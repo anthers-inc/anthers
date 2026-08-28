@@ -177,46 +177,51 @@ describe("content ratings", () => {
 			expect(row.maturity).toBe("mature");
 		});
 
-		it("refuses to release at a rung Anthers is not accepting, and keeps the rating", async () => {
-			// 🚨 The half that would be worse to ship alone. Adding `adult` to the scale
-			// without this would let a creator declare it and publish onto a rung whose
-			// consequences are not built.
+		it("releases a Work its creator rated Adult, now that the rung is open", async () => {
+			// ⚠️ **This assertion was the opposite until the rung opened**, and the flip was
+			// the point rather than a fixup: Adult went onto `ACCEPTED_MATURITY_RATINGS`
+			// only once every fence it needs was real. What the rating then costs the Work
+			// — paid, never Public Access, no Time Pool, invisible unless opted in — is
+			// `adult-enforcement.test.ts`'s subject rather than the release gate's.
 			//
-			// ⭐ The rating SURVIVES the refusal, which is the whole design: the Work is
-			// rated correctly and cannot be released, rather than being pushed into
-			// under-declaring one rung down. That is the pressure wiki 40.13 exists to
-			// remove, and a refusal that also cleared the rating would create it.
-			const workId = await makeWork();
+			// The Work must be gated to be released Adult, so it carries a Badge rung. A
+			// free one is refused by `adult_must_be_paid`, which that suite covers.
+			const workId = await makeWork({
+				seedAccess: [
+					{ threshold: 0, allow: false, price: "0" },
+					{ threshold: 3, allow: true, price: "0" },
+				],
+			});
 			const res = await patch(workId, { maturity: "adult", visibility: "released" });
-			expect(res.status).toBe(409);
-			const body = await res.json();
-			expect(body.code).toBe("maturity_rung_closed");
-			expect(body.rung).toBe("adult");
-			// Names the rung rather than saying "no". A creator told only that something
-			// failed lowers the rating until it stops failing.
-			expect(body.error).toContain("Adult");
-
+			expect(res.status).toBe(200);
 			const row = await reload(workId);
-			expect(row.visibility).toBe("private");
+			expect(row.visibility).toBe("released");
 			expect(row.maturity).toBe("adult");
+			// The creator's own declaration, so nothing is locked — an operator has not
+			// touched it, and the second-decision-maker rule is about corrections.
 			expect(row.maturitySource).toBe("creator");
 		});
 
-		it("refuses to raise a RELEASED Work into a closed rung", async () => {
-			// The same hole by a quieter door: this PATCH never mentions `visibility`, so a
-			// gate watching only for the release transition would wave it through and leave
-			// closed-rung work live. The Work stays as it was, rating included.
-			const workId = await makeWork();
-			expect((await patch(workId, { maturity: "mature", visibility: "released" })).status).toBe(
-				200,
-			);
-
-			const res = await patch(workId, { maturity: "adult" });
+		it("keeps the rating when a release is refused for any other reason", async () => {
+			// ⭐ The ordering the closed-rung work established, and it outlives the rung
+			// being closed. A creator sending the whole form — a rating and a release
+			// together — must not lose the declaration when the release is refused, because
+			// the cheapest way out of a refusal that ate the answer is to pick a lower rung
+			// and have it work. That is the under-declaration pressure wiki 40.13 exists to
+			// remove, produced by the gate meant to enforce it.
+			//
+			// The refusal used here is the free-Adult rule, which is the one that can be
+			// reached without media fixtures.
+			const workId = await makeWork({ seedAccess: [{ threshold: 0, allow: true, price: "0" }] });
+			const res = await patch(workId, { maturity: "adult", visibility: "released" });
 			expect(res.status).toBe(409);
-			expect((await res.json()).code).toBe("maturity_rung_closed");
+			expect((await res.json()).code).toBe("adult_must_be_paid");
+
 			const row = await reload(workId);
-			expect(row.maturity).toBe("mature");
-			expect(row.visibility).toBe("released");
+			expect(row.visibility).toBe("private");
+			// The declaration survived the refusal.
+			expect(row.maturity).toBe("adult");
+			expect(row.maturitySource).toBe("creator");
 		});
 
 		it("tells a closed rung apart from an unanswered question", async () => {

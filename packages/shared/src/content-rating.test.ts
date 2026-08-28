@@ -81,31 +81,35 @@ describe("the rating vocabulary", () => {
 });
 
 describe("which rungs Anthers accepts", () => {
-	it("accepts General and Mature, and not yet Adult", () => {
+	it("accepts every rung on the scale", () => {
 		// ⚠️ This asserts the switch's CURRENT position, and it is meant to fail when the
 		// position changes — that is what makes opening or closing a rung a deliberate act
-		// with a reader rather than a constant somebody edited in passing.
+		// with a reader rather than a constant somebody edited in passing. It failed when
+		// Adult was added, which is the mechanism working.
 		//
-		// 🚨 Adult being absent is not the rung being deferred. It is being built, and this
-		// list is what it goes on once what the rung COSTS a Work is enforced — paid, never
-		// Public Access, no Time Pool, invisible unless opted in. A rung on this list with
-		// none of that built would be an open door described as a fence.
-		expect([...ACCEPTED_MATURITY_RATINGS]).toEqual(["general", "mature"]);
-		expect(isRatingAccepted("general")).toBe(true);
-		expect(isRatingAccepted("mature")).toBe(true);
-		expect(isRatingAccepted("adult")).toBe(false);
+		// ⭐ Adult went on this list only once every fence it needs was real: the payment
+		// requirement, the exclusion from Public Access and so from the Time Pool, the
+		// invisibility to anyone who has not opted in, the adulthood verification, and the
+		// reader's own controls. **If a rung is ever added here again, that is the bar.**
+		expect([...ACCEPTED_MATURITY_RATINGS]).toEqual(["general", "mature", "adult"]);
+		for (const choice of MATURITY_CHOICES) expect(isRatingAccepted(choice.value)).toBe(true);
 		// `unrated` is not a rung and so is not accepted; the release gate answers it with
 		// its own message first.
 		expect(isRatingAccepted("unrated")).toBe(false);
 	});
 
 	it("refuses release at a rung that is not accepted", () => {
-		expect(releaseRatingRefusal("adult")).toBe("closed");
-		// And against an explicit set, so the branch is exercised whichever way the live
-		// switch is set — the day Adult opens, this still proves the mechanism works.
+		// 🚨 Tested against an explicit set, because **every rung is open today and this is
+		// the only place the closed branch can be exercised at all.** The mechanism has to
+		// keep working: 40.13 is explicit that a rung can close again when the queue outruns
+		// whoever is reading it, and that turning one off is the correct response rather
+		// than a failure. The day that happens, this proves the refusal already worked
+		// rather than being tried for the first time under pressure.
 		const openOnlyToGeneral: MaturityRating[] = ["general"];
 		expect(releaseRatingRefusal("mature", openOnlyToGeneral)).toBe("closed");
+		expect(releaseRatingRefusal("adult", openOnlyToGeneral)).toBe("closed");
 		expect(releaseRatingRefusal("general", openOnlyToGeneral)).toBe(null);
+		expect(releaseRatingRefusal("adult", [])).toBe("closed");
 	});
 
 	it("answers an unrated Work `undeclared` even when nothing is accepted", () => {
@@ -117,9 +121,8 @@ describe("which rungs Anthers accepts", () => {
 		expect(releaseRatingRefusal("unrated")).toBe("undeclared");
 	});
 
-	it("lets an accepted rung release", () => {
-		expect(releaseRatingRefusal("general")).toBe(null);
-		expect(releaseRatingRefusal("mature")).toBe(null);
+	it("lets every rung release, against the live switch", () => {
+		for (const choice of MATURITY_CHOICES) expect(releaseRatingRefusal(choice.value)).toBe(null);
 	});
 });
 

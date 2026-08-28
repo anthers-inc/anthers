@@ -111,7 +111,7 @@ describe("what an Adult rating costs", () => {
 
 		// The grown account has opted in and verified. Written directly rather than through
 		// the enable route, because that route reads Stripe and this suite is about what the
-		// verdict DOES rather than about how it is reached — `adult-access.test.ts` owns
+		// verdict DOES rather than about how it is reached — `content-preferences.test.ts` owns
 		// the funding-type half.
 		await db
 			.insert(accounts)
@@ -120,10 +120,21 @@ describe("what an Adult rating costs", () => {
 				adultOptIn: true,
 				adultVerifiedAt: new Date(),
 				adultVerifiedMethod: "card_funding",
+				// ⚠️ Set explicitly, because the column's own default is `hide` and this
+				// suite is about what an opted-in reader can REACH rather than about what
+				// they asked to be shown. The enable route sets this for real people; a
+				// fixture writing the row directly has to do the same or it would be
+				// testing the display preference by accident.
+				adultDisplay: "blur",
 			})
 			.onConflictDoUpdate({
 				target: accounts.userId,
-				set: { adultOptIn: true, adultVerifiedAt: new Date(), adultVerifiedMethod: "card_funding" },
+				set: {
+					adultOptIn: true,
+					adultVerifiedAt: new Date(),
+					adultVerifiedMethod: "card_funding",
+					adultDisplay: "blur",
+				},
 			});
 
 		adultWork = await makeWork({
@@ -355,6 +366,119 @@ describe("what an Adult rating costs", () => {
 			expect(res.status).toBe(200);
 			const body = (await res.json()) as { works: { title: string }[] };
 			expect(body.works.map((w) => w.title)).not.toContain(ADULT_TITLE);
+		});
+	});
+
+	describe("the reader's own controls", () => {
+		/** Set one rung's display preference for the reader who has not opted in. */
+		function setDisplay(body: Record<string, string>, cookie = readerCookie) {
+			return req("/api/accounts/me/content-preferences", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+				body: JSON.stringify(body),
+			});
+		}
+
+		it("blurs Mature by default, for everybody, signed in or out", async () => {
+			// 🚨 The default that makes the rung mean something, and it has to hold for a
+			// signed-out visitor who has no row to read it from. A default resolved from the
+			// column rather than in code would be right for accounts and silently absent for
+			// everybody else — which is the half that matters, since most readers meeting
+			// Mature work for the first time are not signed in.
+			const out = await (
+				await req("/api/accounts/me/content-preferences", {
+					headers: { Origin: ORIGIN },
+				})
+			).json();
+			expect(out.mature).toBe("blur");
+
+			const inn = await (
+				await req("/api/accounts/me/content-preferences", {
+					headers: { Origin: ORIGIN, Cookie: readerCookie },
+				})
+			).json();
+			expect(inn.mature).toBe("blur");
+		});
+
+		it("⭐ leaves a blurred Work in the listing, because a blur is not a hide", async () => {
+			// The distinction the whole feature turns on. A blurred Work is listed,
+			// reachable and earning — the cover is covered and nothing else changes — so a
+			// `blur` preference must produce no query condition at all. If blurring quietly
+			// removed rows, Mature would carry an access consequence, which is exactly what
+			// wiki 40.13 says it must never do.
+			expect((await setDisplay({ mature: "blur" })).status).toBe(200);
+			expect(await catalogTitles(readerCookie)).toContain(MATURE_TITLE);
+		});
+
+		it("removes it from listings when the reader asks to hide the rung", async () => {
+			expect((await setDisplay({ mature: "hide" })).status).toBe(200);
+			expect(await catalogTitles(readerCookie)).not.toContain(MATURE_TITLE);
+		});
+
+		it("🚨 still lets a hidden Work be opened by a direct link", async () => {
+			// What separates hiding from opting out, and the reason `hide` is never an
+			// access rule. The reader asked to keep the rung out of what they browse, not
+			// to be refused something they deliberately went to.
+			const res = await req(`/api/content/works/${matureWork.publicId}`, {
+				headers: { Origin: ORIGIN, Cookie: readerCookie },
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it("⚠️ never hides a creator's own work from them, whatever they asked for", async () => {
+			// The reader is filtering what they browse, not deleting their own Catalog.
+			expect((await setDisplay({ mature: "hide" }, creatorCookie)).status).toBe(200);
+			expect(await catalogTitles(creatorCookie)).toContain(MATURE_TITLE);
+			await setDisplay({ mature: "blur" }, creatorCookie);
+		});
+
+		it("keeps the two rungs on separate controls", async () => {
+			// 🚨 The separation is the design rather than the layout: a reader who wants
+			// difficult work unblurred has said nothing about whether they want explicit
+			// work at all, and one control covering both would make them say it. Moving
+			// Mature must leave Adult exactly where it was.
+			const before = await (
+				await req("/api/accounts/me/content-preferences", {
+					headers: { Origin: ORIGIN, Cookie: readerCookie },
+				})
+			).json();
+			expect((await setDisplay({ mature: "show" })).status).toBe(200);
+			const after = await (
+				await req("/api/accounts/me/content-preferences", {
+					headers: { Origin: ORIGIN, Cookie: readerCookie },
+				})
+			).json();
+			expect(after.mature).toBe("show");
+			expect(after.adult).toBe(before.adult);
+
+			await setDisplay({ mature: "blur" });
+		});
+
+		it("does not let a display preference reach Adult work the reader may not have", async () => {
+			// ⚠️ Two different reasons produce the same absence and only one of them is an
+			// access rule. Setting Adult to `show` is the reader asking; being allowed to
+			// reach it is the platform answering, and the second is not the first. A reader
+			// who has not verified sees nothing however they set this.
+			expect((await setDisplay({ adult: "show" })).status).toBe(200);
+			expect(await catalogTitles(readerCookie)).not.toContain(ADULT_TITLE);
+
+			const res = await req(`/api/content/works/${adultWork.publicId}`, {
+				headers: { Origin: ORIGIN, Cookie: readerCookie },
+			});
+			expect(res.status).toBe(404);
+		});
+
+		it("refuses a display value it does not know", async () => {
+			expect((await setDisplay({ mature: "obliterate" })).status).toBe(400);
+		});
+
+		it("refuses to set anybody's preferences but your own", async () => {
+			const res = await req("/api/accounts/me/content-preferences", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN },
+				body: JSON.stringify({ mature: "show" }),
+			});
+			expect(res.status).toBe(401);
 		});
 	});
 

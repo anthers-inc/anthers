@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { MATURITY_DISPLAY_CHOICES, type MaturityDisplay } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
+import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
 	type DesktopHome,
 	desktopHome,
@@ -191,6 +193,156 @@ interface BlockedUser {
 	username: string;
 	displayName: string | null;
 	createdAt: string;
+}
+
+/**
+ * What the reader meets at each rung, and the door to the Adult rung.
+ *
+ * 🚨 **The two rungs get separate controls, and that separation is the design rather than
+ * layout.** A reader who wants difficult work unblurred has said nothing about whether they
+ * want explicit work at all, and one control covering both would make them say it (wiki
+ * 40.09).
+ *
+ * 🚨 **Nothing here may describe paying as an age check.** A payment proves nothing about
+ * age — debit and prepaid cards have no age floor. What carries the signal is the card's
+ * funding TYPE, because issuers require the primary accountholder of a credit line to be 18.
+ * The copy says that plainly, including the part where an adult with only a debit card
+ * cannot get in and nothing routes around it.
+ */
+function MatureContentSection() {
+	const { prefs, refresh } = useContentPreferences();
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const setDisplay = async (rung: "mature" | "adult", value: MaturityDisplay) => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/content-preferences", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ [rung]: value }),
+			});
+			if (!res.ok) throw new Error();
+			await refresh();
+		} catch {
+			setError("That preference couldn't be saved.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const setAdultAccess = async (on: boolean) => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/adult-access", {
+				method: on ? "POST" : "DELETE",
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				// The server's own sentence. Each refusal has a different remedy and one has
+				// none, so a generic message here would undo the whole point of them being
+				// separate values.
+				setError(body?.error ?? "That couldn't be saved.");
+				return;
+			}
+			await refresh();
+		} catch {
+			setError("That couldn't be saved.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const rungControl = (rung: "mature" | "adult", current: MaturityDisplay) => (
+		<div className="join">
+			{MATURITY_DISPLAY_CHOICES.map((choice) => (
+				<button
+					key={choice.value}
+					type="button"
+					className={`btn btn-sm join-item ${current === choice.value ? "btn-primary" : "btn-outline"}`}
+					disabled={busy}
+					title={choice.hint}
+					onClick={() => setDisplay(rung, choice.value)}
+				>
+					{choice.label}
+				</button>
+			))}
+		</div>
+	);
+
+	return (
+		<div className="card bg-base-200 mb-6">
+			<div className="card-body gap-4">
+				<div>
+					<h3 className="card-title text-lg">Mature Content</h3>
+					<p className="text-sm text-base-content/60">
+						What you meet before you choose. Nothing here changes what a creator earns or whether
+						anyone else can find their work.
+					</p>
+				</div>
+
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div>
+						<p className="font-medium text-sm">Mature</p>
+						<p className="text-xs text-base-content/60">
+							Work made for adults — violence, sex or difficult subjects shown rather than implied.
+							Covered by default.
+						</p>
+					</div>
+					{rungControl("mature", prefs.mature)}
+				</div>
+
+				<div className="border-t border-base-300 pt-4">
+					<p className="font-medium text-sm">Adult</p>
+					<p className="text-xs text-base-content/60">
+						Explicit sexual content. You will not see it anywhere on Anthers unless you turn this
+						on, and it is always sold or gated by its creator rather than free.
+					</p>
+
+					{prefs.adultAccess.canReach ? (
+						<div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+							{rungControl("adult", prefs.adult)}
+							<button
+								type="button"
+								className="btn btn-sm btn-ghost"
+								disabled={busy}
+								onClick={() => setAdultAccess(false)}
+							>
+								Turn Adult content off
+							</button>
+						</div>
+					) : (
+						<div className="mt-3">
+							<p className="text-xs text-base-content/60">
+								Turning this on checks that you are an adult by looking at whether the card on your
+								account is a <strong>credit</strong> card, because card issuers require the primary
+								accountholder to be 18. Paying for something is not the check — debit and prepaid
+								cards have no age requirement at all, so they cannot answer it. We keep only that
+								the check happened and when; we never see or store your date of birth, and we never
+								ask for ID.
+							</p>
+							<p className="mt-2 text-xs text-base-content/60">
+								If your only card is a debit or prepaid card, this will not let you in and we do not
+								have another way to do it. We would rather say so than pretend otherwise.
+							</p>
+							<button
+								type="button"
+								className="btn btn-sm btn-outline mt-3"
+								disabled={busy}
+								onClick={() => setAdultAccess(true)}
+							>
+								Turn Adult content on
+							</button>
+						</div>
+					)}
+				</div>
+
+				{error && <p className="text-sm text-error">{error}</p>}
+			</div>
+		</div>
+	);
 }
 
 /**
@@ -744,6 +896,9 @@ export default function SettingsPage() {
 			<DesktopHomeSection />
 
 			<DevicesSection />
+
+			{/* What the reader meets at each rung, and the door to the Adult rung. */}
+			<MatureContentSection />
 
 			{/* Blocked accounts — the only place a block can be lifted, since a blocked
 			    profile no longer resolves. */}

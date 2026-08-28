@@ -1,11 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Adult access — the only writer of an account's opt-in and its adulthood verification.
+ * Content preferences — the only writer of what a reader has asked to meet: the Adult opt-in,
+ * the adulthood verification behind it, and the per-rung display setting for each of them.
  *
  * Follows the one-writer pattern `services/content-rating.ts`, `services/moderation.ts` and
- * `services/quarantine.ts` establish. Two doors reach this state — a person turning the
- * setting on, and a person turning it off — and both come through here, so an account cannot
- * end up opted in to something it was never verified for.
+ * `services/quarantine.ts` establish. Every door into this state comes through here, so an
+ * account cannot end up opted in to something it was never verified for.
+ *
+ * 🚨 **Every setting here belongs to the READER and reaches nobody else.** A reader hiding or
+ * blurring a rung changes what *they* meet: the Work stays listed for everyone else, stays
+ * searchable, stays earning, and is never demoted or paid less. Wiki 40.09 is explicit that
+ * this is deliberately not platform-side suppression — the platform picks the default and
+ * makes the choice explicit, rather than deciding what anybody sees. The one setting with a
+ * consequence beyond its owner is the Adult opt-in, and even that only decides what its own
+ * account reaches.
+ *
+ * ⚠️ **The two rungs get SEPARATE controls, and keeping them separate is the point.** A
+ * reader who wants difficult work unblurred has said nothing about whether they want explicit
+ * work at all, and one control covering both would make them say it.
  *
  * Wiki 40.09 § The funding type is the age signal owns the reasoning. The headline, because
  * it is the part most easily got wrong: **a payment proves nothing about age and the copy may
@@ -37,11 +49,90 @@
 
 import { db } from "@anthers/db/client";
 import { accounts, works } from "@anthers/db/schema";
+import {
+	DEFAULT_MATURITY_DISPLAY,
+	isMaturityDisplay,
+	type MaturityDisplay,
+} from "@anthers/shared/content-rating";
 import { eq, type SQL, sql } from "drizzle-orm";
 import { getStripe } from "../lib/stripe.js";
 
 /** The only method there is. Stored rather than assumed, so a second one could not make the existing rows ambiguous. */
 export const CARD_FUNDING_METHOD = "card_funding";
+
+/**
+ * Everything a reader has said about what they meet, with the defaults already applied.
+ *
+ * 🚨 **Never hand a caller a null display value.** A signed-out visitor has no row at all and
+ * must still get the Mature blur, so the default is resolved here rather than at each call
+ * site — a caller that had to remember `?? "blur"` is a caller that will one day forget, and
+ * the failure mode is an unblurred cover rather than an error.
+ */
+export interface ContentPreferences {
+	mature: MaturityDisplay;
+	adult: MaturityDisplay;
+	adultAccess: AdultAccess;
+}
+
+function displayOr(stored: string | null, fallback: MaturityDisplay): MaturityDisplay {
+	return stored && isMaturityDisplay(stored) ? stored : fallback;
+}
+
+/** What this viewer has asked to meet. Defaults all the way down for a signed-out visitor. */
+export async function contentPreferencesFor(userId: number | null): Promise<ContentPreferences> {
+	const fallback = {
+		mature: DEFAULT_MATURITY_DISPLAY.mature,
+		adult: DEFAULT_MATURITY_DISPLAY.adult,
+		adultAccess: NO_ADULT_ACCESS,
+	};
+	if (userId == null) return fallback;
+
+	const [row] = await db
+		.select({
+			optIn: accounts.adultOptIn,
+			verifiedAt: accounts.adultVerifiedAt,
+			method: accounts.adultVerifiedMethod,
+			mature: accounts.matureDisplay,
+			adult: accounts.adultDisplay,
+		})
+		.from(accounts)
+		.where(eq(accounts.userId, userId))
+		.limit(1);
+	if (!row) return fallback;
+
+	return {
+		mature: displayOr(row.mature, DEFAULT_MATURITY_DISPLAY.mature),
+		adult: displayOr(row.adult, DEFAULT_MATURITY_DISPLAY.adult),
+		adultAccess: {
+			optIn: row.optIn,
+			verifiedAt: row.verifiedAt,
+			method: row.method,
+			canReach: row.optIn && row.verifiedAt != null,
+		},
+	};
+}
+
+/** Set a rung's display preference. The only writer of the two display columns. */
+export async function setMaturityDisplay(
+	userId: number,
+	input: { mature?: MaturityDisplay; adult?: MaturityDisplay },
+	now: Date = new Date(),
+): Promise<ContentPreferences> {
+	const updates: Record<string, unknown> = { updatedAt: now };
+	if (input.mature) updates.matureDisplay = input.mature;
+	if (input.adult) updates.adultDisplay = input.adult;
+
+	// ⚠️ Upserts rather than updates, because **signing up does not create an `accounts`
+	// row** — one appears on first payment. A plain UPDATE would silently affect nothing and
+	// report success, so a free account's preference would never save and nothing would say
+	// so. This is the same trap the verification fixture hit.
+	await db
+		.insert(accounts)
+		.values({ userId, matureDisplay: input.mature ?? null, adultDisplay: input.adult ?? null })
+		.onConflictDoUpdate({ target: accounts.userId, set: updates });
+
+	return contentPreferencesFor(userId);
+}
 
 /**
  * What an account may currently do with Adult work.
@@ -128,13 +219,54 @@ export function adultHiddenFrom(
 	return sql`(${maturityColumn} <> 'adult' OR ${creatorColumn} = ${viewerId})`;
 }
 
-/** Load the viewer's adult access and the condition that follows from it, in one step. */
+/**
+ * Every rung this viewer has asked to keep out of listings, as one condition.
+ *
+ * Two different reasons produce the same absence and they are not the same rule. A rung is
+ * absent because the viewer **may not reach it** (the Adult opt-in and verification, which is
+ * the platform's rule) or because the viewer **asked for it to be hidden** (their own
+ * `hide` preference, which is theirs). Both end in a row missing from a listing, so both are
+ * expressed here — but only the first is enforcement, and `resolveAccessSync` implements that
+ * one independently. **A `hide` preference is never an access rule**: the Work stays reachable
+ * by a direct link, which is exactly what separates hiding from opting out.
+ *
+ * ⭐ **`blur` produces no condition at all**, because a blurred Work is listed. The blur is
+ * the client's job, from the `maturity` value that already travels with every Work.
+ */
+export function maturityHiddenFrom(
+	prefs: ContentPreferences,
+	viewerId: number | null,
+	creatorColumn: SQL | unknown = works.creatorId,
+	maturityColumn: SQL | unknown = works.maturity,
+): SQL | undefined {
+	const hiddenRungs: string[] = [];
+	if (!prefs.adultAccess.canReach || prefs.adult === "hide") hiddenRungs.push("adult");
+	if (prefs.mature === "hide") hiddenRungs.push("mature");
+	if (hiddenRungs.length === 0) return undefined;
+
+	const list = sql.join(
+		hiddenRungs.map((rung) => sql`${rung}`),
+		sql`, `,
+	);
+	// 🚨 A creator always sees their own, whatever they have asked to be shown. Somebody who
+	// hid a rung is filtering what they browse, not deleting their own Catalog — and a reader
+	// with no opt-in is not asking to be protected from the thing they made.
+	if (viewerId == null) return sql`${maturityColumn} NOT IN (${list})`;
+	return sql`(${maturityColumn} NOT IN (${list}) OR ${creatorColumn} = ${viewerId})`;
+}
+
+/** Load the viewer's preferences and the listing condition that follows, in one step. */
 export async function adultVisibility(viewerId: number | null): Promise<{
 	access: AdultAccess;
+	prefs: ContentPreferences;
 	hidden: SQL | undefined;
 }> {
-	const access = await adultAccessFor(viewerId);
-	return { access, hidden: adultHiddenFrom(access, viewerId) };
+	const prefs = await contentPreferencesFor(viewerId);
+	return {
+		access: prefs.adultAccess,
+		prefs,
+		hidden: maturityHiddenFrom(prefs, viewerId),
+	};
 }
 
 /**
@@ -232,12 +364,29 @@ export async function enableAdultAccess(
 		method = result.method;
 	}
 
+	// ⭐ **Opting in sets the display preference, if the reader has never set one.** The
+	// stored default is `hide`, and leaving it there would mean somebody who just cleared a
+	// card verification to reach the rung then saw nothing at all — a second gate they never
+	// asked for, immediately after passing the first.
+	//
+	// The `hide` default is not being overridden, because it was never load-bearing: while an
+	// account has not opted in, `canReach` is false and Adult work is hidden by the access
+	// rule whatever this column says. The preference becomes operative at exactly this
+	// moment, and at this moment the person has just said they want it. `blur` rather than
+	// `show`, matching Mature — cautious, and one click from either.
+	const [existing] = await db
+		.select({ display: accounts.adultDisplay })
+		.from(accounts)
+		.where(eq(accounts.userId, userId))
+		.limit(1);
+
 	await db
 		.update(accounts)
 		.set({
 			adultOptIn: true,
 			adultVerifiedAt: verifiedAt,
 			adultVerifiedMethod: method,
+			adultDisplay: existing?.display ?? "blur",
 			updatedAt: now,
 		})
 		.where(eq(accounts.userId, userId));

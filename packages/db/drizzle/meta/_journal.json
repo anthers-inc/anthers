@@ -414,6 +414,13 @@
       "when": 1787932509366,
       "tag": "0058_adult_access",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1787934510831,
+      "tag": "0059_maturity_display",
+      "breakpoints": true
     }
   ]
 }

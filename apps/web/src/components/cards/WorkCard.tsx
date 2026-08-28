@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { contentNoteLabel } from "@anthers/shared/content-rating";
+import {
+	displayFor,
+	MaturityVeil,
+	useContentPreferences,
+} from "@anthers/web-shared/content-preferences";
 import { LockedCover, lockedByBadge, unlockLabel } from "@anthers/web-shared/post/unlock";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
@@ -55,6 +61,13 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	// Clicking still navigates into the post, where the unlock options live.
 	const locked = post.access ? !post.access.canAccess : false;
 
+	// What this reader asked to meet at this rung. **A veil is not a lock**: a veiled Work
+	// is listed, reachable and earning, and the reader can uncover it in one click. The two
+	// treatments never stack — a locked cover is already blurred, and covering it twice
+	// would say the same thing twice while implying the rating is what shut them out.
+	const { prefs } = useContentPreferences();
+	const veiled = !locked && displayFor(prefs, post.maturity) === "blur";
+
 	const content = (
 		<>
 			{/* Thumbnail / cover area */}
@@ -64,6 +77,18 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					className="aspect-video"
 					lockedBy={post.access ? lockedByBadge(post.access, cardCreatorName(post)) : null}
 				/>
+			) : veiled ? (
+				<MaturityVeil
+					maturity={post.maturity}
+					notes={(post.maturityNotes ?? []).map(contentNoteLabel)}
+					className="aspect-video"
+				>
+					{post.thumbnail ? (
+						<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
+					) : (
+						<div className="w-full h-full bg-gradient-to-br from-base-300 to-base-200" />
+					)}
+				</MaturityVeil>
 			) : (
 				<>
 					{post.type === "video" && (

@@ -89,6 +89,20 @@ export const accounts = pgTable("accounts", {
 	// existing rows ambiguous about what was actually checked.
 	adultVerifiedMethod: text("adult_verified_method"),
 
+	// ── What the reader has asked to meet, per rung ──
+	// `hide` | `blur` | `show`, and two columns rather than one because the two rungs get
+	// SEPARATE controls. A reader who wants difficult work unblurred has said nothing about
+	// whether they want explicit work at all, and one setting covering both would make them
+	// say it (wiki 40.09).
+	//
+	// ⚠️ **The defaults live in `@anthers/shared/content-rating`, not here.** A signed-out
+	// visitor has no row at all and must still get the Mature blur, so the default has to be
+	// applied by whatever reads the preference rather than by the column — a column default
+	// would be right for accounts and silently absent for everybody else. Null means "never
+	// answered", which is what lets the shared default move without rewriting stored rows.
+	matureDisplay: text("mature_display"),
+	adultDisplay: text("adult_display"),
+
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
