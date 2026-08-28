@@ -8,6 +8,10 @@
  *   GET    /me/following            — list creators the current user follows
  *   GET    /me/feed                 — posts AND releases from followed creators
  *   GET    /me/blocks               — who the current user has blocked
+ *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
+ *                                     the two together open the Adult rung
+ *   POST   /me/adult-access         — opt in, verifying adulthood by card funding type
+ *   DELETE /me/adult-access         — opt back out (the verification is kept)
  *   GET    /creators                — list all creators
  *   GET    /users/:username         — public user profile
  *   POST   /users/:username/follow  — follow a creator
@@ -43,6 +47,7 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
+import { adultAccessFor, disableAdultAccess, enableAdultAccess } from "../services/adult-access.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
@@ -686,6 +691,53 @@ const accountRoutes = new Hono()
 		const { cancelled } = await cancelDeletion(sessionUser.id);
 		if (!cancelled) return c.json({ error: "No deletion was scheduled." }, 404);
 		return c.json({ cancelled: true });
+	})
+
+	// ── Adult access ─────────────────────────────────────────────────────────
+	// The account-level opt-in and the one-time adulthood verification that together
+	// decide whether an account can reach a Work rated Adult. `services/adult-access.ts`
+	// is the only writer and carries the whole of the reasoning; wiki 40.09 § The funding
+	// type is the age signal is the authority.
+	//
+	// 🚨 **This is never described to anybody as "paying proves your age".** A payment
+	// proves nothing about age — debit and prepaid cards have no age floor at all. What
+	// carries the signal is the card's FUNDING TYPE, because issuers require the primary
+	// accountholder of a credit line to be 18. The distinction is the whole feature, and a
+	// sentence that blurs it is a false claim about how Anthers checks.
+
+	.get("/me/adult-access", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json(await adultAccessFor(sessionUser.id));
+	})
+
+	.post("/me/adult-access", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const result = await enableAdultAccess(sessionUser.id);
+
+		if (typeof result === "string") {
+			// ⚠️ Each refusal gets its own sentence because each has a different remedy,
+			// and the middle one has none. Collapsing them into "we couldn't verify you"
+			// would tell somebody whose only card is debit to try again, which is the one
+			// thing that cannot work.
+			const said: Record<typeof result, string> = {
+				unavailable: "We can't check this right now. Please try again shortly.",
+				no_card:
+					"There's no card on your account yet. Add one by supporting a creator or Anthers, then come back.",
+				// Says plainly that nothing routes around it. Wiki 40.09: the exclusion is
+				// real, it skews younger, lower-income and unbanked, and it is the accepted
+				// price of refusing to verify everybody. Gesturing at a path that does not
+				// exist would be worse than the exclusion.
+				funding_not_credit:
+					"This needs a credit card. Debit and prepaid cards have no age requirement, so they can't tell us what this check is asking. We don't have another way to do this, and if that shuts you out, we'd like to hear from you.",
+			};
+			return c.json({ error: said[result], code: result }, 409);
+		}
+		return c.json(result);
+	})
+
+	.delete("/me/adult-access", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json(await disableAdultAccess(sessionUser.id));
 	})
 
 	// ── Blocks ───────────────────────────────────────────────────────────────
