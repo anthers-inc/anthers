@@ -122,10 +122,6 @@ const clearQuarantineSchema = z.object({
  */
 const correctRatingSchema = z.object({
 	workId: z.number().int().positive(),
-	// `adult` is accepted by the schema and refused by the service, deliberately. Leaving it
-	// out here would answer an operator with a validation error naming a field, when what
-	// they need to be told is that the top rung takes a second decision-maker and who that
-	// is — see `correctRating`.
 	maturity: z.enum(["general", "mature", "adult"]),
 	notes: z.array(z.string()).max(20).optional(),
 	note: z.string().max(RATING_NOTE_MAX).optional(),
@@ -508,6 +504,10 @@ const adminRoutes = new Hono()
 	// ⚠️ Two standing principles bound what an operator may call `mature`, and neither is
 	// theirs to overturn: a queer person existing in a story does not make it mature, and
 	// subject matter is not the same as treatment.
+	//
+	// 🚨 **Correcting a Work to `adult` also closes its free public access**, because Adult
+	// work may not be free and a correction is exactly the case where nobody has agreed to
+	// that. The rating and the consequence are one act — see `correctRating`.
 	.post("/works/rating", zValidator("json", correctRatingSchema), async (c) => {
 		const user = c.get("user");
 		const { workId, maturity, notes, note } = c.req.valid("json");
@@ -518,24 +518,16 @@ const adminRoutes = new Hono()
 			actorId: user.id,
 			note,
 		});
-		if (updated === "needs-working-group") {
-			// 409 rather than 403: the operator is permitted to be here and the request is
-			// well-formed, but one person may not move a Work into the rung that costs its
-			// creator the commons and the Time Pool at once.
-			return c.json(
-				{
-					error:
-						"Moving a Work to Adult takes the adult-content working group rather than one operator, and that body doesn't exist yet. If this Work breaks the rules, hide it; if it is only rated too low, its creator can raise it themselves.",
-					code: "rating_needs_working_group",
-				},
-				409,
-			);
-		}
 		if (!updated) return c.json({ error: "Work not found" }, 404);
 		return c.json({
-			workId: updated.id,
-			maturity: updated.maturity,
-			notes: updated.maturityNotes ?? [],
+			workId: updated.work.id,
+			maturity: updated.work.maturity,
+			notes: updated.work.maturityNotes ?? [],
+			// Reported so the console can say what the correction did beyond changing a
+			// label. Correcting a Public Access Work to Adult closes its free door, and an
+			// operator who is not told that has taken an action they did not know they were
+			// taking. The creator is notified separately.
+			accessClosed: updated.accessClosed,
 		});
 	})
 

@@ -22,8 +22,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { moderationActions, workRatingAppeals, works } from "@anthers/db/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import {
+	moderationActions,
+	notifications,
+	users,
+	workRatingAppeals,
+	works,
+} from "@anthers/db/schema";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -59,6 +65,9 @@ describe("content ratings", () => {
 	let creator: string;
 	let operator: string;
 	let stranger: string;
+	// Needed to read back the notification a correction sends. Notifications cascade with
+	// the user, so the existing teardown already covers them.
+	let creatorId: number;
 	const created: number[] = [];
 
 	beforeAll(async () => {
@@ -69,6 +78,11 @@ describe("content ratings", () => {
 		operator = await signUp(operatorName);
 		stranger = await signUp(strangerName);
 		await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${operatorName}`);
+		const [row] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, creatorName));
+		creatorId = row!.id;
 	}, DB_SETUP_TIMEOUT);
 
 	// In `afterAll` so it runs on a bail as well as a pass. Appeals cascade with the Work
@@ -282,28 +296,132 @@ describe("content ratings", () => {
 			expect(res.status).toBe(400);
 		});
 
-		it("cannot move a Work to Adult, because one operator is not enough", async () => {
-			// 🚨 The burden-of-proof rule from wiki 40.13, and the asymmetry is the whole
-			// of it: Adult costs a creator the commons, every Time Pool dollar and their
-			// discoverability at once, so moving somebody else's Work there is the
-			// adult-content working group's call and that body does not exist. The creator
-			// may still declare Adult about their own work whenever they like.
-			const workId = await makeWork({ maturity: "general" });
+		it("🚨 moves a Work to Adult and closes its free access in the same act", async () => {
+			// **The invariant this whole rung rests on**: however a Work arrives at Adult,
+			// the Adult rules are imposed. A correction is exactly the case where nobody has
+			// agreed to them — the creator rated it lower, which is why an operator is here
+			// — so a correction that changed only the label would leave a Work rated Adult
+			// while it went on behaving like ordinary work: free to everyone, in the
+			// commons, and earning the Time Pool.
+			const workId = await makeWork({
+				maturity: "general",
+				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			});
 			const res = await correct(workId, "adult");
-			expect(res.status).toBe(409);
-			expect((await res.json()).code).toBe("rating_needs_working_group");
-			// Refused rather than partly applied: no rating change, and no log entry
-			// claiming a call nobody was allowed to make.
+			expect(res.status).toBe(200);
+			expect((await res.json()).accessClosed).toBe(true);
+
 			const row = await reload(workId);
-			expect(row.maturity).toBe("general");
-			expect(row.maturitySource).toBe("creator");
+			expect(row.maturity).toBe("adult");
+			expect(row.maturitySource).toBe("operator");
+			// The free-to-everyone door is shut. `allow: false` rather than a deleted row,
+			// so the creator's own table shape survives and they can reopen it if the
+			// appeal succeeds.
+			expect(row.seedAccess).toEqual([{ threshold: 0, allow: false, price: "0" }]);
+		});
+
+		it("⭐ leaves the creator's Badge rungs alone when it closes the free one", async () => {
+			// The restraint that keeps this enforcement rather than re-pricing. A rung above
+			// the baseline priced at zero means "supporters get it at no further cost" — a
+			// Badge gate, and exactly the shape Adult work is supposed to have. Flattening
+			// those would be making a business decision on somebody's behalf.
+			const workId = await makeWork({
+				maturity: "general",
+				seedAccess: [
+					{ threshold: 0, allow: true, price: "0" },
+					{ threshold: 3, allow: true, price: "0" },
+					{ threshold: 6, allow: true, price: "2.00" },
+				],
+			});
+			expect((await correct(workId, "adult")).status).toBe(200);
+
+			expect((await reload(workId)).seedAccess).toEqual([
+				{ threshold: 0, allow: false, price: "0" },
+				{ threshold: 3, allow: true, price: "0" },
+				{ threshold: 6, allow: true, price: "2.00" },
+			]);
+		});
+
+		it("touches no access at all when the Work was already gated", async () => {
+			// Idempotent on a Work that already satisfies the rule, so a correction never
+			// reports having changed access it did not change.
+			const gated = [
+				{ threshold: 0, allow: false, price: "0" },
+				{ threshold: 3, allow: true, price: "0" },
+			];
+			const workId = await makeWork({ maturity: "mature", seedAccess: gated });
+			const res = await correct(workId, "adult");
+			expect(res.status).toBe(200);
+			expect((await res.json()).accessClosed).toBe(false);
+			expect((await reload(workId)).seedAccess).toEqual(gated);
+		});
+
+		it("⚠️ closes the free door even when it leaves nobody able to open the Work", async () => {
+			// The outcome that looks like a bug and is the correct answer. Adult work must
+			// be sold or gated, only its creator can decide which, and until they do there
+			// is no price at which anybody may have it. The alternative — leaving it free
+			// because closing it is drastic — is the rule not being enforced.
+			const workId = await makeWork({
+				maturity: "general",
+				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			});
+			await correct(workId, "adult");
+
+			const row = await reload(workId);
+			expect(row.seedAccess?.some((r) => r.allow)).toBe(false);
+		});
+
+		it("tells the creator, because a correction they never hear about cannot be appealed", async () => {
+			// 🚨 The half that makes the correction legitimate rather than merely permitted.
+			// The appeal path is part of the feature, and an appeal nobody knows to file is
+			// the version of it that teaches creators the queue is decorative.
+			const workId = await makeWork({
+				maturity: "general",
+				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			});
+			await correct(workId, "adult");
+
+			// ⚠️ Scoped to THIS Work by its dedupe key, not just to the creator and the
+			// kind. Every fixture in this suite belongs to one creator and several tests
+			// correct a rating, so a query on `(userId, kind)` returns whichever row the
+			// planner reached first — it matched an earlier test's "re-rated Mature" and
+			// asserted against the wrong notification.
+			const [note] = await db
+				.select()
+				.from(notifications)
+				.where(
+					and(
+						eq(notifications.userId, creatorId),
+						eq(notifications.kind, "rating_corrected"),
+						like(notifications.dedupeKey, `rating-corrected:${workId}:%`),
+					),
+				);
+			expect(note).toBeDefined();
+			// Says what happened to the access, not only to the label — that is the part
+			// they have to act on.
+			expect(note.title).toContain("Adult");
+			expect(note.body).toContain("appeal");
+			// `essential`: a decision taken about their work, not activity on it.
+			expect(note.category).toBe("essential");
+		});
+
+		it("records what the correction DID in the log an appeal reads", async () => {
+			const workId = await makeWork({
+				maturity: "general",
+				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			});
+			await correct(workId, "adult");
+
 			const log = await db
 				.select()
 				.from(moderationActions)
 				.where(
 					and(eq(moderationActions.subjectType, "work"), eq(moderationActions.subjectId, workId)),
 				);
-			expect(log).toHaveLength(0);
+			expect(log).toHaveLength(1);
+			// An operator's note explains the rating; the log has to carry the consequence,
+			// or an appeal read months later cannot tell why the Work became unreachable.
+			expect(log[0].note).toContain("free public access closed");
 		});
 	});
 
