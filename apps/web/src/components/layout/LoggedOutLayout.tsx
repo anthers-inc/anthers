@@ -48,6 +48,10 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		links: [
 			["FAQ", "/faq"],
 			["Resources", "/resources"],
+			// Under Support rather than Legal (Parker, 2026-08-27). A parent looking for this
+			// is looking for help understanding the place, not for a policy document — and
+			// filing it beside Terms made it read as one.
+			["For Parents", "/parents"],
 		],
 	},
 	{
@@ -64,7 +68,6 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 			["Terms", "/terms"],
 			["Copyright", "/copyright"],
 			["Safety", "/safety"],
-			["For Parents", "/parents"],
 		],
 	},
 ];

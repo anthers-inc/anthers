@@ -20,6 +20,18 @@
  *
  * It deliberately landed AFTER blocking and person-reporting rather than before, for
  * the same reason.
+ *
+ * ⚠️ **Updated 2026-08-28, and one paragraph had gone false in exactly the way this page
+ * cannot afford.** It said *"There is no sexually explicit material on Anthers… when it opens
+ * it will require a payment method"* — the Adult rung opened, and the payment requirement was
+ * retired the same week, so the page was reassuring a parent with two claims that were no
+ * longer true. **A page that only claims what shipped has to be re-read whenever something
+ * ships**, which is what the review task on it exists for.
+ *
+ * 🚨 Two admissions here are load-bearing and should survive any tidying pass: that **a
+ * parent's own credit card passes the age check** (so the pin, not the check, is what stands
+ * between a teenager and Adult work), and that the time limits **are not screen time**. Both
+ * are places where the comfortable sentence is the false one.
  */
 
 import { Link } from "@anthers/web-shared/router";
@@ -101,13 +113,90 @@ export default function ParentsPage() {
 					occasionally someone behaving badly.
 				</p>
 				<p>
-					<strong>There is no sexually explicit material on Anthers.</strong> A category for work
-					with mature themes is planned but not open, and when it opens it will require a payment
-					method and won't be reachable by browsing.
+					<strong>Every work carries a rating, and there are three of them.</strong> Most work is{" "}
+					<strong>General</strong> and carries no restriction at all. <strong>Mature</strong> means
+					sustained violence, sexual activity depicted rather than implied, or similar — it's
+					labelled, blurred behind a click by default for everybody, and can be hidden entirely.{" "}
+					<strong>Adult</strong> means explicit sexual content that is central to the work.
 				</p>
 				<p>
-					Paid content requires a payment method, which is a real practical limit on what a young
-					person can buy — but it's a limit created by how payment works, not a rule we police.
+					<strong>
+						Adult work is invisible unless an account has asked for it and proved an adult holds it.
+					</strong>{" "}
+					Not just locked — the title and cover art don't appear either, in listings, in search, or
+					on a creator's page. Getting to it takes two separate things: a setting the account turns
+					on, and a one-off check that reads whether there's a <em>credit</em> card on the account,
+					since card issuers require the primary accountholder to be 18. We don't ask for a date of
+					birth or an ID, and we don't keep anything about the card.
+				</p>
+				<p>
+					⚠️ <strong>A parent's credit card would pass that check.</strong> If a young person has
+					used your card here, the age check is not what stands between them and Adult work — the
+					pin below is. We'd rather say so than let you assume otherwise.
+				</p>
+				<p>
+					<strong>Pornography isn't allowed at all</strong>, and that's a different line from Adult
+					rather than a stricter version of it. Work isn't prohibited for being explicit, at any
+					degree; it's prohibited when there's nothing else going on in it.
+				</p>
+			</Section>
+
+			<Section title="Why the gate works this way">
+				<p>
+					A lot of places are being pushed toward age verification that means uploading a driving
+					licence, or letting a camera guess how old your face looks. Those systems work by
+					collecting exactly the identity information we've promised not to hold — and once a
+					company holds it, the question stops being whether they meant well and becomes what
+					happens when they're breached.
+				</p>
+				<p>
+					<strong>Anthers never requires an ID to use it</strong>, and never asks for a date of
+					birth. What we read instead is a structural fact we can check without keeping anything:
+					whether a card on the account is <em>credit</em>-funded, because card issuers require the
+					primary accountholder to be 18. A teenager's debit card or prepaid card doesn't pass. We
+					read the answer once, record that the check happened, and keep nothing about the card — no
+					number, no last four digits, not even which kind it was.
+				</p>
+				<p>
+					It's a real check rather than a checkbox, and it costs a parent nothing in privacy. But it
+					is a check on the <em>card</em>, and a card can be borrowed — which is the honest limit of
+					it, and the reason the controls below exist.
+				</p>
+			</Section>
+
+			<Section title="Parental controls">
+				<p>
+					Any account can be given a <strong>pin</strong>, from its settings page. Once it's set,
+					the pin is required for every change below — including turning the controls off — so they
+					can't be undone from the account itself.
+				</p>
+				<p>
+					<strong>Lock the content settings.</strong> Mature and Adult are separate switches, and
+					locking freezes both wherever you left them. This is the control that closes the gap in
+					the age check above.
+				</p>
+				<p>
+					<strong>Choose creators, and kinds of work.</strong> Either a list of who and what is
+					allowed, or a list of what isn't — whichever way round suits. Video, audio, writing, books
+					and comics, images, games and software can each be allowed or not.
+				</p>
+				<p>
+					<strong>Set time limits</strong> per day, week or month, and optionally a tighter daily
+					limit for one creator or one kind of work. ⚠️ These count{" "}
+					<strong>time spent with a work open</strong> — watching, reading, playing — because that's
+					what we can honestly measure. Browsing and looking around isn't counted, so this isn't
+					screen time and we don't want you reading it as screen time.
+				</p>
+				<p>
+					<strong>Soften strong language</strong>, swapping a short list of words for milder ones
+					wherever text appears. ⚠️ It's a courtesy rather than a guarantee: language doesn't affect
+					how work is rated here, so the filter has nothing to consult and will miss words it hasn't
+					been told about.
+				</p>
+				<p>
+					<strong>There's no way to reset a forgotten pin from the site.</strong> A reset link would
+					go to that account's own inbox, which is often the inbox of the person the pin is for. If
+					it's lost, you'll need to reach us.
 				</p>
 			</Section>
 
