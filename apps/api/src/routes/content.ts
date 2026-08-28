@@ -57,6 +57,7 @@ import {
 	releaseRatingRefusal,
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
+import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -101,6 +102,11 @@ import {
 	setHidden,
 } from "../services/library.js";
 import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
+import {
+	consumedSeconds,
+	parentalPolicyFor,
+	parentalVisibility,
+} from "../services/parental-controls.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { beginScans, scanReleaseGate } from "../services/safety-scan.js";
@@ -1147,6 +1153,57 @@ async function publicAccessGate(
 }
 
 /**
+ * Whether a guardian's **time limit** has run out on this account.
+ *
+ * 🚨 **A third gate, at the same choke point and for a third reason**, and the three are
+ * deliberately not merged. Access says *may you consume this Work* (a property of the Work and
+ * the viewer's standing). The Public Access meter says *have you spent the commons' allowance*
+ * (a property of the account and the commons). This says *has this household run out of time
+ * today* — a property of the account and nothing else, which applies to work that was bought,
+ * gated and cleared, or free alike. Collapsing any two of them would make one of the three
+ * answers wrong somewhere.
+ *
+ * ⚠️ **403 rather than 402, and the difference is not cosmetic.** A spent allowance is "you
+ * may, and here is how" — there is a price that removes it. A time limit is a refusal with no
+ * price attached, and offering one would be the platform selling a way around somebody's
+ * parent.
+ *
+ * Returns null when delivery may proceed, or the 403 body when the window is spent.
+ */
+async function parentalTimeGate(
+	viewerId: number | null,
+	work: WorkRow,
+): Promise<{ error: string; code: string; window: LimitWindow } | null> {
+	if (viewerId == null) return null;
+	const policy = await parentalPolicyFor(viewerId);
+	if (!policy.enabled) return null;
+
+	const subject = { creatorId: work.creatorId, workType: work.type };
+	const cap = dailyCapFor(policy, subject);
+	// Nothing to measure against — skip the query entirely, which is the common case for every
+	// account that has a pin but no limits.
+	if (
+		cap == null &&
+		policy.limits.daily == null &&
+		policy.limits.weekly == null &&
+		policy.limits.monthly == null
+	) {
+		return null;
+	}
+
+	const window = spentWindow(policy, await consumedSeconds(viewerId, subject), cap);
+	if (!window) return null;
+	return {
+		error:
+			window === "day"
+				? "That's the time set for today. There'll be more tomorrow."
+				: `That's the time set for this ${window}.`,
+		code: "parental_time_limit",
+		window,
+	};
+}
+
+/**
  * Serialize a Work for a viewer, withholding the deliverable when they lack access.
  *
  * The split is the load-bearing part. Everything a *listing* needs — title, type,
@@ -1182,6 +1239,17 @@ function serializeWorkForViewer(
 	 * regardless of access. What it must not leak is a pointer at any page.
 	 */
 	pageCount = 0,
+	/**
+	 * Whether a guardian's **time limit** has run out on this account.
+	 *
+	 * ⚠️ **Optional where `allowanceSpent` is required, and the asymmetry is deliberate.** A
+	 * missed allowance check serves the commons free forever, which is a defect; a missed time
+	 * check on a listing serves a card to somebody who cannot open the Work anyway, because
+	 * the four delivery routes and this branch both refuse independently. The default is
+	 * therefore the safe one at every call site that has no viewer to ask about — a Catalog
+	 * page, a project shelf, a post's references.
+	 */
+	timeLimited = false,
 ) {
 	const canAccess = access.canAccess;
 
@@ -1202,8 +1270,13 @@ function serializeWorkForViewer(
 	 * `access` below — the Work still reports itself free, because it *is* free. What ran
 	 * out belongs to the account, and a Work that described itself as gated by someone
 	 * else's meter would re-stratify the commons the retirement of Anthers Gates removed.
+	 *
+	 * A third, since 2026-08-28: a guardian's **time limit**, which behaves like the allowance
+	 * for the same reason — it belongs to the account and says nothing about the Work. Note it
+	 * applies whatever the access, since a limit somebody's parent set is not undone by having
+	 * bought something.
 	 */
-	const deliverable = canAccess && !(publicAccess && allowanceSpent);
+	const deliverable = canAccess && !(publicAccess && allowanceSpent) && !timeLimited;
 
 	return {
 		id: work.id,
@@ -2229,6 +2302,10 @@ const contentRoutes = new Hono()
 		// and "you may, and here is how".
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
+		// A household's own limit, which is a refusal rather than a price — see
+		// `parentalTimeGate` for why the two gates stay separate.
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
 
 		const [job] = await db
 			.select()
@@ -2268,6 +2345,10 @@ const contentRoutes = new Hono()
 		// the equal-time principle is about what a minute IS, not about which medium.
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
+		// A household's own limit, which is a refusal rather than a price — see
+		// `parentalTimeGate` for why the two gates stay separate.
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
 
 		const [page] = await db
 			.select()
@@ -2307,6 +2388,10 @@ const contentRoutes = new Hono()
 		// and refusing it is what stops playback continuing.
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
+		// A household's own limit, which is a refusal rather than a price — see
+		// `parentalTimeGate` for why the two gates stay separate.
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
 
 		const workId = work.id;
 		const [job] = await db
@@ -2621,6 +2706,10 @@ const contentRoutes = new Hono()
 					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
 					await allowanceSpent(viewerId, sharedBy),
 					pageRow?.count ?? 0,
+					// The one page a reader actually opens a text Work, a game or an image
+					// from, so it is the one that has to consult a household's time limit —
+					// those four media have no delivery route of their own.
+					(await parentalTimeGate(viewerId, work)) !== null,
 				),
 				creator,
 				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
@@ -2764,6 +2853,9 @@ const contentRoutes = new Hono()
 					// now the only rule standing between the commons and an unverified
 					// visitor.
 					(await adultVisibility(viewerId)).hidden,
+					// A guardian's blocks hide as well as refuse — a shelf of cards a child
+					// cannot click is an advertisement, not a protection.
+					(await parentalVisibility(viewerId)).hidden,
 				),
 			)
 			.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -2816,7 +2908,11 @@ const contentRoutes = new Hono()
 		// them — the alternative was announcing the existence and usually the title of work
 		// the rung specifically does not give an existence to.
 		const adultHidden = (await adultVisibility(viewerId)).hidden;
+		const parentalHidden = (await parentalVisibility(viewerId)).hidden;
 		if (adultHidden) conditions.push(adultHidden);
+		// A guardian's blocks hide as well as refuse — a shelf of cards a child cannot
+		// click is an advertisement, not a protection.
+		if (parentalHidden) conditions.push(parentalHidden);
 
 		const preview = previewRequest(c);
 		const order =
@@ -3673,6 +3769,9 @@ const contentRoutes = new Hono()
 					// A project is a listing like any other, so an Adult member is absent
 					// from it rather than present and locked.
 					(await adultVisibility(viewerId)).hidden,
+					// A guardian's blocks hide as well as refuse — a shelf of cards a child
+					// cannot click is an advertisement, not a protection.
+					(await parentalVisibility(viewerId)).hidden,
 				),
 			)
 			.orderBy(asc(projectItems.sortOrder));

@@ -22,6 +22,7 @@ import {
 	GAUNTLET_POSTS,
 	gauntletPost,
 } from "@anthers/db/gauntlet";
+import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -49,6 +50,7 @@ function accessible(key: string): AccessibleWork {
 		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
+		type: "text",
 	};
 }
 
@@ -74,6 +76,7 @@ function ctx(givenAmount: number, purchased: number[] = []): AccessContext {
 		purchasedWorkIds: new Set(purchased),
 		adultAccess: true,
 		sharedBy: null,
+		parental: NO_PARENTAL_CONTROLS,
 	};
 }
 
@@ -204,6 +207,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
 		expect(resolveAccessSync(POSTS.G2, ctx(0)).reason).toBe("gated");
@@ -232,6 +236,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 		};
 		const free = resolveAccessSync(POSTS.G1, anon);
 		expect(free.reason).toBe("login_required");
@@ -268,6 +273,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 		});
 		expect(owner.canAccess).toBe(true);
 		expect(owner.reason).toBe("owner");
@@ -280,6 +286,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 		};
 		expect(resolveAccessSync(POSTS.G2, elsewhere).reason).toBe("gated");
 	});

@@ -2,6 +2,7 @@
 
 import { AuthProvider } from "@anthers/web-shared/auth";
 import { ContentPreferencesProvider } from "@anthers/web-shared/content-preferences";
+import { LanguageFilterProvider } from "@anthers/web-shared/language-filter";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
@@ -21,9 +22,14 @@ createRoot(root).render(
 				    they get — and outside the player, because a cover is veiled long before
 				    anything plays. */}
 				<ContentPreferencesProvider>
-					<MediaPlayerProvider>
-						<App />
-					</MediaPlayerProvider>
+					{/* Beside the rating preferences, for the same reason: both are things a
+					    reader asked for about how text and covers are shown to them, and both
+					    are read by surfaces far from where they are set. */}
+					<LanguageFilterProvider>
+						<MediaPlayerProvider>
+							<App />
+						</MediaPlayerProvider>
+					</LanguageFilterProvider>
 				</ContentPreferencesProvider>
 			</AuthProvider>
 		</BrowserRouter>

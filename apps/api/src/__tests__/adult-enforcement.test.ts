@@ -25,6 +25,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { accounts, users, works } from "@anthers/db/schema";
+import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../services/access";
@@ -171,6 +172,7 @@ describe("what an Adult rating costs", () => {
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
+			type: "text",
 			maturity: "adult",
 		};
 		const ctx = (over: Partial<AccessContext> = {}): AccessContext => ({
@@ -179,6 +181,7 @@ describe("what an Adult rating costs", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: false,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 			...over,
 		});
 
@@ -301,6 +304,7 @@ describe("what an Adult rating costs", () => {
 				seedAccess: OPEN_TO_EVERYONE,
 				takedownStatus: "active",
 				quarantineStatus: "none",
+				type: "text",
 				maturity: "adult",
 			};
 			const verified = resolveAccessSync(free, {
@@ -309,6 +313,7 @@ describe("what an Adult rating costs", () => {
 				purchasedWorkIds: new Set(),
 				adultAccess: true,
 				sharedBy: null,
+				parental: NO_PARENTAL_CONTROLS,
 			});
 			expect(verified.canAccess).toBe(true);
 			// `isFree` is the exact field the attention stamp multiplies into
@@ -324,6 +329,7 @@ describe("what an Adult rating costs", () => {
 				purchasedWorkIds: new Set(),
 				adultAccess: false,
 				sharedBy: null,
+				parental: NO_PARENTAL_CONTROLS,
 			});
 			expect(shutOut.canAccess).toBe(false);
 			expect(shutOut.isFree).toBe(false);
@@ -551,6 +557,7 @@ describe("what an Adult rating costs", () => {
 				seedAccess: table,
 				takedownStatus: "active",
 				quarantineStatus: "none",
+				type: "text",
 			};
 			const ctx = {
 				userId: 7,
@@ -558,6 +565,7 @@ describe("what an Adult rating costs", () => {
 				purchasedWorkIds: new Set<number>(),
 				adultAccess: true,
 				sharedBy: null,
+				parental: NO_PARENTAL_CONTROLS,
 			};
 
 			const asAdult = resolveAccessSync({ ...base, maturity: "adult" }, ctx);
@@ -576,6 +584,7 @@ describe("what an Adult rating costs", () => {
 				seedAccess: OPEN_TO_EVERYONE,
 				takedownStatus: "active",
 				quarantineStatus: "none",
+				type: "text",
 			};
 			const ctx = {
 				userId: 7,
@@ -583,6 +592,7 @@ describe("what an Adult rating costs", () => {
 				purchasedWorkIds: new Set<number>(),
 				adultAccess: false,
 				sharedBy: null,
+				parental: NO_PARENTAL_CONTROLS,
 			};
 
 			expect(resolveAccessSync({ ...base, maturity: "mature" }, ctx).canAccess).toBe(true);
@@ -601,6 +611,7 @@ describe("what an Adult rating costs", () => {
 				seedAccess: OPEN_TO_EVERYONE,
 				takedownStatus: "active",
 				quarantineStatus: "none",
+				type: "text",
 				maturity: "a-rung-from-the-future",
 			};
 			const got = resolveAccessSync(unknown, {
@@ -609,6 +620,7 @@ describe("what an Adult rating costs", () => {
 				purchasedWorkIds: new Set(),
 				adultAccess: false,
 				sharedBy: null,
+				parental: NO_PARENTAL_CONTROLS,
 			});
 			expect(got.canAccess).toBe(false);
 			expect(got.reason).toBe("adult_gated");
