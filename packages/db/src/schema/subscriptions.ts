@@ -58,6 +58,37 @@ export const accounts = pgTable("accounts", {
 	 */
 	stripeProductId: text("stripe_product_id").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active support subscription
+
+	// ── Adult access (wiki 40.09 § The funding type is the age signal) ──
+	// Three columns and no fourth, and the shortness is the design rather than a first
+	// pass. Reaching the Adult rung needs the account-level opt-in AND a verification;
+	// what is kept of the verification is that it happened, when, and by which method.
+	//
+	// 🚨 **There is no verification database, and no date of birth crosses our boundary.**
+	// The method is the FUNDING TYPE of a card — card issuers require the primary
+	// accountholder to be 18, so a credit-funded charge carries an age signal that a
+	// payment on its own does not. We read Stripe's `funding`, keep the verdict, and keep
+	// nothing about the card: no brand, no last4, no fingerprint, no funding value. That
+	// is what satisfies the non-retention requirement state law puts on verifiers by
+	// construction rather than by policy.
+	//
+	// ⚠️ **Never add a biometric method here.** Illinois BIPA, Texas CUBI and Washington's
+	// MHMDA all penalize the collection rather than the purpose, and BIPA carries a
+	// private right of action. Facial age estimation is out on those grounds and not on
+	// preference.
+	//
+	// The reader's own choice — "do you ever want to be shown Adult work, anywhere?".
+	// Separate from the verification because they answer different questions and either
+	// can be true without the other: somebody may verify and later turn the setting off.
+	adultOptIn: boolean("adult_opt_in").notNull().default(false),
+	// When adulthood was verified, or null if it never has been. A timestamp rather than
+	// a boolean so a method that later needs re-verifying has something to measure from.
+	adultVerifiedAt: timestamp("adult_verified_at", { withTimezone: true }),
+	// Which method did it — `card_funding` is the only value there is. Recorded rather
+	// than assumed so that a second method, if one is ever built, does not make the
+	// existing rows ambiguous about what was actually checked.
+	adultVerifiedMethod: text("adult_verified_method"),
+
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
