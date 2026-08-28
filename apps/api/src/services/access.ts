@@ -43,6 +43,7 @@ import { db } from "@anthers/db/client";
 import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
+import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import { and, eq, inArray } from "drizzle-orm";
 import { adultAccessFor } from "./content-preferences.js";
 
@@ -291,58 +292,6 @@ function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-/**
- * Does this access table open the Work to everyone, for free? That is what **Public Access**
- * is, expressed as a property of the rows.
- *
- * ⭐ **Only the baseline row counts, and that is not a loosening.** A row at a threshold
- * above zero priced at zero means "people who give this creator $3 a month get it at no
- * further cost", which is a Badge gate and is exactly what an Adult Work is allowed to sit
- * behind. What the rule forbids is the Work being free to *everyone*, which is the
- * `threshold: 0, allow: true, price: 0` row and nothing else.
- *
- * A predecessor of this function, `isPubliclyFree(post)`, was deleted for having no call
- * site and for the deeper reason recorded at the foot of this file — it was being used to
- * bake storage ACLs at upload time, before a Work has an access table at all. This one is a
- * different job: it reads a table the creator has just submitted, at the moment they submit
- * it, and answers a question about that table rather than about bytes.
- */
-export function isOpenToEveryoneFree(rows: SeedAccessRow[] | null | undefined): boolean {
-	return (rows ?? []).some(
-		(row) => row.allow && Number(row.threshold ?? 0) <= 0 && Number(row.price ?? "0") <= 0,
-	);
-}
-
-/**
- * Shut the free-to-everyone door, leaving every other rung exactly as it was.
- *
- * 🚨 **This is how the Adult rules get imposed on a Work that arrives at the rung by an
- * operator's correction rather than its creator's choice.** Refusing the correction is not
- * an option there — it would mean a Work can only be rated Adult with its creator's consent,
- * which is precisely the case the correction exists for. So the rating changes and the
- * consequence is applied in the same act.
- *
- * ⭐ **Only the baseline row is touched, and that restraint is the point.** A rung above the
- * baseline priced at zero means "supporters at $3 get it at no further cost", which is a
- * Badge gate and exactly the shape Adult work is supposed to have — flattening those would
- * be re-pricing somebody's work rather than enforcing a rule. What is removed is only the
- * door marked *free to everyone*, which is the one thing an Adult Work may not have.
- *
- * The result may be a Work nobody can open, when the creator had no rung above the baseline.
- * That is the correct outcome rather than an oversight: Adult work must be sold or gated,
- * only its creator can decide which, and until they do there is no price at which anybody
- * may have it. They are told, and they can appeal the rating itself.
- */
-export function closeFreeBaseline(rows: SeedAccessRow[] | null | undefined): SeedAccessRow[] {
-	const current = rows ?? [];
-	if (!isOpenToEveryoneFree(current)) return [...current];
-	return current.map((row) =>
-		row.allow && Number(row.threshold ?? 0) <= 0 && Number(row.price ?? "0") <= 0
-			? { ...row, allow: false }
-			: row,
-	);
-}
-
 /** An allowed row the viewer qualifies for: its numeric price and whether it's a baseline (everyone) row. */
 interface Offer {
 	price: number;
@@ -448,7 +397,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	// ⚠️ **Below the owner check, so a creator always reaches their own work.** A creator who
 	// has never opted in is not asking to be protected from the thing they made, and locking
 	// them out of their own Work would make it un-editable and un-previewable.
-	if (work.maturity === "adult" && !ctx.adultAccess) {
+	if (requiresAdultVerification(work.maturity) && !ctx.adultAccess) {
 		return { ...base, canAccess: false, reason: "adult_gated" };
 	}
 

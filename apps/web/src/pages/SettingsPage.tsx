@@ -11,8 +11,11 @@ import {
 } from "@anthers/web-shared/desktop";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
+import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import { getStripe } from "../lib/stripe";
+import { cardElementStyle } from "../lib/stripeCard";
 import { studioUrl } from "../lib/studio";
 
 interface DeviceSession {
@@ -196,6 +199,72 @@ interface BlockedUser {
 }
 
 /**
+ * The card field, shown only when there is no card to read.
+ *
+ * 🚨 **A `SetupIntent`, so no money moves and nothing reaches a statement.** The check reads
+ * the card's funding type and nothing else. This must never become a charge — see the route
+ * and `beginAdultVerification` for why.
+ */
+function AdultVerificationCard({ onVerified }: { onVerified: () => Promise<void> }) {
+	const stripe = useStripe();
+	const elements = useElements();
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const submit = async () => {
+		if (!stripe || !elements) return;
+		const card = elements.getElement(CardElement);
+		if (!card) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/adult-access/setup", { method: "POST" });
+			if (!res.ok) throw new Error();
+			const { clientSecret } = (await res.json()) as { clientSecret: string };
+
+			const { error: stripeError } = await stripe.confirmCardSetup(clientSecret, {
+				payment_method: { card },
+			});
+			// ⚠️ Stripe's own message, because it is the one that says *which* thing about
+			// the card was wrong. "That didn't work" would send somebody to re-type a number
+			// that was never the problem.
+			if (stripeError) {
+				setError(stripeError.message ?? "That card couldn't be added.");
+				return;
+			}
+			// The card is attached; the funding check reads it on the next call.
+			await onVerified();
+		} catch {
+			setError("That check couldn't be completed. Please try again shortly.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="mt-3 rounded-box border border-base-300 p-3">
+			<p className="text-xs text-base-content/60">
+				Add a credit card to confirm you're an adult. <strong>You will not be charged</strong> —
+				nothing is billed and nothing appears on your statement. We read only whether the card is a
+				credit card, and we keep only that the check happened.
+			</p>
+			<div className="mt-3 rounded-box border border-base-300 bg-base-100 px-3 py-2">
+				<CardElement options={{ style: cardElementStyle() }} />
+			</div>
+			{error && <p className="mt-2 text-sm text-error">{error}</p>}
+			<button
+				type="button"
+				className="btn btn-sm btn-primary mt-3"
+				disabled={busy || !stripe}
+				onClick={submit}
+			>
+				{busy ? "Checking…" : "Confirm I'm an adult"}
+			</button>
+		</div>
+	);
+}
+
+/**
  * What the reader meets at each rung, and the door to the Adult rung.
  *
  * 🚨 **The two rungs get separate controls, and that separation is the design rather than
@@ -213,6 +282,9 @@ function MatureContentSection() {
 	const { prefs, refresh } = useContentPreferences();
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// True once the server has said there is no card to read — the ordinary case for
+	// somebody who has never paid, which is most of the audience for free Adult work.
+	const [needsCard, setNeedsCard] = useState(false);
 
 	const setDisplay = async (rung: "mature" | "adult", value: MaturityDisplay) => {
 		setBusy(true);
@@ -240,13 +312,25 @@ function MatureContentSection() {
 				method: on ? "POST" : "DELETE",
 			});
 			if (!res.ok) {
-				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				// The server's own sentence. Each refusal has a different remedy and one has
-				// none, so a generic message here would undo the whole point of them being
-				// separate values.
+				const body = (await res.json().catch(() => null)) as {
+					error?: string;
+					code?: string;
+				} | null;
+				// ⭐ `no_card` is not an error, it is the next step. Somebody who has never
+				// paid for anything has no card to read, and that is the ordinary case now
+				// that Adult work can be free — so open the card field rather than telling
+				// them they are stuck.
+				if (body?.code === "no_card") {
+					setNeedsCard(true);
+					return;
+				}
+				// The server's own sentence otherwise. Each refusal has a different remedy
+				// and one has none, so a generic message here would undo the whole point of
+				// them being separate values.
 				setError(body?.error ?? "That couldn't be saved.");
 				return;
 			}
+			setNeedsCard(false);
 			await refresh();
 		} catch {
 			setError("That couldn't be saved.");
@@ -298,7 +382,8 @@ function MatureContentSection() {
 					<p className="font-medium text-sm">Adult</p>
 					<p className="text-xs text-base-content/60">
 						Explicit sexual content. You will not see it anywhere on Anthers unless you turn this
-						on, and it is always sold or gated by its creator rather than free.
+						on. Creators set their own price for it, or leave it free, exactly as they would for
+						anything else.
 					</p>
 
 					{prefs.adultAccess.canReach ? (
@@ -319,22 +404,33 @@ function MatureContentSection() {
 								Turning this on checks that you are an adult by looking at whether the card on your
 								account is a <strong>credit</strong> card, because card issuers require the primary
 								accountholder to be 18. Paying for something is not the check — debit and prepaid
-								cards have no age requirement at all, so they cannot answer it. We keep only that
-								the check happened and when; we never see or store your date of birth, and we never
-								ask for ID.
+								cards have no age requirement at all, so they cannot answer it, and{" "}
+								<strong>you are not charged anything</strong> either way. We keep only that the
+								check happened and when; we never see or store your date of birth, and we never ask
+								for ID.
 							</p>
 							<p className="mt-2 text-xs text-base-content/60">
 								If your only card is a debit or prepaid card, this will not let you in and we do not
 								have another way to do it. We would rather say so than pretend otherwise.
 							</p>
-							<button
-								type="button"
-								className="btn btn-sm btn-outline mt-3"
-								disabled={busy}
-								onClick={() => setAdultAccess(true)}
-							>
-								Turn Adult content on
-							</button>
+							{needsCard ? (
+								<Elements stripe={getStripe()}>
+									<AdultVerificationCard
+										onVerified={async () => {
+											await setAdultAccess(true);
+										}}
+									/>
+								</Elements>
+							) : (
+								<button
+									type="button"
+									className="btn btn-sm btn-outline mt-3"
+									disabled={busy}
+									onClick={() => setAdultAccess(true)}
+								>
+									Turn Adult content on
+								</button>
+							)}
 						</div>
 					)}
 				</div>

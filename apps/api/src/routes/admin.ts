@@ -505,9 +505,10 @@ const adminRoutes = new Hono()
 	// theirs to overturn: a queer person existing in a story does not make it mature, and
 	// subject matter is not the same as treatment.
 	//
-	// 🚨 **Correcting a Work to `adult` also closes its free public access**, because Adult
-	// work may not be free and a correction is exactly the case where nobody has agreed to
-	// that. The rating and the consequence are one act — see `correctRating`.
+	// ⭐ **A correction changes the rating and nothing else.** Adult work may be free, may be
+	// Public Access and earns the Time Pool like anything else — the rung restricts who may
+	// reach a Work, never what its creator may charge or earn. A correction that re-priced
+	// somebody's work would make the rating a penalty, which it is not.
 	.post("/works/rating", zValidator("json", correctRatingSchema), async (c) => {
 		const user = c.get("user");
 		const { workId, maturity, notes, note } = c.req.valid("json");
@@ -520,14 +521,9 @@ const adminRoutes = new Hono()
 		});
 		if (!updated) return c.json({ error: "Work not found" }, 404);
 		return c.json({
-			workId: updated.work.id,
-			maturity: updated.work.maturity,
-			notes: updated.work.maturityNotes ?? [],
-			// Reported so the console can say what the correction did beyond changing a
-			// label. Correcting a Public Access Work to Adult closes its free door, and an
-			// operator who is not told that has taken an action they did not know they were
-			// taking. The creator is notified separately.
-			accessClosed: updated.accessClosed,
+			workId: updated.id,
+			maturity: updated.maturity,
+			notes: updated.maturityNotes ?? [],
 		});
 	})
 

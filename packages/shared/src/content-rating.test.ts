@@ -23,6 +23,7 @@ import {
 	maturityLabel,
 	normalizeContentNotes,
 	releaseRatingRefusal,
+	requiresAdultVerification,
 	rungBelow,
 } from "./content-rating.js";
 
@@ -68,15 +69,57 @@ describe("the rating vocabulary", () => {
 		expect(maturityLabel("something-new")).toBe("something-new");
 	});
 
-	it("tells a creator what the Adult rung costs, in the hint they read while choosing", () => {
-		// The three consequences a creator is agreeing to, and the reason this is asserted
-		// rather than left to review: Adult is the one rung that takes money and audience
-		// away, and a hint that described it as merely "explicit" would be collecting a
-		// declaration nobody was told the price of.
+	it("tells a creator the Adult rung costs them nothing, in the hint they read while choosing", () => {
+		// 🚨 The rating was paid-only until 2026-08-28, and a creator carrying that
+		// assumption would under-declare to avoid a price that no longer exists — the exact
+		// pressure wiki 40.13 is built to remove. So the hint has to say what the rung does
+		// NOT do, and this asserts it still does.
 		const adult = MATURITY_CHOICES.find((c) => c.value === "adult");
-		expect(adult?.hint).toContain("Public Access");
-		expect(adult?.hint).toContain("Time Pool");
 		expect(adult?.hint).toContain("verified");
+		expect(adult?.hint).toContain("Public Access");
+		expect(adult?.hint).toContain("still earns from the Time Pool");
+		// And never the retired claim.
+		expect(adult?.hint).not.toContain("must be sold");
+		expect(adult?.hint).not.toContain("never Public Access");
+	});
+});
+
+describe("requiresAdultVerification — the gate that has to fail closed", () => {
+	it("says no for the rungs that genuinely need nothing", () => {
+		expect(requiresAdultVerification("unrated")).toBe(false);
+		expect(requiresAdultVerification("general")).toBe(false);
+		// 🚨 Mature especially. A mature rating is a warning and a filter input carrying no
+		// access consequence, and a gate that read it would silently put the work wiki 40.13
+		// draws its rows to protect behind an age check.
+		expect(requiresAdultVerification("mature")).toBe(false);
+	});
+
+	it("says yes for Adult", () => {
+		expect(requiresAdultVerification("adult")).toBe(true);
+	});
+
+	it("🚨 says yes for anything it does not recognize, including null", () => {
+		// **The whole reason this is a function rather than `=== "adult"` at each call
+		// site.** The two ways it can be wrong are not symmetric: refusing an adult
+		// something they should have is a complaint, showing a minor something they should
+		// not is the failure the rung exists to prevent. So a value from a newer deployment
+		// mid-rollout, a corrupted row, or a rung added above `adult` later is gated rather
+		// than waved through — *"I'd rather have someone not see Adult content when they
+		// should than see Adult content when they shouldn't"* (Parker, 2026-08-28).
+		expect(requiresAdultVerification("a-rung-from-the-future")).toBe(true);
+		expect(requiresAdultVerification("")).toBe(true);
+		expect(requiresAdultVerification(null)).toBe(true);
+		expect(requiresAdultVerification(undefined)).toBe(true);
+		// Case matters, because the stored value is a code rather than prose.
+		expect(requiresAdultVerification("Mature")).toBe(true);
+	});
+
+	it("classifies every rung the scale defines", () => {
+		// Ties the predicate to the vocabulary, so a value added to `MATURITY_RATINGS`
+		// without a decision here shows up as `adult`-side rather than as an oversight.
+		for (const rating of MATURITY_RATINGS) {
+			expect(requiresAdultVerification(rating), rating).toBe(rating === "adult");
+		}
 	});
 });
 

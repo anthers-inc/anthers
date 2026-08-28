@@ -267,10 +267,18 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
 		email: email || undefined,
 		metadata: { userId: String(userId) },
 	});
+	// ⚠️ Upserts rather than updates. **Signing up does not create an `accounts` row** — one
+	// appears on first payment — so a plain UPDATE affected nothing for a user who had never
+	// paid, and this returned a customer id it had not persisted. Every existing caller
+	// reaches here through a flow that already made the row, which is why it never showed;
+	// adulthood verification is the first caller for whom "never paid" is the normal case.
 	await db
-		.update(accounts)
-		.set({ stripeCustomerId: customer.id, updatedAt: new Date() })
-		.where(eq(accounts.userId, userId));
+		.insert(accounts)
+		.values({ userId, stripeCustomerId: customer.id })
+		.onConflictDoUpdate({
+			target: accounts.userId,
+			set: { stripeCustomerId: customer.id, updatedAt: new Date() },
+		});
 	return customer.id;
 }
 

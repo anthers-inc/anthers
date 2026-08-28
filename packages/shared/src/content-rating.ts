@@ -46,8 +46,9 @@
  * - `general` — its creator says anyone can meet it.
  * - `mature` — its creator (or an operator) says it is made for adults. A warning and a
  *   filter input, carrying no access consequence at all.
- * - `adult` — explicit sexual depiction central to the work. Paid, verified, never in the
- *   commons, invisible to anyone who has not opted in.
+ * - `adult` — explicit sexual depiction central to the work. Reachable only by an account
+ *   that has opted in and verified an adult, and invisible to everyone else. It costs its
+ *   creator nothing: Adult work may be free, may be Public Access, and earns the Time Pool.
  *
  * 🚨 **Nothing above `adult` is a rating.** Work made for the purpose of sexual
  * gratification is not published on Anthers at all, so there is no rung for it and no reason
@@ -107,13 +108,19 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
 	},
 	{
 		value: "adult",
-		// ⭐ The hint states what the rung COSTS rather than only what it covers, because
-		// this is the one rating that takes money and audience away and a creator should not
-		// be able to choose it without having been told the price. It describes the rung
-		// itself and not whether Anthers is currently accepting work at it — that is
-		// `ACCEPTED_MATURITY_RATINGS`, it changes, and a sentence here would go stale.
+		// ⭐ The hint says what the rung DOES and, just as deliberately, what it does not do.
+		// It restricts who may reach a Work and touches nothing about what its creator may
+		// charge or earn — Adult work may be free, may be Public Access, and earns the Time
+		// Pool like anything else. Saying so is not reassurance padding: the rating was
+		// paid-only until 2026-08-28, and a creator who assumed the old cost would
+		// under-declare to avoid a price that no longer exists, which is the exact pressure
+		// 40.13 is built to remove.
+		//
+		// It describes the rung itself and not whether Anthers is currently accepting work
+		// at it — that is `ACCEPTED_MATURITY_RATINGS`, it changes, and a sentence here would
+		// go stale.
 		label: "Adult",
-		hint: "Explicit sexual depiction that is central to the work. Adult work must be sold or gated rather than free, so it is never Public Access and earns nothing from the Time Pool, and it is visible only to people who have opted in and verified that they are adults.",
+		hint: "Explicit sexual depiction that is central to the work. This changes who can reach it and nothing else: only people who have opted in and verified that they are adults. You can still price it however you like, still leave it free in Public Access, and it still earns from the Time Pool.",
 	},
 ] as const;
 
@@ -148,6 +155,29 @@ export const ACCEPTED_MATURITY_RATINGS: readonly DeclarableMaturity[] = [
 	"mature",
 	"adult",
 ];
+
+/**
+ * Does reaching a Work at this rating require a verified adult?
+ *
+ * 🚨 **Unknown values answer `true`, and that is the whole reason this is a function rather
+ * than `maturity === "adult"` at each call site.** Every gate in the system reads this, and
+ * the two ways it can be wrong are not symmetric: refusing an adult something they should
+ * have is a complaint, and showing a minor something they should not is the failure the rung
+ * exists to prevent. So a rating this build does not recognize — a value from a newer
+ * deployment during a rolling migration, a corrupted row, a rung added above `adult` later —
+ * is treated as needing verification rather than waved through.
+ *
+ * ⭐ **Err toward not showing it** (Parker, 2026-08-28): *"I'd rather have someone not see
+ * Adult content when they should than see Adult content when they shouldn't."* This function
+ * is where that instruction lives, and anything that learns to compare against `"adult"`
+ * directly has opted out of it.
+ */
+export function requiresAdultVerification(maturity: string | null | undefined): boolean {
+	if (maturity == null) return true;
+	// The ratings that are known to need nothing. Anything else — including a value this
+	// build has never heard of — falls through to `true`.
+	return maturity !== "unrated" && maturity !== "general" && maturity !== "mature";
+}
 
 /** Does Anthers currently accept Works at this rung? */
 export function isRatingAccepted(
