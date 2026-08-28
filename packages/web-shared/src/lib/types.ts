@@ -90,7 +90,17 @@ export interface UnlockOffer {
 	creator: UnlockRoute | null;
 }
 
-/** Resolved access for a post + viewer (see api services/access.ts). */
+/**
+ * Resolved access for a post + viewer (see api services/access.ts).
+ *
+ * ⚠️ **`reason` is a hand-written mirror of the server's `AccessReason`, and it was three
+ * values behind it** until 2026-08-28: `takedown`, `quarantined` and `adult_gated` all
+ * reach a viewer in production and none of them existed here. Nothing broke, because every
+ * consumer treats an unrecognized reason as "locked" and falling closed is the safe
+ * direction — but a union that omits arrivable values makes every exhaustiveness check on
+ * it a lie, which is a bad thing to be one refactor away from relying on. Adding a reason
+ * on the server means adding it here.
+ */
 export interface AccessResult {
 	canAccess: boolean;
 	reason:
@@ -100,7 +110,10 @@ export interface AccessResult {
 		| "entitled"
 		| "payment_required"
 		| "gated"
-		| "login_required";
+		| "login_required"
+		| "takedown"
+		| "quarantined"
+		| "adult_gated";
 	isFree: boolean;
 	requiresPurchase: boolean;
 	price: string | null;

@@ -431,6 +431,38 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	// Free when any qualifying allowed row is priced at/below 0.
 	if (offers.some((o) => o.price <= 0)) {
 		const universallyFree = offers.some((o) => o.baseline && o.price <= 0);
+
+		/**
+		 * 🚨 **Consuming a Work requires an account, and this is the line that says so.**
+		 *
+		 * A signed-out visitor resolved `free` here until 2026-08-28, which is the single
+		 * fact the whole anonymous-viewing model rested on. It was never a decision: no
+		 * delivery route carried `requireAuth`, and a justification for the absence
+		 * ("anonymous streaming of the commons is the shop window") was written down
+		 * afterwards and propagated into 21.01, the Roadmap and this layer's own comments.
+		 * Parker's correction on 2026-08-14 is that an account is how terms are accepted,
+		 * how 13+ is asserted, and above all how attention is attributed — **the Time Pool
+		 * cannot pay a creator for time it cannot attribute to anyone.** So the commons was
+		 * being watched for free by nobody in particular, and the creator earned nothing.
+		 *
+		 * ⚠️ **`isFree` stays true, and that is the point of putting the refusal here rather
+		 * than at the top of the resolver.** What is public is the Work's *page* — title,
+		 * cover, duration, and the verdict itself — and what requires an account is
+		 * **delivery**. A signed-out visitor still learns that this Work is free to everyone,
+		 * which is what makes the page worth sharing and worth unfurling; they simply are not
+		 * handed the bytes. `serializeWorkForViewer` reads `canAccess` for the deliverable and
+		 * `isFree` for the Public Access badge, so both halves of that sentence land.
+		 *
+		 * **`payment_required` and `gated` are deliberately left alone below and above.**
+		 * Both already refuse a signed-out visitor, and both tell them something true and
+		 * useful about the price of entry. Collapsing them into `login_required` would
+		 * subtract the price from a public page in order to state a rule that page is already
+		 * obeying.
+		 */
+		if (ctx.userId == null) {
+			return { ...base, canAccess: false, reason: "login_required", isFree: universallyFree };
+		}
+
 		return {
 			...base,
 			canAccess: true,

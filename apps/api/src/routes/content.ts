@@ -1195,8 +1195,18 @@ function serializeWorkForViewer(
  * inside `resolveAccessSync` — which is pure and synchronous precisely so a batch
  * resolves without an N+1.
  *
- * A logged-out viewer is never spent: the server hands anonymous callers the full
- * allowance on purpose, because anonymous streaming of the commons is the shop window.
+ * 🚨 **This docstring is where the anonymous-viewing rationale was written down**, and it
+ * is worth saying so rather than quietly deleting it. It read: *"A logged-out viewer is
+ * never spent: the server hands anonymous callers the full allowance on purpose, because
+ * anonymous streaming of the commons is the shop window."* Nobody decided that. It was a
+ * plausible-sounding sentence invented to explain a missing `requireAuth`, and from here it
+ * reached 21.01, the Roadmap and the meter's own module docs, where it read like settled
+ * policy because it was written in the voice of one. **A comment explaining why the code is
+ * right is not evidence that anybody chose it.**
+ *
+ * A signed-out viewer now has no allowance at all, so this reports them spent — which no
+ * longer decides anything, because `resolveAccessSync` has already refused them the
+ * deliverable by then.
  */
 async function allowanceSpent(viewerId: number | null): Promise<boolean> {
 	const budget = await loadPublicAccessBudget(viewerId);
@@ -1973,10 +1983,41 @@ const contentRoutes = new Hono()
 		return c.json({ rating }, 201);
 	})
 
-	// ── Access-checked asset download ─────────────────────────────────────────────
-	// Assets belong to a Work, and the Work carries the gate. No post is involved: an
-	// entitled viewer can download from the Catalog whether or not anything was announced.
-	.post("/works/:id/assets/:assetId/download", async (c) => {
+	/*
+	 * ── The four delivery endpoints ───────────────────────────────────────────────
+	 *
+	 * 🚨 **`requireAuth` on all four, since 2026-08-28. Consuming a Work requires an
+	 * account.** The line is the page versus the bytes: `GET /works/:id` stays open to
+	 * everybody, so a Work's page is shareable, indexable and unfurls properly, and these —
+	 * the routes that actually hand something over — are the ones that ask who is calling.
+	 *
+	 * Anonymous delivery was never a decision. It was the absence of this middleware, which
+	 * later acquired a written justification ("anonymous streaming of the commons is the
+	 * shop window") that propagated into 21.01, the Roadmap and this file's own comments.
+	 * What it cost, concretely: `POST /attention` **is** authenticated, so the bytes went out
+	 * and no attention event was ever written — **the creator earned nothing for anonymous
+	 * viewing of their Public Access work**, silently, with no error and nothing logged. And
+	 * `loadPublicAccessBudget(null)` returned the full allowance, so anonymous streaming was
+	 * *unlimited* while signing in reduced you to ten hours a month — the incentive inverted
+	 * directly underneath the platform's one conversion event.
+	 *
+	 * ⚠️ **The middleware is the guard; it is not the only one.** `resolveAccessSync` refuses
+	 * a null viewer independently, which is what covers text, games, images and software —
+	 * their deliverable rides inside `GET /works/:id` and passes no route of its own. Neither
+	 * check is redundant: remove the middleware and these four leak, remove the resolver rule
+	 * and the other four types do.
+	 *
+	 * 📌 A packaged desktop Studio presents its session as `Authorization: Bearer`, which
+	 * `requireAuth` accepts — but an `<img>`, an `<audio src>` and hls.js cannot attach a
+	 * header, so media in a Tauri window still depends on the cookie it cannot send. That
+	 * gap predates this change and is not closed by it; closing it needs a signed-URL
+	 * handoff, and no installer has been built yet.
+	 *
+	 * ── Access-checked asset download ─────────────────────────────────────────────
+	 * Assets belong to a Work, and the Work carries the gate. No post is involved: an
+	 * entitled viewer can download from the Catalog whether or not anything was announced.
+	 */
+	.post("/works/:id/assets/:assetId/download", requireAuth, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2004,11 +2045,9 @@ const contentRoutes = new Hono()
 		// `works.download_count` above cannot answer it, being a Work-wide counter
 		// with no idea who pulled. Fire-and-forget for the same reason the counter
 		// is: nothing about bookkeeping may stand between a buyer and their file.
-		// (This route has no `requireAuth` — access can be free or entitled — so the
-		// viewer comes from the optional session, and a signed-out one stamps
-		// nothing because there is no purchase of theirs to stamp.)
-		const viewerId = await getOptionalUserId(c);
-		if (viewerId) void markPurchaseDownloaded(viewerId, work.id);
+		// The stamp is a no-op for a downloader who was entitled rather than a buyer,
+		// since there is no purchase of theirs to stamp.
+		void markPurchaseDownloaded(c.get("user").id, work.id);
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
 		// ignores signing and serves via /content).
@@ -2042,7 +2081,7 @@ const contentRoutes = new Hono()
 	// so this is the only way to reach it: access is re-checked here on every request,
 	// then we redirect to a short-lived signed CDN URL. A redirect rather than a proxy so
 	// range requests (seeking) go straight to the CDN instead of through the API.
-	.get("/works/:id/audio", async (c) => {
+	.get("/works/:id/audio", requireAuth, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2078,7 +2117,7 @@ const contentRoutes = new Hono()
 	// through a check, rather than as a single file whose URL is the whole book. Same shape
 	// as the audio route above — re-resolve access, meter the commons, redirect to a
 	// short-lived signed URL.
-	.get("/works/:id/pages/:page", async (c) => {
+	.get("/works/:id/pages/:page", requireAuth, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2114,7 +2153,7 @@ const contentRoutes = new Hono()
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
 	// short-lived signed CDN URLs. Segments are always private, so EVERY accessible Work
 	// (free or gated) is pointed here by serializeWorkForViewer; this check is the gate.
-	.get("/works/:id/hls/:file", async (c) => {
+	.get("/works/:id/hls/:file", requireAuth, async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.
 		if (!/^[A-Za-z0-9_.-]+\.m3u8$/.test(file)) return c.json({ error: "Not found" }, 404);

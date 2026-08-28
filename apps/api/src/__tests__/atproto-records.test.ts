@@ -181,9 +181,15 @@ describe("what the record must never carry", () => {
 		// `knownValues` is an OPEN set and so is not a validation constraint — the generated
 		// schema drops it, which is exactly why adding a medium later is not a breaking
 		// change. The JSON is the artefact that gets published, so the JSON is what to check.
-		const lexicon = await Bun.file("lexicons/org/anthers/work.json").json();
+		// ⚠️ Resolved from this file rather than from the cwd. Both paths are repo-root
+		// relative, so they read fine under `bun test` from the root and threw ENOENT under
+		// `bun run --filter '*' test`, where the cwd is `apps/api` — which is what CI and
+		// `make verify` run. The test was therefore red on `main` and green whenever anyone
+		// checked it in isolation, which is the worst of the two ways for a test to be broken.
+		const repoRoot = new URL("../../../../", import.meta.url).pathname;
+		const lexicon = await Bun.file(`${repoRoot}lexicons/org/anthers/work.json`).json();
 		const known: string[] = lexicon.defs.main.record.properties.kind.knownValues;
-		const attention = await Bun.file("packages/shared/src/attention.ts").text();
+		const attention = await Bun.file(`${repoRoot}packages/shared/src/attention.ts`).text();
 		const consumption = attention.slice(
 			attention.indexOf("const CONSUMPTION"),
 			attention.indexOf("};", attention.indexOf("const CONSUMPTION")),

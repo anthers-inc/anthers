@@ -16,7 +16,7 @@
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
-import { LockedCover, lockedByBadge } from "@anthers/web-shared/post/unlock";
+import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
@@ -333,11 +333,26 @@ export default function WorkPage() {
 			<section ref={deliverableRef}>
 				{!canAccess ? (
 					<div className="space-y-4">
-						<LockedCover
-							thumbnail={work.thumbnail}
-							className="aspect-video rounded-lg"
-							lockedBy={access ? lockedByBadge(access, creatorName) : null}
-						/>
+						{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
+						    is not a lock — the Work is free to everyone and stays free; what is
+						    missing is an account for the time to be attributed to. So the cover
+						    stays unblurred and un-padlocked here, and the card underneath asks
+						    for the account instead. See `presentsAsLocked`. */}
+						{presentsAsLocked(access) ? (
+							<LockedCover
+								thumbnail={work.thumbnail}
+								className="aspect-video rounded-lg"
+								lockedBy={access ? lockedByBadge(access, creatorName) : null}
+							/>
+						) : (
+							work.thumbnail && (
+								<img
+									src={work.thumbnail}
+									alt=""
+									className="aspect-video w-full rounded-lg object-cover"
+								/>
+							)
+						)}
 						{access &&
 							(access.requiresPurchase ? (
 								<>
@@ -440,7 +455,7 @@ export default function WorkPage() {
 						 * an image is an <img>. The players own their own footer; everything else
 						 * has this one.
 						 */}
-						{playerless && <PublicAccessFooter playing={false} />}
+						{playerless && <PublicAccessFooter />}
 					</>
 				)}
 			</section>

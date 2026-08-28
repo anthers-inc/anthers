@@ -190,8 +190,14 @@ test("volume is remembered across a reload", async ({ page }) => {
 	await expect.poll(async () => (await videoState(page))?.volume).toBeCloseTo(0.3, 2);
 });
 
-test("a first visit opens at full volume, not silent", async ({ page, context }) => {
-	await context.clearCookies();
+test("a first visit opens at full volume, not silent", async ({ page }) => {
+	// ⚠️ **"First visit" means no stored preference, not no account**, and this used to
+	// clear the cookies too. That was incidental — a signed-out page was simply the
+	// shortest way to reach a browser with nothing in `localStorage` — and it stopped
+	// working on 2026-08-28, when consuming a Work began requiring an account: a signed-out
+	// visitor gets the invitation to make one where the `<video>` element used to be, so
+	// `openPlayer` timed out looking for a player that correctly wasn't there. Clearing the
+	// two keys is what the test was actually after.
 	await page.goto("/");
 	await page.evaluate(() => {
 		localStorage.removeItem("anthers_media_volume");

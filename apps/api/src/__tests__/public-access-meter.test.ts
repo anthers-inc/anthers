@@ -410,14 +410,34 @@ describe("the stamp is taken at write time", () => {
 });
 
 describe("an anonymous viewer", () => {
-	it("gets the full allowance rather than a refusal", async () => {
-		// Anonymous streaming of the commons is the shop window; the honest place to meter
-		// someone is once there is an account to meter.
+	/*
+	 * 🚨 **This block asserted the opposite until 2026-08-28**, under the heading *"gets
+	 * the full allowance rather than a refusal"*: `allowed: true`, and a playlist request
+	 * that was not a 402. Both were true, and together they were the defect — anonymous
+	 * Public Access streaming was **unlimited** while a signed-in viewer got ten hours a
+	 * month, and since `POST /attention` requires an account, none of that time was ever
+	 * attributed and **the creator earned nothing for it**. The incentive ran backwards
+	 * directly underneath the platform's only conversion event.
+	 *
+	 * Nobody decided that. It was a missing `requireAuth` with a justification written
+	 * afterwards ("anonymous streaming of the commons is the shop window"), which then
+	 * propagated into 21.01, the Roadmap, this test's own comment and the meter's module
+	 * docs — where it read as settled policy because it was written in the voice of one.
+	 */
+	it("has no allowance at all, because an allowance belongs to an account", async () => {
 		const res = await req("/api/subscriptions/public-access");
 		const budget = await res.json();
+		expect(budget.allowed).toBe(false);
+		expect(budget.limitSeconds).toBe(0);
+		// Not `usedSeconds: FREE_PUBLIC_ACCESS_SECONDS`. Both readings refuse, but only one
+		// of them is true — a signed-out visitor has consumed nothing we could attribute.
 		expect(budget.usedSeconds).toBe(0);
-		expect(budget.allowed).toBe(true);
-		expect((await playlist(paWorkId)).status).not.toBe(402);
+	});
+
+	it("is refused the playlist outright rather than metered on it", async () => {
+		// 401, not 402: they have not spent an allowance, they have no account. The meter
+		// is never consulted, because `requireAuth` refuses before the route runs.
+		expect((await playlist(paWorkId)).status).toBe(401);
 	});
 });
 
@@ -540,12 +560,35 @@ describe("media with no player of their own", () => {
 		expect(work.publicAccess).toBe(false);
 	});
 
-	it("an anonymous reader is never withheld from", async () => {
-		// The server hands logged-out callers the full allowance on purpose — anonymous
-		// reading of the commons is the shop window, and there is no account to meter.
+	it("🚨 an anonymous reader gets the page and never the prose", async () => {
+		/*
+		 * The account requirement, at the one choke point text passes through.
+		 *
+		 * This asserted `bodyHtml === TEXT_BODY` until 2026-08-28 — *"an anonymous reader
+		 * is never withheld from"* — and text is the medium where that mattered most,
+		 * because a text Work has no delivery endpoint of its own. Its deliverable rides
+		 * inside `GET /works/:id`, so adding `requireAuth` to the four media routes does
+		 * nothing for it; only `resolveAccessSync` refusing a null viewer closes it. That
+		 * is why neither guard is redundant.
+		 *
+		 * The rest of the payload staying present is the other half of the rule: the page
+		 * is public, the bytes are not.
+		 */
 		const res = await req(`/api/content/works/${textWorkId}`);
-		const { work } = (await res.json()) as { work: { bodyHtml: string } };
-		expect(work.bodyHtml).toBe(TEXT_BODY);
+		expect(res.status).toBe(200);
+		const { work } = (await res.json()) as {
+			work: {
+				bodyHtml: string;
+				title: string | null;
+				access: { reason: string };
+				publicAccess: boolean;
+			};
+		};
+		expect(work.bodyHtml).toBe("");
+		expect(work.access.reason).toBe("login_required");
+		// Still described as the commons, and still carrying everything a listing needs.
+		expect(work.publicAccess).toBe(true);
+		expect(work.title).toBeTruthy();
 	});
 
 	it("⚠️ a spent allowance never withholds a DOWNLOAD", async () => {

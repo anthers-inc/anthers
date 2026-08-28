@@ -3,18 +3,18 @@
 // The browser half of the Public Access meter — the pure parts.
 //
 // The hooks need a DOM and are covered by the e2e spec; what is testable here is the
-// policy that decides *whether the meter speaks at all*, plus the anonymous tally, which
-// is the piece most likely to be mistaken for a budget by someone reading it later.
-import { beforeEach, describe, expect, test } from "bun:test";
+// policy that decides *whether the meter speaks at all*.
+//
+// A second block covered an **anonymous tally** — a `localStorage` count of how long a
+// logged-out visitor had watched, used to time a signup invitation. It went with the
+// anonymous-viewing model on 2026-08-28: consuming a Work requires an account, so there is
+// no anonymous playback left to count.
+import { describe, expect, test } from "bun:test";
 import { FREE_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import {
-	ANON_PROMPT_SECONDS,
-	clearAnonymousSeconds,
 	describeRemaining,
 	LOW_BUDGET_SECONDS,
 	type PublicAccessBudget,
-	readAnonymousSeconds,
-	recordAnonymousSeconds,
 	shouldWarn,
 } from "./public-access";
 
@@ -103,68 +103,5 @@ describe("describeRemaining", () => {
 		// Telling someone they have a minute left when they have eleven seconds is the
 		// direction that gets the player cut off mid-sentence.
 		expect(describeRemaining(119)).toBe("1 minute");
-	});
-});
-
-describe("the anonymous tally", () => {
-	/**
-	 * Bun's test runtime has no DOM, so `localStorage` is genuinely absent here — which
-	 * is the same condition as a browser with storage disabled. Stubbing it makes the
-	 * ordinary path testable; the un-stubbed case is asserted on its own below, because
-	 * "storage is off" is a real state a reader can be in and the tally has to survive it.
-	 */
-	beforeEach(() => {
-		const store = new Map<string, string>();
-		(globalThis as any).localStorage = {
-			getItem: (k: string) => store.get(k) ?? null,
-			setItem: (k: string, v: string) => store.set(k, v),
-			removeItem: (k: string) => store.delete(k),
-		};
-		clearAnonymousSeconds();
-	});
-
-	test("accumulates and survives a read", () => {
-		recordAnonymousSeconds(60);
-		recordAnonymousSeconds(30);
-		expect(readAnonymousSeconds()).toBe(90);
-	});
-
-	test("ignores non-positive ticks", () => {
-		recordAnonymousSeconds(10);
-		recordAnonymousSeconds(0);
-		recordAnonymousSeconds(-5);
-		expect(readAnonymousSeconds()).toBe(10);
-	});
-
-	test("clears completely", () => {
-		recordAnonymousSeconds(600);
-		clearAnonymousSeconds();
-		expect(readAnonymousSeconds()).toBe(0);
-	});
-
-	/**
-	 * 🚨 The distinction this whole file exists to keep straight.
-	 *
-	 * The tally is **not a budget**. A logged-out viewer is not metered at all — the
-	 * server hands them the full allowance every time, deliberately, because anonymous
-	 * streaming of the commons is the shop window. This number only decides when to
-	 * mention that accounts exist, and it is trivially resettable, which is fine because
-	 * nothing is enforced with it.
-	 */
-	test("crosses the prompt mark well short of the free allowance", () => {
-		expect(ANON_PROMPT_SECONDS).toBeLessThan(FREE_PUBLIC_ACCESS_SECONDS);
-		// Half an hour of watching is an invitation; ten hours would be a limit, and an
-		// anonymous viewer has none.
-		expect(ANON_PROMPT_SECONDS).toBe(30 * 60);
-	});
-
-	test("degrades to silence when storage is unavailable, rather than throwing", () => {
-		// A browser with storage disabled must still play video. The prompt simply never
-		// fires, which is the safe direction to fail in — an un-prompted viewer loses
-		// nothing, while an exception here would take the player down with it.
-		(globalThis as any).localStorage = undefined;
-		expect(() => recordAnonymousSeconds(60)).not.toThrow();
-		expect(() => clearAnonymousSeconds()).not.toThrow();
-		expect(readAnonymousSeconds()).toBe(0);
 	});
 });

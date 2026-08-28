@@ -32,6 +32,15 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  *
  * Since none of those are Public Access, the meter simply counts Public Access seconds —
  * the exclusions fall out of the definition rather than being a list of special cases.
+ *
+ * 🚨 **An allowance belongs to an account, so somebody with no account has none.** That is
+ * not a refusal dressed up as arithmetic; it is what the word means here. Consuming a Work
+ * requires an account (21.01 §9.1), which makes a signed-out visitor somebody the meter
+ * never has to answer for rather than somebody it answers generously about. This module
+ * said the opposite until 2026-08-28 — it handed a logged-out caller the full allowance
+ * with nothing spent, and called anonymous streaming the shop window — and that sentence
+ * was the written justification for a missing `requireAuth` rather than a decision anybody
+ * took. See {@link NO_PUBLIC_ACCESS_ALLOWANCE}.
  */
 
 /**
@@ -62,6 +71,29 @@ export interface PublicAccessBudget {
 	/** Whether the viewer may start more Public Access right now. */
 	allowed: boolean;
 }
+
+/**
+ * The standing of somebody with no account: no allowance, none of it spent.
+ *
+ * ⚠️ **`limitSeconds: 0` is the honest reading and `usedSeconds: FREE_PUBLIC_ACCESS_SECONDS`
+ * would not be.** Both would make `allowed` false, but only one of them is true — a
+ * signed-out visitor has consumed nothing we could attribute to them, and saying they had
+ * burned ten hours would put a fabricated number in front of anyone who read the budget.
+ * What is actually zero is the allowance itself, because an allowance is a property of an
+ * account and there is no account here.
+ *
+ * Nothing user-facing renders this today: the browser store drops the budget entirely when
+ * signed out, and delivery refuses a signed-out request before the meter is consulted. It
+ * is stated anyway so that the one place the logged-out budget is built says what it means,
+ * the way `buildAccessContext` does for the logged-out access context.
+ */
+export const NO_PUBLIC_ACCESS_ALLOWANCE: PublicAccessBudget = {
+	unlimited: false,
+	usedSeconds: 0,
+	limitSeconds: 0,
+	remainingSeconds: 0,
+	allowed: false,
+};
 
 /**
  * Resolve a viewer's Public Access standing from the two facts it depends on.

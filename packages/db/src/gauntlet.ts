@@ -180,10 +180,15 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 		"free-post",
 		"Anyone can read this",
 		"always — free to everyone",
-		"The free post. It streams for anyone, signed in or not, and it is the gauntlet's comment target. With no gate on it and streaming on, this is what Public Access means.",
+		"The free post. It streams for every account, at no cost and at no rung, and it is the gauntlet's comment target. With no gate on it and streaming on, this is what Public Access means.",
 		{
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
-			// Free + real video: the case where the bytes MUST arrive, for anyone at all.
+			// Free + real video: the case where the bytes MUST arrive for any account at all.
+			//
+			// ⚠️ This said "for anyone at all", and the copy above said it streams "for
+			// anyone, signed in or not". Both were true until 2026-08-28 and both were the
+			// anonymous-viewing model rather than a decision. Consuming a Work requires an
+			// account; what a signed-out visitor gets is the *page*.
 			contentType: "video",
 			media: "video",
 		},

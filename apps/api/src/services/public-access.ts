@@ -28,7 +28,11 @@
 import { db } from "@anthers/db/client";
 import { accounts, attentionEvents } from "@anthers/db/schema";
 import { supportAmount } from "@anthers/shared/constants";
-import { type PublicAccessBudget, publicAccessBudget } from "@anthers/shared/public-access";
+import {
+	NO_PUBLIC_ACCESS_ALLOWANCE,
+	type PublicAccessBudget,
+	publicAccessBudget,
+} from "@anthers/shared/public-access";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 /** First instant of the current calendar month, in server time. */
@@ -68,16 +72,20 @@ export async function publicAccessSecondsThisMonth(
 /**
  * A viewer's standing against the meter right now.
  *
- * A logged-out viewer gets the free allowance with nothing spent — they cannot have
- * consumed anything we could attribute to them. That is deliberately generous rather than
- * a refusal: anonymous streaming of the commons is the shop window, and the honest place
- * to meter someone is once they have an account to meter.
+ * 🚨 **A signed-out caller has no allowance, and this returned the full one until
+ * 2026-08-28.** The old answer was `publicAccessBudget(0, 0)` — ten hours, nothing spent —
+ * justified in a comment as the shop window. Anonymous viewing was never approved
+ * (21.01 §9.1): consuming a Work requires an account, because that is how terms are
+ * accepted, how 13+ is asserted, and above all how attention is attributed, since the Time
+ * Pool cannot pay a creator for time it cannot attribute to anybody. So the generous answer
+ * was not merely wrong about policy, it was the thing that let anonymous Public Access
+ * streaming run unmetered while the creator earned nothing for it.
  */
 export async function loadPublicAccessBudget(
 	userId: number | null,
 	now: Date = new Date(),
 ): Promise<PublicAccessBudget> {
-	if (userId == null) return publicAccessBudget(0, 0);
+	if (userId == null) return NO_PUBLIC_ACCESS_ALLOWANCE;
 
 	const [[acct], used] = await Promise.all([
 		db

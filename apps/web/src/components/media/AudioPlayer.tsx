@@ -208,7 +208,7 @@ export default function AudioPlayer({
 				</button>
 			)}
 
-			{publicAccess && <PublicAccessFooter playing={isPlaying} />}
+			{publicAccess && <PublicAccessFooter />}
 		</div>
 	);
 }

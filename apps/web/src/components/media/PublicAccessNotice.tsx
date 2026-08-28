@@ -2,11 +2,12 @@
 /**
  * What the Public Access meter says, and when.
  *
- * Three surfaces, in ascending order of how much they interrupt:
+ * Two surfaces, in ascending order of how much they interrupt:
  *
  *   • {@link PublicAccessCountdown} — a line under a player, only in the last hour.
  *   • {@link PublicAccessWall} — replaces the player once the allowance is spent.
- *   • {@link AnonymousViewerBanner} — for someone with no account, who is not metered.
+ *
+ * There was a third, {@link PublicAccessFooter} explains where it went.
  *
  * 🚨 **The whole point is to speak before the stop, not after it.** A limit that arrives
  * unannounced reads as a broken player, and the person it happens to has no way to know
@@ -29,14 +30,9 @@ import {
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
-import { useEffect, useState } from "react";
 import {
-	ANON_PROMPT_SECONDS,
-	clearAnonymousSeconds,
 	describeRemaining,
 	type PublicAccessBudget,
-	readAnonymousSeconds,
-	recordAnonymousSeconds,
 	shouldWarn,
 	useMeteredBudget,
 } from "../../lib/public-access";
@@ -140,81 +136,21 @@ export function PublicAccessWall({ budget }: { budget: PublicAccessBudget }) {
 }
 
 /**
- * For a viewer with no account.
+ * The one thing a player renders under itself.
  *
- * ⚠️ Says nothing about a budget, and cannot: the server hands a logged-out caller the
- * full allowance with nothing spent — on purpose, since anonymous streaming of the
- * commons is the shop window — so any number here would be invented. What it does
- * instead is state the thing an anonymous viewer has no way to know, which is where the
- * money goes.
- */
-export function AnonymousViewerBanner({ playing }: { playing: boolean }) {
-	const [watched, setWatched] = useState(readAnonymousSeconds);
-	const [dismissed, setDismissed] = useState(false);
-
-	// Tally only while something is actually playing. A paused player on an open tab is
-	// not viewing, and counting it would bring the prompt forward on no evidence.
-	useEffect(() => {
-		if (!playing) return;
-		const id = setInterval(() => setWatched(recordAnonymousSeconds(1)), 1000);
-		return () => clearInterval(id);
-	}, [playing]);
-
-	const invited = watched >= ANON_PROMPT_SECONDS && !dismissed;
-
-	if (invited) {
-		return (
-			<div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-base-300 bg-base-200/60 px-4 py-3 text-sm">
-				<span className="min-w-0 flex-1">
-					You've been here a while — create a free account to save your place and keep going.
-				</span>
-				<Link to="/subscribe" className="btn btn-primary btn-sm">
-					Create a free account
-				</Link>
-				{/* Dismissible and non-blocking, deliberately: the argument for an account
-				    here is that it saves your place, not that anything is running out. */}
-				<button
-					type="button"
-					className="link text-xs text-base-content/50"
-					onClick={() => setDismissed(true)}
-				>
-					Not now
-				</button>
-			</div>
-		);
-	}
-
-	return (
-		// Deliberately medium-neutral. This banner sits under a video player, an audio
-		// player, a comic and a game, and "You're watching" read as a mistake on all but
-		// the first — the equal-time principle is the platform's, so the copy should not
-		// pick a favourite medium either.
-		<div className="mt-3 rounded-lg border border-base-300 bg-base-200/60 px-4 py-3 text-sm">
-			You're on Anthers — where what you spend goes straight to creators, never to the platform.{" "}
-			<Link to="/subscribe" className="link link-primary">
-				How it works
-			</Link>
-		</div>
-	);
-}
-
-/**
- * The one thing a player renders under itself — whichever of the three applies.
+ * 🚨 **`AnonymousViewerBanner` used to be the other branch of this and is gone (2026-08-28),
+ * along with the local tally it counted from.** It sat under a player a logged-out visitor
+ * was watching, and invited them to make an account after half an hour. Consuming a Work now
+ * requires an account, so no player renders for a signed-out visitor at all and the branch
+ * became unreachable — the invitation is what stands *instead* of the player now, in
+ * `InlineUnlock`, which is a better place for it than underneath something already playing.
  *
- * Kept as a single component so the players do not each grow a three-way branch on who
- * is watching, and so that "signed out" and "signed in with an allowance" cannot both
- * render at once, which is the mistake that would follow from wiring them separately.
+ * Reduced to one case rather than deleted outright: the players call this, it names the one
+ * thing a metered viewer needs told, and a second branch will come back the day share links
+ * land — at which point the recipient really is watching without an account of their own.
  */
-export function PublicAccessFooter({ playing }: { playing: boolean }) {
+export function PublicAccessFooter() {
 	const { user } = useAuth();
-
-	// The anonymous tally has done its job the moment an account exists; leaving it
-	// behind would prompt a signed-in user on their next signed-out visit for viewing
-	// that happened before they joined.
-	useEffect(() => {
-		if (user) clearAnonymousSeconds();
-	}, [user]);
-
-	if (!user) return <AnonymousViewerBanner playing={playing} />;
+	if (!user) return null;
 	return <PublicAccessCountdown />;
 }

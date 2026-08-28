@@ -314,15 +314,20 @@ describe("Delivery-layer access", () => {
 
 	// ── The audio endpoint ─────────────────────────────────────────────────────
 
-	it("403s the audio endpoint for a denied viewer, and for an anonymous one", async () => {
-		const cases: Record<string, string>[] = [{ Cookie: viewerCookie }, {}];
-		for (const headers of cases) {
-			const res = await req(`/api/content/works/${audioItemId}/audio`, {
-				headers,
-				redirect: "manual",
-			});
-			expect(res.status).toBe(403);
-		}
+	it("403s the audio endpoint for a denied viewer, and 401s for an anonymous one", async () => {
+		// The two refusals are different and the difference is the point. A signed-in
+		// viewer without the gate cleared is *forbidden*; a signed-out one has not said
+		// who they are, and every delivery endpoint asks that first since 2026-08-28.
+		const denied = await req(`/api/content/works/${audioItemId}/audio`, {
+			headers: { Cookie: viewerCookie },
+			redirect: "manual",
+		});
+		expect(denied.status).toBe(403);
+
+		const anonymous = await req(`/api/content/works/${audioItemId}/audio`, {
+			redirect: "manual",
+		});
+		expect(anonymous.status).toBe(401);
 	});
 
 	it("redirects an entitled viewer to the media, uncacheably", async () => {
