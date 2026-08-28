@@ -47,7 +47,12 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
-import { adultAccessFor, disableAdultAccess, enableAdultAccess } from "../services/adult-access.js";
+import {
+	adultAccessFor,
+	adultHiddenFrom,
+	disableAdultAccess,
+	enableAdultAccess,
+} from "../services/adult-access.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
@@ -310,7 +315,16 @@ const accountRoutes = new Hono()
 						})
 						.from(works)
 						.innerJoin(users, eq(works.creatorId, users.id))
-						.where(and(inArray(works.creatorId, creatorIds), eq(works.visibility, "released")))
+						.where(
+							and(
+								inArray(works.creatorId, creatorIds),
+								eq(works.visibility, "released"),
+								// The feed is a listing, and a release by a followed creator is
+								// no exception to the invisibility rule — following somebody is
+								// not the opt-in.
+								adultHiddenFrom(await adultAccessFor(sessionUser.id), sessionUser.id),
+							),
+						)
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
 						.limit(50);
 

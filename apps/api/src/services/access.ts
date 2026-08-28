@@ -44,6 +44,7 @@ import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
+import { adultAccessFor } from "./adult-access.js";
 
 /** The Work fields access resolution depends on (structurally satisfied by a full work row). */
 export interface AccessibleWork {
@@ -68,6 +69,17 @@ export interface AccessibleWork {
 	 */
 	takedownStatus: string;
 	/**
+	 * The Work's content rating — `unrated`, `general`, `mature` or `adult`.
+	 *
+	 * 🚨 **Only `adult` reaches resolution, and `mature` deliberately does not.** A mature
+	 * rating is a warning and a filter input carrying no access consequence at all — the
+	 * Work stays Public Access if its creator left it ungated, stays earning, and stays
+	 * reachable by a signed-out visitor. Teaching this resolver to read `mature` would
+	 * silently paywall the work wiki 40.13 draws its rows to protect. See 40.09 § How
+	 * Access Works When It Opens.
+	 */
+	maturity: string;
+	/**
 	 * The Work's child-safety quarantine state — `none` or `quarantined`.
 	 *
 	 * 🚨 **The only denial in this resolver that reaches everybody without exception**, the
@@ -91,6 +103,17 @@ export interface AccessContext {
 	supportByCreator: Map<number, number>;
 	/** Work ids the viewer has a completed purchase for */
 	purchasedWorkIds: Set<number>;
+	/**
+	 * May this viewer reach Works rated `adult`? The AND of the account-level opt-in and a
+	 * one-time adulthood verification — `services/adult-access.ts` owns both.
+	 *
+	 * 🚨 **False for a signed-out visitor, always, and that is a property of the model
+	 * rather than a default.** Somebody with no account has no setting for the opt-in to
+	 * consult, which is why Adult work is invisible to them entirely rather than merely
+	 * locked. The same holds for a share link: it tells somebody where a Work is and never
+	 * what they may reach, so entitlement stays here.
+	 */
+	adultAccess: boolean;
 }
 
 /**
@@ -138,6 +161,18 @@ export function buildPreviewContext(opts: {
 		// empty rather than being special-cased in the resolver.
 		supportByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.given ?? 0]]),
 		purchasedWorkIds: !signedOut && opts.owned ? new Set(opts.workIds) : new Set(),
+		// The imagined signed-in viewer has opted in and verified; the signed-out one cannot
+		// have, because there is no account to hold the setting.
+		//
+		// ⭐ **Not a shortcut — it is what keeps the preview answering the question it was
+		// asked.** A preview exists to show a creator their own access ladder at $N given,
+		// and an imagined viewer with no opt-in would answer `adult_gated` at every rung,
+		// telling them nothing about the ladder they came to look at. The signed-out case
+		// still shows the invisibility correctly, which is where a creator actually needs to
+		// see it. This stays inside the "a preview can only ever SUBTRACT access" rule
+		// because it is applied to the creator's own Works, and the creator already reaches
+		// them by the owner branch.
+		adultAccess: !signedOut,
 	};
 }
 
@@ -150,7 +185,8 @@ export type AccessReason =
 	| "gated"
 	| "login_required"
 	| "takedown"
-	| "quarantined";
+	| "quarantined"
+	| "adult_gated";
 
 /**
  * One way a denied viewer could open this Work, stated in the gate's own terms.
@@ -255,6 +291,28 @@ function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+/**
+ * Does this access table open the Work to everyone, for free? That is what **Public Access**
+ * is, expressed as a property of the rows.
+ *
+ * ⭐ **Only the baseline row counts, and that is not a loosening.** A row at a threshold
+ * above zero priced at zero means "people who give this creator $3 a month get it at no
+ * further cost", which is a Badge gate and is exactly what an Adult Work is allowed to sit
+ * behind. What the rule forbids is the Work being free to *everyone*, which is the
+ * `threshold: 0, allow: true, price: 0` row and nothing else.
+ *
+ * A predecessor of this function, `isPubliclyFree(post)`, was deleted for having no call
+ * site and for the deeper reason recorded at the foot of this file — it was being used to
+ * bake storage ACLs at upload time, before a Work has an access table at all. This one is a
+ * different job: it reads a table the creator has just submitted, at the moment they submit
+ * it, and answers a question about that table rather than about bytes.
+ */
+export function isOpenToEveryoneFree(rows: SeedAccessRow[] | null | undefined): boolean {
+	return (rows ?? []).some(
+		(row) => row.allow && Number(row.threshold ?? 0) <= 0 && Number(row.price ?? "0") <= 0,
+	);
+}
+
 /** An allowed row the viewer qualifies for: its numeric price and whether it's a baseline (everyone) row. */
 interface Offer {
 	price: number;
@@ -346,6 +404,24 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		return { ...base, canAccess: true, reason: "owner" };
 	}
 
+	// 🚨 A Work rated `adult` is reachable only by an account that has both opted in and
+	// verified an adult. Wiki 40.09 § How Access Works When It Opens.
+	//
+	// **Above the purchase check on purpose, and it is the only rule here besides the two
+	// denials above that outranks a receipt.** A purchase outlives everything on Anthers, so
+	// this needs a reason: the viewer bought this while opted in and has since opted out, and
+	// what they are being refused is something they asked not to be shown. That is honoring
+	// their setting rather than taking their purchase away — nothing is lost, the Work
+	// returns the moment they turn it back on, and a purchase that overrode the setting would
+	// make the setting mean "except for things you already own", which nobody would expect.
+	//
+	// ⚠️ **Below the owner check, so a creator always reaches their own work.** A creator who
+	// has never opted in is not asking to be protected from the thing they made, and locking
+	// them out of their own Work would make it un-editable and un-previewable.
+	if (work.maturity === "adult" && !ctx.adultAccess) {
+		return { ...base, canAccess: false, reason: "adult_gated" };
+	}
+
 	// A prior purchase unlocks it permanently.
 	if (ctx.purchasedWorkIds.has(work.id)) {
 		return { ...base, canAccess: true, reason: "purchased" };
@@ -406,13 +482,21 @@ export async function buildAccessContext(
 	opts: { workIds?: number[] } = {},
 ): Promise<AccessContext> {
 	if (userId == null) {
-		return { userId: null, supportByCreator: new Map(), purchasedWorkIds: new Set() };
+		return {
+			userId: null,
+			supportByCreator: new Map(),
+			purchasedWorkIds: new Set(),
+			// A signed-out visitor has no account and therefore no opt-in to read. Stated
+			// here rather than left to a default so the closed answer is visible at the one
+			// place the logged-out context is built.
+			adultAccess: false,
+		};
 	}
 
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
 
-	const [seedRows, purchaseRows] = await Promise.all([
+	const [seedRows, purchaseRows, adult] = await Promise.all([
 		db
 			.select({ creatorId: seedAllocations.creatorId, amount: seedAllocations.amount })
 			.from(seedAllocations)
@@ -427,6 +511,7 @@ export async function buildAccessContext(
 					...(scoped ? [inArray(purchases.workId, opts.workIds as number[])] : []),
 				),
 			),
+		adultAccessFor(userId),
 	]);
 
 	// `seed_allocations.amount` is MONEY and stays money — it is the payment ledger, not a
@@ -450,6 +535,7 @@ export async function buildAccessContext(
 		purchasedWorkIds: new Set(
 			purchaseRows.map((p) => p.workId).filter((id): id is number => id !== null),
 		),
+		adultAccess: adult.canReach,
 	};
 }
 

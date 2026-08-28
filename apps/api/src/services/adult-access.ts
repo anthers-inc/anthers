@@ -36,8 +36,8 @@
  */
 
 import { db } from "@anthers/db/client";
-import { accounts } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { accounts, works } from "@anthers/db/schema";
+import { eq, type SQL, sql } from "drizzle-orm";
 import { getStripe } from "../lib/stripe.js";
 
 /** The only method there is. Stored rather than assumed, so a second one could not make the existing rows ambiguous. */
@@ -90,6 +90,51 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
 		method: row.method,
 		canReach: row.optIn && row.verifiedAt != null,
 	};
+}
+
+/**
+ * The SQL condition that hides Adult work from a viewer who may not reach it.
+ *
+ * 🚨 **Adult is INVISIBLE rather than merely inaccessible** — its existence, title and cover
+ * art included — so this is a `WHERE` clause on every listing rather than a lock the reader
+ * meets on arrival. Wiki 40.09: a signed-out visitor has no account-level setting for the
+ * opt-in to consult, so Adult work is invisible to them entirely; and a signed-in account
+ * that has not opted in meets the same absence on the non-feed surfaces — creator profiles,
+ * Catalog listings, and search (Parker, 2026-08-28, settling 40.09's open question).
+ *
+ * ⭐ **One rule for everyone without the opt-in, which is what makes it testable as an
+ * absence.** The alternative considered was an interstitial saying an Adult Work is here,
+ * and it was rejected because the existence — and usually the title — is exactly the thing
+ * the rung does not get. The accepted cost is that a creator's profile silently omits work
+ * from a reader who has not opted in.
+ *
+ * ⚠️ **A creator always sees their own**, which is why this takes the viewer's id and the
+ * creator column rather than being a bare `maturity <> 'adult'`. Somebody who has not opted
+ * in is not asking to be protected from the thing they made, and hiding it from them would
+ * take their own Work out of their own Catalog.
+ *
+ * Returns `undefined` when nothing needs hiding, so it composes into `and(...)` exactly as
+ * `notBlockedBy` does — Drizzle drops the undefined rather than needing a branch at the call
+ * site.
+ */
+export function adultHiddenFrom(
+	access: AdultAccess,
+	viewerId: number | null,
+	creatorColumn: SQL | unknown = works.creatorId,
+	maturityColumn: SQL | unknown = works.maturity,
+): SQL | undefined {
+	if (access.canReach) return undefined;
+	if (viewerId == null) return sql`${maturityColumn} <> 'adult'`;
+	return sql`(${maturityColumn} <> 'adult' OR ${creatorColumn} = ${viewerId})`;
+}
+
+/** Load the viewer's adult access and the condition that follows from it, in one step. */
+export async function adultVisibility(viewerId: number | null): Promise<{
+	access: AdultAccess;
+	hidden: SQL | undefined;
+}> {
+	const access = await adultAccessFor(viewerId);
+	return { access, hidden: adultHiddenFrom(access, viewerId) };
 }
 
 /**
