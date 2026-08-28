@@ -12,6 +12,9 @@
  *                                     the two together open the Adult rung
  *   POST   /me/adult-access         — opt in, verifying adulthood by card funding type
  *   DELETE /me/adult-access         — opt back out (the verification is kept)
+ *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
+ *                                     the defaults are what a signed-out visitor gets
+ *   PATCH  /me/content-preferences  — change one or both
  *   GET    /creators                — list all creators
  *   GET    /users/:username         — public user profile
  *   POST   /users/:username/follow  — follow a creator
@@ -47,14 +50,16 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
+import { validateSession } from "../services/auth.js";
+import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import {
 	adultAccessFor,
 	adultHiddenFrom,
+	contentPreferencesFor,
 	disableAdultAccess,
 	enableAdultAccess,
-} from "../services/adult-access.js";
-import { validateSession } from "../services/auth.js";
-import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
+	setMaturityDisplay,
+} from "../services/content-preferences.js";
 import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -139,6 +144,18 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 const usersId = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
+
+/**
+ * The two display settings, both optional so one can be changed without restating the other.
+ *
+ * ⚠️ **Two fields rather than one, matching the two columns and the two controls.** The rungs
+ * are settled separately on purpose: a reader who wants difficult work unblurred has said
+ * nothing about whether they want explicit work at all.
+ */
+const contentPreferencesSchema = z.object({
+	mature: z.enum(["hide", "blur", "show"]).optional(),
+	adult: z.enum(["hide", "blur", "show"]).optional(),
+});
 
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
@@ -709,7 +726,7 @@ const accountRoutes = new Hono()
 
 	// ── Adult access ─────────────────────────────────────────────────────────
 	// The account-level opt-in and the one-time adulthood verification that together
-	// decide whether an account can reach a Work rated Adult. `services/adult-access.ts`
+	// decide whether an account can reach a Work rated Adult. `services/content-preferences.ts`
 	// is the only writer and carries the whole of the reasoning; wiki 40.09 § The funding
 	// type is the age signal is the authority.
 	//
@@ -753,6 +770,31 @@ const accountRoutes = new Hono()
 		const sessionUser = c.get("user");
 		return c.json(await disableAdultAccess(sessionUser.id));
 	})
+
+	// ── What the reader has asked to meet ────────────────────────────────────
+	// The per-rung Hide / Blur / Show settings. Readable signed-out, because the defaults
+	// are what a signed-out visitor gets and the client has to know them to apply the
+	// Mature blur to somebody who has never had an account.
+	//
+	// 🚨 **These change what the READER meets and reach nobody else.** A Work somebody
+	// blurred stays listed for everyone else, stays searchable, stays earning, and is never
+	// demoted. Wiki 40.09 is explicit that this is not platform-side suppression.
+
+	.get("/me/content-preferences", async (c) => {
+		const viewerId = await getOptionalUserId(c);
+		return c.json(await contentPreferencesFor(viewerId));
+	})
+
+	.patch(
+		"/me/content-preferences",
+		requireAuth,
+		zValidator("json", contentPreferencesSchema),
+		async (c) => {
+			const sessionUser = c.get("user");
+			const data = c.req.valid("json");
+			return c.json(await setMaturityDisplay(sessionUser.id, data));
+		},
+	)
 
 	// ── Blocks ───────────────────────────────────────────────────────────────
 	// A personal boundary, not a moderation action. Nothing here writes to

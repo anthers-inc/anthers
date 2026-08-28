@@ -88,9 +88,9 @@ import {
 	isOpenToEveryoneFree,
 	resolveAccessSync,
 } from "../services/access.js";
-import { adultVisibility } from "../services/adult-access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
+import { adultVisibility } from "../services/content-preferences.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
 import {
 	permanentWorkIds,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { AuthProvider } from "@anthers/web-shared/auth";
+import { ContentPreferencesProvider } from "@anthers/web-shared/content-preferences";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
@@ -16,9 +17,14 @@ createRoot(root).render(
 		<BrowserRouter>
 			<ScrollToTop />
 			<AuthProvider>
-				<MediaPlayerProvider>
-					<App />
-				</MediaPlayerProvider>
+				{/* Inside AuthProvider, because who the reader is decides which preferences
+				    they get — and outside the player, because a cover is veiled long before
+				    anything plays. */}
+				<ContentPreferencesProvider>
+					<MediaPlayerProvider>
+						<App />
+					</MediaPlayerProvider>
+				</ContentPreferencesProvider>
 			</AuthProvider>
 		</BrowserRouter>
 	</SiteGate>,

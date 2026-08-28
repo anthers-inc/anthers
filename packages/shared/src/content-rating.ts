@@ -133,17 +133,21 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * comes off this list, and `releaseRatingRefusal` below takes the accepted set as an argument
  * so that branch can be exercised whichever way the switch happens to be set.
  *
- * 🚨 **`adult` is off the list until its consequences are built, and the order is the whole
- * point.** The rung is not deferred — it is being assembled, and what it costs a Work is
- * enforcement's job: paid rather than free, never Public Access, no Time Pool, invisible to
- * anybody who has not opted in and verified. Adding `adult` here before those exist would
- * open a rung with none of its fences, which is precisely the failure 40.09's deferral
- * principle names. It goes on the list in the same change that makes the fences real.
+ * ⭐ **`adult` went on this list only once every fence it needs was real** — the payment
+ * requirement, the exclusion from Public Access and so from the Time Pool, the invisibility
+ * to anyone who has not opted in, the adulthood verification, and the reader's own controls.
+ * Adding it earlier would have opened a rung with none of them, which is precisely the
+ * failure 40.09's deferral principle names. **If a rung is ever added here again, that is
+ * the bar**: the fences before the content, never afterwards.
  *
  * A constant rather than configuration, deliberately: both inputs are judgments that deserve
  * a commit and a reader, not an environment variable somebody can flip without one.
  */
-export const ACCEPTED_MATURITY_RATINGS: readonly DeclarableMaturity[] = ["general", "mature"];
+export const ACCEPTED_MATURITY_RATINGS: readonly DeclarableMaturity[] = [
+	"general",
+	"mature",
+	"adult",
+];
 
 /** Does Anthers currently accept Works at this rung? */
 export function isRatingAccepted(
@@ -217,6 +221,66 @@ export function maturityLabel(value: string): string {
 	if (value === "unrated") return "Unrated";
 	return MATURITY_CHOICES.find((r) => r.value === value)?.label ?? value;
 }
+
+/**
+ * What a reader has asked to meet at a given rung.
+ *
+ * - `hide` — the Work is absent from listings entirely. Still reachable by a direct link if
+ *   the reader has access to it, which is what separates this from the Adult opt-in.
+ * - `blur` — the Work is listed, with its cover obscured behind a label until the reader
+ *   chooses to see it. Friction and a warning rather than suppression.
+ * - `show` — no treatment at all.
+ *
+ * 🚨 **This is the reader deciding what they meet, and it is never platform-side
+ * suppression.** The pattern is Reddit's, and wiki 40.09 is explicit about the distinction:
+ * the platform picks the default and makes the choice explicit, rather than deciding what
+ * anybody sees. A Work is not demoted, delisted for others, or paid less because somebody
+ * blurred it.
+ */
+export type MaturityDisplay = "hide" | "blur" | "show";
+
+export const MATURITY_DISPLAYS: readonly MaturityDisplay[] = ["hide", "blur", "show"];
+
+export function isMaturityDisplay(value: string): value is MaturityDisplay {
+	return (MATURITY_DISPLAYS as readonly string[]).includes(value);
+}
+
+/**
+ * What a reader meets before they have said anything.
+ *
+ * 🚨 **Mature blurs for everybody, signed in or out**, which is the default that makes the
+ * rung mean something: the Work stays listed, searchable, reachable and earning, and what a
+ * reader meets before choosing is a blurred cover and a label. That is friction and a
+ * warning rather than suppression, and it is why Mature can honestly be described as
+ * carrying no access consequence.
+ *
+ * **Adult defaults to `hide`**, but the default is not what keeps Adult work away from
+ * somebody — the account-level opt-in and the adulthood verification do that, in
+ * `services/content-preferences.ts`, and a reader who has not cleared both never has a Work
+ * to apply this to. This is the preference that applies *after* they have.
+ */
+export const DEFAULT_MATURITY_DISPLAY: Record<DeclarableMaturity, MaturityDisplay> = {
+	general: "show",
+	mature: "blur",
+	adult: "hide",
+};
+
+export interface MaturityDisplayDef {
+	value: MaturityDisplay;
+	label: string;
+	hint: string;
+}
+
+/** The three choices, in the order they are offered — least to most visible. */
+export const MATURITY_DISPLAY_CHOICES: readonly MaturityDisplayDef[] = [
+	{
+		value: "hide",
+		label: "Hide",
+		hint: "Keep it out of what I browse. I can still open it from a direct link.",
+	},
+	{ value: "blur", label: "Blur", hint: "List it, and cover it until I choose to look." },
+	{ value: "show", label: "Show", hint: "No cover and no warning." },
+] as const;
 
 /**
  * A content note — what someone meeting this work should know is in it.

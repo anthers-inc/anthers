@@ -44,7 +44,7 @@ import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
-import { adultAccessFor } from "./adult-access.js";
+import { adultAccessFor } from "./content-preferences.js";
 
 /** The Work fields access resolution depends on (structurally satisfied by a full work row). */
 export interface AccessibleWork {
@@ -105,7 +105,7 @@ export interface AccessContext {
 	purchasedWorkIds: Set<number>;
 	/**
 	 * May this viewer reach Works rated `adult`? The AND of the account-level opt-in and a
-	 * one-time adulthood verification — `services/adult-access.ts` owns both.
+	 * one-time adulthood verification — `services/content-preferences.ts` owns both.
 	 *
 	 * 🚨 **False for a signed-out visitor, always, and that is a property of the model
 	 * rather than a default.** Somebody with no account has no setting for the opt-in to

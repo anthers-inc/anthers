@@ -6,7 +6,7 @@
  * post authoring content picker.
  */
 
-import { contentNoteLabel } from "@anthers/shared/content-rating";
+import { contentNoteLabel, maturityLabel } from "@anthers/shared/content-rating";
 import {
 	CommandLineIcon,
 	CubeIcon,
@@ -149,12 +149,15 @@ export function MaturityBadge({ work }: { work: Work }) {
 			</span>
 		);
 	}
+	// ⚠️ Reads the label rather than printing "Mature", which is what it did until the
+	// scale grew a fourth value — an Adult Work would have worn a Mature badge, which is
+	// the one place a rating being wrong is most visible and least excusable.
 	return (
 		<span
-			className="badge badge-sm badge-warning"
+			className={`badge badge-sm ${work.maturity === "adult" ? "badge-error" : "badge-warning"}`}
 			title={notes.length > 0 ? notes.join(" · ") : "Made for adults"}
 		>
-			Mature
+			{maturityLabel(work.maturity)}
 		</span>
 	);
 }

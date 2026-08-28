@@ -10,6 +10,7 @@
 		"./rpc": "./src/lib/rpc.ts",
 		"./desktop": "./src/lib/desktop.ts",
 		"./auth": "./src/lib/auth.tsx",
+		"./content-preferences": "./src/lib/content-preferences.tsx",
 		"./theme": "./src/lib/theme.ts",
 		"./postUrl": "./src/lib/postUrl.ts",
 		"./studio": "./src/lib/studio.ts",
