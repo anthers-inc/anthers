@@ -353,9 +353,29 @@ export default function ForUsersPage() {
 						>
 							Plant something worth growing
 						</h2>
+						{/*
+						 * 🚨 **"a card is only ever needed when you decide to back someone" was here, and
+						 * an absolute is what broke it.** Adult work opened on 2026-08-28 and a card is
+						 * now also read to verify adulthood — a `SetupIntent`, so nothing is charged and
+						 * nothing reaches a statement, but a card all the same. The claim foreclosed a
+						 * space the platform then built in.
+						 *
+						 * ⭐ **The hero paragraph on this same page survived, and the difference is the
+						 * rule worth keeping.** It says *"you'll only ever be asked **to pay**"* — an
+						 * event, still exactly true, because no money moves for verification. This one
+						 * said *"a **card** is only ever needed"* — a foreclosure, false the moment a
+						 * second reason to want a card existed. **State what happens, not what never
+						 * will.** The absolutes ("only ever", "no", "never") are the ones that go stale.
+						 *
+						 * ⚠️ Deliberately says nothing about the Adult rung. It is invisible by default,
+						 * and a general marketing page naming it would undo that for a caveat almost no
+						 * reader here needs. The fact is disclosed where somebody actually meets it: the
+						 * Settings panel opens the card field at the moment they opt in, and `/parents`
+						 * spells out the whole check.
+						 */}
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 							Support the creators you love, on terms you can see and trust. Start with a free
-							account and an email address—that's the whole of it, and a card is only ever needed
+							account and an email address—that's the whole of it, and you're only ever asked to pay
 							when you decide to back someone. {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
 							month, free forever. No ads, no data brokers, nothing to cancel.
 						</p>
