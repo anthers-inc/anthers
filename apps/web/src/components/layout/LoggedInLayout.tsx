@@ -275,6 +275,10 @@ function LoggedInLayoutInner() {
 									<Link to="/resources" className="link link-hover">
 										Resources
 									</Link>
+									{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
+									<Link to="/parents" className="link link-hover">
+										For Parents
+									</Link>
 								</nav>
 								<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 									<h6 className="footer-title text-xs">Legal</h6>
@@ -289,9 +293,6 @@ function LoggedInLayoutInner() {
 									</Link>
 									<Link to="/safety" className="link link-hover">
 										Safety
-									</Link>
-									<Link to="/parents" className="link link-hover">
-										For Parents
 									</Link>
 								</nav>
 							</div>

@@ -141,6 +141,29 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
+			<Section title="Why the gate works this way">
+				<p>
+					A lot of places are being pushed toward age verification that means uploading a driving
+					licence, or letting a camera guess how old your face looks. Those systems work by
+					collecting exactly the identity information we've promised not to hold — and once a
+					company holds it, the question stops being whether they meant well and becomes what
+					happens when they're breached.
+				</p>
+				<p>
+					<strong>Anthers never requires an ID to use it</strong>, and never asks for a date of
+					birth. What we read instead is a structural fact we can check without keeping anything:
+					whether a card on the account is <em>credit</em>-funded, because card issuers require the
+					primary accountholder to be 18. A teenager's debit card or prepaid card doesn't pass. We
+					read the answer once, record that the check happened, and keep nothing about the card — no
+					number, no last four digits, not even which kind it was.
+				</p>
+				<p>
+					It's a real check rather than a checkbox, and it costs a parent nothing in privacy. But it
+					is a check on the <em>card</em>, and a card can be borrowed — which is the honest limit of
+					it, and the reason the controls below exist.
+				</p>
+			</Section>
+
 			<Section title="Parental controls">
 				<p>
 					Any account can be given a <strong>pin</strong>, from its settings page. Once it's set,
