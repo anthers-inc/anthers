@@ -26,7 +26,6 @@
  */
 
 import { db } from "@anthers/db/client";
-import type { SeedAccessRow } from "@anthers/db/schema";
 import { moderationActions, workRatingAppeals, works } from "@anthers/db/schema";
 import {
 	type ContentNote,
@@ -36,7 +35,6 @@ import {
 	normalizeContentNotes,
 } from "@anthers/shared/content-rating";
 import { and, desc, eq } from "drizzle-orm";
-import { closeFreeBaseline, isOpenToEveryoneFree } from "./access.js";
 import { notify } from "./notifications.js";
 
 type WorkRow = typeof works.$inferSelect;
@@ -103,20 +101,13 @@ export async function declareRating(
  * `ModerationActionType`, appended rather than reused: it is neither a hide nor a restore,
  * and recording it as one would make the queue's own history lie about what happened.
  *
- * 🚨 **A correction into `adult` is allowed, and the rung's consequences are applied in the
- * same act.** Anthers cannot rely on a creator always being willing to rate their own work
- * correctly — least of all at the one rung that costs them something — so a correction that
- * needed the creator's cooperation would be no enforcement at all. What the correction may
- * not do is leave the Work rated Adult while it still behaves like ordinary work, so
- * `closeFreeBaseline` shuts the free-to-everyone door here rather than leaving that rule on
- * the creator's edit path where an operator never passes.
- *
- * ⚠️ **The creator's own path refuses instead of imposing, and the asymmetry is deliberate.**
- * A creator raising their own Work to Adult is standing at the editor with the access
- * controls in front of them, so they are told to price or gate it — silently rewriting
- * somebody's pricing while they are looking at it would be making a business decision on
- * their behalf. An operator is acting on work that is not theirs and cannot be refused, so
- * there the rule is imposed and the creator is notified.
+ * 🚨 **A correction into `adult` is allowed and changes nothing but the rating.** Anthers
+ * cannot rely on a creator always being willing to rate their own work correctly, so a
+ * correction that needed their cooperation would be no enforcement at all. What the
+ * correction does *not* do is touch the Work's access table: Adult work may be free, may be
+ * Public Access, and earns the Time Pool like anything else. **The rung restricts who may
+ * reach a Work, never what its creator may charge or earn** — being rated Adult is not a
+ * penalty, and a correction that re-priced somebody's work would make it one.
  *
  * **One operator may do this while Anthers has one operator** (Parker, 2026-08-28). Dual
  * sign-off is wanted and is a good idea, and it arrives when there is a second moderator to
@@ -131,7 +122,7 @@ export async function correctRating(input: {
 	actorId: number;
 	note?: string;
 	now?: Date;
-}): Promise<{ work: WorkRow; accessClosed: boolean } | null> {
+}): Promise<WorkRow | null> {
 	const now = input.now ?? new Date();
 	const [work] = await db.select().from(works).where(eq(works.id, input.workId));
 	if (!work) return null;
@@ -143,16 +134,6 @@ export async function correctRating(input: {
 		updatedAt: now,
 	};
 	if (input.notes) updates.maturityNotes = normalizeContentNotes(input.notes);
-
-	// 🚨 The Adult rules, imposed rather than assumed. Adult work may not be free, and a
-	// Work corrected into the rung is exactly the case where nobody has agreed to that —
-	// so the free baseline row is closed as part of the same write. Higher rungs survive
-	// untouched; see `closeFreeBaseline`.
-	const accessClosed =
-		input.maturity === "adult" && isOpenToEveryoneFree(work.seedAccess as SeedAccessRow[] | null);
-	if (accessClosed) {
-		updates.seedAccess = closeFreeBaseline(work.seedAccess as SeedAccessRow[] | null);
-	}
 
 	const [updated] = await db
 		.update(works)
@@ -168,12 +149,7 @@ export async function correctRating(input: {
 		// The reason column carries a moderation reason code elsewhere, and a reclassification
 		// has none — what it is *about* is the rating, which is in the note.
 		reason: "",
-		// Records the access change too, when there was one. An operator's note explains the
-		// rating; the log has to carry what the correction actually *did*, or an appeal read
-		// months later cannot tell why the Work stopped being reachable.
-		note:
-			((input.note ?? "").slice(0, 1000) || `rated ${input.maturity}`) +
-			(accessClosed ? " · free public access closed (Adult work may not be free)" : ""),
+		note: (input.note ?? "").slice(0, 1000) || `rated ${input.maturity}`,
 		createdAt: now,
 	});
 
@@ -187,19 +163,18 @@ export async function correctRating(input: {
 			userId: updated.creatorId,
 			category: "essential",
 			kind: "rating_corrected",
-			title: accessClosed
-				? `“${updated.title ?? "Your Work"}” is now rated Adult, and its free access was closed`
-				: `“${updated.title ?? "Your Work"}” was re-rated ${maturityLabel(input.maturity)}`,
-			body: accessClosed
-				? "Adult work can't be free to everyone, so the open access on this Work was turned off. Set a price or put it behind a Badge to make it reachable again. If you think the rating is wrong, you can appeal it."
-				: "An operator changed this Work's rating. You can make it more cautious at any time; to lower it, appeal.",
+			title: `“${updated.title ?? "Your Work"}” was re-rated ${maturityLabel(input.maturity)}`,
+			body:
+				input.maturity === "adult"
+					? "An operator changed this Work's rating to Adult. Nothing about what you charge or earn changes — Adult work can still be free, still be Public Access, and still earns the Time Pool. What changes is who can reach it: only people who have opted in and verified they're adults. If you think the rating is wrong, you can appeal it."
+					: "An operator changed this Work's rating. You can make it more cautious at any time; to lower it, appeal.",
 			linkPath: `/works/${updated.slug}-${updated.publicId}`,
 			// Per correction, not per Work — a second correction months later is news again.
 			dedupeKey: `rating-corrected:${updated.id}:${now.toISOString()}`,
 		});
 	}
 
-	return { work: updated, accessClosed };
+	return updated;
 }
 
 /** Why an appeal could not be filed. Each is something the creator can be told plainly. */

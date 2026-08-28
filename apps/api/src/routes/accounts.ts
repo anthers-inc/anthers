@@ -10,6 +10,7 @@
  *   GET    /me/blocks               — who the current user has blocked
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
+ *   POST   /me/adult-access/setup   — start a card check (SetupIntent; no charge)
  *   POST   /me/adult-access         — opt in, verifying adulthood by card funding type
  *   DELETE /me/adult-access         — opt back out (the verification is kept)
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
@@ -55,6 +56,7 @@ import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../
 import {
 	adultAccessFor,
 	adultHiddenFrom,
+	beginAdultVerification,
 	contentPreferencesFor,
 	disableAdultAccess,
 	enableAdultAccess,
@@ -739,6 +741,27 @@ const accountRoutes = new Hono()
 	.get("/me/adult-access", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 		return c.json(await adultAccessFor(sessionUser.id));
+	})
+
+	// 🚨 **A card check, not a charge.** No money moves and nothing lands on a statement —
+	// Stripe attaches the card and reports its funding type, which is the only field read.
+	// Never make this a payment: keeping the money would make Anthers the seller of adult
+	// access, and refunding it would still be a payment whose only purpose was that access.
+	//
+	// ⚠️ This is what makes the rung reachable at all for the people it is for. Verification
+	// reads cards attached to a Stripe customer, and before this a customer only existed
+	// after a payment — so an account that had never paid could not verify, and therefore
+	// could not reach Adult work that is free.
+	.post("/me/adult-access/setup", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const result = await beginAdultVerification(sessionUser.id, sessionUser.email ?? "");
+		if (typeof result === "string") {
+			return c.json(
+				{ error: "We can't start that check right now. Please try again shortly." },
+				409,
+			);
+		}
+		return c.json(result);
 	})
 
 	.post("/me/adult-access", requireAuth, async (c) => {

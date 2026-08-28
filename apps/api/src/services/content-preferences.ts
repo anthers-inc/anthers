@@ -52,10 +52,13 @@ import { accounts, works } from "@anthers/db/schema";
 import {
 	DEFAULT_MATURITY_DISPLAY,
 	isMaturityDisplay,
+	MATURITY_RATINGS,
 	type MaturityDisplay,
+	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { eq, type SQL, sql } from "drizzle-orm";
 import { getStripe } from "../lib/stripe.js";
+import { ensureStripeCustomer } from "./billing.js";
 
 /** The only method there is. Stored rather than assumed, so a second one could not make the existing rows ambiguous. */
 export const CARD_FUNDING_METHOD = "card_funding";
@@ -239,20 +242,33 @@ export function maturityHiddenFrom(
 	creatorColumn: SQL | unknown = works.creatorId,
 	maturityColumn: SQL | unknown = works.maturity,
 ): SQL | undefined {
-	const hiddenRungs: string[] = [];
-	if (!prefs.adultAccess.canReach || prefs.adult === "hide") hiddenRungs.push("adult");
-	if (prefs.mature === "hide") hiddenRungs.push("mature");
-	if (hiddenRungs.length === 0) return undefined;
+	// 🚨 **An allow-list, not a deny-list, and the direction is the safety property.**
+	// `NOT IN ('adult')` lets through any value it has not been told about — a rating from a
+	// newer deployment mid-rollout, a rung added later, a corrupted row — which is the one
+	// direction this filter must never fail in. Listing what a viewer MAY see means an
+	// unrecognized rating is absent instead, and *"I'd rather have someone not see Adult
+	// content when they should than see Adult content when they shouldn't"* (Parker,
+	// 2026-08-28) is the rule that settles which of those two costs to take.
+	//
+	// ⭐ Derived from the vocabulary rather than typed out, so a rung added to
+	// `MATURITY_RATINGS` is classified by `requiresAdultVerification` here automatically
+	// instead of silently defaulting to visible.
+	const visible = MATURITY_RATINGS.filter((rating) => {
+		if (requiresAdultVerification(rating)) {
+			return prefs.adultAccess.canReach && prefs.adult !== "hide";
+		}
+		return !(rating === "mature" && prefs.mature === "hide");
+	});
 
 	const list = sql.join(
-		hiddenRungs.map((rung) => sql`${rung}`),
+		visible.map((rung) => sql`${rung}`),
 		sql`, `,
 	);
 	// 🚨 A creator always sees their own, whatever they have asked to be shown. Somebody who
 	// hid a rung is filtering what they browse, not deleting their own Catalog — and a reader
 	// with no opt-in is not asking to be protected from the thing they made.
-	if (viewerId == null) return sql`${maturityColumn} NOT IN (${list})`;
-	return sql`(${maturityColumn} NOT IN (${list}) OR ${creatorColumn} = ${viewerId})`;
+	if (viewerId == null) return sql`${maturityColumn} IN (${list})`;
+	return sql`(${maturityColumn} IN (${list}) OR ${creatorColumn} = ${viewerId})`;
 }
 
 /** Load the viewer's preferences and the listing condition that follows, in one step. */
@@ -308,11 +324,17 @@ export async function verifyAdulthoodByCardFunding(
 	if (!stripe) return "unavailable";
 	if (!customerId) return "no_card";
 
-	const methods = await stripe.paymentMethods.list({
-		customer: customerId,
-		type: "card",
-		limit: 10,
-	});
+	// 🚨 A failure to reach Stripe is a failure to verify, never a pass. Letting the request
+	// 500 would also have failed closed, but it reads to the person as a broken site rather
+	// than a check that did not complete — and to whoever is watching, as an outage rather
+	// than as the gate holding.
+	let methods: Awaited<ReturnType<typeof stripe.paymentMethods.list>>;
+	try {
+		methods = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 10 });
+	} catch {
+		return "unavailable";
+	}
+
 	const cards = methods.data.filter((pm) => pm.card);
 	if (cards.length === 0) return "no_card";
 
@@ -320,12 +342,61 @@ export async function verifyAdulthoodByCardFunding(
 	// the most recent one. The question is whether this accountholder holds a credit line
 	// at all, and holding one is not undone by also having a debit card — checking only the
 	// newest would make the answer depend on the order somebody happened to add them.
+	//
+	// ⭐ **An explicit equality against `credit`, so anything else fails.** `debit`,
+	// `prepaid`, `unknown` and — the case worth naming — a response where `funding` is
+	// missing entirely all land on the same side. Written as `=== "credit"` rather than as a
+	// list of what to reject, because a rejection list has to be updated when the vendor adds
+	// a value and this does not.
 	const hasCredit = cards.some((pm) => pm.card?.funding === "credit");
 	if (!hasCredit) return "funding_not_credit";
 
 	// Nothing about the card is written. The verdict, the moment, and the method — see the
 	// module note on why that list has no fourth entry.
 	return { verifiedAt: now, method: CARD_FUNDING_METHOD };
+}
+
+/**
+ * Start a card check for somebody who has never paid for anything.
+ *
+ * 🚨 **A `SetupIntent`, so no money moves and nothing appears on a statement.** The check
+ * reads the card's `funding` and nothing else, and Stripe will attach a card and report its
+ * funding type without charging for it — so an adult who wants to reach free Adult work is
+ * asked to add a card, not to buy something. **Never turn this into a charge**: keeping the
+ * money would make Anthers the seller of adult access, refunding it would still be a payment
+ * whose only purpose was that access, and either reading is worse than the friction it
+ * would buy.
+ *
+ * ⚠️ **Without this the whole rung is unreachable for its actual audience.** Verification
+ * reads cards attached to a Stripe customer, a customer is only created inside a payment
+ * flow, and a card is only attached when a payment confirms — so before this existed, an
+ * account that had never paid could not verify, could not see that Adult work existed, and
+ * therefore could not reach work that is now free.
+ *
+ * The card stays on file afterwards, which is a side effect rather than the point: it is the
+ * same place a later purchase would have put it.
+ */
+export async function beginAdultVerification(
+	userId: number,
+	email: string,
+): Promise<{ clientSecret: string } | AdultEnableRefusal> {
+	const stripe = getStripe();
+	if (!stripe) return "unavailable";
+
+	try {
+		const customerId = await ensureStripeCustomer(userId, email);
+		const intent = await stripe.setupIntents.create({
+			customer: customerId,
+			payment_method_types: ["card"],
+			// Reusable later, so somebody who verifies and then supports a creator is not
+			// asked for the same card twice.
+			usage: "off_session",
+			metadata: { purpose: "adult_verification", userId: String(userId) },
+		});
+		return intent.client_secret ? { clientSecret: intent.client_secret } : "unavailable";
+	} catch {
+		return "unavailable";
+	}
 }
 
 /**

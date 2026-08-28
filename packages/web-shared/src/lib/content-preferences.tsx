@@ -19,6 +19,7 @@ import {
 	DEFAULT_MATURITY_DISPLAY,
 	type MaturityDisplay,
 	maturityLabel,
+	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { apiFetch } from "./rpc";
@@ -89,7 +90,9 @@ export function useContentPreferences() {
 /** How a Work of this rating should be presented to this reader. */
 export function displayFor(prefs: ContentPreferences, maturity?: string | null): MaturityDisplay {
 	if (maturity === "mature") return prefs.mature;
-	if (maturity === "adult") return prefs.adult;
+	// Anything this build does not recognize is treated as the most restricted rung it
+	// knows, on the same err-toward-not-showing-it rule the server gates by.
+	if (requiresAdultVerification(maturity)) return prefs.adult;
 	// `general` and `unrated` are never covered. An unrated Work is one nobody has answered
 	// for, and covering it would be asserting a rating on the creator's behalf — the same
 	// thing `unrated` exists in the schema to refuse.

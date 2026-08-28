@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * What an Adult rating costs a Work: it may not be free, it is never in the commons, it
- * earns no Time Pool, and it is invisible to anybody who has not opted in and verified.
+ * What an Adult rating does to a Work — which since 2026-08-28 is one thing rather than
+ * four: it restricts **who may reach it** and touches nothing about what its creator may
+ * charge or earn. Adult work may be free, may be Public Access, and earns the Time Pool.
  *
- * 🚨 **Two of the four are ABSENCES, and an absence needs a test or nothing in the
- * repository can tell it is gone.** That a Work rated Adult never appears in a listing, and
- * that it never earns a Time Pool second, are both the shape of defect that rots silently:
- * the feature keeps working, the tests keep passing, and the only symptom is content
- * reaching people it was never meant to reach. So the listings are asserted to be *missing*
- * the Work rather than to contain it locked, and the eligibility flag is read directly.
+ * 🚨 **The rule is an ABSENCE, and an absence needs a test or nothing in the repository can
+ * tell it is gone.** A Work rated Adult never appears in a listing for somebody who has not
+ * opted in and verified, and that is the shape of defect that rots silently: the feature
+ * keeps working, the tests keep passing, and the only symptom is content reaching people it
+ * was never meant to reach. So the listings are asserted to be *missing* the Work rather
+ * than to contain it locked.
+ *
+ * ⚠️ **This became the only guard when the paywall was retired.** Adult work used to be
+ * excluded from the commons twice over — by the access rule and by not being free — and the
+ * second half is gone, so everything now rests on verification and on every listing
+ * remembering to filter.
  *
  * ⭐ **The invisibility is asserted from three standings, not one.** A signed-out visitor, a
  * signed-in account that has not opted in, and the creator themselves get three different
@@ -21,12 +27,7 @@ import { db } from "@anthers/db/client";
 import { accounts, users, works } from "@anthers/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
-import {
-	type AccessContext,
-	type AccessibleWork,
-	isOpenToEveryoneFree,
-	resolveAccessSync,
-} from "../services/access";
+import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../services/access";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -233,38 +234,24 @@ describe("what an Adult rating costs", () => {
 		});
 	});
 
-	describe("Adult work may not be free", () => {
-		it("recognizes the one row shape that means `free to everyone`", () => {
-			expect(isOpenToEveryoneFree(OPEN_TO_EVERYONE)).toBe(true);
-			// ⭐ Behind a Badge at $3 is NOT free-to-everyone, and this is the assertion that
-			// keeps the rule from over-reaching. A row above the baseline priced at zero
-			// means "supporters get it at no further cost", which is exactly the shape Adult
-			// work is supposed to have.
-			expect(isOpenToEveryoneFree(BEHIND_A_BADGE)).toBe(false);
-			expect(isOpenToEveryoneFree([{ threshold: 0, allow: false, price: "0" }])).toBe(false);
-			expect(isOpenToEveryoneFree([{ threshold: 0, allow: true, price: "5.00" }])).toBe(false);
-			expect(isOpenToEveryoneFree(null)).toBe(false);
-		});
-
-		it("refuses to open an Adult Work up to everyone", async () => {
+	describe("Adult work may be free, and the rung costs the creator nothing", () => {
+		it("⭐ lets a creator open an Adult Work to everyone", async () => {
+			// **The rung restricts who may reach a Work, never what its creator may charge
+			// or earn.** Adult work was paid-only until 2026-08-28, on the premise that the
+			// paywall was doing safety work; the verification gate is what does that, and
+			// the paywall was only making Adult creators poorer than Mature ones for
+			// content that is no less legitimate.
 			const res = await req(`/api/content/works/${adultWork.id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 				body: JSON.stringify({ seedAccess: OPEN_TO_EVERYONE }),
 			});
-			expect(res.status).toBe(409);
-			expect((await res.json()).code).toBe("adult_must_be_paid");
+			expect(res.status).toBe(200);
 			const [row] = await db.select().from(works).where(eq(works.id, adultWork.id));
-			expect(row.seedAccess).toEqual(BEHIND_A_BADGE);
+			expect(row.seedAccess).toEqual(OPEN_TO_EVERYONE);
 		});
 
-		it("refuses to rate a free Work Adult — the same violation from the other side", async () => {
-			// Either half can move in one request, so the check reads the state the edit
-			// RESULTS IN. A guard watching only the access table would wave this through.
-			//
-			// ⚠️ A PRIVATE Work on purpose. A released one is refused first, and correctly,
-			// by the closed-rung check — Adult is not on the accepted list yet — and this
-			// test would then pass on a refusal that has nothing to do with its subject.
+		it("lets a creator rate a free Work Adult without re-pricing it", async () => {
 			const freeDraft = await makeWork({
 				creatorId,
 				type: "text",
@@ -278,20 +265,12 @@ describe("what an Adult rating costs", () => {
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 				body: JSON.stringify({ maturity: "adult" }),
 			});
-			expect(res.status).toBe(409);
-			expect((await res.json()).code).toBe("adult_must_be_paid");
-		});
-
-		it("allows an Adult Work behind a Badge", async () => {
-			const res = await req(`/api/content/works/${adultWork.id}`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-				body: JSON.stringify({ seedAccess: BEHIND_A_BADGE }),
-			});
 			expect(res.status).toBe(200);
+			const [row] = await db.select().from(works).where(eq(works.id, freeDraft.id));
+			expect(row.seedAccess).toEqual(OPEN_TO_EVERYONE);
 		});
 
-		it("refuses to create one free and Adult in a single request", async () => {
+		it("creates one free and Adult in a single request", async () => {
 			const res = await req("/api/content/works", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
@@ -302,8 +281,49 @@ describe("what an Adult rating costs", () => {
 					seedAccess: OPEN_TO_EVERYONE,
 				}),
 			});
-			expect(res.status).toBe(409);
-			expect((await res.json()).code).toBe("adult_must_be_paid");
+			expect(res.status).toBe(201);
+			const { work } = (await res.json()) as { work: { id: number } };
+			madeWorkIds.push(work.id);
+		});
+
+		it("🚨 earns the Time Pool for a verified adult, exactly as any other rung would", async () => {
+			// The point of the whole change, asserted where it actually happens. The
+			// `public_access` stamp reads `access.isFree`, so an Adult Work that is free to
+			// a verified reader carries the flag and that reader's own Time Pool reaches its
+			// creator. Excluding it was silently redirecting an adult's support to the
+			// remainder rather than to the creators they watched.
+			const free: AccessibleWork = {
+				id: 3,
+				creatorId: 99,
+				streamEnabled: true,
+				downloadEnabled: false,
+				seedAccess: OPEN_TO_EVERYONE,
+				takedownStatus: "active",
+				quarantineStatus: "none",
+				maturity: "adult",
+			};
+			const verified = resolveAccessSync(free, {
+				userId: 7,
+				supportByCreator: new Map(),
+				purchasedWorkIds: new Set(),
+				adultAccess: true,
+			});
+			expect(verified.canAccess).toBe(true);
+			// `isFree` is the exact field the attention stamp multiplies into
+			// `publicAccess` — so this is the assertion that the creator gets paid.
+			expect(verified.isFree).toBe(true);
+			expect(verified.reason).toBe("free");
+
+			// And for a reader who cannot reach it, nothing is credited at all: they are
+			// denied before any of that, so no seconds accrue against the Work.
+			const shutOut = resolveAccessSync(free, {
+				userId: 7,
+				supportByCreator: new Map(),
+				purchasedWorkIds: new Set(),
+				adultAccess: false,
+			});
+			expect(shutOut.canAccess).toBe(false);
+			expect(shutOut.isFree).toBe(false);
 		});
 	});
 
@@ -359,6 +379,33 @@ describe("what an Adult rating costs", () => {
 				headers: { Origin: ORIGIN, Cookie: grownCookie },
 			});
 			expect(res.status).toBe(200);
+		});
+
+		it("🚨 hides a rating this build does not recognize, from everyone but its creator", async () => {
+			// The listing filter is an ALLOW-list for exactly this. `NOT IN ('adult')` would
+			// let an unrecognized value through — a rating from a newer deployment during a
+			// rolling migration, a corrupted row, a rung added later — and that is the one
+			// direction it must never fail in. Written straight to the column, because no
+			// client can produce this value and that is the point.
+			const oddball = await makeWork({
+				creatorId,
+				type: "text",
+				title: `Oddball ${run}`,
+				maturity: "general",
+			});
+			await db
+				.update(works)
+				.set({ maturity: "a-rung-from-the-future" })
+				.where(eq(works.id, oddball.id));
+
+			// Absent for a signed-out visitor, for a signed-in reader, and — unlike Adult —
+			// even for a verified adult, because the value is in no allow-list at all.
+			expect(await catalogTitles()).not.toContain(`Oddball ${run}`);
+			expect(await catalogTitles(readerCookie)).not.toContain(`Oddball ${run}`);
+			expect(await catalogTitles(grownCookie)).not.toContain(`Oddball ${run}`);
+			// Its creator still sees their own, so a bad value never silently eats somebody's
+			// Catalog without them being able to find it.
+			expect(await catalogTitles(creatorCookie)).toContain(`Oddball ${run}`);
 		});
 
 		it("never appears in the Public Access commons", async () => {
@@ -482,48 +529,83 @@ describe("what an Adult rating costs", () => {
 		});
 	});
 
-	describe("it earns no Time Pool, and needs no special case to", () => {
-		it("can never be Public Access, because it can never be free", () => {
-			// ⭐ The Time Pool exclusion falls out of the gating rather than being a rule of
-			// its own — `attention_events.public_access` is stamped from `access.isFree`,
-			// and an Adult Work cannot produce a true `isFree` from any viewer standing.
-			// This asserts the property the stamp depends on, from both standings, so a
-			// change that made Adult work free would fail here rather than quietly starting
-			// to pay per minute for it.
-			const work: AccessibleWork = {
+	describe("what it does NOT cost the creator", () => {
+		it("⭐ resolves identically to the same Work rated Mature, once the reader is verified", () => {
+			// **The clearest statement of what the rung is.** Past the verification gate,
+			// an Adult Work and a Mature Work with the same access table give the same
+			// answer — same reason, same price, same free-ness. Anything that made the two
+			// diverge would be the rating charging the creator for its own existence, which
+			// is what the paywall used to do and what its retirement was for.
+			const table = [
+				{ threshold: 0, allow: false, price: "0" },
+				{ threshold: 3, allow: true, price: "0" },
+			];
+			const base = {
 				id: 2,
 				creatorId: 99,
 				streamEnabled: true,
 				downloadEnabled: false,
-				// The most permissive table there is. Even so, the rating denies first.
-				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+				seedAccess: table,
 				takedownStatus: "active",
 				quarantineStatus: "none",
-				maturity: "adult",
 			};
-			const shutOut = resolveAccessSync(work, {
+			const ctx = {
+				userId: 7,
+				supportByCreator: new Map([[99, 3]]),
+				purchasedWorkIds: new Set<number>(),
+				adultAccess: true,
+			};
+
+			const asAdult = resolveAccessSync({ ...base, maturity: "adult" }, ctx);
+			const asMature = resolveAccessSync({ ...base, maturity: "mature" }, ctx);
+			expect(asAdult).toEqual(asMature);
+		});
+
+		it("🚨 and diverges only for a reader who has not verified", () => {
+			// The one difference there is meant to be, stated beside the sameness above so
+			// neither can drift without the other noticing.
+			const base = {
+				id: 2,
+				creatorId: 99,
+				streamEnabled: true,
+				downloadEnabled: false,
+				seedAccess: OPEN_TO_EVERYONE,
+				takedownStatus: "active",
+				quarantineStatus: "none",
+			};
+			const ctx = {
+				userId: 7,
+				supportByCreator: new Map<number, number>(),
+				purchasedWorkIds: new Set<number>(),
+				adultAccess: false,
+			};
+
+			expect(resolveAccessSync({ ...base, maturity: "mature" }, ctx).canAccess).toBe(true);
+			expect(resolveAccessSync({ ...base, maturity: "adult" }, ctx).canAccess).toBe(false);
+		});
+
+		it("⚠️ treats a rating it does not recognize as needing verification", () => {
+			// Fail-closed, at the resolver rather than only in the predicate's own unit
+			// test. A value from a newer deployment mid-rollout, or a corrupted row, is
+			// gated rather than served.
+			const unknown = {
+				id: 2,
+				creatorId: 99,
+				streamEnabled: true,
+				downloadEnabled: false,
+				seedAccess: OPEN_TO_EVERYONE,
+				takedownStatus: "active",
+				quarantineStatus: "none",
+				maturity: "a-rung-from-the-future",
+			};
+			const got = resolveAccessSync(unknown, {
 				userId: 7,
 				supportByCreator: new Map(),
 				purchasedWorkIds: new Set(),
 				adultAccess: false,
 			});
-			expect(shutOut.isFree).toBe(false);
-
-			// And with access, the only way to reach it is a table that is not free to
-			// everyone — which the write boundary enforces, so this shape cannot be stored.
-			const gated = resolveAccessSync(
-				{ ...work, seedAccess: BEHIND_A_BADGE },
-				{
-					userId: 7,
-					supportByCreator: new Map([[99, 3]]),
-					purchasedWorkIds: new Set(),
-					adultAccess: true,
-				},
-			);
-			expect(gated.canAccess).toBe(true);
-			// Entitled through a Badge is not free, so no second it earns carries the flag.
-			expect(gated.isFree).toBe(false);
-			expect(gated.reason).toBe("entitled");
+			expect(got.canAccess).toBe(false);
+			expect(got.reason).toBe("adult_gated");
 		});
 	});
 });
