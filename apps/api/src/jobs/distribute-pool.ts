@@ -42,6 +42,7 @@ import { db } from "@anthers/db";
 import { accounts, attentionEvents, poolDistributions, seedAllocations } from "@anthers/db/schema";
 import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
+import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
 import { and, eq, gte, lt, sum } from "drizzle-orm";
 
@@ -104,9 +105,16 @@ async function distributeForAccount(acct: {
 	// something they had left open, or open something they had gated, and re-deriving
 	// today's answer would pay out against a state that did not hold at the time. See
 	// the column's own note — the point-in-time stamp is the whole reason it exists.
+	//
+	// 🚨 **Split by `via_share_link`, because a viewer's own choices and what strangers
+	// watched through their link are two different claims on the same pool.** Share-link time
+	// is attributed to the sharer — that is what makes it attributable at all — so without a
+	// boundary a link that went viral would dilute what the sharer's *own* watching pays the
+	// creators they deliberately chose. See `SHARE_LINK_POOL_FRACTION`.
 	const attentionRows = await db
 		.select({
 			creatorId: attentionEvents.creatorId,
+			viaShareLink: attentionEvents.viaShareLink,
 			totalSeconds: sum(attentionEvents.durationSeconds).as("total_seconds"),
 		})
 		.from(attentionEvents)
@@ -118,16 +126,29 @@ async function distributeForAccount(acct: {
 				lt(attentionEvents.createdAt, end),
 			),
 		)
-		.groupBy(attentionEvents.creatorId);
+		.groupBy(attentionEvents.creatorId, attentionEvents.viaShareLink);
 
-	const attentionByCreator = new Map<number, number>();
-	let totalAttention = 0;
+	/** The viewer's own watching, and what their links funded — each split within itself. */
+	const own = new Map<number, number>();
+	const shared = new Map<number, number>();
+	let totalOwn = 0;
+	let totalShared = 0;
 	for (const row of attentionRows) {
 		const seconds = Number(row.totalSeconds);
-		if (seconds > 0) {
-			attentionByCreator.set(row.creatorId, seconds);
-			totalAttention += seconds;
-		}
+		if (seconds <= 0) continue;
+		const bucket = row.viaShareLink ? shared : own;
+		bucket.set(row.creatorId, (bucket.get(row.creatorId) ?? 0) + seconds);
+		if (row.viaShareLink) totalShared += seconds;
+		else totalOwn += seconds;
+	}
+
+	/** Everything this viewer's month credited, for the ledger's own `attentionSeconds`. */
+	const attentionByCreator = new Map<number, number>();
+	for (const [creatorId, seconds] of own) {
+		attentionByCreator.set(creatorId, seconds);
+	}
+	for (const [creatorId, seconds] of shared) {
+		attentionByCreator.set(creatorId, (attentionByCreator.get(creatorId) ?? 0) + seconds);
 	}
 
 	const distributions = new Map<number, Dist>();
@@ -185,27 +206,53 @@ async function distributeForAccount(acct: {
 		}
 	}
 
-	// 3. Distribute the Time Pool proportionally by attention.
+	// 3. Distribute the Time Pool proportionally by attention, in two slices.
+	//
+	// 🚨 **The shared slice is a CEILING, never a reservation, and the difference is the whole
+	// design.** A viewer who shared nothing distributes 100% of their pool to the creators
+	// they watched, exactly as before — the slice only comes into being when somebody actually
+	// watched through one of their links. Reserving it unconditionally would quietly cut every
+	// non-sharer's creators by a tenth to fund a feature they never used.
+	//
+	// ⚠️ **The converse is deliberately NOT symmetric.** A sharer who watched nothing
+	// themselves distributes the shared slice and leaves the rest undistributed, rather than
+	// letting strangers command their whole pool — the bound is the point of having one. That
+	// undistributed remainder is the subject of its own open question, the same one a viewer
+	// with no attention at all already raises.
 	const timePool = computeTimePoolAmount(supportAmount(acct.anthersSupport));
-	if (totalAttention > 0 && timePool.gt(0)) {
-		for (const [creatorId, seconds] of attentionByCreator) {
-			const proportion = new Decimal(seconds).div(totalAttention);
-			const d = ensure(creatorId);
-			d.attentionSeconds = seconds;
-			d.poolAmount = d.poolAmount.plus(
-				timePool.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
-			);
+	const sharedPool =
+		totalShared > 0 ? CENTS(timePool.mul(SHARE_LINK_POOL_FRACTION)) : new Decimal(0);
+	const ownPool = totalOwn > 0 ? timePool.minus(sharedPool) : new Decimal(0);
+
+	if (timePool.gt(0)) {
+		for (const [pot, byCreator, total] of [
+			[ownPool, own, totalOwn],
+			[sharedPool, shared, totalShared],
+		] as const) {
+			if (!(pot.gt(0) && total > 0)) continue;
+			for (const [creatorId, seconds] of byCreator) {
+				const proportion = new Decimal(seconds).div(total);
+				ensure(creatorId).poolAmount = ensure(creatorId).poolAmount.plus(
+					pot.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+				);
+			}
 		}
 
 		// Correct rounding drift against the largest allocation so the pot is conserved.
-		correctDrift(
-			distributions,
-			timePool,
-			(d) => d.poolAmount,
-			(d, v) => {
-				d.poolAmount = v;
-			},
-		);
+		// Against the sum of the two slices, not the whole pool: when only one of them was
+		// distributed the other is genuinely undistributed, and correcting to `timePool`
+		// would silently pay it out anyway — which is exactly the ceiling being lost.
+		const distributed = ownPool.plus(sharedPool);
+		if (distributed.gt(0)) {
+			correctDrift(
+				distributions,
+				distributed,
+				(d) => d.poolAmount,
+				(d, v) => {
+					d.poolAmount = v;
+				},
+			);
+		}
 	}
 
 	// Record attention even for creators that only received directed support.

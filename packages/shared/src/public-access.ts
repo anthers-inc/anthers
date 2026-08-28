@@ -58,6 +58,47 @@ export const FREE_PUBLIC_ACCESS_HOURS = 10;
 /** The same limit in seconds, which is the unit `attention_events` records. */
 export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
 
+/**
+ * The slice of a sharer's month that **share-link viewing** may draw — of their allowance,
+ * and of their Time Pool.
+ *
+ * 🚨 **A ceiling, never a reservation, and the difference is the whole design.** A viewer
+ * who shares nothing distributes 100% of their Time Pool to the creators they watched, exactly
+ * as before; the slice only comes into being when somebody actually watches through a link.
+ * Reserving it unconditionally would quietly cut every non-sharer's creators by a tenth to
+ * fund a feature they never used, which is a regression dressed as a policy.
+ *
+ * **What it buys is that sharing never costs the sharer anything.** Share-link time is
+ * attributed to the sharer — that is what makes it attributable at all — so without a
+ * boundary a link that went viral would dilute the pool the sharer's *own* viewing pays out,
+ * and the creators they deliberately chose would earn less because a stranger watched
+ * something else. Ring-fencing means a viral link can consume its own slice and nothing more.
+ *
+ * ⚠️ **Parker settled this on 2026-08-28**, choosing a proportional sub-pool over the
+ * alternative shape — share-link minutes accruing at a *lower rate* in one undivided pool.
+ * The rejected shape taxed the sharer for the exact behaviour the feature exists to
+ * encourage, and it made a minute worth less for how the viewer arrived rather than for how
+ * well attended it was, which sits badly beside the equal-time principle (40.05).
+ *
+ * The figure is illustrative in 21.01 (*"90% own time / 10% shared"*) and belongs to the
+ * financial model rather than to a route.
+ */
+export const SHARE_LINK_POOL_FRACTION = 0.1;
+
+/**
+ * Seconds of share-link viewing a sharer may fund per calendar month.
+ *
+ * 🚨 **A flat constant, and deliberately NOT a fraction of the sharer's own allowance.**
+ * Giving Anthers the Public Access price removes the limit on *your* viewing; it does not
+ * buy an unlimited relay for strangers. Deriving this from the sharer's allowance would make
+ * an unlimited account's shared budget unlimited too, which recreates exactly the anonymous
+ * unmetered streaming that requiring an account for delivery was built to close — at $3 a
+ * month, and with one link.
+ */
+export const SHARED_PUBLIC_ACCESS_SECONDS = Math.round(
+	FREE_PUBLIC_ACCESS_SECONDS * SHARE_LINK_POOL_FRACTION,
+);
+
 /** A viewer's standing against the meter this month. */
 export interface PublicAccessBudget {
 	/** No limit applies — the viewer gives Anthers at least the Public Access price. */
@@ -94,6 +135,43 @@ export const NO_PUBLIC_ACCESS_ALLOWANCE: PublicAccessBudget = {
 	remainingSeconds: 0,
 	allowed: false,
 };
+
+/**
+ * A sharer's standing against the **share-link** budget this month.
+ *
+ * Deliberately the same shape as the ordinary meter and deliberately a separate call. The
+ * two budgets answer different questions about different people — *may I watch more?* about
+ * the account holder, and *may somebody else watch more through my link?* about strangers —
+ * and folding the second into `PublicAccessBudget` would put a field on every budget response
+ * that almost no reader of it means.
+ *
+ * `unlimited` is absent because there is nothing to buy: the shared budget is a flat constant
+ * for every account, paying or not. See {@link SHARED_PUBLIC_ACCESS_SECONDS}.
+ */
+export interface ShareLinkBudget {
+	/** Seconds already watched through this sharer's links this month. */
+	usedSeconds: number;
+	/** The cap in seconds — the same for every account. */
+	limitSeconds: number;
+	/** Seconds left before the cap. Never negative. */
+	remainingSeconds: number;
+	/** Whether anybody may start more viewing through this sharer's links right now. */
+	allowed: boolean;
+}
+
+/** A sharer's share-link standing, from the one fact it depends on. */
+export function shareLinkBudget(usedSeconds: number): ShareLinkBudget {
+	const used = Math.max(0, Math.floor(usedSeconds));
+	const remaining = Math.max(0, SHARED_PUBLIC_ACCESS_SECONDS - used);
+	return {
+		usedSeconds: used,
+		limitSeconds: SHARED_PUBLIC_ACCESS_SECONDS,
+		remainingSeconds: remaining,
+		// Strictly greater than zero, for the same reason the meter above is: a sharer who
+		// has exactly spent the budget has spent it.
+		allowed: remaining > 0,
+	};
+}
 
 /**
  * Resolve a viewer's Public Access standing from the two facts it depends on.

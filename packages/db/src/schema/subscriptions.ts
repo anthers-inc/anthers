@@ -197,6 +197,34 @@ export const attentionEvents = pgTable(
 		 * working; joining back to `works` at distribution time is the thing forbidden.
 		 */
 		publicAccess: boolean("public_access").notNull().default(false),
+		/**
+		 * Did these seconds arrive through a **share link** rather than from the account
+		 * named by `user_id`?
+		 *
+		 * 🚨 **`user_id` is the SHARER on these rows, not the person who watched**, and that
+		 * is the point rather than an inaccuracy. A share-link viewer has no account, so the
+		 * time is attributed to whoever shared the link — which is what makes it attributable
+		 * at all, and the Time Pool cannot pay a creator for time it cannot attribute to
+		 * anybody. Nothing here identifies the viewer, and nothing should: they are a stranger
+		 * we deliberately did not ask to sign up.
+		 *
+		 * Two readers, drawing two different boundaries, and they are not the same boundary:
+		 *
+		 *   - The **share-link budget** (`services/public-access.ts`) counts every row with
+		 *     this flag, `public_access` or not, because what it bounds is *relay volume* —
+		 *     how much viewing one person may fund for strangers — rather than commons
+		 *     consumption.
+		 *   - **`distribute-pool`** splits the sharer's Time Pool by it, capping the shared
+		 *     side at `SHARE_LINK_POOL_FRACTION`, so a link that goes viral cannot dilute what
+		 *     the sharer's own watching pays the creators they actually chose.
+		 *
+		 * ⚠️ A creator sharing their **own** Work writes rows with `public_access: false`, so
+		 * the seconds are still metered against the relay budget and earn nothing. Paying a
+		 * creator out of their own pool is the same refusal the owner branch already makes in
+		 * `resolveAccessSync`; a share context has a null viewer, so that branch cannot make it
+		 * here and the stamp does it instead.
+		 */
+		viaShareLink: boolean("via_share_link").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [

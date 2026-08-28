@@ -115,6 +115,24 @@ export interface AccessContext {
 	 * what they may reach, so entitlement stays here.
 	 */
 	adultAccess: boolean;
+	/**
+	 * Whose allowance this viewing spends, when it arrived through a **share link** — the
+	 * single exception to the rule that consuming a Work requires an account.
+	 *
+	 * 🚨 **Read at exactly one line of `resolveAccessSync`**, the branch where access would
+	 * otherwise be granted to universally-free work, and nowhere else. That is not tidiness;
+	 * it is what makes "a share link is a locator and never an entitlement" a property of the
+	 * code rather than a rule somebody has to keep obeying. Every refusal above that line —
+	 * quarantine, takedown, **Adult**, the gates, a price — runs on the ordinary rules against
+	 * a null viewer, so a link can carry nothing but free work out.
+	 *
+	 * ⚠️ **Only consulted when `userId` is null.** A share link followed by somebody who has
+	 * an account does nothing at all: they resolve on their own standing and spend their own
+	 * allowance. A link that granted access would bypass that person's own Adult opt-in
+	 * exactly as it bypasses an anonymous visitor's absent one, which is the half of 40.13's
+	 * rule that is easiest to get wrong.
+	 */
+	sharedBy: number | null;
 }
 
 /**
@@ -174,6 +192,9 @@ export function buildPreviewContext(opts: {
 		// because it is applied to the creator's own Works, and the creator already reaches
 		// them by the owner branch.
 		adultAccess: !signedOut,
+		// A preview asks what a viewer with a given standing would see, and arriving by a
+		// share link is not a standing — it is how somebody got here. Nothing to imagine.
+		sharedBy: null,
 	};
 }
 
@@ -459,7 +480,16 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		 * subtract the price from a public page in order to state a rule that page is already
 		 * obeying.
 		 */
-		if (ctx.userId == null) {
+		//
+		// ⚠️ **The share-link exception is this one clause, and it is placed here rather than
+		// anywhere earlier for a reason that is worth stating.** Everything above still runs
+		// against a null viewer, so a link can only ever emerge from *this* branch — the one
+		// reached exclusively by work that is free to everyone. Gated work never gets here
+		// (no qualifying allowed row), priced work never gets here, and Adult work is refused
+		// two checks above because a share context carries no opt-in and cannot be given one.
+		// That is what makes "ungated only" a property of the control flow instead of a rule
+		// somebody has to remember; see `services/share-links.ts`.
+		if (ctx.userId == null && ctx.sharedBy == null) {
 			return { ...base, canAccess: false, reason: "login_required", isFree: universallyFree };
 		}
 
@@ -490,7 +520,14 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
  */
 export async function buildAccessContext(
 	userId: number | null,
-	opts: { workIds?: number[] } = {},
+	opts: {
+		workIds?: number[];
+		/**
+		 * The sharer whose allowance a **share-link** view spends. Ignored when `userId` is
+		 * set — see `AccessContext.sharedBy`.
+		 */
+		sharedBy?: number | null;
+	} = {},
 ): Promise<AccessContext> {
 	if (userId == null) {
 		return {
@@ -501,6 +538,10 @@ export async function buildAccessContext(
 			// here rather than left to a default so the closed answer is visible at the one
 			// place the logged-out context is built.
 			adultAccess: false,
+			// Set by `shareContextFor` in routes/content.ts when a request carries a live
+			// share token. Null here because this is the ordinary logged-out context, and a
+			// default that guessed otherwise would hand out an allowance nobody offered.
+			sharedBy: opts.sharedBy ?? null,
 		};
 	}
 
@@ -547,6 +588,10 @@ export async function buildAccessContext(
 			purchaseRows.map((p) => p.workId).filter((id): id is number => id !== null),
 		),
 		adultAccess: adult.canReach,
+		// Deliberately null even if a share token rode along on this request. Somebody with
+		// an account resolves on their own standing and spends their own allowance; a link
+		// they followed tells them where a Work is and nothing more.
+		sharedBy: null,
 	};
 }
 

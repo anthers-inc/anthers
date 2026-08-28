@@ -34,14 +34,16 @@ import {
 } from "@anthers/shared/attention";
 import { amountMeets, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { badgeViews } from "@anthers/shared/fees";
+import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
+import { createMiddleware } from "hono/factory";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { getStripe } from "../lib/stripe.js";
-import { requireAuth, requireVerified } from "../middleware/auth.js";
+import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import {
 	type AccessibleWork,
 	buildAccessContext,
@@ -60,7 +62,8 @@ import {
 	savedCardFor,
 	supportItems,
 } from "../services/billing.js";
-import { loadPublicAccessBudget } from "../services/public-access.js";
+import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
+import { resolveShareToken } from "../services/share-links.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -142,12 +145,11 @@ async function ensureAccount(userId: number) {
 	return created;
 }
 
-async function getOptionalUserId(c: any): Promise<number | null> {
-	const token = getCookie(c, "session");
-	if (!token) return null;
-	const result = await validateSession(token);
-	return result?.user.id ?? null;
-}
+// 🚨 A private, cookie-only `getOptionalUserId` lived here until 2026-08-28, having outlived
+// the consolidation that `middleware/auth.ts` documents as having removed it. It never read
+// the `Authorization: Bearer` header, so a packaged desktop Studio session read as signed out
+// at `GET /public-access` and was told it had no allowance. Two ways to read one session must
+// not answer differently; the import above is the one that does.
 
 // ── Attention eligibility (server side) ──────────────────────────────────────
 
@@ -197,7 +199,8 @@ interface WorkEligibility {
  */
 async function loadWorkEligibility(
 	workIds: number[],
-	viewerId: number,
+	viewerId: number | null,
+	sharedBy: number | null = null,
 ): Promise<Map<number, WorkEligibility>> {
 	const byId = new Map<number, WorkEligibility>();
 	if (workIds.length === 0) return byId;
@@ -205,7 +208,10 @@ async function loadWorkEligibility(
 	const workRows = await db.select().from(works).where(inArray(works.id, workIds));
 	if (workRows.length === 0) return byId;
 
-	const ctx = await buildAccessContext(viewerId, { workIds: workRows.map((w) => w.id) });
+	const ctx = await buildAccessContext(viewerId, {
+		workIds: workRows.map((w) => w.id),
+		sharedBy,
+	});
 	for (const work of workRows) {
 		const earns = new Set<AttentionEventType>();
 		if (isTimePoolEligible(work.type)) earns.add(eventTypeFor(work.type));
@@ -224,10 +230,76 @@ async function loadWorkEligibility(
 			// A creator's own watching is excluded here rather than by the meter: `owner`
 			// reports `isFree: false`, so their seconds never carry the flag and never
 			// draw an allowance for consuming their own catalogue.
-			publicAccess: access.isFree && work.streamEnabled && work.visibility === "released",
+			publicAccess:
+				access.isFree &&
+				work.streamEnabled &&
+				work.visibility === "released" &&
+				// ⚠️ **A creator sharing their OWN Work earns nothing from it**, which the owner
+				// branch cannot say here: a share context has a null viewer, so `owner` never
+				// fires and `isFree` comes back true. Without this the sharer's Time Pool would
+				// pay the sharer, which is the same refusal `resolveAccessSync` makes for a
+				// creator watching their own catalogue — a pool is for buying the commons from
+				// somebody else. The seconds are still recorded and still draw the relay budget,
+				// because what that bounds is how much viewing one account may fund, and
+				// funding it for your own work is exactly the case most in need of a bound.
+				!(sharedBy != null && work.creatorId === sharedBy),
 		});
 	}
 	return byId;
+}
+
+// ── The attributable viewer ──────────────────────────────────────────────────
+
+/**
+ * Who these seconds belong to — an account, or the **sharer** whose link a stranger followed.
+ *
+ * 🚨 **A session always wins over a token.** Somebody with an account spends their own
+ * allowance whatever link they arrived by; otherwise a link would be a way to consume on
+ * another person's meter while signed in.
+ *
+ * ⚠️ **The token is not checked against the Works being claimed here, and does not need to
+ * be.** Eligibility is re-resolved below against a share context, so a claim naming a Work the
+ * link does not cover is refused by the resolver like any other — a share context reaches
+ * only universally-free work, which is the same set any recipient could already open. What
+ * the token decides is *whose month pays*, and that is the sharer either way.
+ */
+async function attributionFor(
+	c: Parameters<typeof getOptionalUserId>[0],
+): Promise<{ userId: number | null; sharedBy: number | null }> {
+	const userId = await getOptionalUserId(c);
+	if (userId != null) return { userId, sharedBy: null };
+	const token = c.req.query("share");
+	if (!token) return { userId: null, sharedBy: null };
+	const link = await resolveShareToken(token);
+	return { userId: null, sharedBy: link?.sharerId ?? null };
+}
+
+/**
+ * A session, **or** a live share link. See the note on `POST /attention` for why this
+ * endpoint wants an *attributable* caller rather than a logged-in one.
+ */
+const requireAttributableViewer = createMiddleware(async (c, next) => {
+	const token = c.req.query("share");
+	if (token && (await resolveShareToken(token))) return next();
+	return requireAuth(c, next);
+});
+
+/**
+ * The relay budget in the ordinary meter's shape.
+ *
+ * The players read `remainingSeconds` and `allowed` to draw a countdown and a wall, and a
+ * share-link recipient needs both for exactly the same reason a signed-in viewer does. Giving
+ * them a second shape would mean a second branch in every player for a difference they should
+ * never see — what ran out is *time on this link*, and the copy says so.
+ */
+function shareLinkBudgetAsMeter(b: ShareLinkBudget): PublicAccessBudget {
+	return {
+		unlimited: false,
+		usedSeconds: b.usedSeconds,
+		limitSeconds: b.limitSeconds,
+		remainingSeconds: b.remainingSeconds,
+		allowed: b.allowed,
+	};
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -658,9 +730,29 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Time (Attention) Events ──────────────────────────────────────────────
+	/**
+	 * 🚨 **`requireAuth` became `requireAttributableViewer` on 2026-08-28, and the name is the
+	 * whole argument.** This endpoint is where time turns into money, so what it has always
+	 * needed is not a *logged-in* caller but an *attributable* one — somebody a creator can be
+	 * paid on behalf of. An account is the ordinary way to be that. A **share link** is the
+	 * other way: the viewer is a stranger we deliberately did not ask to sign up, and the time
+	 * is attributed to whoever shared the link, who does have an account.
+	 *
+	 * ⚠️ **Which is also why the exception cannot leak into access.** The rows written below
+	 * carry the sharer's `user_id` and `via_share_link: true`; the *entitlement* question was
+	 * already answered by `resolveAccessSync` against a null viewer, so nothing a link carries
+	 * can open gated or Adult work. See `services/share-links.ts`.
+	 */
 	.post(
 		"/attention",
-		requireAuth,
+		requireAttributableViewer,
+		zValidator(
+			"query",
+			z.object({
+				/** A **share link** token — see `attributionFor`. Declared so the client can send it. */
+				share: z.string().optional(),
+			}),
+		),
 		zValidator(
 			"json",
 			z.object({
@@ -677,7 +769,13 @@ const subscriptionRoutes = new Hono()
 			}),
 		),
 		async (c) => {
-			const user = c.get("user");
+			const { userId, sharedBy } = await attributionFor(c);
+			// The account the seconds are recorded against. For a share-link view that is the
+			// sharer — which is what makes the time attributable at all, and the Time Pool
+			// cannot pay a creator for time it cannot attribute to anybody.
+			const attributedTo = userId ?? sharedBy;
+			if (attributedTo == null) return c.json({ error: "Authentication required" }, 401);
+			const viaShareLink = userId == null;
 			const { events } = c.req.valid("json");
 
 			if (events.length === 0) {
@@ -700,7 +798,8 @@ const subscriptionRoutes = new Hono()
 			const timed = events.filter((e) => e.durationSeconds > 0);
 			const eligibility = await loadWorkEligibility(
 				[...new Set(timed.map((e) => e.workId).filter((id): id is number => id != null))],
-				user.id,
+				userId,
+				sharedBy,
 			);
 
 			const eligible = events.filter((e) => {
@@ -709,14 +808,14 @@ const subscriptionRoutes = new Hono()
 				const work = eligibility.get(e.workId);
 				if (!work) return false;
 				if (work.creatorId !== e.creatorId) return false;
-				if (!work.released && work.creatorId !== user.id) return false;
+				if (!work.released && work.creatorId !== userId) return false;
 				return work.accessible && work.earns.has(e.eventType);
 			});
 
 			const ineligible = events.length - eligible.length;
 			if (ineligible > 0) {
 				console.warn(
-					`attention eligibility: user ${user.id} submitted ${ineligible} of ${events.length} events that no Work entitles them to — dropped`,
+					`attention eligibility: ${viaShareLink ? `a share link of user ${attributedTo}` : `user ${attributedTo}`} submitted ${ineligible} of ${events.length} events that no Work entitles them to — dropped`,
 				);
 			}
 
@@ -731,6 +830,11 @@ const subscriptionRoutes = new Hono()
 			// so five tabs, five devices, or a hand-written request all land against
 			// one budget. Honest use never reaches it — you cannot consume more than
 			// an hour of anything within an hour.
+			//
+			// ⚠️ **The clamp counts the attributed account's WHOLE window, share-link seconds
+			// included.** That is deliberate: it is a wall-clock bound, and wall clocks do not
+			// fork. Giving a share link its own window would hand every account a second hour
+			// per hour, which is the one thing this check exists to make impossible.
 			const windowStart = new Date(Date.now() - CREDIT_WINDOW_SECONDS * 1_000);
 			const [spent] = await db
 				.select({
@@ -738,7 +842,10 @@ const subscriptionRoutes = new Hono()
 				})
 				.from(attentionEvents)
 				.where(
-					and(eq(attentionEvents.userId, user.id), gte(attentionEvents.createdAt, windowStart)),
+					and(
+						eq(attentionEvents.userId, attributedTo),
+						gte(attentionEvents.createdAt, windowStart),
+					),
 				);
 
 			// Clamped over the ELIGIBLE set, so a rejected claim never eats another
@@ -747,12 +854,12 @@ const subscriptionRoutes = new Hono()
 
 			if (refused > 0) {
 				console.warn(
-					`attention clamp: user ${user.id} claimed ${granted + refused}s with ${spent?.total ?? 0}s already credited this window — refused ${refused}s`,
+					`attention clamp: ${viaShareLink ? "share links of " : ""}user ${attributedTo} claimed ${granted + refused}s with ${spent?.total ?? 0}s already credited this window — refused ${refused}s`,
 				);
 			}
 
 			const rows = allowed.map((e) => ({
-				userId: user.id,
+				userId: attributedTo,
 				creatorId: e.creatorId,
 				eventType: e.eventType,
 				durationSeconds: e.durationSeconds,
@@ -760,6 +867,7 @@ const subscriptionRoutes = new Hono()
 				// Zero-duration visit pings carry no Work and draw nothing, so they are
 				// never Public Access consumption whatever they point at.
 				publicAccess: e.workId != null && (eligibility.get(e.workId)?.publicAccess ?? false),
+				viaShareLink,
 			}));
 
 			await db.insert(attentionEvents).values(rows);
@@ -767,7 +875,13 @@ const subscriptionRoutes = new Hono()
 			// The budget AFTER this batch, so a player can stop at the limit rather than
 			// discovering it on the next playlist request. Returned on every write because
 			// the client has no other cheap way to know it is close.
-			const budget = await loadPublicAccessBudget(user.id);
+			//
+			// A share-link recipient is told about the **relay** budget instead, in the same
+			// shape so the players need no second branch — and without a reading of the
+			// sharer's own ten hours, which are nobody else's business.
+			const budget = viaShareLink
+				? shareLinkBudgetAsMeter(await loadShareLinkBudget(attributedTo))
+				: await loadPublicAccessBudget(attributedTo);
 
 			return c.json({ recorded: rows.length, granted, refused, ineligible, publicAccess: budget });
 		},

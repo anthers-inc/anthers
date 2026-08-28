@@ -45,6 +45,7 @@ const stranger: AccessContext = {
 	supportByCreator: new Map(),
 	purchasedWorkIds: new Set(),
 	adultAccess: true,
+	sharedBy: null,
 };
 
 function work(seedAccess: SeedAccessRow[], streamEnabled = true): AccessibleWork {
@@ -257,6 +258,7 @@ describe("the properties the badge's individual states rest on", () => {
 			supportByCreator: new Map([[CREATOR_ID, 5]]),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
+			sharedBy: null,
 		};
 		const rows = [row(0, false), row(2, true)];
 		const resolved = resolveAccessSync(work(rows), generous);

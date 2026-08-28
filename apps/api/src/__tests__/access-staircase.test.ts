@@ -73,6 +73,7 @@ function ctx(givenAmount: number, purchased: number[] = []): AccessContext {
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR_ID, givenAmount]] : []),
 		purchasedWorkIds: new Set(purchased),
 		adultAccess: true,
+		sharedBy: null,
 	};
 }
 
@@ -202,6 +203,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
+			sharedBy: null,
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
 		expect(resolveAccessSync(POSTS.G2, ctx(0)).reason).toBe("gated");
@@ -229,6 +231,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
+			sharedBy: null,
 		};
 		const free = resolveAccessSync(POSTS.G1, anon);
 		expect(free.reason).toBe("login_required");
@@ -264,6 +267,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
+			sharedBy: null,
 		});
 		expect(owner.canAccess).toBe(true);
 		expect(owner.reason).toBe("owner");
@@ -275,6 +279,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			supportByCreator: new Map([[CREATOR_ID + 1, 99]]),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
+			sharedBy: null,
 		};
 		expect(resolveAccessSync(POSTS.G2, elsewhere).reason).toBe("gated");
 	});

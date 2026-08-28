@@ -54,6 +54,11 @@ const ROUTE_NAMES = [
 	"purchases",
 	"resources",
 	"roadmap",
+	// A single letter, and the shortest route on the platform: `/s/:token` is where a share
+	// link lands. Short on purpose — the URL carries no Work id, slug or username, so pasting
+	// it reveals nothing until somebody follows it — which is exactly what makes the segment
+	// worth reserving.
+	"s",
 	"safety",
 	"settings",
 	"signup",

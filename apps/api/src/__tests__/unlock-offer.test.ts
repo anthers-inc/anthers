@@ -37,6 +37,7 @@ function ctx(givenAmount = 0): AccessContext {
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR, givenAmount]] : []),
 		purchasedWorkIds: new Set(),
 		adultAccess: true,
+		sharedBy: null,
 	};
 }
 
@@ -205,6 +206,7 @@ describe("unlock offer — when it is absent", () => {
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
+			sharedBy: null,
 		};
 		const got = resolveAccessSync(gatedAt(2), anon);
 		expect(got.reason).toBe("login_required");

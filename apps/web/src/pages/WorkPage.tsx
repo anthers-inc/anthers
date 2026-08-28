@@ -40,9 +40,12 @@ import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
+import SharedWorkBanner from "../components/work/SharedWorkBanner";
+import ShareLinkButton from "../components/work/ShareLinkButton";
 import { useAttentionClaim } from "../lib/attention";
 import { useMediaPlayer } from "../lib/media-player";
 import { useMeteredBudget } from "../lib/public-access";
+import { useShareToken, withShareToken } from "../lib/share-link";
 import { trackFromWork } from "../lib/tracks";
 
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
@@ -50,6 +53,12 @@ type WorkDetail = Work & {
 	creator?: { username: string; displayName: string | null; avatar: string | null };
 	/** Whether the creator can actually take a direct payment (Connect onboarded). */
 	creatorHasStripe?: boolean;
+	/**
+	 * Display name of whoever shared the link this page was reached by. Present only on a
+	 * share view — a display name and nothing else, since the rest of that person's account
+	 * is none of the recipient's business.
+	 */
+	sharedBy?: string | null;
 	postedIn?: {
 		slug: string;
 		title: string | null;
@@ -93,8 +102,16 @@ export default function WorkPage() {
 	const { user, isAuthenticated } = useAuth();
 	const { playTracks } = useMediaPlayer();
 	const preview = usePreviewQuery();
+	/**
+	 * The **share link** this page was reached by, if any.
+	 *
+	 * It changes the ANSWER the server gives, exactly as a preview does, so it travels with
+	 * the request rather than being interpreted here — the frontend must never decide a gate
+	 * itself. What it conveys is an allowance, never a permission; see `services/share-links.ts`.
+	 */
+	const shareToken = useShareToken();
 	/** Stable string for the preview, so effects re-run on a change of value not identity. */
-	const previewKey = JSON.stringify(preview);
+	const previewKey = JSON.stringify({ preview, shareToken });
 
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -117,8 +134,10 @@ export default function WorkPage() {
 		const res = await client.api.content.works[":id"].$get({
 			param: { id: slug },
 			// A preview changes the ANSWER, so it has to reach the server — the frontend
-			// must never compute a gate itself or it will drift from the resolver.
-			query: preview,
+			// must never compute a gate itself or it will drift from the resolver. A share
+			// token travels for the same reason and is refused server-side if it names a
+			// different Work.
+			query: shareToken ? { ...preview, share: shareToken } : preview,
 		});
 		if (!res.ok) {
 			setWork(null);
@@ -129,7 +148,7 @@ export default function WorkPage() {
 		// Record the canonical path this Work answers to, so the redirect that is about to
 		// happen is recognised as "already loaded" rather than a new Work to go and get.
 		loadedKey.current = `${workUrl(data.work)}|${previewKey}`;
-	}, [slug, preview, previewKey]);
+	}, [slug, preview, shareToken, previewKey]);
 
 	useEffect(() => {
 		if (!slug) return;
@@ -154,8 +173,12 @@ export default function WorkPage() {
 	useEffect(() => {
 		if (!work) return;
 		const canonical = workUrl(work);
-		if (location.pathname !== canonical) navigate(canonical, { replace: true });
-	}, [work, location.pathname, navigate]);
+		if (location.pathname === canonical) return;
+		// 🚨 The token has to survive the rewrite. It is a recipient's only claim to this
+		// Work, so settling the URL without it would load the page, 401 the player, and say
+		// nothing about why — see `withShareToken`.
+		navigate(withShareToken(canonical, shareToken), { replace: true });
+	}, [work, location.pathname, navigate, shareToken]);
 
 	// Poll while the media is still encoding, so the player swaps in without a refresh.
 	const jobStatus = work?.transcoding?.status;
@@ -431,6 +454,7 @@ export default function WorkPage() {
 								pageCount={work.pageCount ?? 0}
 								apiBase={apiBaseUrl()}
 								title={work.title ?? "Untitled"}
+								shareToken={shareToken}
 							/>
 						)}
 						{work.type === "image" && work.sourceKey && (
@@ -460,6 +484,13 @@ export default function WorkPage() {
 				)}
 			</section>
 
+			{/* Who sent them, and a free account without leaving the page. Rendered under the
+			    deliverable rather than above it: they came here to watch something, and an
+			    invitation that interrupted that would be the funnel this deliberately is not. */}
+			{shareToken && !user && (
+				<SharedWorkBanner sharedBy={work.sharedBy ?? null} onSignedIn={refetch} />
+			)}
+
 			{/* The public blurb — visible whether or not the viewer can open the Work, because a
 			    locked Work still has to say what it is. The gated prose renders above, inside
 			    the deliverable. */}
@@ -476,6 +507,16 @@ export default function WorkPage() {
 					workId={work.id}
 					canAccess={canAccess}
 				/>
+			)}
+
+			{/* Sharing is offered to anyone with an account, and the SERVER decides whether this
+			    particular Work can be shared — a client-side copy of that rule would be free to
+			    disagree, and the direction that matters is a stale page offering to share
+			    something that has since become gated or Adult. */}
+			{isAuthenticated && !shareToken && (
+				<div className="flex justify-end">
+					<ShareLinkButton workId={work.id} />
+				</div>
 			)}
 
 			{/* Reviews — a verdict on the work itself, which is the only thing a review
