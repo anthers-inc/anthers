@@ -91,6 +91,9 @@ export async function declareRating(
 	return updated;
 }
 
+/** Why an operator's correction was refused. Distinguished from "no such Work" by the route. */
+export type CorrectionRefusal = "needs-working-group";
+
 /**
  * An operator correcting a Work's rating.
  *
@@ -98,6 +101,16 @@ export async function declareRating(
  * somebody's work and the log is what an appeal reads. `reclassify` is the third value in
  * `ModerationActionType`, appended rather than reused: it is neither a hide nor a restore,
  * and recording it as one would make the queue's own history lie about what happened.
+ *
+ * 🚨 **A correction into `adult` is refused outright, and it is the burden-of-proof rule
+ * rather than a missing feature.** Wiki 40.13 § Correcting a Rating: the top rung costs a
+ * creator the commons, every Time Pool dollar and their discoverability at once, so moving
+ * somebody else's Work into it may not rest on one operator acting alone — it is the
+ * adult-content working group's call, and until that body exists nobody can make it. A
+ * creator may still declare `adult` about their own work at any time, because raising your
+ * own rating costs nobody else anything; what is refused here is one person doing it *to*
+ * them. An operator meeting work that is plainly at the wrong rung has 40.06's hide instead,
+ * which is reviewable and appealable in its own right.
  */
 export async function correctRating(input: {
 	workId: number;
@@ -106,7 +119,9 @@ export async function correctRating(input: {
 	actorId: number;
 	note?: string;
 	now?: Date;
-}): Promise<WorkRow | null> {
+}): Promise<WorkRow | CorrectionRefusal | null> {
+	if (input.maturity === "adult") return "needs-working-group";
+
 	const now = input.now ?? new Date();
 	const [work] = await db.select().from(works).where(eq(works.id, input.workId));
 	if (!work) return null;

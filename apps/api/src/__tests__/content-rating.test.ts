@@ -176,6 +176,59 @@ describe("content ratings", () => {
 			expect(row.visibility).toBe("released");
 			expect(row.maturity).toBe("mature");
 		});
+
+		it("refuses to release at a rung Anthers is not accepting, and keeps the rating", async () => {
+			// 🚨 The half that would be worse to ship alone. Adding `adult` to the scale
+			// without this would let a creator declare it and publish onto a rung whose
+			// consequences are not built.
+			//
+			// ⭐ The rating SURVIVES the refusal, which is the whole design: the Work is
+			// rated correctly and cannot be released, rather than being pushed into
+			// under-declaring one rung down. That is the pressure wiki 40.13 exists to
+			// remove, and a refusal that also cleared the rating would create it.
+			const workId = await makeWork();
+			const res = await patch(workId, { maturity: "adult", visibility: "released" });
+			expect(res.status).toBe(409);
+			const body = await res.json();
+			expect(body.code).toBe("maturity_rung_closed");
+			expect(body.rung).toBe("adult");
+			// Names the rung rather than saying "no". A creator told only that something
+			// failed lowers the rating until it stops failing.
+			expect(body.error).toContain("Adult");
+
+			const row = await reload(workId);
+			expect(row.visibility).toBe("private");
+			expect(row.maturity).toBe("adult");
+			expect(row.maturitySource).toBe("creator");
+		});
+
+		it("refuses to raise a RELEASED Work into a closed rung", async () => {
+			// The same hole by a quieter door: this PATCH never mentions `visibility`, so a
+			// gate watching only for the release transition would wave it through and leave
+			// closed-rung work live. The Work stays as it was, rating included.
+			const workId = await makeWork();
+			expect((await patch(workId, { maturity: "mature", visibility: "released" })).status).toBe(
+				200,
+			);
+
+			const res = await patch(workId, { maturity: "adult" });
+			expect(res.status).toBe(409);
+			expect((await res.json()).code).toBe("maturity_rung_closed");
+			const row = await reload(workId);
+			expect(row.maturity).toBe("mature");
+			expect(row.visibility).toBe("released");
+		});
+
+		it("tells a closed rung apart from an unanswered question", async () => {
+			// ⚠️ The ordering that makes the two messages honest. `unrated` is not on the
+			// accepted list either, so a gate that asked about acceptance first would tell a
+			// creator who simply has not answered that Anthers is not taking their kind of
+			// work — false, and unfixable, where the real problem is one click.
+			const workId = await makeWork();
+			const res = await patch(workId, { visibility: "released" });
+			expect(res.status).toBe(409);
+			expect((await res.json()).code).toBe("maturity_undeclared");
+		});
 	});
 
 	describe("an operator's correction", () => {
@@ -223,6 +276,30 @@ describe("content ratings", () => {
 			});
 			expect(res.status).toBe(400);
 		});
+
+		it("cannot move a Work to Adult, because one operator is not enough", async () => {
+			// 🚨 The burden-of-proof rule from wiki 40.13, and the asymmetry is the whole
+			// of it: Adult costs a creator the commons, every Time Pool dollar and their
+			// discoverability at once, so moving somebody else's Work there is the
+			// adult-content working group's call and that body does not exist. The creator
+			// may still declare Adult about their own work whenever they like.
+			const workId = await makeWork({ maturity: "general" });
+			const res = await correct(workId, "adult");
+			expect(res.status).toBe(409);
+			expect((await res.json()).code).toBe("rating_needs_working_group");
+			// Refused rather than partly applied: no rating change, and no log entry
+			// claiming a call nobody was allowed to make.
+			const row = await reload(workId);
+			expect(row.maturity).toBe("general");
+			expect(row.maturitySource).toBe("creator");
+			const log = await db
+				.select()
+				.from(moderationActions)
+				.where(
+					and(eq(moderationActions.subjectType, "work"), eq(moderationActions.subjectId, workId)),
+				);
+			expect(log).toHaveLength(0);
+		});
 	});
 
 	describe("the lock, in both directions", () => {
@@ -236,6 +313,23 @@ describe("content ratings", () => {
 			expect(body.code).toBe("maturity_locked");
 			expect(body.error).toContain("appeal");
 			expect((await reload(workId)).maturity).toBe("mature");
+		});
+
+		it("lets the creator raise an operator's Mature to Adult", async () => {
+			// The rung an operator may not move a Work into is one its creator may always
+			// choose. This is the case the caution ORDER exists for: a fourth value added
+			// above the others had to leave "raise yes, lower no" true without anybody
+			// rewriting the rule, and a pair of hardcoded cases would have refused this.
+			const workId = await makeWork({ maturity: "general" });
+			await correct(workId, "mature");
+
+			expect((await patch(workId, { maturity: "adult" })).status).toBe(200);
+			const row = await reload(workId);
+			expect(row.maturity).toBe("adult");
+			// Raising past a correction is still the creator's own declaration, so the
+			// rating comes back to them — and with it the ability to return to the
+			// operator's value.
+			expect(row.maturitySource).toBe("creator");
 		});
 
 		it("lets the creator raise it, and hands the rating back to them", async () => {

@@ -29,7 +29,11 @@
  * creator-side moderation later features rather than later migrations.
  */
 
-import { maturityLabel } from "@anthers/shared/content-rating";
+import {
+	type DeclarableMaturity,
+	MATURITY_CHOICES,
+	maturityLabel,
+} from "@anthers/shared/content-rating";
 import {
 	MODERATION_NOTE_MAX,
 	MODERATION_REASON_GROUPS,
@@ -183,7 +187,7 @@ export default function ModerationQueue() {
 	 * matter is not the same as treatment. Wiki 40.13. The creator can appeal, and the
 	 * appeal queue on this page is where that lands.
 	 */
-	const correctRating = async (item: QueueItem, maturity: "general" | "mature") => {
+	const correctRating = async (item: QueueItem, maturity: DeclarableMaturity) => {
 		setActing(true);
 		try {
 			const res = await apiFetch("/api/admin/works/rating", {
@@ -192,7 +196,12 @@ export default function ModerationQueue() {
 				body: JSON.stringify({ workId: item.subjectId, maturity }),
 			});
 			if (!res.ok) {
-				setError("That rating couldn't be set.");
+				// The server's own sentence, when it has one. A correction can be refused
+				// for a reason the operator needs to act on — moving a Work to Adult takes
+				// the working group rather than one person — and "that couldn't be set"
+				// would send them looking for a bug instead.
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				setError(body?.error || "That rating couldn't be set.");
 				return;
 			}
 			await load();
@@ -365,6 +374,46 @@ export default function ModerationQueue() {
 											</>
 										) : (
 											<span className="badge badge-sm badge-ghost">visible</span>
+										)}
+										{/* The rating correction. It sits under the state badge rather than
+										    beside Hide because it is not a removal — a Work rated too low is
+										    rated wrongly, not against the rules, and offering the two beside
+										    each other invites the harsher one. `maturity` is present on a
+										    reported Work and nowhere else, which is what scopes this. */}
+										{item.maturity != null && (
+											<div className="mt-2">
+												<div className="text-xs text-base-content/50">
+													rated {maturityLabel(item.maturity)}
+												</div>
+												<div className="mt-1 flex flex-wrap gap-1">
+													{MATURITY_CHOICES.map((choice) => {
+														// 🚨 Adult is shown and disabled rather than omitted. An
+														// operator who cannot find the rung reads the scale as
+														// broken; one who is told why it is unavailable knows the
+														// call is the working group's and can go and get it. Wiki
+														// 40.13 § Correcting a Rating.
+														const needsGroup = choice.value === "adult";
+														return (
+															<button
+																key={choice.value}
+																type="button"
+																className={`btn btn-xs ${
+																	item.maturity === choice.value ? "btn-primary" : "btn-ghost"
+																}`}
+																disabled={acting || needsGroup || item.maturity === choice.value}
+																title={
+																	needsGroup
+																		? "Moving a Work to Adult takes the adult-content working group rather than one operator, and that body doesn't exist yet."
+																		: `Correct this Work's rating to ${choice.label}`
+																}
+																onClick={() => correctRating(item, choice.value)}
+															>
+																{choice.label}
+															</button>
+														);
+													})}
+												</div>
+											</div>
 										)}
 									</td>
 									<td className="whitespace-nowrap text-right">
