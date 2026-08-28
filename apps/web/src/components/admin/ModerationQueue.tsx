@@ -386,32 +386,29 @@ export default function ModerationQueue() {
 													rated {maturityLabel(item.maturity)}
 												</div>
 												<div className="mt-1 flex flex-wrap gap-1">
-													{MATURITY_CHOICES.map((choice) => {
-														// 🚨 Adult is shown and disabled rather than omitted. An
-														// operator who cannot find the rung reads the scale as
-														// broken; one who is told why it is unavailable knows the
-														// call is the working group's and can go and get it. Wiki
-														// 40.13 § Correcting a Rating.
-														const needsGroup = choice.value === "adult";
-														return (
-															<button
-																key={choice.value}
-																type="button"
-																className={`btn btn-xs ${
-																	item.maturity === choice.value ? "btn-primary" : "btn-ghost"
-																}`}
-																disabled={acting || needsGroup || item.maturity === choice.value}
-																title={
-																	needsGroup
-																		? "Moving a Work to Adult takes the adult-content working group rather than one operator, and that body doesn't exist yet."
-																		: `Correct this Work's rating to ${choice.label}`
-																}
-																onClick={() => correctRating(item, choice.value)}
-															>
-																{choice.label}
-															</button>
-														);
-													})}
+													{MATURITY_CHOICES.map((choice) => (
+														<button
+															key={choice.value}
+															type="button"
+															className={`btn btn-xs ${
+																item.maturity === choice.value ? "btn-primary" : "btn-ghost"
+															}`}
+															disabled={acting || item.maturity === choice.value}
+															// ⚠️ Adult says what it DOES, not just what it means.
+															// The correction closes the Work's free public access
+															// as part of the same act, and an operator who is not
+															// told that is taking an action they did not know they
+															// were taking.
+															title={
+																choice.value === "adult"
+																	? "Rate this Adult. Adult work can't be free, so this also closes its free public access — the creator is notified and can appeal."
+																	: `Correct this Work's rating to ${choice.label}`
+															}
+															onClick={() => correctRating(item, choice.value)}
+														>
+															{choice.label}
+														</button>
+													))}
 												</div>
 											</div>
 										)}

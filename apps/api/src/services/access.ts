@@ -313,6 +313,36 @@ export function isOpenToEveryoneFree(rows: SeedAccessRow[] | null | undefined): 
 	);
 }
 
+/**
+ * Shut the free-to-everyone door, leaving every other rung exactly as it was.
+ *
+ * 🚨 **This is how the Adult rules get imposed on a Work that arrives at the rung by an
+ * operator's correction rather than its creator's choice.** Refusing the correction is not
+ * an option there — it would mean a Work can only be rated Adult with its creator's consent,
+ * which is precisely the case the correction exists for. So the rating changes and the
+ * consequence is applied in the same act.
+ *
+ * ⭐ **Only the baseline row is touched, and that restraint is the point.** A rung above the
+ * baseline priced at zero means "supporters at $3 get it at no further cost", which is a
+ * Badge gate and exactly the shape Adult work is supposed to have — flattening those would
+ * be re-pricing somebody's work rather than enforcing a rule. What is removed is only the
+ * door marked *free to everyone*, which is the one thing an Adult Work may not have.
+ *
+ * The result may be a Work nobody can open, when the creator had no rung above the baseline.
+ * That is the correct outcome rather than an oversight: Adult work must be sold or gated,
+ * only its creator can decide which, and until they do there is no price at which anybody
+ * may have it. They are told, and they can appeal the rating itself.
+ */
+export function closeFreeBaseline(rows: SeedAccessRow[] | null | undefined): SeedAccessRow[] {
+	const current = rows ?? [];
+	if (!isOpenToEveryoneFree(current)) return [...current];
+	return current.map((row) =>
+		row.allow && Number(row.threshold ?? 0) <= 0 && Number(row.price ?? "0") <= 0
+			? { ...row, allow: false }
+			: row,
+	);
+}
+
 /** An allowed row the viewer qualifies for: its numeric price and whether it's a baseline (everyone) row. */
 interface Offer {
 	price: number;
