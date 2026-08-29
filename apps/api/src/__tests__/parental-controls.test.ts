@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { attentionEvents, users } from "@anthers/db/schema";
+import { accounts, attentionEvents, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -135,6 +135,45 @@ describe("Parental controls", () => {
 			languageFilter: false,
 		});
 		await db.delete(attentionEvents).where(eq(attentionEvents.userId, childId));
+		// The support account too, because the Adult tests below seed one and every column
+		// that decides whether the rung is reachable lives on it.
+		await db.delete(accounts).where(eq(accounts.userId, childId));
+	}
+
+	/**
+	 * Put the account in the state the borrowed card leaves behind: adulthood already
+	 * verified, and opted out.
+	 *
+	 * 🚨 **This is the exploit path, and it needs no Stripe.** `enableAdultAccess` skips the
+	 * card check entirely when `adultVerifiedAt` is already set — verification is once, at
+	 * enablement — so an account that cleared the funding check before a pin was set can
+	 * re-open the rung with a bare POST. That is also the likeliest account to have been
+	 * holding somebody else's card, which is why the lock sits above the shortcut.
+	 *
+	 * ⚠️ **`display: null` is the case that matters and it is the ordinary one.** The Adult
+	 * column is empty until somebody sets it and reads back as `hide` from the default, so
+	 * opting in writes a real `blur` over it — the escalation. A reader who typed `hide`
+	 * themselves keeps it, which is why the two are seeded separately.
+	 */
+	async function alreadyVerified(display: string | null) {
+		const seeded = {
+			adultOptIn: false,
+			adultVerifiedAt: new Date(),
+			adultVerifiedMethod: "card_funding",
+			adultDisplay: display,
+		};
+		await db
+			.insert(accounts)
+			.values({ userId: childId, ...seeded })
+			.onConflictDoUpdate({ target: accounts.userId, set: seeded });
+	}
+
+	/** Turn the maturity lock on, with the pin, leaving everything else alone. */
+	function lock(on: boolean) {
+		return send("/api/accounts/me/parental-controls", "PATCH", child, {
+			pin: PIN,
+			lockMaturity: on,
+		});
 	}
 
 	// ── The pin ───────────────────────────────────────────────────────────────
@@ -201,6 +240,79 @@ describe("Parental controls", () => {
 			mature: "show",
 		});
 		expect(res.status).toBe(200);
+		await reset();
+	});
+
+	it("🚨 refuses to OPEN the Adult rung from inside the lock, verified card and all", async () => {
+		// The defect this file was missing until 2026-08-29. `lockMaturity` was enforced at
+		// `PATCH /me/content-preferences` alone, but reaching Adult work is governed by
+		// `adultOptIn` and `adultVerifiedAt`, which a different route writes — so the pin a
+		// parent was told closes the borrowed-card gap closed nothing at all.
+		await reset();
+		await alreadyVerified(null);
+		await lock(true);
+
+		const res = await send("/api/accounts/me/adult-access", "POST", child, {});
+		expect(res.status).toBe(403);
+		expect((await res.json()).code).toBe("parental_locked");
+
+		const access = await (
+			await req("/api/accounts/me/adult-access", { headers: { Cookie: child } })
+		).json();
+		expect(access.optIn).toBe(false);
+		expect(access.canReach).toBe(false);
+
+		// ...and the display preference the write would have trampled is still `hide`.
+		// `enableAdultAccess` writes a real `blur` over the empty column that reads back as
+		// the default, so the same request that opened the rung also made the work *listed*
+		// — the one preference the lock is named for.
+		const prefs = await (
+			await req("/api/accounts/me/content-preferences", { headers: { Cookie: child } })
+		).json();
+		expect(prefs.adult).toBe("hide");
+
+		// The card check is the same door one step earlier, and it is shut too — nobody is
+		// walked through attaching a card to an account that may not use it.
+		const setup = await send("/api/accounts/me/adult-access/setup", "POST", child, {});
+		expect(setup.status).toBe(403);
+		expect((await setup.json()).code).toBe("parental_locked");
+
+		await reset();
+	});
+
+	it("⭐ opens it with the lock off, which is what proves the lock is doing the work", async () => {
+		// Without this the test above passes for any reason a request might fail — a missing
+		// Stripe key on the runner would do it. The same request, same fixture, one switch.
+		await reset();
+		await alreadyVerified(null);
+
+		const res = await send("/api/accounts/me/adult-access", "POST", child, {});
+		expect(res.status).toBe(200);
+		expect((await res.json()).canReach).toBe(true);
+
+		const prefs = await (
+			await req("/api/accounts/me/content-preferences", { headers: { Cookie: child } })
+		).json();
+		expect(prefs.adult).toBe("blur");
+		await reset();
+	});
+
+	it("⭐ still lets the account opt back OUT under the lock, because that only tightens", async () => {
+		// The asymmetry is deliberate. A lock that stopped somebody making their own account
+		// stricter would be protecting nobody, so only the two routes that open the rung
+		// answer to it.
+		await reset();
+		await alreadyVerified("blur");
+		await db.update(accounts).set({ adultOptIn: true }).where(eq(accounts.userId, childId));
+		await lock(true);
+
+		const res = await send("/api/accounts/me/adult-access", "DELETE", child, {});
+		expect(res.status).toBe(200);
+		expect((await res.json()).canReach).toBe(false);
+
+		// And it cannot be undone from inside the lock, which is the half that matters.
+		const back = await send("/api/accounts/me/adult-access", "POST", child, {});
+		expect(back.status).toBe(403);
 		await reset();
 	});
 

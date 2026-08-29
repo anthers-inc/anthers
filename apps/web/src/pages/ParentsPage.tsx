@@ -174,8 +174,10 @@ export default function ParentsPage() {
 				</p>
 				<p>
 					<strong>Lock the content settings.</strong> Mature and Adult are separate switches, and
-					locking freezes both wherever you left them. This is the control that closes the gap in
-					the age check above.
+					locking freezes both wherever you left them. It also stops the account turning Adult
+					content on at all — card or no card — which is what closes the borrowed-card gap in the
+					check above. Turning Adult content <em>off</em> still works while it's locked, because
+					that only makes the account stricter.
 				</p>
 				<p>
 					<strong>Choose creators, and kinds of work.</strong> Either a list of who and what is

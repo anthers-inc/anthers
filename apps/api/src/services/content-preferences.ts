@@ -7,6 +7,13 @@
  * `services/quarantine.ts` establish. Every door into this state comes through here, so an
  * account cannot end up opted in to something it was never verified for.
  *
+ * 🚨 **Every write here asks `maturityLocked` first, and that is the parental lock's only
+ * enforcement point.** It used to sit at `PATCH /me/content-preferences` alone, which left the
+ * two routes that write `adultOptIn` and `adultVerifiedAt` — the columns that actually decide
+ * whether an account reaches Adult work — outside a lock a guardian had been told closed
+ * exactly that gap. A check derived from the account rather than from the request belongs in
+ * the writer, because the writer is the thing every door has to go through.
+ *
  * 🚨 **Every setting here belongs to the READER and reaches nobody else.** A reader hiding or
  * blurring a rung changes what *they* meet: the Work stays listed for everyone else, stays
  * searchable, stays earning, and is never demoted or paid less. Wiki 40.09 is explicit that
@@ -59,6 +66,7 @@ import {
 import { eq, type SQL, sql } from "drizzle-orm";
 import { getStripe } from "../lib/stripe.js";
 import { ensureStripeCustomer } from "./billing.js";
+import { maturityLocked } from "./parental-controls.js";
 
 /** The only method there is. Stored rather than assumed, so a second one could not make the existing rows ambiguous. */
 export const CARD_FUNDING_METHOD = "card_funding";
@@ -115,12 +123,19 @@ export async function contentPreferencesFor(userId: number | null): Promise<Cont
 	};
 }
 
-/** Set a rung's display preference. The only writer of the two display columns. */
+/**
+ * Set a rung's display preference. The only writer of the two display columns.
+ *
+ * Refuses under a guardian's lock rather than writing, and the refusal is returned rather than
+ * swallowed: a setting that appears to save and does not is worse than one that says no.
+ */
 export async function setMaturityDisplay(
 	userId: number,
 	input: { mature?: MaturityDisplay; adult?: MaturityDisplay },
 	now: Date = new Date(),
-): Promise<ContentPreferences> {
+): Promise<ContentPreferences | "parental_locked"> {
+	if (await maturityLocked(userId)) return "parental_locked";
+
 	const updates: Record<string, unknown> = { updatedAt: now };
 	if (input.mature) updates.matureDisplay = input.mature;
 	if (input.adult) updates.adultDisplay = input.adult;
@@ -187,43 +202,13 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
 }
 
 /**
- * The SQL condition that hides Adult work from a viewer who may not reach it.
- *
- * 🚨 **Adult is INVISIBLE rather than merely inaccessible** — its existence, title and cover
- * art included — so this is a `WHERE` clause on every listing rather than a lock the reader
- * meets on arrival. Wiki 40.09: a signed-out visitor has no account-level setting for the
- * opt-in to consult, so Adult work is invisible to them entirely; and a signed-in account
- * that has not opted in meets the same absence on the non-feed surfaces — creator profiles,
- * Catalog listings, and search (Parker, 2026-08-28, settling 40.09's open question).
- *
- * ⭐ **One rule for everyone without the opt-in, which is what makes it testable as an
- * absence.** The alternative considered was an interstitial saying an Adult Work is here,
- * and it was rejected because the existence — and usually the title — is exactly the thing
- * the rung does not get. The accepted cost is that a creator's profile silently omits work
- * from a reader who has not opted in.
- *
- * ⚠️ **A creator always sees their own**, which is why this takes the viewer's id and the
- * creator column rather than being a bare `maturity <> 'adult'`. Somebody who has not opted
- * in is not asking to be protected from the thing they made, and hiding it from them would
- * take their own Work out of their own Catalog.
- *
- * Returns `undefined` when nothing needs hiding, so it composes into `and(...)` exactly as
- * `notBlockedBy` does — Drizzle drops the undefined rather than needing a branch at the call
- * site.
- */
-export function adultHiddenFrom(
-	access: AdultAccess,
-	viewerId: number | null,
-	creatorColumn: SQL | unknown = works.creatorId,
-	maturityColumn: SQL | unknown = works.maturity,
-): SQL | undefined {
-	if (access.canReach) return undefined;
-	if (viewerId == null) return sql`${maturityColumn} <> 'adult'`;
-	return sql`(${maturityColumn} <> 'adult' OR ${creatorColumn} = ${viewerId})`;
-}
-
-/**
  * Every rung this viewer has asked to keep out of listings, as one condition.
+ *
+ * 🚨 **This is the ONLY maturity condition a listing composes, and there is deliberately no
+ * narrower sibling.** An `adultHiddenFrom` covering the access half alone existed until
+ * 2026-08-29 and emitted `maturity <> 'adult'` — a deny-list, admitting any rung it had not
+ * been told about, which is the one direction this filter must never fail in. A second helper
+ * doing most of one job is how that happened, so there is one.
  *
  * Two different reasons produce the same absence and they are not the same rule. A rung is
  * absent because the viewer **may not reach it** (the Adult opt-in and verification, which is
@@ -233,8 +218,26 @@ export function adultHiddenFrom(
  * one independently. **A `hide` preference is never an access rule**: the Work stays reachable
  * by a direct link, which is exactly what separates hiding from opting out.
  *
+ * 🚨 **Adult is INVISIBLE rather than merely inaccessible** — its existence, title and cover
+ * art included — so this is a `WHERE` clause on every listing rather than a lock the reader
+ * meets on arrival. Wiki 40.09: a signed-out visitor has no account-level setting for the
+ * opt-in to consult, so Adult work is invisible to them entirely; and a signed-in account
+ * that has not opted in meets the same absence on every other surface — creator profiles,
+ * Catalog listings, the followed-creator feed, and search (Parker, 2026-08-28, settling
+ * 40.09's open question). Following somebody is not the opt-in.
+ *
+ * ⭐ **One rule for everyone without the opt-in, which is what makes it testable as an
+ * absence.** The alternative considered was an interstitial saying an Adult Work is here,
+ * and it was rejected because the existence — and usually the title — is exactly the thing
+ * the rung does not get. The accepted cost is that a creator's profile silently omits work
+ * from a reader who has not opted in.
+ *
  * ⭐ **`blur` produces no condition at all**, because a blurred Work is listed. The blur is
  * the client's job, from the `maturity` value that already travels with every Work.
+ *
+ * Always returns a condition — a viewer who may see everything gets `IN` over every rung
+ * rather than nothing — and keeps `undefined` in its type so it composes into `and(...)`
+ * alongside `notBlockedBy` and `parentalHiddenFrom`, which do drop out.
  */
 export function maturityHiddenFrom(
 	prefs: ContentPreferences,
@@ -296,7 +299,18 @@ export type AdultEnableRefusal =
 	/** No card has ever been attached to this account, so there is nothing to read. */
 	| "no_card"
 	/** A card is on file and it is not credit-funded. This is the honest, unmitigated exclusion. */
-	| "funding_not_credit";
+	| "funding_not_credit"
+	/**
+	 * A guardian has locked this account's content-rating settings.
+	 *
+	 * 🚨 **Checked before anything else, and it is the one refusal that is not about a card.**
+	 * The borrowed-card scenario is the whole reason the pin exists: a parent's credit card
+	 * passes the funding check, so a teenager holding one clears adulthood verification
+	 * honestly. What stops them is that the account itself may not turn the rung on. Answering
+	 * this before Stripe is consulted also means the lock holds on a deployment where the card
+	 * check is unavailable, which is the direction it must fail in.
+	 */
+	| "parental_locked";
 
 /**
  * Read the funding type of the card on file, and record adulthood if it is credit.
@@ -380,6 +394,11 @@ export async function beginAdultVerification(
 	userId: number,
 	email: string,
 ): Promise<{ clientSecret: string } | AdultEnableRefusal> {
+	// A card check whose only purpose is opening a rung this account may not open. Refusing
+	// here rather than at the enable step keeps somebody from being walked through attaching a
+	// card to an account that was never going to be allowed to use it.
+	if (await maturityLocked(userId)) return "parental_locked";
+
 	const stripe = getStripe();
 	if (!stripe) return "unavailable";
 
@@ -410,11 +429,21 @@ export async function beginAdultVerification(
  * enablement; somebody turning the setting back on after turning it off is not being asked
  * to prove adulthood a second time, and re-reading their cards would make the gate fail for
  * an adult who has since cancelled the credit card that verified them.
+ *
+ * 🚨 **A guardian's lock is checked first, and this is the route the lock exists for.** Wiki
+ * 40.09 tells a parent that locking the content settings closes the borrowed-card gap, and it
+ * only does so because of this line: a credit-funded card in a teenager's hand passes the
+ * funding check honestly, so the thing that has to refuse is the account, not the card. The
+ * lock deliberately sits *above* the already-verified shortcut described in the paragraph
+ * before this one, because an account that verified before a pin was set is the likeliest one
+ * of all to have been holding somebody else's card.
  */
 export async function enableAdultAccess(
 	userId: number,
 	now: Date = new Date(),
 ): Promise<AdultAccess | AdultEnableRefusal> {
+	if (await maturityLocked(userId)) return "parental_locked";
+
 	const [row] = await db
 		.select({
 			customerId: accounts.stripeCustomerId,
@@ -474,6 +503,11 @@ export async function enableAdultAccess(
  * identifying — and clearing it would make somebody re-prove adulthood every time they
  * changed their mind about what they want to see. The setting is the thing they are changing,
  * so the setting is the thing that changes.
+ *
+ * ⭐ **A guardian's lock does not apply here, and that asymmetry is deliberate.** Opting back
+ * out only makes the account stricter, so a lock that refused it would be stopping somebody
+ * tightening their own settings, which protects nobody. The lock's job is to hold the door
+ * shut, and this is somebody closing it further.
  */
 export async function disableAdultAccess(
 	userId: number,
