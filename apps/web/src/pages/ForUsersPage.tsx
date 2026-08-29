@@ -54,6 +54,7 @@ import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-sha
 import { BADGE_LADDER, PurchaseExample } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
+import { FAQBlock } from "../components/ui/FAQ";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -340,6 +341,22 @@ export default function ForUsersPage() {
 						</Reveal>
 					))}
 				</div>
+			</Section>
+
+			{/* Questions — before the closing CTA rather than after it, deliberately. An FAQ
+			    is the last set of objections standing between a reader and the button, so it
+			    belongs on the way to the button; putting it below would make the accordions
+			    the final thing on the page and leave the CTA stranded above them. The
+			    questions themselves live in `content/faq.tsx` and are shared with /faq.
+
+			    ⚠️ Untinted, which breaks the page's tint alternation against § ② above it —
+			    and the alternative breaks it worse. The closing band is tinted, so a tinted
+			    FAQ would run straight into it and cost the CTA its edge, which is the one
+			    band on the page that needs one. Two untinted sections separated by 48 units
+			    of padding read as two sections; a merged closing band reads as an afterthought
+			    to the FAQ. */}
+			<Section>
+				<FAQBlock surface="users" />
 			</Section>
 
 			{/* Closing */}
