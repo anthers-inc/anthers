@@ -25,9 +25,9 @@
  * is a cron job destroying the thing while an obligation to keep it is live.
  */
 import { db } from "@anthers/db/client";
-import { legalHolds } from "@anthers/db/schema";
+import { abuseReports, legalHolds, moderationReports, users, works } from "@anthers/db/schema";
 import { PRESERVATION_HOLD_YEARS } from "@anthers/shared/constants";
-import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 
 /**
  * What a hold can name. Deliberately small — add a kind when a sweep needs it.
@@ -159,4 +159,121 @@ export async function allHeldSubjectIds(
 		.from(legalHolds)
 		.where(and(eq(legalHolds.subjectType, subjectType), activeAt(now)));
 	return [...new Set(rows.map((r) => r.subjectId))];
+}
+
+/**
+ * What a subject id actually points at, in words an operator can check.
+ *
+ * 🚨 **A hold on an id that names nothing preserves nothing, and looks identical to one
+ * that works.** Nothing in `placeHold` can tell the difference — a subject id is an
+ * integer and every integer is accepted — so the check has to happen where a human types
+ * one. Returning the label rather than a boolean is deliberate: *"user 41 — cormorant"*
+ * lets somebody notice they preserved the wrong account, which a green tick would not.
+ *
+ * Null means no such row, and the caller should refuse rather than write the hold.
+ */
+export async function describeSubject(
+	subjectType: HoldSubjectType,
+	subjectId: number,
+): Promise<string | null> {
+	if (!Number.isInteger(subjectId) || subjectId <= 0) return null;
+	switch (subjectType) {
+		case "user": {
+			const [row] = await db
+				.select({ username: users.username })
+				.from(users)
+				.where(eq(users.id, subjectId))
+				.limit(1);
+			return row ? `@${row.username}` : null;
+		}
+		case "work": {
+			const [row] = await db
+				.select({ title: works.title })
+				.from(works)
+				.where(eq(works.id, subjectId))
+				.limit(1);
+			return row ? (row.title ?? `Work ${subjectId}`) : null;
+		}
+		case "report": {
+			const [row] = await db
+				.select({ id: moderationReports.id })
+				.from(moderationReports)
+				.where(eq(moderationReports.id, subjectId))
+				.limit(1);
+			return row ? `Moderation report #${subjectId}` : null;
+		}
+		case "abuse_report": {
+			const [row] = await db
+				.select({ url: abuseReports.url })
+				.from(abuseReports)
+				.where(eq(abuseReports.id, subjectId))
+				.limit(1);
+			return row ? `Abuse report #${subjectId} — ${row.url}` : null;
+		}
+	}
+}
+
+/** A hold, as the operator console shows it. `state` is derived; the row has no such column. */
+export interface HoldListing {
+	id: number;
+	subjectType: HoldSubjectType;
+	subjectId: number;
+	subjectLabel: string | null;
+	reason: string;
+	note: string;
+	placedBy: string | null;
+	placedAt: string;
+	expiresAt: string | null;
+	liftedAt: string | null;
+	state: "active" | "lifted" | "expired";
+}
+
+/**
+ * Every hold ever placed, newest first, with the lifted and expired ones included.
+ *
+ * 🚨 **Filtering this to active holds would destroy the thing the table is for.** A lifted
+ * hold is the record that something was preserved, for how long, and on whose say-so, and
+ * the question *"why did this survive the sweep?"* is asked years after the hold stops
+ * applying. `liftHold` stamps rather than deletes for the same reason; a list that hid the
+ * stamped rows would undo that at the only place anybody looks.
+ */
+export async function loadHolds(now: Date = new Date()): Promise<HoldListing[]> {
+	const rows = await db
+		.select({
+			id: legalHolds.id,
+			subjectType: legalHolds.subjectType,
+			subjectId: legalHolds.subjectId,
+			reason: legalHolds.reason,
+			note: legalHolds.note,
+			placedBy: users.username,
+			placedAt: legalHolds.placedAt,
+			expiresAt: legalHolds.expiresAt,
+			liftedAt: legalHolds.liftedAt,
+		})
+		.from(legalHolds)
+		.leftJoin(users, eq(users.id, legalHolds.placedBy))
+		.orderBy(desc(legalHolds.placedAt));
+
+	return Promise.all(
+		rows.map(async (row) => {
+			const subjectType = row.subjectType as HoldSubjectType;
+			return {
+				id: row.id,
+				subjectType,
+				subjectId: row.subjectId,
+				subjectLabel: await describeSubject(subjectType, row.subjectId),
+				reason: row.reason,
+				note: row.note,
+				placedBy: row.placedBy,
+				placedAt: row.placedAt.toISOString(),
+				expiresAt: row.expiresAt?.toISOString() ?? null,
+				liftedAt: row.liftedAt?.toISOString() ?? null,
+				state: row.liftedAt
+					? "lifted"
+					: row.expiresAt && row.expiresAt <= now
+						? "expired"
+						: "active",
+			} satisfies HoldListing;
+		}),
+	);
 }

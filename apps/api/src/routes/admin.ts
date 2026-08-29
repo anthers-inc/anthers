@@ -42,6 +42,13 @@ import {
 	takeDownWork,
 } from "../services/dmca.js";
 import {
+	describeSubject,
+	liftHold,
+	loadHolds,
+	placeHold,
+	preservationExpiry,
+} from "../services/legal-hold.js";
+import {
 	dismissReports,
 	hideSubject,
 	loadQueue,
@@ -131,6 +138,30 @@ const resolveAppealSchema = z.object({
 	appealId: z.number().int().positive(),
 	outcome: z.enum(["granted", "upheld"]),
 	note: z.string().max(RATING_NOTE_MAX).optional(),
+});
+
+/**
+ * A hold an operator is placing by hand.
+ *
+ * 🚨 **The reason is required here and not merely non-empty.** `placeHold` already throws
+ * on a blank one, so the schema could have let a space through and relied on the service —
+ * but that turns a form mistake into a 500, and the operator most likely to make it is one
+ * working at speed on a preservation letter. Refusing at the edge with a message is the
+ * same rule enforced where somebody can act on it.
+ *
+ * `duration` is a choice rather than a date, because the two durations that matter are
+ * statutory and should not be arrived at by counting on a calendar.
+ */
+const placeHoldSchema = z.object({
+	subjectType: z.enum(["user", "work", "report", "abuse_report"]),
+	subjectId: z.number().int().positive(),
+	reason: z.string().trim().min(1).max(MODERATION_NOTE_MAX),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+	duration: z.union([
+		z.literal("preservation"),
+		z.literal("indefinite"),
+		z.string().datetime({ offset: true }),
+	]),
 });
 
 // pg-boss job states (v12). We surface the live ones that signal health;
@@ -687,6 +718,65 @@ const adminRoutes = new Hono()
 		});
 		if (!result) return c.json({ error: "Notice not found" }, 404);
 		return c.json(result);
+	})
+
+	// ── Legal holds ─────────────────────────────────────────────────────────────
+	// 🚨 The mechanism shipped without a way to reach it. `legal_holds` has been
+	// honored by five sweeps since PR #72 and placed by exactly one caller —
+	// `services/quarantine.ts`, automatically — so a hold arising from a subpoena
+	// went in by hand with `psql`, and **a hold you can only place with `psql` is
+	// one that will not get placed at 2am**, which is when a preservation letter
+	// arrives. § 6.4 of the Legal Request and Preservation Policy names placing a
+	// hold as a step in the procedure; this is the step.
+	//
+	// Non-delegable floor work under the Keepers model, like the DMCA queue above:
+	// behind `requireAdmin` today, and the capability is named `floor` so that the
+	// migration is a rename rather than a redesign.
+	.get("/legal-holds", async (c) => c.json({ holds: await loadHolds() }))
+
+	// Place one. The subject is resolved to a label BEFORE the write, because a
+	// hold on an id that names nothing preserves nothing and is indistinguishable
+	// from one that works — see `describeSubject`.
+	.post("/legal-holds", zValidator("json", placeHoldSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId, reason, note, duration } = c.req.valid("json");
+
+		const subjectLabel = await describeSubject(subjectType, subjectId);
+		if (!subjectLabel) {
+			return c.json(
+				{ error: `No ${subjectType} with id ${subjectId}.`, code: "no_such_subject" },
+				404,
+			);
+		}
+
+		// Three durations, and the statute states itself rather than being computed at
+		// the call site: a § 2258A(h) preservation is one year, a matter with a suit
+		// behind it is indefinite, and anything else is a date the operator chose.
+		const expiresAt =
+			duration === "preservation"
+				? preservationExpiry()
+				: duration === "indefinite"
+					? null
+					: new Date(duration);
+
+		const { holdId } = await placeHold({
+			subjectType,
+			subjectId,
+			reason,
+			note,
+			placedBy: user.id,
+			expiresAt,
+		});
+		return c.json({ holdId, subjectLabel }, 201);
+	})
+
+	// Lift one. Stamps `liftedAt`; the row stays and keeps showing in the list.
+	.post("/legal-holds/:id/lift", async (c) => {
+		const lifted = await liftHold(Number(c.req.param("id")));
+		// False means no such hold OR one already lifted, and the two are the same
+		// answer to the operator: there is nothing here left to lift.
+		if (!lifted) return c.json({ error: "No active hold with that id", code: "not_active" }, 404);
+		return c.json({ lifted: true });
 	});
 
 /** Pull a readable message out of a pg-boss job's `output` jsonb (shape varies). */

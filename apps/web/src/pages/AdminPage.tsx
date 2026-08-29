@@ -27,6 +27,7 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import LegalHolds from "../components/admin/LegalHolds";
 import ModerationQueue from "../components/admin/ModerationQueue";
 import RatingAppealsQueue from "../components/admin/RatingAppealsQueue";
 
@@ -183,6 +184,14 @@ export default function AdminPage() {
 			    waits. */}
 			<div className="mb-10">
 				<RatingAppealsQueue />
+			</div>
+
+			{/* Outside the telemetry gate for the third time, and here it is not about
+			    latency: a preservation letter arrives on its own schedule, and a hold
+			    that could not be placed because a pg-boss health query was slow is the
+			    failure this surface exists to remove. */}
+			<div className="mb-10">
+				<LegalHolds />
 			</div>
 
 			{loading && !activity && !jobs ? (
