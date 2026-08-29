@@ -15,7 +15,22 @@
  *    until 2026-08-19.** The first describes the retired unit; the second was simply a
  *    **wrong number** — `FREE_TIME_POOL` is `0.25`, and has been since 2026-08-12. Both
  *    dials are named rather than quoted here so this cannot drift again.
- * 2. **Record** the cycle snapshot.
+ * 2. **Undistributed Time Pool → the remainder.** A viewer's pool is a fixed half of what
+ *    they give Anthers, and since the Public Access fix it reaches only creators whose work
+ *    they streamed ungated — so a viewer with no Public Access seconds funds a pool that
+ *    reaches nobody. Until 2026-08-29 that money landed nowhere at all: the budget was
+ *    recorded, the remainder was computed net of it, and no `pool_distributions` row was
+ *    written, so the amount was booked to neither a creator nor the mission. Parker settled
+ *    it on 2026-08-26 — **it falls to the remainder**, on the footing that unallocated
+ *    Anthers money goes there anyway.
+ *
+ *    ⚠️ **Two situations produce it and the second is not rare.** One is a viewer who
+ *    consumed no Public Access in the cycle. The other is a sharer who watched nothing
+ *    themselves: `distribute-pool` treats the share-link slice as a ceiling rather than a
+ *    reservation, so the rest of their pool stays undistributed by design. Neither requires
+ *    the viewer to have logged zero attention — hours of purchased or Badge-cleared work draw
+ *    nothing here — so do not size this from the older "truly zero attention time" framing.
+ * 3. **Record** the cycle snapshot.
  *
  * A first step used to sit above these: draw the cycle's stream consumption against
  * the account's allowance (15 GiB floor + 60 GiB per Anthers-Seed) and charge it at
@@ -28,11 +43,18 @@
  */
 
 import { db } from "@anthers/db";
-import { accountCycles, accounts, crfLedger, seedAllocations } from "@anthers/db/schema";
+import {
+	accountCycles,
+	accounts,
+	crfLedger,
+	poolDistributions,
+	seedAllocations,
+} from "@anthers/db/schema";
 import { supportAmount } from "@anthers/shared/constants";
 import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
+import { billingCycleDate } from "./distribute-pool.js";
 
 export interface SettleCycleData {
 	/** If set, settle a single account. Otherwise all active accounts. */
@@ -48,10 +70,47 @@ function defaultCycle(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+/**
+ * Can `distribute-pool` still write to this cycle for this account?
+ *
+ * 🚨 **This is the whole safety of booking a shortfall, because the two jobs run on
+ * different clocks.** `distribute-pool` runs daily and upserts rows keyed by the account's
+ * own billing period; `settle-cycle` runs monthly and books the difference once. Take that
+ * difference while the pool job can still pay some of it out and the same dollars land in the
+ * remainder *and* in a creator's ledger — the one failure this change must not create.
+ *
+ * So the question is not whether the calendar month is over, it is **which cycle key the pool
+ * job would write to for this account right now** — and the answer is a mirror of
+ * `getBillingCycle`, fallback included: the account's period start, or the current calendar
+ * month when it has none. The ordinary sequence is the pool job running through the month, the
+ * period advancing, and settlement then finding the cycle closed; a period that has not
+ * advanced keeps the cycle open long after the month has ended, which is exactly when a
+ * shortfall would be wrong.
+ *
+ * ⭐ **An open cycle books nothing rather than deferring.** The marker makes settlement
+ * once-per-cycle and `defaultCycle()` never looks back further than a month, so a deferred
+ * account would simply never settle. Booking zero leaves the remainder exactly as it was
+ * before any of this existed, which is the conservative direction: money stays unbooked rather
+ * than being booked twice.
+ */
+function cycleStillOpen(acct: { currentPeriodStart: Date | null }, cycle: string): boolean {
+	const now = new Date();
+	const openCycle = acct.currentPeriodStart
+		? billingCycleDate(acct.currentPeriodStart)
+		: billingCycleDate(new Date(now.getFullYear(), now.getMonth(), 1));
+	return openCycle === cycle;
+}
+
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
 async function settleAccount(
-	acct: { id: number; userId: number; anthersSupport: string; creatorSupportTotal: string },
+	acct: {
+		id: number;
+		userId: number;
+		anthersSupport: string;
+		creatorSupportTotal: string;
+		currentPeriodStart: Date | null;
+	},
 	cycle: string,
 ): Promise<boolean> {
 	// Idempotency: a marker row in the charitable ledger per (user, cycle).
@@ -82,20 +141,54 @@ async function settleAccount(
 	//    card fee, which typechecks fine because the option is optional.
 	const split = paymentsSplit(n, directedSeeds.toNumber());
 	const bd = anthersSupportBreakdown(n, { payments: split.anthers });
-	const inflow = CENTS(Decimal.max(0, bd.foundation));
 
+	// 2. Whatever this account's Time Pool did NOT reach a creator with.
+	//
+	// Measured against what `distribute-pool` actually wrote rather than against what it was
+	// budgeted, because the budget is the promise and the rows are the payment. A viewer with
+	// no Public Access seconds has no rows at all and the whole pool is the shortfall; a
+	// sharer who watched nothing themselves has rows for the share-link slice only, and the
+	// rest of their pool is the shortfall.
+	//
+	// ⚠️ **Clamped at zero rather than trusted to be non-negative.** `pool_amount` is corrected
+	// for rounding drift against the distributed pots, so a cent of drift the other way is
+	// possible in principle — and a negative shortfall would quietly take money *out* of the
+	// remainder, which is a worse error than the one this fixes.
+	const [distributedRow] = cycleStillOpen(acct, cycle)
+		? [undefined]
+		: await db
+				.select({ total: sql<string>`COALESCE(SUM(${poolDistributions.poolAmount}), 0)` })
+				.from(poolDistributions)
+				.where(
+					and(
+						eq(poolDistributions.subscriberId, acct.userId),
+						eq(poolDistributions.billingCycle, cycle),
+					),
+				);
+	const undistributed = distributedRow
+		? CENTS(Decimal.max(0, bd.timePool.minus(new Decimal(distributedRow.total ?? 0))))
+		: new Decimal(0);
+
+	// 3. remainder inflow: the account's own remainder, plus any pool that reached nobody.
+	const remainder = CENTS(Decimal.max(0, bd.foundation));
+	const inflow = CENTS(remainder.plus(undistributed));
+
+	const poolNote = undistributed.gt(0)
+		? `, undistributed Time Pool $${undistributed.toFixed(2)}`
+		: "";
 	await db.insert(crfLedger).values({
 		amount: inflow.toFixed(2),
 		description: inflow.gt(0)
-			? `${marker} remainder $${inflow.toFixed(2)} from $${n.toFixed(2)} to Anthers (Time Pool $${bd.timePool.toFixed(2)}, Payments $${bd.payments.toFixed(2)})`
+			? `${marker} remainder $${remainder.toFixed(2)}${poolNote} from $${n.toFixed(2)} to Anthers (Time Pool $${bd.timePool.toFixed(2)}, Payments $${bd.payments.toFixed(2)})`
 			: `${marker} no remainder inflow (free rank)`,
 	});
 
-	// 2. Record the cycle snapshot.
+	// 4. Record the cycle snapshot.
 	const snapshot = {
 		anthersSupport: new Decimal(n).toFixed(2),
 		creatorSupportTotal: directedSeeds.toFixed(2),
 		timePool: bd.timePool.toFixed(2),
+		timePoolUndistributed: undistributed.toFixed(2),
 		foundation: inflow.toFixed(2),
 	};
 	await db
@@ -106,6 +199,7 @@ async function settleAccount(
 			set: {
 				foundation: snapshot.foundation,
 				timePool: snapshot.timePool,
+				timePoolUndistributed: snapshot.timePoolUndistributed,
 				updatedAt: new Date(),
 			},
 		});

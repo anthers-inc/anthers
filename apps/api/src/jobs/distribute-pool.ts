@@ -70,8 +70,14 @@ function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodE
 	return { start, end };
 }
 
-/** Returns YYYY-MM-01 string for Drizzle date columns. */
-function billingCycleDate(cycleStart: Date): string {
+/**
+ * Returns YYYY-MM-01 string for Drizzle date columns.
+ *
+ * Exported for `settle-cycle.ts`, which has to ask the same question this job answers —
+ * which cycle key an account's period writes to — before it can decide whether that cycle
+ * is closed enough to book an undistributed pool against.
+ */
+export function billingCycleDate(cycleStart: Date): string {
 	const y = cycleStart.getFullYear();
 	const m = String(cycleStart.getMonth() + 1).padStart(2, "0");
 	return `${y}-${m}-01`;
@@ -216,9 +222,13 @@ async function distributeForAccount(acct: {
 	//
 	// ⚠️ **The converse is deliberately NOT symmetric.** A sharer who watched nothing
 	// themselves distributes the shared slice and leaves the rest undistributed, rather than
-	// letting strangers command their whole pool — the bound is the point of having one. That
-	// undistributed remainder is the subject of its own open question, the same one a viewer
-	// with no attention at all already raises.
+	// letting strangers command their whole pool — the bound is the point of having one.
+	//
+	// ⭐ **What happens to that leftover is settled: it falls to the remainder**, along with
+	// the whole pool of a viewer who streamed no Public Access at all (Parker, 2026-08-26;
+	// built 2026-08-29). `settle-cycle.ts` books it, by measuring what this job actually wrote
+	// against the budget — so leaving money undistributed here is a decision about *creators*
+	// and never a decision to lose it.
 	const timePool = computeTimePoolAmount(supportAmount(acct.anthersSupport));
 	const sharedPool =
 		totalShared > 0 ? CENTS(timePool.mul(SHARE_LINK_POOL_FRACTION)) : new Decimal(0);
