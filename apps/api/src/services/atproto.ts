@@ -13,7 +13,7 @@ import { db } from "@anthers/db";
 import { atprotoSessions, users } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
 import { eq } from "drizzle-orm";
-import { EMAIL_SCOPE, getAtprotoClient } from "./atproto-client.js";
+import { EMAIL_SCOPE, getAtprotoClient, revokeAtprotoGrant } from "./atproto-client.js";
 
 export interface AtprotoIdentity {
 	did: string;
@@ -289,14 +289,8 @@ export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: s
 		.set({ atprotoDid: null, atprotoHandle: "", atprotoPdsUrl: "" })
 		.where(eq(users.id, userId));
 
-	// Revoke at the authorization server as well as locally. A row deleted without a
-	// revocation leaves a live token we no longer track, which is the worse of the two.
 	if (user.atprotoDid) {
-		try {
-			await getAtprotoClient().revoke(user.atprotoDid);
-		} catch {
-			// The server may already consider it gone; the local delete below is what matters.
-		}
+		await revokeAtprotoGrant(user.atprotoDid);
 		await db.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));
 	}
 	await db.delete(atprotoSessions).where(eq(atprotoSessions.userId, userId));
