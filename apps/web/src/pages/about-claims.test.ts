@@ -33,7 +33,7 @@
 // correct there. A repo-wide rule would need an `econ:allow` on honest copy, which is
 // how a guard becomes noise people route around.
 //
-// Sources: 63.01 § Claims & honesty (what may be said), 60.01 § Phase 1 (what is true).
+// Sources: 63.01 § Claims & honesty (what may be said), Organizational Structure § Phase 1 (what is true).
 
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";

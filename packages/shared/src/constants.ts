@@ -625,7 +625,7 @@ export const DELIVERY_GIB_PER_HOUR = 1.7;
  * 🚨 **It is a single-recipient alias and must stay one.** § 2258B conditions the
  * provider's immunity on minimizing the number of employees with access to reported
  * depictions, so who receives this is a compliance decision. Never widen it to a team
- * inbox. See 60.13 § 5, and 60.11 for the rest of the NCMEC contact set.
+ * inbox. See Child Safety Reporting Policy § 5, and Contact Points and Published Addresses for the rest of the NCMEC contact set.
  */
 export const ABUSE_EMAIL = "abuse@anthers.org";
 

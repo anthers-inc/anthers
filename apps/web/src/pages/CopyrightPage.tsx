@@ -172,7 +172,7 @@ export default function CopyrightPage() {
 			    design. It leads with the page rather than the address now that `/safety`
 			    carries a no-account form — the address stays beside it because an email is
 			    the thing that still works when a form does not, and because it is the address
-			    on the NCMEC registration. The mailbox is filtered and alerting; see 60.11. */}
+			    on the NCMEC registration. The mailbox is filtered and alerting; see the Contact Points and Published Addresses. */}
 			<div className="alert alert-warning mt-6" role="note">
 				<div>
 					<p className="font-semibold">Reporting something other than copyright?</p>

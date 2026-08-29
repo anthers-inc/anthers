@@ -247,7 +247,7 @@ describe("Our determination and the vendor's are kept apart", () => {
 	 * both. `classification` is the Corporation's own conclusion — permanent, because it
 	 * answers an appeal years later and is what a CyberTipline report states. `vendorMatch`
 	 * is a detection service's answer, which its own terms may require us to time-limit and
-	 * which Shield's terms forbid us feeding to generative AI. 60.13 § 7.6.
+	 * which Shield's terms forbid us feeding to generative AI. Child Safety Reporting Policy § 7.6.
 	 */
 	it("stores the vendor's answer without letting it become our determination", async () => {
 		const { work } = await seedSoldWork("Vendor match kept apart");

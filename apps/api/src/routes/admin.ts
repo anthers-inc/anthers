@@ -440,7 +440,7 @@ const adminRoutes = new Hono()
 	// it (40.12, "Why the reporting path is not a moderation feature").
 	//
 	// 🚨 **Everything here is metadata, and there is no endpoint that renders the
-	// material.** § 5.2 of 60.13 makes that a policy commitment: the operator sees the
+	// material.** § 5.2 of the Child Safety Reporting Policy makes that a policy commitment: the operator sees the
 	// finding — key, Work, uploader, classification, timestamps — and never the image.
 	// Adding a preview route would require amending a policy, not just this file.
 	.get("/quarantine", async (c) => {
@@ -456,7 +456,7 @@ const adminRoutes = new Hono()
 	// report; `reportId` links the two so the finding cites what triggered it.
 	//
 	// ⚠️ **This does not file a CyberTipline report and must not.** Reporting stays
-	// manual, by the Designated Child Safety Contact, following 60.14 — a hash match
+	// manual, by the Designated Child Safety Contact, following the Child Safety Incident Runbook — a hash match
 	// is a reporting trigger and a report filed by a route is one nobody decided to
 	// make. What this does is take the material out of reach and preserve it, which is
 	// what has to be true *before* that person starts.

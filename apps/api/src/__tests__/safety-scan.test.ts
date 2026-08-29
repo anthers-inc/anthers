@@ -2,7 +2,7 @@
  * The scan's policy mapping and its vendor client.
  *
  * These tests are unusually assertive about *why* each expectation holds, because the
- * mapping is a transcription of § 7.3 of 60.13 rather than a design anyone is free to
+ * mapping is a transcription of § 7.3 of the Child Safety Reporting Policy rather than a design anyone is free to
  * adjust. A change that makes one of these fail is a change to what Anthers reports to a
  * federal clearinghouse, and it should be made in the policy first.
  */
@@ -42,7 +42,7 @@ function answering(classification: string, matchType: string | null = "near") {
 	return { scanned_hashes: { [pdqHexToBase64(HASH)]: { classification, match_type: matchType } } };
 }
 
-describe("determinationFor — § 7.3 of 60.13", () => {
+describe("determinationFor — § 7.3 of the Child Safety Reporting Policy", () => {
 	it("treats child sexual abuse material as reportable and quarantines it", () => {
 		expect(determinationFor("csam")).toEqual({
 			determination: "apparent-csam",

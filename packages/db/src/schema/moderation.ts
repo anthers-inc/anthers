@@ -349,7 +349,7 @@ export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
 /**
  * One object moved into the quarantine prefix, and why.
  *
- * 🚨 **A record, never a rendering.** § 5.2 of 60.13 makes it a policy commitment that
+ * 🚨 **A record, never a rendering.** § 5.2 of the Child Safety Reporting Policy makes it a policy commitment that
  * the operator surface shows the finding — the key, the Work, the uploader, the match
  * classification and the timestamps — and **never the material**. That is why there is
  * no thumbnail column, no excerpt, and no preview key here: building a viewer over this
@@ -431,7 +431,7 @@ export const mediaScans = pgTable(
 		 * **The Corporation's own determination** — `clean`, `apparent-csam`,
 		 * `harmful-abusive`, or `unscannable`. Our vocabulary, never a vendor's.
 		 *
-		 * 🚨 `harmful-abusive` is **not** a reporting trigger. § 7.3 of 60.13, and the
+		 * 🚨 `harmful-abusive` is **not** a reporting trigger. § 7.3 of the Child Safety Reporting Policy, and the
 		 * reasoning is in `services/safety-scan.ts` — the vendor defines that classification
 		 * as material that may not be illegal, so reporting on it would report material the
 		 * vendor itself says may be lawful.
@@ -480,7 +480,7 @@ export const mediaQuarantine = pgTable(
 		 * 🚨 A `scan` finding is a **hash match** and a classifier's output is triage only.
 		 * *Lawshe v. Verizon* (2025) read § 2258B immunity as covering reasonable reliance
 		 * on a hash match tagged as apparent CSAM but not on merely uncertain indications,
-		 * which is why the two may never collapse into one value here. § 7.3 of 60.13
+		 * which is why the two may never collapse into one value here. § 7.3 of the Child Safety Reporting Policy
 		 * states it as a rule — and note that a match alone is not the trigger; **the
 		 * classification the match carries is**.
 		 */
@@ -490,7 +490,7 @@ export const mediaQuarantine = pgTable(
 		 * concluded this material is.
 		 *
 		 * 🚨 **This is deliberately NOT a vendor's answer, and the separation is the whole
-		 * point of the two columns.** § 7.6 of 60.13: a detection vendor's data is an input
+		 * point of the two columns.** § 7.6 of the Child Safety Reporting Policy: a detection vendor's data is an input
 		 * to our determination and never a substitute for it. Shield by Project Arachnid
 		 * says outright that its classifications "are not classifications made by law
 		 * enforcement and are not intended to be presented, construed, or interpreted as

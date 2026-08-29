@@ -674,7 +674,7 @@ function renderEdBandMarkdown(): string {
 			rows.map((r) => [r.label, accounts(r.accounts)]),
 		),
 		"",
-		`Still the single number with the most leverage on where the ladder's anchor falls — but no longer a painful choice: paying at the **top** of 60.01's band now reaches inflection 1 at ${accounts(rows[2].accounts)}, comfortably below where the **bottom** of the band landed under the pre-R2 economics (~57,500).`,
+		`Still the single number with the most leverage on where the ladder's anchor falls — but no longer a painful choice: paying at the **top** of the ED band in Organizational Structure now reaches inflection 1 at ${accounts(rows[2].accounts)}, comfortably below where the **bottom** of the band landed under the pre-R2 economics (~57,500).`,
 	].join("\n");
 }
 

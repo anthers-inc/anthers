@@ -234,7 +234,7 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 			? `<p>What the reporter said:</p><blockquote>${escapeHtml(report.details)}</blockquote>`
 			: "<p>The reporter left no description.</p>",
 		"<p>Open the moderation queue in the admin console to act on it.</p>",
-		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
+		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook. Do not open the content.</p>",
 	].join("\n");
 
 	const { sent, messageId } = await sendAbuseAlert({ subject, html });

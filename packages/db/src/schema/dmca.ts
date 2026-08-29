@@ -2,7 +2,7 @@
 /**
  * DMCA schema — see auth.ts for the role-classification legend.
  *
- * `dmca_notices` is `org` by the Keeper model (60.02 names DMCA as non-delegable floor
+ * `dmca_notices` is `org` by the Keeper model (Keepers and the Appointment Model names DMCA as non-delegable floor
  * work with a statutory clock). The *subject* is a node Work (referenced by id with
  * set-null, the soft cross-boundary pattern); the *notice* is a legal claim the org
  * must screen, act on, and clock — not something a creator node processes. The
