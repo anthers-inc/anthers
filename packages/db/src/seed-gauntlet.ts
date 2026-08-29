@@ -28,7 +28,7 @@
  * viewer — so the automated walk never touches the dev account, and works where no dev
  * account exists at all (CI).
  *
- * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
+ * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
 import { mkdir, rm } from "node:fs/promises";

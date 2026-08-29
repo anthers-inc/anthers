@@ -20,7 +20,7 @@
  * Serial on purpose: it is one stateful walk, not independent tests. A retry restarts
  * the whole file, and beforeAll's fixture reset makes that (and re-runs) safe.
  *
- * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
+ * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
 import { execFileSync } from "node:child_process";

@@ -107,6 +107,12 @@ import {
 	parentalPolicyFor,
 	parentalVisibility,
 } from "../services/parental-controls.js";
+import {
+	canBePaid,
+	NO_PAYOUT_ACCOUNT,
+	payoutRefusalMessage,
+	payoutStanding,
+} from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { beginScans, scanReleaseGate } from "../services/safety-scan.js";
@@ -1850,17 +1856,7 @@ const contentRoutes = new Hono()
 
 		// Can the creator receive a direct-purchase payout? (Connected account, onboarded
 		// and payouts-enabled.) Drives whether the buyer sees a live checkout.
-		const [creatorStripe] = post.creatorId
-			? await db
-					.select({
-						payoutsEnabled: stripeAccounts.payoutsEnabled,
-						onboardingComplete: stripeAccounts.onboardingComplete,
-					})
-					.from(stripeAccounts)
-					.where(eq(stripeAccounts.userId, post.creatorId))
-					.limit(1)
-			: [undefined];
-		const creatorHasStripe = !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled;
+		const creatorHasStripe = post.creatorId ? await canBePaid(post.creatorId) : false;
 
 		// No review aggregate here: a review is a verdict on a WORK, and a post is an
 		// announcement. The Works this post links carry their own.
@@ -2673,16 +2669,12 @@ const contentRoutes = new Hono()
 
 		// Can the creator actually receive a direct-purchase payout? Drives whether the
 		// buyer is offered a live checkout or told the creator can't take payments yet.
-		const [creatorStripe] = work.creatorId
-			? await db
-					.select({
-						payoutsEnabled: stripeAccounts.payoutsEnabled,
-						onboardingComplete: stripeAccounts.onboardingComplete,
-					})
-					.from(stripeAccounts)
-					.where(eq(stripeAccounts.userId, work.creatorId))
-					.limit(1)
-			: [undefined];
+		//
+		// ⚠️ Since 2026-08-28 a RELEASED Work's creator has necessarily passed this — it is
+		// a release gate now. It stays because the answer can lapse after release (Stripe
+		// can hold an account at any time), and because this endpoint also serves the
+		// owner's own preview of an unreleased Work.
+		const creatorHasStripe = work.creatorId ? await canBePaid(work.creatorId) : false;
 
 		// This endpoint does not go through `loadWorkBundles`, so the page count is counted
 		// here. It is the ONE page a reader actually opens a book from, and leaving it on
@@ -2712,7 +2704,7 @@ const contentRoutes = new Hono()
 					(await parentalTimeGate(viewerId, work)) !== null,
 				),
 				creator,
-				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
+				creatorHasStripe,
 				// Who sent them, when they arrived by a share link — a display name and nothing
 				// else. The recipient is told whose link they followed because it is what makes
 				// the page make sense; the sharer's account is otherwise none of their business,
@@ -3061,6 +3053,43 @@ const contentRoutes = new Hono()
 			// Re-read, so the gates below and the rest of this handler read the row the
 			// service just wrote rather than the one loaded before it.
 			work = declared;
+		}
+
+		// 🚨 **The first readiness condition, and the only one that is about the CREATOR
+		// rather than the Work** (Parker, 2026-08-28). Payout setup must be complete before
+		// anything is released. `services/payouts.ts` carries the two reasons in full — it
+		// is what makes every creator here a verified adult, since Stripe checks identity
+		// and Anthers deliberately checks nothing; and it means no released Work is
+		// payout-ineligible, which matters because ungated work earns from the Time Pool by
+		// the time people spend with it.
+		//
+		// ⚠️ **The code did not enforce this until now and the Creator Terms always said it
+		// did** — *"a completed payment setup with Stripe before you can publish anything"*.
+		// `/parents` had grown a paragraph describing the gap as a gap, so the three
+		// disagreed in a way only a reader comparing them would catch. Both documents now
+		// describe this gate.
+		//
+		// Placed after the rating is written and before the Work-shaped checks: it is the
+		// cheapest to evaluate and the most fundamental, but the "a refusal never costs the
+		// creator their declaration" rule above applies to it exactly as to the others.
+		// ⚠️ `creatorId` is nullable, and a Work with nobody behind it fails this for the
+		// same reason a Work with an unfinished account does: there is no one to pay. Read
+		// as "not connected", which is true and produces the right message.
+		if (releasing) {
+			const standing =
+				work.creatorId == null ? NO_PAYOUT_ACCOUNT : await payoutStanding(work.creatorId);
+			if (!standing.ready) {
+				return c.json(
+					{
+						error: payoutRefusalMessage(standing),
+						code: "payouts_required",
+						// So the Studio can send them to the right place rather than guessing
+						// which half of the problem they have.
+						connected: standing.connected,
+					},
+					409,
+				);
+			}
 		}
 
 		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {

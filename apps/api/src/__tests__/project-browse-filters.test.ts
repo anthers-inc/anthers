@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -62,6 +63,7 @@ describe("project browse filters", () => {
 		});
 		expect(signUp.status).toBe(201);
 		cookie = signUp.headers.get("Set-Cookie")!.split(";")[0];
+		await enablePayouts(creatorName);
 
 		const auth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie };
 

@@ -249,18 +249,17 @@ export const FAQ_ITEMS = {
 		answer:
 			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player/reader experiences.",
 	},
-	// ⚠️ **Publishing and selling need different things, and conflating them would be a
-	// real error rather than a loose sentence.** The Creator Terms say a completed Stripe
-	// setup is needed "before you can publish anything"; the code does not enforce that —
-	// releasing a Work is gated on media readiness and a declared rating, and on nothing
-	// about payouts — and `/parents` says the opposite in as many words, because the gap is
-	// load-bearing there (it is why Anthers cannot tell a parent that minors don't publish
-	// here). Answered against the code, which agrees with `/parents`.
+	// ⚠️ **Payout setup gates RELEASE, and this answer is the one that says so plainly.**
+	// The Creator Terms always claimed it; the code only started enforcing it on
+	// 2026-08-28, and `/parents` had a paragraph describing the gap. All three agree now.
+	// The country limit is stated rather than softened because a creator in one of the
+	// other ~160 countries finds out at the moment they try to release, and reading it here
+	// first is strictly better than discovering it then.
 	"creator-getting-started": {
 		category: "Creators",
 		question: "What do I need before I can publish?",
 		answer:
-			"To publish, a verified email address — that is genuinely the whole of it. To be paid, a completed payment setup with Stripe, which at launch also means being in one of the countries Stripe Connect supports; that limit is one we inherited rather than chose, and one we intend to get out of. The payment setup has a side effect worth knowing about: it requires identity verification, and Stripe will not verify a minor, so everyone selling work on Anthers is a verified adult. We never see those documents — we read back a yes or a no.",
+			"A verified email address, and a completed payout setup with Stripe — the second one before you release anything, free work included. It exists for two reasons beyond paying you: it means no work here is stranded without a way to earn from the Time Pool, and because Stripe verifies identity and will not verify a minor, it is what lets us say every creator on Anthers is an adult without ever asking anyone for an ID. We never see those documents; we read back a yes or a no. The honest cost is that Stripe Connect reaches about 34 countries, so at launch you need to be in one of them — a limit we inherited rather than chose, and one we intend to get out of.",
 	},
 	"creator-payouts": {
 		category: "Creators",

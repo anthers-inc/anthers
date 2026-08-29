@@ -34,6 +34,7 @@ import {
 	worksOwedScans,
 } from "../services/safety-scan.js";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -93,6 +94,7 @@ describe("release waits for a safety scan, and gives way", () => {
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
 		creator = await signUp(creatorName);
+		await enablePayouts(creatorName);
 	}, DB_SETUP_TIMEOUT);
 
 	// Teardown in afterAll rather than a trailing `it`, so it runs whether the suite passed

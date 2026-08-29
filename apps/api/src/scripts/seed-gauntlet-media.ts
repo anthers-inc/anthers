@@ -38,7 +38,7 @@
  * A no-op with a loud notice when ffmpeg is absent, so a machine without it still gets a
  * working — if less thorough — gauntlet rather than a failed reset.
  *
- * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
+ * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
 import { randomUUID } from "node:crypto";

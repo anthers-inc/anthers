@@ -32,6 +32,7 @@ import {
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -75,8 +76,11 @@ describe("content ratings", () => {
 			sql`DELETE FROM users WHERE username IN (${creatorName}, ${operatorName}, ${strangerName})`,
 		);
 		creator = await signUp(creatorName);
+		await enablePayouts(creatorName);
 		operator = await signUp(operatorName);
+		await enablePayouts(operatorName);
 		stranger = await signUp(strangerName);
+		await enablePayouts(strangerName);
 		await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${operatorName}`);
 		const [row] = await db
 			.select({ id: users.id })

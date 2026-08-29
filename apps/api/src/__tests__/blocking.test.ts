@@ -30,6 +30,7 @@ import {
 } from "@anthers/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -102,9 +103,13 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE username IN (${hostName}, ${abeName}, ${beeName}, ${camName})`,
 	);
 	host = await signUp(hostName);
+	await enablePayouts(hostName);
 	abe = await signUp(abeName);
+	await enablePayouts(abeName);
 	bee = await signUp(beeName);
+	await enablePayouts(beeName);
 	cam = await signUp(camName);
+	await enablePayouts(camName);
 	// abe and bee are creators too, so the creator-listing and profile assertions have
 	// something to find them in.
 	await db.execute(

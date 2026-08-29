@@ -37,7 +37,14 @@ import {
 	MEDIA_FIXTURE_WORKS,
 	type MediaFixtureWork,
 } from "@anthers/db/media-fixture";
-import { projectItems, projects, transcodingJobs, users, works } from "@anthers/db/schema";
+import {
+	projectItems,
+	projects,
+	stripeAccounts,
+	transcodingJobs,
+	users,
+	works,
+} from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
@@ -200,6 +207,39 @@ async function ensureCreator(): Promise<number> {
 		.returning({ id: users.id });
 	console.log(`${TAG} created creator "${MEDIA_FIXTURE_USERNAME}" (id ${created.id})`);
 	return created.id;
+}
+
+/**
+ * Give the fixture creator a payout-ready Stripe account.
+ *
+ * 🚨 **Releasing a Work requires completed payout setup since 2026-08-28**, so without this
+ * the fixture creator cannot release anything and `work-release.authed.e2e.ts` — the walk
+ * that every other Catalog assertion rests on — fails at the release checkbox, which the
+ * Studio now disables. That is the gate working; this is the fixture catching up to it.
+ *
+ * **Reconciled rather than created-if-missing**, on the same reasoning the Works below use:
+ * a machine whose `media_fixture` account predates the gate would otherwise keep an account
+ * with no payout setup forever, and see a failure a fresh clone never reproduces.
+ *
+ * ⚠️ Sibling of `__tests__/payouts-fixture.ts`, deliberately not shared with it — that one
+ * seeds a unit-test database and this one seeds the dev/e2e database. Both write the row
+ * directly because Connect onboarding is a hosted flow with an identity check in it, and
+ * there is nothing to stub that would make either more honest.
+ */
+async function ensurePayouts(userId: number): Promise<void> {
+	await db
+		.insert(stripeAccounts)
+		.values({
+			userId,
+			stripeAccountId: `acct_fixture_${userId}`,
+			onboardingComplete: true,
+			payoutsEnabled: true,
+			chargesEnabled: true,
+		})
+		.onConflictDoUpdate({
+			target: stripeAccounts.userId,
+			set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
+		});
 }
 
 /**
@@ -381,6 +421,7 @@ async function main() {
 	}
 
 	const creator = await ensureCreator();
+	await ensurePayouts(creator);
 	for (const spec of MEDIA_FIXTURE_WORKS) await seedMediaFor(spec, creator);
 	await ensureProject(creator);
 	console.log(

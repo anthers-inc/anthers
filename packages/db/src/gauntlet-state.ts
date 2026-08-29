@@ -22,7 +22,7 @@
  * The viewer defaults to `DEV_ACCOUNT_USERNAME`, mirroring `seed-gauntlet.ts`; the harness
  * always passes `--user` explicitly. Everything here is scoped to the gauntlet fixture.
  *
- * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
+ * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
 import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";

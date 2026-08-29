@@ -26,6 +26,7 @@ import { sessions, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -78,7 +79,9 @@ async function rawExport(cookie: string): Promise<{ res: Response; text: string 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username IN (${subjectName}, ${otherName})`);
 	subject = await signUp(subjectName);
+	await enablePayouts(subjectName);
 	other = await signUp(otherName);
+	await enablePayouts(otherName);
 	await db.execute(
 		sql`UPDATE users SET is_creator = true WHERE username IN (${subjectName}, ${otherName})`,
 	);

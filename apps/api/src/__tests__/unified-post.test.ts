@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -61,7 +62,9 @@ describe("Catalog vertical slice", () => {
 		"signs up a creator and a viewer",
 		async () => {
 			creatorCookie = await signUp(creatorName);
+			await enablePayouts(creatorName);
 			otherCookie = await signUp(otherName);
+			await enablePayouts(otherName);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();
 		},
