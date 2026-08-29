@@ -6,7 +6,7 @@
  * `DELETE /works/:id` purged its media, while account deletion dropped rows with a bare
  * `tx.delete(works)` and made **no object-storage calls at all** — so a deleted user's
  * avatar stayed publicly downloadable at its CDN URL forever, and their originals, HLS
- * renditions and assets stayed in the private bucket indefinitely. 51.05 promised
+ * renditions and assets stayed in the private bucket indefinitely. Privacy Policy promised
  * otherwise. Found 2026-08-11, closed here.
  *
  * The rule this file encodes: **a caller says WHAT is going away, never WHICH KEYS** —

@@ -152,7 +152,7 @@ export const FREE_TIME_POOL = 0.25;
  * How long raw, per-person attention rows are kept before being rolled up into
  * identity-free daily totals and deleted (`jobs/prune-attention.ts`).
  *
- * 51.05 states the *rule* — kept "only until the billing cycle they belong to has
+ * Privacy Policy states the *rule* — kept "only until the billing cycle they belong to has
  * settled and the card-dispute window for that cycle has closed" — and this is the
  * number that rule works out to, derived rather than picked:
  *
@@ -165,7 +165,7 @@ export const FREE_TIME_POOL = 0.25;
  * ⚠️ **This figure has not been reviewed by counsel.** It is a defensible derivation,
  * not advice, and it is a single named constant precisely so that a lawyer's number
  * replaces it in one place. Shortening it below the dispute window would destroy the
- * evidence a chargeback defence rests on; lengthening it weakens the promise in 51.05
+ * evidence a chargeback defence rests on; lengthening it weakens the promise in the Privacy Policy
  * without any stated reason, which is the failure the policy calls hoarding.
  */
 export const ATTENTION_RAW_RETENTION_DAYS = 180;
@@ -533,7 +533,7 @@ export function cardFeeDisplay(amount: number): number {
  * openly rather than hiding behind "to prevent abuse": Anthers keeps nothing from
  * a sale, so a refund comes out of the **remainder** — the same pool that funds
  * the free bandwidth floor and free access. Refund abuse is paid for by free
- * access. Don't soften that wording (51.06 § Refunds).
+ * access. Don't soften that wording (Terms of Service § Refunds).
  *
  * A refund **before** any download is uncapped and unconditional: nothing was
  * delivered, so the only loss is the sunk card fee.
@@ -541,7 +541,7 @@ export function cardFeeDisplay(amount: number): number {
  * Three-per-twelve-months is shape rather than data — generous enough that no
  * honest buyer meets it. Note a per-account cap is defeated by a new account; the
  * durable identifier would be the payment instrument, which is deliberately not
- * built yet (51.06 notes).
+ * built yet (Terms of Service notes).
  */
 export const REFUND_AUTO_CAP = 3;
 
@@ -567,7 +567,7 @@ export const REFUND_CAP_WINDOW_MONTHS = 12;
  * backwards protectively: the inactive buyer who most needs time would get the
  * shortest window).
  *
- * Three surfaces state this number and must state the same one: 51.06, 51.07, and
+ * Three surfaces state this number and must state the same one: Terms of Service, Creator Terms, and
  * the Library card. Import it; never retype the 90.
  */
 export const WITHDRAWN_RESCUE_DAYS = 90;
@@ -588,7 +588,7 @@ export const WITHDRAWN_RESCUE_DAYS = 90;
  * different figure everywhere is one nobody can follow and nobody notices
  * breaking.
  *
- * Stated in 51.05 and in the app's own copy of it. Import it; never retype the 3.
+ * Stated in the Privacy Policy and in the app's own copy of it. Import it; never retype the 3.
  */
 export const RECORD_REDACTION_YEARS = 3;
 

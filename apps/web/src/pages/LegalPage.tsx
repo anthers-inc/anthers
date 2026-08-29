@@ -2,7 +2,7 @@
 /**
  * The legal documents, served — and served **pending**.
  *
- * These were deliberately unbuilt for a week, because 51.05 was written as a
+ * These were deliberately unbuilt for a week, because Privacy Policy was written as a
  * *specification* of what we wanted rather than a description of what existed, and a
  * policy describing features that don't exist is a misrepresentation the moment it is
  * published. That gate held until six of its nine markers were cleared.
@@ -19,7 +19,7 @@
  * TODO to tidy up. It is one field per document in `content/legal`, and a test pins
  * every one of them to `null` so that dating a document has to be deliberate.
  *
- * Canonical text lives in the vault (`51.05`, `51.06`, `51.07`); this is the rendered
+ * Canonical text lives in the vault (`Privacy Policy`, `Terms of Service`, `Creator Terms`); this is the rendered
  * copy with the internal apparatus removed — no `⚠️ NOT YET BUILT` markers, no
  * DO-NOT-PUBLISH banner, and none of the "Notes for us" section, which is reasoning
  * rather than terms.

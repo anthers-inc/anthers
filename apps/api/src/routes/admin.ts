@@ -303,7 +303,7 @@ const adminRoutes = new Hono()
 	})
 
 	// ── Data-rights requests ────────────────────────────────────────────────
-	// The operator's side of 51.05's 30-day promise. This exists because a deadline
+	// The operator's side of the Privacy Policy's 30-day promise. This exists because a deadline
 	// nobody can see is not a mechanism — requests landing in one person's inbox was
 	// the state this replaces. Overdue is computed here rather than stored so it
 	// cannot go stale.

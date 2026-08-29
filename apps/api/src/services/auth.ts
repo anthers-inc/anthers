@@ -252,7 +252,7 @@ export async function cleanupDesktopAuthRequests(): Promise<void> {
  * Delete all expired sessions. Returns how many rows went.
  *
  * 🚨 **Run it, don't just export it.** This was exported and called from nowhere until
- * 2026-08-12, while 51.05 promised "Sessions: deleted when they expire" — and because
+ * 2026-08-12, while Privacy Policy promised "Sessions: deleted when they expire" — and because
  * `validateSession` and `listUserSessions` both filter on `expiresAt > now()`, nothing
  * anywhere behaved differently for the rows that should have been gone. The `ip_address`
  * and `user_agent` on every session ever created were simply kept. It is scheduled as

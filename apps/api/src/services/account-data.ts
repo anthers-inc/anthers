@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Everything Anthers holds about one person, assembled in one place — the engine
- * behind the **export** half of 51.05's rights section.
+ * behind the **export** half of the Privacy Policy's rights section.
  *
  * Article I(c) of the Articles commits the corporation to advancing individuals'
- * ability to *own, access, and control* what they create, and 51.05 turns "access"
+ * ability to *own, access, and control* what they create, and the Privacy Policy turns "access"
  * into a promise of *"a copy of your information and your content, in an openly
  * readable format."* This is the module that has to be able to answer it.
  *
@@ -82,7 +82,7 @@ export interface AccountExport {
  * Deliberately synchronous rather than a queued job that emails a link. A personal
  * archive here is kilobytes — a few hundred rows and no media bytes — and a job would
  * add a queue, a storage object, an expiring URL and a notification path the app does
- * not have (51.05 marker 8). If exports ever grow past what a request can serve, that
+ * not have (Privacy Policy marker 8). If exports ever grow past what a request can serve, that
  * is the moment to move it, and `notes` already tells the reader what isn't inlined.
  */
 export async function buildAccountExport(userId: number): Promise<AccountExport | null> {
@@ -210,7 +210,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			// above.
 			hostingSubsidies: subsidyRows,
 			// Connect account id and capability flags. The KYC documents behind them live
-			// at Stripe and were never ours to hold — see 51.05 on learning the predicate
+			// at Stripe and were never ours to hold — see the Privacy Policy on learning the predicate
 			// rather than the data.
 			stripeAccount: stripeRow[0] ?? null,
 		},

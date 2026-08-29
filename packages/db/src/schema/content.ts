@@ -630,7 +630,7 @@ export const comments = pgTable(
 	{
 		id: serial("id").primaryKey(),
 		// Nullable + SET NULL: when an account is deleted its comments are TOMBSTONED,
-		// not removed. 51.05 — "conversations other people took part in stay readable"; a
+		// not removed. Privacy Policy — "conversations other people took part in stay readable"; a
 		// thread full of holes is worse for everyone still in it, and replies to a
 		// vanished comment stop making sense. A null author renders "deleted by user",
 		// which is deliberately distinguishable from a moderation removal (that is

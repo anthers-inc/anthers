@@ -2,7 +2,7 @@
 /**
  * Account deletion — scheduled, cancellable, and honest about what survives.
  *
- * The largest of 51.05's promises and the one most directly downstream of Article
+ * The largest of the Privacy Policy's promises and the one most directly downstream of Article
  * I(c), which commits the corporation to advancing individuals' ability to **control**
  * what they create. Until now there was no way to leave at all.
  *
@@ -22,7 +22,7 @@
  * reasoning behind the ruling — a cascade used as a substitute for consent and a
  * cancel window is a constraint doing a product's job.
  *
- * **What deletion actually means, per table.** 51.05 sets these out and they are not
+ * **What deletion actually means, per table.** Privacy Policy sets these out and they are not
  * uniform, because the tables genuinely differ. The legal frame that makes it
  * tractable: erasure is not absolute and runs to *personal data*, not to every
  * artifact, so it is often satisfied by **severing the identity link** rather than

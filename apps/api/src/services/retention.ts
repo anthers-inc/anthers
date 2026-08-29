@@ -8,7 +8,7 @@
  * is the only shape that satisfies both obligations at once:
  *
  * - **§ 512(i) conditions the safe harbour on a repeat-infringer policy that is
- *   *reasonably implemented*,** and 51.06 now publicly says we judge a pattern.
+ *   *reasonably implemented*,** and the Terms of Service now publicly says we judge a pattern.
  *   A pattern is *how many notices, against whom, upheld or not* — the sender's
  *   home address is no part of it. Deleting the row would destroy the evidence;
  *   keeping the address would hold PII for a purpose that had expired.

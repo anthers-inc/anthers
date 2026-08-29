@@ -240,7 +240,7 @@ export const attentionEvents = pgTable(
  * What survives when the raw attention rows are deleted — per (creator, Work, day,
  * event type) totals, with **no `user_id` column at all.**
  *
- * That absence is the whole design. 51.05 promises that raw records connecting a
+ * That absence is the whole design. Privacy Policy promises that raw records connecting a
  * person to a Work are kept only until their billing cycle has settled and the
  * card-dispute window has closed, after which they are *"aggregated into per-Work and
  * per-creator totals and the per-person records are deleted"* — so a complete history
@@ -261,7 +261,7 @@ export const attentionEvents = pgTable(
  * rather than adding daily counts together and calling the total unique.
  */
 // org — the daily rollup is the org's analytics and the privacy-preserving survivor
-// of raw event deletion (51.05: "aggregated into per-Work and per-creator totals and
+// of raw event deletion (Privacy Policy: "aggregated into per-Work and per-creator totals and
 // the per-person records are deleted"). No `userId` column by design — this is the org's
 // anonymized record, not a node record.
 export const attentionDaily = pgTable(
@@ -350,7 +350,7 @@ export const poolDistributions = pgTable(
 	{
 		id: serial("id").primaryKey(),
 		// 🚨 BOTH are ON DELETE SET NULL, not cascade, and both are nullable — because this
-		// row is a **payment record**, not a viewing one. 51.05 names it as the one thing
+		// row is a **payment record**, not a viewing one. Privacy Policy names it as the one thing
 		// that survives account deletion ("a per-month total of how much time you spent
 		// with each creator you supported"), and until 2026-08-12 a cascade on both sides
 		// destroyed it. The creator side was the worse half: a creator closing their

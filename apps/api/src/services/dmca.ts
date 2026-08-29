@@ -675,7 +675,7 @@ export async function loadDmcaQueue(limit = 100) {
  * the policy legible: a repeat-infringer policy and a notice loop that nobody can
  * see the shape of is a claim rather than a practice. Per-notice publication —
  * Lumen or our own — stays deferred, because publishing a notice publishes the
- * complainant's contact details and identifies the creator, which is a 51.05
+ * complainant's contact details and identifies the creator, which is a Privacy Policy
  * question rather than a default.
  *
  * ⚠️ **At launch volumes a count is close to naming someone.** "1 actioned" beside

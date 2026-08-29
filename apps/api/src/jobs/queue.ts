@@ -177,7 +177,7 @@ export const QUEUES = {
 	RESCAN_OWED: "rescan-owed",
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
-	// Delete expired sessions and verification tokens. 51.05 promises "Sessions: deleted
+	// Delete expired sessions and verification tokens. Privacy Policy promises "Sessions: deleted
 	// when they expire"; until 2026-08-12 `deleteExpiredSessions()` and
 	// `deleteExpiredTokens()` were exported and called from NOWHERE, so every session row
 	// ever written — with its `ip_address` and `user_agent` — was filtered out of reads

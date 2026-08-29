@@ -3,7 +3,7 @@
  * Two promises that had no mechanism behind them, and the shape of test that catches
  * that class.
  *
- * 51.05 says a deleted account's profile is deleted and that "Sessions: deleted when
+ * Privacy Policy says a deleted account's profile is deleted and that "Sessions: deleted when
  * they expire." Both were false, and neither failed anywhere:
  *
  * - `eraseAccount` made **zero object-storage calls**. `storage.delete` and
@@ -251,8 +251,8 @@ describe("expired credentials are actually deleted", () => {
 	);
 });
 
-describe("the one record 51.05 says survives deletion, survives it", () => {
-	// 51.05: "One record survives that, and it is a payment record rather than a viewing
+describe("the one record Privacy Policy says survives deletion, survives it", () => {
+	// Privacy Policy: "One record survives that, and it is a payment record rather than a viewing
 	// one … a per-month total of how much time you spent with each creator you supported."
 	// Both FKs cascaded until 2026-08-12, so it did not survive either deletion — and the
 	// creator side was worse, because a creator leaving destroyed the records of everyone

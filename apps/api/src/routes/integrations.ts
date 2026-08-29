@@ -5,7 +5,7 @@
  *
  * > [!warning] Analytics read TWO tables, and both halves are required
  * > Raw `attention_events` are deleted after `ATTENTION_RAW_RETENTION_DAYS` and rolled
- * > into `attention_daily` by `jobs/prune-attention.ts`, per 51.05's retention
+ * > into `attention_daily` by `jobs/prune-attention.ts`, per the Privacy Policy's retention
  * > promise. A creator's `period` can be up to a year, so **anything reading only the
  * > raw table silently returns zero for the older part of the window** — not an error,
  * > just a history that quietly stops. Every query below unions the two.

@@ -2,8 +2,8 @@
 /**
  * The published text of the legal documents.
  *
- * **Canonical text lives in the vault** — `51.05 Privacy Policy`, `51.06 Terms of
- * Service`, `51.07 Creator Terms`. This is the rendered copy with the internal
+ * **Canonical text lives in the vault**, in `51.01 Published Terms` — the Privacy Policy,
+ * the Terms of Service and the Creator Terms. This is the rendered copy with the internal
  * apparatus removed: no `⚠️ NOT YET BUILT` markers, no DO-NOT-PUBLISH banner, and none
  * of the "Notes for us, not for publication" section, which is reasoning about the
  * documents rather than part of them.

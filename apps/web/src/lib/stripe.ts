@@ -23,9 +23,9 @@ let cached: Promise<Stripe | null> | null = null;
  * including signed-out ones reading /about, loaded Stripe.js and got fingerprinted for it
  * (`m.stripe.com/6`, plus a year-long `__stripe_mid` machine-ID cookie). Nobody chose
  * that — it was a module-evaluation side effect. Stripe does recommend loading site-wide
- * for Radar's benefit, but prod runs in test mode and 51.01's posture is "never contest,
+ * for Radar's benefit, but prod runs in test mode and the Payment Processing Setup Guide's posture is "never contest,
  * always refund fast", so it bought signal we've decided not to use, at the cost of a
- * claim the privacy policy makes. See `51.05 Privacy Policy` and the third-party-requests
+ * claim the privacy policy makes. See `Privacy Policy` and the third-party-requests
  * e2e spec, which fails if an off-origin request reappears on a marketing route.
  *
  * Memoized rather than fresh per call because `<Elements stripe={…}>` re-initializes if

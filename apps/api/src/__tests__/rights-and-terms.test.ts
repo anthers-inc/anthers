@@ -10,7 +10,7 @@
  * the boundary is the guarantee.
  *
  * The rights intake exists because **a deadline nobody can see is not a mechanism.**
- * 51.05 promises a response within 30 days; requests arriving as email into one
+ * Privacy Policy promises a response within 30 days; requests arriving as email into one
  * person's inbox is a hope. `dueAt` is stamped at creation so the commitment is fixed
  * when it is made and cannot move if the policy later changes the window.
  */

@@ -94,7 +94,7 @@ async function resolvePurchase(slug: string, userId: number) {
  * two creators cannot be a single destination charge. The alternative — separate charges
  * and transfers — parks the buyers' money in a **platform balance** before paying it out,
  * which is precisely what `/checkout/:slug` refuses to do, and it is the *conduit* framing
- * the counsel brief (51.04) says makes both the money-transmission answer and the 501(c)(3) story harder.
+ * the counsel brief (Payments and Exempt-Purpose Counsel Brief) says makes both the money-transmission answer and the 501(c)(3) story harder.
  * That is a question for counsel, not a thing to decide in a route handler. Until it is
  * answered, a multi-creator basket is refused with `mixed_creators` and the client checks
  * out one creator at a time.
@@ -102,7 +102,7 @@ async function resolvePurchase(slug: string, userId: number) {
  * What the basket buys is the **fixed $0.30**, which is per *charge* and not per item:
  * five $1 tracks pay $1.65 in card fees separately and $0.45 together, and the whole
  * $1.20 goes to the creator because Anthers keeps nothing either way. Same mechanism as
- * batching a month's support onto one transaction (51.02).
+ * batching a month's support onto one transaction (Billing Cycle and Arrears Model).
  */
 async function resolveBasket(workIds: number[], userId: number) {
 	const unique = [...new Set(workIds)];
@@ -593,7 +593,7 @@ const paymentRoutes = new Hono()
 	// ── Refund ───────────────────────────────────────────────────────────────
 	// Buyer-initiated. "Ask us and we will refund you" — no justification is
 	// required and none is asked for, so `reason` is optional and free text kept
-	// for our own reading, never a condition of the refund (51.06 § Refunds).
+	// for our own reading, never a condition of the refund (Terms of Service § Refunds).
 	.post("/purchases/:id/refund", requireAuth, async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
