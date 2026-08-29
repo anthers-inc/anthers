@@ -674,7 +674,7 @@ function renderEdBandMarkdown(): string {
 			rows.map((r) => [r.label, accounts(r.accounts)]),
 		),
 		"",
-		`Still the single number with the most leverage on where the ladder's anchor falls — but no longer a painful choice: paying at the **top** of 60.01's band now reaches inflection 1 at ${accounts(rows[2].accounts)}, comfortably below where the **bottom** of the band landed under the pre-R2 economics (~57,500).`,
+		`Still the single number with the most leverage on where the ladder's anchor falls — but no longer a painful choice: paying at the **top** of the ED band in Organizational Structure now reaches inflection 1 at ${accounts(rows[2].accounts)}, comfortably below where the **bottom** of the band landed under the pre-R2 economics (~57,500).`,
 	].join("\n");
 }
 
@@ -760,7 +760,8 @@ interface Block {
 	allowRetired?: string;
 }
 
-const LADDER = "60-69 Strategy/61 Roadmap & Growth/61.01 Growth Phases and Join Quotas.md";
+const LADDER =
+	"60-69 Governance & Strategy/61 Roadmap & Growth/61.01 Growth Phases and Join Quotas.md";
 
 /**
  * Generated regions in markdown that lives in **this repository**.
@@ -806,7 +807,7 @@ const BLOCKS: Block[] = [
 			"names the retired first-download charge in the past tense, to explain why size is shown for scale only",
 	},
 	{
-		file: "60-69 Strategy/63 Brand/63.01 Copy Style Guide.md",
+		file: "60-69 Governance & Strategy/63 Brand/63.01 Copy Style Guide.md",
 		key: "sale-table",
 		render: renderSaleMarkdown,
 		allowRetired: "same renderer as 50.01's sale-table, and the same past-tense sentence",
@@ -822,7 +823,7 @@ const BLOCKS: Block[] = [
 		render: renderSelfSufficiencyMarkdown,
 	},
 	{
-		file: "60-69 Strategy/62 Positioning & Audience/62.04 Creator Take-Home Comparisons.md",
+		file: "60-69 Governance & Strategy/62 Positioning & Audience/62.04 Creator Take-Home Comparisons.md",
 		key: "take-home",
 		render: renderTakeHomeMarkdown,
 	},

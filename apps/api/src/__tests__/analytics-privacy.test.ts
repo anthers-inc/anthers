@@ -3,7 +3,7 @@
  * "Creators never see who watched what" — the privacy policy's sharpest claim,
  * pinned.
  *
- * 51.05 says it as a commitment rather than a description: *"Analytics are
+ * Privacy Policy says it as a commitment rather than a description: *"Analytics are
  * aggregated by Work and by date, and your identity is never part of them. A creator
  * can see that a Work was watched for forty hours; they cannot see that it was
  * watched by you. This is a design commitment, not a current limitation, and it is
@@ -12,7 +12,7 @@
  * Until this file, it was enforced by nothing — it held because every query in
  * `routes/integrations.ts` happens to filter on `creatorId` and aggregate by Work or
  * by date, and **nothing would have failed loudly if someone added a `groupBy(userId)`
- * or selected the column**. 51.05's own notes flag it as one of two claims that were
+ * or selected the column**. Privacy Policy's own notes flag it as one of two claims that were
  * "promises about code that is currently only a habit".
  *
  * That is exactly the family of defect the third-party-requests work named: **where a

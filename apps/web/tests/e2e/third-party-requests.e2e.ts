@@ -17,7 +17,7 @@ import { expect, test } from "./fixtures";
  * the next CDN `<link>` or embed fails here rather than in a policy audit a year on.
  *
  * If a genuine third-party dependency is ever added, this test does not simply get
- * an entry in an allowlist — it also gets a row in `51.05 Privacy Policy`.
+ * an entry in an allowlist — it also gets a row in `Privacy Policy`.
  */
 test.describe("third-party requests", () => {
 	// Marketing routes reachable with no API behind them (the preview is static).

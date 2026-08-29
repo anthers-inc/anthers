@@ -34,7 +34,7 @@
  * **What this deliberately does not decide: whether the uploader's account is suspended.**
  * `40.06` refuses a `user` subject with `400 not_moderatable` because suspension has
  * unanswered consequences for Works, purchases, support in flight and payouts, and
- * 60.14's Step 6 tells an operator not to invent one during an incident. Denying delivery
+ * Child Safety Incident Runbook's Step 6 tells an operator not to invent one during an incident. Denying delivery
  * is this module; suspending a person is a decision that has not been taken.
  */
 
@@ -67,7 +67,7 @@ export interface QuarantineInput {
 	/**
 	 * **Our own determination** — what Anthers concluded this is, in our vocabulary.
 	 *
-	 * 🚨 Never a vendor's answer. § 7.6 of 60.13: a detection vendor's data is an input to
+	 * 🚨 Never a vendor's answer. § 7.6 of the Child Safety Reporting Policy: a detection vendor's data is an input to
 	 * our determination and never a substitute for it, and Shield says outright that its
 	 * classifications are not final determinations of legality. Pass the vendor's answer as
 	 * `vendorMatch` instead, which is kept apart for retention and for the rule that it
@@ -199,7 +199,7 @@ async function listHlsObjects(masterKey: string): Promise<string[]> {
  *
  * Idempotent: quarantining a Work that is already quarantined moves whatever objects are
  * still in place and adds no second set of records. That matters because the realistic
- * caller is an operator acting during an incident, and 60.14 Step 2 is explicit that a
+ * caller is an operator acting during an incident, and Child Safety Incident Runbook Step 2 is explicit that a
  * report is never delayed for want of tooling — so the button has to be safe to press
  * twice.
  *
@@ -448,7 +448,7 @@ export interface QuarantineFinding {
  * arriving in every listing.
  *
  * 🚨 There is no `thumbnail`, no `url` and no `preview` on the row this returns, and there
- * must not be. § 5.2 of 60.13 commits Anthers to an operator surface that shows the
+ * must not be. § 5.2 of the Child Safety Reporting Policy commits Anthers to an operator surface that shows the
  * finding and never the material — so adding one would be a policy amendment rather than
  * a feature. The keys are here because a key is what a CyberTipline report cites.
  */

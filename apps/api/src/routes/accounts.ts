@@ -646,7 +646,7 @@ const accountRoutes = new Hono()
 	})
 
 	// ── Data-rights requests ─────────────────────────────────────────────────
-	// The non-self-serve half of 51.05's rights section. Export and deletion are
+	// The non-self-serve half of the Privacy Policy's rights section. Export and deletion are
 	// buttons; this is for rectification, objection and "tell me what you hold".
 	// `dueAt` is stamped here so the 30-day commitment is fixed when it is made.
 
@@ -966,7 +966,7 @@ const accountRoutes = new Hono()
 	})
 
 	// ── Export ───────────────────────────────────────────────────────────────
-	// 51.05's "get a copy of your information and your content, in an openly
+	// Privacy Policy's "get a copy of your information and your content, in an openly
 	// readable format", and Article I(c)'s commitment to *access*. Rules about what
 	// is and isn't in it — especially the credentials and other people's data that
 	// deliberately are not — live in `services/account-data.ts`.

@@ -550,7 +550,7 @@ export function salaryLandmarks(): Landmark[] {
 		{
 			label: "🚩 Inflection 1 — full-time, charity-healthy",
 			accounts: crossover(affordable, { payingShare: share, staffing: full }),
-			note: "inside 60.01's ED band with Admin under 30% — the line the ladder is anchored on",
+			note: "inside the ED band in Organizational Structure, with Admin under 30% — the line the ladder is anchored on",
 		},
 		{
 			label: "🚩 Inflection 2 — a first hire, charity-healthy",
@@ -640,14 +640,14 @@ export function freePotSensitivity() {
 	}));
 }
 
-/** 60.01's ED compensation band, as monthly all-in staff cost. */
+/** Organizational Structure's ED compensation band, as monthly all-in staff cost. */
 export const ED_BAND = [
 	{ label: "$80k (band floor — current assumption)", staff: 6_700 },
 	{ label: "$100k", staff: 8_350 },
 	{ label: "$120k (band ceiling)", staff: 10_000 },
 ];
 
-/** Inflection 1 against where in 60.01's band the ED is paid. */
+/** Inflection 1 against where in the Organizational Structure's band the ED is paid. */
 export function edBandSensitivity() {
 	const base = staffingForPhase(10);
 	return ED_BAND.map(({ label, staff }) => ({

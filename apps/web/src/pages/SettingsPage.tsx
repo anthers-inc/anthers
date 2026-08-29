@@ -685,7 +685,7 @@ interface DeletionState {
 /**
  * Your data — the export button and the deletion flow.
  *
- * 🚨 **This section is what makes two published sentences true.** 51.05 has said since it
+ * 🚨 **This section is what makes two published sentences true.** Privacy Policy has said since it
  * was written that getting a copy of your data and deleting your account are things you
  * do yourself, and `/parents` said the same to parents. The API routes shipped in PR #193
  * and **nothing ever called them**, so both documents described a self-service control
@@ -1006,7 +1006,7 @@ export default function SettingsPage() {
 			    profile no longer resolves. */}
 			<BlockedSection />
 
-			{/* Export and deletion — the controls 51.05 and /parents describe. */}
+			{/* Export and deletion — the controls Privacy Policy and /parents describe. */}
 			<DataSection />
 
 			{/* Creator tools live in the Studio (payouts, connections, Badges). */}

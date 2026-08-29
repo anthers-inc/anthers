@@ -7,7 +7,7 @@
  * obligations were waiting on it**, which is what made it worth building on its own
  * rather than as the awkward half of whichever one landed first:
  *
- * 1. 51.05's promise to announce material policy changes *"before it takes effect —
+ * 1. Privacy Policy's promise to announce material policy changes *"before it takes effect —
  *    not by quietly updating a date at the bottom"*;
  * 2. the withdrawn-Work rescue window, whose notice has to reach someone who **may
  *    never sign in again**;
@@ -200,7 +200,7 @@ export async function markRead(userId: number, ids?: number[]): Promise<{ marked
  * The email body.
  *
  * Deliberately plain, and deliberately **self-hosted-nothing**: no images, no tracking
- * pixel, no open-rate beacon. The same rule the app is held to under 51.05 — Anthers
+ * pixel, no open-rate beacon. The same rule the app is held to under the Privacy Policy — Anthers
  * makes no off-origin request on a user's behalf — does not stop applying because the
  * surface is an inbox, and an open-tracking pixel is precisely the "third party learns
  * you read this" pattern the policy says we don't do.

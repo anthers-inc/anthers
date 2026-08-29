@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Attention retention — 51.05's promise that a complete history of what someone
+ * Attention retention — Privacy Policy's promise that a complete history of what someone
  * personally watched **stops existing**.
  *
  * The policy sentence has two halves and they pull against each other, which is why

@@ -14,7 +14,7 @@
  *    quietly applies to a deadline notice is worse than no preference, because the
  *    user believes they know what they will be told.
  *
- * 3. **Losing the record.** 51.05 promises we will tell people before a change takes
+ * 3. **Losing the record.** Privacy Policy promises we will tell people before a change takes
  *    effect, and a promise to have told someone is worth what the evidence behind it is
  *    worth. So the in-app row must survive an email opt-out and an email *failure* —
  *    both tested, because both are states where the naive implementation writes nothing.

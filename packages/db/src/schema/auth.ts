@@ -105,7 +105,7 @@ export const users = pgTable("users", {
 /**
  * A formal request to exercise a data right, and the clock it started.
  *
- * 51.05 extends GDPR/CPRA-level rights to everyone and promises a response **within
+ * Privacy Policy extends GDPR/CPRA-level rights to everyone and promises a response **within
  * 30 days**. Two of those rights are self-serve — export and deletion both have
  * buttons — and this exists for the rest: rectification beyond what settings can edit,
  * objection to a particular use, and "tell me exactly what you hold about me".
@@ -122,7 +122,7 @@ export const users = pgTable("users", {
  * would be needed.
  */
 // org — a formal data-rights request under GDPR/CPRA. The org is who must respond
-// within 30 days (51.05); a creator node has no obligations under these regimes. The
+// within 30 days (Privacy Policy); a creator node has no obligations under these regimes. The
 // row outlives the account (`userId` is set null) because the org's evidence of
 // compliance must survive erasure.
 export const rightsRequests = pgTable(
@@ -152,7 +152,7 @@ export const rightsRequests = pgTable(
 /**
  * One thing Anthers needed to tell one person — and the **record** that it did.
  *
- * The record is the point, not the delivery. 51.05 promises *"we will tell you before
+ * The record is the point, not the delivery. Privacy Policy promises *"we will tell you before
  * it takes effect — not by quietly updating a date at the bottom"*, and a promise to
  * have told someone is worth exactly as much as the evidence behind it. Sending an
  * email and keeping nothing is the same failure as the fingerprinting claim and the
@@ -170,7 +170,7 @@ export const rightsRequests = pgTable(
  * failed) is a real and different state from one that was, and collapsing them would
  * make the evidence unreliable in the direction that matters.
  */
-// org — the org telling a person something, and the record that it did (51.05). A
+// org — the org telling a person something, and the record that it did (Privacy Policy). A
 // creator node has no outbound notification obligation; this is the org's evidence of
 // a promise kept.
 export const notifications = pgTable(
@@ -423,7 +423,7 @@ export const atprotoOauthState = pgTable("atproto_oauth_state", {
  *
  * ⚠️ Swept on a TTL, for the same reason `atproto_oauth_state` is: nothing else deletes
  * these, an abandoned signup is the normal case rather than the exception, and an abandoned
- * one is personal data belonging to somebody who never became a user (51.05).
+ * one is personal data belonging to somebody who never became a user (Privacy Policy).
  */
 // org — a signup that has been asked for and not yet finished. Pre-account by
 // construction: there is no node yet to own it, exactly as with `signup_codes`. The

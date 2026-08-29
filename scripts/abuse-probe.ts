@@ -39,7 +39,7 @@
  * prove a report was accepted, that the right row was written, and that `escalated_at` was
  * stamped — which means Resend accepted the message. It **cannot** prove the mail arrived,
  * and it cannot prove the phone alert fired. `abuse@anthers.org` is single-recipient by
- * policy (60.13 § 5.4), so nobody but its owner can see inside it. That last step is
+ * policy (Child Safety Reporting Policy § 5.4), so nobody but its owner can see inside it. That last step is
  * deliberately left to a person, and this script exists to make sure it is the *only* step
  * left to a person.
  *

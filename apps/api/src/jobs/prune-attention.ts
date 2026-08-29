@@ -3,7 +3,7 @@
  * Attention retention — roll raw per-person rows into identity-free daily totals,
  * then delete them.
  *
- * This is the job behind 51.05's retention promise: raw records connecting a person
+ * This is the job behind Privacy Policy's retention promise: raw records connecting a person
  * to a Work are kept only until their billing cycle has settled and the card-dispute
  * window has closed, after which they are *"aggregated into per-Work and per-creator
  * totals and the per-person records are deleted"* — so that a complete history of
@@ -51,7 +51,7 @@
  *
  * The thing this job deliberately does NOT touch is `pool_distributions`, which also
  * carries `(subscriber_id, creator_id, attention_seconds)` per cycle. That is a
- * *payment* record — what was paid to whom, out of whose support — and 51.05 keeps
+ * *payment* record — what was paid to whom, out of whose support — and the Privacy Policy keeps
  * payment records for as long as tax and nonprofit reporting law requires. It is
  * per-creator and per-cycle, never per-Work, so the sentence the policy actually
  * makes ("what you personally watched") is about this table and not that one. Worth

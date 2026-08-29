@@ -5,7 +5,7 @@
  * ONE subscription carries everything a user gives, as **one item per destination** —
  * Anthers and each creator, each priced at that destination's own monthly amount. Someone
  * giving Anthers $3, Alice $5 and Bob $2.50 has three items totalling $10.50, on one
- * invoice and one charge. That is 51.02's fully prepaid monthly charge, and it is also
+ * invoice and one charge. That is Billing Cycle and Arrears Model's fully prepaid monthly charge, and it is also
  * what amortises the fixed $0.30 across every creator on it.
  *
  * 🚨 **This was ONE item with `quantity` = the total Seed count until 2026-08-16**, with

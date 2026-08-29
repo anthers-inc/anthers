@@ -4,7 +4,7 @@
  * `services/quarantine.ts` establish.
  *
  * 🚨 **The mapping in this file is a transcription of policy, not a design choice.**
- * § 7.3 of 60.13 (Child Safety Reporting Policy) is the authority, and it says what
+ * § 7.3 of the Child Safety Reporting Policy (Child Safety Reporting Policy) is the authority, and it says what
  * triggers a report is **the classification a match carries, not the fact that something
  * matched**. The failure this prevents is specific and was nearly shipped: Shield's
  * *Harmful-Abusive Material* classification IS a confirmed match against known material,
@@ -43,7 +43,7 @@ export const VENDOR = "arachnid-shield";
  *
  * - `clean` — nothing known matched. The overwhelmingly common answer.
  * - `apparent-csam` — a match classified as child sexual abuse material. Quarantine, and a
- *   reporting trigger under § 7.3, handled by a human via the 60.14 runbook.
+ *   reporting trigger under § 7.3, handled by a human via the Child Safety Incident Runbook runbook.
  * - `harmful-abusive` — a match the vendor says may not be illegal. **Quarantine, and
  *   explicitly NOT a reporting trigger.** A content decision about whether the work stays
  *   up, which is precisely what § 7.3 calls it.
@@ -159,7 +159,7 @@ export async function scanPdqHash(
  * 🚨 **A match quarantines through `quarantineWork` and nothing else.** That service is the
  * single writer for taking content out of reach, and it is what places the preservation
  * holds § 2258A(h) requires. Reporting stays manual either way: § 7.3 makes a `csam`
- * classification a trigger for a human following the 60.14 runbook, never an automatic
+ * classification a trigger for a human following the Child Safety Incident Runbook runbook, never an automatic
  * report, because a wrongly-automated report carries its own liability.
  */
 export async function scanStoredImage(

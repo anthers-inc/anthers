@@ -52,7 +52,7 @@ export const purchases = pgTable(
 		// once detached: an amount, a tax figure, a Stripe reference and a snapshot of
 		// what was sold, with no route back to a person. GDPR Art. 17(3)(b) exempts
 		// erasure where processing is required by law, and severing the identity link is
-		// the standard remedy rather than a loophole. 51.05 says so in the user's words.
+		// the standard remedy rather than a loophole. Privacy Policy says so in the user's words.
 		buyerId: integer("buyer_id").references(() => users.id, { onDelete: "set null" }),
 		// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
 		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
@@ -112,7 +112,7 @@ export const purchases = pgTable(
 		// When this buyer first pulled the actual payload down. Null = never
 		// downloaded, and that distinction is what the refund policy turns on: the
 		// cap applies only to refunds *after* download, because the un-sendable
-		// bytes are the loss it exists to bound (51.06 § Refunds).
+		// bytes are the loss it exists to bound (Terms of Service § Refunds).
 		//
 		// Stamped by the asset-download route only — not by streaming. `works.
 		// download_count` is a Work-wide counter and cannot answer "did *this*

@@ -5,7 +5,7 @@
  * 🚨 **This spec exists because both were claimed for months and neither existed.** The
  * API routes shipped in PR #193 — `GET /me/export`, `GET /me/deletion`, `DELETE /me`,
  * `POST /me/deletion/cancel` — and **nothing in the front end ever called any of them**,
- * while 51.05 said *"downloading your data and deleting your account both happen
+ * while Privacy Policy said *"downloading your data and deleting your account both happen
  * immediately in your settings"* and `/parents` told parents the same. A promise with no
  * mechanism, invisible because the routes existed and passed their own tests.
  *

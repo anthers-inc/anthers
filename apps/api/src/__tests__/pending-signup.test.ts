@@ -490,7 +490,7 @@ describe("what an address-resumed signup may NOT carry across", () => {
 describe("an abandoned signup does not linger", () => {
 	it("expires, reads as absent immediately, and takes its orphan OAuth session with it", async () => {
 		// An abandoned pending signup is personal data belonging to somebody who never became
-		// a user (51.05), and the OAuth session beside it is live tokens for somebody else's
+		// a user (Privacy Policy), and the OAuth session beside it is live tokens for somebody else's
 		// repository. Both go.
 		const token = await startPendingSignup({
 			email: addr("abandoned"),

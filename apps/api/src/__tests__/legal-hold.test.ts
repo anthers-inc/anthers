@@ -5,7 +5,7 @@
  * The assertions here are all of the same shape and it is a deliberate one: they
  * check that **rows survived a sweep that ran**, by counting them directly, rather
  * than checking that some reader stopped returning them. That distinction is the
- * whole lesson of the sessions defect 51.05 records — `deleteExpiredSessions()` was
+ * whole lesson of the sessions defect Privacy Policy records — `deleteExpiredSessions()` was
  * exported and called from nowhere for months while every reader filtered expired
  * sessions out anyway, so a read-side test would have passed throughout. A sweep
  * that does not run and a sweep that correctly skips look identical from the

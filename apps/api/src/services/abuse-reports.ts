@@ -144,7 +144,7 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 			? `<p>They left <code>${escapeHtml(report.reporterEmail)}</code> to be reached at.</p>`
 			: "<p>They left no address, so there is nobody to reply to.</p>",
 		"<p>Open the public reports queue in the admin console to act on it.</p>",
-		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
+		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook. Do not open the content.</p>",
 	].join("\n");
 
 	const { sent, messageId } = await sendAbuseAlert({ subject, html });

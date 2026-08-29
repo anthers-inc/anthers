@@ -4,7 +4,7 @@
  * promised to answer in.
  *
  * Pure and shared, like `moderation.ts`, so the form a user fills in and the API that
- * validates it read one list. 51.05 states these rights and extends them to everyone
+ * validates it read one list. Privacy Policy states these rights and extends them to everyone
  * rather than branching by region.
  *
  * **Two of the six rights the policy names are deliberately absent here**, because
@@ -56,7 +56,7 @@ export function isRightsRequestKind(value: string): boolean {
 }
 
 /**
- * The response window, in days, as promised in 51.05.
+ * The response window, in days, as promised in the Privacy Policy.
  *
  * Stamped onto each request at creation rather than computed at read time, so changing
  * this number never silently moves a deadline already committed to.
