@@ -145,6 +145,12 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 										/>
 									</td>
 									<td>
+										{/* ⚠️ `min="0"` and not the floor, because the rule is "$0 or at least
+										    $0.50, and nothing in between" — and an HTML `min` cannot say that.
+										    Raising it to 0.50 would make every FREE Work invalid in the
+										    browser, which is exactly the way to get this wrong that looks
+										    right. `TakeHome` beside the field says what the gap costs, and
+										    `accessRowSchema` is what actually refuses it. */}
 										<input
 											type="number"
 											className="input input-bordered input-sm w-full"

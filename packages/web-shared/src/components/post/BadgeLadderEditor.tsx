@@ -10,7 +10,7 @@
  * the dollar figure beside it is
  * derived for display rather than typed.
  */
-import { amountLabel, supportAmount } from "@anthers/shared/constants";
+import { amountLabel, STRIPE_MIN_CHARGE, supportAmount } from "@anthers/shared/constants";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
@@ -175,7 +175,7 @@ export default function BadgeLadderEditor() {
 											className="input input-bordered input-sm w-28"
 											value={editThreshold}
 											onChange={(e) => setEditThreshold(e.target.value)}
-											min="0.01"
+											min={STRIPE_MIN_CHARGE}
 											step="0.01"
 											placeholder="$/mo"
 										/>
@@ -256,7 +256,7 @@ export default function BadgeLadderEditor() {
 									className="input input-bordered input-sm w-28"
 									value={newThreshold}
 									onChange={(e) => setNewThreshold(e.target.value)}
-									min="0.01"
+									min={STRIPE_MIN_CHARGE}
 									step="0.01"
 									placeholder="$/mo"
 								/>

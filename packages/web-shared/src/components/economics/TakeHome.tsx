@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { CARD_RATE, cardFeeDisplay, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import {
+	CARD_RATE,
+	cardFeeDisplay,
+	PUBLIC_ACCESS_PRICE,
+	STRIPE_MIN_CHARGE,
+} from "@anthers/shared/constants";
 import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
 
 /**
@@ -15,6 +20,14 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
  * step, no nagging. A floor would ban prices we are genuinely competitive at and sit
  * against Article I(c) — so this component's job is to make the consequence visible, never
  * to refuse it.
+ *
+ * ⚠️ **One amount is now refused, and it is not an exception to that rule so much as a case
+ * the rule never covered.** Since 2026-08-29 an amount between zero and `STRIPE_MIN_CHARGE`
+ * is rejected by the validators, because it is not a low price we disapprove of — it is a
+ * price the payment rail will not accept, so a creator who sets one has published something
+ * nobody can buy and finds out through a stranger failing at checkout. Everything above that
+ * floor stays entirely theirs, underwater prices included, and this component still explains
+ * rather than nags. **Do not let this grow into a minimum of ours.**
  *
  * 🚨 **The brief's "a creator can price at $0.25 and keep about 6%" is FALSE, found while
  * building this.** At $0.25 the fee is $0.31, so the creator receives **−$0.06** — a sale
@@ -32,15 +45,6 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
 
 /** Below this, the fixed fee dominates hard enough that it needs explaining rather than showing. */
 const EXPLAIN_BELOW = 1;
-
-/**
- * Stripe's minimum USD charge. A price under this **cannot be taken on its own** — the
- * PaymentIntent is refused before anything of ours runs.
- *
- * Not a floor of ours, and it must not be written as one: it is a fact about the rail, and
- * a basket of several such items would clear it together once carts exist.
- */
-const STRIPE_MIN_CHARGE = 0.5;
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
@@ -141,10 +145,17 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 			)}
 
 			{amount > 0 && amount < STRIPE_MIN_CHARGE && (
-				<p className="mt-1 text-xs text-base-content/60" data-testid="take-home-min-charge">
-					{/* A fact about the payment rail, deliberately not phrased as our rule. */}
-					Card networks will not take a charge under {usd(STRIPE_MIN_CHARGE)}, so this cannot be
-					sold on its own.
+				<p className="mt-1 text-xs text-error" data-testid="take-home-min-charge">
+					{/* 🚨 The one amount that is refused rather than explained, and the copy has to
+					    say so — this notice was informational until 2026-08-29, and a page telling
+					    a creator their price merely "cannot be sold on its own" while the save
+					    button refuses it would be describing a different product. The reason is
+					    still the rail's rather than ours, which is why the sentence leads with it.
+					    Baskets exist and one could clear the floor collectively, but a creator
+					    cannot make anybody buy two things, so a lone purchase is the case that
+					    decides it. */}
+					Card networks will not take a charge under {usd(STRIPE_MIN_CHARGE)}, so this amount can't
+					be saved. Make it {usd(STRIPE_MIN_CHARGE)} or more, or free.
 				</p>
 			)}
 

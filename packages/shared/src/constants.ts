@@ -26,6 +26,13 @@ export const APP_NAME = "Anthers";
  * *invoice total*, never a minimum per-creator amount, and that is a different mechanism
  * in a different place.
  *
+ * ⚠️ **`STRIPE_MIN_CHARGE` is not that floor and does not contradict this**, which is worth
+ * reading before the two look like a reversal. The rule above kills a floor justified by
+ * **card-fee proportionality**, and that justification is dead. Stripe's $0.50 is a
+ * different constraint: not *this charge is uneconomic* but *this charge cannot exist*.
+ * Both are true at once, and a creator-set amount is therefore free at every level except
+ * the unpayable gap between zero and Stripe's own minimum.
+ *
  * **There is no bandwidth term.** Delivery was metered at cost ($0.01/GiB) against
  * a 15 GiB free floor plus a per-Seed allowance until 2026-08-12. That whole apparatus
  * was cost-recovery for one vendor's price list — `BANDWIDTH_PER_GIB` was *exactly*
@@ -111,6 +118,49 @@ export type Badge = "root" | "sprout" | "petal" | "blossom";
  * multiples of it.
  */
 export const PUBLIC_ACCESS_PRICE = 3;
+
+/**
+ * The smallest amount Stripe will process, in USD.
+ *
+ * 🚨 **Not a granularity floor, and the distinction is the whole reason this is a separate
+ * constant.** The floor this file's header forbids is one justified by **card-fee
+ * proportionality** — "a $1 charge loses a third to processing" — and that argument died
+ * when one subscription came to carry everything a user gives, because the fixed $0.30 is
+ * then paid once a month whatever the denomination. It argues for a minimum *invoice total*
+ * and never for a minimum per-creator amount, and that rule still stands.
+ *
+ * This is a different constraint with a different justification. It does not say *this
+ * charge is uneconomic*; it says **this charge cannot exist**. Stripe refuses it, so a price
+ * below it is not a cheap price but an unbuyable one — and a creator finds that out through
+ * a buyer failing at checkout rather than through their own editor.
+ *
+ * ⚠️ **Named for the vendor because that is whose rule it is.** It is not ours to choose, it
+ * is USD-specific, and if Anthers ever charges in another currency this constant is the
+ * thing that has to grow a dimension rather than the call sites.
+ */
+export const STRIPE_MIN_CHARGE = 0.5;
+
+/**
+ * Can a creator-set amount actually be charged?
+ *
+ * 🚨 **The rule is "$0 or at least $0.50, and nothing in between" — never a flat minimum.**
+ * $0 with Allow checked is exactly what Public Access is, so `Math.max(0.5, price)` would
+ * put a price on every free Work on the platform. That is the way to get this wrong that
+ * looks most correct, which is why the rule lives in one predicate rather than at each of
+ * the five validators that need it.
+ *
+ * Compared in **cents**, because the inputs arrive as money strings and as numbers parsed
+ * from them, and `0.5` is not exactly representable — a floor that rejected `0.5` itself on
+ * some paths and not others would be worse than no floor at all.
+ */
+export function isChargeableAmount(dollars: number): boolean {
+	if (!Number.isFinite(dollars) || dollars < 0) return false;
+	const cents = Math.round(dollars * 100);
+	return cents === 0 || cents >= Math.round(STRIPE_MIN_CHARGE * 100);
+}
+
+/** What to tell somebody who set an amount between zero and the floor. */
+export const CHARGEABLE_AMOUNT_MESSAGE = `An amount has to be $0 or at least $${STRIPE_MIN_CHARGE.toFixed(2)} — Stripe will not process a charge below that, so anything in between is a price nobody can pay.`;
 /**
  * Share of what a user gives Anthers that funds the Time Pool, paid to creators by time.
  *
