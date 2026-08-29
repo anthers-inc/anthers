@@ -43,7 +43,11 @@ import {
 	workPages,
 	works,
 } from "@anthers/db/schema";
-import { CHARGEABLE_AMOUNT_MESSAGE, isChargeableAmount } from "@anthers/shared/constants";
+import {
+	CHARGEABLE_AMOUNT_MESSAGE,
+	isChargeableAmount,
+	WITHDRAWN_RESCUE_DAYS,
+} from "@anthers/shared/constants";
 import {
 	COMMENT_MAX,
 	type CommentSubjectType,
@@ -103,6 +107,7 @@ import {
 	setHidden,
 } from "../services/library.js";
 import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
+import { notifyMany } from "../services/notifications.js";
 import {
 	consumedSeconds,
 	parentalPolicyFor,
@@ -815,6 +820,66 @@ async function worksOnlyLinkedFrom(postId: number): Promise<number[]> {
 		.where(and(inArray(postWorkRefs.workId, ids), ne(postWorkRefs.postId, postId)));
 	const stillLinked = new Set(others.map((r) => r.workId));
 	return ids.filter((id) => !stillLinked.has(id));
+}
+
+/**
+ * Tell everyone who bought a Work that the creator has withdrawn it.
+ *
+ * 🚨 **This closes an asymmetry rather than adding a feature.** `services/account-deletion.ts`
+ * has notified buyers since 2026-08-10 when a departing creator's Works are withdrawn.
+ * The ordinary withdrawal — a creator deleting a purchased Work from the Studio — reached
+ * the same outcome for the same buyer and told them **nothing**. One path told them and
+ * the other did not, and which one you got depended on why the creator did it.
+ *
+ * ⚠️ **The dedupe key is deliberately the same namespace `account-deletion.ts` uses**, so a
+ * creator who withdraws a Work and later closes their account does not mail the buyer twice
+ * about one withdrawal. The two notices word it differently, and the buyer keeps whichever
+ * arrived first — the actionable fact is identical in both, and being told twice that a
+ * purchase left public circulation is noise rather than diligence.
+ *
+ * ⭐ **The deadline is named because the Library card already names it.** A buyer reading
+ * the card sees a date; a notice that said only *"at some point"* would be the vaguer of two
+ * statements of the same promise. The sweep that enforces it is still unbuilt, so today the
+ * Work outlives the date it is given — which errs toward keeping a purchase alive, the
+ * right way to be wrong here.
+ */
+async function tellBuyersItWasWithdrawn(
+	workId: number,
+	title: string | null,
+	withdrawnAt: Date,
+): Promise<void> {
+	const buyers = (
+		await db
+			.select({ purchaseId: purchases.id, buyerId: purchases.buyerId })
+			.from(purchases)
+			.where(and(eq(purchases.workId, workId), eq(purchases.status, "completed")))
+	).filter((r): r is { purchaseId: number; buyerId: number } => r.buyerId != null);
+	if (buyers.length === 0) return;
+
+	const deadline = new Date(withdrawnAt);
+	deadline.setDate(deadline.getDate() + WITHDRAWN_RESCUE_DAYS);
+	const by = deadline.toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	});
+	const name = title?.trim() || "A Work you bought";
+
+	await notifyMany(
+		buyers.map((b) => ({
+			userId: b.buyerId,
+			// Essential, so it reaches people who turned activity email off: this is the
+			// one notice whose whole value is arriving before a date.
+			category: "essential" as const,
+			kind: "work_withdrawn_by_creator",
+			title: `“${name}” has been withdrawn`,
+			body: `The creator has taken this out of public circulation. You still own it and it stays in your library — download a copy you keep before ${by}.`,
+			linkPath: "/library",
+			// Per purchase, so two people who bought the same Work each get told and
+			// neither gets told twice.
+			dedupeKey: `work-withdrawn:${b.purchaseId}`,
+		})),
+	);
 }
 
 /**
@@ -3448,10 +3513,12 @@ const contentRoutes = new Hono()
 		// job rather than a later migration — and until it exists, erring toward keeping
 		// a buyer's purchase alive is the right way to be wrong.
 		if (soldCount > 0) {
+			const withdrawnAt = new Date();
 			await db
 				.update(works)
-				.set({ visibility: "withdrawn", withdrawnAt: new Date(), updatedAt: new Date() })
+				.set({ visibility: "withdrawn", withdrawnAt, updatedAt: new Date() })
 				.where(eq(works.id, id));
+			await tellBuyersItWasWithdrawn(id, item.title, withdrawnAt);
 			return c.json({ withdrawn: true, purchaseCount: soldCount }, 200);
 		}
 
