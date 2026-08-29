@@ -10,7 +10,15 @@
  * finished first. These fixtures are how those branches get exercised at all.
  */
 import { describe, expect, it } from "bun:test";
-import { commitsOf, type Deployment, readDeployments } from "./deploy-state.js";
+import {
+	commitsOf,
+	type Deployment,
+	RUN_PENDING_STATUSES,
+	readDeployments,
+	readWorkflowRuns,
+	repoSlugFromRemote,
+	type WorkflowRun,
+} from "./deploy-state.js";
 
 const REF = "026ef6525812ad9371d3a74ce2b608866bba59ae";
 const OLD = "1faf3948c43409c87b5b3ef1b5fb7f6f4d10bba9";
@@ -110,5 +118,86 @@ describe("The ordinary steady state", () => {
 		expect(s.inFlight).toBeNull();
 		// Nothing is deploying, so nothing softens this. It is the case the watch exists for.
 		expect(s.inFlightIsRef).toBe(false);
+	});
+});
+
+describe("The layer DigitalOcean cannot see — CI's own run for the commit", () => {
+	/*
+	 * 🚨 This is the gap the earlier fix left behind, one layer along. Teaching the script
+	 * about deployments already in flight AT DigitalOcean fixed the window after `deploy`
+	 * runs; this is the window before it. On 2026-08-26 that was about six minutes, because
+	 * `deploy` waits on `test`, `browser`, `browser-media` and `images` — and for all six of
+	 * them the script printed "Nothing is in flight — this is a real stale build".
+	 */
+	const run = (over: Partial<WorkflowRun> = {}): WorkflowRun => ({
+		head_sha: REF,
+		status: "in_progress",
+		conclusion: null,
+		name: "CI",
+		...over,
+	});
+
+	it("sees a run that has not finished, for every status GitHub uses before one has", () => {
+		for (const status of [...RUN_PENDING_STATUSES]) {
+			const seen = readWorkflowRuns([run({ status })], REF);
+			expect(seen.pending?.status, status).toBe(status);
+			expect(seen.failed).toBeNull();
+		}
+	});
+
+	it("🚨 ignores a run for a different commit, which is not evidence about this one", () => {
+		// The failure this prevents: an unrelated run on another branch explaining away a
+		// genuinely stale build, which is the same shape of error as reading a half-built
+		// deployment as normal progress.
+		const seen = readWorkflowRuns([run({ head_sha: OLD })], REF);
+		expect(seen.pending).toBeNull();
+		expect(seen.failed).toBeNull();
+	});
+
+	it("⭐ separates a failed run from no run at all, because they need different answers", () => {
+		// "CI ran for this commit and failed" is the most useful thing this branch can say,
+		// and it was the one thing it could not say before.
+		const failed = readWorkflowRuns(
+			[run({ status: "completed", conclusion: "failure", html_url: "https://x/1" })],
+			REF,
+		);
+		expect(failed.failed?.html_url).toBe("https://x/1");
+		expect(failed.pending).toBeNull();
+
+		expect(readWorkflowRuns([], REF)).toEqual({ pending: null, failed: null });
+	});
+
+	it("does not call a successful run a failure", () => {
+		const seen = readWorkflowRuns([run({ status: "completed", conclusion: "success" })], REF);
+		expect(seen.failed).toBeNull();
+		expect(seen.pending).toBeNull();
+	});
+
+	it("prefers the unfinished run when an earlier one for the same commit failed", () => {
+		// A re-run after a failure is the ordinary case, and reporting the old failure while
+		// the new attempt is mid-flight would send somebody to a dead run.
+		const seen = readWorkflowRuns(
+			[run({ status: "completed", conclusion: "failure" }), run({ status: "in_progress" })],
+			REF,
+		);
+		expect(seen.pending?.status).toBe("in_progress");
+	});
+});
+
+describe("Finding the repository to ask about", () => {
+	it("reads both remote forms, because a laptop and a runner disagree about which they get", () => {
+		for (const url of [
+			"git@github.com:anthers-inc/anthers.git",
+			"https://github.com/anthers-inc/anthers.git",
+			"https://github.com/anthers-inc/anthers",
+			"  git@github.com:anthers-inc/anthers.git\n",
+		]) {
+			expect(repoSlugFromRemote(url), url).toBe("anthers-inc/anthers");
+		}
+	});
+
+	it("returns nothing for a remote that is not GitHub, rather than a wrong guess", () => {
+		expect(repoSlugFromRemote("git@gitlab.com:someone/thing.git")).toBe("");
+		expect(repoSlugFromRemote("")).toBe("");
 	});
 });

@@ -1,4 +1,11 @@
-import { type Deployment, readDeployments } from "./deploy-state.js";
+import {
+	type CiSituation,
+	type Deployment,
+	readDeployments,
+	readWorkflowRuns,
+	repoSlugFromRemote,
+	type WorkflowRun,
+} from "./deploy-state.js";
 
 /** Which `doctl` account to compare against, via `DOCTL_CONTEXT`. Same rule as
  * `spec-diff.ts`: production is under an Anthers-owned account, and without this
@@ -18,6 +25,49 @@ async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr
 		new Response(proc.stderr).text(),
 	]);
 	return { ok: (await proc.exited) === 0, stdout, stderr };
+}
+
+/**
+ * Ask GitHub whether CI is still working on this commit.
+ *
+ * ⚠️ **Every failure here returns `situation: null` with a reason, and none of them is
+ * fatal.** This is a second opinion on a question DigitalOcean cannot answer, and a tool
+ * that refused to run because an optional lookup failed would be worse than the confident
+ * wrongness it replaces. What matters is that the caller prints *"could not ask"* rather
+ * than *"nothing is coming"*.
+ *
+ * Unauthenticated works on a public repo and is rate-limited by IP, which is fine for a
+ * laptop; `GH_TOKEN` or `GITHUB_TOKEN` raises that and is what CI passes.
+ */
+async function ciRunsFor(sha: string): Promise<{ situation: CiSituation | null; why: string }> {
+	let repo = (process.env.GITHUB_REPOSITORY ?? "").trim();
+	if (!repo) {
+		const remote = await run(["git", "remote", "get-url", "origin"]);
+		repo = remote.ok ? repoSlugFromRemote(remote.stdout) : "";
+	}
+	if (!repo) return { situation: null, why: "no GitHub repository in the origin remote" };
+
+	const token = (process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "").trim();
+	const headers: Record<string, string> = {
+		Accept: "application/vnd.github+json",
+		"User-Agent": "anthers-deploy-status",
+	};
+	if (token) headers.Authorization = `Bearer ${token}`;
+
+	try {
+		const res = await fetch(
+			`https://api.github.com/repos/${repo}/actions/runs?head_sha=${sha}&per_page=20`,
+			{ headers, signal: AbortSignal.timeout(8000) },
+		);
+		if (!res.ok) {
+			const hint = token ? "" : " (unauthenticated — set GH_TOKEN to raise the rate limit)";
+			return { situation: null, why: `the Actions API answered ${res.status}${hint}` };
+		}
+		const body = (await res.json()) as { workflow_runs?: WorkflowRun[] };
+		return { situation: readWorkflowRuns(body.workflow_runs ?? [], sha), why: "" };
+	} catch (e) {
+		return { situation: null, why: e instanceof Error ? e.message : String(e) };
+	}
 }
 
 if (!(await run(["which", "doctl"])).ok) {
@@ -62,14 +112,36 @@ if (!deploys.ok) {
 
 const deployments = JSON.parse(deploys.stdout) as Deployment[];
 
-// The ref to compare against: `release` locally by default, overridable via REF.
-// CI passes `REF=origin/release` because the scheduled check has no local branch
-// state worth trusting — only the remote ref is what App Platform builds from.
+// The ref to compare against, overridable via REF.
 //
 // ⚠️ Resolved BEFORE the ACTIVE lookup, because the no-ACTIVE branch below has to be
 // able to say whether the thing currently deploying is the thing we asked for.
-const REF = process.env.REF ?? "release";
-const refResult = await run(["git", "rev-parse", `--short=7`, REF]);
+//
+// 🚨 The default is the REMOTE ref, because that is what App Platform builds from and the
+// local branch is not. `git push origin main:release` — the documented way to promote —
+// never moves local `release`, so a default of `release` compared production against a
+// branch that had been stale since the last checkout. The tool's own comments record that
+// misfiring on 2026-08-15, and the trap survived the fix that recorded it. Same for
+// `PROMOTE_FROM`: counting `release..main` against a stale local `main` reports work as
+// unshipped that shipped days ago.
+let REF = process.env.REF ?? "origin/release";
+// Best-effort, because being offline must not break a check that can still answer from
+// the last fetch. Failure here is silent by design; a stale `origin/release` is caught by
+// the fallback below only when the ref is missing entirely.
+await run(["git", "fetch", "origin", "release", "main", "--quiet"]);
+
+let refResult = await run(["git", "rev-parse", "--short=7", REF]);
+if (!refResult.ok && !process.env.REF && REF.startsWith("origin/")) {
+	// A clone that has never fetched has no remote-tracking ref. Fall back rather than
+	// refusing to run, and say which ref the answer is actually about.
+	const local = REF.slice("origin/".length);
+	const fallback = await run(["git", "rev-parse", "--short=7", local]);
+	if (fallback.ok) {
+		console.log(`deploy-status: no ${REF} — comparing against local ${local} instead.`);
+		REF = local;
+		refResult = fallback;
+	}
+}
 if (!refResult.ok) {
 	console.error(`deploy-status: could not resolve ref "${REF}".\n${refResult.stderr.trim()}`);
 	process.exit(2);
@@ -167,7 +239,8 @@ const ageHours = (ageMs / 3_600_000).toFixed(1);
  * hourly watcher in a permanent alarm state during ordinary development, and a watcher that
  * cries wolf gets muted, which is how this repo lost the last one.
  */
-const PROMOTE_FROM = process.env.PROMOTE_FROM ?? "main";
+const PROMOTE_FROM =
+	process.env.PROMOTE_FROM ?? (REF.startsWith("origin/") ? "origin/main" : "main");
 let unshipped = 0;
 let promoteHead = "";
 if (REF !== PROMOTE_FROM) {
@@ -201,7 +274,7 @@ if (agree && unshipped > 0) {
 if (agree) {
 	console.log(`deploy-status: in sync ✓`);
 	if (promoteHead) console.log(`  ${PROMOTE_FROM.padEnd(8)} ${promoteHead}`);
-	console.log(`  release: ${refCommit}  (${REF})`);
+	console.log(`  ${REF.padEnd(8)} ${refCommit}`);
 	console.log(
 		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
 	);
@@ -262,12 +335,47 @@ if (liveIsDescendant) {
 	console.error("  Either an older push is still landing, or a deploy was created by hand from");
 	console.error(`  the wrong SHA. Wait for it to settle, then re-run before acting.`);
 } else {
+	// 🚨 The old text ended with "Nothing is in flight — this is a real stale build, not a
+	// deploy in progress", which is a confident denial of the thing most likely to be
+	// happening. DigitalOcean has no deployment for the few minutes CI spends on `test`,
+	// `browser`, `browser-media` and `images` before `deploy` runs, and the script knew
+	// only what DigitalOcean had. So ask GitHub before concluding anything, and when the
+	// answer cannot be had, say that instead of asserting the opposite.
+	const ci = await ciRunsFor(refFull);
+	if (ci.situation?.pending) {
+		const runName = ci.situation.pending.name ?? "a workflow";
+		console.log(`deploy-status: CI still running ✓`);
+		console.log(`  ${REF.padEnd(8)} ${refCommit}`);
+		console.log(
+			`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
+		);
+		console.log(
+			`  ${runName} is ${ci.situation.pending.status.replace("_", " ")} for ${refCommit} — the deploy job has not reached`,
+		);
+		console.log("  DigitalOcean yet, so there is nothing in flight there to see.");
+		if (ci.situation.pending.html_url) console.log(`  ${ci.situation.pending.html_url}`);
+		console.log("  (Exit 5, distinct from drift, so a scheduled check can tolerate it.)");
+		process.exit(5);
+	}
 	console.error("  Production is serving a stale build: the push succeeded, nothing deployed.");
-	console.error("  Likely causes:");
-	console.error("    - the CI `deploy` job did not run (billing, a failing upstream job, etc.)");
-	console.error("    - the deploy was created manually but from a different SHA");
+	if (ci.situation?.failed) {
+		// The most useful thing this branch can say, and it could not say it before.
+		const failed = ci.situation.failed;
+		console.error(
+			`  CI ran for ${refCommit} and finished ${failed.conclusion} — that is why nothing deployed.`,
+		);
+		if (failed.html_url) console.error(`    ${failed.html_url}`);
+	} else if (ci.situation) {
+		console.error(`  GitHub has no workflow run for ${refCommit} at all. Likely causes:`);
+		console.error("    - the push did not trigger CI (a workflow condition, or a disabled run)");
+		console.error("    - the deploy was created manually but from a different SHA");
+	} else {
+		// The honest version of the sentence this branch used to end on.
+		console.error(`  GitHub could not be asked whether CI is still running: ${ci.why}`);
+		console.error("  So this may be a stale build, or a deploy that has not reached");
+		console.error("  DigitalOcean yet. Check the Actions tab before acting.");
+	}
 	console.error("  Recover: doctl apps create-deployment <app-id>  (CI's escape hatch, by hand)");
 	console.error("          or merge the missing work into release and push again.");
-	console.error("  (Nothing is in flight — this is a real stale build, not a deploy in progress.)");
 }
 process.exit(1);

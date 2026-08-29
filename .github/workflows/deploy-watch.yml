@@ -47,10 +47,15 @@ on:
   # Manual trigger for testing and for "check now after a push that should have deployed"
   workflow_dispatch:
 
-# `issues: write` would be the scoped permission for an issue-based alert path,
-# but issues are disabled on this repo. No elevated permissions are needed: the
-# run fails on drift, and that failure is the alert.
-permissions: {}
+# `actions: read` is the one permission this needs: `deploy-status.ts` asks the Actions
+# API whether a run for the release commit is still going before it concludes that
+# nothing deployed. Without it the lookup falls back to unauthenticated, which works on
+# a public repo and is rate-limited by runner IP — so the check would still answer, just
+# less reliably. `issues: write` would be the scoped permission for an issue-based alert
+# path, but issues are disabled on this repo; the run fails on drift, and that failure is
+# the alert.
+permissions:
+  actions: read
 
 jobs:
   check:
@@ -99,6 +104,7 @@ jobs:
           DO_APP_ID: ${{ vars.DO_APP_ID }}
           REF: origin/release
           PROMOTE_FROM: origin/main
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           bun run scripts/deploy-status.ts
@@ -115,6 +121,16 @@ jobs:
           # one would have cried wolf on a share of every deploy from then on.
           if [ "$code" -eq 4 ]; then
             echo "::notice::a deployment of release is in flight — production is catching up, not stale"
+            exit 0
+          fi
+          # Exit 5 is the same window one layer earlier: CI is still running for the
+          # release commit and its `deploy` job has not created a DigitalOcean deployment
+          # yet, so there is nothing in flight there to see. On 2026-08-26 that gap was
+          # about six minutes, because `deploy` waits on `test`, `browser`, `browser-media`
+          # and `images` — six minutes in which this check called a healthy deploy a stale
+          # build, and said so in as many words.
+          if [ "$code" -eq 5 ]; then
+            echo "::notice::CI is still running for the release commit — the deploy has not reached DigitalOcean yet"
             exit 0
           fi
           exit "$code"
