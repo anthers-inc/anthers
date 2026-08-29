@@ -272,7 +272,7 @@ export default function SubscriptionPage() {
 	const [success, setSuccess] = useState<string | null>(null);
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
 
-	// Pending Seed edits (creatorId → whole dollars)
+	// Pending support edits (creatorId → dollars, cents included — no unit to be whole of)
 	const [pendingSeeds, setPendingSeeds] = useState<Map<number, number>>(new Map());
 
 	const sessionId = searchParams.get("session_id");
@@ -425,7 +425,9 @@ export default function SubscriptionPage() {
 	const isPaid = badge !== "free";
 	const isCanceling = account ? !!account.canceledAt : false;
 
-	// ── Seed allocation handlers ──
+	// ── Support allocation handlers ──
+	// The `seed*` identifiers below name `seed_allocations`, which kept its name in the
+	// 2026-08-16 retirement and still means what it says. The copy does not.
 
 	const handleSeedChange = (creatorId: number, newVal: number) => {
 		const committed = committedSeedMap.get(creatorId) ?? 0;

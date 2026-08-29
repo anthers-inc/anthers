@@ -72,7 +72,7 @@ describe("when the meter speaks", () => {
 		 * This shape is one the API does not currently produce, and that is the point: it
 		 * is what the guard is *for*. Anything that later returns a countdown alongside
 		 * `unlimited` — a caching layer, a future partial allowance — must not start
-		 * telling Seed-holders they are running out.
+		 * telling people whose Public Access is unlimited that they are running out.
 		 */
 		expect(shouldWarn({ ...UNLIMITED, remainingSeconds: 60 })).toBe(false);
 	});

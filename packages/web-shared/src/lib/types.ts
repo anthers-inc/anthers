@@ -84,9 +84,21 @@ export interface UnlockRoute {
 	badge: string | null;
 }
 
-/** How a gated post could be opened, per destination. Null = that side offers no way in. */
+/**
+ * How a gated post could be opened. Null = there is no way in short of a purchase.
+ *
+ * 🚨 **One route, matching the server's `UnlockOffer` exactly, and it did not until
+ * 2026-08-29.** This declared an `anthers` route alongside — the way out of an Anthers Gate —
+ * which the server stopped emitting when those were retired on 2026-08-12. The field kept a
+ * whole branch of `InlineUnlock` compiling, complete with an inline subscribe flow that could
+ * never run, because a client type is not checked against the server's. **A hand-written
+ * mirror that has grown a field the original lacks is dead code with a compiler's blessing.**
+ *
+ * It stays an object rather than collapsing to `UnlockRoute | null`, for the same reason the
+ * server's does: a creator gating on **another creator's** support level is a live case, and
+ * that is where a second route would reappear.
+ */
 export interface UnlockOffer {
-	anthers: UnlockRoute | null;
 	creator: UnlockRoute | null;
 }
 
