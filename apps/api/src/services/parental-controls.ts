@@ -82,6 +82,22 @@ export async function parentalPolicyFor(userId: number | null): Promise<Parental
 	};
 }
 
+/**
+ * Whether a guardian has frozen this account's content-rating settings.
+ *
+ * 🚨 **Asked by the WRITER of those settings, not by a route.** The pin is a request-level
+ * check and belongs where the request is, but this one is derived from the account alone — so
+ * putting it at a route protects that route and nothing else, which is exactly how the lock
+ * came to cover `PATCH /me/content-preferences` while `POST /me/adult-access` wrote the columns
+ * that actually govern reaching the Adult rung. `services/content-preferences.ts` asks this
+ * before every write it makes, so a door added later is covered by construction rather than by
+ * whoever adds it remembering.
+ */
+export async function maturityLocked(userId: number | null): Promise<boolean> {
+	const policy = await parentalPolicyFor(userId);
+	return policy.enabled && policy.lockMaturity;
+}
+
 /** Whether a presented pin is the one on file. False when there is no pin at all. */
 export async function pinMatches(userId: number, pin: string): Promise<boolean> {
 	const [row] = await db

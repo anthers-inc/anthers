@@ -12,7 +12,8 @@
  *                                     the two together open the Adult rung
  *   POST   /me/adult-access/setup   — start a card check (SetupIntent; no charge)
  *   POST   /me/adult-access         — opt in, verifying adulthood by card funding type
- *   DELETE /me/adult-access         — opt back out (the verification is kept)
+ *   DELETE /me/adult-access         — opt back out (the verification is kept; never locked,
+ *                                     because opting out only makes an account stricter)
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change one or both
@@ -56,7 +57,7 @@ import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import {
 	adultAccessFor,
-	adultHiddenFrom,
+	adultVisibility,
 	beginAdultVerification,
 	contentPreferencesFor,
 	disableAdultAccess,
@@ -200,6 +201,20 @@ const parentalUpdateSchema = z.object({
 		.optional(),
 	languageFilter: z.boolean().optional(),
 });
+
+/**
+ * What every route refused by a guardian's maturity lock says.
+ *
+ * 🚨 **One sentence for three routes, because a reader must not be able to tell them apart.**
+ * The display settings, the card check and the Adult opt-in are all frozen by the same switch,
+ * and a differently worded refusal on one of them would tell whoever is testing the lock which
+ * door is worth pushing on. It names the pin rather than a remedy, because the remedy is a
+ * conversation with whoever set it.
+ */
+const PARENTAL_LOCKED = {
+	error: "These settings are locked. Ask whoever set the parental pin.",
+	code: "parental_locked",
+} as const;
 
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
@@ -348,6 +363,15 @@ const accountRoutes = new Hono()
 		// `?kind=posts` or `?kind=releases` for someone who wants one or the other.
 		const kind = c.req.query("kind") ?? "all";
 
+		// The two viewer-side listing conditions the Works half composes, loaded once rather
+		// than awaited inside the query builder. `adultVisibility` is the allow-list every
+		// other listing uses; it replaced a narrower `adultHiddenFrom` on 2026-08-29 that
+		// emitted `maturity <> 'adult'` and so admitted any rung it had not been told about.
+		const [maturity, parental] = await Promise.all([
+			adultVisibility(sessionUser.id),
+			parentalVisibility(sessionUser.id),
+		]);
+
 		const feedPosts =
 			kind === "releases"
 				? []
@@ -382,10 +406,11 @@ const accountRoutes = new Hono()
 								eq(works.visibility, "released"),
 								// The feed is a listing, and a release by a followed creator is
 								// no exception to the invisibility rule — following somebody is
-								// not the opt-in.
-								adultHiddenFrom(await adultAccessFor(sessionUser.id), sessionUser.id),
+								// not the opt-in, and it is not a reason to be shown a rung the
+								// reader asked to hide either.
+								maturity.hidden,
 								// Nor is following an exemption from a guardian's blocks.
-								(await parentalVisibility(sessionUser.id)).hidden,
+								parental.hidden,
 							),
 						)
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -781,6 +806,11 @@ const accountRoutes = new Hono()
 	// carries the signal is the card's FUNDING TYPE, because issuers require the primary
 	// accountholder of a credit line to be 18. The distinction is the whole feature, and a
 	// sentence that blurs it is a false claim about how Anthers checks.
+	//
+	// 🚨 **And a card can be borrowed, which is why both routes that OPEN the rung answer to a
+	// guardian's maturity lock.** The funding check reads the card and the card may well be a
+	// parent's, so it is the account rather than the card that has to be refused. Only the two
+	// opening routes are locked; opting back out is left alone, since it only tightens.
 
 	.get("/me/adult-access", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
@@ -799,6 +829,7 @@ const accountRoutes = new Hono()
 	.post("/me/adult-access/setup", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 		const result = await beginAdultVerification(sessionUser.id, sessionUser.email ?? "");
+		if (result === "parental_locked") return c.json(PARENTAL_LOCKED, 403);
 		if (typeof result === "string") {
 			return c.json(
 				{ error: "We can't start that check right now. Please try again shortly." },
@@ -808,9 +839,16 @@ const accountRoutes = new Hono()
 		return c.json(result);
 	})
 
+	// 🚨 **The parental lock is checked inside `enableAdultAccess`, before the card is.** This
+	// route is the one the pin exists for: a borrowed credit card passes the funding check
+	// honestly, so the thing that has to refuse is the account rather than the card. It answers
+	// 403 like the content-preferences lock does, because a locked account is not a card
+	// problem and must not be offered a card as the remedy.
 	.post("/me/adult-access", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 		const result = await enableAdultAccess(sessionUser.id);
+
+		if (result === "parental_locked") return c.json(PARENTAL_LOCKED, 403);
 
 		if (typeof result === "string") {
 			// ⚠️ Each refusal gets its own sentence because each has a different remedy,
@@ -860,22 +898,16 @@ const accountRoutes = new Hono()
 			const sessionUser = c.get("user");
 			const data = c.req.valid("json");
 
-			// 🚨 **The parental lock, at the one route that can change these settings.** This
-			// is the whole point of the pin: the account holder may be a child, and a lock
-			// enforced only by hiding the controls in the browser would be lifted by anyone who
-			// opened the network tab. Refused rather than silently ignored — a setting that
-			// appears to save and does not is worse than one that says no.
-			const policy = await parentalPolicyFor(sessionUser.id);
-			if (policy.enabled && policy.lockMaturity) {
-				return c.json(
-					{
-						error: "These settings are locked. Ask whoever set the parental pin.",
-						code: "parental_locked",
-					},
-					403,
-				);
-			}
-			return c.json(await setMaturityDisplay(sessionUser.id, data));
+			// 🚨 **The parental lock, refused by the writer rather than by this route.** The
+			// pin's whole point is that the account holder may be a child, so a lock enforced
+			// only by hiding the controls in the browser would be lifted by anyone who opened
+			// the network tab — and a lock enforced only *here* was lifted by posting to
+			// `/me/adult-access` instead, which is the defect that moved it. Refused rather
+			// than silently ignored: a setting that appears to save and does not is worse than
+			// one that says no.
+			const result = await setMaturityDisplay(sessionUser.id, data);
+			if (result === "parental_locked") return c.json(PARENTAL_LOCKED, 403);
+			return c.json(result);
 		},
 	)
 

@@ -62,7 +62,8 @@ export interface ParentalPolicy {
 	/** Whether a pin has been set at all. Nothing below applies without one. */
 	enabled: boolean;
 	/**
-	 * Whether the content-rating display settings are locked.
+	 * Whether the content-rating settings are locked — the per-rung display preferences, and
+	 * the Adult opt-in that decides whether the account reaches the rung at all.
 	 *
 	 * 🚨 **Two switches, not one, and they are worth locking independently.** The scale runs
 	 * `general · mature · adult`, and a reader who wants difficult work unblurred has said
@@ -71,10 +72,13 @@ export interface ParentalPolicy {
 	 * content notes for the same reason: allowing intense horror and blurring substance use is
 	 * a real position.
 	 *
-	 * ⭐ **Adult already carries a second lock that has nothing to do with this panel**, and
-	 * the pin is not a replacement for it in either direction. Reaching that rung needs
-	 * adulthood verified by card funding type, so a teenager cannot get there by flipping a
-	 * setting — but a parent's credit card would pass, which is exactly the gap a pin closes.
+	 * 🚨 **The opt-in is what makes this a child-safety control rather than a display one, and
+	 * it was outside the lock until 2026-08-29.** Reaching Adult work needs adulthood verified
+	 * by card funding type, and a parent's credit card passes that check honestly — so the
+	 * borrowed card is the scenario the pin exists for, and the only thing that can refuse it
+	 * is the account. `services/content-preferences.ts` asks `maturityLocked` before every
+	 * write it makes, so both routes that open the rung are covered along with the display
+	 * settings; opting back *out* is left alone, since that only tightens.
 	 */
 	lockMaturity: boolean;
 	creators: ParentalList;
