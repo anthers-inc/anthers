@@ -93,9 +93,15 @@ export async function canBePaid(userId: number): Promise<boolean> {
  * different people: nobody has started, or Stripe is holding an account that exists. A
  * single "set up payouts" would send somebody already waiting on Stripe back to a form
  * they have already filled in.
+ *
+ * ⚠️ **The first one names a place, so the place has to be real.** It said *"Open Payouts in
+ * the Studio"* until 2026-08-29, and the Studio has no Payouts — the section is Payouts under
+ * Studio settings, which is also where Connect's own return leg now lands. A sentence sending
+ * somebody somewhere is a route reference that no test can follow, exactly like the
+ * `return_url` this was wrong alongside, so it is worth re-reading whenever either moves.
  */
 export function payoutRefusalMessage(standing: PayoutStanding): string {
 	return standing.connected
-		? "Your payout setup isn't finished — Stripe still needs something from you. Open Payouts in the Studio to see what, and you'll be able to release once it clears."
+		? "Your payout setup isn't finished — Stripe still needs something from you. Open Payouts under Studio settings to see what, and you'll be able to release once it clears."
 		: "Set up payouts before releasing your first Work. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you.";
 }

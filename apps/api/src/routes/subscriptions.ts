@@ -35,6 +35,7 @@ import {
 import { amountMeets, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { badgeViews } from "@anthers/shared/fees";
 import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
+import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -724,7 +725,7 @@ const subscriptionRoutes = new Hono()
 			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
 		const session = await stripe.billingPortal.sessions.create({
 			customer: customerId,
-			return_url: `${base}/subscription`,
+			return_url: `${base}${STRIPE_RETURN_PATHS.billingPortalReturn}`,
 		});
 		return c.json({ portalUrl: session.url });
 	})

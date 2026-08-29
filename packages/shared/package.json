@@ -16,6 +16,7 @@
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
 		"./next-path": "./src/next-path.ts",
+		"./redirect-paths": "./src/redirect-paths.ts",
 		"./signup": "./src/signup.ts",
 		"./figures": "./src/figures.generated.ts",
 		"./lexicons": "./src/lexicons.ts"

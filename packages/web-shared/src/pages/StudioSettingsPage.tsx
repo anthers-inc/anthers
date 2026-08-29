@@ -12,6 +12,20 @@ import BadgeLadderEditor from "../components/post/BadgeLadderEditor";
 import { apiFetch, client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
+/**
+ * Payouts — where Connect onboarding starts, and where Stripe returns somebody afterwards.
+ *
+ * 🚨 **This section is the destination of `STRIPE_RETURN_PATHS.connectReturn`, so the `stripe`
+ * parameter it reads is a contract with the API rather than a local detail.** The API pointed
+ * Connect's return leg at `/studio/payouts?onboarded=1` until 2026-08-29 — a route that has
+ * never existed, carrying a parameter nothing has ever read — so a creator who finished
+ * onboarding was returned to the `/:username` catch-all and shown a stranger's profile.
+ *
+ * ⚠️ **Called "Payouts" rather than "Stripe Payments" because that is what a creator is
+ * looking for.** Stripe is how it is done and the body says so; getting paid is the thing.
+ * `payoutRefusalMessage` sends a blocked creator to "Payouts under Studio settings", so the
+ * heading and that sentence have to keep agreeing.
+ */
 function StripeOnboardingSection() {
 	const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -44,7 +58,7 @@ function StripeOnboardingSection() {
 		return (
 			<div className="card bg-base-200">
 				<div className="card-body">
-					<h3 className="card-title text-lg">Stripe Payments</h3>
+					<h3 className="card-title text-lg">Payouts</h3>
 					<p className="text-sm text-base-content/60">Loading...</p>
 				</div>
 			</div>
@@ -57,7 +71,7 @@ function StripeOnboardingSection() {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Stripe Payments</h3>
+				<h3 className="card-title text-lg">Payouts</h3>
 
 				{stripeResult === "complete" && !isConnected && (
 					<div className="alert alert-info text-sm">

@@ -25,6 +25,7 @@ import {
 } from "@anthers/db/schema";
 import { MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
+import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -213,12 +214,19 @@ const paymentRoutes = new Hono()
 		}
 
 		// Return here after the hosted flow; the account.updated webhook syncs enablement.
+		//
+		// 🚨 **Both legs come from `STRIPE_RETURN_PATHS`, and typing one inline here is what
+		// went wrong.** They pointed at `/studio/payouts?onboarded=1` from the day they were
+		// written until 2026-08-29, and no such route has ever existed — the app's
+		// `/:username` catch-all rendered a stranger's profile instead of a 404, so a creator
+		// finishing onboarding landed somewhere plausible and wrong. Nothing could catch it:
+		// this string is handed to Stripe and never navigated by us.
 		const base =
 			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
 		const link = await stripe.accountLinks.create({
 			account: accountId,
-			refresh_url: `${base}/studio/payouts?refresh=1`,
-			return_url: `${base}/studio/payouts?onboarded=1`,
+			refresh_url: `${base}${STRIPE_RETURN_PATHS.connectRefresh}`,
+			return_url: `${base}${STRIPE_RETURN_PATHS.connectReturn}`,
 			type: "account_onboarding",
 		});
 
