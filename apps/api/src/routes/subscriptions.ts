@@ -32,7 +32,14 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
-import { amountMeets, heldBadgeName, supportAmount } from "@anthers/shared/constants";
+import {
+	amountMeets,
+	CHARGEABLE_AMOUNT_MESSAGE,
+	heldBadgeName,
+	isChargeableAmount,
+	STRIPE_MIN_CHARGE,
+	supportAmount,
+} from "@anthers/shared/constants";
 import { badgeViews } from "@anthers/shared/fees";
 import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
@@ -97,9 +104,11 @@ const MAX_ANTHERS_SUPPORT = 300;
  * fee actually argues for is a minimum total, which is here, and a creator may set a $1
  * Badge without it costing anyone a third of it.
  *
- * $0.50 because that is Stripe's own minimum charge; going lower is not ours to choose.
+ * It **is** Stripe's own minimum charge rather than a number chosen to match it, which is why
+ * it is `STRIPE_MIN_CHARGE` and not a literal: going lower is not ours to choose, and the
+ * same vendor rule is what floors a creator's own amounts.
  */
-const MIN_INVOICE_TOTAL = 0.5;
+const MIN_INVOICE_TOTAL = STRIPE_MIN_CHARGE;
 
 /** The Badge ladder (Free … Blossom), each with its monthly amount + decomposition. Shared
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
@@ -477,7 +486,10 @@ const subscriptionRoutes = new Hono()
 					.array(
 						z.object({
 							creatorId: z.number().int(),
-							amount: z.number().min(0.5).max(MAX_ANTHERS_SUPPORT),
+							// 🚨 Stripe's floor, not a granularity floor. A directed amount can be
+							// any level at all above it; what it cannot be is the unpayable gap
+							// between zero and a charge the processor will not accept.
+							amount: z.number().min(STRIPE_MIN_CHARGE).max(MAX_ANTHERS_SUPPORT),
 						}),
 					)
 					.max(50)
@@ -1204,7 +1216,15 @@ const subscriptionRoutes = new Hono()
 				// gate was one no viewer could exactly meet, since Seeds were indivisible. The
 				// unit went and so did the reasoning: refusing "9.50" now rejects the levels a
 				// creator is most likely to set. Cents, because that is what can be charged.
-				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
+				// 🚨 And floored at Stripe's minimum, because a Badge level is a level of
+				// monthly support somebody has to be able to fund. `directed[].amount` refuses
+				// anything between zero and that floor, so a $0.25 Badge is a rung no viewer
+				// can climb — the creator would find out through a supporter failing rather
+				// than through their own editor.
+				threshold: z
+					.string()
+					.regex(/^\d+(\.\d{1,2})?$/)
+					.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE }),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
 				gateType: z.enum(["seed", "anthers_badge"]).optional().default("seed"),
@@ -1237,6 +1257,7 @@ const subscriptionRoutes = new Hono()
 				threshold: z
 					.string()
 					.regex(/^\d+(\.\d{1,2})?$/)
+					.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE })
 					.optional(),
 				label: z.string().min(1).max(100).optional(),
 				description: z.string().max(1000).optional(),

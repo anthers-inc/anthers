@@ -43,6 +43,7 @@ import {
 	workPages,
 	works,
 } from "@anthers/db/schema";
+import { CHARGEABLE_AMOUNT_MESSAGE, isChargeableAmount } from "@anthers/shared/constants";
 import {
 	COMMENT_MAX,
 	type CommentSubjectType,
@@ -340,9 +341,23 @@ const accessRowSchema = z.object({
 			{
 				message: "Threshold must be a whole number of cents",
 			},
-		),
+		)
+		// 🚨 A threshold is a level of monthly support a viewer must be giving, and a level
+		// nobody can fund is a rung nobody can climb — `directed[].amount` refuses anything
+		// between zero and Stripe's minimum, so a $0.25 gate is unreachable by construction.
+		// The baseline row sits at 0 and must stay legal, which is why this is the "$0 or at
+		// least the floor" predicate rather than a minimum.
+		.refine(isChargeableAmount, { message: CHARGEABLE_AMOUNT_MESSAGE }),
 	allow: z.boolean(),
-	price: z.string().regex(MONEY),
+	// 🚨 **The floor sits on the PRICE, never on the buyer's total.** `calculateFees` adds
+	// sales tax on top, so flooring the total would make a $0.47 Work purchasable in a taxed
+	// jurisdiction and not in an untaxed one — and `SALES_TAX_RATE` is an illustrative rate
+	// rather than a real per-jurisdiction one, so the boundary would move with a figure that
+	// is not even claimed to be accurate.
+	price: z
+		.string()
+		.regex(MONEY)
+		.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE }),
 });
 
 const seedAccessRowSchema = accessRowSchema;

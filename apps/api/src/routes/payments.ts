@@ -23,7 +23,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
-import { MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
+import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import Decimal from "decimal.js";
@@ -78,6 +78,23 @@ async function resolvePurchase(slug: string, userId: number) {
 	const amount = new Decimal(access.price);
 	if (amount.lte(0))
 		return { ok: false as const, status: 400 as const, error: "This work is free" };
+
+	// 🚨 **A price the processor will not accept, caught here rather than at Stripe.** The
+	// validators refuse a sub-floor price on the way in, but a Work priced before that
+	// shipped is still a row in the database — and without this the failure surfaces as a
+	// PaymentIntent error at checkout, to the buyer, about somebody else's pricing. Nothing
+	// rewrites the creator's number: raising a price on their behalf is not ours to do, and
+	// the next edit of that Work is refused with the same sentence.
+	if (!isChargeableAmount(amount.toNumber()))
+		return {
+			ok: false as const,
+			status: 409 as const,
+			// Says what is true and nothing more. Nothing here notifies the creator, so the
+			// message must not imply that anything has — a sentence that invents a
+			// notification is a worse defect than the price it is explaining.
+			error:
+				"This work is priced below what a card payment can process, so it can't be bought right now. Only the creator can change that.",
+		};
 
 	// All-in list price: card processing comes OUT of the price, sales tax is added on
 	// top, and Anthers keeps $0 (the purchase fee was removed 2026-08-03, the delivery
