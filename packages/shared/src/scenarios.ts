@@ -289,11 +289,11 @@ export function creatorReceipt(grossEarnings = 1575, libraryGiB = 69) {
  * the card fee does not scale with it.
  *
  * 🚨 **It is `growth.ts`'s mix now, and that unification was the point** (2026-08-16).
- * This was four hand-typed shares — `{1: .5, 2: .3, 3: .15, 4: .05}`, average 1.75 Seeds
- * — while the growth ladder ran on a geometric decay averaging 2.20. Two mixes meant two
- * **floor paying shares** in circulation (10.3% here, 8.8% there), and 61.01 had to carry
- * a warning naming which one governed. That is the same defect as a typed figure beside a
- * generated one, wearing different clothes: two descriptions of one fact, drifting.
+ * 🚨 **One mix, and there were two in circulation once.** A hand-typed set here and a
+ * geometric decay in the growth ladder put two different **floor paying shares** into
+ * published documents, and 61.01 had to carry a warning naming which one governed. That
+ * is a typed figure beside a generated one wearing different clothes: two descriptions of
+ * one fact, drifting.
  */
 export const PAYING_BADGE_MIX: Record<number, number> = payingBadgeMix();
 
@@ -591,11 +591,10 @@ export function payingShareSensitivity() {
 /**
  * Average monthly support per payer, for the flattening-risk sweep.
  *
- * ⚠️ **These were Seed COUNTS (4.65 / 3.04 / 1.67 / 1.25) until 2026-08-16** and are the
- * same points re-denominated at $3 a rung, so every landmark below is unchanged and only
- * the published axis label moved. Re-denominating rather than re-choosing is deliberate:
- * the rows are a comparison against 61.01's recorded sensitivity, and picking new round
- * numbers would have quietly broken that comparison while looking tidier.
+ * ⚠️ **Dollars, and deliberately not round ones.** They are 61.01's recorded landmarks
+ * re-denominated rather than re-chosen, because these rows exist to be compared against
+ * that recorded sensitivity — picking tidier numbers would have quietly broken the
+ * comparison while looking like an improvement.
  */
 export const MIX_AVERAGES = [13.95, 9.12, 5.01, 3.75];
 

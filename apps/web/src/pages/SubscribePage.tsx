@@ -47,12 +47,11 @@
 // forever" and the cap to be co-present in the same breath; this page now does it in the
 // first thing anybody sees.
 //
-// 🚨 Steps 1 and 2 were the other way round until 2026-08-17, and creator support was not
-// mentioned until the third section. That order was a relic of the model where support for
-// Anthers bought streaming bandwidth generally, so it was the thing every visitor needed.
-// It buys Public Access now and nothing else; early visitors arrive at the invitation of a
-// creator already here, and with few creators there is little Public Access to want yet.
-// So the creator ask leads and the Anthers ask follows it.
+// 🚨 **The creator ask leads and the Anthers ask follows it, and that is a product
+// decision rather than a layout one.** Support for Anthers buys Public Access and nothing
+// else; early visitors arrive at the invitation of a creator already here, and with few
+// creators there is little Public Access to want yet. Reordering these two is a change to
+// what the funnel is for — see the same note on `/`.
 //
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
@@ -78,11 +77,10 @@
 //     inline post unlock uses.
 //   • Following commits for real.
 //   • Support for a CREATOR rides on the SAME subscription as the Anthers one — ONE ITEM
-//     PER DESTINATION, itemised, so the invoice names them. ⚠️ This described a shared
-//     *quantity* until 2026-08-16 ("one to Anthers and one each to two creators is quantity
-//     3 at $9/month"); the Seed retirement replaced that with N items carrying their own
-//     amounts, because a quantity can only express multiples of one unit. The split rides
-//     in subscription metadata; see `anthersSupportFromSub` in services/billing.ts.
+//     PER DESTINATION, itemised, so the invoice names them. ⚠️ **Never collapse these back
+//     into a quantity**: a quantity can only express whole multiples of one price, and
+//     amounts are free to the cent. The split rides in subscription metadata; see
+//     `anthersSupportFromSub` in services/billing.ts.
 //     (`POST /subscriptions/seeds/buy` also exists as a one-off top-up of the creator
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
 //     nothing in the UI calls it.)
@@ -2145,7 +2143,7 @@ export default function SubscribePage() {
 	 *
 	 * They agreed, so nothing was visibly wrong — but the page's summary said
 	 * `(anthers + creators) × price` while the charge said `1 + creators`, and only the
-	 * second one was broken by the Seed retirement. A page that computes what it shows and
+	 * second one broke when the unit changed under it. A page that computes what it shows and
 	 * what it bills by different routes is one edit away from showing a number it does not
 	 * charge, which is the exact failure the confirmation ceremony exists to prevent.
 	 *

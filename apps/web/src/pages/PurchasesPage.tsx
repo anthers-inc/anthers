@@ -88,9 +88,8 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 	const to =
 		p.work?.publicId != null ? workUrl({ slug: p.work.slug, publicId: p.work.publicId }) : null;
 
-	// 🚨 Support has no title of its own, so it is named by its amount. It divided by
-	// $3 and rendered a COUNT until 2026-08-16 — which was already wrong by then, because
-	// any amount is payable: $7.50 of support rendered as "3 Seeds", and $1 as "0 Seeds".
+	// 🚨 Support has no title of its own, so it is named by its **amount**, never by a
+	// count of anything. Any amount is payable, so there is no unit a count could be in.
 	const label =
 		p.type === "seeds" ? `${amountLabel(p.amount)} of support` : (p.work?.title ?? "Untitled");
 

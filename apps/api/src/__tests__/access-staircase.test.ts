@@ -66,7 +66,7 @@ type PostKey = string;
  * cycle**, and it is the only viewer fact gate resolution reads besides purchases.
  *
  * The staircase row's `anthersSupport` is deliberately NOT passed: there is nowhere to put
- * it. Since Anthers Gates were retired the Badge cannot reach resolution at all, which is
+ * it. A Badge cannot reach resolution at all, which is
  * a stronger statement than any assertion — the same shape as `following`.
  */
 function ctx(givenAmount: number, purchased: number[] = []): AccessContext {

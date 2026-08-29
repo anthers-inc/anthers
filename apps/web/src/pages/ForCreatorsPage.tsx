@@ -5,21 +5,20 @@
 // Sans, wrapped in the shared <MeadowDecor> (pollen + woven side vines); the
 // shared LoggedOutLayout supplies the Meadow footer + grassy floor.
 //
-// Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one primitive,
-// a monthly amount, pointed either at a creator (no platform cut, clearing that creator's
-// gates at whatever amounts they set) or at Anthers (half into the Time Pool and a
-// remainder funding free access and the charitable programs). A fan's Badge IS the amount
-// they give Anthers (Root → Blossom = $3 → $12, "+" beyond). ⚠️ The **$3 Seed unit retired
-// 2026-08-16** — there is no unit and no granularity floor, so never write a level as a
-// count of anything. There is no bandwidth line either: delivery costs $0 at any volume,
-// so downloads are unlimited and free on both sides.
+// Copy tracks the SUPPORT MODEL: one primitive, a monthly amount, pointed either at a
+// creator (no platform cut, clearing that creator's gates at whatever amounts they set) or
+// at Anthers (half into the Time Pool and a remainder funding free access and the
+// charitable programs). A fan's Badge IS the amount they give Anthers (Root → Blossom =
+// $3 → $12, "+" beyond). ⚠️ **Never write a level as a count of anything** — there is no
+// unit and no granularity floor — and there is no delivery line to write either, since
+// delivery costs $0 at any volume and downloads are unlimited and free on both sides.
 //
-// 🚨 Corrected 2026-08-14 — this page sold **Anthers Gates**, retired 2026-08-12. There
-// is one gate primitive and it points only at you: your work is behind one of YOUR gates
-// or it is Public Access, with no Badge threshold in between, and a fan's Anthers Badge
-// opens nothing. What support for Anthers does is lift that fan's monthly Public Access
-// limit (at the Public Access price) and grow their Time Pool (at every level). The free tier is bounded —
-// FREE_PUBLIC_ACCESS_HOURS a month — so never write streaming as unlimited for everyone.
+// 🚨 **There is one gate primitive and it points only at you.** Your work is behind one of
+// YOUR gates or it is Public Access, with no Badge threshold in between, and a fan's
+// Anthers Badge opens nothing. What support for Anthers does is lift that fan's monthly
+// Public Access limit (at the Public Access price) and grow their Time Pool (at every
+// level). The free tier is bounded — FREE_PUBLIC_ACCESS_HOURS a month — so never write
+// streaming as unlimited for everyone.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
 // ① direct support (what fans give you + direct sales) carries no platform cut — the
@@ -887,12 +886,11 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
 /**
  * The monthly-support scenario, and the basis every rival row is scaled to.
  *
- * 🚨 **This silently became $2.** It was `PUBLIC_ACCESS_PRICE * SEED_COUNT` — two whole
- * Seeds, $6 — and the retirement pass dropped the multiplication but left `SEED_COUNT = 2`
- * behind, so the page computed a **$2** scenario while every sentence around it still said
- * $6, including the note that told the reader rival figures were "all-in take-home at the
- * same $6". A comparison table whose stated basis disagrees with its own numbers is worse
- * than one with no basis at all.
+ * 🚨 **A basis that disagrees with its own numbers is worse than no basis at all**, and
+ * this page shipped one: a stray multiplier left behind by a rename made it compute a $2
+ * scenario while every sentence around it said $6, including the note telling the reader
+ * rival figures were all-in take-home at the same $6. Nothing caught it, because a
+ * scenario basis is arithmetic rather than a typed figure `econ:figures` can see.
  *
  * Two Public Access prices is the editorial choice, so it is written as that rather than
  * as a bare 6 — the figure moves if the price does.

@@ -447,7 +447,7 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 // ── A Badge opens nothing ───────────────────────────────────────────────────
 /**
  * 🚨 Four tests climbed Root → Blossom here until 2026-08-12, each asserting that exactly
- * one more post unlocked. **Anthers Gates are retired**, so the replacement asserts the
+ * one more post unlocked. A Badge opens nothing, so the replacement asserts the
  * opposite and is the more important of the two: the top Badge, held for real, changes
  * nothing about any Work.
  *
@@ -486,12 +486,10 @@ test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 /**
  * The walk TYPES each amount rather than clicking to it.
  *
- * 🚨 It clicked once per Seed until 2026-08-16, which worked only because every state was
- * a whole $3 step above the last. With amounts free the stepper's arrows are a $1
- * convenience, and the ladder's `$9.50` rung **cannot be reached by clicking at all** — so
- * a click-driven walk would silently stop covering the one rung that guards the float
- * comparison. Filling the field is also closer to what a supporter choosing an amount
- * actually does.
+ * 🚨 **Never make this click to an amount.** The stepper's arrows are a $1 convenience and
+ * the ladder's `$9.50` rung **cannot be reached by clicking at all**, so a click-driven
+ * walk would silently stop covering the one rung that guards the float comparison. Filling
+ * the field is also closer to what a supporter choosing an amount actually does.
  *
  * ⭐ **The ladder is sparse, so some states land BETWEEN rungs and must unlock nothing.**
  * That is the point of walking every state rather than only the rungs: a surface comparing

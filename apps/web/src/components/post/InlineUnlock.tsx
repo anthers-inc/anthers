@@ -6,8 +6,7 @@
  * Badges page, this names the *exact minimum upgrade* that opens it — the lowest Badge rung
  * that clears the gate — right where the viewer hit it.
  *
- * ⚠️ **There is one route out of a gate and there has been since Anthers Gates were
- * retired.** A second branch offering to clear it by giving Anthers more survived here until
+ * ⚠️ **There is exactly one route out of a gate: the creator's own ladder.** A second branch offering to clear it by giving Anthers more survived here until
  * 2026-08-29, complete with an inline subscribe flow and a confirmation modal — it read
  * `access.unlock.anthers`, which the server has never emitted since `UnlockOffer` lost that
  * field. It typechecked because the *client* type still declared it, which is the whole
@@ -28,7 +27,7 @@ import { LockClosedIcon, UserPlusIcon } from "@heroicons/react/24/solid";
 
 /** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
 function seedsToGo(moreNeeded: number): string {
-	// ⚠️ A MONEY amount, since 2026-08-16 — it was a Seed count. Rendering it as a count
+	// ⚠️ **A MONEY amount, never a count.** Rendering it as a count
 	// would be wrong in two directions at once now: there is no unit to count, and a
 	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
 	return `$${moreNeeded.toFixed(2)} more`;

@@ -7,11 +7,7 @@
  * destination, each carrying its own amount). What they direct at creators is tracked in
  * `seed_allocations`; `creatorSupportTotal` is the balance they direct from.
  *
- * ⚠️ This block was left **half-edited** by the retirement until 2026-08-19: the noun
- * became "amount" while the next clause still read "that **count** is their rank … at $3
- * each … a single $3 Seed price × quantity". It also named `creatorSeedTotal`, which does
- * not exist.
- * There is no bandwidth line — delivery is free at any volume. This file also
+ * There is no delivery line — delivery is free at any volume. This file also
  * serves time (attention) tracking, pool distributions, creator gates, and access.
  */
 
@@ -86,11 +82,10 @@ import { resolveShareToken } from "../services/share-links.js";
  * about the ladder and this is about a request. Note `/seeds/buy` uses a different bound
  * again — left alone here, but the roadmap carries a milestone for reconciling them.
  *
- * ⚠️ A stranded one-line docblock sat directly above this one until 2026-08-19, reading
- * *"Max Anthers-Seeds a single subscription can hold"* — the pre-retirement description of
- * the same constant, left behind when the real block was written above the rename. Two
- * docblocks on one declaration is a shape worth noticing: the compiler takes the nearest
- * and the reader takes the first.
+ * ⚠️ **Two docblocks on one declaration is a shape worth noticing**, because this
+ * declaration carried a stale second one for months: the compiler takes the nearest and
+ * the reader takes the first, so a rewrite placed above an old block leaves both live and
+ * only one of them read.
  */
 const MAX_ANTHERS_SUPPORT = 300;
 
@@ -365,7 +360,7 @@ const subscriptionRoutes = new Hono()
 	// ── Preview a monthly amount to Anthers (no charge) — powers the confirmation modal ──
 	.get("/preview/:amount", requireAuth, async (c) => {
 		const user = c.get("user");
-		// ⚠️ NOT `Number.isInteger`. Amounts carry cents since the Seed retired as a unit,
+		// ⚠️ **NOT `Number.isInteger`.** Amounts carry cents,
 		// so an integer check here would refuse to preview any amount a creator's own
 		// ladder can actually sit at.
 		const target = supportAmount(c.req.param("amount"));
@@ -1007,13 +1002,10 @@ const subscriptionRoutes = new Hono()
 	// **Amounts are dollars, at any level, to the cent.** The API does not reject
 	// non-multiples of anything, because there is no unit left to be a multiple of.
 	//
-	// ⚠️ This comment was left **half-edited** by the 2026-08-16 retirement and said:
-	// "Amounts are whole Seeds: a Seed is an indivisible $3 unit, so an allocation is any
-	// amount at all — the API no longer rejects non-multiples, because silently storing a
-	// fraction of a Seed." The premise is the old model, the conclusion is the new one,
-	// and the last clause has no predicate at all. Worth keeping as a marker: a sweep
-	// that rewrites the end of a sentence and not its beginning leaves prose that reads
-	// as considered and asserts both models at once.
+	// ⚠️ **A sweep that rewrites the end of a sentence and not its beginning leaves prose
+	// that reads as considered and asserts two models at once**, which is what stood here
+	// for three days: an old premise, a new conclusion, and a final clause with no
+	// predicate left in it at all. Re-read a whole paragraph when a rule under it moves.
 	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();

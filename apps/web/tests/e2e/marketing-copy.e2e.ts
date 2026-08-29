@@ -2,12 +2,11 @@
 //
 // The marketing pages, checked at the RENDERED level for claims that are no longer true.
 //
-// 🚨 Why this exists, and why it is not redundant with `econ:figures --check`. On
-// 2026-08-14 four marketing pages still sold **Anthers Gates** (retired 2026-08-12) and
-// promised unlimited streaming to a free account whose Public Access is capped monthly.
-// Every one of those pages carried a *correct* money figure, so the figure scan was
-// silent — a retired mechanism carries no wrong number, and that is exactly its blind
-// spot. The source-level `RETIRED_COPY` rules now catch the phrasings we know about;
+// 🚨 Why this exists, and why it is not redundant with `econ:figures --check`. Four
+// marketing pages once sold a mechanism that had been deleted, and promised unlimited
+// streaming to a free account whose Public Access is capped monthly. Every one of them
+// carried a *correct* money figure, so the figure scan was silent — **a retired mechanism
+// carries no wrong number**, and that is exactly its blind spot. The source-level `RETIRED_COPY` rules now catch the phrasings we know about;
 // this file catches the claim wherever it is *assembled*, including from a constant or a
 // prop the source scan reads as an identifier rather than a sentence.
 //
@@ -51,7 +50,7 @@ test.describe("marketing copy tells the truth about access", () => {
 		test(`${path} sells no retired gate`, async ({ page }) => {
 			const text = await copy(page, path);
 
-			// Anthers Gates are retired: one gate primitive, pointed only at a creator.
+			// One gate primitive, pointed only at a creator.
 			expect(text).not.toMatch(/Anthers[- ]gates?\b(?!\s+nothing)/i);
 			expect(text).not.toContain("Anthers-gated");
 

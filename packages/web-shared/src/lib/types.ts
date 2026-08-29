@@ -58,9 +58,9 @@ export interface Creator {
  * `threshold` is **monthly dollars**: what the viewer gives Anthers for the Anthers table,
  * what they direct at this creator for the creator table. 0 = everyone.
  *
- * ⚠️ It said "whole Seeds" until 2026-08-19 — the same wrong claim that had the dev seeder
- * building every gate at a third of its value. The column is `numeric` and the resolver
- * compares dollars to the cent.
+ * ⚠️ The column is `numeric` and the resolver compares dollars **to the cent**. A comment
+ * here once claimed whole units, and the dev seeder built every gate at a third of its
+ * value on the same misreading.
  */
 export interface AccessRow {
 	threshold: number;
@@ -88,7 +88,7 @@ export interface UnlockRoute {
  * How a gated post could be opened. Null = there is no way in short of a purchase.
  *
  * 🚨 **One route, matching the server's `UnlockOffer` exactly, and it did not until
- * 2026-08-29.** This declared an `anthers` route alongside — the way out of an Anthers Gate —
+ * 2026-08-29.** This declared a second, platform-side `anthers` route alongside —
  * which the server stopped emitting when those were retired on 2026-08-12. The field kept a
  * whole branch of `InlineUnlock` compiling, complete with an inline subscribe flow that could
  * never run, because a client type is not checked against the server's. **A hand-written
@@ -618,7 +618,7 @@ export interface BadgeView {
  * directed to creators.
  *
  * `bandwidthUsedGiB` is a **dead column**. It metered stream consumption against a
- * per-Seed allowance until 2026-08-12; delivery is free, nothing writes it, and it
+ * consumption against an allowance; delivery is free, nothing writes it, and it
  * stays only because dropping it is a migration of its own.
  */
 export interface Account {
@@ -627,12 +627,11 @@ export interface Account {
 	/**
 	 * Monthly $ given to Anthers, as a **money string** — this is the raw row.
 	 *
-	 * 🚨 It was `anthersSeeds: number` (a count) until 2026-08-16, and a blanket rename
-	 * would have left it typed `number` against a `numeric` column that arrives as
-	 * "3.00". That is the shape that produces a silently wrong comparison — `"3.00" >= 3`
-	 * is true by coercion, `"10.00" >= 9` is FALSE by string ordering — so the type has to
-	 * say string and callers have to parse. `AccountResponse.anthersSupport` is the parsed
-	 * number beside it, which is why both exist.
+	 * 🚨 **String, not number, and typing it `number` produces a silently wrong
+	 * comparison.** A `numeric` column arrives as `"3.00"`: `"3.00" >= 3` is true by
+	 * coercion and `"10.00" >= 9` is **false** by string ordering. So the type says string
+	 * and callers parse. `AccountResponse.anthersSupport` is the parsed number beside it,
+	 * which is why both exist.
 	 */
 	anthersSupport: string;
 	creatorSupportTotal: string;

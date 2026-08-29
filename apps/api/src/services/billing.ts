@@ -8,14 +8,12 @@
  * invoice and one charge. That is Billing Cycle and Arrears Model's fully prepaid monthly charge, and it is also
  * what amortises the fixed $0.30 across every creator on it.
  *
- * 🚨 **This was ONE item with `quantity` = the total Seed count until 2026-08-16**, with
- * the Anthers/creator split riding in subscription metadata. Arbitrary amounts ended that:
- * a quantity of a shared unit cannot express $2.50, and the unit itself retired. What must
- * survive the change is the LESSON PR #223 paid for — a number read as if it meant
- * something else, with no error anywhere. That hazard has not gone, it has moved: the
- * amounts are now structural and legible on the invoice, but **which destination an item
- * belongs to is still a stamp**, and reading an item's amount without checking its
- * `destination` metadata funds the wrong Time Pool exactly as silently as before.
+ * 🚨 **One item per destination, never one item with a quantity**, because a quantity of a
+ * shared unit cannot express $2.50. The hazard that shape carried has not gone, it has
+ * moved: the amounts are structural and legible on the invoice now, but **which
+ * destination an item belongs to is still a stamp**, and reading an item's amount without
+ * checking its `destination` metadata funds the wrong Time Pool exactly as silently as a
+ * misread quantity did — a number taken to mean something else, with no error anywhere.
  * `splitFromSub` is the one place that check lives.
  *
  * The DB follows Stripe: subscription webhooks are the source of truth for both halves,

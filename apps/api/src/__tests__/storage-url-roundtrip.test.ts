@@ -4,13 +4,11 @@
  *
  * Two jobs.
  *
- * **1. Prove the configuration is REQUIRED rather than guessed.** This file was written to
- * prove the opposite — that every default reproduced the old hard-coded DigitalOcean Spaces
- * string exactly, so making the provider configurable was a no-op. That property did its
- * job and expired with the migration: Spaces is gone, and the `nyc3` region default it
- * pinned is the specific value that made every Cloudflare R2 call fail. The defaults are
- * removed, so what needs pinning now is that a half-configured environment fails loudly at
- * boot instead of on the first upload.
+ * **1. Prove the configuration is REQUIRED rather than guessed.** ⚠️ This file once pinned
+ * the opposite — that every default reproduced a working URL for the provider of the day —
+ * and that property became the defect: the region default it pinned is the specific value
+ * that made every Cloudflare R2 call fail. What needs pinning is that a half-configured
+ * environment fails loudly at boot instead of on the first upload.
  *
  * **2. Pin the invariant `urlToKey(getUrl(key)) === key`.** Absolute URLs are persisted —
  * playlists, HLS manifests, processed audio and some thumbnails go into the database as

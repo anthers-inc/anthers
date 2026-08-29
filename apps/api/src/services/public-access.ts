@@ -17,7 +17,7 @@
  *      viewer consume this Work", which for Public Access is unconditionally yes — the
  *      Work is free to everyone, and it stays free to everyone. What runs out is the
  *      *account's* monthly allowance. Encoding it as a Work-level denial is how the
- *      commons quietly becomes stratified again, which is the thing retiring Anthers Gates
+ *      commons quietly becomes stratified again, which is the thing this rule
  *      was for.
  *
  * So a Work never reports itself gated by the meter. Bytes are withheld at the endpoints

@@ -82,7 +82,7 @@ function paidAccess(price: string) {
 }
 
 /**
- * Seed-gated: locked for everyone at the baseline, then unlocked (free) once the viewer
+ * Creator-gated: locked for everyone at the baseline, then unlocked (free) once the viewer
  * has given `threshold` monthly dollars to the creator this cycle.
  */
 function seedGatedAccess(threshold: number) {
@@ -99,31 +99,29 @@ function nextPublicId(): number {
 	return publicIdSeq++;
 }
 
-// A few posts exercise the non-free access paths (everything else streams free):
-// two creator-gate levels, at the higher and the lower threshold (see the note at the
-// insert: the higher set was Anthers-gated until Anthers Gates retired on 2026-08-12).
-const ANTHERS_GATED_POSTS = new Set<string>([
+// A few posts exercise the non-free access paths (everything else streams free), at the
+// creator's higher and lower gate levels. The demo wants a ladder with more than one step.
+const HIGH_GATED_POSTS = new Set<string>([
 	"The Myth of the Neutral Platform",
 	"Signal Return Postmortem — 72 Hours of Panic",
 ]);
-const SEED_GATED_POSTS = new Set<string>([
+const GATED_POSTS = new Set<string>([
 	"How I Design Pixel Art Tilesets",
 	"How I Build Reactive Visuals with Three.js",
 ]);
 /**
  * Monthly dollars a viewer must give a creator to clear a gated post.
  *
- * 🚨 **These were `1` and `2` until 2026-08-18, and by then that meant $1 and $2.**
- * They were written as *whole Seeds* — correct while `threshold` counted Seeds — and
- * migration `0041` turned the column back into dollars (× 3) without touching the
- * seeder, which writes fresh rows every run. So `db:seed` produced a demo ladder at a
- * third of its intended rungs, with labels ("Patron", "Producer") implying otherwise.
- * The same slip as the six `thresholdForBadge()` call sites: nothing type-errors,
- * because a count and an amount are both `number`.
+ * 🚨 **A migration rewrites existing ROWS; a seeder writes new ones.** When this column's
+ * meaning changed, the migration converted what was already stored and this file kept
+ * emitting the old scale — so `db:seed` built a demo ladder at a third of its intended
+ * rungs, with labels implying otherwise, and nothing type-errored because both scales are
+ * `number`. **Any migration that changes what a column means has to be followed here by
+ * hand.**
  */
-const SEED_GATE_THRESHOLD = 3;
-/** The second rung, for posts that were Anthers-gated before 2026-08-12. */
-const SEED_GATE_THRESHOLD_HIGH = 6;
+const GATE_THRESHOLD = 3;
+/** The second rung, so the demo ladder has more than one step. */
+const GATE_THRESHOLD_HIGH = 6;
 
 // ---------------------------------------------------------------------------
 // Seed data definitions
@@ -147,13 +145,12 @@ interface SeedProject {
 	/**
 	 * `"free"` or `"paid"`.
 	 *
-	 * 🚨 A third value, `"pwyw"`, lived here until 2026-08-16 with `minPrice` and
-	 * `suggestedPrice` beside it — **for a mechanism this platform has never had.**
-	 * `resolvePurchase` charges the stored price and checkout sends no amount, so there
-	 * was nothing for a minimum to be a minimum of. Its branch below read `minPrice`,
-	 * which was `"0.00"` on both works that used it, so the two seeded as free and the
-	 * suggested price was thrown away — a fiction that quietly did nothing, in the file a
-	 * developer reads to learn what the model supports.
+	 * 🚨 **Two values, and never invent a third for a mechanism the platform lacks.** A
+	 * pay-what-you-want type lived here once, with a minimum and a suggested price beside
+	 * it, for something `resolvePurchase` cannot do — it charges the stored price and
+	 * checkout sends no amount, so there was nothing for a minimum to be a minimum of. It
+	 * seeded as free and threw the rest away: a fiction that quietly did nothing, in the
+	 * file a developer reads to learn what the model supports.
 	 */
 	pricingType: string;
 	price?: string;
@@ -642,9 +639,9 @@ function buildAttentionEvents(
  * current-cycle `account_cycle` snapshot. The cycle's Time Pool and remainder are
  * derived from that amount via `anthersSupportBreakdown`.
  *
- * Stream usage was a third input until 2026-08-12 — it priced the account's
- * bandwidth against its allowance — and is gone with the per-GiB charge. The
- * `bandwidth_used_gib` columns still exist and default to 0; nothing writes them.
+ * ⚠️ The `bandwidth_used_gib` columns still exist and default to 0. **Nothing writes
+ * them** — delivery is not metered — and they remain only because dropping them is a
+ * migration of its own.
  */
 async function seedAccountAndCycle(params: {
 	userId: number;
@@ -879,7 +876,7 @@ async function seed() {
 
 	// ---- 3. Create text/stream posts ----
 	// Former stream posts stay posts: stream-only. Most are free; a few named posts are
-	// Anthers-gated or Seed-gated (see the sets above) to exercise the entitlement paths.
+	// gated at one of the two levels above, to exercise the entitlement paths.
 	console.log("Creating seed posts...");
 	for (const [username, creatorPosts] of Object.entries(POSTS_BY_CREATOR)) {
 		const creatorId = createdUserIds[username];
@@ -900,14 +897,11 @@ async function seed() {
 				continue;
 			}
 
-			// Two Seed-Gate levels plus Public Access. The first set was Anthers-gated until
-			// 2026-08-12 — "any paid Badge streams it free" — and Anthers Gates are retired,
-			// so it became the creator's higher rung rather than disappearing: the demo still
-			// wants a ladder with more than one step on it.
-			const access = ANTHERS_GATED_POSTS.has(post.title)
-				? seedGatedAccess(SEED_GATE_THRESHOLD_HIGH)
-				: SEED_GATED_POSTS.has(post.title)
-					? seedGatedAccess(SEED_GATE_THRESHOLD)
+			// Two creator-gate levels plus Public Access.
+			const access = HIGH_GATED_POSTS.has(post.title)
+				? seedGatedAccess(GATE_THRESHOLD_HIGH)
+				: GATED_POSTS.has(post.title)
+					? seedGatedAccess(GATE_THRESHOLD)
 					: freeAccess();
 
 			// Gating applies to a WORK, so the prose becomes a text Work carrying the gate,
@@ -1083,12 +1077,9 @@ async function seed() {
 	// Gate definitions per creator — the creator's advertised ladder. `threshold` is
 	// **monthly dollars given to this creator this cycle**.
 	//
-	// 🚨 This column has now changed meaning twice, and the seeder followed it late both
-	// times. Migration 0007 made it whole Seeds, so on 2026-08-12 these were divided by
-	// SEED_PRICE and restated as Seeds ("1", "2"). Migration `0041` retired the unit and
-	// converted the column back to dollars (× 3) — but a migration rewrites existing
-	// ROWS, and a seeder writes new ones, so from 2026-08-16 `db:seed` built every gate
-	// at a third of its rung. Restored × 3 on 2026-08-18.
+	// 🚨 **A migration rewrites existing ROWS and a seeder writes new ones**, so this file
+	// has been left behind twice by a change to what this column means. See the same note
+	// on `GATE_THRESHOLD` above.
 	//
 	// ⚠️ A gate may sit at any amount, to the cent — $7.50 is as legal as $9. These are
 	// round because they are a demo ladder, not because a floor exists; the gauntlet

@@ -9,11 +9,10 @@
 // sentence doesn't. Same family as the generated econ figures, and the same rule: a
 // published number with a formula behind it is derived, never transcribed.
 //
-// ⚠️ **It became a FUNCTION on 2026-08-16 and that is a copy problem, not just a rename.**
-// It was a constant because every supporter gave a multiple of one $3 Seed, so "a Seed"
-// named exactly one multiple. With amounts free, the multiple depends on what *this* user
-// gives — so a page saying "six times" is asserting something about a specific amount and
-// has to say which. At the $3 Public Access price it is still 6.
+// ⚠️ **A FUNCTION rather than a constant, and that is a copy problem rather than a
+// naming one.** The multiple depends on what *this* user gives, so a page saying "six
+// times" is asserting something about a specific amount and has to say which. At the $3
+// Public Access price it is still 6.
 import { describe, expect, test } from "bun:test";
 import {
 	FREE_TIME_POOL,

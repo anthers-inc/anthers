@@ -34,10 +34,11 @@ const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
  * A loose illustrative cap on what a viewer directs to creators, by Badge — **dollars a
  * month**, and independent of what they give Anthers.
  *
- * 🚨 It was a Seed COUNT, and `thresholdForBadge` started returning dollars when the Seed
- * retired on 2026-08-16. Everything downstream still multiplied by $3, so Blossom modelled
- * a viewer directing **$36** rather than $12 — the whole page overstated creator revenue
- * threefold, silently, because nothing here is a typed figure `econ:figures` could catch.
+ * 🚨 **Dollars, and a stray multiplier here overstated the whole page threefold once.**
+ * When `thresholdForBadge` changed what its return value *meant*, everything downstream
+ * kept multiplying by $3 and Blossom modelled a viewer directing **$36** rather than $12.
+ * Nothing caught it, because a modelling coefficient is not a typed figure `econ:figures`
+ * can see — so read what this returns rather than assuming its unit.
  */
 const supportOf = (badge: BadgeKey) => thresholdForBadge(badge);
 /** "Supports Anthers" — the non-Time-Pool part of what is given to Anthers: the

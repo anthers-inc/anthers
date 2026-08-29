@@ -2,7 +2,7 @@
 export const APP_NAME = "Anthers";
 
 /**
- * Support-model economics constants (supersedes the V4 "Badge plans" model).
+ * Support-model economics constants.
  *
  * A user gives a **monthly amount**, in dollars, pointed one of two ways:
  *   - at a **creator**: **no platform cut** and no payout processing — the only
@@ -17,11 +17,9 @@ export const APP_NAME = "Anthers";
  * recipient like any creator — it simply defines its own set (root/sprout/petal/blossom
  * at $3/$6/$9/$12).
  *
- * 🚨 **THE SEED IS RETIRED AS A FINANCIAL UNIT (2026-08-16).** There was a `SEED_PRICE`
- * of $3, every amount was a whole multiple of it, and every threshold counted Seeds. All
- * of that is gone: amounts are dollars, creators set their own Badge levels to anything,
- * and $3 survives only as the price of unlimited Public Access — *just $3*, not a unit.
- * See `BadgeDef` for why the unit stopped earning its place. **Do not reintroduce a
+ * 🚨 **There is no unit and no granularity floor.** Amounts are dollars, creators set
+ * their own Badge levels to anything, and $3 is the price of unlimited Public Access
+ * rather than a denomination anything else is a multiple of. **Do not reintroduce a
  * granularity floor**: if the fixed $0.30 ever argues for a floor it argues for a minimum
  * *invoice total*, never a minimum per-creator amount, and that is a different mechanism
  * in a different place.
@@ -33,15 +31,12 @@ export const APP_NAME = "Anthers";
  * Both are true at once, and a creator-set amount is therefore free at every level except
  * the unpayable gap between zero and Stripe's own minimum.
  *
- * **There is no bandwidth term.** Delivery was metered at cost ($0.01/GiB) against
- * a 15 GiB free floor plus a per-Seed allowance until 2026-08-12. That whole apparatus
- * was cost-recovery for one vendor's price list — `BANDWIDTH_PER_GIB` was *exactly*
- * DigitalOcean Spaces' egress rate — and Cloudflare R2 charges $0 egress at any
- * volume, so it metered a cost nobody pays. Downloads are unlimited and free,
- * permanently, across unlimited devices. The freed term fell to the **remainder**,
- * which is the residual, so removing it *raised* charitable funding rather than
- * deleting a fee. Don't reintroduce a per-byte charge without a vendor change
- * behind it.
+ * 🚨 **There is no delivery term, and don't reintroduce a per-byte charge without a
+ * vendor change behind it.** Cloudflare R2 charges $0 egress at any volume, so metering
+ * delivery would be charging for a cost nobody pays — the apparatus that did was
+ * cost-recovery for a price list Anthers no longer buys from. Downloads are unlimited and
+ * free, permanently, across unlimited devices, and that value sits in the **remainder**,
+ * which is the residual.
  *
  * The at-cost **Payments** line (card + processing) sits INSIDE the price — it is
  * charged on the whole batched monthly charge and split pro-rata, then paid to the
@@ -66,15 +61,13 @@ export const APP_NAME = "Anthers";
  * may place Badges at ANY level. A creator's set of $2/$7/$15 is exactly as valid as
  * Anthers' $3/$6/$9/$12, and there is **no granularity floor at all**.
  *
- * 🚨 **The threshold was WHOLE SEEDS until 2026-08-16, and the unit change is the point.**
- * The Seed retired as a financial unit: everything is denominated in dollars now, creators
- * set their own Badge levels to any amount exactly as they set a direct-purchase list
- * price, and Anthers keeps $3 for unlimited Public Access — which is *just $3*, not "a
- * Seed". The $3 unit's written justification had died under it: it existed because a $1
- * card charge loses ~33% to processing against ~13% on $3, and PR #223 made one
- * subscription carry everything a user gives, so the fixed $0.30 is paid **once a month
- * regardless of denomination**. What that argues for is a minimum *invoice total*, never a
- * minimum per-creator amount. Against that, $3 steps were the coarsest tier granularity in
+ * 🚨 **Dollars at any level, and the absence of a shared denomination is the point.**
+ * Creators set their own Badge levels exactly as they set a direct-purchase list price,
+ * and Anthers' $3 is the price of unlimited Public Access rather than a unit. The
+ * card-economics argument for a shared step died when one subscription came to carry
+ * everything a user gives: the fixed $0.30 is paid **once a month regardless of
+ * denomination**, which argues for a minimum *invoice total* and never a minimum
+ * per-creator amount. Against that, a $3 step was the coarsest tier granularity in
  * the market at exactly the point where tiers live — a 100% jump from the first rung to the
  * second, and no way to say $5, $10 or $25.
  *
@@ -94,9 +87,9 @@ export interface BadgeDef {
 /**
  * Anthers' own Badge set — ordinary Badges; Anthers just defines its own.
  *
- * $3 buys unlimited Public Access and nothing above it buys more access. The higher rungs
- * keep the amounts they had as 2/3/4 Seeds: their prices and their perks are each due
- * their own discussion, and re-denominating the unit is not the moment to pre-empt it.
+ * $3 buys unlimited Public Access and nothing above it buys more access. What the higher
+ * rungs cost and what they carry are each due their own discussion; these amounts are
+ * inherited rather than argued for.
  */
 export const ANTHERS_BADGES: readonly BadgeDef[] = [
 	{ name: "root", threshold: 3 },
@@ -333,11 +326,10 @@ export function amountMeets(held: number, threshold: number): boolean {
 /**
  * A dollar amount as whole cents — the unit every support comparison is made in.
  *
- * 🚨 **Load-bearing, and the reason it exists at all.** Thresholds were whole Seeds until
- * 2026-08-16, so every comparison was integer-against-integer and could not go wrong. In
- * dollars they are floats, and `0.1 + 0.2 !== 0.3` is the oldest bug there is: a supporter
- * who gives exactly what a Badge asks must clear it, and a naive `>=` on the parsed doubles
- * is one representation away from denying them with no error anywhere.
+ * 🚨 **Load-bearing, and the reason it exists at all.** Thresholds are dollars, so they
+ * are floats, and `0.1 + 0.2 !== 0.3` is the oldest bug there is: a supporter who gives
+ * exactly what a Badge asks must clear it, and a naive `>=` on the parsed doubles is one
+ * representation away from denying them with no error anywhere.
  *
  * ⚠️ **ROUND, never floor — and the reason is subtler than it first looks.** Flooring is
  * the obvious way to stop a sub-cent amount opening a gate, and against a *symmetric*
@@ -368,10 +360,8 @@ export function supportAmount(amount: string | number | null | undefined): numbe
  *
  * 🚨 **The cents half is the whole reason this exists.** Interpolating the number
  * directly renders a `9.5` rung as **"$9.5"**, which reads as a typo and, beside a
- * correctly formatted copy of itself, as a bug. That shipped in two places at once when
- * the Seed retired — the access table's threshold hint and the gauntlet's rung
- * descriptions — because whole Seeds could never carry cents and every call site had
- * quietly assumed integers.
+ * correctly formatted copy of itself, as a bug. It shipped in two places at once the first
+ * time a rung carried cents, because every call site had quietly assumed integers.
  *
  * Five copies of this expression existed by then, none shared. This is the one.
  */
@@ -454,12 +444,9 @@ export function storageGibFor(anthersDollars: number): number {
  * argument rests on. Same reasoning as the generated econ figures: a published number
  * with a formula behind it is generated, never transcribed.
  *
- * ⚠️ **It became a FUNCTION on 2026-08-16 and the reason matters for copy.** It was a
- * constant — `TIME_POOL_PER_SEED / FREE_TIME_POOL` — because every supporter gave a
- * multiple of one $3 Seed, so "a Seed" named exactly one multiple. With amounts free the
- * multiple depends on what *this* user gives, so a page that says "six times" is now
- * asserting something about a specific amount and has to say which. At the $3 Public
- * Access price it is still 6.
+ * ⚠️ **A FUNCTION rather than a constant, and the reason matters for copy.** The multiple
+ * depends on what *this* user gives, so a page that says "six times" is asserting something
+ * about a specific amount and has to say which. At the $3 Public Access price it is 6.
  *
  * Not in `figures.generated.ts` because that file is money *tables* built by a script;
  * this is a one-line derivation and belongs beside the dials it divides.

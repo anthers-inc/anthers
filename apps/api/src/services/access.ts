@@ -20,13 +20,13 @@
  * download — one price unlocks both). No qualifying allowed row is a hard gate. Works
  * ship "free but fully locked" (baseline row, allow=false).
  *
- * 🚨 **There were two tables, OR-ed together, until 2026-08-12.** The second read the
- * viewer's *Anthers* Badge — "Sprout and above" — and **Anthers Gates are retired**,
- * because they stratified the commons: better public content behind a higher Badge beside
- * worse public content that was actually free. So a Work is now either gated by its
- * creator or it is **Public Access** — ungated and streaming, free to everyone — and
- * `ANTHERS_BADGES` no longer participates in resolution at all. A Badge is standing.
- * Reasoning: `30.01 Creator Content Gates` § 4.1b. Migration `0029` folded the column in.
+ * 🚨 **ONE table, and a second one must never come back.** A platform-side gate reading
+ * the viewer's own Badge stratifies the commons — better public content behind a higher
+ * Badge, beside worse public content that is actually free — which is a class-of-citizen
+ * problem inside the one part of the platform that exists in order not to have one. A
+ * Work is gated by its creator or it is **Public Access**: ungated, streaming, free to
+ * everyone. `ANTHERS_BADGES` does not participate in resolution at all, and a Badge is
+ * standing. Reasoning: `30.01 Creator Content Gates` § 4.1b.
  *
  * ⚠️ The OR *within* this table survives and is the interesting one: a creator may gate on
  * **another creator's** support level, which is the seed of collabs and bundles. There is
@@ -284,7 +284,7 @@ export interface UnlockRoute {
  * leave a purchase in the way.
  *
  * ⚠️ This was a two-field type until 2026-08-12, with an `anthers` route beside this one.
- * Anthers Gates are retired, so there is one destination left. It stays an object rather
+ * There is one destination. It stays an object rather
  * than collapsing to `UnlockRoute | null` because a creator gating on **another
  * creator's** support level is a live case, and that is where a second route would reappear.
  */
@@ -324,11 +324,10 @@ export function currentBillingCycle(): string {
 /**
  * Monthly dollars a user currently gives Anthers.
  *
- * ⚠️ **This no longer decides access to any Work.** It compared against Anthers Gates
- * until 2026-08-12; those are retired, and what money given to Anthers now governs is
- * the account-level Public Access limit and the size of the user's Time Pool — neither of
- * which is a property of a Work. Kept because both of those read it, and because it is
- * the Badge.
+ * ⚠️ **This decides access to no Work, and must never be made to.** What money given to
+ * Anthers governs is the account-level Public Access limit and the size of the user's
+ * Time Pool — neither of which is a property of a Work. Kept because both of those read
+ * it, and because it is the Badge.
  *
  * A raw amount, not a Badge name: a Badge is the highest threshold you meet, so collapsing
  * to it first rounds someone giving $9 down to a $6 Badge. Name the Badge only for
@@ -340,8 +339,8 @@ export async function heldAnthersSupport(userId: number): Promise<number> {
 		.from(accounts)
 		.where(eq(accounts.userId, userId))
 		.limit(1);
-	// ⚠️ NOT floored. It rounded down to a whole Seed until 2026-08-16, which is right for
-	// a count and destroys a real amount: $2.50 became $2 and stopped clearing its own gate.
+	// ⚠️ **NOT floored**, and flooring it would be a silent money bug rather than a
+	// rounding nicety: $2.50 would become $2 and stop clearing its own $2.50 gate.
 	return supportAmount(row?.anthersSupport);
 }
 
@@ -676,8 +675,6 @@ export async function resolveAccess(
  * The access table a freshly created Work ships with: the baseline row alone, locked —
  * "free but fully locked". The creator opts access in, and adds ladder rungs above it.
  *
- * A companion `defaultAnthersAccess()` seeded rows at [0,1,2,3,4] until 2026-08-12, one
- * per Anthers Badge. Anthers Gates are retired and it is gone with them.
  */
 export function defaultSeedAccess(): SeedAccessRow[] {
 	return [{ threshold: 0, allow: false, price: "0" }];
