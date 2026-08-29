@@ -85,6 +85,7 @@ import {
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
+import { FAQBlock } from "../components/ui/FAQ";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -778,6 +779,16 @@ export default function ForCreatorsPage() {
 						</div>
 					</Card>
 				</Reveal>
+			</Section>
+
+			{/* Questions — above the closing CTA, for the reason noted on /for-users: an FAQ
+			    answers what is still standing between a reader and the button, so it belongs
+			    on the way there. This page argues the economics at length, so its questions
+			    lead with take-home and then cover what the argument never reaches — the
+			    setup, the one charge, and what publishing here commits you to. Shared with
+			    /faq via `content/faq.tsx`. */}
+			<Section>
+				<FAQBlock surface="creators" />
 			</Section>
 
 			{/* Closing */}

@@ -135,6 +135,7 @@ import { storedGibPerSourceHour } from "../components/calculators/video-model";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
+import { FAQBlock } from "../components/ui/FAQ";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
  * Both of these were quarantined in a named `SPIKE` block until 2026-08-12, because
@@ -2671,6 +2672,25 @@ export default function SubscribePage() {
 							organization, not to founders or shareholders.
 						</p>
 					</div>
+
+					{/* ── Questions ─────────────────────────────────────────────
+					    🚨 Last on this page, and that is the opposite of where the same block
+					    sits on /for-users and /for-creators. Those are pages somebody reads and
+					    then acts on, so their FAQ goes above the closing CTA. This page's
+					    control is at the TOP — a visitor can join from the first screen and
+					    never scroll — so everything below the summary is for the reader who did
+					    scroll, and is still deciding. Their remaining doubts belong at the end
+					    of that scroll rather than in front of a button they have already passed
+					    twice.
+
+					    The six questions are the ones asked with a hand on the button — what
+					    this costs, what free covers, whether it can be undone — and they are
+					    the same objects /faq renders, from `content/faq.tsx`. */}
+					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+						<div className="text-center">
+							<FAQBlock surface="signup" />
+						</div>
+					</Reveal>
 				</div>
 			</div>
 
