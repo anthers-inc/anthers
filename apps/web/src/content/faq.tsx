@@ -30,7 +30,12 @@
 // to everyone and what changes is the **cap**. `faq.test.ts` holds the ones a regex can
 // check.
 
-import { FREE_STORAGE_GIB, FREE_TIME_POOL, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import {
+	ATTENTION_RAW_RETENTION_DAYS,
+	FREE_STORAGE_GIB,
+	FREE_TIME_POOL,
+	PUBLIC_ACCESS_PRICE,
+} from "@anthers/shared/constants";
 import { DIRECTED_SUPPORT_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { Link } from "@anthers/web-shared/router";
@@ -324,7 +329,8 @@ export const FAQ_ITEMS = {
 					What we keep is what running the place requires: your account, what you published, what
 					you bought, and a record of what you spent time with and for how long — which is how
 					creators get paid. Creators never see who watched their work, only totals, and the
-					per-person records are deleted after 180 days, leaving anonymous totals behind. The{" "}
+					per-person records are deleted after {ATTENTION_RAW_RETENTION_DAYS} days, leaving
+					anonymous totals behind. The{" "}
 					<Link to="/privacy" className="link text-primary decoration-primary/40">
 						privacy policy
 					</Link>{" "}
