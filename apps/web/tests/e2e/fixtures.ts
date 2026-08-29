@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { fileURLToPath } from "node:url";
-import { test as base, expect, type Page } from "@playwright/test";
+import { GAUNTLET_CREATOR_PASSWORD, GAUNTLET_CREATOR_USERNAME } from "@anthers/db/gauntlet";
+import { type BrowserContext, test as base, expect, type Page } from "@playwright/test";
 
 /** The static preview the browser loads (playwright.config.ts webServer #1). */
 export const WEB_ORIGIN = "http://localhost:4173";
@@ -50,6 +51,47 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
 		errors.push(`console: ${text}`);
 	});
 	return errors;
+}
+
+/**
+ * Sign in as the gauntlet CREATOR and put the session on `context`.
+ *
+ * The `authed` project's stored state belongs to the gauntlet *viewer*, who is not a creator —
+ * so anything behind the Studio's creator gate needs this instead. Plain `fetch` plus an
+ * explicit cookie, exactly as `gauntlet.setup.ts` does it, and deliberately not
+ * `page.request.post`: that threw an opaque `"/api/auth/sign-in" cannot be parsed as a URL`
+ * even when handed an absolute one, and the setup file's approach is the one already proven
+ * against this API.
+ *
+ * Returns the raw token so a test can call the API as the creator — cleanup, mostly — without
+ * driving the browser.
+ */
+export async function signInAsCreator(context: BrowserContext): Promise<string> {
+	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
+		body: JSON.stringify({
+			login: GAUNTLET_CREATOR_USERNAME,
+			password: GAUNTLET_CREATOR_PASSWORD,
+		}),
+	});
+	expect(res.ok, `creator sign-in failed: ${res.status}`).toBe(true);
+
+	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
+	expect(token, "no session cookie returned").toBeTruthy();
+	await context.addCookies([
+		{
+			name: "session",
+			value: token as string,
+			domain: "localhost",
+			path: "/",
+			expires: Math.floor(Date.now() / 1000) + 3600,
+			httpOnly: true,
+			secure: false,
+			sameSite: "Lax" as const,
+		},
+	]);
+	return token as string;
 }
 
 export { expect };
