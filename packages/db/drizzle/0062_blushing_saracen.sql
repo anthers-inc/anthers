@@ -1,0 +1,1 @@
+ALTER TABLE "account_cycles" ADD COLUMN "time_pool_undistributed" numeric DEFAULT '0.00' NOT NULL;

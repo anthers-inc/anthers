@@ -134,7 +134,28 @@ export const accountCycles = pgTable(
 		anthersSupport: numeric("anthers_support").notNull().default("0.00"), // $/mo to Anthers this cycle
 		creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $ directed to creators
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
-		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle
+		/**
+		 * How much of that budget reached no creator, and therefore fell to the remainder.
+		 *
+		 * 🚨 **`time_pool` stays the BUDGET and this is the shortfall beside it**, rather than
+		 * `time_pool` being rewritten to what was actually paid. The budget is a fact about the
+		 * gift — a fixed half of what this account gave Anthers — and it is what the account's
+		 * own Time Pool pie is drawn against; overwriting it would make an old row mean
+		 * something new and leave nothing recording the promise. So the two sit side by side
+		 * and `time_pool - time_pool_undistributed` is what creators were paid.
+		 *
+		 * ⚠️ **Denormalized on purpose, and that is what a snapshot table is for.** It is
+		 * derivable today as the budget less `SUM(pool_distributions.pool_amount)` for the
+		 * (subscriber, cycle) — but `distribute-pool` upserts those rows daily, so a figure
+		 * recomputed later is not the figure settlement acted on. What was booked to the
+		 * remainder has to be readable years afterwards from the row that booked it.
+		 *
+		 * Two things leave a pool undistributed and both land here: a viewer who streamed no
+		 * Public Access at all in the cycle, and a sharer who watched nothing themselves, whose
+		 * share-link slice is a ceiling rather than a reservation. See `distribute-pool.ts`.
+		 */
+		timePoolUndistributed: numeric("time_pool_undistributed").notNull().default("0.00"),
+		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle, incl. any undistributed pool
 		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
