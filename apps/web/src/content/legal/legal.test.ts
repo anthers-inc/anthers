@@ -67,6 +67,41 @@ describe("published legal documents", () => {
 		}
 	});
 
+	it("🚨 names every outside party that receives something about a user", () => {
+		/*
+		 * The disclosure list is the whole point of a privacy policy, and it is the part
+		 * that goes stale silently — a recipient is added in code and nobody edits prose.
+		 *
+		 * 🚨 **The Canadian Centre for Child Protection is here because it was missing for
+		 * three days while the scan was live.** The vault copy had the paragraph, under a
+		 * `NOT YET BUILT` marker; the serving layer strips marked copy; so shipping the
+		 * scanner published nothing, and the policy named four providers while a fifth
+		 * party was receiving a hash of every uploaded image. **A marker withholding a
+		 * disclosure is worse than a marker annotating a draft**, and nothing failed.
+		 */
+		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
+		for (const recipient of [
+			"Cloudflare",
+			"DigitalOcean",
+			"Stripe",
+			"Resend",
+			"Canadian Centre for Child Protection",
+		]) {
+			expect(text, `${recipient} receives user data and the policy must name it`).toContain(
+				recipient,
+			);
+		}
+	});
+
+	it("⭐ says a video's frames are not scanned, for exactly as long as that is true", () => {
+		// The other half of the same failure, pointed the other way. The claim above is
+		// narrowed to images because PDQ is an image hash — so when keyframe scanning
+		// lands, this test is what says the narrowing has to come out. A disclosure that
+		// under-claims is not safe by default: it tells people less than we do.
+		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
+		expect(text).toContain("Video and audio are not covered");
+	});
+
 	it("makes no claim Anthers is a 501(c)(3)", () => {
 		// Copy rule, and a live one until the determination letter arrives: the honest
 		// word is "nonprofit". Asserted here because a legal page is the most plausible
