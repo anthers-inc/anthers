@@ -15,7 +15,7 @@
  *
  * Keep it free of imports with side effects (no `db`) so importing it never touches Postgres.
  *
- * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
+ * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
 import { amountLabel } from "@anthers/shared/constants";

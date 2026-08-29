@@ -7,7 +7,7 @@
  * to find out whether the gauntlet spec is actually true of the code. The fixture and the
  * e2e spec are both built on this table; if a cell is wrong, they inherit the error.
  *
- * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
+ * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  *
  * Note the spec's "Free, following" row has no representation here, and cannot: `AccessContext`
  * carries no follow field, so following is *structurally* incapable of affecting access. That's

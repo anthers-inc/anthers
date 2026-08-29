@@ -49,7 +49,7 @@
  * A generated-figures guard only covers what it is pointed at, and nothing said the
  * app was outside it.
  */
-import { existsSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
@@ -88,7 +88,99 @@ import {
 } from "../packages/shared/src/scenarios.js";
 
 const REPO = join(import.meta.dir, "..");
-const VAULT = join(process.env.HOME ?? "", "Obsidian/40-59 PhD Projects/43 Platforms/Anthers");
+
+/** The Obsidian vault, if this machine has one. Its *contents* move; this doesn't. */
+const OBSIDIAN = join(process.env.HOME ?? "", "Obsidian");
+
+/**
+ * Where the wiki lives — **discovered, never hardcoded**.
+ *
+ * 🚨 **This was a literal path until 2026-08-28, and moving the project inside the vault
+ * silently switched half of this script off.** `--check` printed *"(vault not present —
+ * skipping wiki blocks)"* and **exited 0**, so every generated money table in the wiki
+ * stopped being regenerated and stopped being checked, with nothing to notice. That is the
+ * exact failure this file exists to prevent, one level up from the ones it catches — and
+ * the same shape as the renamed document that `writeBlocks` was taught to fail on, except
+ * that losing the *root* loses every target at once.
+ *
+ * ⚠️ **The bug was conflating two states that look alike and mean opposite things.** A
+ * machine with no vault (CI, any contributor's clone) *should* skip the wiki silently.
+ * A machine with a vault we cannot find inside is **broken**, and must say so. One
+ * `existsSync` on a path that encoded both the vault and the project answered "skip" to
+ * both, so a wrong path was indistinguishable from no path.
+ *
+ * Resolution, in order:
+ *   1. `ANTHERS_VAULT`, for an explicit override. If it is set and wrong, that is a
+ *      **failure** — an explicit pointer must never degrade into a skip.
+ *   2. No `~/Obsidian` at all → skip, silently and correctly.
+ *   3. Otherwise search the vault for the project root. Not found, or found twice → a
+ *      failure naming what was searched.
+ */
+function findWiki(): { path: string } | { skip: true } | { error: string } {
+	const override = process.env.ANTHERS_VAULT;
+	if (override) {
+		return existsSync(override)
+			? { path: override }
+			: { error: `ANTHERS_VAULT is set to "${override}", which does not exist` };
+	}
+	if (!existsSync(OBSIDIAN)) return { skip: true };
+
+	const found = searchVault(OBSIDIAN, 4);
+	if (found.length === 1) return { path: found[0] };
+	if (found.length === 0) {
+		return {
+			error:
+				`the vault at ${OBSIDIAN} has no "${PROJECT_DIR}" project root in it ` +
+				`(moved out of the vault, or renamed? set ANTHERS_VAULT to point at it)`,
+		};
+	}
+	return {
+		error:
+			`found ${found.length} candidate project roots and cannot choose between them ` +
+			`(${found.map((p) => relative(OBSIDIAN, p)).join(", ")}) — set ANTHERS_VAULT`,
+	};
+}
+
+/** The folder the project lives in, wherever inside the vault it has been filed. */
+const PROJECT_DIR = "Anthers";
+
+/**
+ * Every `Anthers/` folder in the vault that looks like the project root.
+ *
+ * ⚠️ **The marker is a Johnny-Decimal area (`00-09 Meta`, `40-49 Architecture`, …),
+ * deliberately not one of the files in `BLOCKS`.** Validating against a block target would
+ * make *renaming a document* read as *losing the vault*, which reports the wrong problem —
+ * and `writeBlocks` already fails loudly and by name on a renamed target, so that case is
+ * covered better one layer down. An area prefix survives every renumbering below it.
+ */
+function searchVault(dir: string, depth: number): string[] {
+	if (depth < 0) return [];
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(dir, { withFileTypes: true });
+	} catch {
+		return []; // Unreadable (permissions, a broken symlink) is not a match.
+	}
+	const out: string[] = [];
+	for (const entry of entries) {
+		if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+		const path = join(dir, entry.name);
+		if (entry.name === PROJECT_DIR && isProjectRoot(path)) out.push(path);
+		else out.push(...searchVault(path, depth - 1));
+	}
+	return out;
+}
+
+/** A Johnny-Decimal area directory inside it — `00-09 Meta`, `50-59 Business and Finance`. */
+function isProjectRoot(path: string): boolean {
+	try {
+		return readdirSync(path, { withFileTypes: true }).some(
+			(e) => e.isDirectory() && /^\d{2}-\d{2} /.test(e.name),
+		);
+	} catch {
+		return false;
+	}
+}
 
 const check = process.argv.includes("--check");
 /** Generated regions that no longer match what the model says. */
@@ -1485,10 +1577,17 @@ async function writeBlocks(root: string, blocks: Block[]) {
 // a contributor with no vault still gets the check. The wiki is the optional half.
 await writeBlocks(REPO, REPO_BLOCKS);
 
-if (!existsSync(VAULT)) {
-	console.log("  (vault not present — skipping wiki blocks)");
+// The wiki is the optional half — but only *absent* is optional. A vault we cannot find
+// our way around inside is a broken tool reporting success, which is the state this whole
+// block was in between the project moving and 2026-08-28.
+const wiki = findWiki();
+if ("error" in wiki) {
+	failures.push(`the wiki blocks were not checked at all — ${wiki.error}`);
+} else if ("skip" in wiki) {
+	console.log("  (no vault on this machine — skipping wiki blocks)");
 } else {
-	await writeBlocks(VAULT, BLOCKS);
+	console.log(`  wiki: ${wiki.path}`);
+	await writeBlocks(wiki.path, BLOCKS);
 }
 
 await scanApp();
