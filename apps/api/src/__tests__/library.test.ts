@@ -24,6 +24,7 @@ import { db } from "@anthers/db/client";
 import { libraryItems, purchases, works } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -127,7 +128,9 @@ describe("the Library", () => {
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${readerName})`);
 		const creator = await signUp(creatorName);
+		await enablePayouts(creatorName);
 		const reader = await signUp(readerName);
+		await enablePayouts(readerName);
 		creatorId = creator.userId;
 		readerId = reader.userId;
 		readerCookie = reader.cookie;

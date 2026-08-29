@@ -22,6 +22,7 @@ import { ratings } from "@anthers/db/schema";
 import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -86,8 +87,11 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
+	await enablePayouts(creatorName);
 	viewerA = await signUp(viewerAName);
+	await enablePayouts(viewerAName);
 	_viewerB = await signUp(viewerBName);
+	await enablePayouts(viewerBName);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",

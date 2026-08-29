@@ -25,6 +25,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -72,7 +73,9 @@ describe("Catalog CRUD and post links", () => {
 		"signs up an owner and a stranger",
 		async () => {
 			ownerCookie = await signUp(ownerName);
+			await enablePayouts(ownerName);
 			strangerCookie = await signUp(strangerName);
+			await enablePayouts(strangerName);
 			expect(ownerCookie).toBeTruthy();
 			expect(strangerCookie).toBeTruthy();
 		},

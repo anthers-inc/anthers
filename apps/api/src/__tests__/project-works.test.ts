@@ -25,6 +25,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -98,7 +99,9 @@ describe("a Project's Works", () => {
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${strangerName})`);
 		const cookie = await signUp(creatorName);
+		await enablePayouts(creatorName);
 		strangerCookie = await signUp(strangerName);
+		await enablePayouts(strangerName);
 		auth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie };
 
 		for (const slug of [SLUG, OTHER_SLUG]) {

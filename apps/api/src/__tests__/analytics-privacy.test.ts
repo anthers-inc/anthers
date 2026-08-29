@@ -31,6 +31,7 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -106,8 +107,11 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
+	await enablePayouts(creatorName);
 	const viewerA = await signUp(viewerAName);
+	await enablePayouts(viewerAName);
 	const viewerB = await signUp(viewerBName);
+	await enablePayouts(viewerBName);
 	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
 
 	const idOf = async (username: string) => {
@@ -223,6 +227,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		const otherName = `apriv_other_${id}`;
 		await db.execute(sql`DELETE FROM users WHERE username = ${otherName}`);
 		const other = await signUp(otherName);
+		await enablePayouts(otherName);
 		await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${otherName}`);
 
 		const overview = await (await req(ANALYTICS_ROUTES[0], { headers: { Cookie: other } })).json();

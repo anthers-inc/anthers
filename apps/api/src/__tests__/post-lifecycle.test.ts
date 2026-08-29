@@ -17,6 +17,7 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
 import { CRON_SCHEDULES, QUEUES } from "../jobs/queue";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -78,7 +79,9 @@ let stranger: string;
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username IN (${ownerName}, ${strangerName})`);
 	owner = await signUp(ownerName);
+	await enablePayouts(ownerName);
 	stranger = await signUp(strangerName);
+	await enablePayouts(strangerName);
 }, DB_SETUP_TIMEOUT);
 
 // These suites run against the shared dev database and the usernames carry a per-run

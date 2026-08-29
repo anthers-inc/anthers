@@ -19,6 +19,7 @@ import { db } from "@anthers/db/client";
 import { dmcaNotices, moderationActions, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -99,8 +100,11 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${adminName}, ${otherCreatorName})`,
 	);
 	creator = await signUp(creatorName);
+	await enablePayouts(creatorName);
 	admin = await signUp(adminName);
+	await enablePayouts(adminName);
 	otherCreator = await signUp(otherCreatorName);
+	await enablePayouts(otherCreatorName);
 	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
 
 	// Create two Works by two different creators, both released and free.

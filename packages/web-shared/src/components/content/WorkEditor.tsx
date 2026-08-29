@@ -34,6 +34,7 @@ import {
 } from "@anthers/shared/content-rating";
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
+import { Link } from "../../lib/router";
 import { client } from "../../lib/rpc";
 import type {
 	AuthoredPrecision,
@@ -196,6 +197,39 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	const [visibility, setVisibility] = useState<"private" | "released">(
 		editing?.visibility === "released" ? "released" : "private",
 	);
+
+	/**
+	 * Whether payouts are set up, so the release control can say so before it is clicked.
+	 *
+	 * 🚨 **A prediction, never the decision.** `services/payouts.ts` is the authority and
+	 * `PATCH /works/:id` refuses with `payouts_required`; this exists for the same reason
+	 * `disabled={!maturity}` does below — don't offer a click that fails. `null` means the
+	 * answer has not arrived, and the control stays enabled until it does: a creator whose
+	 * status request failed should meet the server's refusal, not a disabled checkbox with
+	 * no explanation.
+	 */
+	const [payoutsReady, setPayoutsReady] = useState<boolean | null>(null);
+
+	useEffect(() => {
+		let live = true;
+		client.api.payments.stripe.onboard
+			.$get()
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as {
+					payoutsEnabled: boolean | null;
+					onboardingComplete: boolean | null;
+				};
+				// Both flags, matching the server's predicate exactly. Onboarding can finish
+				// while Stripe still declines to send money, and only the second answers
+				// "can this creator be paid".
+				if (live) setPayoutsReady(data.payoutsEnabled === true && data.onboardingComplete === true);
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, []);
 
 	// The creator's own Badge rungs. Best-effort: without them the table still renders its
 	// baseline row, which is the row that decides Public Access and the only one most
@@ -824,10 +858,13 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 									type="checkbox"
 									className="checkbox checkbox-sm checkbox-primary"
 									checked={visibility === "released"}
-									// The server refuses an unrated release with `maturity_undeclared`.
-									// Don't offer the click that fails — the same reasoning as the
-									// delivery switches above.
-									disabled={!maturity}
+									// The server refuses an unrated release with `maturity_undeclared`,
+									// and one with no payout setup with `payouts_required`. Don't offer
+									// the click that fails — the same reasoning as the delivery
+									// switches above. `payoutsReady === false` rather than
+									// `!payoutsReady`, so an unanswered status request leaves the
+									// control alone instead of locking it for a reason nobody stated.
+									disabled={!maturity || payoutsReady === false}
 									onChange={(e) => setVisibility(e.target.checked ? "released" : "private")}
 								/>
 								<span className="label-text text-sm">Released to my public Catalog</span>
@@ -837,6 +874,20 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 									Pick a rating above first. Nothing goes into your public Catalog until somebody
 									has said whether it is General or Mature.
 								</p>
+							)}
+							{payoutsReady === false && (
+								<div className="alert alert-warning text-sm">
+									<span>
+										<strong>Set up payouts before releasing.</strong> It is how you get paid, and it
+										is also what lets us say every creator here is an adult — Stripe checks identity
+										so Anthers never has to ask you for an ID. Anthers takes no cut, so all of it
+										comes to you.{" "}
+										<Link to="/studio/settings" className="link">
+											Set it up in Studio settings
+										</Link>
+										.
+									</span>
+								</div>
 							)}
 							{visibility === "released" && !anyoneAllowed && (
 								<div className="alert alert-warning text-sm">

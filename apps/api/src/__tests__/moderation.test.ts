@@ -21,6 +21,7 @@ import { comments, moderationActions, moderationReports, ratings, users } from "
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -101,9 +102,13 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${adminName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
+	await enablePayouts(creatorName);
 	admin = await signUp(adminName);
+	await enablePayouts(adminName);
 	viewerA = await signUp(viewerAName);
+	await enablePayouts(viewerAName);
 	viewerB = await signUp(viewerBName);
+	await enablePayouts(viewerBName);
 	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
 
 	const itemRes = await post("/api/content/works", creator, {
