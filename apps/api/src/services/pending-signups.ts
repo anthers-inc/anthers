@@ -56,7 +56,7 @@ import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { normalizePicks, type SignupPicks } from "@anthers/shared/signup";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { AtprotoIdentity } from "./atproto.js";
-import { attachSessionToUser, getAtprotoClient } from "./atproto-client.js";
+import { attachSessionToUser, revokeAtprotoGrant } from "./atproto-client.js";
 
 /**
  * How long an unfinished signup waits before it has to be started again.
@@ -399,11 +399,7 @@ async function dropOrphanAtprotoSession(did: string): Promise<void> {
 		.limit(1);
 	if (!orphan) return;
 
-	try {
-		await getAtprotoClient().revoke(did);
-	} catch {
-		// The server may already consider it gone; the local delete is what matters.
-	}
+	await revokeAtprotoGrant(did);
 	await db
 		.delete(atprotoSessions)
 		.where(and(eq(atprotoSessions.did, did), isNull(atprotoSessions.userId)));

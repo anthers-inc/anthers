@@ -295,3 +295,25 @@ export function getAtprotoClient(): OAuthClient {
 export function setAtprotoClient(next: OAuthClient | undefined): void {
 	client = next;
 }
+
+/**
+ * Tell the authorization server this grant is over. Best-effort, and never throws.
+ *
+ * 🚨 **Revoke first, delete second, everywhere.** A local row removed without a revocation
+ * leaves a live OAuth authorization on somebody's Bluesky account pointing at an Anthers that
+ * no longer holds anything — and once the row is gone we cannot even find it to try again.
+ * The reverse order fails safely: a revocation that succeeded against a row we then failed to
+ * delete leaves a dead row, which the next sign-in overwrites.
+ *
+ * ⚠️ **The failure is swallowed on purpose, and the reason differs by caller.** At an unlink it
+ * is because the server may already consider the grant gone. At an **erasure** it is stronger
+ * than that: a revocation that fails must never leave an account undeleted, because somebody
+ * asked to be forgotten and a third party's outage is not a reason to refuse them.
+ */
+export async function revokeAtprotoGrant(did: string): Promise<void> {
+	try {
+		await getAtprotoClient().revoke(did);
+	} catch {
+		// Nothing to do about it here. Every caller deletes its local rows regardless.
+	}
+}

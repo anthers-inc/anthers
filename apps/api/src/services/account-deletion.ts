@@ -51,8 +51,18 @@
  */
 
 import { db } from "@anthers/db/client";
-import { comments, posts, purchases, ratings, sessions, users, works } from "@anthers/db/schema";
+import {
+	atprotoSessions,
+	comments,
+	posts,
+	purchases,
+	ratings,
+	sessions,
+	users,
+	works,
+} from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { revokeAtprotoGrant } from "./atproto-client.js";
 import { isUnderHold } from "./legal-hold.js";
 import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
@@ -220,11 +230,45 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 	}
 
 	const [user] = await db
-		.select({ id: users.id, avatar: users.avatar, headerImage: users.headerImage })
+		.select({
+			id: users.id,
+			avatar: users.avatar,
+			headerImage: users.headerImage,
+			// Read here because it is about to cascade away, and a DID we no longer hold is a
+			// grant we can never find to revoke.
+			atprotoDid: users.atprotoDid,
+		})
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
 	if (!user) return { erased: false };
+
+	// 🚨 **Revoke the ATProto grant BEFORE the account goes, and after the hold check.**
+	// Erasure deleted the `atproto_sessions` row by cascade and stopped until 2026-08-29, so
+	// somebody who asked to be forgotten was left with a live OAuth authorization on their
+	// Bluesky account pointing at an Anthers that no longer held anything — and with the row
+	// gone, nothing on our side could find it to try again. That is precisely the outcome
+	// `unlinkAtprotoFromUser` orders its two steps to avoid, and it matters more here: an
+	// unlink is somebody tidying a connection they can see and redo, while an erasure is
+	// somebody being promised there are no loose ends.
+	//
+	// ⚠️ **Best-effort and non-fatal**, which is what `revokeAtprotoGrant` guarantees. A
+	// revocation that fails must never leave an account undeleted — a third party's outage is
+	// not a reason to refuse somebody their erasure.
+	//
+	// It sits *after* the hold guard on purpose. A held account returns above with
+	// `erased: false` and stays intact, so revoking first would break the identity link of an
+	// account that is still very much alive.
+	//
+	// ⭐ **The other two ATProto tables were checked and need nothing, which is worth stating
+	// so it is not re-derived.** `atproto_oauth_state` holds an in-flight authorization keyed
+	// by an opaque `key`, with the linking user id inside its jsonb `appState` — a row still
+	// in flight at erasure resolves to a user who is gone, the callback refuses it, and the
+	// TTL sweep takes the row. `pending_signups` carries a DID but no user id at all: a row
+	// holding this DID is a *different*, unfinished signup rather than anything of this
+	// account's, and `clearPendingSignup` already revokes the session behind one when it is
+	// abandoned. Neither is a live grant we would otherwise lose track of, which is the test.
+	if (user.atprotoDid) await revokeAtprotoGrant(user.atprotoDid);
 
 	const workIds = (
 		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
@@ -300,6 +344,16 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 
 		// The buyer comes off the financial record; the record itself stays.
 		await tx.update(purchases).set({ buyerId: null }).where(eq(purchases.buyerId, userId));
+
+		// 🚨 The ATProto session goes by DID as well as by cascade, and the second delete is
+		// not redundant. `atproto_sessions` is keyed by DID because the SDK's session store is
+		// addressed by the token subject and knows nothing about Anthers accounts — so the row
+		// is written at the OAuth callback, *before* there is an account, and `user_id` is
+		// nullable and reconciled afterwards. A row whose reconciliation never happened
+		// carries this person's live tokens and cascades from nothing at all.
+		if (user.atprotoDid) {
+			await tx.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));
+		}
 
 		// And the account. Sessions, ATProto tokens, follows, bookmarks, blocks,
 		// attention rows, accounts/cycles and seed allocations all cascade from here;
