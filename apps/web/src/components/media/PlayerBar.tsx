@@ -16,7 +16,7 @@
  *   - **Allowance spent.** The track is free and stays free; the viewer's monthly Public
  *     Access hours ran out. 🚨 The copy has to put it that way round — "you've used your
  *     hours", never "this is locked" — or the commons reads as stratified again, which is
- *     the thing retiring Anthers Gates was for.
+ *     the thing the binary model exists to prevent.
  */
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { workUrl } from "@anthers/web-shared/postUrl";

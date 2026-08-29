@@ -26,26 +26,22 @@ import { users } from "./auth.js";
  * A Work has **one access table**, and every row is a **monthly dollar** threshold pointed
  * at the Work's own creator.
  *
- * `threshold` is **dollars** — never a Seed count, never a list position. 🚨 It has been
- * through both units: dollars originally, whole Seeds from migration `0007` (because the
- * price of a Seed was otherwise baked into every stored gate), and dollars again from
- * `0041`, when **the Seed retired as a financial unit**. A creator sets their own levels
- * to any amount now, so there is no shared price left to leak — and storing Seeds would
+ * `threshold` is **dollars** — never a count, never a list position. 🚨 A creator sets
+ * their own levels to any amount, so there is no shared price that could leak into a
+ * stored row — and storing a count would
  * instead bake in a conversion that no longer means anything. A gate needs no Badge to sit
  * on it: with Badges at $2 and $4, a gate at $3 is legal and a viewer giving $3 clears it.
  *
  * `threshold: 0` is the **baseline** row — everyone. It is what makes a Work free to all
  * (allow, price 0) or buyable by all (allow, price > 0), and it is not a gate at all.
  *
- * 🚨 **There were TWO tables until 2026-08-12**, and the second one is worth knowing about
- * because its disappearance is a model change rather than a refactor. `anthers_access`
- * read the viewer's *Anthers* Badge — "Sprout and above" — and access was the OR across
- * both. **Anthers Gates are retired**: they stratified the commons, producing better
- * public content behind a higher Badge beside worse public content that was actually
- * free, which is a class-of-citizen problem inside the one part of the platform that
- * exists in order not to have one. A Work is now either gated by its creator or it is
- * **Public Access** — ungated and streaming — and a Badge opens nothing. The reasoning is
- * kept in `30.01 Creator Content Gates` § 4.1b; the model is `11.01 Support Model Overview`.
+ * 🚨 **ONE table, and a second one is a model change rather than a refactor.** A
+ * platform-side gate reading the viewer's own Badge stratifies the commons — better public
+ * content behind a higher Badge, beside worse public content that is actually free — which
+ * is a class-of-citizen problem inside the one part of the platform that exists in order
+ * not to have one. A Work is gated by its creator or it is **Public Access**, and a Badge
+ * opens nothing. Reasoning: `30.01 Creator Content Gates` § 4.1b; model: `11.01 Support
+ * Model Overview`.
  *
  * Migration `0029` folded that column in rather than dropping it: every *allowed* Anthers
  * row collapsed to threshold 0 at its cheapest price, so no Work was newly locked out.
@@ -674,7 +670,7 @@ export const comments = pgTable(
  *
  * ## Why this table exists at all
  *
- * The Library used to be `/api/payments/purchases` with Seed buys filtered out — a receipt
+ * The Library was once a purchase list — a receipt
  * list wearing a shelf's name. That worked while "yours" meant "paid for", and stopped
  * working the moment the commons did: **most of what a user loves on Anthers is free**, so
  * it was never purchasable and therefore had nowhere to live. Bookmarks half-covered it and

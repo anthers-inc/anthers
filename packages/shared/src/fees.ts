@@ -49,7 +49,7 @@ export function cardFee(amount: Decimal | number): Decimal {
  * whole of the argument the retired $3 unit used to carry: the fee is paid once a month
  * whatever the denomination, so it can only ever justify a minimum *invoice total*.
  *
- * ⚠️ Both arguments are **dollars** now, not counts. They were whole Seed counts until
+ * ⚠️ Both arguments are **dollars**, never counts. They were counts until
  * 2026-08-16, and the old body floored them — which is exactly the coercion that has to
  * go, or a $7.50 gift silently becomes $7.
  */
@@ -87,7 +87,7 @@ export function paymentsSplit(
  * anywhere else, because the remainder is the residual by construction — which made
  * that retirement an increase in charitable funding, not a deleted fee.
  *
- * ⚠️ It took a whole **Seed count** until 2026-08-16 and takes **dollars** now. The old
+ * ⚠️ **Dollars, never a count.** The old
  * body floored its argument, which is the coercion that had to go with the unit: an
  * issuer may sit at any amount, so flooring $7.50 to $7 would quietly under-credit both
  * the Time Pool and the remainder.

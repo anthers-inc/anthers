@@ -15,7 +15,7 @@
  * had: correct only by accident of a consecutive ladder, and failing toward OVER-claiming.
  *
  * 🚨 **Half of this file used to drive the Anthers side**, gating on the viewer's Badge.
- * Anthers Gates were retired on 2026-08-12 and there is one destination left, so the same
+ * There is one destination — the creator's own ladder — so the same
  * assertions run against the creator's ladder. The Badge-naming tests survive on
  * `unlockRoute` directly, which still takes an issuer's Badge set — that is the seam a
  * creator's own Badges will arrive through.
@@ -97,7 +97,7 @@ describe("unlock offer — the marginal ask", () => {
 
 describe("unlock offer — there is no Anthers route any more", () => {
 	/**
-	 * The behavioural half of the Anthers Gate retirement, and the reason it is asserted
+	 * The behavioural half of the one-destination rule, and the reason it is asserted
 	 * rather than left to the type system: a viewer's Badge must not open a Work, and a
 	 * Work must not advertise a Badge as a way in. Giving Anthers $12 —
 	 * the top Badge — changes nothing about a creator-gated Work.

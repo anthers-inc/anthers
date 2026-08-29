@@ -48,7 +48,7 @@ describe("what supporting Anthers does", () => {
 	 * one value: **access is binary and arrives whole at the Public Access price.** Nothing
 	 * above it buys more. A regression here would most likely look like someone
 	 * reintroducing a ladder — a limit that scales with the amount — which is precisely the
-	 * stratified commons that retiring Anthers Gates was for.
+	 * stratified commons the binary model exists to prevent.
 	 */
 	test("the Public Access price removes the limit, and every amount above it is identical", () => {
 		const at = publicAccessBudget(PUBLIC_ACCESS_PRICE, 500 * HOUR);

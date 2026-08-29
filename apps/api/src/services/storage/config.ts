@@ -7,21 +7,14 @@
  * taking an env-shaped object can be tested against every provider's URL shape without
  * credentials, a network, or a bucket.
  *
- * ── Vendor-neutral names, and nothing else ─────────────────────────────────────────
+ * ── Vendor-neutral names, and no defaults ──────────────────────────────────────────
  *
- * The variables were `SPACES_*`, which named DigitalOcean in the configuration as well as
- * in the code. They became `STORAGE_*` with the old names kept as fallbacks, and every
- * default composed a DigitalOcean Spaces URL, so an environment that set nothing new
- * behaved identically — the property that made introducing this file a no-op.
- *
- * **Both are gone as of 2026-08-11, because the thing they protected is gone.** The
- * fallbacks existed because pushing to `release` never applies the committed spec, so a
- * rename could have deployed cleanly and then failed every upload on empty credentials
- * against a *live* Spaces deployment. That deployment has been deleted: Anthers runs on
- * Cloudflare R2 under an Anthers-owned account, and there is no Spaces bucket, cluster or
- * app left to fall back to. Keeping them would leave a configuration path nothing
- * exercises — and one of those defaults (`nyc3`) is the specific value that made every R2
- * call fail, which is a poor thing to leave loaded.
+ * 🚨 **The variables are `STORAGE_*` and none of them has a default**, which is a
+ * deliberate reversal of how this file started. A default that composes a working URL for
+ * one provider is loaded ammunition the moment the provider changes: a region default of
+ * `nyc3` is exactly what made every Cloudflare R2 call fail, and it reported
+ * `SignatureDoesNotMatch` rather than anything about a region. A half-configured
+ * environment must fail loudly at boot instead of on the first upload.
  *
  * So the required variables are now **required**, and `resolveStorageConfig` throws naming
  * the missing ones rather than composing a URL for a vendor we left.
@@ -113,11 +106,10 @@ function env(source: Record<string, string | undefined>, name: string): string {
 /**
  * Every variable that must be present for S3 storage to work at all.
  *
- * There are no defaults for these any more. Each used to have one that composed a
- * DigitalOcean Spaces URL — which was correct while Spaces was what we ran on, and became
- * actively harmful the moment it wasn't: `STORAGE_REGION` defaulting to `nyc3` is precisely
- * what made every R2 call fail, with presigned URLs reporting `SignatureDoesNotMatch`
- * rather than anything about a region.
+ * 🚨 **None of these has a default, and none should get one.** A default that composes a
+ * working URL for whichever provider is current becomes actively harmful the moment the
+ * provider changes — see the note at the top of this file for the region default that
+ * failed every call while reporting a signature error.
  *
  * `STORAGE_PUBLIC_BUCKET` is deliberately NOT here. Falling back to the private bucket is a
  * real posture (one bucket, per-object ACLs) rather than a vendor guess, and it is what

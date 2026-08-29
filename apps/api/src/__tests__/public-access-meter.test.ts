@@ -135,7 +135,7 @@ function playlist(workId: number, cookie?: string) {
 /**
  * Set what this user gives Anthers, **in dollars**.
  *
- * ⚠️ Named `setSeeds` and called with Seed-era integers until 2026-08-17 — which is how
+ * ⚠️ This helper once took a different unit from the function it drove — which is how
  * this suite stayed green while `publicAccessBudget` compared dollars against `>= 1` and
  * $1 a month bought unlimited access priced at $3.
  */
@@ -272,7 +272,7 @@ describe("the meter withholds bytes, not just numbers", () => {
 	/**
 	 * 🚨 The claim the whole model rests on: **access is binary and arrives whole at the
 	 * Public Access price.** A regression would most plausibly look like a per-dollar allowance
-	 * creeping back in — the stratified commons retiring Anthers Gates was meant to end.
+	 * creeping back in — the stratified commons the binary model exists to prevent.
 	 */
 	it("the Public Access price removes the limit, however much has been watched", async () => {
 		await setSupport(seededId, PUBLIC_ACCESS_PRICE);
@@ -505,7 +505,7 @@ describe("media with no player of their own", () => {
 		 * The whole distinction the model rests on. The Work is free to everyone and stays
 		 * free to everyone; what ran out belongs to the *account*. If `access` ever starts
 		 * reporting denied here, the commons has quietly re-stratified — which is the exact
-		 * thing retiring Anthers Gates was for — and the UI would show a lock ("you may
+		 * thing the binary model forbids — and the UI would show a lock ("you may
 		 * not") where the truth is a spent allowance ("you may, and here is how").
 		 */
 		expect(work.access.isFree).toBe(true);

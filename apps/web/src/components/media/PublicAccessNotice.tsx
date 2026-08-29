@@ -15,7 +15,7 @@
  * it. That is why the countdown exists at all: the wall on its own would be a working
  * feature and a dishonest one.
  *
- * ⚠️ **This is the platform's only conversion event**, since Anthers Gates were retired.
+ * ⚠️ **This is the platform's only conversion event.**
  * It is the one moment a free user is asked for money by something they actually wanted,
  * rather than by an argument on a marketing page. Which cuts both ways — it earns the
  * right to be a real interruption, and it is the last place that should feel like a

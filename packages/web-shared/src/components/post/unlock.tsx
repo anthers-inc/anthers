@@ -35,7 +35,7 @@ import type { AccessResult, UnlockRoute } from "../../lib/types";
  *
  * That is the same line the Public Access meter draws and for the same reason — a Work is
  * never described as gated by something that belongs to the viewer, or the commons quietly
- * reads as stratified again, which is what retiring Anthers Gates was for.
+ * reads as stratified again, which the binary model exists to prevent.
  */
 export function presentsAsLocked(access: AccessResult | null | undefined): boolean {
 	if (!access || access.canAccess) return false;
@@ -48,7 +48,7 @@ export function presentsAsLocked(access: AccessResult | null | undefined): boole
  * Returns null when the Work isn't gate-openable (purchase-only, or logged out).
  *
  * ⚠️ **It chose between two routes until 2026-08-29 and there has only ever been one to
- * choose since Anthers Gates were retired.** The second was `unlock.anthers`, which the
+ * choose.** The second was `unlock.anthers`, which the
  * server stopped emitting on 2026-08-12 and which the *client* type went on declaring — so
  * the comparison that picked the cheaper of the two typechecked, read as considered, and had
  * one operand that was always undefined. The name is kept because the shape it names is real:
@@ -68,7 +68,7 @@ function cheapestRoute(
 
 /** "$6.00 more" — always the MARGINAL ask, never the threshold. */
 function seedsToGo(moreNeeded: number): string {
-	// ⚠️ A MONEY amount, since 2026-08-16 — it was a Seed count. Rendering it as a count
+	// ⚠️ **A MONEY amount, never a count.** Rendering it as a count
 	// would be wrong in two directions at once now: there is no unit to count, and a
 	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
 	return `$${moreNeeded.toFixed(2)} more`;
@@ -77,8 +77,7 @@ function seedsToGo(moreNeeded: number): string {
 /**
  * The imperative: what to do, in the fewest words, about the gap the viewer is actually
  * facing. One kind of giving, named by where it goes — there is no second kind. (The
- * guide entry this used to quote taught the Seed, and retired with it on 2026-08-16; the
- * point it made survives, because what changed was the unit and not the shape.)
+ * point survives whatever the amounts are called, because it is about the shape.)
  */
 export function unlockLabel(access: AccessResult, creatorName = "this creator"): string {
 	if (access.reason === "login_required") return "Log in to unlock";

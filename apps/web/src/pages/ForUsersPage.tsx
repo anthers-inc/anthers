@@ -12,33 +12,27 @@
 // (what goes to Anthers funds free public content via the Time Pool and lifts the
 // viewer's own Public Access limit).
 //
-// 🚨 RESEQUENCED 2026-08-17, and it ran the other way round for as long as this page had
-// existed. Support for Anthers led because it used to be the load-bearing gate — it paid
-// for streaming bandwidth generally, so everyone needed some. It buys **Public Access**
-// now, and nothing else, and early visitors arrive at the invitation of a creator who is
-// already here: with few creators there is little Public Access to want yet, so the
-// commons is not the tip of the funnel. Lead with *support the creators you love, and
-// Anthers takes no cut, so you pay less and they make more*; Public Access is the
-// second, optional thing. Reordering this back is a product decision, not a layout one.
+// 🚨 **The creator ask leads and Public Access follows it, and reordering that back is a
+// product decision rather than a layout one.** Support for Anthers buys Public Access and
+// nothing else, and early visitors arrive at the invitation of a creator who is already
+// here: with few creators there is little Public Access to want yet, so the commons is not
+// the tip of the funnel. Lead with *support the creators you love, and Anthers takes no
+// cut, so you pay less and they make more*.
 //
-// 🚨 Rewritten 2026-08-14, because the page taught two retired mechanisms. It framed
-// gates as "one primitive pointed two ways" and sold Anthers' Badges on the content they
-// unlocked — but **Anthers Gates are retired** (2026-08-12): there is one gate primitive
-// and it points only at creators, so a Work is gated by its creator or it is Public
-// Access, with no Badge threshold in between. A Badge is now **standing, not
-// entitlement**. What supporting Anthers actually buys is the *lifted Public Access
+// 🚨 **There is one gate primitive and it points only at creators**, so a Work is gated by
+// its creator or it is Public Access, with no Badge threshold in between. A Badge is
+// **standing, not entitlement**. What supporting Anthers buys is the *lifted Public Access
 // limit* (at the Public Access price, whole) and a *larger Time Pool* for the creators you
 // spend time with (linearly, at every level). Write the ladder as what your giving does,
 // never as what you get to see — 63.01 § Words, "Anthers' Badges".
 //
 // ⚠️ And the free tier is bounded: FREE_PUBLIC_ACCESS_HOURS a month. 63.01 makes
 // co-presence mandatory — "free forever" without the limit beside it reads as unlimited,
-// and the limit is the whole reason to start giving. Never say this page's old
-// "streams without a meter".
+// and the limit is the whole reason to start giving. Never write streaming as unmetered.
 //
 // All numbers derive from the support model. Anthers' Badges sit at $3–$12 a month given
-// to Anthers (Root–Blossom, "+" beyond); ⚠️ the $3 Seed UNIT retired 2026-08-16, so a
-// level is an amount and never a count of anything.
+// to Anthers (Root–Blossom, "+" beyond); ⚠️ a level is an amount and never a count of
+// anything, because there is no unit for it to count.
 //
 // Motion: content fades up on load (hero) and as it scrolls into view (sections),
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).

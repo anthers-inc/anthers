@@ -12,9 +12,8 @@
  * two marketing pages; `econ:figures --check` now carries a `RETIRED_COPY` rule so it
  * cannot walk back.
  *
- * A second table sat beside this until 2026-08-12, gating on the viewer's Anthers Badge,
- * with access the OR across both. Anthers Gates are retired — they stratified the commons
- * — so a Work is gated by its creator or it is Public Access, and there is one table.
+ * ⚠️ **One table.** A Work is gated by its creator or it is Public Access; there is no
+ * platform-side second table to render, and adding one would stratify the commons.
  */
 import { amountLabel } from "@anthers/shared/constants";
 import type { CreatorGate, SeedAccessRow } from "../../lib/types";

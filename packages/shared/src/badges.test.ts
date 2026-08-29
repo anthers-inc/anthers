@@ -3,16 +3,13 @@
 // Coverage for the Badge model — the rule that a Badge is identified by its **amount**
 // and never by its position in a list.
 //
-// The distinction has teeth. The retired `badgeRank` was `BADGE_ORDER.indexOf(name)`, and
-// the retired `seedsMeetRank` compared a held count against that index. It gave correct
-// answers only because Anthers' own Badges sat at 1/2/3/4 Seeds, where index and threshold
-// coincide — an accident, not a design. Any issuer whose Badges skip a level mis-resolved
-// access *silently*: no error, no crash, just wrong answers about who may read what.
+// 🚨 **Compare thresholds, never positions.** A resolver that compares a held amount
+// against a Badge's INDEX gives correct answers for as long as an issuer's ladder happens
+// to sit at consecutive values, and mis-resolves access *silently* the moment one skips a
+// level — no error, no crash, just wrong answers about who may read what. A creator's
+// ladder is an arbitrary set of amounts, so non-consecutive is the ordinary case.
 //
-// 🚨 **That accident is now impossible to rely on, which is why this file grew rather than
-// shrank.** Thresholds became dollars on 2026-08-16 when the Seed retired as a unit, so a
-// creator's ladder is an arbitrary set of amounts and non-consecutive is the ORDINARY case.
-// What replaces the index hazard is a float one: two `numeric` columns compared with `>=`.
+// ⚠️ **The successor hazard is a float one**: two `numeric` columns compared with `>=`.
 // The sparse ladder below is deliberately not round for exactly that reason.
 import { describe, expect, test } from "bun:test";
 import {
@@ -31,8 +28,8 @@ import {
 /**
  * A creator's ladder with gaps AND cents — the two cases a resolver gets silently wrong.
  *
- * $2.50 and $7.30 are the point: under the retired whole-Seed model neither could exist,
- * and both are now perfectly ordinary things for a creator to charge.
+ * $2.50 and $7.30 are the point: both are perfectly ordinary things for a creator to
+ * charge, and both break a resolver that assumes whole dollars.
  */
 const SPARSE: readonly BadgeDef[] = [
 	{ name: "spark", threshold: 1 },

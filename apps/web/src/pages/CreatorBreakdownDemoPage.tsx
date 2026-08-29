@@ -127,9 +127,6 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
  * Time Pool only, shared across everyone they spend time with; a creator's actual take is
  * their time share of it plus anything directed straight to them (separate, and no
  * platform cut). Derived from @anthers/shared/constants.
- *
- * ⚠️ This described a *count* of Seeds at $3 each until 2026-08-19, and had the fan
- * "covering their own streaming at cost" — a bandwidth line retired 2026-08-12.
  */
 const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
 	(b) => {

@@ -297,7 +297,7 @@ describe("the Public Access incentive ceiling", () => {
 describe("the paying-user mix", () => {
 	test("the shipped decay puts the average payer at $6.59 a month", () => {
 		// 2.20 rungs at $3 — the figure 61.01 names as its current assumption, in the
-		// dollars the model has been denominated in since the Seed retired as a unit.
+		// dollars the model is denominated in.
 		expect(averageSupport(payingBadgeMix())).toBeCloseTo(6.59, 2);
 		expect(averageSupport(payingBadgeMix()) / 3).toBeCloseTo(2.2, 2);
 	});

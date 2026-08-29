@@ -32,7 +32,7 @@ import {
 } from "./fees.js";
 import { BADGE_TABLE } from "./figures.generated.js";
 
-/** Anthers' own rungs, in dollars — $3/$6/$9/$12 since the Seed retired as a unit. */
+/** Anthers' own rungs, in dollars — $3/$6/$9/$12. */
 const PAID_RUNGS = [3, 6, 9, 12];
 
 describe("anthersSupportBreakdown", () => {

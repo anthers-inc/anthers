@@ -127,10 +127,9 @@ export const accountCycles = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(), // YYYY-MM-01
-		// 🚨 ONE column, not two. This carried `anthers_seeds` (a count) beside
-		// `anthers_spend` (that count × $3) until 2026-08-16 — two descriptions of one fact,
-		// which is the defect the whole Seed retirement is about. The count is gone and the
-		// dollars are the record.
+		// 🚨 **ONE column, not two.** A count sat beside its own dollar value here once —
+		// two descriptions of one fact, which is exactly what drifts. The dollars are the
+		// record; never add a derived companion to them.
 		anthersSupport: numeric("anthers_support").notNull().default("0.00"), // $/mo to Anthers this cycle
 		creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $ directed to creators
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
@@ -415,13 +414,10 @@ export const poolDistributions = pgTable(
  * `threshold` is **monthly dollars**. `seed` rungs read what the viewer directs to this
  * creator this cycle; the direction is the only difference between gate types.
  *
- * 🚨 **It has been through both units and landed back on dollars, which is worth knowing
- * before anyone changes it again.** It counted dollars originally; migration `0007`
- * divided by 3 to store whole Seeds, because the price of a Seed was otherwise baked into
- * every stored gate. That reasoning died with the unit on 2026-08-16 — a creator sets
- * their own levels to any amount now, so there is no shared price to leak, and storing
- * Seeds would instead bake in a *conversion* that no longer means anything. Migration
- * `0041` multiplied back by 3.
+ * 🚨 **Store the amount, never a conversion of it.** This column once held a count
+ * derived by dividing by a shared price, to keep that price out of every stored gate — a
+ * reason that died when creators began setting their own levels, since there is no shared
+ * price left to leak and a stored conversion bakes in a ratio that means nothing.
  *
  * Naming the rungs is this table's job; deciding a Work's access is `works.seed_access`'s,
  * and a Work may gate at a threshold no rung is named for.

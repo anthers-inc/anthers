@@ -2,13 +2,12 @@
 /**
  * The **Library** — everything the user has kept.
  *
- * This page used to read `/api/payments/purchases` with Seed buys filtered out: a receipt
- * list wearing a shelf's name. That worked while "yours" meant "paid for", and stopped
- * working the moment the commons did — **most of what a person loves on Anthers is free**,
- * so it was never purchasable and therefore had nowhere to live. Bookmarks half-covered
- * that and half-covered four other things, which is why both felt like half a feature.
+ * 🚨 **A shelf, not a receipt list, and the commons is what forces the distinction.** Most
+ * of what a person loves on Anthers is free, so it was never purchasable — a list built
+ * from purchases has nowhere to put it, and bookmarks half-covered that and half-covered
+ * four other things, which is why both felt like half a feature.
  *
- * Now it reads `/api/content/library`: purchases, which land here automatically and
+ * So it reads `/api/content/library`: purchases, which land here automatically and
  * permanently, alongside anything free the user chose to **save**.
  *
  * Two behaviours worth knowing before changing anything here:

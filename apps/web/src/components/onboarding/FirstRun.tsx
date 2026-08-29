@@ -17,7 +17,7 @@
  *     declined once, and asking again ninety seconds later is how a funnel becomes a nag.
  *   • **cold** — came through the classic signup page and was never asked anything.
  *
- * ⚠️ **This must not become a second conversion ask.** With Anthers Gates retired, the
+ * ⚠️ **This must not become a second conversion ask.** The
  * platform's only conversion event is the free-limit moment — a person converts when
  * they want something specific, not when a page asks twice. A first-run screen leading
  * with "give us $3" competes with the moment that is supposed to do that work, and does

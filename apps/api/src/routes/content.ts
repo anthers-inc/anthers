@@ -319,14 +319,14 @@ const MONEY = /^\d+(\.\d{1,2})?$/;
 /**
  * One row shape for the Work's one access table: a monthly-dollar threshold, an allow
  * flag, and a price. The threshold is what the viewer has given this Work's creator
- * this cycle. (An Anthers table sat beside it, counting the viewer's own Badge, until
- * migration `0029` folded it in when Anthers Gates retired on 2026-08-12.)
+ * this cycle, and there is exactly one such table.
  *
- * 🚨 **`z.number().int()` until 2026-08-16, and the justification inverted.** It read
- * *"a gate sits at a whole Seed or nowhere, and accepting 2.5 would let a row be written
- * that no viewer can ever exactly meet"* — true while Seeds were indivisible, and exactly
- * backwards once they retired: $2.50 is now an ordinary thing to give, so refusing it
- * writes off the amounts a creator is most likely to choose.
+ * 🚨 **Cents, not integers, and this is a justification that inverted under its own
+ * premise.** Refusing a fractional threshold was once right — a gate nobody could exactly
+ * meet is a gate nobody can clear — and became exactly backwards when amounts stopped
+ * being whole multiples of anything: $2.50 is an ordinary thing to give, so refusing it
+ * writes off the amounts a creator is most likely to choose. **Check whether a rule's
+ * reason still holds before preserving the rule.**
  *
  * Two cents of precision, because that is what can be charged and what `amountMeets`
  * compares in. Finer would be a threshold nobody could pay to the cent.
@@ -1006,7 +1006,7 @@ function previewRequest(c: {
 	const raw = c.req.query("previewAs")?.trim();
 	if (!raw) return null;
 	if (raw === "out") return { given: null, owned: false };
-	// ⚠️ NOT `Number.isInteger` any more. Amounts carry cents since the Seed retired as a
+	// ⚠️ **NOT `Number.isInteger`.** Amounts carry cents, so an integer check refuses a
 	// unit, so an integer check would silently refuse to preview any creator whose own
 	// ladder sits at $2.50 — the exact case a preview exists to let them see.
 	const given = Number(raw);
@@ -1116,7 +1116,7 @@ async function workAccessFor(
  * A free account watches 10 hours of Public Access a month; the Public Access price
  * given to Anthers removes the limit. That is a property of the **account**, not of the Work — the
  * Work stays free to everyone either way — so encoding it as a Work-level denial is how
- * the commons quietly re-stratifies, which is exactly what retiring Anthers Gates was
+ * the commons quietly re-stratifies, which is exactly what this rule was
  * for. `resolveAccessSync` also has to stay pure and synchronous so a Catalog page
  * resolves a batch without an N+1, and this needs a query.
  *
@@ -1290,7 +1290,7 @@ function serializeWorkForViewer(
 	 * always will be, but you have used your hours this month). The second never touches
 	 * `access` below — the Work still reports itself free, because it *is* free. What ran
 	 * out belongs to the account, and a Work that described itself as gated by someone
-	 * else's meter would re-stratify the commons the retirement of Anthers Gates removed.
+	 * else's meter would re-stratify the commons this rule keeps flat.
 	 *
 	 * A third, since 2026-08-28: a guardian's **time limit**, which behaves like the allowance
 	 * for the same reason — it belongs to the account and says nothing about the Work. Note it
@@ -3542,8 +3542,7 @@ const contentRoutes = new Hono()
 			WHERE pi.project_id = ${projects.id} AND w.visibility = 'released' AND (${predicate})
 		)`;
 
-		/** Any allowed row on the Work's access table. (There were two tables to concatenate
-		 * here until Anthers Gates were retired on 2026-08-12.) */
+		/** Any allowed row on the Work's access table — there is exactly one such table. */
 		const anyAccessRow = (predicate: SQL) => sql`EXISTS (
 			SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
 			WHERE (r->>'allow')::boolean AND (${predicate})

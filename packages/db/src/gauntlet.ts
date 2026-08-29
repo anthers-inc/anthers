@@ -54,20 +54,15 @@ export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
  * clear the $9.50 rung and NOT the $15 one, and any implementation that has drifted back
  * to counting positions fails the walk instead of passing it.
  *
- * It grew from three rungs to five on 2026-08-12, when Anthers Gates were retired: G2–G5
- * were Badge rungs, and rather than let the staircase get four steps shorter, the walk
- * now climbs the one gate type that still exists, further and less evenly.
+ * 🚨 **The ladder is sparse and one rung deliberately carries CENTS, and both properties
+ * are load-bearing.** A round, evenly-spaced ladder exercises neither hazard: a sparse one
+ * catches a resolver comparing positions instead of thresholds, and `$9.50` catches one
+ * comparing floats off `numeric` columns without rounding to cents — the failure that
+ * denies a supporter the exact Badge they paid for. The walk needs both, so do not tidy
+ * these numbers.
  *
- * 🚨 **Re-denominated from whole Seeds to dollars on 2026-08-16, and one rung deliberately
- * carries CENTS.** (It was `SEED_RUNGS` until 2026-08-19 — renamed because the *meaning*
- * changed, a count becoming an amount, which is the same exception `accounts.anthers_seeds`
- * → `anthers_support` earned. **Badge** is the ladder noun a creator sets; "gate" is the
- * generic term for what opens a Work.) The old ladder was `[1, 2, 3, 5, 7]` Seeds; a straight × 3 would have
- * given `[3, 6, 9, 15, 21]`, every rung round, and would have exercised none of the new
- * hazard. Thresholds are floats off `numeric` columns now, so `$9.50` is here to catch a
- * resolver that has quietly started comparing them without rounding to cents — the failure
- * that denies a supporter the exact Badge they paid for. A sparse ladder catches position
- * comparison; a non-round rung catches float comparison. The walk needs both.
+ * (**Badge** is the ladder noun a creator sets; "gate" is the generic term for what opens
+ * a Work.)
  */
 export const BADGE_RUNGS = [3, 6, 9.5, 15, 21] as const;
 
@@ -165,13 +160,9 @@ function post(
 /**
  * The posts, in staircase order: one free, one purchase-only, and a Badge ladder between.
  *
- * 🚨 **G2–G5 used to be Anthers Badge rungs** (Root / Sprout / Petal / Blossom), with the
- * two access tables kept strictly orthogonal because access was the OR across both.
- * **Anthers Gates were retired on 2026-08-12** and those four posts went with them. The
- * staircase did not get shorter: the Badge ladder grew from three rungs to five, and to
- * deliberately uneven ones — see `BADGE_RUNGS`.
- *
- * The last rung is reachable by no gate at all, so purchase is the only way in.
+ * The Badge ladder is five rungs and deliberately uneven — see `BADGE_RUNGS` for why the
+ * unevenness is the point. The last rung is reachable by no gate at all, so purchase is
+ * the only way in.
  */
 export const GAUNTLET_POSTS: GauntletPost[] = [
 	post(
@@ -199,10 +190,8 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 	// keyed to the rung's **dollar amount** (`seed-9.5`), and the amount is the THRESHOLD
 	// rather than the rung's position, which is what keeps a sparse ladder honest.
 	//
-	// ⚠️ This said slugs were "keyed to the Seed *count*, so retuning SEED_PRICE doesn't
-	// orphan the seeded rows". There is no `SEED_PRICE` — it retired with the unit — and
-	// the slugs are amounts. The `seed-` prefix stays: it is a data key on rows already
-	// seeded, and renaming it would orphan exactly what the original note worried about.
+	// ⚠️ The `seed-` prefix stays: it is a data key on rows already seeded, so renaming it
+	// would orphan them. It names the column, not a unit.
 	...BADGE_RUNGS.map((amount, i) =>
 		post(
 			2 + i,
@@ -217,8 +206,7 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 				seedAccess: seedRung(amount),
 				// Gated + real audio on the SECOND rung: the mirror of G1, where the bytes must
 				// NOT arrive until the viewer climbs. Audio because it exercises the second
-				// delivery endpoint, which nothing else walks. It sat on the Sprout Badge gate
-				// until Anthers Gates were retired; the case it covers is unchanged.
+				// delivery endpoint, which nothing else walks.
 				...(i === 1 ? { contentType: "audio", media: "audio" as const } : {}),
 			},
 		),
@@ -314,10 +302,8 @@ function reasonsFor(givenAmount: number, purchased: boolean): Record<string, Gau
  * following must never grant access. The resolver can't even see a follow (no such field
  * in `AccessContext`); the e2e row exists to prove the *app* honors that too.
  *
- * 🚨 **`anthersSupport` is the same kind of field now, and that is the Anthers Gate
- * retirement made visible.** Four Badge rows sat in this staircase until 2026-08-12,
- * climbing Root → Blossom and unlocking a post each. A Badge opens nothing now, and
- * `AccessContext` no longer carries the count at all — so, exactly like a follow, it is
+ * 🚨 **`anthersSupport` is the same kind of field**: a Badge opens nothing, and
+ * `AccessContext` does not carry it at all — so, exactly like a follow, it is
  * *structurally* incapable of affecting access rather than merely asserted not to. The
  * field rides along here as documentation and for the e2e walk to set.
  */
@@ -328,9 +314,8 @@ function reasonsFor(givenAmount: number, purchased: boolean): Record<string, Gau
  * when there are any. Printing `$9.50` as `$9.5` or `$10` would defeat the rung's whole
  * purpose: it exists to assert that a non-round threshold survives the round trip.
  *
- * ⚠️ A local `amountLabel()` sat between this and `amountLabel` until 2026-08-19, by then a
- * pure pass-through — it had converted Seeds to dollars, and the retirement left the
- * wrapper once there was nothing left to convert.
+ * ⚠️ Call the shared helper directly. A local wrapper sat here once, doing a conversion
+ * that stopped existing, and a pure pass-through is a thing that looks load-bearing.
  */
 function badgeRungState(amount: number): string {
 	return `${amountLabel(amount)} given`;
@@ -389,9 +374,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
  * Distinct from the per-post access table above, which is what actually authorizes.
  * Thresholds are **monthly dollars given to this creator** (migration `0041`).
  *
- * An `anthers_badge` half sat beside this until 2026-08-12, advertising Root/Sprout/
- * Petal/Blossom as rungs a creator could gate on. Anthers Gates are retired, so a
- * creator advertises only their own ladder now.
+ * A creator advertises only their own ladder; there is no second, platform-side half.
  */
 export const GAUNTLET_GATES: Array<{
 	gateType: "seed";

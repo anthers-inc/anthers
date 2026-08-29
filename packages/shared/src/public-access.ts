@@ -19,7 +19,7 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  * Public Access be described as free to everyone without qualification. A Work is not
  * "10-hour content"; a *viewer* has a monthly allowance. The distinction matters because
  * the alternative — metering per Work — is how you end up back at a stratified commons,
- * which is exactly what retiring Anthers Gates was for.
+ * which is exactly what the binary model exists to prevent.
  *
  * **What the meter does NOT count**, and each exclusion is load-bearing:
  *
@@ -180,8 +180,8 @@ export function shareLinkBudget(usedSeconds: number): ShareLinkBudget {
  * — point-in-time, like everything else in the model. Reaching the Public Access price is
  * the only threshold that matters, and nothing above it buys more.
  *
- * 🚨 **This took a Seed COUNT until 2026-08-17 and tested `Math.floor(seeds) >= 1`.** The
- * Seed retirement converted the caller — `services/public-access.ts` began passing
+ * 🚨 **Dollars, and the unit changed under this function once without a single test
+ * noticing.** The caller — `services/public-access.ts` — began passing
  * `supportAmount(...)`, i.e. dollars — and left this contract behind, so **$1 a month
  * bought unlimited access priced at $3**, for anything above a dollar and below three.
  *

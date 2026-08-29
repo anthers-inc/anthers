@@ -117,18 +117,15 @@ export const creatorCap = (accounts: number) => Math.max(CREATOR_FLOOR, accounts
  * flattening-risk table sweeps — that table's rows *are* different decay values — and it
  * admits amounts above Blossom, which the product supports ("+" beyond the top rung).
  *
- * ⚠️ **Re-keyed from Seed counts to dollars on 2026-08-16 when the Seed retired as a unit,
- * and the model did not move**: the rungs were `n` and are `n × $3`, so every landmark is
- * unchanged and only the published axis label differs. It steps at `PUBLIC_ACCESS_PRICE`
- * because those are **Anthers'** own Badge levels — creators may sit anywhere, but this
- * model is about Anthers' books and only Anthers-directed money reaches them.
+ * ⚠️ **Keyed in dollars**, stepping at `PUBLIC_ACCESS_PRICE` because those are **Anthers'**
+ * own Badge levels — creators may sit anywhere, but this model is about Anthers' books and
+ * only Anthers-directed money reaches them.
  *
- * 🚨 **This replaced four hand-typed shares on 2026-08-16, and the replacement was the
- * point of that task, not a side effect.** `scenarios.ts` carried `{1: .5, 2: .3, 3: .15,
- * 4: .05}` — a lighter distribution — while the ladder ran on this one, so the two models
- * published **two different floor paying shares** (10.3% and 8.8%) and 61.01 had to carry
- * a warning saying which governed. Two descriptions of one fact is the failure every
- * generated figure in this repo exists to prevent; a mix is no different.
+ * 🚨 **This is the only mix, and there were two once.** A second, lighter distribution sat
+ * in `scenarios.ts` while the ladder ran on this one, so the two published **two different
+ * floor paying shares** (10.3% and 8.8%) and 61.01 had to carry a warning saying which
+ * governed. Two descriptions of one fact is the failure every generated figure in this
+ * repo exists to prevent; a mix is no different.
  */
 export const PAY_DECAY = 0.55;
 /** Rungs the mix spans. Beyond ten the weights are noise (0.55^10 ≈ 0.003). */

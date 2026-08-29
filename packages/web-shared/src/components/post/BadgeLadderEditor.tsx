@@ -19,7 +19,7 @@ import { TakeHome } from "../economics/TakeHome";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
 function rungAmount(v: string): string {
-	// ⚠️ It floored to a whole Seed until 2026-08-16. Flooring a DOLLAR amount silently
+	// ⚠️ **Never floor this.** Flooring a DOLLAR amount silently
 	// turns a creator's $2.50 rung into $2 — the granularity the unit retirement removed,
 	// reintroduced by a coercion nobody would look at twice.
 	const n = supportAmount(v);

@@ -42,7 +42,7 @@ export interface PreviewBadge {
 /**
  * How far the dial goes when a creator has no gates worth speaking of.
  *
- * ⚠️ **Dollars a month, not a Seed count** — it was 6 Seeds ($18) and became $6 without
+ * ⚠️ **Dollars a month, never a count** — a unit change here once turned $18 into $6 without
  * anyone touching the number, when thresholds were re-denominated on 2026-08-16. $12 is
  * the top Anthers Badge, a reasonable reach for a ladder with nothing on it.
  */

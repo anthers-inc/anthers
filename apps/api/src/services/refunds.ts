@@ -35,7 +35,7 @@
  *     to the charitable ledger as a negative entry so the pool's balance tells the
  *     truth.
  *     A refund that moves money without a ledger row is the silent version of the
- *     gross-vs-net bug that cost ~$0.39 a Seed until 2026-08-08.
+ *     gross-vs-net bug that cost ~$0.39 on every lone directed charge.
  *
  *   • **The cap counts refunds after DOWNLOAD, and only buyer-initiated ones.** A
  *     takedown or a defect refunds someone who may well have downloaded, and must
