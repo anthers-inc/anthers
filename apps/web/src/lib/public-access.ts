@@ -117,8 +117,8 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
  * The budget **only when it actually applies to this viewer** — signed in, and limited.
  *
  * Null covers three genuinely different situations that all mean *do not render a
- * meter*: not signed in (not metered at all), not yet known, and unlimited (holds a
- * Seed). Collapsing them is safe here because every caller does the same thing with all
+ * meter*: not signed in (not metered at all), not yet known, and unlimited (gives Anthers
+ * the Public Access price). Collapsing them is safe here because every caller does the same thing with all
  * three, and separating them would push a three-way branch into every consumer to no
  * end.
  *

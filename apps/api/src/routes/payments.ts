@@ -519,7 +519,7 @@ const paymentRoutes = new Hono()
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		// "Owns" = can consume it now: creator, free, a prior purchase, or an
-		// entitlement grant (subscriber/Seed). resolveAccess unifies all four.
+		// entitlement grant (a gate their monthly support clears). resolveAccess unifies all four.
 		const access = await resolveAccess(work, user.id);
 		return c.json({ owns: access.canAccess });
 	})

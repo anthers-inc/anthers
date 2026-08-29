@@ -497,11 +497,18 @@ function renderCreatorReceiptMarkdown(): string {
 /** Whether the charitable budget funds itself, as a function of the paying share. */
 function renderSelfSufficiencyMarkdown(): string {
 	const s = selfSufficiency();
-	// Only the rungs carrying a whole percent — the tail runs to ten Seeds and printing
-	// "0% at 9" teaches the reader the mix stops there, which is the opposite of true.
+	// 🚨 **The keys are DOLLARS and the `$` is load-bearing.** This destructured them as
+	// `seeds` and printed a bare number until 2026-08-29, so the block published "45% at 3,
+	// 25% at 6, 14% at 9" one line below the words "$6.59 a month" — every figure correct and
+	// every one of them reading as a count of the retired $3 Seed. The mix has been keyed in
+	// dollars since 2026-08-16; nothing was wrong but the notation, which is the only part a
+	// reader sees.
+	//
+	// Only the rungs carrying a whole percent: the mix spans ten and printing a rung at "0%"
+	// would teach the reader it stops there, which is the opposite of true.
 	const mix = Object.entries(PAYING_BADGE_MIX)
 		.filter(([, share]) => Number(share) >= 0.01)
-		.map(([seeds, share]) => `${(Number(share) * 100).toFixed(0)}% at ${seeds}`)
+		.map(([amount, share]) => `${(Number(share) * 100).toFixed(0)}% at $${amount}`)
 		.join(", ")
 		.concat(", trailing off beyond that");
 	return [
@@ -1151,6 +1158,22 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			"gi",
 		),
 		why: "a free account's Public Access is capped monthly — say the limit beside the freedom (63.01 § Claims: co-presence)",
+	},
+	{
+		// 🚨 **A support rung written as a bare number reads as a count of the retired unit,
+		// however correct the number is.** This is the exact defect that reached published
+		// output: `renderSelfSufficiencyMarkdown` destructured `PAYING_BADGE_MIX` — keyed in
+		// dollars since 2026-08-16 — as `seeds` and printed the key without a `$`, so 11.02
+		// published *"45% at 3, 25% at 6, 14% at 9"* one line below the words "$6.59 a
+		// month". Every figure was right and every one of them said "three Seeds".
+		//
+		// ⭐ It is the one shape of this failure a regex can actually catch, which is why it
+		// is here and why the rest of the sweep was a reading pass. A scanner cannot tell a
+		// comment *recording* that the Seed was retired from one describing it as current —
+		// the corpus holds about 150 of the first — but "a percentage at a bare number" has
+		// no correct occurrence in published copy, because every rung is money.
+		pattern: /\d+% at (?!\$)\d/g,
+		why: "a support rung is money — write it as `at $3`, or a bare number reads as a count of the Seed retired 2026-08-16",
 	},
 ];
 

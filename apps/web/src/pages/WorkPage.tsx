@@ -398,7 +398,7 @@ export default function WorkPage() {
 									)}
 								</>
 							) : (
-								<InlineUnlock post={work} access={access} onUnlocked={refetch} />
+								<InlineUnlock post={work} access={access} />
 							))}
 					</div>
 				) : spentOnThis ? (

@@ -3,9 +3,16 @@
  * What stands where a Work's deliverable would be, when the viewer cannot have it.
  *
  * For a gated Work that is an unlock: instead of bouncing the viewer to the creator's
- * Badges page, this offers the *exact minimum upgrade* that opens it — the lowest allowed
- * Anthers threshold (subscribe inline, with the confirmation modal) and/or the lowest Badge
- * rung — right where the viewer hit the gate.
+ * Badges page, this names the *exact minimum upgrade* that opens it — the lowest Badge rung
+ * that clears the gate — right where the viewer hit it.
+ *
+ * ⚠️ **There is one route out of a gate and there has been since Anthers Gates were
+ * retired.** A second branch offering to clear it by giving Anthers more survived here until
+ * 2026-08-29, complete with an inline subscribe flow and a confirmation modal — it read
+ * `access.unlock.anthers`, which the server has never emitted since `UnlockOffer` lost that
+ * field. It typechecked because the *client* type still declared it, which is the whole
+ * lesson: a dead branch stays compilable exactly as long as the type it reads keeps the
+ * field alive.
  *
  * ⚠️ **Since 2026-08-28 it also stands in front of free work, for a signed-out visitor**,
  * because consuming a Work requires an account. That case is not a gate and must not be
@@ -13,17 +20,11 @@
  * apart. It is also the surface that replaced `AnonymousViewerBanner` — the invitation to
  * make an account now stands *instead of* the player rather than underneath one.
  */
-import { amountLabel, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { Link, useLocation } from "@anthers/web-shared/router";
-import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon, UserPlusIcon } from "@heroicons/react/24/solid";
-import { useState } from "react";
-import SubscriptionPaymentModal, {
-	type SubscriptionPreview,
-} from "../subscribe/SubscriptionPaymentModal";
 
 /** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
 function seedsToGo(moreNeeded: number): string {
@@ -41,19 +42,10 @@ interface UnlockSubject {
 export default function InlineUnlock({
 	post,
 	access,
-	onUnlocked,
 }: {
 	post: UnlockSubject;
 	access: AccessResult;
-	onUnlocked: () => void;
 }) {
-	const [pending, setPending] = useState<{
-		anthersSupport: number;
-		badgeName: string;
-		preview: SubscriptionPreview;
-	} | null>(null);
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	const location = useLocation();
 
 	const creatorName = post.creator?.displayName || post.creator?.username || "this creator";
@@ -130,121 +122,47 @@ export default function InlineUnlock({
 		);
 	}
 
-	// The unlock routes come from the RESOLVER, which owns the thresholds — the client no
+	// The unlock route comes from the RESOLVER, which owns the thresholds — the client no
 	// longer derives them. It used to, and got the label wrong: it named the highest Badge
 	// at-or-below the gate, which by definition does not clear a gate sitting above it, and
-	// silently dropped the price whenever the gate fell between Badges. `badge` here is the
-	// Badge sitting EXACTLY at the threshold, or null when none does.
-	const anthersRoute = access.unlock?.anthers ?? null;
+	// silently dropped the price whenever the gate fell between Badges. `badge` on the route
+	// is the Badge sitting EXACTLY at the threshold, or null when none does.
 	const creatorRoute = access.unlock?.creator ?? null;
-	const minAnthersAmount = anthersRoute?.threshold;
-
-	const unlockWithBadge = async () => {
-		if (minAnthersAmount == null) return;
-		setLoading(true);
-		setError(null);
-		try {
-			// The gate's own threshold, not the Badge's — buying up to the named Badge could
-			// overshoot, and buying the Badge below would not clear the gate at all.
-			const res = await client.api.subscriptions.preview[":amount"].$get({
-				param: { amount: String(minAnthersAmount) },
-			});
-			if (!res.ok) {
-				setError("Couldn't load the details. Please try again.");
-				return;
-			}
-			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
-			setPending({
-				anthersSupport: minAnthersAmount,
-				// Name the Badge only when the gate actually sits on one; otherwise the
-				// level itself is the honest label for what's being bought.
-				badgeName: anthersRoute?.badge
-					? badgeLabel(anthersRoute.badge as BadgeKey)
-					: `${amountLabel(minAnthersAmount)} a month`,
-				preview,
-			});
-		} catch {
-			setError("Couldn't load the details. Please try again.");
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	// Whichever side asks for less is the primary action; a tie goes to the creator, since
-	// Anthers takes no cut of what a viewer gives a creator.
-	const anthersFirst =
-		!!anthersRoute && (!creatorRoute || anthersRoute.moreNeeded < creatorRoute.moreNeeded);
-	const lockedBy = anthersFirst && anthersRoute?.badge ? badgeLabel(anthersRoute.badge) : null;
 
 	return (
 		<UnlockCard
-			lockedBy={lockedBy}
-			// No blurb when there's a route: the button already says what to do and to whom,
+			// No blurb when there is a route: the button already says what to do and to whom,
 			// and a sentence restating it just makes the reader parse the same fact twice.
 			// The blurb survives only where nothing else explains the situation.
 			blurb={
-				!anthersRoute && !creatorRoute
-					? `Support ${creatorName} monthly to unlock this post and their other members-only work.`
-					: undefined
+				creatorRoute
+					? undefined
+					: `Support ${creatorName} monthly to unlock this post and their other members-only work.`
 			}
 		>
-			{anthersRoute ? (
-				<button
-					type="button"
-					className={anthersFirst ? "btn btn-primary btn-wide" : "btn btn-ghost btn-sm"}
-					onClick={unlockWithBadge}
-					disabled={loading}
-				>
-					{loading
-						? "Loading…"
-						: `${anthersFirst ? "Unlock" : "Or unlock"} with ${seedsToGo(anthersRoute.moreNeeded)} to Anthers`}
-				</button>
-			) : null}
-
 			{creatorRoute && creatorUsername ? (
-				<Link
-					to={`/${creatorUsername}?tab=badges`}
-					className={anthersFirst ? "btn btn-ghost btn-sm" : "btn btn-primary btn-wide"}
-				>
-					{`${anthersFirst ? "Or unlock" : "Unlock"} with ${seedsToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
+				<Link to={`/${creatorUsername}?tab=badges`} className="btn btn-primary btn-wide">
+					{`Unlock with ${seedsToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
 				</Link>
 			) : null}
 
-			{!anthersRoute && !creatorRoute && creatorUsername ? (
+			{!creatorRoute && creatorUsername ? (
 				<Link to={`/${creatorUsername}?tab=badges`} className="btn btn-primary btn-wide">
 					Join to unlock
 				</Link>
 			) : null}
-
-			{error && <p className="text-error text-xs">{error}</p>}
-
-			{pending && (
-				<SubscriptionPaymentModal
-					anthersSupport={pending.anthersSupport}
-					badgeName={pending.badgeName}
-					preview={pending.preview}
-					onComplete={() => {
-						setPending(null);
-						onUnlocked();
-					}}
-					onClose={() => setPending(null)}
-				/>
-			)}
 		</UnlockCard>
 	);
 }
 
 function UnlockCard({
 	blurb,
-	lockedBy,
 	heading,
 	icon = "lock",
 	children,
 }: {
 	/** Only for states the action itself doesn't explain (login, or no route at all). */
 	blurb?: string;
-	/** Badge the gate sits on, when it sits on one — the lock's *identity*. */
-	lockedBy?: string | null;
 	/** Overrides the default "Unlock this post" — for the states that are not unlocks. */
 	heading?: string;
 	/**
@@ -263,9 +181,7 @@ function UnlockCard({
 				<div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
 					<Icon className="w-6 h-6 text-base-content/70" />
 				</div>
-				<h3 className="font-bold text-lg">
-					{heading ?? (lockedBy ? `Locked · ${lockedBy}` : "Unlock this post")}
-				</h3>
+				<h3 className="font-bold text-lg">{heading ?? "Unlock this post"}</h3>
 				{blurb ? <p className="text-sm text-base-content/60 max-w-sm">{blurb}</p> : null}
 				{children}
 			</div>

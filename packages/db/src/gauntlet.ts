@@ -106,7 +106,7 @@ function seedRung(threshold: number): SeedAccessRow[] {
 	];
 }
 
-/** The neutral Seed table — the baseline row present but denied. */
+/** The neutral access table — the baseline row present but denied. */
 const SEED_LOCKED: SeedAccessRow[] = [{ threshold: 0, allow: false, price: "0" }];
 
 export interface GauntletPost {

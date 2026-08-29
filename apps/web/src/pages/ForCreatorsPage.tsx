@@ -1202,7 +1202,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 };
 
 /** The interactive heart of "the solution": pick how a fan supports you (purchase /
- * Seed / stream) and the medium, and see exactly what reaches the creator vs.
+ * monthly support / stream) and the medium, and see exactly what reaches the creator vs.
  * the platform on Anthers and elsewhere. Leads with purchase — the categorical 0%-cut
  * win. Scenario assumptions are stated in-card; figures are estimates and Anthers'
  * profit is $0 on every one. */

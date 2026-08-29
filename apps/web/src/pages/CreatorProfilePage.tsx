@@ -90,7 +90,7 @@ function GiveSeedsCard({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	/** The viewer's Seed budget and what's still unallocated across all creators. */
+	/** The viewer's support budget and what's still unallocated across all creators. */
 	const loadBudget = useCallback(async () => {
 		const res = await client.api.subscriptions.seeds.$get();
 		if (!res.ok) return;

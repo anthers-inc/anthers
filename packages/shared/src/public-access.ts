@@ -13,7 +13,7 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  * forever**. Giving Anthers the Public Access price removes the limit for as long as it is
  * kept up, and **nothing above it buys any more access** — what more buys is a
  * larger Time Pool for the creators the user watches. Access is binary and arrives whole
- * at the first Seed.
+ * at that price.
  *
  * 🚨 **This is a property of the ACCOUNT, never of the Work**, and that is what lets
  * Public Access be described as free to everyone without qualification. A Work is not
@@ -51,7 +51,7 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  * raising this changes what a free account *feels like* without changing what it costs.
  * It was untrue while a bandwidth floor existed, where generosity and solvency were
  * literally the same dial. What this figure trades against is **conversion**: it is the
- * reason to give Anthers a first Seed at all.
+ * reason to give Anthers anything at all.
  */
 export const FREE_PUBLIC_ACCESS_HOURS = 10;
 

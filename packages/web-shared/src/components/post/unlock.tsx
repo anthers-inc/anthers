@@ -43,11 +43,16 @@ export function presentsAsLocked(access: AccessResult | null | undefined): boole
 }
 
 /**
- * The cheapest route into a gated Work, and who the money would go to.
+ * The route into a gated Work, and who the money would go to.
  *
- * "Cheapest" is the smallest amount the viewer still has to add, which is what they asked
- * for; a tie goes to the creator, since what a viewer gives a creator reaches them in full.
  * Returns null when the Work isn't gate-openable (purchase-only, or logged out).
+ *
+ * ⚠️ **It chose between two routes until 2026-08-29 and there has only ever been one to
+ * choose since Anthers Gates were retired.** The second was `unlock.anthers`, which the
+ * server stopped emitting on 2026-08-12 and which the *client* type went on declaring — so
+ * the comparison that picked the cheaper of the two typechecked, read as considered, and had
+ * one operand that was always undefined. The name is kept because the shape it names is real:
+ * a creator gating on another creator's support level would put a second route back.
  *
  * Module-private since 2026-08-17 — the two components that used it from outside the two
  * label helpers below are gone, and an export nobody imports is an invitation to grow a
@@ -57,16 +62,8 @@ function cheapestRoute(
 	access: AccessResult,
 	creatorName: string,
 ): { route: UnlockRoute; target: string } | null {
-	const anthers = access.unlock?.anthers;
 	const creator = access.unlock?.creator;
-	if (anthers && creator) {
-		return creator.moreNeeded <= anthers.moreNeeded
-			? { route: creator, target: creatorName }
-			: { route: anthers, target: "Anthers" };
-	}
-	if (creator) return { route: creator, target: creatorName };
-	if (anthers) return { route: anthers, target: "Anthers" };
-	return null;
+	return creator ? { route: creator, target: creatorName } : null;
 }
 
 /** "$6.00 more" — always the MARGINAL ask, never the threshold. */

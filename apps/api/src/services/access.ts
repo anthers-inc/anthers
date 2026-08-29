@@ -499,7 +499,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		};
 	}
 
-	// Qualifies via a non-baseline (Seed Gate) row → "entitled" for display.
+	// Qualifies via a non-baseline (a creator's gate) row → "entitled" for display.
 	const isEntitled = offers.some((o) => !o.baseline);
 
 	// Free when any qualifying allowed row is priced at/below 0.
