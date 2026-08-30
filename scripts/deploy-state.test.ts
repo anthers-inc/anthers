@@ -11,8 +11,10 @@
  */
 import { describe, expect, it } from "bun:test";
 import {
+	branchName,
 	commitsOf,
 	type Deployment,
+	promoteCommand,
 	RUN_PENDING_STATUSES,
 	readDeployments,
 	readWorkflowRuns,
@@ -181,6 +183,30 @@ describe("The layer DigitalOcean cannot see — CI's own run for the commit", ()
 			REF,
 		);
 		expect(seen.pending?.status).toBe("in_progress");
+	});
+});
+
+describe("The commands this tool tells you to run", () => {
+	/*
+	 * 🚨 A recovery line that does not run is worse than none, because it teaches people to
+	 * stop reading the output of the one tool whose job is being trusted about production.
+	 * This shipped broken on 2026-08-29: the refs defaulted to remote-tracking names in the
+	 * morning and the promote suggestion became `git push origin origin/main:origin/release`,
+	 * which promotes nothing and would create a remote branch called `origin/release`.
+	 */
+	it("🚨 promotes with branch names, never with remote-tracking ones", () => {
+		expect(promoteCommand("origin/main", "origin/release")).toBe("git push origin main:release");
+		expect(promoteCommand("main", "release")).toBe("git push origin main:release");
+		expect(promoteCommand("refs/heads/main", "refs/heads/release")).toBe(
+			"git push origin main:release",
+		);
+	});
+
+	it("strips only the leading remote, so a branch that contains one survives", () => {
+		// `feature/origin-move` is a real branch name shape, and eating the middle of it
+		// would produce a command that pushes somewhere nobody asked for.
+		expect(branchName("feature/origin-move")).toBe("feature/origin-move");
+		expect(branchName("origin/feature/origin-move")).toBe("feature/origin-move");
 	});
 });
 
