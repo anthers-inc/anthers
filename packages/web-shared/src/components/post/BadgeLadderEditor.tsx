@@ -267,7 +267,7 @@ export default function BadgeLadderEditor() {
 	 * ⚠️ **Only the FIRST load blanks the ladder.** A refetch after a save used to set
 	 * `loading` unconditionally, which swapped the whole list for "Loading…" and unmounted
 	 * every rung — so a creator picking a shape watched the ladder flash and the picker
-	 * close, and had to reopen it for the colour and again for the emblem. Three choices,
+	 * close, and had to reopen it for the color and again for the emblem. Three choices,
 	 * three reopenings, for a component whose entire point is mixing and matching. Found in
 	 * the browser; nothing in the API tests could have shown it.
 	 */

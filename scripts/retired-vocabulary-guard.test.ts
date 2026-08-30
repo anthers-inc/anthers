@@ -39,7 +39,11 @@ import { join } from "node:path";
  * would flag the one place they are correct.
  */
 const RETIRED = [
-	/\b(?:a|the|one|whole|per|each|every|\$3|counted?|indivisible)[- ]Seeds?\b/i,
+	// ⚠️ **Case-SENSITIVE, and the `/i` it used to carry was a bug.** The capital S is the
+	// whole discriminator between the retired unit and ordinary English, and with `/i` this
+	// matched *"deterministic per seed"* in a test that seeds a pseudo-random generator —
+	// a false positive that would have been "fixed" by renaming a variable to please a lint.
+	/\b(?:a|the|one|whole|per|each|every|\$3|counted?|indivisible)[- ]Seeds?\b/,
 	/\bSeeds?\b(?=\s+(?:count|price|gate|rung|model|retirement|era|unit))/i,
 	/\bSeed[- ]?(?:count|price|gated?|Gate|rung)s?\b/,
 	/\bAnthers[- ][Gg]ates?\b/,
@@ -68,22 +72,19 @@ const EXEMPT: { pattern: RegExp; why: string }[] = [
 /** How many mentions each file is allowed. A file absent from here is allowed none. */
 const BUDGET: Record<string, number> = {
 	"packages/shared/src/constants.ts": 3,
-	"packages/db/src/seed.ts": 3,
+	"packages/db/src/seed.ts": 1,
 	"apps/api/src/__tests__/access-staircase.test.ts": 2,
 	"apps/api/src/__tests__/creator-preview.test.ts": 2,
 	"apps/api/src/routes/subscriptions.ts": 2,
-	"apps/api/src/services/access.ts": 2,
+	"apps/api/src/services/access.ts": 1,
 	"apps/api/src/services/billing.ts": 2,
 	"apps/web/src/pages/UserDemoPage.tsx": 2,
 	"apps/web/src/components/calculators/video-model.ts": 2,
 	"apps/api/src/__tests__/distribute-pool.test.ts": 1,
-	"apps/api/src/__tests__/atproto-records.test.ts": 1,
 	"apps/api/src/__tests__/unlock-offer.test.ts": 1,
 	"apps/api/src/__tests__/payments-stripe.test.ts": 1,
 	"apps/api/src/__tests__/support-split.test.ts": 1,
 	"apps/api/src/routes/content.ts": 1,
-	"apps/api/src/services/atproto-records.ts": 1,
-	"apps/api/src/scripts/seed-media-fixture.ts": 1,
 	"apps/api/src/jobs/distribute-pool.ts": 1,
 	"apps/web/src/content/faq.tsx": 1,
 	"apps/web/src/content/faq.test.ts": 1,
@@ -94,7 +95,6 @@ const BUDGET: Record<string, number> = {
 	"apps/web/src/components/subscribe/SubscriptionPaymentModal.tsx": 1,
 	"apps/web/src/components/creator/PreviewBar.tsx": 1,
 	"apps/web/tests/e2e/calculators.e2e.ts": 1,
-	"apps/web/tests/e2e/video-player.authed.e2e.ts": 1,
 	"packages/shared/src/badges.test.ts": 1,
 	"packages/shared/src/figures.generated.ts": 1,
 	"packages/shared/src/public-access.test.ts": 1,
