@@ -62,7 +62,6 @@ import {
 	TIME_POOL_RATE,
 	timePoolFor,
 } from "../packages/shared/src/constants.js";
-import { CREATOR_FLOOR, PHASE_ACCOUNTS } from "../packages/shared/src/growth.js";
 import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
 import {
 	badgeTable,
@@ -75,7 +74,6 @@ import {
 	growthLadder,
 	MODELLED_PAYING_SHARE,
 	PAYING_BADGE_MIX,
-	paIncentiveCeiling,
 	payingShareSensitivity,
 	purchaseExamples,
 	RIVAL_STOREFRONTS,
@@ -724,17 +722,6 @@ function renderCreatorSegmentsMarkdown(): string {
 	].join("\n");
 }
 
-function renderPaCeilingMarkdown(): string {
-	const c = paIncentiveCeiling();
-	return [
-		`Public Access content never counts against a creator's storage, so Anthers carries it — the first creator incentive. Incentives are held under **one aggregate budget line, ${c.ceilingPct} of charitable revenue**, because individually healthy incentives can still sum to a cost problem.`,
-		"",
-		`Priced at the **worst case** — every creator giving their whole catalog to the commons — the exemption costs **${c.atScalePct}** of charitable revenue at scale, and ${c.allFit ? "fits inside the ceiling at every rung" : "**exceeds the ceiling at some rung**"}.`,
-		"",
-		`⚠️ **The worst case is rung ${c.worstPhase}, at ${c.worstPct}, and that is the opposite of the intuition.** The cost is driven by creators *per account*, and the flat ${CREATOR_FLOOR}-creator floor makes the smallest rung the most creator-dense the platform will ever be — ${CREATOR_FLOOR} creators against ${PHASE_ACCOUNTS[0]} accounts, where the ratio alone would allow one. So the exemption very nearly touches its ceiling at rung ${c.worstPhase} and is negligible everywhere above. **Raising the flat creator floor raises this**, which is a live constraint on that open call.`,
-	].join("\n");
-}
-
 /**
  * What each candidate free-account Time Pool pot costs, as the floor paying share.
  *
@@ -858,7 +845,6 @@ const BLOCKS: Block[] = [
 	{ file: LADDER, key: "growth-seed-mix", render: renderSeedMixMarkdown },
 	{ file: LADDER, key: "growth-ed-band", render: renderEdBandMarkdown },
 	{ file: LADDER, key: "growth-creator-segments", render: renderCreatorSegmentsMarkdown },
-	{ file: LADDER, key: "growth-pa-ceiling", render: renderPaCeilingMarkdown },
 	{
 		file: "10-19 Overview/11 Model & Mission/11.03 Open Questions re the Support Model.md",
 		key: "free-pot",

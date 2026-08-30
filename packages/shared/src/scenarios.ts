@@ -42,7 +42,6 @@ import {
 	floorPayingShare,
 	modelAt,
 	NO_STAFFING,
-	PA_INCENTIVE_CEILING,
 	PAY_DECAY,
 	PHASE_ACCOUNTS,
 	payingBadgeMix,
@@ -693,48 +692,12 @@ export function creatorSegments(accounts = 80_000) {
 	};
 }
 
-/**
- * What the Public Access storage exemption costs against the budget line that bounds it.
- *
- * ⚠️ **The worst case is rung 1, not the largest rung**, which is the opposite of the
- * intuition and was not what the retired playground's own prose claimed (it said "about
- * 1% … and stays there at every rung"; the model says **0.29%**, flat from rung 6 up).
- * The cost is driven by *creators per account*, and the flat 25-creator floor makes rung 1
- * the most creator-dense the platform will ever be — 25 creators against 100 accounts,
- * where the ratio would allow one. So the exemption very nearly breaches its 3% ceiling at
- * the smallest rung and is negligible everywhere else.
- *
- * Worth carrying into 61.01's open call on the flat-25 floor: raising it raises this.
- */
-export function paIncentiveCeiling() {
-	const rows = PHASE_ACCOUNTS.map((accounts, i) => {
-		// The exemption priced at its worst case — every creator giving their whole
-		// catalog to the commons. Modeling it at the current 10% would report a cost we
-		// have no way to hold anyone to.
-		const m = modelAt({
-			accounts,
-			payingShare: MODELLED_PAYING_SHARE,
-			staffing: staffingForPhase(i + 1),
-			paCatalogueShare: 1,
-		});
-		return {
-			phase: i + 1,
-			accounts,
-			pct: (m.paIncentiveCost / m.charitableRevenue) * 100,
-			fits: m.paWithinCeiling,
-		};
-	});
-	const worst = rows.reduce((a, b) => (b.pct > a.pct ? b : a));
-	const atScale = rows[rows.length - 1];
-	return {
-		ceilingPct: `${(PA_INCENTIVE_CEILING * 100).toFixed(0)}%`,
-		worstPct: `${worst.pct.toFixed(2)}%`,
-		worstPhase: worst.phase,
-		atScalePct: `${atScale.pct.toFixed(2)}%`,
-		allFit: rows.every((r) => r.fits),
-		rows,
-	};
-}
+// ⚠️ **`paIncentiveCeiling()` was removed on 2026-08-30 along with its subject.** It priced
+// the Public Access storage exemption against `PA_INCENTIVE_CEILING` and rendered 61.01's
+// `growth-pa-ceiling` block. With the exemption retired the function reported 0.00% at every
+// rung — a generated table saying nothing, which is worse than no table, because a reader
+// takes a published figure as evidence that something was measured. The ceiling itself is
+// kept in `growth.ts`; what a future incentive costs is for whoever builds it to render.
 
 /** A lone $3 to one creator — the worst case, and the figure creator-facing copy quotes. */
 export function directedSupportWorstCase(monthly = PUBLIC_ACCESS_PRICE) {
