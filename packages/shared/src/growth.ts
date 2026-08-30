@@ -100,6 +100,13 @@ export const ADMIN_CEILING = 0.3;
  * individually healthy incentives can still add up to a cost problem. Internal
  * discipline, not creator-facing: a creator should experience the incentives, not the
  * budget governing them.
+ *
+ * ⚠️ **The program currently has no members, so this bounds nothing** (2026-08-30). The
+ * storage exemption — Public Access content not counting against a creator's storage —
+ * was its first and only priced incentive, and it is retired: see `modelAt` below. The
+ * ceiling is kept rather than deleted because it is a standing policy from 11.02 about
+ * what the *next* incentive is allowed to cost, and re-deriving it later from an empty
+ * file is how a considered number becomes a guess.
  */
 export const PA_INCENTIVE_CEILING = 0.03;
 
@@ -220,14 +227,6 @@ export const CREATOR_SEGMENTS: readonly CreatorSegment[] = [
 ];
 
 /**
- * Share of a creator's catalog published as Public Access.
- *
- * Public Access content never counts against a creator's storage, so Anthers carries it —
- * the first creator incentive, and this dial is the price of it.
- */
-export const PA_CATALOGUE_SHARE = 0.1;
-
-/**
  * Platform infrastructure, per month.
  *
  * `opsPerKAccounts` is what survived the R2 migration: presigned HLS segments cannot be
@@ -253,7 +252,6 @@ export interface GrowthInputs {
 	staffing: Staffing;
 	/** Defaults to the shipped `FREE_TIME_POOL`; a parameter so 11.03's review can sweep it. */
 	freeTimePool?: number;
-	paCatalogueShare?: number;
 	mix?: Record<number, number>;
 }
 
@@ -279,7 +277,7 @@ export interface GrowthLedger {
 	charitableRevenue: number;
 	/** Admin: infrastructure, staffing and reserves. */
 	overhead: number;
-	/** Free access as a program obligation: the free pot, free storage, the PA exemption. */
+	/** Free access as a program obligation: the free pot and free creators' storage. */
 	freeAccess: number;
 	/** What the Public Access incentives cost, and what they are allowed to cost. */
 	paIncentiveCost: number;
@@ -319,7 +317,6 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		payingShare,
 		staffing,
 		freeTimePool = FREE_TIME_POOL,
-		paCatalogueShare = PA_CATALOGUE_SHARE,
 		mix = payingBadgeMix(),
 	} = input;
 
@@ -359,23 +356,28 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 	);
 	let storageCharge = 0;
 	let freeStorageSubsidy = 0;
-	let paStorage = 0;
-	let paChargeForgone = 0;
 	const segments: CreatorSegmentLedger[] = CREATOR_SEGMENTS.map((seg, i) => {
 		const count = segmentCounts[i];
 		const attentionShare = attentionTotal > 0 && count > 0 ? seg.attention / attentionTotal : 0;
 		const earnsEach = count > 0 ? (attentionShare * timePoolToCreators) / count : 0;
+		// 🚨 **Every stored byte is billed, and the Public Access exemption that used to
+		// discount this is gone** (Parker, 2026-08-30). A creator's Public Access bytes
+		// once cost them nothing, which made the commons cheaper to join; the exemption
+		// was retired because its cost is governed by a number Anthers does not control
+		// and cannot observe in advance — how much creators store. Priced at its own
+		// worst case it fit the ceiling with almost nothing to spare (2.97% of charitable
+		// revenue at rung 1), and doubling the modeled library sizes breached it. Those
+		// sizes are modest for video: `CREATOR_SEGMENTS` puts Large at 400 GiB, while a
+		// 100-hour 1080p60 library with masters is ~1,062 GiB by our own storage model.
+		// So the exemption was solvent only on an assumption the platform is actively
+		// trying to falsify. It may return in a **bounded** form — see 11.02.
 		const fullCost = seg.storageGiB * STORAGE_PER_GIB_MONTH;
-		// Billed on non-PA bytes only — the exemption is the incentive.
-		const billedCost = fullCost * (1 - paCatalogueShare);
-		const chargeEach = seg.free ? 0 : AFF_INFRA_RATE * billedCost;
-		const paidByCreator = seg.free ? 0 : billedCost;
+		const chargeEach = seg.free ? 0 : AFF_INFRA_RATE * fullCost;
+		const paidByCreator = seg.free ? 0 : fullCost;
 		if (seg.free) {
 			freeStorageSubsidy += fullCost * count;
 		} else {
 			storageCharge += chargeEach * count;
-			paStorage += fullCost * paCatalogueShare * count;
-			paChargeForgone += AFF_INFRA_RATE * fullCost * paCatalogueShare * count;
 		}
 		return {
 			...seg,
@@ -386,7 +388,11 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 			netEach: earnsEach - paidByCreator - chargeEach,
 		};
 	});
-	const paIncentiveCost = paStorage + paChargeForgone;
+	// The Public Access incentive program's cost. Its first and only priced member was the
+	// storage exemption above, so this is **zero until an incentive is actually built** —
+	// kept as a term rather than deleted because `PA_INCENTIVE_CEILING` still bounds the
+	// program, and the next incentive should land here rather than rebuild the accounting.
+	const paIncentiveCost = 0;
 
 	// ---- The charitable budget, read obligations-first ----
 	const charitableRevenue = charitableFromUsers + storageCharge;

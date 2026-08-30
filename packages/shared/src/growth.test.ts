@@ -13,7 +13,7 @@
 // from here. After that these constants are the record of the port, and the thing they
 // guard is that a later refactor does not quietly move a landmark.
 import { describe, expect, test } from "bun:test";
-import { FREE_TIME_POOL } from "./constants.js";
+import { AFF_INFRA_RATE, FREE_TIME_POOL, STORAGE_PER_GIB_MONTH } from "./constants.js";
 import {
 	ADMIN_CEILING,
 	affordable,
@@ -252,45 +252,63 @@ describe("the ledger balances", () => {
 	});
 });
 
-describe("the Public Access incentive ceiling", () => {
-	test("fits inside its 3% budget line at every rung, even priced at the worst case", () => {
+describe("creator storage is billed in full", () => {
+	/**
+	 * 🚨 **This is the guard that replaced the Public Access storage exemption's tests**
+	 * (2026-08-30). A creator's Public Access bytes used to be free, so `modelAt` billed
+	 * `fullCost × (1 − paCatalogueShare)` and two tests asserted the resulting subsidy fit
+	 * inside `PA_INCENTIVE_CEILING`. The exemption is retired, so those tests had nothing
+	 * left to assert — and deleting them without putting this in its place would have left
+	 * the discount reintroducible by a one-character edit with nothing to notice.
+	 *
+	 * What this asserts is the **absence of any discount**, which is a property rather than
+	 * a number: every modeled paying creator pays the object-store rate on their whole
+	 * library. It is deliberately derived from `CREATOR_SEGMENTS` rather than from frozen
+	 * dollar figures, so it moves with the dials and fails only on a real change of rule.
+	 */
+	test("a paying creator's cost is their whole library, with no exemption applied", () => {
+		const m = modelAt({
+			accounts: PHASE_ACCOUNTS[6],
+			payingShare: SHARE,
+			staffing: staffingForPhase(7),
+		});
+		const paying = m.segments.filter((s) => !s.free);
+		expect(paying.length, "no paying creator segments to check").toBeGreaterThan(0);
+		for (const seg of paying) {
+			expect(seg.storageCostEach, `${seg.name} is being discounted`).toBeCloseTo(
+				seg.storageGiB * STORAGE_PER_GIB_MONTH,
+				10,
+			);
+			expect(seg.storageChargeEach, `${seg.name}'s half-again is off the wrong base`).toBeCloseTo(
+				AFF_INFRA_RATE * seg.storageGiB * STORAGE_PER_GIB_MONTH,
+				10,
+			);
+		}
+	});
+
+	/**
+	 * ⚠️ **This one passes vacuously, and says so rather than pretending otherwise.** The
+	 * incentive program is real policy (11.02) and `PA_INCENTIVE_CEILING` still governs it,
+	 * but it has no members: the storage exemption was its first and only priced one. So
+	 * `paWithinCeiling` is true because zero is under every ceiling, which is exactly the
+	 * shape of guard that looks green while checking nothing.
+	 *
+	 * It earns its place by pinning the **zero** instead of the verdict: the moment a real
+	 * incentive lands as a term in `paIncentiveCost`, this fails and whoever added it has to
+	 * come here and price it against the ceiling on purpose. That is the whole point of
+	 * keeping the budget line rather than deleting it with the exemption.
+	 */
+	test("the incentive program costs nothing, because nothing is in it yet", () => {
 		for (let i = 0; i < PHASE_ACCOUNTS.length; i++) {
 			const m = modelAt({
 				accounts: PHASE_ACCOUNTS[i],
 				payingShare: SHARE,
 				staffing: staffingForPhase(i + 1),
-				paCatalogueShare: 1,
 			});
+			expect(m.paIncentiveCost, "an incentive has a cost — price it against the ceiling").toBe(0);
 			expect(m.paWithinCeiling).toBe(true);
 		}
-	});
-
-	/**
-	 * ⚠️ **The worst case is rung 1, not the largest rung** — the opposite of the
-	 * intuition, and not what the retired playground's own prose said ("about 1% … and
-	 * stays there at every rung"). The cost is driven by creators *per account*, and the
-	 * flat 25-creator floor makes rung 1 the most creator-dense the platform will ever be.
-	 * So it very nearly breaches the ceiling at the smallest rung and is negligible after.
-	 *
-	 * This is a live constraint on 61.01's open call about the flat-25 floor: raising it
-	 * raises this, and there is about 1% of headroom.
-	 */
-	test("the worst case is the SMALLEST rung, and it is close to the line", () => {
-		const share = (accounts: number, phase: number) => {
-			const m = modelAt({
-				accounts,
-				payingShare: SHARE,
-				staffing: staffingForPhase(phase),
-				paCatalogueShare: 1,
-			});
-			return m.paIncentiveCost / m.charitableRevenue;
-		};
-		const atRung1 = share(PHASE_ACCOUNTS[0], 1);
-		const atScale = share(PHASE_ACCOUNTS[12], 13);
-		expect(atRung1).toBeGreaterThan(atScale * 5);
-		expect(atRung1).toBeCloseTo(0.0297, 3);
-		expect(atRung1).toBeLessThan(PA_INCENTIVE_CEILING);
-		expect(atScale).toBeCloseTo(0.0029, 3);
+		expect(PA_INCENTIVE_CEILING).toBeGreaterThan(0);
 	});
 });
 

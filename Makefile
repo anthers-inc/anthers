@@ -306,6 +306,15 @@ deploy-status: ## Assert the live deployment's commit matches release (DOCTL_CON
 webhook-check: ## Assert Stripe's webhook endpoints and that prod's signing secrets work
 	bun run scripts/webhook-check.ts
 
+# Deliberately NOT part of `verify`. It needs the Obsidian vault, which only Parker has —
+# so CI took the skip path on every run it ever had, and the only thing it reliably did
+# was fail on the one machine that does have a vault, whenever the notes were reorganized.
+# Same reasoning `spec-diff` and `storage-check` are out: a target that needs something
+# outside the repository is a target you run on purpose. Run it before publishing anything
+# quoting a wiki table.
+wiki-figures: ## Render the wiki's generated money blocks into the vault (CHECK=1 to assert instead)
+	bun run econ:figures --wiki $(if $(CHECK),--check,)
+
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium
 
