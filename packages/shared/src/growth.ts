@@ -20,14 +20,14 @@
  * The per-user money is `Decimal` and comes from `fees.ts`. Everything above that — the
  * population, the sweep, the ratios — is plain `number`. This is not a relaxation of the
  * "all financial values use decimal.js" rule: that rule is about money that moves through
- * somebody's account, and nothing here does. This is a **sizing** model over a modelled
+ * somebody's account, and nothing here does. This is a **sizing** model over a modeled
  * population, and its output is a crossover found by bisection, which has no exact answer
  * to round correctly. Exact arithmetic on a forecast would be false precision at a real
  * cost in legibility.
  *
  * ## Scope — Anthers' own books only
  *
- * What Anthers subsidises (free accounts' Time Pool, free creators' storage, the Public
+ * What Anthers subsidizes (free accounts' Time Pool, free creators' storage, the Public
  * Access storage exemption) and what it takes in (support given to Anthers, paying creators'
  * storage charge). **Directed support and direct purchases are deliberately absent**: Anthers
  * keeps $0 of either, so they cannot move any line here. That is 11.02's decoupling, and
@@ -108,7 +108,7 @@ export const CREATOR_RATIO = 100;
 export const CREATOR_FLOOR = 25;
 export const creatorCap = (accounts: number) => Math.max(CREATOR_FLOOR, accounts / CREATOR_RATIO);
 
-// ── Modelled populations ─────────────────────────────────────────────────────
+// ── Modeled populations ─────────────────────────────────────────────────────
 /**
  * How the paying population spreads across monthly amounts: a geometric decay, `0.55^(n-1)`
  * over Anthers' own rungs — $3, $6, $9, and up in the same steps.
@@ -131,7 +131,7 @@ export const PAY_DECAY = 0.55;
 /** Rungs the mix spans. Beyond ten the weights are noise (0.55^10 ≈ 0.003). */
 export const MAX_MODELLED_RUNGS = 10;
 
-/** The normalised paying-user mix — `{monthlyDollars: share}`, summing to 1. */
+/** The normalized paying-user mix — `{monthlyDollars: share}`, summing to 1. */
 export function payingBadgeMix(
 	decay = PAY_DECAY,
 	max = MAX_MODELLED_RUNGS,
@@ -149,7 +149,7 @@ export const averageSupport = (mix: Record<number, number>) =>
  * The decay that produces a given average.
  *
  * 61.01's flattening-risk table is indexed by **average monthly support per payer**, not by the
- * decay underneath it — so the axis is solved for rather than dialled. Dialling it would
+ * decay underneath it — so the axis is solved for rather than dialed. Dialing it would
  * mean the published axis label and the mix it describes could disagree by a rounding,
  * which is the small version of the whole defect this file exists to close.
  *
@@ -197,7 +197,7 @@ export function remainderPerPayingAccount(mix: Record<number, number>): number {
  * is an emergent ratio nobody is paid at. Attention-proportion is the real metric and the
  * one the equal-time principle applies to — a minute is a minute, whatever the medium.
  *
- * `storageGiB` is the whole catalogue. A **free** creator's is subsidised entirely; a
+ * `storageGiB` is the whole catalog. A **free** creator's is subsidized entirely; a
  * paying creator is billed on their non-Public-Access bytes only.
  */
 export interface CreatorSegment {
@@ -220,7 +220,7 @@ export const CREATOR_SEGMENTS: readonly CreatorSegment[] = [
 ];
 
 /**
- * Share of a creator's catalogue published as Public Access.
+ * Share of a creator's catalog published as Public Access.
  *
  * Public Access content never counts against a creator's storage, so Anthers carries it —
  * the first creator incentive, and this dial is the price of it.
@@ -232,7 +232,7 @@ export const PA_CATALOGUE_SHARE = 0.1;
  *
  * `opsPerKAccounts` is what survived the R2 migration: presigned HLS segments cannot be
  * edge-cached, so streaming carries uncacheable Class B reads. It is billed per thousand
- * **accounts** rather than per hour, because hours stopped being a modelled quantity when
+ * **accounts** rather than per hour, because hours stopped being a modeled quantity when
  * pay-per-watch-hour was retired — the streaming volume behind it is an assumption inside
  * the rate rather than a dial of its own.
  */
@@ -346,8 +346,8 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 	const freeAccessTimePool = freeTimePool * freeAccounts;
 
 	// ---- Creators ----
-	// Bookkeeping care with the Public Access exemption: a FREE creator's whole catalogue
-	// is already subsidised, so only a PAYING creator's PA bytes are new cost. Counting
+	// Bookkeeping care with the Public Access exemption: a FREE creator's whole catalog
+	// is already subsidized, so only a PAYING creator's PA bytes are new cost. Counting
 	// both would double-count them.
 	const segmentCounts = apportion(
 		creators,

@@ -8,7 +8,7 @@
  * cannot drift.
  *
  * The Anthers addition is the **gated** row. A gated track keeps its number and its title
- * and gains a padlock and a "Gated" label — it is not hidden and not greyed into
+ * and gains a padlock and a "Gated" label — it is not hidden and not grayed into
  * illegibility, because it is a real part of the record and the point is that the listener
  * can see what they would get.
  */
@@ -63,7 +63,7 @@ export default function TrackRow({
 			<span className={`min-w-0 truncate text-sm ${isCurrent ? "font-medium text-primary" : ""}`}>
 				{track.title}
 			</span>
-			{/* A word, not only a padlock — colour and iconography alone are not a status. */}
+			{/* A word, not only a padlock — color and iconography alone are not a status. */}
 			<span className="text-[10px] font-medium uppercase tracking-wide text-base-content/40">
 				{gated ? "Gated" : ""}
 			</span>

@@ -213,7 +213,7 @@ describe("DMCA notices past the clock", () => {
 
 		// 🚨 Kept — this half is the point. § 512(i) needs the pattern and an appeal
 		// needs the decision, so a sweep that took these too would satisfy privacy by
-		// destroying the safe harbour.
+		// destroying the safe harbor.
 		expect(after?.workId).toBe(workId);
 		expect(after?.workTitle).toBe("A fixture Work");
 		expect(after?.status).toBe("restored");

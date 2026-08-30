@@ -480,7 +480,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-ga",
 							title: "General Availability",
 							description:
-								"Stable public platform, all four programme pillars active, federation functioning, organizational maturity.",
+								"Stable public platform, all four program pillars active, federation functioning, organizational maturity.",
 							status: "exploring",
 							startQ: 6,
 							endQ: 7,
@@ -566,7 +566,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-25000-subs",
 							title: "25,000 Subscribers",
 							description:
-								"Inflection point: ED salary + admin overhead ($125-164K/yr). All four programme pillars active. Meaningful creation grants.",
+								"Inflection point: ED salary + admin overhead ($125-164K/yr). All four program pillars active. Meaningful creation grants.",
 							status: "exploring",
 							startQ: 6,
 							endQ: 7,

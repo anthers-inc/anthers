@@ -33,7 +33,7 @@
  *    words, so only the user's own are exported.
  *
  * 4. **It is a snapshot, and it says so.** Nothing here is a live feed; the payload
- *    carries the moment it was taken so a stale copy can be recognised as one.
+ *    carries the moment it was taken so a stale copy can be recognized as one.
  *
  * The same assembly is what makes deletion honest, which is why this module is
  * `account-data` rather than `export`: you cannot credibly promise to delete what you

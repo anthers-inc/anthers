@@ -146,7 +146,7 @@ export const dmcaNotices = pgTable(
 		// on the reasoning that a notice is about that Work specifically — which is
 		// true and is the wrong conclusion, because it made the *infringer* able to
 		// erase the record of their own infringement by deleting the Work. § 512(i)
-		// conditions the safe harbour on a repeat-infringer policy that is
+		// conditions the safe harbor on a repeat-infringer policy that is
 		// *reasonably implemented*, and the terms now published say we judge a
 		// pattern; a pattern held in rows the subject can delete is not a record.
 		// Same reasoning `moderation_reports` already applies to accounts: a

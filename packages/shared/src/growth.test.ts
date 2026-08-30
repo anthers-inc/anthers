@@ -107,7 +107,7 @@ describe("the landmarks 61.01 publishes", () => {
 		const two = crossover(affordable, { payingShare: SHARE, staffing: hire }) as number;
 		// 61.01: "roughly two and a third times further up" — 2.36x, and the ratio is a
 		// structural property of fixed overhead against per-account revenue rather than an
-		// artefact of the delivery economics that changed underneath it.
+		// artifact of the delivery economics that changed underneath it.
 		expect(two / one).toBeGreaterThan(2.2);
 		expect(two / one).toBeLessThan(2.5);
 	});

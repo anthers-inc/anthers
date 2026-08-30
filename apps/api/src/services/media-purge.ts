@@ -16,7 +16,7 @@
  * 🚨 Every function is best-effort and swallows storage failures after logging. A storage
  * hiccup must never block a database delete, because the row is the record of the promise
  * and the object is only its payload; a stranded object can be swept later, while a row
- * that refused to delete is a deletion request we did not honour.
+ * that refused to delete is a deletion request we did not honor.
  */
 
 import { assets, db, transcodingJobs, works } from "@anthers/db";

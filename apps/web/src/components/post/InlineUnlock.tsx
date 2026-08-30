@@ -57,7 +57,7 @@ export default function InlineUnlock({
 	 * no router state. So a visitor with no account had nothing to click at all, and one
 	 * with an account was signed in and dropped on their feed, having lost the Work they
 	 * were looking at. The comment above this block said "return to the post" and had said
-	 * so since it was written — the behaviour was never there.
+	 * so since it was written — the behavior was never there.
 	 *
 	 * ⚠️ It is easy to think this was collateral from deleting the Create Account card on
 	 * 2026-08-17. It wasn't. The component that carried a return was `UnlockModal` in

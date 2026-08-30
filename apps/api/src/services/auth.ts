@@ -9,7 +9,7 @@ const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 /** How stale `sessions.last_used_at` may get before a request refreshes it. */
 const LAST_USED_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
-/** Enrolment window — long enough to read the authorize page, short enough to matter. */
+/** Enrollment window — long enough to read the authorize page, short enough to matter. */
 const DESKTOP_AUTH_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
 /** How a session is carried. See `sessions.kind`. */
@@ -143,7 +143,7 @@ export async function revokeUserSession(userId: number, sessionId: number): Prom
 	return deleted.length > 0;
 }
 
-// ─── Desktop Enrolment (browser handoff + PKCE) ──────────────────────────────
+// ─── Desktop Enrollment (browser handoff + PKCE) ──────────────────────────────
 
 /** SHA-256 of a PKCE verifier, lowercase hex — the form stored as `challenge`. */
 export async function pkceChallenge(verifier: string): Promise<string> {
@@ -154,7 +154,7 @@ export async function pkceChallenge(verifier: string): Promise<string> {
 }
 
 /**
- * Open a desktop enrolment. Called unauthenticated by the app itself, which has only
+ * Open a desktop enrollment. Called unauthenticated by the app itself, which has only
  * generated a verifier — no session exists yet and no user is implied. Re-opening an
  * existing challenge is idempotent so a retried request can't strand the flow.
  */
@@ -169,7 +169,7 @@ export async function startDesktopAuth(challenge: string, label: string | null):
 		});
 }
 
-/** A pending enrolment, as shown on the authorize page before the creator confirms. */
+/** A pending enrollment, as shown on the authorize page before the creator confirms. */
 export async function getPendingDesktopAuth(challenge: string) {
 	const [row] = await db
 		.select()
@@ -243,7 +243,7 @@ export async function redeemDesktopAuth(code: string, verifier: string): Promise
 	return row.sessionToken;
 }
 
-/** Drop expired/consumed enrolment rows. Safe to call opportunistically. */
+/** Drop expired/consumed enrollment rows. Safe to call opportunistically. */
 export async function cleanupDesktopAuthRequests(): Promise<void> {
 	await db.delete(desktopAuthRequests).where(lt(desktopAuthRequests.expiresAt, new Date()));
 }

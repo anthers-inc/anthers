@@ -7,7 +7,7 @@
  * fields are blanked in place. That is not a compromise between two positions, it
  * is the only shape that satisfies both obligations at once:
  *
- * - **§ 512(i) conditions the safe harbour on a repeat-infringer policy that is
+ * - **§ 512(i) conditions the safe harbor on a repeat-infringer policy that is
  *   *reasonably implemented*,** and the Terms of Service now publicly says we judge a pattern.
  *   A pattern is *how many notices, against whom, upheld or not* — the sender's
  *   home address is no part of it. Deleting the row would destroy the evidence;

@@ -415,7 +415,7 @@ export default function ModerationQueue() {
 									</td>
 									<td className="whitespace-nowrap text-right">
 										{/* A person gets no hide button, and a sentence instead of a disabled
-										    control — "greyed out with no explanation" reads as a bug, and this
+										    control — "grayed out with no explanation" reads as a bug, and this
 										    is a decision. Dismiss below is still offered: it is the one
 										    outcome that exists for a reported account. */}
 										{!item.moderatable ? (

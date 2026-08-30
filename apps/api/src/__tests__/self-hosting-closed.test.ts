@@ -10,7 +10,7 @@
  * Building a verification mechanism now would be building something that gets deleted.
  *
  * ⚠️ Closing it also removes a footgun rather than withholding a feature, because the
- * flag's one live effect is **inverted**: `SELF_HOST_FEE` is `0`, so a claimant's modelled
+ * flag's one live effect is **inverted**: `SELF_HOST_FEE` is `0`, so a claimant's modeled
  * hosting cost is zero, so `calculate-crf`'s `earnings.gte(hostingCost)` passes for
  * everyone and books them a zero subsidy. Setting the flag costs a creator money. The
  * arithmetic side of that is pinned in `packages/shared/src/economics.test.ts`.

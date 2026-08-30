@@ -16,7 +16,7 @@ import type { AppType } from "../../../../apps/api/src/index.js";
 export interface DesktopRuntime {
 	/** Absolute API origin, e.g. "https://anthers.org". No trailing slash. */
 	apiBaseUrl: string;
-	/** The desktop session token, or null before enrolment completes. */
+	/** The desktop session token, or null before enrollment completes. */
 	getToken(): string | null;
 	/** Optional replacement transport (tauri-plugin-http). Defaults to global fetch. */
 	fetch?: typeof fetch;

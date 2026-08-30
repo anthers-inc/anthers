@@ -26,7 +26,7 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  * - **Gated work the viewer cleared.** They gave that creator money; charging their free
  *   allowance for it would bill them twice for one thing.
  * - **Work they bought.** A purchase is permanent access, not a draw against anything.
- * - **Their own work.** A creator watching their own catalogue is not consuming a commons.
+ * - **Their own work.** A creator watching their own catalog is not consuming a commons.
  * - **Downloads, of anything.** Delivery is free at any volume, and the meter measures
  *   *attention to the commons*, not bytes.
  *
@@ -76,7 +76,7 @@ export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
  *
  * ⚠️ **Parker settled this on 2026-08-28**, choosing a proportional sub-pool over the
  * alternative shape — share-link minutes accruing at a *lower rate* in one undivided pool.
- * The rejected shape taxed the sharer for the exact behaviour the feature exists to
+ * The rejected shape taxed the sharer for the exact behavior the feature exists to
  * encourage, and it made a minute worth less for how the viewer arrived rather than for how
  * well attended it was, which sits badly beside the equal-time principle (40.05).
  *

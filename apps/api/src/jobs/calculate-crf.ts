@@ -67,7 +67,7 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 
 	// Sums on `purchases.creator_id` rather than joining through `works` (`0016`). The
 	// join was silently lossy: it dropped any sale whose Work had since been deleted, so
-	// a creator's own earnings figure depended on their catalogue still existing.
+	// a creator's own earnings figure depended on their catalog still existing.
 	const [salesResult] = await db
 		.select({
 			total: sum(purchases.creatorEarnings),

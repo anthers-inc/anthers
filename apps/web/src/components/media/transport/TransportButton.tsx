@@ -51,7 +51,7 @@ export default function TransportButton({
 	/**
 	 * A latched control that is currently on (shuffle, repeat, captions).
 	 *
-	 * Renders as a colour change *and* `aria-pressed`, because colour alone is not a
+	 * Renders as a color change *and* `aria-pressed`, because color alone is not a
 	 * status signal — the accessibility rule and the honest one agree here.
 	 */
 	active?: boolean;

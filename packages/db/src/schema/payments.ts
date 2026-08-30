@@ -72,7 +72,7 @@ export const purchases = pgTable(
 		// A snapshot of what was bought, as it was at the time of sale. These are NOT a
 		// cache of the Work — they are what the row still says after the Work is gone, and
 		// they deliberately do not track later edits: a receipt records the transaction as
-		// it happened, not the current state of the catalogue.
+		// it happened, not the current state of the catalog.
 		workTitle: text("work_title"),
 		workType: text("work_type"),
 		workPublicId: bigint("work_public_id", { mode: "number" }),

@@ -730,7 +730,7 @@ function DataSection() {
 			if (!res.ok) throw new Error("Export failed.");
 			// The server sends it as an attachment deliberately — this is the one document
 			// containing everything about a person, and a browser rendering it in a tab is a
-			// thing that ends up in shared screenshots and back-button history. Honour that
+			// thing that ends up in shared screenshots and back-button history. Honor that
 			// by saving it rather than navigating to it.
 			const blob = await res.blob();
 			const url = URL.createObjectURL(blob);
@@ -811,8 +811,8 @@ function DataSection() {
 							Your account is scheduled for deletion on {new Date(scheduled).toLocaleDateString()}.
 						</span>
 						<span className="text-sm">
-							Nothing has been deleted yet. Cancelling puts everything back exactly as it was —
-							there is no separate restore.
+							Nothing has been deleted yet. Canceling puts everything back exactly as it was — there
+							is no separate restore.
 						</span>
 						<button type="button" className="btn btn-sm" onClick={handleCancel} disabled={busy}>
 							Cancel deletion

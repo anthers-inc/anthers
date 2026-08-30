@@ -10,7 +10,7 @@
  * work. `0041` and `0042` did this and it went unnoticed for weeks, through a release.
  *
  * Nothing else can see it: typecheck is happy, the tests pass, and the database is correct.
- * The only artefact that disagrees is a JSON file nobody reads.
+ * The only artifact that disagrees is a JSON file nobody reads.
  *
  * Fixing a violation: run `bun run db:generate` (which drives the prompts — see
  * `scripts/drizzle-generate.ts`), keep the snapshot it writes, and replace its SQL with

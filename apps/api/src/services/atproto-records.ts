@@ -57,7 +57,7 @@ export type UnpublishableReason =
  *
  * ⚠️ Records are public and cached by strangers. An over-permissive answer here cannot be
  * taken back by deleting the record later, which is why this fails closed on any
- * visibility value it does not recognise.
+ * visibility value it does not recognize.
  */
 export function unpublishableReason(work: PublishableWork): UnpublishableReason | null {
 	// 🚨 First, and stated separately from the visibility check below even though a

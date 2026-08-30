@@ -610,7 +610,7 @@ export interface BadgeView {
 	price: number;
 	timePool: string;
 	supportsAnthers: string;
-	subsidised: boolean;
+	subsidized: boolean;
 }
 
 /**

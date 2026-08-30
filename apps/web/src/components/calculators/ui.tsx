@@ -86,7 +86,7 @@ export function SegControl<T extends string | number>({
 }
 
 // ---------------------------------------------------------------------------
-// Labelled numeric field (with optional $ prefix / unit suffix)
+// Labeled numeric field (with optional $ prefix / unit suffix)
 // ---------------------------------------------------------------------------
 
 export function NumberField({

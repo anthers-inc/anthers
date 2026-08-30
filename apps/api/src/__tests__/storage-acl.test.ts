@@ -7,7 +7,7 @@
  * delivery-access work: `S3StorageService.upload` defaulted its `acl` argument to
  * "public", and the upload route decided publicness with a denylist over a value
  * (`mediaType`) that arrives unvalidated off a multipart form — so anything the
- * route didn't recognise landed world-readable.
+ * route didn't recognize landed world-readable.
  *
  * Both are inverted now, and the cases below are the ones that would silently
  * regress: an unknown type, a missing type, and the catch-all. If someone adds a
@@ -44,7 +44,7 @@ describe("upload ACL allowlist", () => {
 		}
 	});
 
-	it("fails closed on anything it doesn't recognise", () => {
+	it("fails closed on anything it doesn't recognize", () => {
 		// The actual bug: `mediaType` is `formData.get("mediaType") as string | null`,
 		// so a client can send any string, or none, and it used to come out public.
 		for (const type of [null, undefined, "", "wat", "Avatar", "AVATAR", "video ", "__proto__"]) {
@@ -53,7 +53,7 @@ describe("upload ACL allowlist", () => {
 	});
 
 	it("treats the allowlist as exact — no case folding, no trimming", () => {
-		// Recorded so nobody "helpfully" normalises the input later: loosening the
+		// Recorded so nobody "helpfully" normalizes the input later: loosening the
 		// match is the direction that reopens the hole, and it should be a decision
 		// with a test change attached, not an incidental tidy-up.
 		expect(PUBLIC_MEDIA_TYPES.has("avatar")).toBe(true);
@@ -68,7 +68,7 @@ describe("upload ACL allowlist", () => {
  *
  * Verified against the live `anthers-media` bucket on 2026-07-26: the presigner hoists
  * `x-amz-acl` into the query string, and Spaces IGNORES it there — an object signed
- * `public-read` in the query came back owner-only. It is honoured only as a request
+ * `public-read` in the query came back owner-only. It is honored only as a request
  * header. So the ACL takes effect exactly when the client echoes the header, which is
  * why `getPresignedUploadUrl` returns headers instead of leaving the caller to infer
  * them. A regression here is silent: uploads keep succeeding, objects just quietly take

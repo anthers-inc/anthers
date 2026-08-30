@@ -166,7 +166,7 @@ const placeHoldSchema = z.object({
 
 // pg-boss job states (v12). We surface the live ones that signal health;
 // `completed` rows are pruned by keep_until, so their count is only ever recent.
-const JOB_STATES = ["created", "retry", "active", "completed", "cancelled", "failed"] as const;
+const JOB_STATES = ["created", "retry", "active", "completed", "cancelled", "failed"] as const; // lint-spelling: ignore — pg-boss's own state values
 type JobState = (typeof JOB_STATES)[number];
 
 // postgres-js returns the rows array directly from db.execute(); other drivers
@@ -273,7 +273,7 @@ const adminRoutes = new Hono()
 			const failRes = await db.execute(sql`
 				SELECT name, state::text AS state, created_on, output
 				FROM pgboss.job
-				WHERE state IN ('failed', 'cancelled')
+				WHERE state IN ('failed', 'cancelled') -- lint-spelling: ignore — pg-boss's own state values
 				ORDER BY COALESCE(completed_on, created_on) DESC
 				LIMIT 25
 			`);

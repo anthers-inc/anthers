@@ -24,7 +24,7 @@
  *
  * **Sabotage-verified 1 / 2 / 1, all three predicted correctly and all three MEASURED —
  * these numbers are not guesses.** Removing the `sourceKey` split so every row is resumable
- * (the pre-guard behaviour) fails 1. Putting back the `video ? TRANSCODE : PROCESS_AUDIO`
+ * (the pre-guard behavior) fails 1. Putting back the `video ? TRANSCODE : PROCESS_AUDIO`
  * ternary fails 2 — the ebook routing AND the unknown-type skip, since under a ternary
  * there is no such thing as an unrecognised type: everything that is not video is audio.
  * Widening the status filter to include `completed` fails 1. Each sabotage was `grep`ed

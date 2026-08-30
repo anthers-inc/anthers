@@ -100,7 +100,7 @@ export default function DashboardPage() {
 	/**
 	 * Delete a Project.
 	 *
-	 * Deliberately NOT modelled on the post-delete flow above, because the stakes are
+	 * Deliberately NOT modeled on the post-delete flow above, because the stakes are
 	 * different: `project_posts.projectId` cascades, so only the MEMBERSHIP rows go — every
 	 * post in the Project survives on the creator's profile. There is no orphaned-media
 	 * question here and nothing to purge, so offering a media checkbox would imply a

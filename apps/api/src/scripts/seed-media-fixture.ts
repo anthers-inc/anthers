@@ -91,7 +91,7 @@ async function ffmpegAvailable(): Promise<boolean> {
 /**
  * A multi-page PDF, generated rather than committed.
  *
- * Four pages of coloured test cards, so a reader spec can tell page 2 from page 3 by
+ * Four pages of colored test cards, so a reader spec can tell page 2 from page 3 by
  * eye — a fixture whose pages are identical cannot show that a page turn happened.
  * Built by rendering images with ffmpeg and stitching with `img2pdf`-free plumbing:
  * ffmpeg writes a PDF directly via its `pdf` muxer where available, and we fall back to

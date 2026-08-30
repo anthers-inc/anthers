@@ -4,9 +4,9 @@
  *
  * ONE subscription carries everything a user gives, as **one item per destination** —
  * Anthers and each creator, each priced at that destination's own monthly amount. Someone
- * giving Anthers $3, Alice $5 and Bob $2.50 has three items totalling $10.50, on one
+ * giving Anthers $3, Alice $5 and Bob $2.50 has three items totaling $10.50, on one
  * invoice and one charge. That is Billing Cycle and Arrears Model's fully prepaid monthly charge, and it is also
- * what amortises the fixed $0.30 across every creator on it.
+ * what amortizes the fixed $0.30 across every creator on it.
  *
  * 🚨 **One item per destination, never one item with a quantity**, because a quantity of a
  * shared unit cannot express $2.50. The hazard that shape carried has not gone, it has
@@ -201,7 +201,7 @@ export function periodEndFromSub(sub: Stripe.Subscription): number | null {
  *
  * `price_data` on a subscription item takes a Product **id**, not a name — so without one
  * per creator every line on a supporter's invoice would carry the same label and the
- * itemised receipt would say nothing. This is the whole reason the N-item model needs a
+ * itemized receipt would say nothing. This is the whole reason the N-item model needs a
  * column at all.
  *
  * Lazy rather than eager: a creator nobody supports needs no Product, and creating one at

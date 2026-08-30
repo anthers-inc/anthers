@@ -82,7 +82,7 @@ export default function PostPage() {
 			.then((postData) => {
 				setPost(postData?.post ?? null);
 				// The canonical path this post answers to, so the redirect that follows is
-				// recognised as "already loaded" rather than a new post to go and get.
+				// recognized as "already loaded" rather than a new post to go and get.
 				if (postData?.post) loadedPath.current = postUrl(postData.post);
 			})
 			.catch(console.error)

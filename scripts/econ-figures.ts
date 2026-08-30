@@ -859,7 +859,7 @@ const BLOCKS: Block[] = [
 // here in the first place:
 //
 //   It catches a published figure at the moment it is TYPED, while it still matches
-//   the model. It does NOT recognise one that has already gone stale — $9.40 matches
+//   the model. It does NOT recognize one that has already gone stale — $9.40 matches
 //   nothing we publish now, so nothing here would have flagged it today. It would
 //   have flagged it on the day it was written, when it was still correct.
 //
@@ -894,7 +894,7 @@ const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"]
  * and nobody noticed the repo's shop window was outside it.
  *
  * 🚨 **It was `["README.md"]` — one file — until 2026-08-18, and the same reasoning that
- * added the README argued for all of it.** Fixing one file and leaving its neighbours
+ * added the README argued for all of it.** Fixing one file and leaving its neighbors
  * outside is how the gap reproduces: `packages/db/TEST_ACCOUNTS.md` was a **complete
  * description of the pre-retirement model** (a "Rank (Anthers-Seeds)" column, Anthers
  * Gates, Seed Gates, "whole $3 Seeds"), and `apps/web/tests/README.md` said "badge/Seed
@@ -909,7 +909,7 @@ const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"]
  * across `LICENSE.md` and the two `THIRD-PARTY.md` files, which are verbatim third-party
  * text: none needed an `econ:allow-file`. That is the same result adding `packages/db/src`
  * to `APP_ROOTS` got, and for the same reason — these patterns match retired *copy*, and
- * copy is not what a licence is made of.
+ * copy is not what a license is made of.
  */
 async function docFiles(): Promise<string[]> {
 	const out: string[] = [];

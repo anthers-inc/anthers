@@ -227,7 +227,7 @@ describe("the request is scheduled, informed, and reversible", () => {
 		const after = await (await req("/api/accounts/me", { headers: { Cookie: leaver } })).json();
 		expect(after.user.deletionRequestedAt).toBeNull();
 
-		// Cancelling twice is a 404, not a silent success.
+		// Canceling twice is a 404, not a silent success.
 		expect((await post("/api/accounts/me/deletion/cancel", leaver)).status).toBe(404);
 	});
 

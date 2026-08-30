@@ -4,7 +4,7 @@
  *
  * 🛑 Settled by Parker on 2026-08-21. A public repository and a social media post are not
  * the same kind of public: the repository is a quiet presence that shipping proceeds into
- * on engineering judgement, while posting to the Anthers Bluesky account reaches people who
+ * on engineering judgment, while posting to the Anthers Bluesky account reaches people who
  * were not looking and is not reversible the way a commit is. That makes it a **marketing**
  * decision on his timing, never a consequence of some feature being ready.
  *

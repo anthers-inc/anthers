@@ -74,7 +74,7 @@ test.describe("Resources calculators", () => {
 	 * 🚨 **This asserted only that the phrase was VISIBLE, and that is how the page came to
 	 * overstate creator revenue threefold for a fortnight.** When the Seed retired,
 	 * `thresholdForBadge` began returning dollars while the page still multiplied by $3, so
-	 * a Sprout viewer was modelled as directing $18 rather than $6 — and a test asking
+	 * a Sprout viewer was modeled as directing $18 rather than $6 — and a test asking
 	 * "does the string `reaches creators` appear" passed every run.
 	 *
 	 * Every figure on this page is computed, so the typed-figure scan has nothing to look

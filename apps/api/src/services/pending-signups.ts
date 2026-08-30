@@ -67,7 +67,7 @@ import { attachSessionToUser, revokeAtprotoGrant } from "./atproto-client.js";
  * "press the button, read the mail tomorrow" is the ordinary case rather than an edge one.
  *
  * It is still short, because an abandoned pending signup is personal data belonging to
- * somebody who never became a user — see the Privacy Policy — and the sweep below is what honours that.
+ * somebody who never became a user — see the Privacy Policy — and the sweep below is what honors that.
  */
 export const PENDING_SIGNUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 

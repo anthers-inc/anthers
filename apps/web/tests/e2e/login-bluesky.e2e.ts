@@ -78,7 +78,7 @@ test.describe("logging in with Bluesky", () => {
 		expect((await me.json()).user, "a refused handle must not create a session").toBeNull();
 	});
 
-	test("cancelling leaves the sign-in form exactly as it was", async ({ page }) => {
+	test("canceling leaves the sign-in form exactly as it was", async ({ page }) => {
 		await page.goto("/login");
 		await page.locator('input[autocomplete="username"]').first().fill("alice@example.com");
 

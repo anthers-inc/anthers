@@ -19,8 +19,8 @@
  * Garnet indexes a local filesystem: every track it lists, it can play. Anthers resolves
  * access per request, so **a queue can legitimately hold a track the listener turns out
  * not to own**. That is not an error state to prevent — an album with two free singles and
- * three gated tracks is a perfectly ordinary thing to press play on. It needs a behaviour,
- * and the behaviour is asymmetric on purpose:
+ * three gated tracks is a perfectly ordinary thing to press play on. It needs a behavior,
+ * and the behavior is asymmetric on purpose:
  *
  *   - **Auto-advance skips it.** Ending track 2 and stopping dead on a gate the listener
  *     did not choose is the stall this exists to avoid.
@@ -103,7 +103,7 @@ function identityOrder(n: number): number[] {
  * A shuffled permutation of [0, n) with `first` at the front.
  *
  * `first` leads so that turning shuffle on continues from the track already playing
- * instead of jumping somewhere else mid-song — the behaviour every music player has and
+ * instead of jumping somewhere else mid-song — the behavior every music player has and
  * nobody notices until it is missing.
  *
  * @param random Injected so the shuffle is testable. Production passes `Math.random`.

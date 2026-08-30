@@ -71,7 +71,7 @@ export interface BadgeRow {
  * A `bandwidth` column sat between the charge and the Time Pool until 2026-08-12,
  * driven by a reference streamer's watch-hours. Both are gone: delivery costs $0,
  * so there is nothing for time to price, and the table no longer rests on a
- * behavioural assumption at all. **Every row is now exact rather than illustrative.**
+ * behavioral assumption at all. **Every row is now exact rather than illustrative.**
  */
 export function badgeTable(): BadgeRow[] {
 	return BADGE_ORDER.filter((b) => thresholdForBadge(b) > 0).map((badge) => {
@@ -192,7 +192,7 @@ export interface PurchaseExample extends SaleScenario {
 /**
  * The creator-facing worked examples — the single-item worst case Studio quotes.
  *
- * Single-item on purpose: a multi-item cart amortises the fixed $0.30 and only ever
+ * Single-item on purpose: a multi-item cart amortizes the fixed $0.30 and only ever
  * pays the creator more, so quoting the cart price would be quoting a best case. The
  * deduction percentage is here rather than in the doc because it is the number a
  * creator actually reacts to, and a percentage recomputed by hand beside a generated
@@ -303,7 +303,7 @@ export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
 /**
  * What a free user costs each month.
  *
- * It used to be their streaming bandwidth at cost plus the subsidised Time Pool.
+ * It used to be their streaming bandwidth at cost plus the subsidized Time Pool.
  * With delivery free the bandwidth half is gone, so **a free account's whole cost to
  * Anthers is the Time Pool it funds on their behalf** — the money that reaches the
  * creators they watched. Watching more costs Anthers nothing extra, which is exactly
@@ -411,7 +411,7 @@ export function selfSufficiency() {
  *
  * `absorbsProcessing` is Valve's model: their 30% covers the card cost, so nothing
  * further comes off. `maxPrice` bounds a row we would not honestly claim — Bandcamp
- * sells music, and a $40 album is not a transaction anyone recognises.
+ * sells music, and a $40 album is not a transaction anyone recognizes.
  */
 export const RIVAL_STOREFRONTS: {
 	name: string;
@@ -465,7 +465,7 @@ export function takeHomeComparison(): TakeHomeRow[] {
 
 // ── The growth ladder (61.01) ────────────────────────────────────────────────
 /**
- * The paying share the ladder is modelled at. 61.01 calls it the model default and the
+ * The paying share the ladder is modeled at. 61.01 calls it the model default and the
  * single biggest input to where inflection 1 falls — and the one thing the early rungs
  * exist to *measure*, since nothing in the product has ever observed it.
  */
@@ -525,7 +525,7 @@ export interface Landmark {
  * the Form 1023 narrative is examined and the first 990s are filed. **Every salary
  * landmark uses the charity-health line**, and the solvency line is reported beside it
  * because "the platform stops costing Parker money" is a real milestone — just not a
- * licence to draw a salary.
+ * license to draw a salary.
  */
 export function salaryLandmarks(): Landmark[] {
 	const share = MODELLED_PAYING_SHARE;
@@ -585,7 +585,7 @@ export function payingShareSensitivity() {
  * 🚨 **This is the single biggest risk to the ladder, and it is not an economic one.**
  * Binary Public Access removes the reason to give Anthers more than its price, so
  * the paying population slides toward exactly that unless something above it
- * earns it. Each row is a different decay in the mix; the labelled average is what the
+ * earns it. Each row is a different decay in the mix; the labeled average is what the
  * decay produces, so the axis stays a fact about the population rather than a dial name.
  */
 /**
@@ -709,7 +709,7 @@ export function creatorSegments(accounts = 80_000) {
 export function paIncentiveCeiling() {
 	const rows = PHASE_ACCOUNTS.map((accounts, i) => {
 		// The exemption priced at its worst case — every creator giving their whole
-		// catalogue to the commons. Modelling it at the current 10% would report a cost we
+		// catalog to the commons. Modeling it at the current 10% would report a cost we
 		// have no way to hold anyone to.
 		const m = modelAt({
 			accounts,

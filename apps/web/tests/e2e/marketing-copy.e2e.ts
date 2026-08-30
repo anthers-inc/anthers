@@ -89,7 +89,7 @@ test.describe("FAQ", () => {
 		await page.goto("/faq");
 
 		// The disclosure is a native <details>, not a checkbox collapse — this asserts the
-		// behaviour rather than the element, so swapping the mechanism again stays free.
+		// behavior rather than the element, so swapping the mechanism again stays free.
 		const q = page.getByText("Is there a data cap?", { exact: false }).first();
 		await expect(q).toBeVisible();
 

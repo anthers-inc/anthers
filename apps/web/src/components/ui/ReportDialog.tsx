@@ -5,7 +5,7 @@
  * Deliberately says nothing about what happens next. Whether the item is already
  * reported, already hidden, or was already looked at and dismissed is operator
  * information, and reflecting it back here would turn a report button into a way
- * to probe moderation state. Every successful report gets the same acknowledgement.
+ * to probe moderation state. Every successful report gets the same acknowledgment.
  *
  * The reason list comes from `@anthers/shared/moderation`, the same module the
  * API validates against, so the radio buttons can't drift from what the server
@@ -219,7 +219,7 @@ export default function ReportDialog({
 						)}
 
 						{/* 🚨 Shown always, not conditionally on a reason. This is the surface somebody
-						    uses when they are looking at a Work they recognise as their own, and the
+						    uses when they are looking at a Work they recognize as their own, and the
 						    moment to tell them there is a different process is before they pick a
 						    reason that cannot deliver one. */}
 						<p className="mt-3 text-xs text-base-content/60">

@@ -154,7 +154,7 @@ export default function EmailCodeForm({
 		 * unable to correct it without reloading. Nothing errors, and it looks like a stuck
 		 * field. Found by the e2e spec.
 		 *
-		 * The behaviour it implements is the one people expect from a code field: clear this
+		 * The behavior it implements is the one people expect from a code field: clear this
 		 * box if it holds anything, otherwise clear the one before and go there. Stepping
 		 * back *without* clearing would leave a character behind that the cursor has already
 		 * passed, which is how these fields end up eating a correction.

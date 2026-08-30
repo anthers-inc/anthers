@@ -338,7 +338,7 @@ const atprotoRoutes = new Hono()
 	// 🚨 **Without this the closed state is a button that refuses**, which is worse than no
 	// button: `ATPROTO_SIGNUP_ENABLED` is a launch switch, and while it is off `/subscribe`
 	// should look exactly as it did before this existed rather than advertising a door and
-	// then apologising. The API refuses either way — this only decides whether anyone is
+	// then apologizing. The API refuses either way — this only decides whether anyone is
 	// invited to try.
 	.get("/config", (c) => c.json({ signupEnabled: atprotoSignupEnabled() }))
 

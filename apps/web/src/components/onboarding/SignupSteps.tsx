@@ -97,7 +97,7 @@ export default function SignupSteps({
 		<div className="mx-auto min-w-0 w-full max-w-lg px-6 py-12 sm:py-16">
 			{/* An ordered list, because that is what this is — and it means a screen reader
 			    hears "3 of 3" rather than three unrelated words. The visual state is carried
-			    by `aria-current` and by the word in the label, never by colour alone. */}
+			    by `aria-current` and by the word in the label, never by color alone. */}
 			{/* ⚠️ **No connecting lines between the steps, and that is a fix rather than a
 			    simplification.** Three steps do not fit on one line in this column, so the rail
 			    wraps — and a connector drawn after every step but the last leaves one dangling

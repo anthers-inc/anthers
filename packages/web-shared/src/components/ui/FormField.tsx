@@ -8,7 +8,7 @@ interface FormFieldProps {
 	 * A line under the input saying something the label cannot — what happens if the field
 	 * is left blank, what shape the value should take. Rendered below the control so it is
 	 * read *after* the box it describes, and replaced by `error` when there is one, since
-	 * two lines of small grey text under one input is how neither gets read.
+	 * two lines of small gray text under one input is how neither gets read.
 	 */
 	hint?: ReactNode;
 	children: ReactNode;

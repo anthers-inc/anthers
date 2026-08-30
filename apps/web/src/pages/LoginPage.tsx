@@ -65,13 +65,13 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *
  * 🚨 **The card's height is decoration, and it is load-bearing decoration.** The botanical
  * flourishes are positioned against the card box and each spray reaches roughly seven rems
- * in from its corner, so the empty space above and below the centred content is what keeps
+ * in from its corner, so the empty space above and below the centered content is what keeps
  * a leaf off the buttons. At `h-[32rem]` the old content cleared the bottom pair by a
  * fraction of a rem — which is why adding the Bluesky row put a spray straight through it,
  * and why the handle prompt is a modal instead of an inline field. Two rules follow: the
  * height is a **minimum** now, because a card that cannot grow spills its content the
  * moment a form gains an error line; and anything added to the card body has to be paid
- * for in height, at twice its own, since the content is centred.
+ * for in height, at twice its own, since the content is centered.
  */
 export default function LoginPage() {
 	const { signIn, signInWithBluesky, refreshUser } = useAuth();

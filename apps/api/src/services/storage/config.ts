@@ -164,7 +164,7 @@ export function resolveStorageConfig(
  *
  * Deliberately a bare concatenation, byte-identical to what `s3.ts` did before this file
  * existed, because the point of this change is to be a no-op. Do not add encoding here as a
- * drive-by: it would be an improvement, and it would also be a silent behaviour change to
+ * drive-by: it would be an improvement, and it would also be a silent behavior change to
  * every URL the application hands out and every URL already written to the database.
  *
  * ⚠️ **Known pre-existing gap, found while writing this and left alone on purpose.** Keys
@@ -172,7 +172,7 @@ export function resolveStorageConfig(
  * route), so a key *can* contain characters that need encoding. For ordinary keys the round
  * trip through `urlToKey` is exact, because `new URL()` percent-encodes the pathname and
  * `decodeURIComponent` undoes it. For a key containing a literal `%` it is lossy — the key
- * `a%20b` comes back as `a b`. `storage-url-roundtrip.test.ts` pins both behaviours so the
+ * `a%20b` comes back as `a b`. `storage-url-roundtrip.test.ts` pins both behaviors so the
  * limitation is visible rather than discovered. Fixing it means encoding here *and*
  * migrating stored URLs, which is its own piece of work.
  */

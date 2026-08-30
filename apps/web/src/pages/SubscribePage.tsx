@@ -56,7 +56,7 @@
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
 // replaced a sticky tray in a right-hand rail: the rail fought the one thing every other
-// marketing page does, which is centre a single column, and it put a choice and its
+// marketing page does, which is center a single column, and it put a choice and its
 // consequence in different eyelines.
 //
 // The question the page asks is *whether*, never *how much*: a creator pick is
@@ -77,7 +77,7 @@
 //     inline post unlock uses.
 //   • Following commits for real.
 //   • Support for a CREATOR rides on the SAME subscription as the Anthers one — ONE ITEM
-//     PER DESTINATION, itemised, so the invoice names them. ⚠️ **Never collapse these back
+//     PER DESTINATION, itemized, so the invoice names them. ⚠️ **Never collapse these back
 //     into a quantity**: a quantity can only express whole multiples of one price, and
 //     amounts are free to the cent. The split rides in subscription metadata; see
 //     `anthersSupportFromSub` in services/billing.ts.
@@ -171,7 +171,7 @@ const FREE_VIDEO_HOURS = Math.floor(FREE_STORAGE_GIB / storedGibPerSourceHour("1
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
 const HANDFUL = 6;
 
-/** Work types, in the shape a reader recognises. Keys are `works.type` values. */
+/** Work types, in the shape a reader recognizes. Keys are `works.type` values. */
 const MEDIUMS = [
 	{ key: "game", label: "Games" },
 	{ key: "video", label: "Video" },
@@ -233,9 +233,9 @@ function StepNumber({ n }: { n: number }) {
 /**
  * A step's heading block.
  *
- * Centred, and in the Fraunces display face at the marketing scale, because this page
+ * Centered, and in the Fraunces display face at the marketing scale, because this page
  * sits in the same lineup as /for-users and /about and was reading as a different site:
- * bold sans headings hard against the left edge, while every neighbouring page centres a
+ * bold sans headings hard against the left edge, while every neighboring page centers a
  * light serif inside a capped column.
  */
 function StepHeading({
@@ -516,7 +516,7 @@ interface PerkRow {
  * The confirmed perk set from 20.06 § Currently Confirmed Perks, one row per perk.
  *
  * 🚨 **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
- * table are the same numbers as the sections they summarise, and neither may be edited
+ * table are the same numbers as the sections they summarize, and neither may be edited
  * without the other. So the Sticker budget and the storage floor have real functions in
  * `constants.ts` — `stickerBudgetFor` and `storageGibFor` — rather than being read off the
  * table, and `econ:figures` fails the build on a figure typed into a page.
@@ -748,7 +748,7 @@ function BadgeMark({ badge, lit, size }: { badge: Badge; lit: boolean; size: str
 				name={BADGE_ART[badge].wreath}
 				className={`absolute inset-0 h-full w-full ${lit ? "text-primary/70" : "text-primary/30"}`}
 			/>
-			{/* The emoji is full-colour artwork, so selection brightens the frame and leaves it. */}
+			{/* The emoji is full-color artwork, so selection brightens the frame and leaves it. */}
 			<span aria-hidden="true" className="text-xl">
 				{BADGE_ART[badge].emoji}
 			</span>
@@ -765,12 +765,12 @@ function BadgeMark({ badge, lit, size }: { badge: Badge; lit: boolean; size: str
  *
  * ⚠️ **Every vertical rule is a `border-r`, never a `border-l` on the cell to its right.**
  * `border-separate` does not collapse adjacent borders — it stacks them — so a column
- * drawing its left edge beside a neighbour drawing its right edge is a 2px line where
+ * drawing its left edge beside a neighbor drawing its right edge is a 2px line where
  * every other rule is 1px. One side owns the line; the first column adds the card's left
  * edge because nothing sits to its left to own it.
  *
  * 🚨 **The chosen column recolours the rule on EACH side of it, which means touching its
- * left neighbour's cell.** The alternative — giving the lit column its own `border-l` — is
+ * left neighbor's cell.** The alternative — giving the lit column its own `border-l` — is
  * what stacks two borders, and the highlight would visibly fatten on one side only.
  *
  * ⚠️ **Two shades, not one** (Parker, 2026-08-25). The chrome — the rung tabs along the top
@@ -800,7 +800,7 @@ const RAISED = "drop-shadow-[0_5px_16px_rgba(0,0,0,0.15)]";
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
 function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 	// ⚠️ The chosen rung as a COLUMN INDEX rather than an amount, because the grid rules are
-	// drawn by neighbour: a cell needs to know it sits immediately left of the lit column.
+	// drawn by neighbor: a cell needs to know it sits immediately left of the lit column.
 	// An amount off the ladder gives `-1`, which no `column` and no `column - 1` can equal,
 	// so an unrecognised value lights nothing rather than lighting the wrong thing.
 	const litColumn = RUNG_AMOUNTS.indexOf(value);
@@ -838,7 +838,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									key={key}
 									scope="col"
 									// `align-middle` rather than a `h-full` flex child: the cell stretches to
-									// the row and centres its own content, which is what lets Free sit level
+									// the row and centers its own content, which is what lets Free sit level
 									// with the others without a spacer standing in for art it does not have.
 									//
 									// ⚠️ **Every header carries a visible edge, not only the chosen one.**
@@ -1311,7 +1311,7 @@ function EchoRow({ line, onDrop }: { line: PickLine; onDrop?: (key: string) => v
  *
  * Every step that asks something answers it in place rather than reporting into a rail
  * off to one side: a choice and its consequence belong in the same eyeline, and the page
- * can then be a single centred column like the rest of the marketing lineup. The default
+ * can then be a single centered column like the rest of the marketing lineup. The default
  * is always *nothing chosen*, said plainly — an unanswered step reads as unanswered
  * rather than as a quiet no.
  */
@@ -1423,7 +1423,7 @@ function FreeInclusions() {
 			label: `${FREE_STORAGE_GIB} GiB of Creator storage`,
 			// ⚠️ **This is a CREATOR allowance, and the sentence has to keep saying so.**
 			// `FREE_STORAGE_GIB`'s only consumer is `estimateStorageCost` in
-			// `packages/shared/src/fees.ts`, which bills a creator's catalogue against it —
+			// `packages/shared/src/fees.ts`, which bills a creator's catalog against it —
 			// there is no user-side storage quota to describe. A draft of this line offered
 			// the same allowance to users for preserving delisted purchases and storing
 			// cloud saves; neither exists, and a delisted purchase already survives without
@@ -1730,11 +1730,11 @@ function SignupForm({
 				onChange={(e) => onHandleChange(e.target.value)}
 			/>
 			{/* 🚨 No butterfly on this button, and that is a compliance decision rather than a
-			    visual one. Bluesky's guidance allows their mark in three colours only, and the
+			    visual one. Bluesky's guidance allows their mark in three colors only, and the
 			    one that reads on `btn-primary` differs by theme — our primary is a deep green
 			    in light and a light amber in dark, so white works on one and is nearly
 			    invisible on the other, while their blue is listed for light backgrounds only.
-			    The tab an inch above already carries the mark in an approved colour on a
+			    The tab an inch above already carries the mark in an approved color on a
 			    surface we control, which is where it belongs. */}
 			<button
 				type="submit"
@@ -1796,7 +1796,7 @@ function SignupForm({
 			className={`overflow-hidden rounded-2xl border border-base-300 bg-base-200/60 ${className ?? ""}`}
 		>
 			{/* Tabs across the TOP rather than down the left (Parker, 2026-08-24) — the card
-			    is a centred column and a left rail pushed its contents off that centre line,
+			    is a centered column and a left rail pushed its contents off that center line,
 			    where a top strip keeps the field, the button and the note all aligned to the
 			    same axis.
 
@@ -1815,7 +1815,7 @@ function SignupForm({
 							className={`h-5 w-5 ${door === "email" ? "text-primary" : "text-base-content/40"}`}
 						/>,
 					)}
-					{/* 🚨 The butterfly keeps its own colour in BOTH states — see `BlueskyMark`.
+					{/* 🚨 The butterfly keeps its own color in BOTH states — see `BlueskyMark`.
 					    Dimming it to signal "not selected" would be tinting somebody else's
 					    trademark, so the tab behind it carries the whole selected state. */}
 					{tab("bluesky", "Bluesky", <BlueskyMark className="h-5 w-5" />)}

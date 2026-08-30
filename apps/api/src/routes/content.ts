@@ -1040,7 +1040,7 @@ function parseNumericId(raw: string): number | null {
  * the raw query, because three routes accept a preview and only one of them can carry this
  * validator without changing its own signature. Everything is optional and unconstrained
  * here, so it can never reject a request — the real validation is `previewRequest`, which
- * fails back to "no preview" on anything it doesn't recognise.
+ * fails back to "no preview" on anything it doesn't recognize.
  */
 const previewQuerySchema = z.object({
 	previewAs: z.string().optional(),
@@ -1116,7 +1116,7 @@ function contextFor(
  * ⚠️ **The token must name the Work in the path.** Without that, a token minted for one free
  * Work would be a skeleton key to every delivery route on the platform — the recipient would
  * still be refused gated and Adult work by the resolver, but they would be drawing the
- * sharer's budget across a catalogue the sharer never shared.
+ * sharer's budget across a catalog the sharer never shared.
  */
 const requireViewerOrShareLink = createMiddleware(async (c, next) => {
 	const workId = parseNumericId(c.req.param("id") ?? "");
@@ -1186,7 +1186,7 @@ async function workAccessFor(
  *
  * So it sits here, at the two endpoints that actually hand over media, and only for
  * Public Access work: a gated Work the viewer cleared, one they bought, and their own
- * catalogue are all `isFree: false` and never reach the meter.
+ * catalog are all `isFree: false` and never reach the meter.
  *
  * ⚠️ **A share-link view is metered against the SHARER's separate share-link budget**, not
  * against their ordinary allowance and not against nothing. Which budget applies is decided
@@ -1841,7 +1841,7 @@ const contentRoutes = new Hono()
 		// NOTE: publishing is deliberately NOT gated on media readiness any more. Readiness is
 		// a property of the media, the media belongs to the Work, and a post that merely links
 		// a Work has nothing to wait for — blocking an announcement on someone's encode was an
-		// artefact of the post owning the media. The gate moved to RELEASE, on the Work.
+		// artifact of the post owning the media. The gate moved to RELEASE, on the Work.
 
 		// Explicit slug must be free; otherwise derive a unique one from the title.
 		let slug: string;
@@ -4313,7 +4313,7 @@ const contentRoutes = new Hono()
 		}
 
 		// Public ONLY for display chrome; everything else private, including any
-		// mediaType this route doesn't recognise (it arrives unvalidated off the form).
+		// mediaType this route doesn't recognize (it arrives unvalidated off the form).
 		const acl = aclForMediaType(mediaType);
 
 		const buffer = Buffer.from(await file.arrayBuffer());
@@ -4483,7 +4483,7 @@ const contentRoutes = new Hono()
 	 * Access is resolved per item exactly as the Catalog resolves it, because a shelf can
 	 * hold a Work its owner cannot currently open: a free Work they saved and its creator
 	 * later gated, or a refunded purchase. Those render locked with the route to unlock,
-	 * which is the same behaviour a gated track gets in the play queue.
+	 * which is the same behavior a gated track gets in the play queue.
 	 *
 	 * `?hidden=1` includes tidied-away entries — the "show hidden" toggle. They are
 	 * excluded by default and never deleted.

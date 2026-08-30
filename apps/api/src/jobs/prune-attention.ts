@@ -12,7 +12,7 @@
  * requests. Two of those three were false** — `deleteExpiredSessions()` and
  * `deleteExpiredTokens()` were exported and called from nowhere until 2026-08-12, when
  * they were scheduled as `QUEUES.PRUNE_CREDENTIALS`. Only `cleanupDesktopAuthRequests()`
- * ever actually ran. The behavioural log, which is by far the most sensitive of the four,
+ * ever actually ran. The behavioral log, which is by far the most sensitive of the four,
  * had none either and accumulated forever.
  *
  * Three properties this has to hold, in order of how badly they break:

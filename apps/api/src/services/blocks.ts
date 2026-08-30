@@ -10,7 +10,7 @@
  * `follows` in the auth schema, and why nothing here writes to `moderation_actions`.
  *
  * Three properties hold together, and dropping any one of them makes the feature a
- * pretence:
+ * pretense:
  *
  * 1. **Enforcement is symmetric.** The row is directed so an unblock knows whose
  *    decision it was, but every read asks whether a row exists in *either*

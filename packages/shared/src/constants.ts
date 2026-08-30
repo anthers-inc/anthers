@@ -170,7 +170,7 @@ export const TIME_POOL_RATE = 0.5;
  * viewer's watching still pays the creators they watch. The user pays $0.
  *
  * 🚨 **$0.25 is an explicitly PROVISIONAL number (Parker, 2026-08-12) and is expected to
- * move.** It needs vetting against real modelling and real conversion data, not further
+ * move.** It needs vetting against real modeling and real conversion data, not further
  * argument on paper — so treat it as a starting position rather than a settled dial, and
  * see [[11.03 Open Questions]] where it is flagged for review.
  *
@@ -185,7 +185,7 @@ export const TIME_POOL_RATE = 0.5;
  *
  * It is also the single dial that sets **free-access cost per account**, since delivery
  * became free: cost is now `free accounts × this number`, headcount times a policy figure,
- * with no behavioural guess underneath it. That is what decoupled the free tier's
+ * with no behavioral guess underneath it. That is what decoupled the free tier's
  * *generosity* from the platform's *solvency* — the watch-hour limit can move without
  * moving this, and vice versa.
  */
@@ -208,7 +208,7 @@ export const FREE_TIME_POOL = 0.25;
  * ⚠️ **This figure has not been reviewed by counsel.** It is a defensible derivation,
  * not advice, and it is a single named constant precisely so that a lawyer's number
  * replaces it in one place. Shortening it below the dispute window would destroy the
- * evidence a chargeback defence rests on; lengthening it weakens the promise in the Privacy Policy
+ * evidence a chargeback defense rests on; lengthening it weakens the promise in the Privacy Policy
  * without any stated reason, which is the failure the policy calls hoarding.
  */
 export const ATTENTION_RAW_RETENTION_DAYS = 180;
@@ -221,7 +221,7 @@ export const ATTENTION_RAW_RETENTION_DAYS = 180;
  * The rule, uniformly: your Badge is the **highest-threshold Badge whose threshold
  * you meet**; giving *strictly more* than that threshold adds a "+". The "+"
  * applies BETWEEN Badges, not only past the top of the set — with Badges at 2 and 4,
- * someone giving $3 holds the $2 Badge with a "+". It honours someone who chose
+ * someone giving $3 holds the $2 Badge with a "+". It honors someone who chose
  * to give a little extra; whether it *carries* anything is the issuer's choice.
  *
  * Returns `badge: null` below the lowest threshold (no Badge held).
@@ -279,7 +279,7 @@ export function thresholdForBadge(badge: BadgeKey): number {
  *
  * Note this **collapses** an amount onto a Badge and so throws away the remainder —
  * someone giving $3 to a set with Badges at $2 and $4 answers "the $2 Badge". That is
- * right for *labelling* what someone holds and wrong for *resolving access*, which must
+ * right for *labeling* what someone holds and wrong for *resolving access*, which must
  * compare the amount against the gate's own threshold via `amountMeets`. Rounding down
  * to a Badge first is how a viewer gets denied a gate they actually clear.
  */
@@ -350,7 +350,7 @@ export function cents(amount: string | number | null | undefined): number {
 	return Math.round(Math.max(0, Number(amount ?? 0)) * 100);
 }
 
-/** A dollar amount of monthly support, normalised — negatives floor at 0, extra precision drops. */
+/** A dollar amount of monthly support, normalized — negatives floor at 0, extra precision drops. */
 export function supportAmount(amount: string | number | null | undefined): number {
 	return cents(amount) / 100;
 }
@@ -373,7 +373,7 @@ export function amountLabel(amount: string | number | null | undefined): string 
 // ── Derived amounts ──────────────────────────────────────────────────────────
 /**
  * Time Pool $ funded by giving Anthers `dollars` a month (giving nothing = the
- * subsidised `FREE_TIME_POOL`, which the user does not pay for).
+ * subsidized `FREE_TIME_POOL`, which the user does not pay for).
  */
 export function timePoolFor(anthersDollars: number): number {
 	return anthersDollars <= 0 ? FREE_TIME_POOL : supportAmount(anthersDollars) * TIME_POOL_RATE;
@@ -397,7 +397,7 @@ export const STICKER_SHARE_OF_POOL = 1 / 3;
  * the cycle. So a rung's Time Pool figure and its Sticker figure overlap by design — the
  * second is part of the first — and any surface showing both has to say so.
  *
- * A free account has none: a third of the subsidised pot buys no Sticker at any
+ * A free account has none: a third of the subsidized pot buys no Sticker at any
  * denomination, so the arithmetic settles this before policy has to.
  *
  * 🚨 **Stickers are DESIGNED, NOT BUILT.** There is no like primitive to attach one to.
@@ -501,20 +501,20 @@ export const FOUNDATION_SPLIT = { admin: 0.1, programs: 0.4, subsidy: 0.5 } as c
  * This is the second dial R2 moved, and the one nothing else was watching. It cuts
  * the creator-facing storage charge by ~20% — and that charge is one of the two
  * charitable revenue streams, so it reduces the mission's income at the same moment
- * retiring the bandwidth term raises it. The two must be modelled together or the
+ * retiring the bandwidth term raises it. The two must be modeled together or the
  * net effect reads wrong in both directions.
  *
  * Note R2's Infrequent Access tier charges $0.01/GB to retrieve, so a cold-storage
  * class is not a free saving and shouldn't be assumed into this number.
  */
 export const STORAGE_PER_GIB_MONTH = 0.0161;
-/** Free creator storage allowance (GiB), subsidised. */
+/** Free creator storage allowance (GiB), subsidized. */
 export const FREE_STORAGE_GIB = 50;
 /**
  * What a self-hosting creator pays Anthers for infrastructure: **nothing**.
  *
  * It was a flat $1/month standing in for the storage charge, and it was upside-down
- * — a hosted creator's first 50 GiB is free, so break-even sat at a catalogue of
+ * — a hosted creator's first 50 GiB is free, so break-even sat at a catalog of
  * ~91 GiB at R2 rates and every creator below that line paid *more* for storing
  * their own files than for Anthers storing them. The discount was a penalty for
  * exactly the hobbyist most likely to try self-hosting, and R2 widened the gap.

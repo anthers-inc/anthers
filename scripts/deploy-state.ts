@@ -99,7 +99,7 @@ export type WorkflowRun = {
 	head_sha: string;
 	/** queued · waiting · requested · pending · in_progress · completed */
 	status: string;
-	/** success · failure · cancelled · … — null while the run is unfinished. */
+	/** success · failure · cancelled · … — null while the run is unfinished. */ // lint-spelling: ignore — GitHub's own conclusion values
 	conclusion: string | null;
 	name?: string;
 	html_url?: string;

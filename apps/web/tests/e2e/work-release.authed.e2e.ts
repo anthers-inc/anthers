@@ -5,7 +5,7 @@
  * This is the path everything else in the Catalog rests on, and until 2026-08-13 it did
  * not exist: a Work is born `private` with an access table that admits nobody
  * (`defaultSeedAccess()`), and the Studio had no control for either. So a creator could
- * upload a complete catalogue and publish exactly none of it, with nothing anywhere
+ * upload a complete catalog and publish exactly none of it, with nothing anywhere
  * saying so.
  *
  * 🚨 **The state this guards hardest is `locked`** — released, but with no access row
@@ -71,7 +71,7 @@ test.describe.configure({ mode: "serial" });
  * with `authed`** (`workers` is unset outside CI). The reset deleted this walk's Work
  * mid-test, and the failure landed wherever the walk happened to be: a Catalog read that
  * found nothing (`Received: null`, not `false`), or a modal that never closed. Both read
- * as product bugs. ⚠️ **CI could never see it**: `workers: 1` in CI serialises the
+ * as product bugs. ⚠️ **CI could never see it**: `workers: 1` in CI serializes the
  * projects, so the two never overlap there — green on every PR, red about one local
  * `make verify` in three.
  *
@@ -173,7 +173,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await modal.locator('input[type="text"]').first().fill(TITLE);
 
 	// The Created date, at year precision. Its whole reason for existing is back-dating a
-	// catalogue, which is what a creator arriving with years of work actually does.
+	// catalog, which is what a creator arriving with years of work actually does.
 	await modal.getByRole("combobox").last().selectOption("year");
 	await modal.locator('input[type="number"][min="1900"]').fill("2015");
 

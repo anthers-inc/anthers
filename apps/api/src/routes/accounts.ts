@@ -146,7 +146,7 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
  * followers, posts and follows. Found 2026-08-11 while building /subscribe, which is the
  * first surface to render these numbers where being wrong is obvious.
  *
- * The lesson generalises past this file: **a correlated subquery in a select list must
+ * The lesson generalizes past this file: **a correlated subquery in a select list must
  * qualify its outer reference**, and the failure mode is a plausible number rather than
  * an error. Two other counts had the identical shape — `projects.postCount` here and
  * `jams`' `entryCount` — and neither was ever broken, because both joined `users` and so
@@ -714,7 +714,7 @@ const accountRoutes = new Hono()
 				.returning();
 
 			// Confirmed in writing, with the deadline in it. A rights request that
-			// vanishes into a queue with no acknowledgement is the thing people file
+			// vanishes into a queue with no acknowledgment is the thing people file
 			// complaints about, and the record here is also our evidence of the clock.
 			await notify({
 				userId: sessionUser.id,
@@ -790,9 +790,9 @@ const accountRoutes = new Hono()
 
 	.post("/me/deletion/cancel", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { cancelled } = await cancelDeletion(sessionUser.id);
-		if (!cancelled) return c.json({ error: "No deletion was scheduled." }, 404);
-		return c.json({ cancelled: true });
+		const { canceled } = await cancelDeletion(sessionUser.id);
+		if (!canceled) return c.json({ error: "No deletion was scheduled." }, 404);
+		return c.json({ canceled: true });
 	})
 
 	// ── Adult access ─────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
  *
  * One component for both surfaces, because a Post thread and a Work thread are the same
  * conversation UI asked about different subjects — and because the report affordance and
- * the "hidden comments simply aren't here" behaviour are things it would be easy to get
+ * the "hidden comments simply aren't here" behavior are things it would be easy to get
  * subtly wrong in a second copy. The server already shares its read; this shares the view.
  *
  * A Work needed a thread at all because it can be released, consumed and paid for with no

@@ -27,7 +27,7 @@
  * near side of that: the ceremony **opens in place**, the field behaves, a bad code is
  * refused, and nobody is signed in by accident. The single most valuable of those is
  * the first, because "it redirected to /signup and the user lost their picks" is the
- * behaviour this whole change exists to remove.
+ * behavior this whole change exists to remove.
  */
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";

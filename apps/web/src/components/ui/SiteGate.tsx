@@ -54,9 +54,9 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		if (!redeeming || inviteKey === null) return;
-		let cancelled = false;
+		let canceled = false;
 		redeemInviteKey(inviteKey).then((ok) => {
-			if (cancelled) return;
+			if (canceled) return;
 			// A redeemed key writes the same flag the password does, so the visitor
 			// stays in on later visits without the link.
 			if (ok) {
@@ -68,7 +68,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 			setRedeeming(false);
 		});
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, [redeeming]);
 

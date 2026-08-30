@@ -54,7 +54,7 @@ export interface DistributePoolData {
 /** Round to cents the same way `fees.ts` does, so the two never disagree by a penny. */
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-/** The Time Pool a user funds this cycle = `TIME_POOL_RATE` of what they give Anthers (subsidised at $0). */
+/** The Time Pool a user funds this cycle = `TIME_POOL_RATE` of what they give Anthers (subsidized at $0). */
 function computeTimePoolAmount(anthersSupport: number): Decimal {
 	return new Decimal(timePoolFor(anthersSupport));
 }
@@ -102,7 +102,7 @@ async function distributeForAccount(acct: {
 	// 1. Aggregate **Public Access** attention seconds per creator.
 	//
 	// The pool pays for the commons and only for the commons. Gated work the viewer
-	// cleared, work they bought, and their own catalogue were all paid for by whoever
+	// cleared, work they bought, and their own catalog were all paid for by whoever
 	// cleared the gate or made the purchase — distributor-pays refuses to pay twice, so
 	// those seconds draw nothing here.
 	//
@@ -185,7 +185,7 @@ async function distributeForAccount(acct: {
 	}
 
 	// The card fee is charged once on the WHOLE batched monthly charge and split
-	// pro-rata, so a user who also gives to Anthers amortises the fixed $0.30
+	// pro-rata, so a user who also gives to Anthers amortizes the fixed $0.30
 	// and every creator on that charge is paid more. Worst case is a lone directed
 	// $3 on its own charge: $3.00 gross → $2.61 net.
 	if (grossDirected.gt(0)) {

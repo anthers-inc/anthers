@@ -115,7 +115,7 @@ export async function resumeOrphanedTranscodes(
 		// ⚠️ The reset happens BEFORE the queue lookup, so a row whose media type we cannot
 		// place is still reset to `pending` and then not sent. That ordering is preserved
 		// from the original exactly as it shipped, because this extraction is meant to make
-		// the behaviour testable rather than to change it. It is also harmless either way:
+		// the behavior testable rather than to change it. It is also harmless either way:
 		// the row stays in the pending/processing set and gets the same warning next boot,
 		// and it is deliberately NOT failed — we have nowhere to send it, which is not the
 		// same as it being unfinishable, and a later release that knows the type can run it.

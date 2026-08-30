@@ -17,7 +17,7 @@
  *
  * ⚠️ **Setting `NODE_ENV=production` in `.do/app.yaml` was considered and rejected.** One line
  * would have repaired all three at once, which is exactly what makes it tempting, but it is a
- * global switch that changes behaviour in every library that reads it, on a live app, to fix
+ * global switch that changes behavior in every library that reads it, on a live app, to fix
  * three specific call sites. It also leaves the fragility in place: the next branch somebody
  * writes on `NODE_ENV` is correct only for as long as nobody removes the variable.
  *

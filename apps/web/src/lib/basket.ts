@@ -91,7 +91,7 @@ export function useBasket() {
 		const current = read();
 		if (current.some((i) => i.workId === item.workId)) return { ok: true as const };
 		// A different creator means a different charge. Replace rather than reject: the
-		// buyer's most recent intent is the one to honour, and telling them at the moment
+		// buyer's most recent intent is the one to honor, and telling them at the moment
 		// they click is far better than at checkout.
 		const clashed = current.length > 0 && current[0].creatorUsername !== item.creatorUsername;
 		const next = clashed ? [item] : [...current, item];

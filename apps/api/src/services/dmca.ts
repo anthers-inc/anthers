@@ -98,7 +98,7 @@ export function counterNoticeAttestationText(): string {
  * No automatic removal. § 512(c)(1)(C) requires expeditious action, but human
  * review is the deliberate answer — the brief's "Refuse the design that looks
  * fairest" warning: a hold that gives the creator 24–48 hours to respond costs
- * the safe harbour, because expeditious means *now*. Remove fast, restore fast,
+ * the safe harbor, because expeditious means *now*. Remove fast, restore fast,
  * and put the fairness into intake and the counter-notice path instead.
  */
 export async function fileNotice(input: {

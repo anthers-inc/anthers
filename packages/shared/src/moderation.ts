@@ -31,7 +31,7 @@
  *
  * `comment` and `rating` are user-generated rows. `user` is a **person**, added
  * because a platform where adult creators and 13–17-year-olds share a space needs a
- * way to report a pattern of behaviour, not only the one artifact that happens to
+ * way to report a pattern of behavior, not only the one artifact that happens to
  * have survived. `work` is a published Work — added for DMCA takedown, where the
  * target of a notice is a Work rather than a comment or a review.
  *

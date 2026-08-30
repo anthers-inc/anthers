@@ -428,7 +428,7 @@ export async function beginAdultVerification(
  * ⚠️ **An already-verified account is not re-verified.** Verification is once, at
  * enablement; somebody turning the setting back on after turning it off is not being asked
  * to prove adulthood a second time, and re-reading their cards would make the gate fail for
- * an adult who has since cancelled the credit card that verified them.
+ * an adult who has since canceled the credit card that verified them.
  *
  * 🚨 **A guardian's lock is checked first, and this is the route the lock exists for.** Wiki
  * 40.09 tells a parent that locking the content settings closes the borrowed-card gap, and it

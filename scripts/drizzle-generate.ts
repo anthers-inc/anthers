@@ -17,7 +17,7 @@
  * moot in both directions.
  *
  * ⚠️ Read the generated SQL before applying it. This automates the *prompt*, not the
- * judgement; a destructive statement is still destructive because a default was accepted.
+ * judgment; a destructive statement is still destructive because a default was accepted.
  */
 export {}; // top-level await needs this file to be a module
 
@@ -107,6 +107,6 @@ for (const line of interesting) console.log(line);
 console.log(`drizzle-generate: answered ${answered} rename question(s)`);
 
 if (!interesting.length) {
-	console.error("drizzle-generate: drizzle-kit produced no recognisable outcome");
+	console.error("drizzle-generate: drizzle-kit produced no recognizable outcome");
 	process.exit(1);
 }

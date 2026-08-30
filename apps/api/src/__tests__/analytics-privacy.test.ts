@@ -182,7 +182,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 			// The allowlist is an explicit set rather than a looser pattern, so adding a
 			// viewer-ish field is a deliberate edit here with a reason attached — this
 			// assertion has already caught one addition (`uniqueViewersWindowDays`, added
-			// with the retention rollup), which is the behaviour wanted.
+			// with the retention rollup), which is the behavior wanted.
 			//
 			//   `uniqueViewers`           — a COUNT. How many, never who. A creator knowing
 			//                               two people watched reveals nothing about either.

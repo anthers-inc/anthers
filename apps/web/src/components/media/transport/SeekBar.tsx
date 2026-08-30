@@ -81,7 +81,7 @@ export default function SeekBar({
 			</div>
 
 			{/* The knob. Only on the default rail — a waveform marks its own position by
-			    colour, and a second marker over it just adds noise. */}
+			    color, and a second marker over it just adds noise. */}
 			{!track && (
 				<span
 					className="pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-primary shadow transition-transform duration-150 group-hover/seek:scale-100 group-has-[:focus-visible]/seek:scale-100"

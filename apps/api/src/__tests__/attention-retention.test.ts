@@ -8,7 +8,7 @@
  *
  * - the per-person rows go, so nobody can reconstruct who watched what;
  * - the creator's earnings history and analytics **survive**, aggregated per Work and
- *   per day, because a retention job that quietly blanks a creator's back catalogue
+ *   per day, because a retention job that quietly blanks a creator's back catalog
  *   is a bug wearing a privacy feature's clothes.
  *
  * The failure this file is really guarding against is the second one. Deletion is
