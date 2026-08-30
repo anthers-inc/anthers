@@ -73,9 +73,9 @@ hooks: ## Point git at the repo's tracked hooks (.githooks/)
 # and local. That is the opposite of `spec-apply`, where a wrong source reaches production —
 # which is why that one refuses instead of falling back.
 dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
-	@if command -v bws >/dev/null 2>&1 && [ -s "$$HOME/.config/bws/token" ]; then \
-		PID=$$(bun run scripts/bws-project-id.ts "Anthers Dev") || exit 1; \
-		BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/token)} \
+	@if command -v bws >/dev/null 2>&1 && [ -s "$$HOME/.config/bws/anthers-dev-token" ]; then \
+		PID=$$(bun run scripts/bws-project-id.ts dev) || exit 1; \
+		BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-dev-token)} \
 			bws run --project-id $$PID -- '$(MAKE) dev-local'; \
 	else \
 		echo "  -> bws unavailable; secrets must come from .env, which no longer holds them"; \

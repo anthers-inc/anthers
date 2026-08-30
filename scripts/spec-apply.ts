@@ -61,6 +61,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BWS_PROJECTS, bwsProjectId, bwsToken } from "./bws";
 import {
 	COMPONENT_KINDS,
 	CONTEXT,
@@ -147,49 +148,32 @@ function* walkEnvs(spec: Spec): Generator<{ id: string; entry: EnvEntry }> {
  * for the duration of the call.
  */
 async function bwsSecrets(): Promise<Map<string, string>> {
-	const tokenFile = `${process.env.HOME}/.config/bws/token`;
-	let token = (process.env.BWS_ACCESS_TOKEN ?? "").trim();
-	if (!token)
-		token = (
-			await Bun.file(tokenFile)
-				.text()
-				.catch(() => "")
-		).trim();
-	if (!token) {
-		console.error(`spec-apply: no BWS_ACCESS_TOKEN and nothing readable at ${tokenFile}.`);
+	// 🚨 **Always the production role**, because the only thing this function is for is
+	// filling a production spec. It read one shared token and guessed at the project until
+	// 2026-08-30, and the guess had a fallback — *if only one project is visible, use it* —
+	// which was correct by accident and would have silently picked `Anthers Dev` the moment
+	// a token saw only that. `bwsToken` refuses to default for exactly this reason.
+	let token: string;
+	try {
+		token = await bwsToken("prod");
+	} catch (err) {
+		console.error(`spec-apply: ${err instanceof Error ? err.message : String(err)}`);
 		process.exit(2);
 	}
 	const env = { BWS_ACCESS_TOKEN: token };
 
 	let project = BWS_PROJECT;
 	if (!project) {
-		const list = await run(["bws", "project", "list", "-o", "json"], env);
-		if (!list.ok) {
-			console.error(`spec-apply: bws could not list projects.\n${list.stderr.trim()}`);
-			process.exit(2);
-		}
-		const projects = JSON.parse(list.stdout) as { id: string; name: string }[];
-		/**
-		 * Resolve by NAME — the app's own name from the spec — rather than by a committed
-		 * UUID. Same reasoning `ci.yml` gives for keeping `DO_APP_ID` in a repository
-		 * variable: an infrastructure identifier is useless without a token, but it is still
-		 * infrastructure identity and this repo is world-readable.
-		 *
-		 * The match is exact (case-insensitively), which is what keeps a sibling project
-		 * apart: "Anthers Dev" holds the DEVELOPMENT credentials and must never be mistaken
-		 * for the one production reads from. A prefix or fuzzy match would eventually pick it.
-		 */
-		const named = projects.filter((p) => p.name.toLowerCase() === appName.toLowerCase());
-		const chosen = named.length === 1 ? named[0] : projects.length === 1 ? projects[0] : undefined;
-		if (!chosen) {
+		try {
+			project = await bwsProjectId(BWS_PROJECTS.prod, token);
+		} catch (err) {
 			console.error(
-				`spec-apply: cannot tell which bws project holds "${appName}" — name one with --bws-project <id>:\n` +
-					projects.map((p) => `    ${p.id}  ${p.name}`).join("\n"),
+				`spec-apply: ${err instanceof Error ? err.message : String(err)}\n` +
+					`    name one explicitly with --bws-project <id> if the project was renamed.`,
 			);
 			process.exit(2);
 		}
-		project = chosen.id;
-		console.log(`spec-apply: using bws project "${chosen.name}"`);
+		console.log(`spec-apply: using bws project "${BWS_PROJECTS.prod}"`);
 	}
 
 	const listed = await run(["bws", "secret", "list", project, "-o", "json"], env);
