@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // The Resources marketing page — the Meadow-styled hub for everything that shows
-// our work: explainers (how the model works), calculators (run it yourself), and
-// comparisons (how we stack up). The page is wrapped in the shared <MeadowDecor>
-// (pollen + woven side vines) at the route level, so this file styles content only.
+// our work: calculators (run it yourself) and comparisons (how we stack up). The
+// page is wrapped in the shared <MeadowDecor> (pollen + woven side vines) at the
+// route level, so this file styles content only.
 //
 // Two axes, kept deliberately separate — the section says what *format* a resource
 // is, the card's tag says what *subject* it covers. Don't tag a card with its own
@@ -11,6 +11,16 @@
 // of posts. A Documentation section lands here once the wiki has content behind it
 // (/wiki is currently a shell — no /api/wiki route, no markdown), which is why the
 // closing band points at the FAQ instead.
+//
+// ⚠️ **An Explainers section stood first here until 2026-08-30**, holding the three
+// `/demo-*` pages. All four demos were deleted rather than rebuilt: each modeled the
+// economics in its own hardcoded numbers, so each could go wrong on its own while
+// every generated figure on the site stayed right. Two resources replace them —
+// creator financials, and where Anthers' own revenue goes — and both are built
+// against the shared model rather than typed. Until they land this page is honestly
+// two sections rather than three, which is better than a section advertising pages
+// that do not exist. The section is missing, not empty: an empty one would read as
+// a rendering bug.
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -20,13 +30,10 @@ import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowRightIcon,
 	BanknotesIcon,
-	ChartBarIcon,
 	CircleStackIcon,
 	NewspaperIcon,
 	PuzzlePieceIcon,
 	ScaleIcon,
-	UserGroupIcon,
-	WalletIcon,
 } from "@heroicons/react/24/outline";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -39,34 +46,6 @@ interface ResourceCard {
 	tag: string;
 	icon: typeof CircleStackIcon;
 }
-
-/** Guided walkthroughs of the model — the orientation layer, so they lead. */
-const EXPLAINERS: ResourceCard[] = [
-	{
-		to: "/demo-user",
-		title: "See where your money goes",
-		blurb:
-			"A viewer's-eye view of monthly support — to Anthers and to creators — the Time Pool, and where every dollar goes.",
-		tag: "Users",
-		icon: WalletIcon,
-	},
-	{
-		to: "/demo-creator-breakdown",
-		title: "Creator economics breakdown",
-		blurb:
-			"Composite creator profiles mapped onto the Anthers model — where every dollar of a subscriber's spend lands.",
-		tag: "Creators",
-		icon: UserGroupIcon,
-	},
-	{
-		to: "/demo-infrastructure",
-		title: "Infrastructure economics",
-		blurb:
-			"What it actually costs to host content across video, audio, text, and games — at cost, zero markup.",
-		tag: "Infrastructure",
-		icon: ChartBarIcon,
-	},
-];
 
 /** The interactive tools — put numbers in, get numbers out. */
 const CALCULATORS: ResourceCard[] = [
@@ -139,29 +118,17 @@ export default function ResourcesPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<Lede>
-							Everything behind Anthers, in the open — how the model works, what the infrastructure
-							really costs, and how time with a creator turns into revenue. No login, no sign-up:
-							run the numbers yourself, and hold us to them.
+							Everything behind Anthers, in the open — what it costs to host the work, how time with
+							a creator turns into money that reaches them, and how that compares to the platforms
+							you are already using. No login, no sign-up: run the numbers yourself, and hold us to
+							them.
 						</Lede>
 					</Reveal>
 				</div>
 			</header>
 
-			{/* Explainers — start here if you're new to how any of this fits together */}
-			<Section>
-				<Reveal>
-					<Eyebrow>Explainers</Eyebrow>
-					<H2>How the model works</H2>
-					<Lede>
-						Guided walkthroughs of the Anthers model — where a subscriber's dollar lands, what a
-						creator actually earns, and what it costs to host the work.
-					</Lede>
-				</Reveal>
-				<ResourceGrid cards={EXPLAINERS} />
-			</Section>
-
 			{/* Calculators */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Calculators</Eyebrow>
 					<H2>Run the numbers yourself</H2>
@@ -174,7 +141,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* Comparisons */}
-			<Section>
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Comparisons</Eyebrow>
 					<H2>How we stack up</H2>
@@ -187,7 +154,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* The way onward when the tools above don't have the answer. */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Still looking?</Eyebrow>
 					<H2>Not finding what you need?</H2>
@@ -225,7 +192,7 @@ function ResourceGrid({ cards }: { cards: ResourceCard[] }) {
 	);
 }
 
-/** A single tool/explainer card — a clickable Meadow rounded card. */
+/** A single resource card — a clickable Meadow rounded card. */
 function ResourceTile({ r }: { r: ResourceCard }) {
 	const Icon = r.icon;
 	return (

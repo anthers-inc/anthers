@@ -23,12 +23,15 @@
 // `overflow-hidden`, so on every route that renders it — directly or through
 // `MeadowDecorLayout` — a breakout is CLIPPED rather than scrolled, the document never
 // widens, and this gate passes no matter what. Measured, not inferred: injecting a
-// 1200px element into each route's own content moved `scrollWidth` on 10 of 22 and moved
-// it on NONE of these twelve —
+// 1200px element into each route's own content moved `scrollWidth` on 10 of the 22 routes
+// then in the list and moved it on NONE of these —
 //
 //     /  ·  /for-creators  ·  /about  ·  /faq  ·  /resources  ·  /compare/itch-io
-//     /compare/ghost  ·  /demo-creator-page  ·  /demo-creator-breakdown
-//     /demo-infrastructure  ·  /demo-user  ·  /login (below the card)
+//     /compare/ghost  ·  /login (below the card)
+//
+// ⚠️ Four of the blind routes were the `/demo-*` pages, deleted on 2026-08-30. The count
+// above is left at 22 because that is what was measured; the list is eight rather than
+// twelve because those four routes no longer exist to be blind about.
 //
 // They are kept in the list on purpose — the clipping is a property of today's layout,
 // not a promise, and a page that stops rendering `MeadowDecor` becomes checkable without

@@ -18,10 +18,11 @@
 // A module rather than a global script, and not merely for tidiness: without it `name`
 // collides with the DOM global of that name, top-level `await` is rejected, and the file
 // cannot be typechecked at all. It went unnoticed because `scripts/` sat outside
-// `bun run typecheck` until 2026-08-16.
+// `bun run typecheck` until 2026-08-16. ⚠️ The `export {}` that used to say so was removed
+// on 2026-08-30 — the import below has made this a module since the consolidation of
+// 2026-08-29, so the marker was doing nothing and biome flagged it. Deleting this import
+// would put the file back where the note describes.
 import { BWS_PROJECTS, type BwsRole, bwsProjectId, bwsToken } from "./bws";
-
-export {};
 
 const arg = (Bun.argv[2] ?? "").trim();
 if (arg !== "prod" && arg !== "dev") {

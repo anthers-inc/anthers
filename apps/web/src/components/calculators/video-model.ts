@@ -37,7 +37,7 @@ export const RES_HEIGHT: Record<Resolution, number> = {
  * Category colors for the resolution rungs — a cool→warm ramp (low→high res)
  * chosen to stay legible on both the light and dark themes. These are data-viz
  * marks, not theme chrome, so they're fixed hex like the other chart colors in
- * the app (see InfrastructureDemoPage).
+ * the app (see AdminPage).
  */
 export const RES_COLOR: Record<Resolution, string> = {
 	"240p": "#60a5fa",

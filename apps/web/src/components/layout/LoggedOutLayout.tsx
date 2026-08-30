@@ -20,11 +20,15 @@ const LOCALIZATION_ENABLED = false;
 // The Meadow footer nav — mirrors the header, plus a Support column. label → href.
 const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	{
+		// ⚠️ **Two links here pointed at demo pages deleted on 2026-08-30** — "Creator Hubs"
+		// at `/demo-creator-page` and "Creator Economics" at `/demo-creator-breakdown`. They
+		// are replaced by the creator terms rather than by a substitute demo: a footer is
+		// where someone goes for the document, and the economics question now belongs to
+		// /resources, which the Support column already carries.
 		title: "Creators",
 		links: [
 			["For Creators", "/for-creators"],
-			["Creator Hubs", "/demo-creator-page"],
-			["Creator Economics", "/demo-creator-breakdown"],
+			["Creator Terms", "/creator-terms"],
 		],
 	},
 	{

@@ -33,6 +33,13 @@ const ROUTE_NAMES = [
 	"copyright",
 	"creator-terms",
 	"dashboard",
+	// ⚠️ **These four are RETIRED routes, kept reserved on purpose** — the `/demo-*` pages
+	// were deleted on 2026-08-30 and nothing answers at them now. Releasing the names would
+	// hand them to the `/:username` catch-all, so an old link to `/demo-user` from a post or
+	// a bookmark would stop being a dead end and start resolving to whoever registered that
+	// handle. A stranded URL is a smaller harm than a hijacked one, and the drift test below
+	// only asserts that every live route IS reserved, so keeping a name past its route costs
+	// nothing but the four handles themselves.
 	"demo-creator-breakdown",
 	"demo-creator-page",
 	"demo-infrastructure",

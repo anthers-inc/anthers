@@ -129,11 +129,19 @@ export default function ForCreatorsPage() {
 							<Link to={startHref} className="btn btn-primary lg px-8">
 								Start Creating
 							</Link>
+							{/* ⚠️ This read "See What Others Built" and pointed at `/demo-creator-page`
+							    until that demo was deleted on 2026-08-30. It is deliberately not
+							    repointed at `/discover`, the only place real creator pages are
+							    gathered: that route is behind `RequireAuth`, so a logged-out
+							    visitor following this button would land on the login wall rather
+							    than on the work. The secondary CTA answers the paragraph above it
+							    instead — the page has just claimed 0%, and this is where a
+							    skeptic goes to check it. */}
 							<Link
-								to="/demo-creator-page"
+								to="/resources"
 								className="btn btn-outline rounded-full border-base-content/20 px-7"
 							>
-								See What Others Built
+								Check Our Math
 							</Link>
 						</div>
 						<BrandGlyph
@@ -811,10 +819,10 @@ export default function ForCreatorsPage() {
 								Create Your Account
 							</Link>
 							<Link
-								to="/demo-creator-page"
+								to="/resources"
 								className="btn btn-outline rounded-full border-base-content/20 px-7"
 							>
-								See a Creator Page
+								Check Our Math
 							</Link>
 						</div>
 					</Reveal>
