@@ -20,12 +20,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { creatorGates, users } from "@anthers/db/schema";
+import { creatorGates, mediaQuarantine, users } from "@anthers/db/schema";
 import { BADGE_ART_PX } from "@anthers/shared/constants";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import app from "../index";
+import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { artwork, stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const ORIGIN = "http://localhost:3000";
@@ -52,34 +54,6 @@ async function signUp(username: string): Promise<string> {
 	return res.headers.get("Set-Cookie")!.split(";")[0];
 }
 
-/**
- * A wide, non-square image with real structure in it.
- *
- * 🚨 **Not a flat color, and that is not incidental.** PDQ reports its own confidence and
- * `scanPdqHash` refuses to match below `MIN_PDQ_QUALITY`, because matching on noise
- * produces false positives that quarantine somebody's work. A solid rectangle scores near
- * zero, so a flat fixture is answered `unscannable` without the vendor ever being asked —
- * and the refusal case cannot fire. Found exactly that way.
- */
-async function artwork(seed = 7): Promise<File> {
-	const [w, h] = [900, 300];
-	const raw = Buffer.alloc(w * h * 3);
-	for (let y = 0; y < h; y++) {
-		for (let x = 0; x < w; x++) {
-			const i = (y * w + x) * 3;
-			// Deterministic per seed, so a test can ask for a *different* picture and get
-			// one — a second upload has to produce a different hash to be worth anything.
-			raw[i] = (x * 7 + y * 13 + seed * 53) % 256;
-			raw[i + 1] = (x * x + y * 3 + seed * 31) % 256;
-			raw[i + 2] = ((x ^ y) + seed * 17) % 256;
-		}
-	}
-	const png = await sharp(raw, { raw: { width: w, height: h, channels: 3 } })
-		.png()
-		.toBuffer();
-	return new File([new Uint8Array(png)], "badge.png", { type: "image/png" });
-}
-
 function upload(gateId: number, cookie: string, file: File) {
 	const body = new FormData();
 	body.append("file", file);
@@ -90,43 +64,9 @@ function upload(gateId: number, cookie: string, file: File) {
 	});
 }
 
-/**
- * Shield answering for whatever it is asked.
- *
- * 🚨 **The credentials are set here, and without them these tests pass for the wrong
- * reason.** `shieldCredentials()` returns null when the environment has none, and
- * `scanStoredImage` then answers `unscannable` without making a request at all — so a stub
- * would sit unconsulted while every upload succeeded and the refusal case silently could
- * not fire. Found exactly that way.
- */
-function stubShield(classification: string) {
-	const original = globalThis.fetch;
-	const priorUser = process.env.ARACHNID_SHIELD_USERNAME;
-	const priorPass = process.env.ARACHNID_SHIELD_PASSWORD;
-	process.env.ARACHNID_SHIELD_USERNAME = "test";
-	process.env.ARACHNID_SHIELD_PASSWORD = "test";
-	globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-		const body = JSON.parse(String(init?.body ?? "{}")) as { hashes?: string[] };
-		const scanned: Record<string, { classification: string; match_type: string }> = {};
-		for (const h of body.hashes ?? []) scanned[h] = { classification, match_type: "near" };
-		return new Response(JSON.stringify({ scanned_hashes: scanned }), {
-			status: 200,
-			headers: { "Content-Type": "application/json" },
-		});
-	}) as typeof fetch;
-	return {
-		restore: () => {
-			globalThis.fetch = original;
-			if (priorUser === undefined) delete process.env.ARACHNID_SHIELD_USERNAME;
-			else process.env.ARACHNID_SHIELD_USERNAME = priorUser;
-			if (priorPass === undefined) delete process.env.ARACHNID_SHIELD_PASSWORD;
-			else process.env.ARACHNID_SHIELD_PASSWORD = priorPass;
-		},
-	};
-}
-
 let creatorCookie: string;
 let otherCookie: string;
+let creatorId = 0;
 let gateId = 0;
 
 async function makeGate(cookie: string, label: string): Promise<number> {
@@ -143,10 +83,29 @@ describe("Creator Badge art", () => {
 	beforeAll(async () => {
 		creatorCookie = await signUp(creatorName);
 		otherCookie = await signUp(otherName);
+		const [row] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, creatorName));
+		creatorId = row.id;
 		gateId = await makeGate(creatorCookie, `Rung ${RUN}`);
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
+		// ⚠️ **Deleting the accounts is not enough, and asking what does NOT cascade is the
+		// whole of why.** A refused badge now leaves three things behind the user row does
+		// not take with it: `media_quarantine.uploader_id` is `set null` by design, the
+		// parked object is a file rather than a row, and a legal hold carries no foreign key
+		// to its subject at all — so a stale one would suspend real sweeps in later runs.
+		const findings = await db
+			.select({ id: mediaQuarantine.id, quarantineKey: mediaQuarantine.quarantineKey })
+			.from(mediaQuarantine)
+			.where(eq(mediaQuarantine.uploaderId, creatorId));
+		for (const f of findings) await storage.delete(f.quarantineKey).catch(() => {});
+		await db.execute(sql`DELETE FROM media_quarantine WHERE uploader_id = ${creatorId}`);
+		await db.execute(
+			sql`DELETE FROM legal_holds WHERE subject_type = 'user' AND subject_id = ${creatorId}`,
+		);
 		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherName})`);
 	});
 
@@ -203,7 +162,7 @@ describe("Creator Badge art", () => {
 		expect((await req(`/api/subscriptions/gates/${gateId}/art`)).status).toBe(404);
 	});
 
-	it("🚨 refuses art that matches known material, and stores nothing", async () => {
+	it("🚨 refuses art that matches known material, and preserves the object", async () => {
 		// The whole reason the scan is inline. There is no release gate behind which a
 		// queued scan could catch up, so a match has to stop the upload itself.
 		const stub = stubShield("csam");
@@ -220,6 +179,20 @@ describe("Creator Badge art", () => {
 			.from(creatorGates)
 			.where(eq(creatorGates.id, gateId));
 		expect(gate.artKey, "a refused upload must leave the rung with no art").toBeNull();
+
+		// 🚨 **Refused is not destroyed, and the route used to destroy it.** A match is
+		// actual knowledge under § 2258A, and the object is the one thing a CyberTipline
+		// report has to cite — so it is parked under the quarantine prefix with a
+		// preservation hold, exactly as a Work's match is. Asserting the bytes survive is
+		// what separates this from the old behavior, which left an identical gate row.
+		const [finding] = await db
+			.select({ originalKey: mediaQuarantine.originalKey, objectKind: mediaQuarantine.objectKind })
+			.from(mediaQuarantine)
+			.where(eq(mediaQuarantine.uploaderId, creatorId));
+		expect(finding, "a refused badge must leave a finding somebody can act on").toBeDefined();
+		expect(finding.objectKind).toBe("badge");
+		expect(await storage.exists(finding.originalKey)).toBe(false);
+		expect(await storage.exists(`${QUARANTINE_PREFIX}${finding.originalKey}`)).toBe(true);
 	});
 
 	it("🚨 refuses a file that is not a raster image at all", async () => {

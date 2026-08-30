@@ -121,10 +121,10 @@ import {
 } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
-import { beginScans, scanReleaseGate } from "../services/safety-scan.js";
+import { beginScans, scanInlineUpload, scanReleaseGate } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import { resolveShareToken, revokeShareLink, shareLinkFor } from "../services/share-links.js";
-import { aclForMediaType } from "../services/storage/acl.js";
+import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -4277,6 +4277,9 @@ const contentRoutes = new Hono()
 		const uuid = crypto.randomUUID().replace(/-/g, "");
 		const prefix = `creators/${user.id}`;
 		let key: string;
+		// Which quarantine subject a match on this object would name. `null` means the
+		// object is not scanned here at all — see `scannedObjectKind`.
+		const objectKind = scannedObjectKind(mediaType);
 
 		switch (mediaType) {
 			case "video":
@@ -4318,6 +4321,25 @@ const contentRoutes = new Hono()
 
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type, acl);
+
+		// 🚨 **Scanned inline, and this is the door 40.12 § *The shape* has always claimed
+		// scanned.** The bytes are fully buffered here, so there is nothing to defer to a
+		// job — and unlike a Work there is no release gate behind which a queued scan could
+		// catch up, because an avatar is visible the moment the row points at it.
+		//
+		// ⭐ **A match quarantines the object rather than deleting it**, through
+		// `scanInlineUpload` → `quarantineObject`: the § 2258A(h) hold is placed on the
+		// uploader and the finding reaches the operator queue, which is exactly what a Work's
+		// match gets. Only the video, audio and asset branches are skipped, because a
+		// perceptual image hash has nothing to say about any of them and the file may be
+		// 500 MB. Those go through `QUEUES.SCAN_MEDIA` once they are attached to a Work.
+		if (objectKind) {
+			const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind });
+			if (outcome.quarantine) {
+				return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
+			}
+		}
+
 		const url = await storage.getUrl(key);
 
 		return c.json({ key, url }, 201);
