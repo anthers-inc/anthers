@@ -39,7 +39,11 @@
 import Stripe from "stripe";
 import { bwsSecrets } from "./bws";
 
-const VAULT = "Anthers";
+// Production's secrets, read with the production machine account. The project's *name* lives
+// in `bws.ts` now rather than here — it was the literal string "Anthers" until the web-vault
+// rename of 2026-08-30 made that name resolve to nothing, and a name written at each call
+// site is a name that gets missed at one of them.
+const ROLE = "prod" as const;
 // Overridable so the check itself can be driven against doctored inputs — a check nobody
 // has watched fail is worth about as much as no check, and these two files are where every
 // interesting failure enters (a handler branch nothing delivers, a URL Stripe never heard of).
@@ -80,7 +84,7 @@ const expected = handledEvents(await Bun.file(HANDLER).text());
 console.log(`\n## Webhook check — ${url}\n`);
 console.log(`  handler branches on ${expected.length} event types (read from ${HANDLER})\n`);
 
-const secrets = await bwsSecrets(VAULT);
+const secrets = await bwsSecrets(ROLE);
 const apiKey = secrets.get("STRIPE_SECRET_KEY");
 if (!apiKey) {
 	console.error("webhook-check: no STRIPE_SECRET_KEY in the vault.");
