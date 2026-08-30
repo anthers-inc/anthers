@@ -89,6 +89,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    # 🚨 In the CI image because ffmpeg is now a dependency of the API suite, not only of
+    # the browser one. `safety-scan` samples a video into frames to hash them, and its
+    # tests generate a video with `testsrc` and decode it — a stub cannot prove that
+    # consecutive frames hash differently, which is the whole assertion.
+    #
+    # ⚠️ **The pre-push hook cannot catch this class of failure and did not.** `make verify`
+    # runs the same suite on a machine that already has ffmpeg, so a dependency present
+    # locally and absent on the runner passes every local check and fails only in CI. That
+    # is the one gap between the hook and the pipeline, and it is worth remembering rather
+    # than rediscovering: a green `make verify` says the code is right, never that the
+    # runner can run it.
+    container:
+      image: ghcr.io/anthers-inc/anthers-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
     services:
       postgres:
         image: postgres:16
@@ -105,7 +122,7 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgres://anthers:anthers@localhost:5432/anthers
+      DATABASE_URL: postgres://anthers:anthers@postgres:5432/anthers
 
     steps:
       - uses: actions/checkout@v4
@@ -151,6 +168,11 @@ jobs:
       # database is correct — the only artefact that disagrees is a JSON file nobody reads.
       - name: Drizzle snapshots are in step with the journal
         run: bun run db:snapshots
+
+      - name: Media tools are present
+        run: |
+          set -euo pipefail
+          ffmpeg -version | head -1
 
       - name: Apply database migrations
         run: bun run db:migrate
