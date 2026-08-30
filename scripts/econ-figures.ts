@@ -2,10 +2,18 @@
 /**
  * Render every published money figure from the model, into both places that quote it.
  *
- *   bun run econ:figures           # write
+ *   bun run econ:figures           # write — the repo's own figures and blocks
  *   bun run econ:figures --check   # fail if anything has drifted (CI / make verify)
+ *   make wiki-figures              # ALSO render the wiki's blocks, into the vault
+ *   make wiki-figures CHECK=1      # ...and fail if any of those has drifted
  *
- * Two outputs:
+ * ⚠️ **The wiki half is opt-in and deliberately outside `make verify`** (2026-08-30). It
+ * needs an Obsidian vault that only Parker has, so CI took the skip path on every run it
+ * ever had — while on the machine that does have one, reorganizing the notes broke the
+ * build twice in a day. Run it before publishing anything that quotes a wiki table. The
+ * full reasoning is at the bottom of this file, beside the code it governs.
+ *
+ * Three outputs, of which only the third needs a vault:
  *
  *  1. `packages/shared/src/figures.generated.ts` — plain numbers for the app. Plain,
  *     because **the SPA bundle must never import `fees.ts`**: that is the one import
@@ -25,10 +33,8 @@
  *     false positive for a week. **A leak check is only as good as its last run**: if
  *     one of these ever returns a hit, confirm what the hit IS before believing it.
  *
- *  2. The wiki tables and the sample receipt, and the money section of this repo's own
- *     `README.md`, written between HTML-comment markers in the docs that publish them.
- *     Same pattern the vault already uses for roadmap bars: generated regions are never
- *     hand-edited. The two run on different conditions — see `REPO_BLOCKS`.
+ *  2. The money section of this repo's own `README.md`, written between HTML-comment
+ *     markers. Every clone has it and CI checks it, so it runs unconditionally.
  *
  * And one guard, which is neither:
  *
@@ -38,6 +44,16 @@
  *     cannot import; everything around it needs the opposite shape — not "regenerate
  *     this region" but "no region may hold a typed figure at all". See `scanApp` /
  *     `scanDocs`, which share `scanText`.
+ *
+ * And the opt-in half:
+ *
+ *  4. The wiki's tables and sample receipts — 18 blocks across 9 documents in the
+ *     Obsidian vault, written between the same HTML-comment markers, and only with
+ *     `--wiki`. Same pattern the vault already uses for roadmap bars: generated regions
+ *     are never hand-edited. `findWiki` locates the project root, and everything that
+ *     apparatus needs — `ANTHERS_VAULT`, `PROJECT_DIR`, `isProjectRoot` — exists solely
+ *     to serve this one job, and would be deleted outright by moving the wiki into the
+ *     repository.
  *
  * Why it exists: the 2026-08-03 pricing revamp swept these by hand and missed three
  * of them, which then sat in the "source of truth" doc overstating the remainder by
@@ -221,6 +237,16 @@ function isProjectRoot(path: string): boolean {
 }
 
 const check = process.argv.includes("--check");
+/**
+ * Whether to render the wiki's generated blocks, which live in Parker's Obsidian vault.
+ *
+ * Opt-in since 2026-08-30, and **`make verify` does not pass it** — see the long note at
+ * the bottom of this file for why. In short: a runner has no vault, so this half was never
+ * enforced in CI, while on the one machine that does have a vault it failed whenever the
+ * notes were reorganized. Run `make wiki-figures` to write them, and `make wiki-figures
+ * CHECK=1` to assert they are current before publishing anything that quotes them.
+ */
+const wikiRequested = process.argv.includes("--wiki");
 /** Generated regions that no longer match what the model says. */
 const failures: string[] = [];
 /** Published figures found typed into the app by hand. */
@@ -1633,17 +1659,42 @@ async function writeBlocks(root: string, blocks: Block[]) {
 // a contributor with no vault still gets the check. The wiki is the optional half.
 await writeBlocks(REPO, REPO_BLOCKS);
 
-// The wiki is the optional half — but only *absent* is optional. A vault we cannot find
-// our way around inside is a broken tool reporting success, which is the state this whole
-// block was in between the project moving and 2026-08-28.
-const wiki = findWiki();
-if ("error" in wiki) {
-	failures.push(`the wiki blocks were not checked at all — ${wiki.error}`);
-} else if ("skip" in wiki) {
-	console.log("  (no vault on this machine — skipping wiki blocks)");
+// 🚨 **The wiki half runs only when it is asked for — `--wiki`, via `make wiki-figures`.**
+//
+// It was part of every `make verify` until 2026-08-30, and the reason it is not any more
+// is that **CI has never once run it.** A GitHub runner has no `~/Obsidian`, so the branch
+// below took the `skip` path on every CI run this check has ever had, printing a line and
+// passing. The drift protection on the wiki's blocks was therefore never "CI enforces
+// this" — it was "whoever last ran `make verify` on the one laptop with the vault
+// attached", which is the weakest enforcement available.
+//
+// ⭐ **What it did reliably produce was failure on the developer machine**, because a
+// personal notes folder is not a build input: reorganizing it renamed the project root
+// (fixed 2026-08-30) and left an empty husk that looked like a second root (fixed the same
+// day). Both fixes are real and both are patches on a coupling that should not exist —
+// a test in this repository has no business failing because of the shape of somebody's
+// notes directory. The generation is worth keeping; making it a gate was the mistake.
+//
+// ⚠️ The repo's own blocks above are unaffected and stay in `make verify`, as does the
+// whole typed-figure scan over `apps/` and `packages/` — those are the parts that protect
+// what users see, and neither needs a vault. **The real fix is for the wiki to live in the
+// repository**, at which point this entire discovery apparatus — `ANTHERS_VAULT`, the
+// project-root regex, the husk check — deletes itself and CI checks the blocks for real.
+if (wikiRequested) {
+	// Only *absent* is optional. A vault we cannot find our way around inside is a broken
+	// tool reporting success — and having explicitly asked for the wiki, silence about not
+	// finding it would be worse here than anywhere.
+	const wiki = findWiki();
+	if ("error" in wiki) {
+		failures.push(`the wiki blocks were not checked at all — ${wiki.error}`);
+	} else if ("skip" in wiki) {
+		console.log("  (no vault on this machine — skipping wiki blocks)");
+	} else {
+		console.log(`  wiki: ${wiki.path}`);
+		await writeBlocks(wiki.path, BLOCKS);
+	}
 } else {
-	console.log(`  wiki: ${wiki.path}`);
-	await writeBlocks(wiki.path, BLOCKS);
+	console.log(`  (wiki blocks not requested — ${BLOCKS.length} blocks skipped; make wiki-figures)`);
 }
 
 await scanApp();
