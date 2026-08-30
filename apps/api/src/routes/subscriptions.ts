@@ -71,7 +71,7 @@ import {
 	supportItems,
 } from "../services/billing.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
-import { scanStoredImage } from "../services/safety-scan.js";
+import { scanInlineUpload } from "../services/safety-scan.js";
 import { resolveShareToken } from "../services/share-links.js";
 import { storage } from "../services/storage/index.js";
 
@@ -1379,15 +1379,15 @@ const subscriptionRoutes = new Hono()
 		// user-supplied imagery on a surface other people see, so it is another ingest door
 		// for 40.12 — and unlike a Work there is no release gate behind which a queued scan
 		// could catch up. The bytes are already buffered here, so there is nothing to defer.
-		const outcome = await scanStoredImage(key, { workId: null });
+		const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind: "badge" });
 		if (outcome.quarantine) {
-			// ⚠️ **There is no quarantine subject for a badge.** `quarantineWork` writes
-			// `works.quarantine_status`, and this object belongs to no Work — so refusing the
-			// upload and destroying the object is the whole of the action available here. The
-			// `media_scans` row `scanStoredImage` wrote is the record that it was examined.
-			// A badge match reaching the Designated Child Safety Contact the way a Work's
-			// does is a real gap and is not closed by this route.
-			await storage.delete(key).catch(() => {});
+			// 🚨 **The object is quarantined, never deleted, and the scanner has already done
+			// it** — `quarantineObject` moved it under the quarantine prefix, wrote the
+			// `media_quarantine` row and placed the § 2258A(h) hold on the uploader before
+			// this line runs. Destroying it here is what the route used to do, and it was
+			// backwards twice over: it discarded the one object a CyberTipline report has to
+			// cite, and it made the outcome depend on where the file was going rather than on
+			// what it was. Refusing the upload is still right — the creator gets no badge.
 			return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
 		}
 

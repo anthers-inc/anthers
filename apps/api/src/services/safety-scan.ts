@@ -34,7 +34,7 @@ import {
 import { MIN_PDQ_QUALITY, type PdqHash, pdqHashImage } from "../lib/pdq";
 import { hashVideoFrames, probeVideo, type SampledFrame } from "../lib/video-frames.js";
 import { urlToKey } from "./media-purge.js";
-import { quarantineWork } from "./quarantine.js";
+import { type QuarantineObjectKind, quarantineObject, quarantineWork } from "./quarantine.js";
 import { storage } from "./storage/index.js";
 
 /** The vendor identifier recorded on every `VendorMatch` this service writes. */
@@ -158,7 +158,8 @@ export async function scanPdqHash(
  * happen is a row appearing for a scan that did not complete — so a vendor failure throws
  * out of here, leaving the object unscanned and the job to be retried.
  *
- * 🚨 **A match quarantines through `quarantineWork` and nothing else.** That service is the
+ * 🚨 **A match quarantines through `services/quarantine.ts` and nothing else**, by whichever
+ * of its two doors the subject calls for — see {@link quarantineMatch}. That service is the
  * single writer for taking content out of reach, and it is what places the preservation
  * holds § 2258A(h) requires. Reporting stays manual either way: § 7.3 makes a `csam`
  * classification a trigger for a human following the Child Safety Incident Runbook runbook, never an automatic
@@ -166,8 +167,7 @@ export async function scanPdqHash(
  */
 export async function scanStoredImage(
 	storageKey: string,
-	options: {
-		workId?: number | null;
+	options: ScanSubject & {
 		credentials?: ShieldCredentials | null;
 		baseUrl?: string;
 		now?: () => Date;
@@ -188,17 +188,112 @@ export async function scanStoredImage(
 
 	await recordScan(storageKey, options.workId ?? null, pdq, outcome);
 
-	if (outcome.quarantine && options.workId) {
+	if (outcome.quarantine) {
+		await quarantineMatch(storageKey, outcome, options, `safety scan: ${storageKey}`);
+	}
+	return outcome;
+}
+
+/**
+ * What the scanned object belongs to, which decides which quarantine door a match takes.
+ *
+ * 🚨 **Exactly one of these is expected, and neither being present is the bug this type
+ * exists to make visible.** A match on an object with no subject at all has nowhere to be
+ * recorded and nobody to hold, so the finding is discarded — which is precisely what
+ * happened to every badge, avatar and cover before {@link quarantineObject} existed, on a
+ * branch that read as a guard.
+ */
+export interface ScanSubject {
+	/** The Work it belongs to, when it belongs to one. */
+	workId?: number | null;
+	/** Who uploaded it, for an object that belongs to no Work. */
+	uploaderId?: number | null;
+	/** Which kind of Work-less object this is. Its presence is what selects that door. */
+	objectKind?: QuarantineObjectKind | null;
+}
+
+/**
+ * Scan an object an upload handler is holding open, and never fail the upload because a
+ * detection vendor is having a bad day.
+ *
+ * ⭐ **The give-way is the same one the release gate makes, for the same reason.** § 2258A(f)
+ * imposes no duty to search at all, so refusing somebody's avatar because a third party is
+ * unreachable trades a working platform for an obligation nobody owes. `scanStoredImage`
+ * throws on a vendor failure because its other caller is a *job* that must be able to leave
+ * the object owed and retry; an HTTP handler has no retry, so the failure is absorbed here
+ * and recorded as what it actually was.
+ *
+ * 🚨 **`unscannable` is written rather than nothing, and that distinction is the whole
+ * point.** A row saying *the question could not be answered* is what keeps "uploaded images
+ * are checked" honest; no row at all would leave a vendor outage indistinguishable from a
+ * clean scan in our own records. What must never appear is a `clean` row for a scan that
+ * did not happen, and this writes no such thing.
+ *
+ * ⚠️ **Nothing sweeps these afterwards yet.** `worksOwedScans` enumerates Works, so a
+ * Work-less object that went unanswered during an outage is never re-asked. That gap is
+ * real, is narrower than the outage it replaces, and belongs to the owed-sweep rather than
+ * to an upload handler.
+ */
+export async function scanInlineUpload(
+	storageKey: string,
+	subject: ScanSubject,
+): Promise<ScanOutcome> {
+	try {
+		return await scanStoredImage(storageKey, subject);
+	} catch {
+		await recordScan(storageKey, subject.workId ?? null, null, UNSCANNABLE);
+		return UNSCANNABLE;
+	}
+}
+
+/**
+ * Send one match to whichever writer owns its subject.
+ *
+ * ⭐ **This is the fix for the badge-art asymmetry, and it lives here rather than in a
+ * route on purpose.** The scanner is the one place that knows a match happened, so closing
+ * the gap here covers every caller that has no Work behind it — the badge endpoint, the
+ * direct-upload route, and whatever ingest door is added next — rather than each of them
+ * remembering to. § 2258A attaches on actual knowledge however it arrives; a scan we ran
+ * and recorded is knowledge, and where the file was going is not a reason to keep it.
+ *
+ * ⚠️ **A match with no subject at all is logged loudly rather than swallowed.** It means a
+ * caller scanned something and told us nothing about whose it was, and the material stays
+ * servable — so it has to be findable in the worker log rather than being a silent `if`.
+ */
+async function quarantineMatch(
+	storageKey: string,
+	outcome: ScanOutcome,
+	subject: ScanSubject,
+	note: string,
+): Promise<void> {
+	if (subject.workId) {
 		await quarantineWork({
-			workId: options.workId,
+			workId: subject.workId,
 			source: "scan",
 			// Our word, not theirs. The vendor's own answer rides `vendorMatch`.
 			classification: outcome.determination,
 			vendorMatch: outcome.vendorMatch,
-			note: `safety scan: ${storageKey}`,
+			note,
 		});
+		return;
 	}
-	return outcome;
+	if (subject.objectKind) {
+		await quarantineObject({
+			storageKey,
+			uploaderId: subject.uploaderId ?? null,
+			objectKind: subject.objectKind,
+			source: "scan",
+			classification: outcome.determination,
+			vendorMatch: outcome.vendorMatch,
+			note,
+		});
+		return;
+	}
+	// 🚨 The vendor's classification is deliberately absent from this line, on the same rule
+	// `jobs/scan-media.ts` states: a worker log is read by agents, and Match Data may not be.
+	console.error(
+		`[safety-scan] ${storageKey}: ${outcome.determination} with no Work and no object kind — NOT quarantined`,
+	);
 }
 
 /**
@@ -222,8 +317,7 @@ export async function scanStoredImage(
  */
 export async function scanStoredVideo(
 	storageKey: string,
-	options: {
-		workId?: number | null;
+	options: ScanSubject & {
 		credentials?: ShieldCredentials | null;
 		baseUrl?: string;
 		now?: () => Date;
@@ -274,14 +368,8 @@ export async function scanStoredVideo(
 	await recordScans(rows.map((r) => ({ ...r, workId })));
 	await recordScan(storageKey, workId, null, worst);
 
-	if (worst.quarantine && workId) {
-		await quarantineWork({
-			workId,
-			source: "scan",
-			classification: worst.determination,
-			vendorMatch: worst.vendorMatch,
-			note: `safety scan: ${storageKey} (video frame)`,
-		});
+	if (worst.quarantine) {
+		await quarantineMatch(storageKey, worst, options, `safety scan: ${storageKey} (video frame)`);
 	}
 	return worst;
 }

@@ -59,7 +59,28 @@ import { storage } from "./storage/index.js";
 export type QuarantineSource = "report" | "scan" | "operator";
 
 /** Which of a Work's objects a row names, for the operator and for the restore. */
-export type QuarantineObjectKind = "source" | "thumbnail" | "asset" | "audio" | "hls";
+export type WorkObjectKind = "source" | "thumbnail" | "asset" | "audio" | "hls";
+
+/**
+ * An object belonging to no Work — display chrome and badge art.
+ *
+ * ⭐ **These are the upload routes' own `mediaType` words**, deliberately, so an operator
+ * reading a finding sees the same noun the uploader's request carried and nobody has to
+ * maintain a translation. `gallery` is the key prefix that `image` and `screenshot` also
+ * land in, so all three arrive here as `gallery`.
+ */
+export type ChromeObjectKind =
+	| "avatar"
+	| "header"
+	| "cover"
+	| "gallery"
+	| "inline-image"
+	| "badge"
+	/** The direct route's catch-all bucket, for a `mediaType` it does not recognize. */
+	| "upload";
+
+/** Which object a row names, for the operator and for the restore. */
+export type QuarantineObjectKind = WorkObjectKind | ChromeObjectKind;
 
 export interface QuarantineInput {
 	workId: number;
@@ -101,7 +122,7 @@ export interface QuarantineResult {
  */
 interface WorkObject {
 	key: string;
-	kind: QuarantineObjectKind;
+	kind: WorkObjectKind;
 }
 
 /**
@@ -135,7 +156,7 @@ async function objectsFor(workId: number): Promise<WorkObject[]> {
 
 	const out: WorkObject[] = [];
 	const seen = new Set<string>();
-	const add = (raw: string | null, kind: QuarantineObjectKind) => {
+	const add = (raw: string | null, kind: WorkObjectKind) => {
 		if (!raw) return;
 		const key = urlToKey(raw);
 		if (!key || seen.has(key)) return;
@@ -357,6 +378,193 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 	return { objectsMoved: moved.length, objectsMissing, holdIds };
 }
 
+export interface QuarantineObjectInput {
+	/** The stored object to take out of reach. */
+	storageKey: string;
+	/** Who uploaded it. Null only where the uploader genuinely cannot be established. */
+	uploaderId: number | null;
+	/**
+	 * Which kind of object this is, in the upload route's own vocabulary.
+	 *
+	 * ⚠️ **A `WorkObjectKind` is legitimate here and is not a mistake.** A thumbnail
+	 * uploaded through `media-upload/direct` genuinely has no Work behind it yet — the key
+	 * is minted before the Work row exists — so what selects this door is the *absence of a
+	 * Work*, never the vocabulary the kind is drawn from.
+	 */
+	objectKind: QuarantineObjectKind;
+	source: QuarantineSource;
+	/** **Our own determination.** Never a vendor's — see {@link QuarantineInput}. */
+	classification: string;
+	vendorMatch?: VendorMatch | null;
+	actorId?: number | null;
+	reportId?: number | null;
+	note?: string;
+}
+
+export interface QuarantineObjectResult {
+	/** 1 when the object was moved, 0 when storage did not have it or it was already parked. */
+	objectsMoved: number;
+	/** The `media_quarantine` row, or null when this key already had an open finding. */
+	findingId: number | null;
+	holdIds: number[];
+}
+
+/**
+ * Take a **Work-less** object out of reach and preserve it — badge art, an avatar, a
+ * header, a cover, a gallery shot, an inline post image.
+ *
+ * 🚨 **This exists because § 2258A attaches on actual knowledge however that knowledge
+ * arrives, and a scan we ran and recorded is knowledge.** Until this door existed, the same
+ * person uploading the same bytes got a preserved finding if they attached them to a Work
+ * and silence if they used them as a badge — the outcome turned on where the file was
+ * going rather than on what it was.
+ *
+ * ⚠️ **It writes no `moderationActions` row, and that is the one place it diverges from
+ * {@link quarantineWork}.** The log row exists there so an operator reading a *Work's*
+ * history sees the quarantine beside the hides and the takedowns; a Work-less object has no
+ * such history, and the only durable subject left is the uploader. Writing `user` there
+ * would be worse than writing nothing: `loadModerationQueue` attaches the latest action to
+ * a queue item by `(subject_type, subject_id)`, so a reported *person* would render as
+ * hidden with reason `quarantine` when nothing whatever happened to their account — and
+ * suspending a person is precisely the decision 40.06 records as not taken. The
+ * `media_quarantine` row is the record, and `GET /api/admin/quarantine` is where it surfaces.
+ *
+ * **Idempotent on the key**, on the same reasoning `quarantineWork` states: the realistic
+ * caller is an operator during an incident, and the button has to be safe to press twice.
+ *
+ * 🚨 **The storage move happens BEFORE the row is written**, the same ordering and for the
+ * same reason: a committed row and a failed move is the database claiming material is out
+ * of reach while it is still servable, which is the one lie this module cannot tell.
+ */
+export async function quarantineObject(
+	input: QuarantineObjectInput,
+): Promise<QuarantineObjectResult> {
+	const [existing] = await db
+		.select({ id: mediaQuarantine.id })
+		.from(mediaQuarantine)
+		.where(
+			and(eq(mediaQuarantine.originalKey, input.storageKey), isNull(mediaQuarantine.clearedAt)),
+		)
+		.limit(1);
+
+	const quarantineKey = quarantineKeyFor(input.storageKey);
+	const moved = await storage.move(input.storageKey, quarantineKey);
+
+	// A second call on a key already under an open finding re-parks whatever is still in
+	// place — a re-upload to the same key, say — and adds no second row.
+	if (existing) return { objectsMoved: moved ? 1 : 0, findingId: existing.id, holdIds: [] };
+
+	const [row] = await db
+		.insert(mediaQuarantine)
+		.values({
+			// 🚨 Null on purpose, and the column has always allowed it. A finding about an
+			// avatar is not a finding about a Work, and inventing one to hang it from would
+			// put a Work into `quarantine_status` that no creator can see or clear.
+			workId: null,
+			uploaderId: input.uploaderId,
+			originalKey: input.storageKey,
+			quarantineKey,
+			objectKind: input.objectKind,
+			source: input.source,
+			classification: input.classification,
+			vendorMatch: input.vendorMatch ?? null,
+			reportId: input.reportId ?? null,
+			// There is no visibility to restore: the object is not a Work and was never
+			// published on its own. Empty, which is what `clearQuarantine` already reads as
+			// "nothing was recorded here".
+			priorVisibility: "",
+			placedBy: input.actorId ?? null,
+			note: input.note ?? "",
+		})
+		.returning({ id: mediaQuarantine.id });
+
+	// 🚨 Placed after the record and never skipped, exactly as for a Work: material parked
+	// in the quarantine prefix with no hold is material a sweep can still reach, and
+	// nothing watches that prefix.
+	const expiresAt = preservationExpiry();
+	const reason = `Quarantine of ${input.objectKind} ${input.storageKey} (${input.source}), § 2258A(h) preservation`;
+	const holdIds: number[] = [];
+	if (input.uploaderId != null) {
+		holdIds.push(
+			(
+				await placeHold({
+					subjectType: "user",
+					subjectId: input.uploaderId,
+					reason,
+					placedBy: input.actorId ?? null,
+					expiresAt,
+				})
+			).holdId,
+		);
+	}
+	if (input.reportId != null) {
+		holdIds.push(
+			(
+				await placeHold({
+					subjectType: "report",
+					subjectId: input.reportId,
+					reason,
+					placedBy: input.actorId ?? null,
+					expiresAt,
+				})
+			).holdId,
+		);
+	}
+
+	return { objectsMoved: moved ? 1 : 0, findingId: row.id, holdIds };
+}
+
+/**
+ * Put one Work-less object back, for a finding that turned out to be wrong.
+ *
+ * **The preservation hold is deliberately not lifted**, on the same reasoning
+ * {@link clearQuarantine} gives: *the finding was wrong* and *the obligation to preserve
+ * has ended* are different decisions taken by different people against different clocks.
+ *
+ * ⚠️ **Restoring the object does not restore whatever referenced it.** A badge upload is
+ * refused before `creator_gates.art_key` is written, so there is nothing pointing at the
+ * key to repair; an avatar refused the same way never reached the profile row either. The
+ * object comes back where it was and the uploader re-uploads. Anything that would need a
+ * row repaired belongs to a Work, and a Work goes through `clearQuarantine`.
+ */
+export async function clearObjectQuarantine(input: {
+	findingId: number;
+	actorId: number;
+	note?: string;
+}): Promise<{ cleared: boolean; objectsRestored: number; storageKey: string }> {
+	const [row] = await db
+		.select({
+			id: mediaQuarantine.id,
+			workId: mediaQuarantine.workId,
+			originalKey: mediaQuarantine.originalKey,
+			quarantineKey: mediaQuarantine.quarantineKey,
+		})
+		.from(mediaQuarantine)
+		.where(and(eq(mediaQuarantine.id, input.findingId), isNull(mediaQuarantine.clearedAt)))
+		.limit(1);
+	// A finding that names a Work is `clearQuarantine`'s to close, because clearing it has
+	// to restore the Work's visibility too. Refusing here rather than half-clearing it is
+	// what keeps the two paths from leaving different state.
+	if (!row || row.workId != null) return { cleared: false, objectsRestored: 0, storageKey: "" };
+
+	const restored = (await storage.move(row.quarantineKey, originalKeyFor(row.quarantineKey)))
+		? 1
+		: 0;
+
+	await db
+		.update(mediaQuarantine)
+		.set({ clearedAt: new Date(), clearedBy: input.actorId, note: input.note ?? "" })
+		.where(eq(mediaQuarantine.id, row.id));
+
+	// 🚨 **`cleared` and `objectsRestored` are two different facts and the caller needs
+	// both.** A finding id that matches nothing clears nothing, and a finding whose object
+	// storage no longer holds clears the row and restores nothing — telling those apart is
+	// the same lesson the legal-hold console learned, where every integer was a valid
+	// subject and a hold on a typo was indistinguishable from one that worked. The key is
+	// returned so the operator is shown *what* they cleared rather than a tick.
+	return { cleared: true, objectsRestored: restored, storageKey: row.originalKey };
+}
+
 /**
  * Put a Work's material back, for a finding that turned out to be wrong.
  *
@@ -492,14 +700,29 @@ export async function loadQuarantineFindings(
 	}));
 }
 
-/** How many findings are open. For the console's headline row. */
-export async function quarantineSummary(): Promise<{ openFindings: number; works: number }> {
+/**
+ * How many findings are open. For the console's headline row.
+ *
+ * ⚠️ **`works` counts Works and a Work-less finding is not one.** Badge art, avatars and
+ * covers belong to no Work and carry `work_id = null`, so folding those rows in would
+ * collapse every one of them into a single phantom Work and report a count that is wrong in
+ * both directions at once. They are counted as `objects` instead, which is the number an
+ * operator actually needs: `openFindings` is rows, and the two subject counts say what
+ * those rows are about.
+ */
+export async function quarantineSummary(): Promise<{
+	openFindings: number;
+	works: number;
+	objects: number;
+}> {
 	const rows = await db
 		.select({ workId: mediaQuarantine.workId })
 		.from(mediaQuarantine)
 		.where(isNull(mediaQuarantine.clearedAt));
+	const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
 	return {
 		openFindings: rows.length,
-		works: new Set(rows.map((r) => r.workId)).size,
+		works: new Set(workIds).size,
+		objects: rows.length - workIds.length,
 	};
 }

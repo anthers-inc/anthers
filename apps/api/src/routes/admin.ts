@@ -59,6 +59,7 @@ import {
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
 import {
+	clearObjectQuarantine,
 	clearQuarantine,
 	loadQuarantineFindings,
 	quarantineSummary,
@@ -112,6 +113,19 @@ const closeAbuseSchema = z.object({
 const deliveryQuerySchema = z.object({
 	kind: z.enum(["abuse", "report"]),
 	id: z.coerce.number().int().positive(),
+});
+
+/**
+ * Clearing names either the Work or the single finding, and exactly one of them.
+ *
+ * A Work's finding clears through `clearQuarantine`, which also restores the visibility the
+ * creator had chosen — so it has to be addressed by Work, since one quarantine covers every
+ * object the Work owns. A badge or an avatar belongs to no Work and there is nothing to
+ * restore but the object, so it is addressed by the row's own id.
+ */
+const clearObjectQuarantineSchema = z.object({
+	findingId: z.number().int().positive(),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
 });
 
 const clearQuarantineSchema = z.object({
@@ -520,6 +534,25 @@ const adminRoutes = new Hono()
 		const result = await clearQuarantine({ workId, actorId: user.id, note });
 		if (result.objectsRestored === 0 && !result.visibility) {
 			return c.json({ error: "No open quarantine for that Work" }, 404);
+		}
+		return c.json(result);
+	})
+
+	// Clear a finding on an object that belongs to no Work — badge art, an avatar, a cover.
+	//
+	// ⚠️ **Separate from the route above because the two restore different things**, not
+	// merely because they take different keys. A Work's clear puts back the visibility the
+	// creator had chosen; there is no such thing here, and folding them together would mean
+	// one handler branching on which half of its own input arrived. `clearObjectQuarantine`
+	// refuses a finding that names a Work for the same reason.
+	.post("/quarantine/clear-object", zValidator("json", clearObjectQuarantineSchema), async (c) => {
+		const user = c.get("user");
+		const { findingId, note } = c.req.valid("json");
+		const result = await clearObjectQuarantine({ findingId, actorId: user.id, note });
+		// 404 rather than a cheerful zero: a finding id that matches nothing, or one that
+		// names a Work and belongs to the route above, must not read as a successful clear.
+		if (!result.cleared) {
+			return c.json({ error: "No open object quarantine with that finding id" }, 404);
 		}
 		return c.json(result);
 	})

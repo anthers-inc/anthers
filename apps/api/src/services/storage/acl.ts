@@ -13,6 +13,10 @@
  * until someone deliberately lists it here.
  */
 
+// `import type` only, and deliberately: this module has no runtime imports at all, which is
+// what lets it be tested without S3, a bucket or a database. A type import is erased.
+import type { QuarantineObjectKind } from "../quarantine.js";
+
 /**
  * Display chrome — the imagery a viewer is meant to see *before* they have access:
  * avatars, headers, covers, thumbnails, gallery shots, inline post images.
@@ -37,6 +41,53 @@ export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
  */
 export function aclForMediaType(mediaType: string | null | undefined): "public" | "private" {
 	return PUBLIC_MEDIA_TYPES.has(mediaType ?? "") ? "public" : "private";
+}
+
+/**
+ * Which quarantine subject a match on this upload would name, or `null` when the object is
+ * not perceptually hashable and so is not scanned in the request path at all.
+ *
+ * ⭐ **This is a third answer to the same question the two functions above answer, from the
+ * same unvalidated form field, which is why it lives beside them.** The scanned set is the
+ * display-chrome allowlist *plus the catch-all*, and stating them adjacently is what makes
+ * the single difference visible: an unrecognized `mediaType` is stored **private** and
+ * **is** scanned, because failing closed means something different for each question — for
+ * an ACL it means withhold, and for detection it means look.
+ *
+ * 🚨 **Video, audio and assets are the deliberate omission and are not a gap.** PDQ has
+ * nothing to say about audio or a game archive, a video needs decoding into frames rather
+ * than hashing whole, and all three arrive here at up to 500 MB. They are scanned by
+ * `QUEUES.SCAN_MEDIA` once a key is attached to a Work, which is the path 40.12 §
+ * *The ingest inventory* describes and the only one available for the presigned door.
+ *
+ * ⚠️ **`thumbnail` returns a `WorkObjectKind` and that is correct.** A thumbnail is minted
+ * through this route before the Work row exists, so at scan time it genuinely belongs to no
+ * Work — the kind names what the object *is*, and the absence of a Work is what decides
+ * which quarantine door it takes.
+ */
+export function scannedObjectKind(
+	mediaType: string | null | undefined,
+): QuarantineObjectKind | null {
+	switch (mediaType) {
+		case "video":
+		case "audio":
+		case "asset":
+			return null;
+		case "avatar":
+		case "header":
+		case "cover":
+		case "thumbnail":
+		case "inline-image":
+			return mediaType;
+		// One key prefix, so one kind. An operator reading `gallery` and an operator reading
+		// the key are looking at the same place.
+		case "gallery":
+		case "image":
+		case "screenshot":
+			return "gallery";
+		default:
+			return "upload";
+	}
 }
 
 /**
