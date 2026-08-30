@@ -436,6 +436,42 @@ export const creatorGates = pgTable(
 		threshold: numeric("threshold").notNull(), // monthly $ required, both gate types
 		label: text("label").notNull(),
 		description: text("description").default(""),
+		/**
+		 * The creator's own art for this rung, as a storage key. Null means the rung shows
+		 * a default and is the ordinary state.
+		 *
+		 * 🚨 **A key, never a URL, and the object is PRIVATE.** The two-bucket split routes
+		 * writes on the ACL and reads on the key prefix, and both fail closed toward
+		 * private; storing a URL here would invite somebody to hand it straight to a
+		 * browser and quietly move badge art into the public bucket, where nothing checks
+		 * it again. It is served through an access-checked route like every other media
+		 * object.
+		 *
+		 * ⭐ **Only the INTERIOR of the badge lives here.** Every badge — Anthers' own and
+		 * every creator's — shares one round botanical frame, and what differs is what sits
+		 * inside it. Baking a frame into the upload would make the art unrestyleable and
+		 * would let the two ladders drift apart, which is most of what makes the model read
+		 * cleanly (30.01).
+		 */
+		artKey: text("art_key"),
+		/**
+		 * The background a creator picked from the standard library — a shape id and a color
+		 * id from `@anthers/shared/badge-art`, null for the defaults.
+		 *
+		 * ⭐ **Three layers, and this is the middle one** (Parker, 2026-08-29): Anthers' frame,
+		 * a background of a shape and a color, and a foreground that is either a library
+		 * emblem or the creator's own art. The point is flexibility without inconsistency — a
+		 * creator who does not draw still gets a badge that is recognizably theirs, because
+		 * shape, color and emblem are three choices rather than one upload they cannot make.
+		 *
+		 * ⚠️ **Ids rather than values.** Storing `oklch(...)` or a path would freeze today's
+		 * library into every row, so a palette correction would leave old badges on the old
+		 * color with nothing saying why.
+		 */
+		artShape: text("art_shape"),
+		artColor: text("art_color"),
+		/** A library emblem, used as the foreground when `art_key` is null. */
+		artEmblem: text("art_emblem"),
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

@@ -10,11 +10,21 @@
  * the dollar figure beside it is
  * derived for display rather than typed.
  */
-import { amountLabel, STRIPE_MIN_CHARGE, supportAmount } from "@anthers/shared/constants";
+
+import type { BrandIconName } from "@anthers/brand";
+import { BADGE_COLORS, BADGE_EMBLEMS, BADGE_SHAPES } from "@anthers/shared/badge-art";
+import {
+	amountLabel,
+	BADGE_ART_MAX_BYTES,
+	STRIPE_MIN_CHARGE,
+	supportAmount,
+} from "@anthers/shared/constants";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
-import { client } from "../../lib/rpc";
+import { useEffect, useRef, useState } from "react";
+import { apiFetch, client } from "../../lib/rpc";
 import type { CreatorGate } from "../../lib/types";
+import { BrandGlyph } from "../decor/BrandGlyph";
+import { CreatorBadgeMark } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
@@ -29,6 +39,211 @@ function rungAmount(v: string): string {
 /** "$6/mo" — the amount IS the gate now, so nothing has to be derived from it. */
 function rungLabel(threshold: string | number): string {
 	return `${amountLabel(threshold)}/mo`;
+}
+
+/**
+ * The mark for one rung, and the way its art is changed.
+ *
+ * ⭐ **The mark is the control**, rather than a separate "upload" button beside a preview.
+ * A creator picking art for a rung is looking at the rung, and what they want to press is
+ * the picture — which also means the default is visible in the place the real art will
+ * appear, so nothing about the ladder changes shape when a file lands.
+ *
+ * ⚠️ **Raster only, and the input says so.** An SVG is refused by the server, which cannot
+ * safety-scan one without rasterizing it first, so accepting one here would only move the
+ * refusal later and make it look like a bug.
+ */
+function BadgeArtControl({
+	gate,
+	index,
+	onChanged,
+	onError,
+}: {
+	gate: CreatorGate;
+	index: number;
+	onChanged: () => void;
+	onError: (message: string | null) => void;
+}) {
+	const input = useRef<HTMLInputElement>(null);
+	const [busy, setBusy] = useState(false);
+	const [open, setOpen] = useState(false);
+
+	const upload = async (file: File) => {
+		onError(null);
+		if (file.size > BADGE_ART_MAX_BYTES) {
+			onError("That image is too large — 4 MB at most.");
+			return;
+		}
+		setBusy(true);
+		try {
+			const body = new FormData();
+			body.append("file", file);
+			const res = await apiFetch(`/api/subscriptions/gates/${gate.id}/art`, {
+				method: "POST",
+				body,
+			});
+			if (!res.ok) {
+				const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+				// The server's own words: "that file is not an image we can read" is more use
+				// than anything this component could guess.
+				onError(detail?.error ?? "That art didn't go through.");
+				return;
+			}
+			onChanged();
+		} catch {
+			onError("That art didn't go through.");
+		} finally {
+			setBusy(false);
+			if (input.current) input.current.value = "";
+		}
+	};
+
+	const clear = async () => {
+		setBusy(true);
+		onError(null);
+		try {
+			const res = await apiFetch(`/api/subscriptions/gates/${gate.id}/art`, { method: "DELETE" });
+			if (!res.ok) onError("Couldn't remove that art.");
+			else onChanged();
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	/** Save one library choice. Null is how a creator goes back to the default. */
+	const choose = async (patch: Record<string, string | null>) => {
+		setBusy(true);
+		onError(null);
+		try {
+			const res = await apiFetch(`/api/subscriptions/gates/${gate.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(patch),
+			});
+			if (!res.ok) onError("Couldn't save that choice.");
+			else onChanged();
+		} catch {
+			onError("Couldn't save that choice.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="relative flex flex-col items-center gap-1">
+			<button
+				type="button"
+				className="btn btn-ghost btn-square h-14 w-14 p-0"
+				onClick={() => setOpen((o) => !o)}
+				disabled={busy}
+				title="Change this badge"
+			>
+				<CreatorBadgeMark gateId={gate.id} index={index} label={`${gate.label} badge`} art={gate} />
+			</button>
+			<input
+				ref={input}
+				type="file"
+				accept="image/png,image/jpeg,image/webp"
+				className="hidden"
+				onChange={(e) => {
+					const file = e.target.files?.[0];
+					if (file) upload(file);
+				}}
+			/>
+
+			{open && (
+				// ⭐ Shape, color and emblem are three separate choices, and that is the whole
+				// point: a creator who cannot draw still ends up with a badge that is
+				// recognizably theirs, without ever opening a file picker.
+				<div className="absolute top-16 left-0 z-10 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
+					<PickerRow label="Shape">
+						{BADGE_SHAPES.map((s) => (
+							<button
+								key={s.id}
+								type="button"
+								aria-label={s.label}
+								aria-pressed={gate.artShape === s.id}
+								className={`btn btn-xs btn-square ${gate.artShape === s.id ? "btn-primary" : "btn-ghost"}`}
+								onClick={() => choose({ artShape: s.id })}
+								disabled={busy}
+							>
+								<svg viewBox="0 0 100 100" className="h-4 w-4" aria-hidden="true">
+									<title>{s.label}</title>
+									<path d={s.path} fill="currentColor" />
+								</svg>
+							</button>
+						))}
+					</PickerRow>
+
+					<PickerRow label="Color">
+						{BADGE_COLORS.map((col) => (
+							<button
+								key={col.id}
+								type="button"
+								aria-label={col.label}
+								aria-pressed={gate.artColor === col.id}
+								className={`h-5 w-5 rounded-full border ${gate.artColor === col.id ? "border-primary" : "border-base-300"}`}
+								style={{ backgroundColor: col.fill }}
+								onClick={() => choose({ artColor: col.id })}
+								disabled={busy}
+							/>
+						))}
+					</PickerRow>
+
+					<PickerRow label="Emblem">
+						{BADGE_EMBLEMS.map((name) => (
+							<button
+								key={name}
+								type="button"
+								aria-label={name}
+								aria-pressed={gate.artEmblem === name}
+								className={`btn btn-xs btn-square ${gate.artEmblem === name ? "btn-primary" : "btn-ghost"}`}
+								onClick={() => choose({ artEmblem: name })}
+								disabled={busy || gate.hasArt}
+							>
+								<BrandGlyph name={name as BrandIconName} className="h-4 w-4" />
+							</button>
+						))}
+					</PickerRow>
+
+					<div className="mt-2 flex items-center gap-2 border-t border-base-300 pt-2">
+						<button
+							type="button"
+							className="btn btn-xs"
+							onClick={() => input.current?.click()}
+							disabled={busy}
+						>
+							{gate.hasArt ? "Replace art" : "Use my own art"}
+						</button>
+						{gate.hasArt && (
+							<button
+								type="button"
+								className="btn btn-ghost btn-xs text-base-content/50"
+								onClick={clear}
+								disabled={busy}
+							>
+								Remove
+							</button>
+						)}
+					</div>
+					{/* Said here rather than discovered at the refusal: the server cannot
+					    safety-scan an SVG without rasterizing it first, so it refuses one. */}
+					<p className="mt-1 text-[11px] text-base-content/50">
+						PNG, JPEG or WebP. Your art sits on the background you picked.
+					</p>
+				</div>
+			)}
+		</div>
+	);
+}
+
+function PickerRow({ label, children }: { label: string; children: React.ReactNode }) {
+	return (
+		<div className="mb-2">
+			<div className="mb-1 text-xs font-medium text-base-content/60">{label}</div>
+			<div className="flex flex-wrap items-center gap-1">{children}</div>
+		</div>
+	);
 }
 
 export default function BadgeLadderEditor() {
@@ -48,8 +263,16 @@ export default function BadgeLadderEditor() {
 	const [editThreshold, setEditThreshold] = useState("");
 	const [editDescription, setEditDescription] = useState("");
 
+	/**
+	 * ⚠️ **Only the FIRST load blanks the ladder.** A refetch after a save used to set
+	 * `loading` unconditionally, which swapped the whole list for "Loading…" and unmounted
+	 * every rung — so a creator picking a shape watched the ladder flash and the picker
+	 * close, and had to reopen it for the colour and again for the emblem. Three choices,
+	 * three reopenings, for a component whose entire point is mixing and matching. Found in
+	 * the browser; nothing in the API tests could have shown it.
+	 */
 	const fetchGates = () => {
-		setLoading(true);
+		setLoading((wasLoading) => wasLoading || gates.length === 0);
 		client.api.subscriptions.gates
 			.$get()
 			.then(async (res) => {
@@ -208,6 +431,12 @@ export default function BadgeLadderEditor() {
 								</div>
 							) : (
 								<div key={gate.id} className="flex items-center gap-2 p-3 bg-base-100 rounded-lg">
+									<BadgeArtControl
+										gate={gate}
+										index={gates.indexOf(gate)}
+										onChanged={fetchGates}
+										onError={setError}
+									/>
 									<div className="flex-1">
 										<div className="flex items-center gap-2">
 											<span className="font-medium text-sm">{gate.label}</span>

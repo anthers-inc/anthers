@@ -9,6 +9,7 @@
 		"./fees": "./src/fees.ts",
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
+		"./badge-art": "./src/badge-art.ts",
 		"./parental-controls": "./src/parental-controls.ts",
 		"./public-access": "./src/public-access.ts",
 		"./moderation": "./src/moderation.ts",
