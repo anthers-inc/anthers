@@ -134,6 +134,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ⚠️ Inside a container the checkout is owned by a different uid than the one the
+      # job runs as, so git refuses it as "dubious ownership" — and the guard that scans
+      # tracked files for credential-shaped strings runs `git ls-files`. It failed loudly,
+      # which is the right way round, but only because it asserts it found files at all.
+      - name: Trust the workspace, which the container does not own
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: oven-sh/setup-bun@v2
         # No bun-version here ON PURPOSE. setup-bun reads `packageManager` from
         # package.json, so the repo declares the runtime once and CI follows it —
