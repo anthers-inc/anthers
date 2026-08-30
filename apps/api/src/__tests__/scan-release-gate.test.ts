@@ -128,18 +128,28 @@ describe("release waits for a safety scan, and gives way", () => {
 				sourceKey: KEY("src"),
 				thumbnail: KEY("thumb"),
 			});
-			expect(scannableKeys(work).sort()).toEqual([KEY("src"), KEY("thumb")].sort());
+			expect(
+				scannableKeys(work)
+					.map((o) => o.key)
+					.sort(),
+			).toEqual([KEY("src"), KEY("thumb")].sort());
+			expect(scannableKeys(work).every((o) => o.kind === "image")).toBe(true);
 		});
 
-		it("leaves a video's source alone, because PDQ cannot read it", async () => {
-			// A video's thumbnail IS in scope — it is an extracted frame, so it is new image
-			// bytes — while its own source is not scannable under an image hash at all.
+		it("🚨 takes a video's source AS A VIDEO, and its thumbnail as an image", async () => {
+			// The kind travels with the key, and this is why: both are strings in the same
+			// namespace, and a video source sent down the image path hashes container bytes,
+			// fails, and records the whole video as permanently unscannable — coverage
+			// removed by the machinery meant to provide it.
 			const work = await stage({
 				type: "video",
 				sourceKey: KEY("video-src"),
 				thumbnail: KEY("video-thumb"),
 			});
-			expect(scannableKeys(work)).toEqual([KEY("video-thumb")]);
+			expect(scannableKeys(work)).toEqual([
+				{ key: KEY("video-src"), kind: "video" },
+				{ key: KEY("video-thumb"), kind: "image" },
+			]);
 		});
 
 		it("normalizes a thumbnail held as a full URL", async () => {
@@ -147,7 +157,7 @@ describe("release waits for a safety scan, and gives way", () => {
 				type: "text",
 				thumbnail: `https://cdn.anthers.org/content/${KEY("url-thumb")}`,
 			});
-			expect(scannableKeys(work)).toEqual([KEY("url-thumb")]);
+			expect(scannableKeys(work)).toEqual([{ key: KEY("url-thumb"), kind: "image" }]);
 		});
 
 		it("finds nothing on a Work carrying no image at all", async () => {
@@ -161,8 +171,8 @@ describe("release waits for a safety scan, and gives way", () => {
 			const work = await stage({ type: "image", sourceKey: KEY("begin") });
 			expect(work.scanQueuedAt).toBeNull();
 
-			const keys = await beginScans(work);
-			expect(keys).toEqual([KEY("begin")]);
+			const objects = await beginScans(work);
+			expect(objects).toEqual([{ key: KEY("begin"), kind: "image" }]);
 			expect((await reload(work.id)).scanQueuedAt).toBeInstanceOf(Date);
 		});
 
@@ -259,7 +269,9 @@ describe("release waits for a safety scan, and gives way", () => {
 				scanQueuedAt: new Date(),
 			});
 			const owed = await worksOwedScans();
-			expect(owed.find((o) => o.id === work.id)?.keys).toEqual([KEY("owed")]);
+			expect(owed.find((o) => o.id === work.id)?.objects).toEqual([
+				{ key: KEY("owed"), kind: "image" },
+			]);
 		});
 
 		it("leaves alone a Work whose every object has been answered", async () => {

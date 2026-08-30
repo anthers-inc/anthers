@@ -19,6 +19,7 @@
  * log, because § 6(b)/(c) of the Shield terms make agent use of it a prohibited use.
  */
 
+import { rm } from "node:fs/promises";
 import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
 import { mediaScans, works } from "@anthers/db/schema";
@@ -31,6 +32,7 @@ import {
 	shieldCredentials,
 } from "../lib/arachnid-shield";
 import { MIN_PDQ_QUALITY, type PdqHash, pdqHashImage } from "../lib/pdq";
+import { hashVideoFrames, probeVideo, type SampledFrame } from "../lib/video-frames.js";
 import { urlToKey } from "./media-purge.js";
 import { quarantineWork } from "./quarantine.js";
 import { storage } from "./storage/index.js";
@@ -199,6 +201,164 @@ export async function scanStoredImage(
 	return outcome;
 }
 
+/**
+ * Scan a stored **video** by sampling it into frames.
+ *
+ * 🚨 **The worst frame decides the video, and that asymmetry is the whole point.** One
+ * matching frame in ninety minutes of otherwise unremarkable footage is the case this
+ * exists for, so the outcomes are folded by severity rather than by majority or by first
+ * answer. `apparent-csam` beats `harmful-abusive` beats `clean`.
+ *
+ * ⭐ **Every sampled frame gets its own `media_scans` row, keyed `<sourceKey>#t=<seconds>`,
+ * beside one summary row at the source key itself.** The per-frame hashes are ours rather
+ * than the vendor's, so keeping them is free of every Match Data restriction — and they are
+ * what lets a corpus update be re-checked later without decoding the video again, which for
+ * video is the expensive half. The summary row is what the release gate and the owed sweep
+ * watch, because they enumerate keys before anything has been decoded and cannot know how
+ * many frames there will be.
+ *
+ * ⚠️ **A vendor failure throws and records nothing**, on the same rule the image path
+ * follows: a scan that did not happen must not leave a row saying nothing matched.
+ */
+export async function scanStoredVideo(
+	storageKey: string,
+	options: {
+		workId?: number | null;
+		credentials?: ShieldCredentials | null;
+		baseUrl?: string;
+		now?: () => Date;
+	} = {},
+): Promise<ScanOutcome> {
+	const workId = options.workId ?? null;
+
+	let frames: SampledFrame[] = [];
+	let localPath: string | null = null;
+	try {
+		localPath = await storage.downloadToTemp(storageKey);
+		const probe = await probeVideo(localPath);
+		frames = probe
+			? await hashVideoFrames(localPath, {
+					width: probe.width,
+					height: probe.height,
+					durationSeconds: probe.durationSeconds,
+				})
+			: [];
+	} catch {
+		// A key storage no longer has, a container ffmpeg will not open, a file that is not
+		// a video at all. Unscannable rather than thrown: retrying will not change any of
+		// them, and the row is what says the question was asked and could not be answered.
+		frames = [];
+	} finally {
+		if (localPath) await rm(localPath).catch(() => {});
+	}
+
+	if (frames.length === 0) {
+		await recordScan(storageKey, workId, null, UNSCANNABLE);
+		return UNSCANNABLE;
+	}
+
+	const outcomes = await scanPdqHashBatch(
+		frames.map((f) => f.hash),
+		options,
+	);
+
+	const rows = frames.map((frame) => ({
+		storageKey: `${storageKey}#t=${frame.atSeconds}`,
+		pdq: frame.hash,
+		outcome: outcomes.get(frame.hash.hash) ?? UNSCANNABLE,
+	}));
+
+	const worst = worstOutcome(rows.map((r) => r.outcome));
+	// Frames first, then the summary. A crash between the two leaves the video still owed,
+	// which the sweep re-asks — the other order would mark it answered with nothing behind it.
+	await recordScans(rows.map((r) => ({ ...r, workId })));
+	await recordScan(storageKey, workId, null, worst);
+
+	if (worst.quarantine && workId) {
+		await quarantineWork({
+			workId,
+			source: "scan",
+			classification: worst.determination,
+			vendorMatch: worst.vendorMatch,
+			note: `safety scan: ${storageKey} (video frame)`,
+		});
+	}
+	return worst;
+}
+
+/**
+ * Fold many frame outcomes into one answer for the video.
+ *
+ * 🚨 **The worst frame decides, and nothing about this is a majority.** One matching frame
+ * in ninety minutes of otherwise unremarkable footage is precisely the case video coverage
+ * exists for, so a single `apparent-csam` among a hundred and ninety-nine `clean` answers
+ * makes the video `apparent-csam`.
+ *
+ * ⭐ **`unscannable` ranks below `clean`, which is the ordering worth stating.** A frame
+ * nobody could fingerprint is an unasked question, and a video where *some* frames were
+ * asked and came back clean has been scanned — so one unhashable fade-to-black must not
+ * drag the whole video down to "never examined". A video where **every** frame was
+ * unscannable has genuinely not been examined, and folding an empty-of-answers list
+ * naturally lands there.
+ */
+export function worstOutcome(outcomes: ScanOutcome[]): ScanOutcome {
+	const severity = (o: ScanOutcome): number =>
+		({ "apparent-csam": 3, "harmful-abusive": 2, clean: 1, unscannable: 0 })[o.determination];
+	return outcomes.reduce(
+		(acc, o) => (severity(o) > severity(acc) ? o : acc),
+		UNSCANNABLE as ScanOutcome,
+	);
+}
+
+/**
+ * Ask about many hashes in one request, and answer per hash.
+ *
+ * ⚠️ **A hash the vendor did not answer for is absent from the result**, and the caller
+ * must read that as *unanswered* rather than *nothing matched*. `scanPdqHash` throws in
+ * that situation because it asked about exactly one thing; here a single missing frame out
+ * of two hundred is not worth failing a whole video over, so it is recorded as
+ * `unscannable` — visible in the row, and re-askable.
+ *
+ * Hashes below `MIN_PDQ_QUALITY` are never sent, so a featureless frame — a fade to black,
+ * a title card — cannot contribute a match to anything.
+ */
+async function scanPdqHashBatch(
+	hashes: PdqHash[],
+	options: { credentials?: ShieldCredentials | null; now?: () => Date; baseUrl?: string } = {},
+): Promise<Map<string, ScanOutcome>> {
+	const out = new Map<string, ScanOutcome>();
+	const credentials = options.credentials !== undefined ? options.credentials : shieldCredentials();
+	if (!credentials) return out;
+
+	const askable = hashes.filter((h) => h.quality >= MIN_PDQ_QUALITY);
+	if (askable.length === 0) return out;
+
+	const answers = await scanPdqHashes([...new Set(askable.map((h) => h.hash))], credentials, {
+		baseUrl: options.baseUrl,
+	});
+	const now = options.now?.() ?? new Date();
+	for (const [hex, answer] of answers) {
+		const { determination, reportable, quarantine } = determinationFor(answer.classification);
+		out.set(
+			hex,
+			determination === "clean"
+				? CLEAN
+				: {
+						determination,
+						reportable,
+						quarantine,
+						vendorMatch: {
+							vendor: VENDOR,
+							classification: answer.classification,
+							matchType: answer.matchType ?? "none",
+							receivedAt: now.toISOString(),
+						},
+					},
+		);
+	}
+	return out;
+}
+
 // ─── The release gate ────────────────────────────────────────────────────────
 
 type WorkRow = typeof works.$inferSelect;
@@ -232,19 +392,36 @@ export const SCAN_RELEASE_GRACE_MS = 2 * 60 * 1000;
  * copies would drift the moment video keyframes or archive members are added, and the
  * failure mode of that drift is a gate that waits for a scan nobody queued.
  *
- * Only images, because PDQ is an image hash. A video's *thumbnail* is in scope — it is an
- * extracted frame and therefore new image bytes — while its frames are not yet. The
- * coverage map lives in wiki 40.12 and deliberately not on the public safety page.
+ * ⭐ **Each key carries how it must be read**, rather than leaving the caller to work it out
+ * from the Work's type. A video source and an image share a key namespace and need
+ * completely different handling — one is hashed directly, the other is decoded into frames
+ * — and reconstructing that at each of the three call sites is how one of them eventually
+ * sends a video to the image path and records the whole file as unscannable.
+ *
+ * Audio is still uncovered, and so is anything inside an archive: PDQ has nothing to say
+ * about either. The coverage map lives in wiki 40.12 and deliberately not on the public
+ * safety page, because a temporary gap published is an evasion map with a shelf life.
  */
-export function scannableKeys(work: Pick<WorkRow, "type" | "sourceKey" | "thumbnail">): string[] {
-	const keys = new Set<string>();
-	if (work.type === "image" && work.sourceKey) keys.add(work.sourceKey);
+export type ScannableKind = "image" | "video";
+
+export interface ScannableObject {
+	key: string;
+	kind: ScannableKind;
+}
+
+export function scannableKeys(
+	work: Pick<WorkRow, "type" | "sourceKey" | "thumbnail">,
+): ScannableObject[] {
+	const out = new Map<string, ScannableKind>();
+	if (work.type === "image" && work.sourceKey) out.set(work.sourceKey, "image");
+	if (work.type === "video" && work.sourceKey) out.set(work.sourceKey, "video");
 	// Thumbnails may be stored as a full URL on older rows; `urlToKey` normalizes both.
+	// A video's thumbnail is an image and is scanned as one — it is new bytes either way.
 	if (work.thumbnail) {
 		const key = urlToKey(work.thumbnail);
-		if (key) keys.add(key);
+		if (key && !out.has(key)) out.set(key, "image");
 	}
-	return [...keys];
+	return [...out].map(([key, kind]) => ({ key, kind }));
 }
 
 /**
@@ -258,11 +435,14 @@ export function scannableKeys(work: Pick<WorkRow, "type" | "sourceKey" | "thumbn
  * ⚠️ **Re-stamping on every enqueue is deliberate.** Replacing a thumbnail is new bytes from
  * the same uploader owing a fresh answer, so the grace window restarts with it.
  */
-export async function beginScans(work: WorkRow, now: Date = new Date()): Promise<string[]> {
-	const keys = scannableKeys(work);
-	if (keys.length === 0) return [];
+export async function beginScans(
+	work: WorkRow,
+	now: Date = new Date(),
+): Promise<ScannableObject[]> {
+	const objects = scannableKeys(work);
+	if (objects.length === 0) return [];
 	await db.update(works).set({ scanQueuedAt: now }).where(eq(works.id, work.id));
-	return keys;
+	return objects;
 }
 
 export interface ScanReleaseGate {
@@ -293,7 +473,7 @@ export async function scanReleaseGate(
 	work: WorkRow,
 	now: Date = new Date(),
 ): Promise<ScanReleaseGate> {
-	const keys = scannableKeys(work);
+	const keys = scannableKeys(work).map((o) => o.key);
 	if (keys.length === 0) return { pending: [], blocked: false, waitUntil: null };
 
 	const answered = await db
@@ -324,7 +504,9 @@ export async function scanReleaseGate(
  * five-minute `escalate-reports` retry, at a slower cadence because nothing here is waiting
  * on a person.
  */
-export async function worksOwedScans(limit = 200): Promise<Array<{ id: number; keys: string[] }>> {
+export async function worksOwedScans(
+	limit = 200,
+): Promise<Array<{ id: number; objects: ScannableObject[] }>> {
 	const candidates = await db
 		.select({
 			id: works.id,
@@ -351,19 +533,65 @@ export async function worksOwedScans(limit = 200): Promise<Array<{ id: number; k
 		)
 		.limit(limit);
 
-	const owed: Array<{ id: number; keys: string[] }> = [];
+	const owed: Array<{ id: number; objects: ScannableObject[] }> = [];
 	for (const work of candidates) {
-		const keys = scannableKeys(work);
-		if (keys.length === 0) continue;
+		const objects = scannableKeys(work);
+		if (objects.length === 0) continue;
 		const answered = await db
 			.select({ storageKey: mediaScans.storageKey })
 			.from(mediaScans)
-			.where(inArray(mediaScans.storageKey, keys));
+			.where(
+				inArray(
+					mediaScans.storageKey,
+					objects.map((o) => o.key),
+				),
+			);
 		const seen = new Set(answered.map((row) => row.storageKey));
-		const pending = keys.filter((key) => !seen.has(key));
-		if (pending.length > 0) owed.push({ id: work.id, keys: pending });
+		const pending = objects.filter((o) => !seen.has(o.key));
+		if (pending.length > 0) owed.push({ id: work.id, objects: pending });
 	}
 	return owed;
+}
+
+/**
+ * Record many scans at once — the video path, which writes a row per sampled frame.
+ *
+ * Same replace-rather-than-stack rule as `recordScan`, in one statement because two hundred
+ * round trips for one video is two hundred chances to be interrupted halfway.
+ */
+export async function recordScans(
+	entries: Array<{
+		storageKey: string;
+		workId: number | null;
+		pdq: PdqHash | null;
+		outcome: ScanOutcome;
+	}>,
+): Promise<void> {
+	if (entries.length === 0) return;
+	const scannedAt = new Date();
+	const rows = entries.map((e) => ({
+		storageKey: e.storageKey,
+		workId: e.workId,
+		pdqHash: e.pdq?.hash ?? null,
+		pdqQuality: e.pdq?.quality ?? null,
+		determination: e.outcome.determination,
+		vendorMatch: e.outcome.vendorMatch,
+		scannedAt,
+	}));
+	await db
+		.insert(mediaScans)
+		.values(rows)
+		.onConflictDoUpdate({
+			target: mediaScans.storageKey,
+			set: {
+				workId: sql`excluded.work_id`,
+				pdqHash: sql`excluded.pdq_hash`,
+				pdqQuality: sql`excluded.pdq_quality`,
+				determination: sql`excluded.determination`,
+				vendorMatch: sql`excluded.vendor_match`,
+				scannedAt: sql`excluded.scanned_at`,
+			},
+		});
 }
 
 /** The only writer of `media_scans`. A re-scan replaces the row rather than stacking. */

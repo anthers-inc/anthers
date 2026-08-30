@@ -605,22 +605,21 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * to belong to somebody, and having one trigger point rather than two is what keeps a new
  * upload route from acquiring transcoding while quietly skipping detection.
  *
- * ⚠️ **Only images are scanned in this pass, and a video's frames are not yet.** PDQ is an
- * image hash, so video coverage means extracting keyframes inside `transcode-video.ts`,
- * which already decodes every frame — the correct method and the correct place, but a
- * separate integration. **A video's thumbnail IS scanned here**, since it is an extracted
- * frame and therefore new image bytes. Audio has no coverage under a perceptual image hash
- * at all. The current coverage map stays in wiki 40.12 and off the public safety page.
+ * ⚠️ **Images and videos both, and each key says which it is.** PDQ is an image hash, so a
+ * video is sampled into frames and hashed frame by frame — a different job body behind the
+ * same queue, dispatched on the `kind` that `scannableKeys` attaches. Audio has no coverage
+ * under a perceptual image hash at all, and neither does anything inside an archive. The
+ * current coverage map stays in wiki 40.12 and off the public safety page.
  */
 async function queueScanForWork(item: WorkRow): Promise<void> {
 	// `beginScans` decides which objects are scannable and starts the Work's clock; this
 	// only sends the jobs. The key set has to be the same one the release gate waits on, so
 	// it lives in the service that owns both rather than being computed again here.
-	const keys = await beginScans(item);
-	for (const storageKey of keys) {
+	const objects = await beginScans(item);
+	for (const object of objects) {
 		await queue.send(
 			QUEUES.SCAN_MEDIA,
-			{ storageKey, workId: item.id },
+			{ storageKey: object.key, workId: item.id, kind: object.kind },
 			JOB_OPTIONS[QUEUES.SCAN_MEDIA],
 		);
 	}
