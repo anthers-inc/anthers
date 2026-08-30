@@ -130,7 +130,7 @@ function findWiki(): { path: string } | { skip: true } | { error: string } {
 	if (found.length === 0) {
 		return {
 			error:
-				`the vault at ${OBSIDIAN} has no "${PROJECT_DIR}" project root in it ` +
+				`the vault at ${OBSIDIAN} has no project root matching ${PROJECT_DIR} in it ` +
 				`(moved out of the vault, or renamed? set ANTHERS_VAULT to point at it)`,
 		};
 	}
@@ -141,8 +141,24 @@ function findWiki(): { path: string } | { skip: true } | { error: string } {
 	};
 }
 
-/** The folder the project lives in, wherever inside the vault it has been filed. */
-const PROJECT_DIR = "Anthers";
+/**
+ * The folder the project lives in, wherever inside the vault it has been filed.
+ *
+ * ⚠️ **The name carries an optional Johnny-Decimal number**, because on 2026-08-30 the root
+ * became `30-39 Anthers Projects/30 Anthers` and an exact match on `Anthers` stopped finding
+ * it. The guard behaved correctly — it failed loudly and said the root had been "moved out of
+ * the vault, or renamed?" rather than skipping — but every `make verify` on a machine with the
+ * vault went red, including the pre-push hook, so it had to be taught the new shape.
+ *
+ * 🚨 **Matching "any directory whose name contains Anthers" was considered and rejected.** The
+ * same reorganization created `31 Anthers-Brand`, `32 Anthers-Desktop`, `33 Anthers-Meta`,
+ * `34 Anthers-Node` and `35 Anthers-Wiki` as siblings. They are empty today, so the area-
+ * directory marker below would exclude them — but they are obviously going to be filled, and
+ * the first one that gains a `00-09 Meta` would turn this into a permanent found-twice
+ * failure. A tight pattern that fails loudly when the name changes again is better than a
+ * loose one that starts matching the neighbours.
+ */
+const PROJECT_DIR = /^(?:\d{2} )?Anthers$/;
 
 /**
  * Every `Anthers/` folder in the vault that looks like the project root.
@@ -165,7 +181,7 @@ function searchVault(dir: string, depth: number): string[] {
 	for (const entry of entries) {
 		if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
 		const path = join(dir, entry.name);
-		if (entry.name === PROJECT_DIR && isProjectRoot(path)) out.push(path);
+		if (PROJECT_DIR.test(entry.name) && isProjectRoot(path)) out.push(path);
 		else out.push(...searchVault(path, depth - 1));
 	}
 	return out;
