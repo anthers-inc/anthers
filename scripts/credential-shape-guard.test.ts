@@ -74,6 +74,36 @@ describe("nothing tracked looks like a credential", () => {
 		expect(files.length).toBeGreaterThan(200);
 	});
 
+	it("🚨 still recognizes each format it claims to watch, so a pattern cannot rot", () => {
+		/*
+		 * Guard the guard, the other way round. The corpus check above proves files were
+		 * read; this proves the patterns can still see anything in them. Without it, a
+		 * broken escape or a changed fragment leaves every pattern matching nothing and the
+		 * guard reports a clean repository forever — which is indistinguishable from
+		 * working, and was the actual state: disabling all seven patterns kept this file
+		 * green.
+		 *
+		 * ⚠️ **The samples are assembled at runtime and are runs of one character**, for the
+		 * same reason the patterns are: a plausible-looking literal here would be a real
+		 * finding for GitHub's own scanner in the one file that cannot afford one.
+		 */
+		const samples: Record<string, string> = {
+			"Stripe webhook secret": `wh${"sec"}_${"a".repeat(24)}`,
+			"Stripe live secret key": `sk${"_live_"}${"a".repeat(16)}`,
+			"Stripe live restricted key": `rk${"_live_"}${"a".repeat(16)}`,
+			"Stripe test secret key": `sk${"_test_"}${"a".repeat(16)}`,
+			"Resend API key": `re${"_"}${"a".repeat(8)}_${"a".repeat(16)}`,
+			"AWS access key id": `AK${"IA"}${"A".repeat(16)}`,
+			"Bitwarden access token": `0.${"a".repeat(36)}.${"a".repeat(40)}`,
+		};
+		// Every pattern needs a sample, so adding a format without one is a failure rather
+		// than a silent hole in the liveness check itself.
+		expect(Object.keys(samples).sort()).toEqual(PATTERNS.map((p) => p.name).sort());
+		for (const { name, re } of PATTERNS) {
+			expect(re.test(samples[name]), `${name} no longer matches its own format`).toBe(true);
+		}
+	});
+
 	it("carries no string shaped like a real secret", () => {
 		const offenders: string[] = [];
 		for (const file of trackedFiles()) {
