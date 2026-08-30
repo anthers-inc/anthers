@@ -791,7 +791,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 	// ⚠️ The chosen rung as a COLUMN INDEX rather than an amount, because the grid rules are
 	// drawn by neighbor: a cell needs to know it sits immediately left of the lit column.
 	// An amount off the ladder gives `-1`, which no `column` and no `column - 1` can equal,
-	// so an unrecognised value lights nothing rather than lighting the wrong thing.
+	// so an unrecognized value lights nothing rather than lighting the wrong thing.
 	const litColumn = RUNG_AMOUNTS.indexOf(value);
 	return (
 		// ⚠️ `overflow-x-auto` is a backstop rather than the plan — `MATRIX_QUERY` is what

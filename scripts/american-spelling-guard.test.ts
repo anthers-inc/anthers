@@ -16,6 +16,12 @@
  * regression guard is for: it cannot catch a British spelling nobody has ever typed, and
  * `lint_spelling.py --ext md,ts,tsx,css` is still the tool for a real sweep.
  *
+ * ⚠️ **This file declares `lint-spelling: ignore-file`**, because its subject IS the
+ * vocabulary: a guard that lists the British forms it watches for cannot avoid spelling
+ * them, and without the declaration the vault's own sweep reports seventy offenses here and
+ * buries every real one. `scripts/retired-vocabulary-guard.test.ts` earns its exemption the
+ * same way.
+ *
  * ⭐ **Two escape hatches, both of which say why at the site.** A line carrying
  * `lint-spelling: ignore` is skipped, for a spelling that belongs to an external vocabulary
  * this code has to match exactly — pg-boss's `cancelled` job state, GitHub Actions'
@@ -67,6 +73,16 @@ const BRITISH = [
 	"honouring",
 	"acknowledgement",
 	"acknowledgements",
+	// 🚨 These were LIVE on /privacy after the sweep that was meant to remove them, because
+	// neither stem was in the vault's word list — and this guard was built from the tally of
+	// what that sweep found, so it inherited the same blind spot by construction. A tripwire
+	// derived from a sweep can only ever be as complete as the sweep was.
+	"anonymise",
+	"anonymised",
+	"anonymises",
+	"anonymising",
+	"anonymisation",
+	"unrecognised",
 	"programme",
 	"programmes",
 	"itemise",

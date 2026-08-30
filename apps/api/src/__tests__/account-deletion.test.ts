@@ -7,7 +7,7 @@
  * *plausible* as its opposite and none of them fails loudly when it's wrong:
  *
  * - tombstoning that hard-deletes instead takes **third parties' comments** with it;
- * - anonymising a review by deleting it moves a creator's average through no fault of
+ * - anonymizing a review by deleting it moves a creator's average through no fault of
  *   theirs;
  * - a purchased Work destroyed instead of withdrawn breaks the promise a buyer paid
  *   for;
@@ -162,11 +162,11 @@ beforeAll(async () => {
 	stayerCommentId = (await c2.json()).comment.id;
 
 	// A review by the leaver, inserted directly — reviewing requires access, and the
-	// point under test is the anonymisation rather than the access path.
+	// point under test is the anonymization rather than the access path.
 	//
 	// It hangs off the SOLD Work deliberately. `ratings.work_id` cascades, so a review
 	// attached to the unsold Work would be destroyed along with it and the
-	// anonymisation assertion would be testing an empty table.
+	// anonymization assertion would be testing an empty table.
 	const [rating] = await db
 		.insert(ratings)
 		.values({ userId: leaverId, workId: soldWorkId, score: 4, body: `LEAVER-REVIEW-${id}` })
@@ -311,7 +311,7 @@ describe("what 'deleted' means, table by table", () => {
 		expect(res.status).toBe(200);
 	});
 
-	it("ANONYMISES the review — score survives, author does not", async () => {
+	it("ANONYMIZES the review — score survives, author does not", async () => {
 		const [row] = await db.select().from(ratings).where(eq(ratings.id, ratingId));
 		expect(row).toBeDefined();
 		// Deleting it would move a creator's average through no fault of theirs.

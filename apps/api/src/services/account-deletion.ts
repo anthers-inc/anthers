@@ -32,7 +32,7 @@
  * |:--|:--|:--|
  * | profile, sessions, ATProto link, follows, bookmarks, blocks, attention rows | **destroyed** (FK cascade) | purely this person's |
  * | comments, posts | **tombstoned** — author nulled, content stays | a thread full of holes is worse for everyone still in it, and deleting a post takes third parties' comments with it |
- * | reviews | **anonymised** — score stays, author nulled | a bare 1–5 is the least personal thing here, and removing it moves a creator's average through no fault of theirs |
+ * | reviews | **anonymized** — score stays, author nulled | a bare 1–5 is the least personal thing here, and removing it moves a creator's average through no fault of theirs |
  * | Works nobody bought | **destroyed** | nothing depends on them |
  * | Works someone bought | **withdrawn** | a purchase outlives the Work — buyers keep what they paid for |
  * | purchases | **buyer detached, row kept** | sales-tax remittance records; settled 2026-08-10 |
@@ -334,7 +334,7 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 			await tx.delete(works).where(inArray(works.id, unpurchased));
 		}
 
-		// Tombstone the posts and comments, anonymise the reviews. Done explicitly rather
+		// Tombstone the posts and comments, anonymize the reviews. Done explicitly rather
 		// than left to the FK: `SET NULL` would produce the same rows, but stating it
 		// here is what makes the three different outcomes visible in one place instead of
 		// spread across four schema files.
