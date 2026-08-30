@@ -21,6 +21,25 @@
  * still theme-aware; what a creator picked is not.
  */
 
+/**
+ * The edging every badge wears, whatever its shape or field color.
+ *
+ * ⭐ **This is the whole of what makes a wall of badges read as one collection** (Parker's
+ * scout-badge reference, 2026-08-29). A Girl Scout set is triangles and squares in wildly
+ * different field colors, and it reads as a set because every one of them is bound in the
+ * same brown stitching. So the edge is a constant and the field is the creator's — the
+ * reverse of the first cut here, which derived the rim from the fill and got no shared
+ * identity out of it at all.
+ *
+ * ⚠️ **Not a token that follows the theme.** A badge is an identity object people collect
+ * across creators; one whose edging changed with the viewer's light/dark preference would
+ * not be the same badge twice.
+ */
+export const BADGE_EDGE = "oklch(34% 0.05 55)";
+
+/** How thick that edging is, in viewBox units, painted inward from the shape's outline. */
+export const BADGE_EDGE_WIDTH = 9;
+
 /** A background shape, as a path in a 0 0 100 100 viewBox. */
 export interface BadgeShape {
 	id: string;
@@ -34,6 +53,12 @@ export interface BadgeShape {
  */
 export const BADGE_SHAPES: BadgeShape[] = [
 	{ id: "circle", label: "Circle", path: "M50 4a46 46 0 1 0 0 92a46 46 0 1 0 0-92Z" },
+	{ id: "triangle", label: "Triangle", path: "M50 5 97 88a6 6 0 0 1-5 9H8a6 6 0 0 1-5-9Z" },
+	{
+		id: "triangle-down",
+		label: "Inverted triangle",
+		path: "M8 3h84a6 6 0 0 1 5 9l-42 83a6 6 0 0 1-10 0L3 12a6 6 0 0 1 5-9Z",
+	},
 	{
 		id: "rounded",
 		label: "Rounded square",
@@ -141,4 +166,20 @@ export function badgeColor(id: string | null | undefined): BadgeColor {
 export function defaultBadgeEmblem(index: number): string {
 	const n = BADGE_EMBLEMS.length;
 	return BADGE_EMBLEMS[((index % n) + n) % n];
+}
+
+/**
+ * The field color a rung falls back to, by ladder position.
+ *
+ * ⭐ **Varied rather than uniform, for the same reason the emblem is.** A creator who has
+ * touched nothing should see a ladder of distinct patches — which is what a scout set looks
+ * like — rather than five identical discs that only differ if you look closely. A default
+ * that reads as a set is doing the job; a default that reads as "unset" is not.
+ *
+ * ⚠️ **Stepped by a stride that is coprime with the list length**, so consecutive rungs land
+ * far apart in the palette instead of on neighboring greens.
+ */
+export function defaultBadgeColor(index: number): string {
+	const n = BADGE_COLORS.length;
+	return BADGE_COLORS[(((index * 3) % n) + n) % n].id;
 }

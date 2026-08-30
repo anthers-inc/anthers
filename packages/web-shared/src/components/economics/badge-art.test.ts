@@ -22,6 +22,7 @@ import {
 	badgeShape,
 	DEFAULT_BADGE_COLOR,
 	DEFAULT_BADGE_SHAPE,
+	defaultBadgeColor,
 	defaultBadgeEmblem,
 	isBadgeColor,
 	isBadgeEmblem,
@@ -83,6 +84,16 @@ describe("the badge library", () => {
 		expect(isBadgeShape(DEFAULT_BADGE_SHAPE)).toBe(true);
 		expect(isBadgeColor(DEFAULT_BADGE_COLOR)).toBe(true);
 		expect(isBadgeEmblem(BADGE_EMBLEMS[0])).toBe(true);
+	});
+
+	it("⭐ gives an untouched ladder distinct patches rather than five of the same", () => {
+		// A default that reads as "unset" is not doing the job. Consecutive rungs get
+		// different fields AND different emblems, so a creator who has touched nothing still
+		// sees a set.
+		const colors = [0, 1, 2, 3].map(defaultBadgeColor);
+		expect(new Set(colors).size).toBe(4);
+		for (const id of colors) expect(isBadgeColor(id)).toBe(true);
+		expect(BADGE_COLORS.map((c) => c.id)).toContain(defaultBadgeColor(-1));
 	});
 
 	it("gives consecutive rungs different default emblems, and wraps rather than breaking", () => {

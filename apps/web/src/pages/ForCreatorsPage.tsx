@@ -640,9 +640,10 @@ export default function ForCreatorsPage() {
 								👑&nbsp; Your Badges
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Every threshold of yours carries a Badge you design—a small collectible emblem your
-								supporters wear, the way Anthers' own Badges have their botanical wreaths. Anthers
-								sponsors emerging illustrators to help creators make them.
+								Every threshold of yours carries a Badge—a small collectible patch your supporters
+								wear. Pick its shape and color, put one of our emblems on it or your own art, and it
+								sits beside Anthers' own Badges as part of the same set. Anthers sponsors emerging
+								illustrators to help creators make them.
 							</p>
 						</Card>
 					</Reveal>
