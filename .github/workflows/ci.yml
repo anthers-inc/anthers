@@ -106,6 +106,13 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    # ⚠️ The container's default shell is `sh`, which is dash — `set -o pipefail` is a
+    # bash builtin and fails there with "Illegal option". `browser-media` carries the same
+    # line for the same reason; a job that moves into a container needs it.
+    defaults:
+      run:
+        shell: bash
+
     services:
       postgres:
         image: postgres:16
