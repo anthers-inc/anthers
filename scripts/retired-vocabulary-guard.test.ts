@@ -78,7 +78,6 @@ const BUDGET: Record<string, number> = {
 	"apps/api/src/routes/subscriptions.ts": 2,
 	"apps/api/src/services/access.ts": 1,
 	"apps/api/src/services/billing.ts": 2,
-	"apps/web/src/pages/UserDemoPage.tsx": 2,
 	"apps/web/src/components/calculators/video-model.ts": 2,
 	"apps/api/src/__tests__/distribute-pool.test.ts": 1,
 	"apps/api/src/__tests__/unlock-offer.test.ts": 1,

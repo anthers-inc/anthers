@@ -75,8 +75,6 @@ const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
 const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
 const CompareItchPage = lazy(() => import("./pages/CompareItchPage"));
-const CreatorBreakdownDemoPage = lazy(() => import("./pages/CreatorBreakdownDemoPage"));
-const CreatorDemoPage = lazy(() => import("./pages/CreatorDemoPage"));
 const CreatorMonetizationCalculatorPage = lazy(
 	() => import("./pages/CreatorMonetizationCalculatorPage"),
 );
@@ -86,7 +84,6 @@ const DesktopAuthorizePage = lazy(() => import("./pages/DesktopAuthorizePage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const ForCreatorsPage = lazy(() => import("./pages/ForCreatorsPage"));
-const InfrastructureDemoPage = lazy(() => import("./pages/InfrastructureDemoPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const CopyrightPage = lazy(() => import("./pages/CopyrightPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
@@ -103,7 +100,6 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SubscribePage = lazy(() => import("./pages/SubscribePage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
-const UserDemoPage = lazy(() => import("./pages/UserDemoPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
@@ -153,10 +149,14 @@ export default function App() {
 					<Route element={<MeadowDecorLayout />}>
 						<Route path="/compare/itch-io" element={<CompareItchPage />} />
 						<Route path="/compare/ghost" element={<CompareGhostPage />} />
-						<Route path="/demo-creator-page" element={<CreatorDemoPage />} />
-						<Route path="/demo-creator-breakdown" element={<CreatorBreakdownDemoPage />} />
-						<Route path="/demo-infrastructure" element={<InfrastructureDemoPage />} />
-						<Route path="/demo-user" element={<UserDemoPage />} />
+						{/* The four `/demo-*` routes were deleted on 2026-08-30. Each modeled the
+						    economics in its own hardcoded numbers, so each drifted independently
+						    of the model and of the product; `/demo-user` in particular lagged the
+						    real user controls, which is worse than no page while those controls
+						    are still moving. Nothing replaces them at a top-level route: a demo
+						    listed as a resource but addressed as something else was the symptom
+						    that prompted the review. See the vault's "Decide what resources we
+						    actually need". */}
 						<Route path="/about" element={<AboutPage />} />
 					</Route>
 					<Route path="/wiki/*" element={<WikiPage />} />

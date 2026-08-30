@@ -23,13 +23,24 @@ test.describe("Resources calculators", () => {
 		await page.goto("/resources");
 		await expect(page.getByRole("heading", { name: "Check our math" })).toBeVisible();
 
-		// The three groups the page is organized into. Section = format, tag = subject;
-		// these headings are the structure, so guard them against a silent regression.
+		// The groups the page is organized into. Section = format, tag = subject; these
+		// headings are the structure, so guard them against a silent regression.
 		// (<Reveal> only fades content in on scroll, but it animates opacity — which
 		// Playwright still counts as visible — so below-fold assertions hold here.)
-		await expect(page.getByRole("heading", { name: "How the model works" })).toBeVisible();
+		//
+		// ⚠️ A third group, "How the model works", led this page until 2026-08-30; it held
+		// the `/demo-*` explainers and went with them.
 		await expect(page.getByRole("heading", { name: "Run the numbers yourself" })).toBeVisible();
 		await expect(page.getByRole("heading", { name: "How we stack up" })).toBeVisible();
+
+		// 🚨 **A link to a deleted `/demo-*` page would not look broken.** `App.tsx` ends in
+		// a `/:username` catch-all, so those paths now fall through to a profile lookup
+		// rather than to anything that announces itself as missing — and the handles stay
+		// reserved, so the lookup renders "not found" instead of erroring. A dangling card
+		// would therefore navigate, render, and pass every other assertion on this page.
+		// This is the only thing that would say so.
+		const demoLinks = await page.locator('a[href*="/demo-"]').count();
+		expect(demoLinks, "the resources index links to a retired demo page").toBe(0);
 
 		await expect(page.getByRole("heading", { name: "Video Storage Calculator" })).toBeVisible();
 		await expect(
