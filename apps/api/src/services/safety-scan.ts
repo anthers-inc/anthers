@@ -150,6 +150,28 @@ export async function scanPdqHash(
 }
 
 /**
+ * A scan that could not complete because the vendor did not answer, carrying the
+ * fingerprint we had already computed.
+ *
+ * 🚨 **The hash is the whole reason this type exists**, and discarding it made an outage
+ * indistinguishable from an unhashable image. `unscannable` has three causes and only two
+ * of them are permanent: an object we could not fingerprint at all (`pdq_hash` null), one
+ * whose fingerprint carried no signal (`pdq_quality` below {@link MIN_PDQ_QUALITY}), and one
+ * we had a perfectly good fingerprint for and simply never got an answer about. **Only the
+ * third is worth re-asking**, and the two existing columns separate all three — provided the
+ * hash survives the failure. It did not, until 2026-08-30.
+ */
+export class ScanUnansweredError extends Error {
+	constructor(
+		readonly pdq: PdqHash | null,
+		override readonly cause: unknown,
+	) {
+		super("The detection vendor did not answer");
+		this.name = "ScanUnansweredError";
+	}
+}
+
+/**
  * Scan one stored object and record what came back.
  *
  * ⚠️ **The row is written whatever the answer is, including `unscannable`.** A scan that
@@ -178,13 +200,25 @@ export async function scanStoredImage(
 	// than thrown, because retrying forever will not make a deleted object reappear.
 	const pdq = bytes ? await pdqHashImage(bytes) : null;
 
-	const outcome = pdq
-		? await scanPdqHash(pdq, {
+	let outcome: ScanOutcome;
+	if (pdq) {
+		try {
+			outcome = await scanPdqHash(pdq, {
 				credentials: options.credentials,
 				baseUrl: options.baseUrl,
 				now: options.now,
-			})
-		: UNSCANNABLE;
+			});
+		} catch (cause) {
+			// 🚨 **Still thrown, and still recording nothing** — `worksOwedScans` finds an
+			// owed object by the ABSENCE of a row, so writing one here would take the object
+			// out of the sweep that exists to re-ask it. What changes is only that the
+			// fingerprint travels with the failure, so a caller that has no retry can record
+			// *what* went unanswered instead of discarding it.
+			throw new ScanUnansweredError(pdq, cause);
+		}
+	} else {
+		outcome = UNSCANNABLE;
+	}
 
 	await recordScan(storageKey, options.workId ?? null, pdq, outcome);
 
@@ -229,10 +263,21 @@ export interface ScanSubject {
  * clean scan in our own records. What must never appear is a `clean` row for a scan that
  * did not happen, and this writes no such thing.
  *
- * ⚠️ **Nothing sweeps these afterwards yet.** `worksOwedScans` enumerates Works, so a
- * Work-less object that went unanswered during an outage is never re-asked. That gap is
- * real, is narrower than the outage it replaces, and belongs to the owed-sweep rather than
- * to an upload handler.
+ * ⭐ **The fingerprint is kept, which is what makes the row re-askable later.** A row saying
+ * `unscannable` with a usable hash on it can only mean *we asked nobody and here is exactly
+ * what we would have asked about*; the same row with no hash means we could never have
+ * asked. {@link ScanUnansweredError} carries it out of the failure so the distinction
+ * survives, and re-asking costs a vendor call rather than another read and another hash.
+ *
+ * ⚠️ **Nothing sweeps these afterwards yet.** `worksOwedScans` enumerates Works and finds
+ * them by the absence of a row, so a Work-less object — which now has a row — is outside it
+ * in both directions. Closing that is its own task; what this function guarantees is that
+ * the sweep, when it exists, has something unambiguous to select on.
+ *
+ * 🚨 **A caller passing a `workId` here would take that object out of `worksOwedScans`**,
+ * because writing any row is what removes a key from a sweep keyed on absence. No caller
+ * does today — both upload doors pass an `objectKind` and no Work — and the Work-less sweep
+ * arm is what makes it safe when one does.
  */
 export async function scanInlineUpload(
 	storageKey: string,
@@ -240,8 +285,9 @@ export async function scanInlineUpload(
 ): Promise<ScanOutcome> {
 	try {
 		return await scanStoredImage(storageKey, subject);
-	} catch {
-		await recordScan(storageKey, subject.workId ?? null, null, UNSCANNABLE);
+	} catch (err) {
+		const pdq = err instanceof ScanUnansweredError ? err.pdq : null;
+		await recordScan(storageKey, subject.workId ?? null, pdq, UNSCANNABLE);
 		return UNSCANNABLE;
 	}
 }
