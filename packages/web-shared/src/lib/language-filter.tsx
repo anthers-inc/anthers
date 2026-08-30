@@ -19,6 +19,7 @@
  */
 import { censorText } from "@anthers/shared/parental-controls";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { useAuth } from "./auth";
 import { apiFetch } from "./rpc";
 
 const LanguageFilterContext = createContext(false);
@@ -38,8 +39,21 @@ export function useLanguageFilter(): boolean {
  */
 export function LanguageFilterProvider({ children }: { children: ReactNode }) {
 	const [on, setOn] = useState(false);
+	// ⚠️ **Asked, rather than attempted and discarded.** This endpoint is behind
+	// `requireAuth`, so a signed-out visitor's request 401s — on every route, including the
+	// public legal pages, leaving a console error on a page where a stranger is reading our
+	// privacy commitments. Nothing broke, which is why it survived: the provider defaults to
+	// off and the failure was indistinguishable from the ordinary answer. It also puts noise
+	// in the one channel `trackErrorsStrict` reads as failure.
+	const { isAuthenticated, isLoading } = useAuth();
 
 	useEffect(() => {
+		if (isLoading || !isAuthenticated) {
+			// A signed-out reader has no controls to read. Off is not a fallback here, it is
+			// the correct answer.
+			setOn(false);
+			return;
+		}
 		let canceled = false;
 		(async () => {
 			try {
@@ -54,7 +68,7 @@ export function LanguageFilterProvider({ children }: { children: ReactNode }) {
 		return () => {
 			canceled = true;
 		};
-	}, []);
+	}, [isAuthenticated, isLoading]);
 
 	return <LanguageFilterContext.Provider value={on}>{children}</LanguageFilterContext.Provider>;
 }
