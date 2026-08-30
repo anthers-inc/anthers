@@ -185,12 +185,36 @@ function searchVault(dir: string, depth: number): string[] {
 	return out;
 }
 
-/** A Johnny-Decimal area directory inside it — `00-09 Meta`, `50-59 Business and Finance`. */
+/**
+ * A Johnny-Decimal area directory inside it — `00-09 Meta`, `50-59 Business and Finance` —
+ * **and at least one document under it.**
+ *
+ * 🚨 **The second half was added on 2026-08-30, after an empty husk broke every local
+ * `make verify` on the machine that had the vault.** Reorganizing the vault in Obsidian
+ * left `40-59 PhD Projects/Anthers/00-09 Meta/Tasks/Active` behind — three nested
+ * directories and **zero files** — beside the real root at its new home. The area test
+ * above passed on both, `findWiki` reported two candidates and refused to choose, and it
+ * was right to: on the evidence it had, they were indistinguishable.
+ *
+ * ⭐ **An empty directory tree is the characteristic residue of a move**, so this will
+ * happen again every time the vault is reorganized; a wiki with no documents in it is not
+ * a wiki, and saying so is what makes the discovery survive the next one. Note the
+ * refusal is still the correct behavior for two *real* roots — this narrows what counts
+ * as a root rather than loosening what happens when there are two.
+ *
+ * The scan is recursive and unbounded, which is affordable because it runs only on a
+ * directory that already matched `PROJECT_DIR`, and it stops at the first hit.
+ */
 function isProjectRoot(path: string): boolean {
 	try {
-		return readdirSync(path, { withFileTypes: true }).some(
+		const hasArea = readdirSync(path, { withFileTypes: true }).some(
 			(e) => e.isDirectory() && /^\d{2}-\d{2} /.test(e.name),
 		);
+		if (!hasArea) return false;
+		for (const entry of readdirSync(path, { recursive: true, withFileTypes: true })) {
+			if (entry.isFile() && entry.name.endsWith(".md")) return true;
+		}
+		return false;
 	} catch {
 		return false;
 	}
