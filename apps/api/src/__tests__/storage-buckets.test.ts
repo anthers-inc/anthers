@@ -116,7 +116,7 @@ describe("what counts as public, by key", () => {
 		}
 	});
 
-	it("fails closed on anything it does not recognise", () => {
+	it("fails closed on anything it does not recognize", () => {
 		// The same posture as `aclForMediaType`: an unlisted prefix, a legacy key shape, or
 		// a string a client invented is private. Getting this backwards is the difference
 		// between an object nobody can read and an object everybody can.

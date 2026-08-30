@@ -225,7 +225,7 @@ describe("Account deletion", () => {
 		expect(result.erased).toBe(false);
 
 		// The row survives — and the request survives with it, so the account is erased
-		// the day the hold lifts rather than the deletion being silently cancelled.
+		// the day the hold lifts rather than the deletion being silently canceled.
 		const [row] = await db
 			.select({ id: users.id, deletionRequestedAt: users.deletionRequestedAt })
 			.from(users)

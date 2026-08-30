@@ -924,7 +924,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			if (!item.lastEscalatedAt || stamp > item.lastEscalatedAt) item.lastEscalatedAt = stamp;
 		}
 		// False wins over true: one un-alerted floor report is the thing worth surfacing,
-		// however many of its neighbours went out.
+		// however many of its neighbors went out.
 		item.floorAlerted = item.floorAlerted === false ? false : Boolean(r.escalatedAt);
 	}
 

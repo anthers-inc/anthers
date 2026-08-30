@@ -36,8 +36,8 @@ const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
  *
  * 🚨 **Dollars, and a stray multiplier here overstated the whole page threefold once.**
  * When `thresholdForBadge` changed what its return value *meant*, everything downstream
- * kept multiplying by $3 and Blossom modelled a viewer directing **$36** rather than $12.
- * Nothing caught it, because a modelling coefficient is not a typed figure `econ:figures`
+ * kept multiplying by $3 and Blossom modeled a viewer directing **$36** rather than $12.
+ * Nothing caught it, because a modeling coefficient is not a typed figure `econ:figures`
  * can see — so read what this returns rather than assuming its unit.
  */
 const supportOf = (badge: BadgeKey) => thresholdForBadge(badge);

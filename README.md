@@ -94,7 +94,7 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 
 **Reading, watching, playing.** Three players — video, audio, and a comic/ebook reader — on one shared transport that survives navigation, so a queued album keeps playing while you browse. A **Library** holds everything a person has kept: what they bought, permanently, plus anything free they chose to save. Follows produce a chronological feed that interleaves posts and releases, so releasing never costs a creator their reach. Reviews carry a score *and* text, because a number on its own says nothing worth moderating.
 
-**Money.** Stripe Connect onboarding and payouts, direct purchases at an all-in list price, itemised monthly support subscriptions, per-item refunds that reconcile identically whether the buyer or the Stripe dashboard starts them, monthly cycle settlement, and daily Time Pool distribution across the creators each person actually spent time with.
+**Money.** Stripe Connect onboarding and payouts, direct purchases at an all-in list price, itemized monthly support subscriptions, per-item refunds that reconcile identically whether the buyer or the Stripe dashboard starts them, monthly cycle settlement, and daily Time Pool distribution across the creators each person actually spent time with.
 
 **Operations.** An admin console with activity and job-queue telemetry, a moderation queue with the reporting taxonomy behind it, account export and deletion, analytics for creators, cross-publishing, and an itch.io importer.
 

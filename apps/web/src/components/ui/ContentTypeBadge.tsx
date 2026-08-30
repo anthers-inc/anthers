@@ -16,7 +16,7 @@ const config = {
 	text: { label: "Article", Icon: DocumentTextIcon, color: "badge-info" },
 	image: { label: "Image", Icon: PhotoIcon, color: "badge-accent" },
 	// ⚠️ The fallback below is `config.text`, so a type missing from this map renders as
-	// "Article" rather than as anything obviously wrong — an ebook labelled Article looks
+	// "Article" rather than as anything obviously wrong — an ebook labeled Article looks
 	// like a copy choice, not a gap. Add the row when you add the type.
 	ebook: { label: "Book", Icon: BookOpenIcon, color: "badge-accent" },
 	audio: { label: "Audio", Icon: MusicalNoteIcon, color: "badge-secondary" },

@@ -175,13 +175,13 @@ describe("the named-alternative comparison", () => {
 	});
 
 	test("a rival we make no claim about renders as no claim, not as zero", () => {
-		// Bandcamp sells music; a $40 album is not a transaction anyone recognises, so
+		// Bandcamp sells music; a $40 album is not a transaction anyone recognizes, so
 		// `maxPrice` bounds the row. Showing $0 there would assert they pay nothing.
 		expect(rivalNet("Bandcamp", 40)).toBeNull();
 		expect(rivalNet("Bandcamp", 10)).not.toBeNull();
 	});
 
-	test("every rival column includes the same card fee we itemise", () => {
+	test("every rival column includes the same card fee we itemize", () => {
 		// 63.01 § Comparisons: all-in against all-in. A rival's cut compared against our
 		// all-in would flatter us exactly where a creator would check.
 		const price = 10;
@@ -208,7 +208,7 @@ describe("the Badge worst case", () => {
 	/**
 	 * A Badge level's worst case is a supporter with nothing else on the month's invoice, so
 	 * the whole fixed fee lands on that one line — identical arithmetic to a lone purchase.
-	 * Anyone giving more amortises it. Stating the worst case is the honest direction: the
+	 * Anyone giving more amortizes it. Stating the worst case is the honest direction: the
 	 * best case would flatter the creator into pricing low.
 	 */
 	test("a lone $3 Badge nets the same as a lone $3 purchase", () => {

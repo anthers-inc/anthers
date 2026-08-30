@@ -11,7 +11,7 @@
  * 🚨 **The password is optional, and the page has to make that believable.** An account
  * with no password is a supported end state, not an unfinished one — it signs in with an
  * emailed code, the same six characters that got it here. Presenting the field as
- * required-but-skippable (a greyed "skip" link under a filled-in form) would produce the
+ * required-but-skippable (a grayed "skip" link under a filled-in form) would produce the
  * thing this is trying to avoid: an unwanted password, invented under mild pressure,
  * reused from somewhere else. So the choice is stated as two equal options and neither
  * is preselected as the "real" one.

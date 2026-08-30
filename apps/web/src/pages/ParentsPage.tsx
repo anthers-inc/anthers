@@ -73,8 +73,8 @@ export default function ParentsPage() {
 					sold to anyone, ever.
 				</p>
 				<p>
-					That's not a feature we added — it's a consequence of how the organisation is built. An
-					engagement-maximising feed would earn Anthers nothing, so there isn't one.
+					That's not a feature we added — it's a consequence of how the organization is built. An
+					engagement-maximizing feed would earn Anthers nothing, so there isn't one.
 				</p>
 			</Section>
 
@@ -118,7 +118,7 @@ export default function ParentsPage() {
 					<strong>Every work carries a rating, and there are three of them.</strong> Most work is{" "}
 					<strong>General</strong> and carries no restriction at all. <strong>Mature</strong> means
 					sustained violence, sexual activity depicted rather than implied, or similar — it's
-					labelled, blurred behind a click by default for everybody, and can be hidden entirely.{" "}
+					labeled, blurred behind a click by default for everybody, and can be hidden entirely.{" "}
 					<strong>Adult</strong> means explicit sexual content that is central to the work.
 				</p>
 				<p>
@@ -146,7 +146,7 @@ export default function ParentsPage() {
 			<Section title="Why the gate works this way">
 				<p>
 					A lot of places are being pushed toward age verification that means uploading a driving
-					licence, or letting a camera guess how old your face looks. Those systems work by
+					license, or letting a camera guess how old your face looks. Those systems work by
 					collecting exactly the identity information we've promised not to hold — and once a
 					company holds it, the question stops being whether they meant well and becomes what
 					happens when they're breached.

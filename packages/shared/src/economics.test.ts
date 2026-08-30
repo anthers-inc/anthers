@@ -88,11 +88,11 @@ describe("anthersSupportBreakdown", () => {
 		expect(b.foundation.toFixed(2)).toBe("2.53");
 	});
 
-	test("the free tier ($0) pays $0 and funds no charitable remainder, but has a subsidised Time Pool", () => {
+	test("the free tier ($0) pays $0 and funds no charitable remainder, but has a subsidized Time Pool", () => {
 		const b = anthersSupportBreakdown(0);
 		expect(b.given.toNumber()).toBe(0);
 		expect(b.foundation.toNumber()).toBe(0);
-		expect(b.subsidised).toBe(true);
+		expect(b.subsidized).toBe(true);
 		expect(b.timePool.toNumber()).toBeGreaterThan(0);
 	});
 
@@ -198,7 +198,7 @@ describe("supportBreakdown", () => {
 		);
 	});
 
-	test("batching pays creators MORE — the fixed $0.30 amortises across a bigger charge", () => {
+	test("batching pays creators MORE — the fixed $0.30 amortizes across a bigger charge", () => {
 		const alone = supportBreakdown({ anthersDollars: 0, creatorDollars: 3 });
 		const batched = supportBreakdown({ anthersDollars: 9, creatorDollars: 3 });
 		// The same $3 directed, but riding on a $12 charge instead of a $3 one.
@@ -289,7 +289,7 @@ describe("calculateFees — direct purchase, all-in list price, zero platform cu
 	});
 
 	/**
-	 * The headline of the 2026-08-12 allowance retirement, asserted as **behaviour
+	 * The headline of the 2026-08-12 allowance retirement, asserted as **behavior
 	 * rather than as the constant that produces it**: a digital sale used to deduct
 	 * the first download at $0.01/GiB, and redownloads drew the buyer's own streaming
 	 * allowance. Delivery is free on R2, so size stops touching money entirely.
@@ -335,9 +335,9 @@ describe("estimateStorageCost — and the self-hosting branch that inverted unno
 	// than an assertion that reads the constant back.
 	// 🚨 This branch had NO test until 2026-08-20, and it is the one that changed meaning
 	// without anything failing. `SELF_HOST_FEE` went 1 → 0 on 2026-08-12 when a flat $1 was
-	// found to be upside-down (a hosted creator's first 50 GiB are free, so every catalogue
+	// found to be upside-down (a hosted creator's first 50 GiB are free, so every catalog
 	// under ~91 GiB paid MORE to store its own files). The dial moved, every test stayed
-	// green, and the consequence — that the flag now zeroes a creator's modelled hosting
+	// green, and the consequence — that the flag now zeroes a creator's modeled hosting
 	// cost — went unrecorded anywhere a test could see it.
 	test("a self-hosting creator's storage costs Anthers nothing, whatever they store", () => {
 		const tiny = estimateStorageCost({ storageBytes: 0, isSelfHosting: true });

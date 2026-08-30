@@ -434,7 +434,7 @@ describe("Payments not configured — every guarded route refuses", () => {
 	/**
 	 * The two that matter most, and the reason PR #142 exists. These read `if (stripe && …)`
 	 * before that PR, which SKIPPED Stripe and mutated the row anyway — the UI showed a
-	 * cancelled subscription that Stripe kept billing. So asserting the 503 is only half the
+	 * canceled subscription that Stripe kept billing. So asserting the 503 is only half the
 	 * test; the other half is that the database did not move.
 	 */
 	it("refuses to cancel — and leaves the account untouched", async () => {
@@ -1240,7 +1240,7 @@ describe("Support top-up — the price is all-in", () => {
 		expect(body.processingFee).toBe(cardFee(base).toFixed(2));
 		expect(new Decimal(body.processingFee).greaterThan(0)).toBe(true);
 
-		// The assertion that would have caught the old behaviour: the amount actually sent
+		// The assertion that would have caught the old behavior: the amount actually sent
 		// to Stripe, not the number in the response body.
 		const params = fake.lastCall("paymentIntents.create")?.args[0] as
 			| Stripe.PaymentIntentCreateParams
@@ -1282,7 +1282,7 @@ describe("remainder — a heavy streamer costs the mission nothing", () => {
 	 * heavy account now books its *full* remainder, because nothing a user watches
 	 * enters settlement any more. The clamp stays as documented-defensive code (its
 	 * no-floor contract is still pinned in `economics.test.ts`), but this is the
-	 * behaviour worth guarding — a future cost term added back here would fail it
+	 * behavior worth guarding — a future cost term added back here would fail it
 	 * first, which is exactly when someone should be made to think about it.
 	 *
 	 * The 120 hours of attention are deliberately kept in the fixture. They are what

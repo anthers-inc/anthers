@@ -44,7 +44,7 @@ interface VideoPlayerProps {
 	 * streaming and free to everyone. Comes straight from the serialized Work.
 	 *
 	 * Omitted or false means the meter is irrelevant here and never renders: gated work
-	 * the viewer cleared, work they bought, and their own catalogue are all reached
+	 * the viewer cleared, work they bought, and their own catalog are all reached
 	 * without spending an allowance, so metering them would bill somebody twice.
 	 */
 	publicAccess?: boolean;
@@ -361,7 +361,7 @@ export default function VideoPlayer({
 		toggleFullscreen,
 		stepFrame: (direction) => {
 			// Not a true frame — the element cannot tell us the frame rate — but a step
-			// small enough to land on a neighbouring one at ordinary rates. Named for what
+			// small enough to land on a neighboring one at ordinary rates. Named for what
 			// it is for rather than pretending to a precision it does not have.
 			videoRef.current?.pause();
 			seekTo((videoRef.current?.currentTime ?? 0) + direction / 24);

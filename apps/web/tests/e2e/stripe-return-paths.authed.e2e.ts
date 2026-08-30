@@ -32,7 +32,7 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	/**
 	 * The Payouts section, inside the Studio shell.
 	 *
-	 * ⭐ The `?stripe=complete` acknowledgement itself is deliberately not asserted: it renders
+	 * ⭐ The `?stripe=complete` acknowledgment itself is deliberately not asserted: it renders
 	 * only for an account Stripe has not yet enabled, so whether the fixture creator sees it
 	 * depends on Connect state this suite does not own. `connectRefresh` below carries the
 	 * proof that the parameter is read at all, because its alert is unconditional.

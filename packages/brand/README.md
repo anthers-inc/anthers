@@ -53,7 +53,7 @@ icons.bee;                                    // { viewBox, inner } — build yo
 `marks/` is first-party Anthers identity. The palette and type notes are in `marks/README.txt`.
 
 - **`marks/*.svg`** — the vector masters: the mark (light and reversed cuts), a flat single-color silhouette for stamps and tiny sizes, and the flower alone.
-- **`marks/lockup/*.png`** — the wordmark lockups the app actually imports. Full-colour raster, deliberately outside the recolor-ready pipeline above, because a full-colour logo can't recolor from a single value. Four cuts: `anthers-lockup` / `-dark` carry the tagline; `-oneline` / `-oneline-dark` are the compact navbar cut.
+- **`marks/lockup/*.png`** — the wordmark lockups the app actually imports. Full-color raster, deliberately outside the recolor-ready pipeline above, because a full-color logo can't recolor from a single value. Four cuts: `anthers-lockup` / `-dark` carry the tagline; `-oneline` / `-oneline-dark` are the compact navbar cut.
 
 	```ts
 	import lockup from "@anthers/brand/marks/lockup/anthers-lockup.png"; // → hashed URL string

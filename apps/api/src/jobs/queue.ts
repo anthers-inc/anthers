@@ -194,7 +194,7 @@ export const QUEUES = {
 	// isolation rather than tidiness. Restoring is the statutory obligation and
 	// touches only our own database; refunding is our promise and reaches Stripe.
 	// Sharing a handler would let a Stripe outage stop restores from happening —
-	// spending the safe harbour to protect the money, which is exactly backwards.
+	// spending the safe harbor to protect the money, which is exactly backwards.
 	DMCA_FINALIZE: "dmca-finalize",
 	// Age the personal detail out of settled safety and copyright records. Blanks
 	// contact fields in place after RECORD_REDACTION_YEARS; never deletes a row,
@@ -236,7 +236,7 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	[QUEUES.SCAN_MEDIA]: {
 		// Retried generously and slowly on purpose. A vendor outage must leave the object
 		// UNSCANNED and owed rather than recorded as clean, so the job failing and coming
-		// back later is the correct behaviour rather than a nuisance to be tuned away.
+		// back later is the correct behavior rather than a nuisance to be tuned away.
 		retryLimit: 5,
 		retryDelay: 300,
 		expireInMinutes: 10,
@@ -303,7 +303,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// 3:30 AM daily. Nothing depends on the ordering — an expired session is dead to every
 	// reader the moment it expires, so this only reclaims the row and the IP on it.
 	[QUEUES.PRUNE_CREDENTIALS, "30 3 * * *"],
-	// 4 AM daily. Hourly would honour the grace period more precisely, but the window
+	// 4 AM daily. Hourly would honor the grace period more precisely, but the window
 	// is a week — a few hours' latency on the far end of it is not something a user can
 	// perceive, and a wipe that runs once a day is a wipe you can reason about.
 	[QUEUES.RUN_DELETIONS, "0 4 * * *"],

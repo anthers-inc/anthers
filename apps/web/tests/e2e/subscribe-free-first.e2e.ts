@@ -276,13 +276,13 @@ test.describe("/subscribe leads with the free door", () => {
 		// 🚨 **The rules were declared and then painted transparent, and it shipped.** The
 		// value cells carried `border-t border-base-content/10` for the row rule and
 		// `border-x border-transparent` to reserve the column edge — and `border-transparent`
-		// sets `border-color` on ALL FOUR sides, so the later class wiped the colour the row
+		// sets `border-color` on ALL FOUR sides, so the later class wiped the color the row
 		// rule depended on. The label column had no such class, which is why the lines
 		// appeared under the descriptions and stopped dead where the figures began.
 		//
 		// ⚠️ **Nothing else could have caught this.** The markup was right, the classes were
 		// all present, every layout assertion passed, and the DOM says `border-top-width: 1px`
-		// either way. The only thing that knows is the computed colour.
+		// either way. The only thing that knows is the computed color.
 		await page.setViewportSize({ width: 1280, height: 900 });
 		await page.goto("/subscribe");
 
@@ -299,7 +299,7 @@ test.describe("/subscribe leads with the free door", () => {
 		});
 
 		// `rgba(…, 0)` is the tell — a border that is there, sized, and invisible.
-		const invisible = (colour: string) => /,\s*0\s*\)$/.test(colour) || colour === "transparent";
+		const invisible = (color: string) => /,\s*0\s*\)$/.test(color) || color === "transparent";
 		expect(invisible(paint.top), `row rule is invisible: ${paint.top}`).toBe(false);
 		expect(invisible(paint.right), `column rule is invisible: ${paint.right}`).toBe(false);
 		// And the card has a surface of its own, so the figures do not sit on the page.

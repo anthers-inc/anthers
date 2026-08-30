@@ -3,7 +3,7 @@
  * The account menu behind the header avatar — that it opens at all.
  *
  * 🚨 **This spec exists because the avatar was inert from the day it shipped.** Its
- * trigger was a bare `<label>` carrying no `tabIndex` and labelling no control, and
+ * trigger was a bare `<label>` carrying no `tabIndex` and labeling no control, and
  * daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none` until the
  * enclosing `.dropdown` matches `:focus-within`. Nothing could ever focus that label, so
  * clicking the avatar did nothing, and Profile, Settings, Subscription, Purchases and

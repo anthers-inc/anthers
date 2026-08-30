@@ -107,7 +107,7 @@ test("Space plays and pauses, and the page never gets the key", async ({ page })
 	 * to be (0px of scroll room in the built preview). It would have passed against a
 	 * player that let Space through, on a page that simply had nowhere to go, and gone on
 	 * passing until somebody read it on a long page. Reading `defaultPrevented` off the
-	 * event tests the behaviour itself and is true or false regardless of page length.
+	 * event tests the behavior itself and is true or false regardless of page length.
 	 */
 	const pressAndWatch = async () => {
 		// Arm first, press second, read third. An `evaluate` that *returns* a promise

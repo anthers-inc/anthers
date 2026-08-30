@@ -880,7 +880,7 @@ const authRoutes = new Hono()
 		return c.json({ success: true });
 	})
 
-	// ── Desktop Enrolment ────────────────────────────────────────────────────
+	// ── Desktop Enrollment ────────────────────────────────────────────────────
 	// The desktop Studio never sees a password. It opens the authorize page in the
 	// SYSTEM browser, where the creator already holds a cookie session, and one
 	// confirm click mints an independently revocable desktop token. PKCE binds the

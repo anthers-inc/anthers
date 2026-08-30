@@ -13,7 +13,7 @@
  *
  * ⚠️ **The absence of a route is not the only way to get this wrong.** A path that resolves
  * but ignores the query is the same failure one step quieter — the page renders, the creator
- * sees no acknowledgement that anything happened, and nothing anywhere errors. So each entry
+ * sees no acknowledgment that anything happened, and nothing anywhere errors. So each entry
  * below names both the page and the parameter that page reads, and the e2e guard asserts the
  * thing the parameter produces rather than only that the URL resolves.
  *

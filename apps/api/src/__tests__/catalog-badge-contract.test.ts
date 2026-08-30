@@ -19,7 +19,7 @@
  *
  * That is deliberately NOT a restatement of `accessState`'s code. It is a claim about
  * `resolveAccessSync`, exhaustive over the access tables a creator can actually build, and
- * it fails the moment the resolver stops honouring it — which is the moment the Studio
+ * it fails the moment the resolver stops honoring it — which is the moment the Studio
  * badge would start lying about what readers can open.
  *
  * Verified by sabotage before being committed, and the numbers are measured, not guessed:

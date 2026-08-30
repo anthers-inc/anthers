@@ -13,7 +13,7 @@
  *    so the confirmation screen states real counts from this account, not a generic
  *    warning nobody reads.
  * 2. **An "oops" window.** `DELETION_GRACE_DAYS` between the request and the wipe, so
- *    a change of mind is recoverable. Cancelling clears one column.
+ *    a change of mind is recoverable. Canceling clears one column.
  * 3. **No hoarding.** The delay is a grace period, **not an archive**. Nothing may
  *    start retaining data *because* a deletion is pending, nothing extends the window,
  *    and when it elapses the wipe runs.
@@ -194,13 +194,13 @@ export async function requestDeletion(userId: number): Promise<{ scheduledFor: s
 }
 
 /** Change of mind. Clearing the column is the whole of it. */
-export async function cancelDeletion(userId: number): Promise<{ cancelled: boolean }> {
+export async function cancelDeletion(userId: number): Promise<{ canceled: boolean }> {
 	const rows = await db
 		.update(users)
 		.set({ deletionRequestedAt: null })
 		.where(and(eq(users.id, userId), isNotNull(users.deletionRequestedAt)))
 		.returning({ id: users.id });
-	return { cancelled: rows.length > 0 };
+	return { canceled: rows.length > 0 };
 }
 
 /**
@@ -219,7 +219,7 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 	// hold is a federal crime under § 1519 — so the collision between this function and
 	// that obligation is not a policy question, it is this `if`.
 	//
-	// **Deferred rather than cancelled.** `deletionRequestedAt` is deliberately left
+	// **Deferred rather than canceled.** `deletionRequestedAt` is deliberately left
 	// alone, so the daily sweep re-selects this account and erases it the day the hold
 	// lifts. A user who asked to be forgotten is still owed that; what they are not
 	// owed is destruction of evidence in the meantime, and the privacy policy has to

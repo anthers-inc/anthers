@@ -10,7 +10,7 @@
  * So it reads `/api/content/library`: purchases, which land here automatically and
  * permanently, alongside anything free the user chose to **save**.
  *
- * Two behaviours worth knowing before changing anything here:
+ * Two behaviors worth knowing before changing anything here:
  *
  *   🚨 **A purchase can be hidden, never removed.** Somebody who tidies a purchase off
  *      their shelf and can't work out how to get it back has effectively lost the thing
@@ -122,7 +122,7 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 			<div className="card-body gap-1 p-4">
 				<h2 className="card-title text-sm">{title}</h2>
 				<div className="flex flex-wrap items-center gap-1.5">
-					{/* A word, not only a colour: "Purchased" is what makes the permanence
+					{/* A word, not only a color: "Purchased" is what makes the permanence
 					    rule legible when the remove control refuses. */}
 					{item.purchased && <span className="badge badge-sm badge-soft">Purchased</span>}
 					{item.kind === "project" && <span className="badge badge-sm badge-ghost">Album</span>}

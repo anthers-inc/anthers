@@ -293,7 +293,7 @@ export const FAQ_ITEMS = {
 			<div className="space-y-2">
 				<p>
 					Yes, at two levels. Every Work carries a rating. Most is <strong>General</strong> and
-					carries no restriction at all; <strong>Mature</strong> is labelled and blurred behind a
+					carries no restriction at all; <strong>Mature</strong> is labeled and blurred behind a
 					click for everybody by default, and can be hidden outright; <strong>Adult</strong> is
 					invisible — not merely locked — unless an account has both asked for it and passed a
 					one-off check that an adult holds the account.

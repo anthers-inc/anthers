@@ -11,7 +11,7 @@
  * 🚨 Unlike the other legal pages, this one does NOT use `effectiveDate: null`
  * for a "not yet in force" banner. A statutory agent designation is either
  * registered or it isn't — there is no "pending" state, because the § 512
- * safe harbour does not apply until the registration is on file. So the page
+ * safe harbor does not apply until the registration is on file. So the page
  * gates on `DMCA_AGENT_REGISTERED`: when the agent is registered, the details
  * render; when not, the page says "we are in the process of designating our
  * DMCA agent" and the rest of the page (how to file, how to counter-file, the
@@ -225,7 +225,7 @@ export default function CopyrightPage() {
 					<div className="alert alert-warning">
 						<p>
 							We are in the process of designating our DMCA agent. Until the registration is on file
-							with the U.S. Copyright Office, the § 512 safe harbour does not apply to Anthers. If
+							with the U.S. Copyright Office, the § 512 safe harbor does not apply to Anthers. If
 							you need to report copyright infringement, please contact us at{" "}
 							<a className="link link-primary" href="mailto:contact@anthers.org">
 								contact@anthers.org

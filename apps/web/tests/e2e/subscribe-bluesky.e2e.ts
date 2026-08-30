@@ -96,7 +96,7 @@ test.describe("signing up with Bluesky", () => {
 		// A button wired to nothing looks identical to one wired to something until you
 		// press it — which is how the sign-in half of this shipped unreachable. Intercepting
 		// is what lets the assertion be about the REQUEST rather than about a modal opening:
-		// the handoff is the behaviour, and everything past it is somebody else's website.
+		// the handoff is the behavior, and everything past it is somebody else's website.
 		let payload: unknown = null;
 		const order: string[] = [];
 		await page.route("**/api/auth/signup/begin", async (route) => {
@@ -116,7 +116,7 @@ test.describe("signing up with Bluesky", () => {
 		});
 
 		// ⚠️ Typed WITH the leading `@`, because that is how people write a handle and it is
-		// not part of one. Stripping it is a real behaviour and this is the only test of it.
+		// not part of one. Stripping it is a real behavior and this is the only test of it.
 		await topSignup(page).getByLabel("Bluesky handle").fill("@alice.bsky.social");
 		await topSignup(page)
 			.getByRole("button", { name: /sign up with bluesky/i })

@@ -80,7 +80,7 @@ describe("the configuration is required, not guessed", () => {
 		}
 	});
 
-	it("no longer honours the SPACES_* names at all", () => {
+	it("no longer honors the SPACES_* names at all", () => {
 		// The fallback existed because a live Spaces deployment would have failed every
 		// upload on empty credentials during a rename. That deployment is deleted, so an
 		// environment carrying only the old names is now a misconfiguration and says so.

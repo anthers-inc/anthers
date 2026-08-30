@@ -7,7 +7,7 @@
  *    the at-cost Payments line. Users who also direct support at creators leave more for
  *    the mission, because the fixed card fee is charged once on the whole batched
  *    monthly charge. Free accounts (giving $0) contribute nothing — their
- *    `FREE_TIME_POOL` is subsidised. The remainder is the shock absorber: Time Pool
+ *    `FREE_TIME_POOL` is subsidized. The remainder is the shock absorber: Time Pool
  *    is a fixed share and never moves against it, so cost swings land here, never on
  *    creator pay.
  *
@@ -126,7 +126,7 @@ async function settleAccount(
 
 	// Directed creator support this cycle. Needed BEFORE the remainder inflow, because
 	// the at-cost card fee is charged on the whole batched monthly charge and split
-	// pro-rata — so directed support amortises the fixed $0.30 and leaves a fatter
+	// pro-rata — so directed support amortizes the fixed $0.30 and leaves a fatter
 	// remainder. Anthers takes no cut of these; they are recorded, not an inflow.
 	const [dir] = await db
 		.select({ total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)` })

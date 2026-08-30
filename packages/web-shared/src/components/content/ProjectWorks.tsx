@@ -2,7 +2,7 @@
 /**
  * The Works on a Project's shelf, as an ordered, reorderable list.
  *
- * Deliberately NOT modelled on `PostWorkLinks`, which looks like the same component and
+ * Deliberately NOT modeled on `PostWorkLinks`, which looks like the same component and
  * isn't. That one holds form state and saves with the post; membership here has its own
  * endpoints and **persists immediately**, the way the builds section of `WorkEditor` does.
  * The reason is the Project form: a creator adding twelve tracks should not lose them to a

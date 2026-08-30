@@ -8,7 +8,7 @@
  * not less rated, a Work past a daily limit is not less free, and a censored word was never
  * part of any classification. What changes is what reaches one account. Encoding any of it as
  * a property of the content would stratify the commons in exactly the way retiring Anthers
- * Gates was for — and it would leak one household's settings into everybody's catalogue.
+ * Gates was for — and it would leak one household's settings into everybody's catalog.
  *
  * **Four of the five controls are one shape.** A creator rule and a media-type rule are the
  * same rule with a different key; a whole-app limit is the same limit with no key at all. So

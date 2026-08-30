@@ -369,7 +369,7 @@ export default function CompareItchPage() {
 					<Reveal delay={110}>
 						<PortabilityPoint icon={<LockOpenIcon className="h-6 w-6" />} title="Open source">
 							The whole platform is AGPL-3.0. Hosting with us is meant to be a convenience rather
-							than a requirement — and a licence is a harder promise to walk back than a policy.
+							than a requirement — and a license is a harder promise to walk back than a policy.
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={220}>

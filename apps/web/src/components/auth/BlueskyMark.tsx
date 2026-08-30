@@ -11,16 +11,16 @@
  *
  * ⚠️ It is somebody else's mark, not ours, so it does not belong in `@anthers/brand`. That
  * package is the Anthers asset set and its licensing story is about Noun Project assets we
- * hold a licence for; this is a third-party trademark used to name a third-party service.
+ * hold a license for; this is a third-party trademark used to name a third-party service.
  *
- * ── 🚨 The colour is not ours to choose ──────────────────────────────────────────────
+ * ── 🚨 The color is not ours to choose ──────────────────────────────────────────────
  *
  * Bluesky's brand guidance (https://bsky.social/about/support/branding) permits exactly
- * three colours for the butterfly — their blue `#0560FF`, black, and white — and says in
+ * three colors for the butterfly — their blue `#0560FF`, black, and white — and says in
  * as many words: **"do not substitute, tint, or approximate."**
  *
  * This component drew with `fill-current` until 2026-08-23, which meant it took whichever
- * colour its container happened to set. In practice that was `--color-base-content`, a
+ * color its container happened to set. In practice that was `--color-base-content`, a
  * dark green in the light theme and a warm off-white in the dark one, and inside a
  * `btn-primary` it was `--color-primary-content`, which is *dark green* under the dark
  * theme. Every one of those is an approximation of their mark in our palette, which is
@@ -30,7 +30,7 @@
  * So the default is now `--bluesky-mark`, a theme token defined in `theme.css` that holds
  * their blue in the light theme and white in the dark one — the two variants their
  * guidance names for light and dark backgrounds. **Reach for `variant` only when the
- * surface makes the token wrong** (a mark sitting on a coloured button rather than on the
+ * surface makes the token wrong** (a mark sitting on a colored button rather than on the
  * base), and pick from the three approved values rather than inventing a fourth.
  *
  * Two other rules worth knowing before you use this elsewhere, because they are easy to
@@ -39,7 +39,7 @@
  * composed element. Sitting beside our own chrome is fine; being merged into it is not.
  */
 
-/** The three colours Bluesky's guidance allows, plus the theme-aware default. */
+/** The three colors Bluesky's guidance allows, plus the theme-aware default. */
 type MarkVariant = "auto" | "brand" | "black" | "white";
 
 const FILL: Record<MarkVariant, string> = {

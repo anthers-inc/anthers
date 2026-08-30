@@ -62,7 +62,7 @@ async function offendingFiles() {
 	return hits.sort();
 }
 
-describe("API origin resolution is centralised", () => {
+describe("API origin resolution is centralized", () => {
 	it("has no hand-rolled API base outside rpc.ts", async () => {
 		// Failure message is the fix: route the call through `apiFetch` from
 		// `@anthers/web-shared/rpc`, which resolves the origin per request and carries

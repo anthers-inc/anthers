@@ -477,7 +477,7 @@ describe("buyer refunds are released at finality, never at removal", () => {
 		const noticeId = await takedown(workId);
 
 		// Constructed directly, because no app path produces it: `restoreWork` always
-		// moves the notice too, so the `not_taken_down` branch is defence in depth
+		// moves the notice too, so the `not_taken_down` branch is defense in depth
 		// against a future writer of `takedown_status` that forgets the notice. It is
 		// tested rather than trusted for exactly that reason — an unreachable guard
 		// nobody has exercised is a guard nobody knows works.

@@ -59,7 +59,7 @@ describe("what may be published at all", () => {
 		expect(workToRecord(work, { baseUrl: BASE })).toBeNull();
 	});
 
-	it("fails closed on a visibility value it does not recognise", () => {
+	it("fails closed on a visibility value it does not recognize", () => {
 		// A record, once public, cannot be recalled by deleting it — the firehose already
 		// carried it — so an unknown state must not default to publishable.
 		expect(unpublishableReason(openWork({ visibility: "some_future_state" }))).toBe("not_released");
@@ -180,7 +180,7 @@ describe("what the record must never carry", () => {
 		// ⚠️ Asserted against the Lexicon JSON rather than the generated validator, because
 		// `knownValues` is an OPEN set and so is not a validation constraint — the generated
 		// schema drops it, which is exactly why adding a medium later is not a breaking
-		// change. The JSON is the artefact that gets published, so the JSON is what to check.
+		// change. The JSON is the artifact that gets published, so the JSON is what to check.
 		// ⚠️ Resolved from this file rather than from the cwd. Both paths are repo-root
 		// relative, so they read fine under `bun test` from the root and threw ENOENT under
 		// `bun run --filter '*' test`, where the cwd is `apps/api` — which is what CI and

@@ -48,7 +48,7 @@ function clientFor(config: StorageConfig): S3Client {
 		// ⚠️ Kept unconditionally rather than made provider-specific. It is the conservative
 		// setting everywhere — it only ever *omits* optional checksums — so a provider that
 		// would accept the trailers loses nothing, while flipping it per-provider would be a
-		// behaviour change to Spaces made on the way past.
+		// behavior change to Spaces made on the way past.
 		requestChecksumCalculation: "WHEN_REQUIRED",
 		responseChecksumValidation: "WHEN_REQUIRED",
 	});
@@ -102,7 +102,7 @@ export class S3StorageService implements StorageService {
 		// call site that forgot the argument published its object, and that is the
 		// mechanism by which gated HLS playlists ended up world-readable. Every call
 		// site passes explicitly today, so this default is a backstop rather than a
-		// behaviour: the point is that the next one to forget gets a locked object
+		// behavior: the point is that the next one to forget gets a locked object
 		// and a bug report, not a silent leak.
 		acl: "public" | "private" = "private",
 	): Promise<string> {

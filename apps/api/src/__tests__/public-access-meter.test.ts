@@ -10,7 +10,7 @@
  *   - that the meter actually **withholds bytes**, at the endpoints that serve them,
  *     rather than merely reporting a smaller number somewhere;
  *   - that it withholds them for **Public Access only** — gated work the viewer cleared,
- *     work they bought and their own catalogue must never draw the allowance;
+ *     work they bought and their own catalog must never draw the allowance;
  *   - that the `public_access` flag is **stamped at write time** from the access the
  *     viewer actually had, so re-gating a Work later cannot retroactively bill someone.
  *
@@ -314,7 +314,7 @@ describe("what the meter must NOT charge for", () => {
 		expect((await playlist(boughtWorkId, viewerCookie)).status).not.toBe(402);
 	});
 
-	it("a creator's own catalogue draws no allowance", async () => {
+	it("a creator's own catalog draws no allowance", async () => {
 		// The creator is over any limit by construction — they have an account that gives
 		// nothing — and `owner` access is not free access.
 		await setSupport(creatorId, 0);

@@ -6,7 +6,7 @@
  * detour is an interruption, and losing the thing they wanted at the end of it is the
  * failure this exists to prevent. `/login` has read a `?next=` for a long time; the
  * signup path lost its equivalent on 2026-08-17 when the Create Account card — which
- * honoured `location.state.from` — was deleted, so the destination now travels as a
+ * honored `location.state.from` — was deleted, so the destination now travels as a
  * query parameter through `/subscribe` → `/welcome` instead.
  *
  * 🚨 **A redirect target that arrives from the URL is attacker-controlled, and that is
@@ -21,7 +21,7 @@
  *     React Router's `navigate()` would treat both as relative paths rather than
  *     actually leaving the site, but that is a property of today's router, not a
  *     decision — and `window.location.assign` is one refactor away.
- *   • **No backslashes**, which several browsers normalise to `/` — so `/\evil.example`
+ *   • **No backslashes**, which several browsers normalize to `/` — so `/\evil.example`
  *     reaches the same place `//evil.example` does while passing a naive `//` check.
  *   • **No control characters**, including the ones a `\n` in an encoded parameter can
  *     smuggle in.

@@ -26,27 +26,27 @@ export default function SharedWorkPage() {
 			setFailed(true);
 			return;
 		}
-		let cancelled = false;
+		let canceled = false;
 		(async () => {
 			try {
 				const res = await client.api.content.share[":token"].$get({ param: { token } });
 				if (!res.ok) {
-					if (!cancelled) setFailed(true);
+					if (!canceled) setFailed(true);
 					return;
 				}
 				const link = (await res.json()) as { slug: string; publicId: number };
-				if (cancelled) return;
+				if (canceled) return;
 				// `replace`, so Back returns the recipient to wherever the link was posted rather
 				// than to this redirect, which they never meant to visit.
 				navigate(`/works/${link.slug}-${link.publicId}?share=${encodeURIComponent(token)}`, {
 					replace: true,
 				});
 			} catch {
-				if (!cancelled) setFailed(true);
+				if (!canceled) setFailed(true);
 			}
 		})();
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, [token, navigate]);
 

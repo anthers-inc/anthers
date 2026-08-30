@@ -18,14 +18,14 @@ If you would rather report privately through GitHub, [open a draft security advi
 
 Anthers is run by one person right now, so we will not pretend to a pager rotation we do not have. What we commit to:
 
-- **An acknowledgement within 3 business days**, from a human.
+- **An acknowledgment within 3 business days**, from a human.
 - **An assessment within 10 business days** — whether we agree it is a vulnerability, how severe we think it is, and what we intend to do.
 - **Credit in the fix**, by whatever name you like, unless you would rather stay anonymous.
 - **Telling you when it is fixed**, and telling you honestly if we decide not to fix it and why.
 
 If you do not hear back within 3 business days, assume the mail went astray and send it again — that is a failure on our end, not a signal to escalate publicly.
 
-## Safe harbour
+## Safe harbor
 
 We will not pursue or support legal action against anyone who makes a good-faith effort to follow this policy. Good faith means:
 

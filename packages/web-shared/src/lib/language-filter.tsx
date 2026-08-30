@@ -40,19 +40,19 @@ export function LanguageFilterProvider({ children }: { children: ReactNode }) {
 	const [on, setOn] = useState(false);
 
 	useEffect(() => {
-		let cancelled = false;
+		let canceled = false;
 		(async () => {
 			try {
 				const res = await apiFetch("/api/accounts/me/parental-controls");
 				if (!res.ok) return;
 				const policy = (await res.json()) as { enabled?: boolean; languageFilter?: boolean };
-				if (!cancelled) setOn(Boolean(policy.enabled && policy.languageFilter));
+				if (!canceled) setOn(Boolean(policy.enabled && policy.languageFilter));
 			} catch {
 				/* off, which is the default */
 			}
 		})();
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, []);
 

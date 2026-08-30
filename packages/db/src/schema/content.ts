@@ -146,7 +146,7 @@ export const works = pgTable(
 		// what someone wrote. Only audio Works display them.
 		lyrics: text("lyrics").default(""),
 		// Browser-encode transport (metadata.clientVariants) + physical/service product
-		// details. Full variant/SKU modelling lands when merch/fulfillment is real; for now
+		// details. Full variant/SKU modeling lands when merch/fulfillment is real; for now
 		// downloadable variants (game/software builds) live in `assets`.
 		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
 
@@ -663,7 +663,7 @@ export const comments = pgTable(
  * free unlock button, which is the worst defect this platform could ship. Entitlement
  * lives in `purchases` and only there.
  *
- * The consequence, which is correct and needs a real behaviour rather than a fix: **a free
+ * The consequence, which is correct and needs a real behavior rather than a fix: **a free
  * Work you saved can later be gated by its creator.** It stays on your shelf and becomes
  * unplayable, exactly as a gated track sits in a queue — see `lib/music-queue.ts`, which
  * arrived at the same rule from the other direction.

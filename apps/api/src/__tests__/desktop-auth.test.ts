@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Desktop auth — the bearer transport and the browser-handoff enrolment that mints it.
+ * Desktop auth — the bearer transport and the browser-handoff enrollment that mints it.
  *
  * These are the three things a packaged Tauri window breaks (42.06 § Desktop auth):
  * the session cookie is never sent from `tauri://localhost`, every mutation 403s on
@@ -55,8 +55,8 @@ async function signUp(username: string) {
 	return res.headers.get("Set-Cookie")!.split(";")[0];
 }
 
-/** Run the whole browser-handoff enrolment, returning the minted desktop token. */
-async function enrol(cookie: string, label: string) {
+/** Run the whole browser-handoff enrollment, returning the minted desktop token. */
+async function enroll(cookie: string, label: string) {
 	const verifier = hex();
 	const challenge = await pkceChallenge(verifier);
 
@@ -94,10 +94,10 @@ describe("Desktop auth", () => {
 		cookie = await signUp(userName);
 	}, DB_SETUP_TIMEOUT);
 
-	// ── Enrolment ────────────────────────────────────────────────────────────
+	// ── Enrollment ────────────────────────────────────────────────────────────
 
 	it("mints a desktop token through the browser handoff", async () => {
-		const { token, user } = await enrol(cookie, "test-thinkpad");
+		const { token, user } = await enroll(cookie, "test-thinkpad");
 		expect(token).toMatch(/^[0-9a-f]{64}$/);
 		expect(user.username).toBe(userName);
 	});
@@ -119,10 +119,10 @@ describe("Desktop auth", () => {
 		expect(unknown.status).toBe(404);
 	});
 
-	it("lets the app open and redeem an enrolment with NO Origin header at all", async () => {
+	it("lets the app open and redeem an enrollment with NO Origin header at all", async () => {
 		// Regression guard. Both endpoints are called BY the packaged app, which has no
 		// allowed Origin (`tauri://localhost`) and no session yet — so if they are not
-		// CSRF-exempt, enrolment 403s and the desktop app can never sign in. This was
+		// CSRF-exempt, enrollment 403s and the desktop app can never sign in. This was
 		// missed once because the tests sent an Origin the real client cannot send.
 		const verifier = hex();
 		const challenge = await pkceChallenge(verifier);
@@ -224,7 +224,7 @@ describe("Desktop auth", () => {
 	});
 
 	it("rejects a code replayed after a successful exchange", async () => {
-		const { code, verifier } = await enrol(cookie, "replay-test");
+		const { code, verifier } = await enroll(cookie, "replay-test");
 		const replay = await req("/api/auth/desktop/exchange", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -236,14 +236,14 @@ describe("Desktop auth", () => {
 	// ── Bearer transport ─────────────────────────────────────────────────────
 
 	it("authenticates a GET with no cookie and no Origin", async () => {
-		const { token } = await enrol(cookie, "get-test");
+		const { token } = await enroll(cookie, "get-test");
 		const res = await desktopReq("/api/auth/me", token);
 		expect(res.status).toBe(200);
 		expect((await res.json()).user.username).toBe(userName);
 	});
 
 	it("authenticates a MUTATION with no cookie and no Origin — the CSRF skip", async () => {
-		const { token } = await enrol(cookie, "mutation-test");
+		const { token } = await enroll(cookie, "mutation-test");
 		// Bio update via the accounts route: a plain authenticated PATCH, which under
 		// cookie auth would need an allowed Origin.
 		const res = await desktopReq("/api/accounts/me", token, {
@@ -292,7 +292,7 @@ describe("Desktop auth", () => {
 	// ── Devices list + revocation ────────────────────────────────────────────
 
 	it("lists desktop sessions beside browser ones, flagging the current one", async () => {
-		const { token } = await enrol(cookie, "listed-device");
+		const { token } = await enroll(cookie, "listed-device");
 
 		const res = await desktopReq("/api/auth/sessions", token);
 		expect(res.status).toBe(200);
@@ -308,8 +308,8 @@ describe("Desktop auth", () => {
 	});
 
 	it("revokes a desktop session, killing that token and nothing else", async () => {
-		const doomed = await enrol(cookie, "stolen-laptop");
-		const keeper = await enrol(cookie, "home-desktop");
+		const doomed = await enroll(cookie, "stolen-laptop");
+		const keeper = await enroll(cookie, "home-desktop");
 
 		const list = await desktopReq("/api/auth/sessions", keeper.token);
 		const { sessions } = await list.json();
@@ -335,9 +335,9 @@ describe("Desktop auth", () => {
 		const strangerName = `desk_other_${id}`;
 		await db.execute(sql`DELETE FROM users WHERE username = ${strangerName}`);
 		const strangerCookie = await signUp(strangerName);
-		const stranger = await enrol(strangerCookie, "stranger-device");
+		const stranger = await enroll(strangerCookie, "stranger-device");
 
-		const mine = await enrol(cookie, "victim-device");
+		const mine = await enroll(cookie, "victim-device");
 		const list = await desktopReq("/api/auth/sessions", mine.token);
 		const target = (await list.json()).sessions.find(
 			(s: { label: string }) => s.label === "victim-device",
@@ -354,7 +354,7 @@ describe("Desktop auth", () => {
 	});
 
 	it("signs out the desktop session without touching the browser's", async () => {
-		const { token } = await enrol(cookie, "signout-test");
+		const { token } = await enroll(cookie, "signout-test");
 
 		const out = await desktopReq("/api/auth/sign-out", token, { method: "POST" });
 		expect(out.status).toBe(200);

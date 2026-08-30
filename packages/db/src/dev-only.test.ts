@@ -65,7 +65,7 @@ describe("devCheckoutRoot", () => {
 		expect(devCheckoutRoot(nested)).toBeNull();
 	});
 
-	it("recognises this repository, so `make dev` keeps working", () => {
+	it("recognizes this repository, so `make dev` keeps working", () => {
 		// The positive case with no fixture: if this ever fails, the dev bootstrap has silently
 		// stopped ensuring anybody's login.
 		expect(devCheckoutRoot()).not.toBeNull();
@@ -96,7 +96,7 @@ describe("assertDevCheckout", () => {
  * `assertDevCheckout` or be exempted here **with a reason** — which is a decision somebody
  * makes on purpose rather than a step they can forget.
  *
- * ⚠️ This is a source scan, so it measures the text as much as the behaviour. It is the
+ * ⚠️ This is a source scan, so it measures the text as much as the behavior. It is the
  * cheap half; the injected-directory cases above are the half that exercises the guard.
  */
 const EXEMPT_DB_SCRIPTS: Record<string, string> = {

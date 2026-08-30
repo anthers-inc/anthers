@@ -46,7 +46,7 @@ interface QueueRow {
 	retry: number;
 	active: number;
 	completed: number;
-	cancelled: number;
+	cancelled: number; // lint-spelling: ignore — keys come from pg-boss's own state values
 	failed: number;
 }
 interface Jobs {

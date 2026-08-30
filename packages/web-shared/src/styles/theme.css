@@ -40,7 +40,7 @@
 	--color-error: oklch(57% 0.17 28);
 	--color-error-content: oklch(98.6% 0.012 96);
 
-	/* 🚨 NOT an Anthers token — Bluesky's own brand blue, and the ONE colour their brand
+	/* 🚨 NOT an Anthers token — Bluesky's own brand blue, and the ONE color their brand
 	   guidance permits for the butterfly on a light background. It is deliberately a raw
 	   hex rather than an oklch Meadow value: their guidance says "do not substitute, tint,
 	   or approximate", so this must never be expressed in terms of our palette or nudged
@@ -90,21 +90,21 @@
 	border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
 }
 
-/* 🚨 Placeholders, which rendered at FULL text colour without this — so every empty
+/* 🚨 Placeholders, which rendered at FULL text color without this — so every empty
    field on the site read as a field somebody had already filled in.
 
-   Nothing was styling them. DaisyUI gives `.input` a placeholder colour only in the
+   Nothing was styling them. DaisyUI gives `.input` a placeholder color only in the
    DISABLED state, so an enabled field fell through to Tailwind's preflight default,
    and whatever preflight was contributing did not survive to the screen. Rather than
-   chase which layer swallowed it, this states the colour we want at a specificity
+   chase which layer swallowed it, this states the color we want at a specificity
    nothing here competes with.
 
    ⚠️ `:where()` keeps it at zero specificity on purpose, so DaisyUI's disabled rule
    (20%, dimmer still) keeps winning where it applies.
 
    ⭐ **Verify a change here against pixels, not against the DOM.** `getComputedStyle(el,
-   "::placeholder")` returns the *element's* colour rather than the pseudo-element's, and
-   reading `rule.style.cssText` back through the CSSOM serialises a `color-mix()` down to
+   "::placeholder")` returns the *element's* color rather than the pseudo-element's, and
+   reading `rule.style.cssText` back through the CSSOM serializes a `color-mix()` down to
    its bare base — the `.input` border rule above reads back as a flat
    `var(--color-base-content)` while genuinely computing to `… / 0.1`. Both readbacks will
    tell you this rule is not working when it is. Screenshot an empty field beside a filled

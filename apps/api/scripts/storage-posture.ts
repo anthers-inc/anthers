@@ -211,7 +211,7 @@ const CONTROL_ORIGIN = "https://storage-posture-control.invalid";
 const PRIVATE_PROBE_KEY = "creators/1/videos/originals/posture-probe.mp4";
 const PUBLIC_PROBE_KEY = "creators/1/covers/posture-probe.jpg";
 
-/** The URL the SDK would address an object at, honouring the addressing style in config. */
+/** The URL the SDK would address an object at, honoring the addressing style in config. */
 function s3ObjectUrl(bucketName: string, key: string): string {
 	if (config.forcePathStyle) return `${config.endpoint}/${bucketName}/${key}`;
 	const url = new URL(config.endpoint);
@@ -391,7 +391,7 @@ if (writeProbe && s3 && sdk) {
 	 * DIRECT PutObject with `ACL` set succeeds on R2. Only the presigned path breaks.
 	 */
 	for (const [label, acl] of [
-		["no ACL (the old presign behaviour)", undefined],
+		["no ACL (the old presign behavior)", undefined],
 		["explicit private", "private"],
 	] as const) {
 		const key = `${base}.${acl ?? "none"}.txt`;
@@ -419,7 +419,7 @@ if (writeProbe && s3 && sdk) {
 	}
 
 	// The uncomfortable one: a presigned URL signs only `host`, so the CLIENT picks the
-	// ACL and Spaces honours it over the one the server signed. Only a bucket policy can
+	// ACL and Spaces honors it over the one the server signed. Only a bucket policy can
 	// enforce the posture — this line is here so that stays visible rather than assumed.
 	const key = `${base}.client-override.txt`;
 	const url = await getSignedUrl(

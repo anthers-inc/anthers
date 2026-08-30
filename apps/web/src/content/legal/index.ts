@@ -56,7 +56,7 @@ const PRIVACY: LegalDocument = {
 		"## What we don't collect",
 		"No advertising identifiers. No analytics service. No third-party tracking pixels. No data brokers, in either direction.",
 		"**Anthers loads no fonts, scripts, or embeds from anyone else's servers** — everything the site needs, it serves itself, so that reading, watching or browsing here tells nobody but us that you did. The **one** exception is the payment processor's own software on the pages where you are paying, described below. We would rather name a single exception than write a sentence that is nearly true.",
-		"**We do not build a device fingerprint of you.** We considered it as a defence against fraudulent card disputes and decided against it. The one exception is not ours and we won't pretend otherwise — **Stripe inspects your device and browser on our payment pages** as part of checking that a card is being used by the person entitled to use it. That is confined to the pages where you are paying.",
+		"**We do not build a device fingerprint of you.** We considered it as a defense against fraudulent card disputes and decided against it. The one exception is not ours and we won't pretend otherwise — **Stripe inspects your device and browser on our payment pages** as part of checking that a card is being used by the person entitled to use it. That is confined to the pages where you are paying.",
 
 		"## What creators can see",
 		"Creators receive analytics about their own work: how many people viewed it, total time spent, and trends over time.",
@@ -108,7 +108,7 @@ const PRIVACY: LegalDocument = {
 		"## Young people",
 		"**You have to be 13 or older to have an Anthers account.** We do not knowingly collect information from anyone under 13, and if we learn that we have, we delete it. There is no under-13 account and no plan for one — if we ever build something for younger children, it will be a separate service built for them, not a filtered corner of this one.",
 		"**We don't ask your age, and we don't verify it.** That is deliberate. Verifying age properly means collecting identity documents or dates of birth from everyone, and we are not willing to hold that about you in order to check a fact about a few. It means someone under 13 could sign up by not telling us — we would rather say that plainly than claim a protection we don't have.",
-		"**Content made for young audiences is free, and funded by us**, never advertising and never engagement-optimised. There is no advertising anywhere on Anthers and no mechanism anywhere that profits from anyone's attention, at any age.",
+		"**Content made for young audiences is free, and funded by us**, never advertising and never engagement-optimized. There is no advertising anywhere on Anthers and no mechanism anywhere that profits from anyone's attention, at any age.",
 		"Some things about this service are worth a parent knowing, and they're set out in plain language on our [page for parents and guardians](/parents) rather than buried here.",
 
 		"## Security",
@@ -135,7 +135,7 @@ const TERMS: LegalDocument = {
 		"## What you can expect from us",
 		"Anthers is a nonprofit. **We take no cut of what you give creators** — the only deduction on monthly support or a purchase is the card processing that the payment network charges, which goes to the processor and not to us.",
 		"We'll keep the platform running as well as we reasonably can, and we'll tell you before we make a change that materially affects your rights.",
-		"**We won't sell your data, show you advertising, or optimise anything here to consume more of your attention.**",
+		"**We won't sell your data, show you advertising, or optimize anything here to consume more of your attention.**",
 
 		"## What we expect from you",
 		"Don't post things that are illegal, that harass or threaten people, that sexualise minors in any way, or that you don't have the right to post. Don't try to break, overload, or get around the access controls on other people's work.",
@@ -145,7 +145,7 @@ const TERMS: LegalDocument = {
 		"Don't post work you don't have the rights to. If you do, the person who owns it can ask us to take it down, and we will.",
 		"**If you own a copyright and someone here is infringing it**, our [copyright page](/copyright) has our designated agent's details and how to file a formal notice. A report through the ordinary reporting button is **not** a copyright notice and can't be treated as one — copyright ownership is a claim about the world, made under penalty of perjury, with legal requirements we can't meet on your behalf. If you file a report that turns out to be a copyright claim, we'll tell you and point you at the right path rather than acting on the report.",
 		"**We end the accounts of users who repeatedly infringe copyright, in appropriate circumstances.** That's a condition of the legal protection that lets us host anyone's work at all, and this is where we tell you about it.",
-		"- **A person decides, every time.** There's no automatic strike counter. A notice is not a finding, and an automatic counter turns a bad-faith notice into an instant penalty — which is what makes copyright takedown a weapon on other platforms.\n- **We publish no number.** A stated threshold invites gaming from both directions, and the law asks for none. What counts as “appropriate circumstances” is a judgement about a pattern: how many notices, whether they were valid, whether they were answered, and whether anything changed.\n- **You can ask, and you can appeal.** The decision is recorded, so *“why?”* has an answer.\n- **A notice you successfully answer isn't held against you.** If you file a counter-notice and the work comes back, none of it counts toward anything.",
+		"- **A person decides, every time.** There's no automatic strike counter. A notice is not a finding, and an automatic counter turns a bad-faith notice into an instant penalty — which is what makes copyright takedown a weapon on other platforms.\n- **We publish no number.** A stated threshold invites gaming from both directions, and the law asks for none. What counts as “appropriate circumstances” is a judgment about a pattern: how many notices, whether they were valid, whether they were answered, and whether anything changed.\n- **You can ask, and you can appeal.** The decision is recorded, so *“why?”* has an answer.\n- **A notice you successfully answer isn't held against you.** If you file a counter-notice and the work comes back, none of it counts toward anything.",
 		"We publish counts of what this process has actually done — notices received, acted on, rejected, answered, restored — on the [copyright page](/copyright). We don't publish the notices themselves, because that would publish the sender's home address and identify the creator they named.",
 
 		"## Blocking and reporting",
@@ -168,7 +168,7 @@ const TERMS: LegalDocument = {
 
 		"## If you bought something and it goes away",
 		"If a creator removes a Work you paid for, **you keep it.** It leaves public circulation and stays available to you. If a creator closes their account entirely, we email you so you can download a copy you keep.",
-		"There are narrow cases where a creator can have work taken down immediately — a lost licence, a legal order, a safety reason — and in those cases you're refunded.",
+		"There are narrow cases where a creator can have work taken down immediately — a lost license, a legal order, a safety reason — and in those cases you're refunded.",
 		"**A copyright takedown is the other exception, and the only case where somebody outside the sale can end it.** If a copyright owner files a valid notice against a work you bought, we have to remove it — and unlike ordinary removal, that means removing it from your library too, not just from public view. Continuing to deliver work we've been told infringes would be continuing to infringe, so it isn't a promise we're able to keep. **We refund you in full**, and it never counts against your refund limit — it wasn't your decision.",
 		"The refund comes when the removal is **final**, not the moment it happens: the creator has ten business days to answer the notice, and a work that comes back was never a sale that should have been undone. If they do answer and it's restored, it goes back on sale rather than back into your library — your money has already come back to you. The whole process is on our [copyright page](/copyright).",
 
@@ -210,7 +210,7 @@ const CREATOR_TERMS: LegalDocument = {
 
 		"## If you remove work someone bought",
 		"**People who paid for something keep it.** If you delete a Work that has buyers, it's withdrawn rather than destroyed — it leaves public circulation and stays in their library. We email them so they can download a copy.",
-		"If you need something gone *immediately* — a lost licence, a safety reason, a legal order — that's a takedown request, handled quickly and separately, and buyers are refunded.",
+		"If you need something gone *immediately* — a lost license, a safety reason, a legal order — that's a takedown request, handled quickly and separately, and buyers are refunded.",
 		"If you close your account, the same applies to everything you've sold.",
 
 		"## When somebody else asks for your work to come down",

@@ -62,7 +62,7 @@ export interface MediaFixtureWork {
  * One video and four audio tracks. Four rather than one because the music work needs a
  * queue with somewhere to advance *to* — a single-track album cannot tell a "next" that
  * works from a "next" that silently does nothing — and because **track 3 is gated**, which
- * is what makes the skip-over-locked behaviour observable at all.
+ * is what makes the skip-over-locked behavior observable at all.
  *
  * The gated one is in the MIDDLE on purpose: at the end it would be indistinguishable from
  * the queue simply running out.

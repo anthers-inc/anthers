@@ -118,25 +118,25 @@ export async function desktopSignOut(): Promise<void> {
  */
 export function onAuthCode(handler: (code: string) => void): () => void {
 	let unlisten: (() => void) | null = null;
-	let cancelled = false;
+	let canceled = false;
 
 	import("@tauri-apps/api/event")
 		.then(({ listen }) => listen<string>("desktop-auth-code", (e) => handler(e.payload)))
 		.then((off) => {
 			// Unsubscribed before the listener finished registering — tear it straight down.
-			if (cancelled) off();
+			if (canceled) off();
 			else unlisten = off;
 		})
 		.catch(() => {});
 
 	return () => {
-		cancelled = true;
+		canceled = true;
 		unlisten?.();
 	};
 }
 
 /**
- * A human-recognisable name for this machine, used as the device label in the Devices
+ * A human-recognizable name for this machine, used as the device label in the Devices
  * list. The webview cannot read a hostname, so this is the best honest approximation —
  * the creator sees it on the authorize page before approving, which is what matters.
  */

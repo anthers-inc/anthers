@@ -251,7 +251,7 @@ describe("project browse filters", () => {
 		expect(await asViewer("pricing=gated&show_locked=true")).toEqual([mine.get("text")!]);
 	});
 
-	it("still honours the filters that already worked", async () => {
+	it("still honors the filters that already worked", async () => {
 		expect(await listSlugs(`search=Filt audio ${id}`)).toEqual([mine.get("audio")!]);
 		expect((await listSlugs(`creator=${creatorName}`)).sort()).toEqual([...mine.values()].sort());
 	});

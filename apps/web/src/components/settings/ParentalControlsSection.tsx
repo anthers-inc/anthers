@@ -14,7 +14,7 @@
  * will set the wrong thing.
  *
  * 📌 **The time limits say "watching, reading and playing", never "screen time".** Anthers
- * measures time spent consuming Works and nothing else — browsing a catalogue writes no event
+ * measures time spent consuming Works and nothing else — browsing a catalog writes no event
  * and cannot honestly be counted — so calling it screen time would promise a measurement that
  * does not exist, and a guardian would discover the gap by watching a child sit on the site
  * all evening with the limit untouched.

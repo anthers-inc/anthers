@@ -87,13 +87,13 @@ function CheckoutForm({
 	// button render from the quote or not at all, and a quote we could not get is a
 	// disabled button rather than a number we guessed.
 	useEffect(() => {
-		let cancelled = false;
+		let canceled = false;
 		setQuote(null);
 		setQuoteFailed(false);
 		client.api.payments.quote[":slug"]
 			.$get({ param: { slug } })
 			.then(async (res) => {
-				if (cancelled) return;
+				if (canceled) return;
 				if (!res.ok) {
 					setQuoteFailed(true);
 					return;
@@ -101,10 +101,10 @@ function CheckoutForm({
 				setQuote((await res.json()) as Quote);
 			})
 			.catch(() => {
-				if (!cancelled) setQuoteFailed(true);
+				if (!canceled) setQuoteFailed(true);
 			});
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, [slug]);
 

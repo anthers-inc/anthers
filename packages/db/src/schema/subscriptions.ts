@@ -169,7 +169,7 @@ export const accountCycles = pgTable(
 // accounting. Classified `both` because neither half is decorative — the node needs
 // to know a Work earned minutes, the org needs to distribute them. This is the finding
 // to carry to 41.02: the boundary runs through the middle of this table, not between
-// it and its neighbours.
+// it and its neighbors.
 export const attentionEvents = pgTable(
 	"attention_events",
 	{
@@ -206,14 +206,14 @@ export const attentionEvents = pgTable(
 		 * Access meter (`services/public-access.ts`) spends a viewer's monthly allowance
 		 * against it, and `distribute-pool` pays the Time Pool against it — because
 		 * distributor-pays says the pool buys the commons and nothing else. Gated work the
-		 * viewer cleared, work they bought, and their own catalogue are all `false` here
+		 * viewer cleared, work they bought, and their own catalog are all `false` here
 		 * and earn nothing from the pool; whoever cleared the gate or made the purchase
 		 * already paid that creator in full, and paying again would dilute exactly the
 		 * Public Access creators the pool exists for.
 		 *
 		 * ⚠️ **"Never re-derived" is not "never filtered", and reading it the second way is
 		 * what caused the bug.** `distribute-pool` summed every row until 2026-08-26,
-		 * having taken this note as licence to ignore the stamp rather than as an
+		 * having taken this note as license to ignore the stamp rather than as an
 		 * instruction not to recompute it. Filtering on the recorded value is the discipline
 		 * working; joining back to `works` at distribution time is the thing forbidden.
 		 */
@@ -307,7 +307,7 @@ export const attentionDaily = pgTable(
 	(table) => [
 		// The prune job upserts on this key, so re-running it over a day it already
 		// rolled up updates rather than duplicates — which matters because the job
-		// deletes the rows it summarised, and a crash between the two halves has to be
+		// deletes the rows it summarized, and a crash between the two halves has to be
 		// safe to retry.
 		//
 		// `COALESCE(work_id, -1)` rather than the bare column, and that is load-bearing.
@@ -456,7 +456,7 @@ export const creatorGates = pgTable(
  * ⚠️ **Nothing here is a fact about content, and the shapes are chosen to keep it that way.**
  * The lists hold creator ids and Work types — the viewer's opinions about them — and no rating,
  * note or access row is touched. A guardian's settings must never leak into anybody else's
- * catalogue, which they cannot do from here.
+ * catalog, which they cannot do from here.
  *
  * See `@anthers/shared/parental-controls` for the policy the rows are read against; this table
  * stores it and decides nothing.
@@ -490,7 +490,7 @@ export const parentalControls = pgTable("parental_controls", {
 	 * Whole-app consumption caps, in seconds. Null is uncapped.
 	 *
 	 * ⚠️ **These bound time spent CONSUMING Works, which is the only time Anthers measures.**
-	 * Browsing a catalogue is not counted and cannot honestly be — there is no event for it —
+	 * Browsing a catalog is not counted and cannot honestly be — there is no event for it —
 	 * so the panel says "time watching, reading and playing" rather than "time in the app".
 	 * Naming it screen time would promise a measurement that does not exist.
 	 */

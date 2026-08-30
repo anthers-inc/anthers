@@ -43,7 +43,7 @@ export function cardFee(amount: Decimal | number): Decimal {
  * gives Anthers and what they give creators, pro-rata by dollar value.
  *
  * The fixed $0.30 is per *charge*, not per recipient, so a user supporting creators
- * alongside Anthers amortises it across a bigger charge — which leaves a fatter
+ * alongside Anthers amortizes it across a bigger charge — which leaves a fatter
  * remainder AND pays their creators more. That effect is the whole reason everything a
  * user gives batches onto one monthly transaction, and since 2026-08-16 it is also the
  * whole of the argument the retired $3 unit used to carry: the fee is paid once a month
@@ -79,7 +79,7 @@ export function paymentsSplit(
  * is this side's share of the at-cost card fee (see `paymentsSplit`); the
  * **remainder is what's left** — the shock absorber, so an expensive charge shrinks
  * the mission share while creator pay stays exactly the same. Free (n = 0) pays $0:
- * its small Time Pool is subsidised, and it funds no charitable remainder.
+ * its small Time Pool is subsidized, and it funds no charitable remainder.
  *
  * A fourth term, the user's own at-cost bandwidth, sat first in this identity until
  * 2026-08-12. It is gone with the allowance: R2 charges $0 egress, so there was no
@@ -105,7 +105,7 @@ export function anthersSupportBreakdown(
 	timePool: Decimal;
 	payments: Decimal;
 	foundation: Decimal;
-	subsidised: boolean;
+	subsidized: boolean;
 } {
 	const n = supportAmount(anthersDollars);
 	const given = new Decimal(n);
@@ -118,7 +118,7 @@ export function anthersSupportBreakdown(
 			timePool,
 			payments: new Decimal(0),
 			foundation: new Decimal(0),
-			subsidised: true,
+			subsidized: true,
 		};
 	}
 	const foundation = given.minus(timePool).minus(payments);
@@ -128,7 +128,7 @@ export function anthersSupportBreakdown(
 		timePool,
 		payments,
 		foundation,
-		subsidised: false,
+		subsidized: false,
 	};
 }
 
@@ -182,7 +182,7 @@ export interface BadgeView {
 	timePool: string;
 	/** "Supports Anthers" — the remainder, funding free access and the programs. */
 	supportsAnthers: string;
-	subsidised: boolean;
+	subsidized: boolean;
 }
 
 /**
@@ -216,7 +216,7 @@ export function badgeViews(): BadgeView[] {
 			price,
 			timePool: bd.timePool.toFixed(2),
 			supportsAnthers: bd.foundation.toFixed(2),
-			subsidised: price === 0,
+			subsidized: price === 0,
 		};
 	});
 }

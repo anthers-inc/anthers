@@ -363,7 +363,7 @@ export default function SubscriptionPage() {
 			// `creatorId` is null once that creator deletes their account — the payment
 			// record survives them (Privacy Policy), so this list has to render the money without a
 			// creator to attach it to. Keyed on a negative synthetic id so several deleted
-			// creators stay separate rows rather than collapsing into one, and labelled
+			// creators stay separate rows rather than collapsing into one, and labeled
 			// rather than blanked: the person is gone, what you paid is not.
 			const key = d.creatorId ?? -d.id;
 			map.set(key, {

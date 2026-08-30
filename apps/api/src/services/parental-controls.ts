@@ -16,7 +16,7 @@
  *
  * ⚠️ **A guardian's settings never leave this account.** Nothing here writes a rating, a note
  * or an access row, and nothing here is readable by anybody but the account holder — which is
- * what keeps one household's controls out of everybody else's catalogue. The controls sit on
+ * what keeps one household's controls out of everybody else's catalog. The controls sit on
  * the viewer, never on the Work.
  */
 
@@ -210,7 +210,7 @@ function daysAgo(now: Date, days: number): Date {
  * How much of each window this account has spent consuming Works.
  *
  * 🚨 **This measures time spent CONSUMING, which is the only time Anthers measures.** Browsing
- * a catalogue writes no attention event and cannot honestly be counted, so a limit set here is
+ * a catalog writes no attention event and cannot honestly be counted, so a limit set here is
  * not screen time and the panel must not call it that. Naming it screen time would promise a
  * measurement that does not exist, and a guardian would find out by watching a child sit on
  * the site all evening with the limit untouched.

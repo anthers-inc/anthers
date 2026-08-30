@@ -122,7 +122,7 @@ describe("Release-readiness gate", () => {
 	});
 
 	it("publishes a post linking that Work anyway", async () => {
-		// The announcement is not the work. Blocking it on someone's encode was an artefact
+		// The announcement is not the work. Blocking it on someone's encode was an artifact
 		// of the post owning the media.
 		const res = await req("/api/content/posts", {
 			method: "POST",

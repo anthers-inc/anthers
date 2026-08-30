@@ -173,7 +173,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("What the form requires", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("refuses a reason it does not recognise", async () => {
+	it("refuses a reason it does not recognize", async () => {
 		const res = await report({
 			url: "https://anthers.org/works/x-123456",
 			reason: "not-a-reason",

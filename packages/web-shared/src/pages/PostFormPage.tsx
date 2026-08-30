@@ -78,17 +78,17 @@ export default function PostFormPage() {
 
 	// Initial load: the post being edited.
 	useEffect(() => {
-		let cancelled = false;
+		let canceled = false;
 		(async () => {
 			if (isEdit && slug) {
 				try {
 					const res = await client.api.content.posts[":slug"].$get({ param: { slug } });
 					if (!res.ok) {
-						if (!cancelled) setError("Failed to load post.");
+						if (!canceled) setError("Failed to load post.");
 						return;
 					}
 					const { post } = (await res.json()) as { post: Post };
-					if (cancelled) return;
+					if (canceled) return;
 					setTitle(post.title ?? "");
 					setBody(post.body ?? "");
 					setBodyHtml(post.bodyHtml ?? "");
@@ -97,13 +97,13 @@ export default function PostFormPage() {
 					setScheduledFor(isoToLocalInput(post.scheduledFor));
 					setLinkedWorks((post.linkedWorks ?? []).map((r) => r.work));
 				} catch {
-					if (!cancelled) setError("Failed to load post.");
+					if (!canceled) setError("Failed to load post.");
 				}
 			}
-			if (!cancelled) setLoading(false);
+			if (!canceled) setLoading(false);
 		})();
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, [slug, isEdit]);
 

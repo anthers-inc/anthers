@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Desktop sign-in confirmation — the browser half of the desktop Studio's enrolment.
+ * Desktop sign-in confirmation — the browser half of the desktop Studio's enrollment.
  *
  * The desktop app never asks for a password. It opens this page in the SYSTEM browser,
  * where the creator usually already holds a normal cookie session, and one confirm
@@ -31,10 +31,10 @@ export default function DesktopAuthorizePage() {
 			setPhase("expired");
 			return;
 		}
-		let cancelled = false;
+		let canceled = false;
 		apiFetch(`/api/auth/desktop/pending/${encodeURIComponent(challenge)}`)
 			.then(async (res) => {
-				if (cancelled) return;
+				if (canceled) return;
 				if (!res.ok) {
 					setPhase("expired");
 					return;
@@ -44,10 +44,10 @@ export default function DesktopAuthorizePage() {
 				setPhase("ready");
 			})
 			.catch(() => {
-				if (!cancelled) setPhase("expired");
+				if (!canceled) setPhase("expired");
 			});
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, [challenge]);
 

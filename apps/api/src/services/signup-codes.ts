@@ -95,7 +95,7 @@ export function generateSignupCode(): string {
  * The one way an address is turned into a key.
  *
  * Lowercased and trimmed, so `A@B.com ` and `a@b.com` are the same row and the same
- * account. Without this a user who capitalises their address on the second visit gets a
+ * account. Without this a user who capitalizes their address on the second visit gets a
  * second account rather than their own, and the unique index would not stop them.
  */
 export function normalizeEmail(email: string): string {

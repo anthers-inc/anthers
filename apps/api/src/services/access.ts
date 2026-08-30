@@ -154,7 +154,7 @@ export interface AccessContext {
 	 * 🚨 **Sits on the VIEWER and never on the Work**, which is what makes it safe to put in a
 	 * resolver that a whole Catalog page runs through. A blocked creator is not less rated and
 	 * a limited household's Work is not less free; what changes is what reaches one account, so
-	 * no answer here can leak into anybody else's catalogue.
+	 * no answer here can leak into anybody else's catalog.
 	 *
 	 * ⚠️ **Time limits are deliberately NOT here.** They need a query — how long has this
 	 * account consumed today — and this resolver is pure and synchronous precisely so a batch

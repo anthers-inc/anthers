@@ -146,7 +146,7 @@ export default function WorkPage() {
 		const data = (await res.json()) as unknown as { work: WorkDetail };
 		setWork(data.work);
 		// Record the canonical path this Work answers to, so the redirect that is about to
-		// happen is recognised as "already loaded" rather than a new Work to go and get.
+		// happen is recognized as "already loaded" rather than a new Work to go and get.
 		loadedKey.current = `${workUrl(data.work)}|${previewKey}`;
 	}, [slug, preview, shareToken, previewKey]);
 
@@ -210,7 +210,7 @@ export default function WorkPage() {
 	/**
 	 * The allowance is gone *and* it applies here. Both halves matter: a spent allowance
 	 * says nothing about gated work the viewer cleared, work they bought, or their own
-	 * catalogue — none of which is Public Access, and none of which the meter touches.
+	 * catalog — none of which is Public Access, and none of which the meter touches.
 	 */
 	const spentOnThis =
 		playerless && (work?.publicAccess ?? false) && meterBudget != null && !meterBudget.allowed;

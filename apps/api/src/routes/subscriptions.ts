@@ -185,7 +185,7 @@ interface WorkEligibility {
 	/**
 	 * Whether this Work is **Public Access** — ungated, streaming, free to everyone — so
 	 * its seconds draw a free account's monthly allowance. Gated work the viewer cleared,
-	 * work they bought, and their own catalogue are all excluded by this being false.
+	 * work they bought, and their own catalog are all excluded by this being false.
 	 */
 	publicAccess: boolean;
 	/** Private Works aren't public consumption, so they can't earn from the public. */
@@ -234,7 +234,7 @@ async function loadWorkEligibility(
 			//
 			// A creator's own watching is excluded here rather than by the meter: `owner`
 			// reports `isFree: false`, so their seconds never carry the flag and never
-			// draw an allowance for consuming their own catalogue.
+			// draw an allowance for consuming their own catalog.
 			publicAccess:
 				access.isFree &&
 				work.streamEnabled &&
@@ -243,7 +243,7 @@ async function loadWorkEligibility(
 				// branch cannot say here: a share context has a null viewer, so `owner` never
 				// fires and `isFree` comes back true. Without this the sharer's Time Pool would
 				// pay the sharer, which is the same refusal `resolveAccessSync` makes for a
-				// creator watching their own catalogue — a pool is for buying the commons from
+				// creator watching their own catalog — a pool is for buying the commons from
 				// somebody else. The seconds are still recorded and still draw the relay budget,
 				// because what that bounds is how much viewing one account may fund, and
 				// funding it for your own work is exactly the case most in need of a bound.
@@ -622,7 +622,7 @@ const subscriptionRoutes = new Hono()
 			// Charged all-in via Stripe — the card fee comes out of it, not on top; the
 			// webhook credits the balance on success. ⚠️ A one-off charge pays the fixed
 			// $0.30 by itself, which is exactly the cost the monthly subscription exists to
-			// amortise — so this path is genuinely expensive at small amounts, and nothing
+			// amortize — so this path is genuinely expensive at small amounts, and nothing
 			// in the UI reaches it.
 			const charge = await createOneTimeCharge({
 				userId: user.id,
@@ -686,7 +686,7 @@ const subscriptionRoutes = new Hono()
 		// Refuse outright when payments aren't configured, like the other seven payment
 		// routes. This used to be `if (stripe && …)`, which silently SKIPPED Stripe and
 		// mutated the DB anyway — recording a cancellation locally that never reached
-		// Stripe, so billing would keep charging a user the UI showed as cancelled. That was
+		// Stripe, so billing would keep charging a user the UI showed as canceled. That was
 		// filed as harmless while prod carried no Stripe config; prod now runs Stripe in
 		// test mode, so the guard is doing real work.
 		const stripe = getStripe();

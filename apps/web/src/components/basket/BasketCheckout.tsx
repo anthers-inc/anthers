@@ -2,7 +2,7 @@
 /**
  * Paying for a basket — the same card flow as a single purchase, against one charge.
  *
- * Modelled on `ProjectPricing`'s `CheckoutForm` rather than shared with it, because the
+ * Modeled on `ProjectPricing`'s `CheckoutForm` rather than shared with it, because the
  * two differ in the one place that matters: this posts a *list* of Works to
  * `/basket/checkout`, which writes one purchase row per Work against a single
  * PaymentIntent. What they must not differ on is the money, and they don't — both let the

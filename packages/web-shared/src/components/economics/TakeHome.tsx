@@ -14,7 +14,7 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
  * $0.67 — read as "33%" against a 15% they think they understand, a creator leaves. Read as
  * **$0.67 beside itch's $0.57 and Bandcamp's $0.52**, the same number says they earn more
  * here. So the take-home is the headline, the deduction is explained rather than
- * summarised, and the comparison is to named alternatives.
+ * summarized, and the comparison is to named alternatives.
  *
  * **Inform, never restrict** (Parker, 2026-08-13). No minimum of ours, no confirmation
  * step, no nagging. A floor would ban prices we are genuinely competitive at and sit
@@ -75,7 +75,7 @@ export interface TakeHomeProps {
 	 * deduction on the one a creator is most likely to set low. A purchase's worst case is
 	 * a single-item basket. A Badge's worst case is a supporter for whom this is the only
 	 * thing on the month's invoice — so the whole fixed fee lands on it, exactly as for a
-	 * lone purchase, and anything else they give amortises it away.
+	 * lone purchase, and anything else they give amortizes it away.
 	 */
 	kind: "purchase" | "badge";
 }
@@ -190,7 +190,7 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 				<p className="mt-2 text-xs text-base-content/50">
 					{/* The Badge worst case, stated rather than buried. A supporter giving you and
 					    nothing else pays the whole flat fee on this one line; one who also supports
-					    Anthers or another creator amortises it, and you receive more. */}
+					    Anthers or another creator amortizes it, and you receive more. */}
 					Shown for a supporter with nothing else on their month. Anyone who also supports Anthers
 					or another creator splits the {usd(fee)} across it, and you receive more.
 				</p>

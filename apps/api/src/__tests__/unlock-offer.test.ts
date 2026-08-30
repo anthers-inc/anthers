@@ -3,7 +3,7 @@
  * The unlock offer a gated Work reports — what the viewer still needs, and what to call it.
  *
  * This exists because the UI used to work it out itself, and got it wrong in a way no test
- * could see: it labelled the unlock button with `rankForSeeds(threshold)`, which returns the
+ * could see: it labeled the unlock button with `rankForSeeds(threshold)`, which returns the
  * highest Badge **at or below** a level, so any gate sitting above the top Badge was offered
  * as "Unlock with Blossom" — a Badge that by definition does not clear it — with the price
  * silently missing, because the price came from a Badge-rung lookup that found nothing.
@@ -97,7 +97,7 @@ describe("unlock offer — the marginal ask", () => {
 
 describe("unlock offer — there is no Anthers route any more", () => {
 	/**
-	 * The behavioural half of the one-destination rule, and the reason it is asserted
+	 * The behavioral half of the one-destination rule, and the reason it is asserted
 	 * rather than left to the type system: a viewer's Badge must not open a Work, and a
 	 * Work must not advertise a Badge as a way in. Giving Anthers $12 —
 	 * the top Badge — changes nothing about a creator-gated Work.

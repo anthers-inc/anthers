@@ -67,7 +67,7 @@ const integrationRoutes = new Hono()
 			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)));
 
 		// The rolled-up half of the same window. Counts and seconds add across the two
-		// tables because the prune job deletes exactly what it summarised — an event is
+		// tables because the prune job deletes exactly what it summarized — an event is
 		// in one or the other, never both.
 		const [rolled] = await db
 			.select({

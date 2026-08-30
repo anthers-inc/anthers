@@ -47,7 +47,7 @@ const EXPLORE_MODES = [
 
 // Sort options. Each one the server can actually order by — "Trending" was here and is
 // gone, because it needs views over a window and `works.view_count` is a lifetime
-// counter. Offering a control the handler can't honour is what made every filter on this
+// counter. Offering a control the handler can't honor is what made every filter on this
 // page inert; don't re-add one ahead of its signal.
 const SORT_OPTIONS = [
 	{ value: "newest", label: "Newest" },

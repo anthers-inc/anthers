@@ -294,7 +294,7 @@ describe("adulthood verification by card funding", () => {
 
 		it("does not re-verify an account that already has, even if the cards would now fail", async () => {
 			// Verification is once, at enablement. Re-reading the cards would make the gate
-			// fail for an adult who has since cancelled the credit card that verified them,
+			// fail for an adult who has since canceled the credit card that verified them,
 			// which is a worse outcome than the one it would be protecting against.
 			await reset({ customerId: "cus_fake" });
 			withCards(["credit"]);

@@ -8,7 +8,7 @@
  * build runs with `--clear`, so anything hand-written there is deleted on the next run.
  * The curated surface is `packages/shared/src/lexicons.ts`, which sits outside it. `--check` regenerates into a temporary
  * directory and compares, which is the same shape as `econ:figures --check` and exists for
- * the same reason: a generated artefact that nothing re-derives is a second description of
+ * the same reason: a generated artifact that nothing re-derives is a second description of
  * the truth, free to drift.
  *
  * 🚨 A published Lexicon is a public API commitment — a breaking change becomes other

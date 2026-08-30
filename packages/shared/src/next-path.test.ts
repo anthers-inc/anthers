@@ -33,9 +33,9 @@ describe("sanitizeNextPath refuses anything that could leave the origin", () => 
 		// The classic open-redirect payload: protocol-relative, and it looks like a path.
 		["//evil.example", "protocol-relative"],
 		["//evil.example/login", "protocol-relative with a path"],
-		// Browsers normalise a backslash to `/`, so this reaches the same place as `//`
+		// Browsers normalize a backslash to `/`, so this reaches the same place as `//`
 		// while passing a naive check for a doubled slash.
-		["/\\evil.example", "backslash normalised to a slash"],
+		["/\\evil.example", "backslash normalized to a slash"],
 		["\\\\evil.example", "UNC-looking"],
 		["https://evil.example", "absolute URL"],
 		["http://evil.example", "absolute URL"],

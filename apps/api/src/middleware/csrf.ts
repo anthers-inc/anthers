@@ -16,7 +16,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  *   exemption removes the Origin check and puts nothing in its place that could be
  *   absent: an unsigned request is rejected by the handler's first act rather than
  *   waved through.
- * - The two desktop-enrolment endpoints are called by the packaged app itself, which
+ * - The two desktop-enrollment endpoints are called by the packaged app itself, which
  *   has no allowed Origin (`tauri://localhost`) and no session yet — obtaining one is
  *   the entire point of the exchange. Neither is CSRF-forgeable to any effect:
  *   `/start` only records a pending challenge the caller invented and touches no user

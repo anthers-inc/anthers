@@ -33,12 +33,12 @@ describe("what a visitor starts at", () => {
 		expect(readStoredVolume()).toEqual({ level: 1, muted: false });
 	});
 
-	test("a stored level is honoured", () => {
+	test("a stored level is honored", () => {
 		stub({ anthers_media_volume: "0.4" });
 		expect(readStoredVolume().level).toBe(0.4);
 	});
 
-	test("a stored zero is honoured — it is a real choice, not a missing value", () => {
+	test("a stored zero is honored — it is a real choice, not a missing value", () => {
 		stub({ anthers_media_volume: "0" });
 		expect(readStoredVolume().level).toBe(0);
 	});

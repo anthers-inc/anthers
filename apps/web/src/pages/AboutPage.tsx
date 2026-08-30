@@ -21,7 +21,7 @@
 // reference on the brief — ProPublica, Blender, Alveus, the Mozilla Foundation —
 // is a mission line and a handful of paragraphs, and none of them annotates its
 // own claims. **For a young organization the honest move is to say less, not to
-// hedge more**: the old page carried four programme pillars with a paragraph
+// hedge more**: the old page carried four program pillars with a paragraph
 // explaining three had no budget, and federation as a numbered principle with a
 // disclaimer attached. Cutting them removed the hedging along with them.
 //
@@ -40,7 +40,7 @@
 //                          gets a whole section on /for-creators.
 //   3. Who we are ........ Parker, first person, portrait beside the prose.
 //
-// The programme pillars, the founding-board invitation and the "what comes next"
+// The program pillars, the founding-board invitation and the "what comes next"
 // list are all on /roadmap already. **This page says what is true; the roadmap
 // says when.** That division is why nothing here promises a date.
 //
@@ -88,7 +88,7 @@
 // what an earlier draft did and got wrong. What that page does: it **opens
 // declaratively** ("I'm a director, developer, writer, and composer from
 // Colorado"), never with a greeting; it builds **long multi-clause sentences**
-// rather than punchy short ones; its humour is **dry and rare** ("wore more hats
+// rather than punchy short ones; its humor is **dry and rare** ("wore more hats
 // than I can count" is as far as an entire page goes); and it **lands a thought
 // on a stated principle** ("It matters how we do things, even more than what we
 // aim to do"), set in bold, not on a quip. Its **What I Do / How I Do It** pair
@@ -130,7 +130,7 @@ const BINDING_NOW = [
 	"There are no owners and no shares, and the Articles give Anthers no voting members. Nobody holds a piece of it, so there is nobody to pay a profit to and nothing for anyone to buy.",
 	"Nothing Anthers earns may be paid out to anyone inside it. The Articles bar its net earnings from benefiting a director, an officer, or any private person, and require it to serve public rather than private interests. What it may pay is ordinary compensation for work actually done.",
 	"If Anthers ever dissolves, its assets go to another charitable organization or to a government for a public purpose — not to a founder, and not to anyone who worked here.",
-	"Anthers' purposes are fixed in the Articles, and they are specific: making creative and educational work freely available to the public, releasing the platform's technology under open-source licences, publishing the formats it stores work in so that others can build on or replace it, and enabling creators to host and deliver their own work independently of Anthers.",
+	"Anthers' purposes are fixed in the Articles, and they are specific: making creative and educational work freely available to the public, releasing the platform's technology under open-source licenses, publishing the formats it stores work in so that others can build on or replace it, and enabling creators to host and deliver their own work independently of Anthers.",
 ];
 
 // What federal recognition would add, chosen for the three people who actually

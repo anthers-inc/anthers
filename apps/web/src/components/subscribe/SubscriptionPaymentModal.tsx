@@ -27,9 +27,9 @@ interface Props {
 	 *
 	 * The subscription carries ONE ITEM PER DESTINATION — `anthersSupport` and each of
 	 * these — because everything a user gives arrives on one monthly charge, which is also
-	 * what amortises the fixed card fee across the creators on it. ⚠️ This said the
+	 * what amortizes the fixed card fee across the creators on it. ⚠️ This said the
 	 * *quantity* was `anthersSupport` plus these until 2026-08-16; a quantity can only
-	 * express multiples of one unit, so the retirement replaced it with itemised amounts.
+	 * express multiples of one unit, so the retirement replaced it with itemized amounts.
 	 * Omitted everywhere the caller only changes the Anthers amount (the post unlock,
 	 * /subscription).
 	 */

@@ -263,7 +263,7 @@ describe("Share links", () => {
 
 	it("🚨 a token is scoped to ONE Work and is not a skeleton key", async () => {
 		// Without this the recipient would still be refused gated and Adult work — but they
-		// would be drawing the sharer's budget across a catalogue the sharer never shared.
+		// would be drawing the sharer's budget across a catalog the sharer never shared.
 		const res = await req(`/api/content/works/${textId}/pages/1?share=${openToken}`, {
 			redirect: "manual",
 		});

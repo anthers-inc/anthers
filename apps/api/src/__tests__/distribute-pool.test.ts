@@ -133,7 +133,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		expect((await payouts(userId)).get(creatorId)?.toFixed(2)).toBe(expected.toFixed(2));
 	});
 
-	it("pays MORE per Seed when the charge is batched — the fixed $0.30 amortises", async () => {
+	it("pays MORE per Seed when the charge is batched — the fixed $0.30 amortizes", async () => {
 		const soloCreator = await makeUser("creator");
 		const batchedCreator = await makeUser("creator");
 
@@ -230,7 +230,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
  * conserved the pot perfectly — the pool was distributed in full, to the wrong people —
  * so a totals check passes against both versions of the job. Every test here that can
  * fail names a creator and a figure. The conservation case is kept for the property it
- * does cover (excluding rows must not strand cents) and is labelled as not being the
+ * does cover (excluding rows must not strand cents) and is labeled as not being the
  * guard.
  */
 describe("distributePool — the Time Pool pays for Public Access only", () => {
@@ -323,7 +323,7 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 
 	it("strands no cents when excluded seconds shrink the population", async () => {
 		// ⚠️ NOT the guard against the double-pay bug — the bug conserved the pot too.
-		// This covers the neighbouring failure: dropping rows from the aggregate must not
+		// This covers the neighboring failure: dropping rows from the aggregate must not
 		// leave the drift correction with a target it can no longer reach.
 		const a = await makeUser("creator");
 		const b = await makeUser("creator");

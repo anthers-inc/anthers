@@ -80,7 +80,7 @@ export const users = pgTable("users", {
 	 * Deletion is **scheduled, not immediate** — Parker's ruling, 2026-08-07: the user
 	 * has to understand what they lose (stated at the point of deletion, not buried in
 	 * the policy), and there has to be an "oops" window long enough for a change of
-	 * mind. Cancelling is simply clearing this column.
+	 * mind. Canceling is simply clearing this column.
 	 *
 	 * The window is a **grace period, not an archive**, and the distinction is the rule
 	 * that keeps this honest: nothing may start retaining data *because* a deletion is
@@ -117,7 +117,7 @@ export const users = pgTable("users", {
  * later changes the window.
  *
  * `userId` is `set null` rather than cascade for the same reason the moderation
- * records are: a request to be forgotten, and the record that it was honoured, must
+ * records are: a request to be forgotten, and the record that it was honored, must
  * outlive the account it concerned — otherwise the evidence disappears exactly when it
  * would be needed.
  */
@@ -222,7 +222,7 @@ export const sessions = pgTable(
 		// signing every browser out.
 		kind: text("kind").notNull().default("web"),
 		// Human label for the revocation list — the device name the desktop app reports
-		// at enrolment ("parker-thinkpad"). Null for browser sessions, which are
+		// at enrollment ("parker-thinkpad"). Null for browser sessions, which are
 		// described by user_agent instead.
 		label: text("label"),
 		// Last time this session authenticated a request, throttled to one write per
@@ -239,7 +239,7 @@ export const sessions = pgTable(
 );
 
 /**
- * One in-flight desktop enrolment. The desktop app never sees a password: it opens
+ * One in-flight desktop enrollment. The desktop app never sees a password: it opens
  * an authorize page in the SYSTEM browser (where the creator already holds a normal
  * cookie session), and one confirm click mints the desktop session here.
  *
@@ -251,7 +251,7 @@ export const sessions = pgTable(
  * Rows are single-use (`consumedAt`) and short-lived (`expiresAt`); the swept remains
  * carry no secret, since `sessionToken` is cleared on redemption.
  */
-// node — a desktop enrolment is node auth (PKCE flow for the Studio app). Same
+// node — a desktop enrollment is node auth (PKCE flow for the Studio app). Same
 // reasoning as `sessions`: the credential belongs to the identity, which is node.
 export const desktopAuthRequests = pgTable(
 	"desktop_auth_requests",
@@ -302,7 +302,7 @@ export const verificationTokens = pgTable(
  * The address is the key — **one live code per address, ever**, replaced on re-request
  * rather than appended. That is what makes "Send it again" safe: a second code silently
  * retires the first, so a mailbox holding three codes has exactly one that works (the
- * newest), which is the behaviour a reader already expects from every other site.
+ * newest), which is the behavior a reader already expects from every other site.
  *
  * What proving the address buys depends on whether it is already an account:
  * a new address is **created** and signed in; an existing one is **signed in**. Both
