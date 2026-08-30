@@ -25,10 +25,14 @@ export async function rescanOwed(): Promise<number> {
 	const owed = await worksOwedScans();
 	let sent = 0;
 	for (const work of owed) {
-		for (const storageKey of work.keys) {
+		for (const object of work.objects) {
+			// `kind` travels with the key rather than being re-derived here: a video source
+			// re-queued as an image would hash the container bytes, fail, and record the
+			// video as permanently unscannable — a sweep undoing the coverage it exists to
+			// restore.
 			await queue.send(
 				QUEUES.SCAN_MEDIA,
-				{ storageKey, workId: work.id },
+				{ storageKey: object.key, workId: work.id, kind: object.kind },
 				JOB_OPTIONS[QUEUES.SCAN_MEDIA],
 			);
 			sent += 1;

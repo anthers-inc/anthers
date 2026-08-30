@@ -93,13 +93,21 @@ describe("published legal documents", () => {
 		}
 	});
 
-	it("⭐ says a video's frames are not scanned, for exactly as long as that is true", () => {
-		// The other half of the same failure, pointed the other way. The claim above is
-		// narrowed to images because PDQ is an image hash — so when keyframe scanning
-		// lands, this test is what says the narrowing has to come out. A disclosure that
-		// under-claims is not safe by default: it tells people less than we do.
+	it("⭐ names the media the scan does not reach, for exactly as long as that is true", () => {
+		/*
+		 * The other half of the recipient assertion, pointed the other way, and it has
+		 * already done its job once: the claim used to read *"Video and audio are not
+		 * covered"* and this test is what forced it to be widened when keyframe sampling
+		 * landed rather than leaving the policy telling people less than we do.
+		 *
+		 * ⚠️ **A disclosure that under-claims is not safe by default.** It describes a
+		 * platform that examines less than this one does, and somebody reading it to decide
+		 * whether to upload here is being told something untrue in the cautious direction.
+		 * Audio is the live gap now — a perceptual image hash has nothing to say about a
+		 * sound — and when that changes, this line changes with it.
+		 */
 		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
-		expect(text).toContain("Video and audio are not covered");
+		expect(text).toContain("Audio is not covered");
 	});
 
 	it("makes no claim Anthers is a 501(c)(3)", () => {

@@ -18,17 +18,24 @@
  * a *falsely* clean one is a lie in our own records.
  */
 
-import { scanStoredImage } from "../services/safety-scan.js";
+import { type ScannableKind, scanStoredImage, scanStoredVideo } from "../services/safety-scan.js";
 
 export interface ScanMediaData {
 	/** The stored object to scan. */
 	storageKey: string;
 	/** The Work it belongs to, when it belongs to one. Null for profile images. */
 	workId?: number | null;
+	/**
+	 * How the object must be read. Defaults to `image`, which is what every job enqueued
+	 * before video coverage existed carries — a payload with no `kind` is an image job from
+	 * before this field, and defaulting the other way would decode avatars.
+	 */
+	kind?: ScannableKind;
 }
 
 export async function scanMedia(data: ScanMediaData): Promise<void> {
-	const outcome = await scanStoredImage(data.storageKey, { workId: data.workId ?? null });
+	const scan = data.kind === "video" ? scanStoredVideo : scanStoredImage;
+	const outcome = await scan(data.storageKey, { workId: data.workId ?? null });
 
 	// Logged only when it is not the ordinary answer. A line per clean scan would bury the
 	// worker log, and this is a log somebody has to be able to read — the same reasoning
