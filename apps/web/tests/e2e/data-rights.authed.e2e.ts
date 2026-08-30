@@ -44,7 +44,7 @@ test("deletion states what it will do, in real counts, before it does it", async
 	// Parker's ruling (2026-08-07): the safety lives in informed consent plus an oops
 	// window, not in the foreign keys. "Your content will be deleted" is a sentence people
 	// click past — so the confirmation has to carry this account's real per-table outcomes,
-	// and they are not uniform: destroyed, tombstoned, anonymised, and kept-with-you-detached
+	// and they are not uniform: destroyed, tombstoned, anonymized, and kept-with-you-detached
 	// are four different fates and the UI may not flatten them into one number.
 	const panel = page.locator("text=Here is exactly what happens to this account").locator("..");
 	await expect(panel).toBeVisible();

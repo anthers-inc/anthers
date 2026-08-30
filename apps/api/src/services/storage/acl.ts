@@ -7,7 +7,7 @@
  *
  * The rule is stated as an ALLOWLIST on purpose. It used to be a denylist at the
  * upload route — "private if video/audio/asset, else public" — and `mediaType`
- * arrives unvalidated straight off a multipart form, so any unrecognised value fell
+ * arrives unvalidated straight off a multipart form, so any unrecognized value fell
  * through to the catch-all key prefix *and* came out public. Inverted, an unknown
  * type is locked, and a media type added to the route's switch later stays locked
  * until someone deliberately lists it here.
@@ -70,7 +70,7 @@ export const PUBLIC_KEY_PREFIXES: readonly string[] = [
 /** Whether a storage key holds display chrome, and so belongs in the public bucket. */
 export function isPublicKey(key: string): boolean {
 	// Every key the application mints is `creators/{id}/…`; the media type is the segment
-	// (or two) that follows. Anything else is unrecognised and therefore private.
+	// (or two) that follows. Anything else is unrecognized and therefore private.
 	const match = /^creators\/\d+\/(.+)$/.exec(key);
 	if (!match) return false;
 	return PUBLIC_KEY_PREFIXES.some((prefix) => match[1].startsWith(prefix));

@@ -53,7 +53,7 @@ const CONSUMPTION: Record<string, ConsumptionMode> = {
 	// visible tab plus a sign of life. Turning pages supplies that naturally.
 	//
 	// 🚨 Registering it here is NOT optional bookkeeping. `consumptionModeFor` returns
-	// "none" for an unrecognised type, which makes it Time-Pool-ineligible — the safe
+	// "none" for an unrecognized type, which makes it Time-Pool-ineligible — the safe
 	// default (unknown types are inert rather than free money) and the wrong answer for a
 	// real medium. A new Work type that nobody adds here earns its creator nothing, with
 	// no error anywhere to say so.

@@ -796,7 +796,7 @@ export const ratings = pgTable(
 	"ratings",
 	{
 		id: serial("id").primaryKey(),
-		// Nullable + SET NULL: a deleted account's reviews are ANONYMISED, not removed.
+		// Nullable + SET NULL: a deleted account's reviews are ANONYMIZED, not removed.
 		// A bare 1–5 score is the least personal thing in the system, and deleting it
 		// would move a creator's average through no fault of theirs. The score stays and
 		// counts; the link to a person goes.

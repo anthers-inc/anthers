@@ -702,7 +702,7 @@ interface DeletionState {
  * per account, never from anything computed here.
  *
  * **The outcomes are not uniform and the UI must not flatten them.** Some things are
- * destroyed, some tombstoned, some anonymised, and some kept with the person detached for
+ * destroyed, some tombstoned, some anonymized, and some kept with the person detached for
  * tax records. Showing one number would misrepresent all four.
  */
 function DataSection() {

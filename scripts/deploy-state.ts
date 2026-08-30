@@ -86,6 +86,26 @@ export function repoSlugFromRemote(url: string): string {
 }
 
 /**
+ * The branch name behind a ref, for building a command somebody will actually run.
+ *
+ * 🚨 **A remote-tracking name is not a push destination**, and interpolating one produced a
+ * recovery line that was worse than useless: with the refs defaulting to `origin/release`
+ * and `origin/main`, the promote suggestion came out as
+ * `git push origin origin/main:origin/release` — which does not promote anything and would
+ * create a remote branch literally called `origin/release`. A tool that prints a command
+ * that fails is teaching people to stop reading its output, which is the thing this script
+ * exists to be trusted about.
+ */
+export function branchName(ref: string): string {
+	return ref.replace(/^refs\/heads\//, "").replace(/^origin\//, "");
+}
+
+/** The command that promotes one branch to another, in a form git accepts. */
+export function promoteCommand(promoteFrom: string, ref: string): string {
+	return `git push origin ${branchName(promoteFrom)}:${branchName(ref)}`;
+}
+
+/**
  * A GitHub Actions run, as the REST API reports it. Only the fields we read.
  *
  * 🚨 **This is the layer DigitalOcean cannot see, and not knowing about it is what made

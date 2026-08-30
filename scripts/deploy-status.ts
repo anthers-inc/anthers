@@ -1,6 +1,7 @@
 import {
 	type CiSituation,
 	type Deployment,
+	promoteCommand,
 	readDeployments,
 	readWorkflowRuns,
 	repoSlugFromRemote,
@@ -266,7 +267,7 @@ if (agree && unshipped > 0) {
 	console.log("");
 	console.log(`  🚨 Production does NOT contain work merged to ${PROMOTE_FROM}. This is not a`);
 	console.log("     deploy failure — it is work that was never promoted. Ship it with:");
-	console.log(`       git push origin ${PROMOTE_FROM}:${REF}`);
+	console.log(`       ${promoteCommand(PROMOTE_FROM, REF)}`);
 	console.log("  (Exit 3, distinct from drift, so a scheduled check can tolerate it.)");
 	process.exit(3);
 }
@@ -317,11 +318,15 @@ console.error(
 console.error("");
 if (liveIsDescendant) {
 	console.error(`  Live is AHEAD of ${REF} — production has commits your ref does not.`);
-	console.error("  Usually a stale local branch rather than a deploy problem.");
-	// Only suggest the refresh when REF is a plain local branch. For `origin/release` or
-	// `release~1` the command would be malformed, and printing a broken recovery is how a
-	// tool teaches people to stop reading its output.
-	if (/^[\w.-]+$/.test(REF)) {
+	// ⚠️ The advice depends on WHICH ref is stale, and the default changed. Against
+	// `origin/release` this means the remote-tracking ref has not been fetched; against a
+	// local branch it means the branch itself is behind. Printing the local-branch fix for
+	// a remote-tracking ref would be a command that does nothing.
+	if (REF.startsWith("origin/")) {
+		console.error("  That usually means this checkout has not fetched. Check with:");
+		console.error("    git fetch origin && make deploy-status");
+	} else {
+		console.error("  Usually a stale local branch rather than a deploy problem.");
 		console.error("  Check with:");
 		console.error(`    git fetch origin && git branch -f ${REF} origin/${REF}`);
 		console.error(`  or re-run against the remote: REF=origin/${REF} make deploy-status`);
