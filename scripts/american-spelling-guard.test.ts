@@ -143,6 +143,29 @@ const ROOTS = ["apps/api/src", "apps/web/src", "apps/web/tests", "packages", "sc
 const EXTENSIONS = "**/*.{ts,tsx,css,md}";
 const SELF = "american-spelling-guard.test.ts";
 
+/**
+ * Markdown outside every workspace directory, which the roots above structurally cannot see.
+ *
+ * ⚠️ **These are the most-read documents in the repository and they were unscanned until
+ * 2026-08-30.** `README.md` and `CONTRIBUTING.md` are what a newcomer opens first, this is a
+ * public repository, and `README.md` additionally carries the generated money figures. The
+ * roots list stops at the workspaces because that is where code lives; the top of the
+ * repository is not a workspace and so fell through.
+ *
+ * ⭐ **`econ:figures` had the same gap and closed it by walking markdown from the repository
+ * root**, which is why the two checks disagreeing about their corpus was the tell. Listed
+ * explicitly rather than globbed from `.` so that the walk cannot wander into
+ * `node_modules`, `target` or a vendored directory and cost a second on every run.
+ */
+const ROOT_DOCS = [
+	"README.md",
+	"CONTRIBUTING.md",
+	"SECURITY.md",
+	"LICENSE.md",
+	"data/README.md",
+	"apps/web/public/fonts/THIRD-PARTY.md",
+] as const;
+
 /** Blank out every span a name occupies, so a word inside one cannot match. */
 function withoutNames(line: string): string {
 	let out = line;
@@ -157,6 +180,12 @@ async function sourceFiles(): Promise<string[]> {
 			if (rel.includes("node_modules/") || rel.endsWith(SELF)) continue;
 			found.push(join(root, rel));
 		}
+	}
+	// A named file that has been deleted or renamed is skipped rather than throwing, so
+	// removing `SECURITY.md` does not break the spelling guard. The test below is what
+	// notices if the list empties out.
+	for (const doc of ROOT_DOCS) {
+		if (await Bun.file(doc).exists()) found.push(doc);
 	}
 	return found;
 }
@@ -177,6 +206,18 @@ async function offenses(): Promise<string[]> {
 describe("American spelling", () => {
 	it("scans a plausible number of files, so a broken glob cannot pass silently", async () => {
 		expect((await sourceFiles()).length).toBeGreaterThan(200);
+	});
+
+	it("🚨 reads the repository's own front page, which no workspace root contains", async () => {
+		// Six files against two hundred move the count above by three percent, so the corpus
+		// check cannot answer this. `README.md` is named on its own because it is both the
+		// most-read document here and the one carrying generated money figures — if the
+		// skip-if-missing above ever swallows the whole list, this is what says so.
+		const files = await sourceFiles();
+		expect(files, "README.md is not being scanned for spelling").toContain("README.md");
+		expect(files.filter((f) => (ROOT_DOCS as readonly string[]).includes(f)).length).toBe(
+			ROOT_DOCS.length,
+		);
 	});
 
 	it("🚨 finds no British spelling anywhere in the repository", async () => {

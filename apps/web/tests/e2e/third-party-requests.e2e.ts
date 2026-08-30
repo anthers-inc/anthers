@@ -28,7 +28,9 @@ test.describe("third-party requests", () => {
 	for (const route of ROUTES) {
 		test(`${route} requests nothing off-origin`, async ({ page }) => {
 			const offOrigin: string[] = [];
+			let seen = 0;
 			page.on("request", (req) => {
+				seen++;
 				const url = new URL(req.url());
 				// data: and blob: carry no network request; localhost is us (the preview
 				// on :4173 and the API on :8000 both count as first-party here).
@@ -38,6 +40,14 @@ test.describe("third-party requests", () => {
 			});
 
 			await page.goto(route, { waitUntil: "networkidle" });
+
+			// 🚨 **An empty list is two different facts and this is what tells them apart.**
+			// Nothing above proves the page made any request at all, so a navigation that
+			// silently failed, a route answering an empty shell, or a listener attached too
+			// late all read as a clean pass — the same vacuous absence a guard reports when
+			// its corpus has gone empty. The font test below has always had this check; the
+			// route loop did not.
+			expect(seen, `${route} made no requests at all — the page did not load`).toBeGreaterThan(0);
 
 			expect(
 				offOrigin,

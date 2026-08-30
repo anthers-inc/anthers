@@ -38,6 +38,24 @@ const REPO_ROOT = join(import.meta.dir, "..");
 const SCANNED = /\.(ts|tsx|js|jsx|json|yaml|yml|md|sh|sql|toml|env\.example)$/;
 
 /**
+ * Tracked files that carry no extension at all, matched by name.
+ *
+ * 🚨 **`SCANNED` requires a dot, so every one of these was invisible until 2026-08-30** —
+ * and a Dockerfile is among the likeliest places in a repository to paste a credential,
+ * because `ENV` and `ARG` read as configuration rather than as source and both images here
+ * are built in CI with a real secret in scope. The extension was never the point; the
+ * question is whether a person edits the file as text, and all of these are edited as text.
+ *
+ * Matched on the **basename** so a Dockerfile added under a new path is covered on the day
+ * it is added rather than on the day somebody remembers this list.
+ */
+const SCANNED_NAMES = new Set(["Dockerfile", "Makefile", "pre-push", "pre-commit"]);
+
+function isScanned(path: string): boolean {
+	return SCANNED.test(path) || SCANNED_NAMES.has(path.split("/").pop() ?? "");
+}
+
+/**
  * Credential formats this project actually handles.
  *
  * Each is built from parts so the pattern never appears whole in this file. `SAFE` marks
@@ -62,7 +80,7 @@ const PLACEHOLDER_MARKERS = ["EXAMPLE", "PLACEHOLDER", "REDACTED", "not_a_real",
 
 function trackedFiles(): string[] {
 	const out = execFileSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf8" });
-	return out.split("\n").filter((f) => f && SCANNED.test(f));
+	return out.split("\n").filter((f) => f && isScanned(f));
 }
 
 describe("nothing tracked looks like a credential", () => {
@@ -72,6 +90,17 @@ describe("nothing tracked looks like a credential", () => {
 		// is about.
 		const files = trackedFiles();
 		expect(files.length).toBeGreaterThan(200);
+	});
+
+	it("🚨 reaches the extensionless files too, which a dot-anchored pattern cannot", () => {
+		// A total over hundreds of files says nothing about whether the four files with no
+		// extension were among them, and those are the ones a `\.(…)$` pattern structurally
+		// cannot reach. Named individually rather than counted, because the point is which
+		// files are covered rather than how many.
+		const files = trackedFiles();
+		for (const path of ["apps/api/Dockerfile", "Makefile"]) {
+			expect(files, `${path} is not being scanned`).toContain(path);
+		}
 	});
 
 	it("🚨 still recognizes each format it claims to watch, so a pattern cannot rot", () => {
