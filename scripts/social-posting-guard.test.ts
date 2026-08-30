@@ -61,6 +61,20 @@ describe("no social posting", () => {
 		expect(files.length).toBeGreaterThan(100);
 	});
 
+	it("🚨 still recognizes a posting call when it sees one, so the list cannot rot", async () => {
+		// The corpus check above proves files were read; this proves the list can still see
+		// anything in them. Emptying `FORBIDDEN` of real values left this file green, which
+		// is indistinguishable from the rule being kept — and the rule is Parker's, not an
+		// engineering one, so silently ceasing to enforce it is the worst available outcome.
+		expect(FORBIDDEN.length).toBeGreaterThan(0);
+		for (const nsid of FORBIDDEN) {
+			// A record's NSID is what a real call carries, so a value that stopped looking
+			// like one has stopped watching for the thing it names.
+			expect(nsid, `${nsid} is not a record NSID`).toMatch(/^app\.bsky\.[a-z]+\.[a-z]+$/);
+			expect(`await agent.api.${nsid}.create()`.includes(nsid)).toBe(true);
+		}
+	});
+
 	it("contains no call that would publish to a social account", async () => {
 		const files = await sourceFiles();
 		const hits: string[] = [];

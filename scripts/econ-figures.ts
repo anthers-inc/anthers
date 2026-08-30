@@ -1587,7 +1587,13 @@ async function writeBlocks(root: string, blocks: Block[]) {
 		const current = byFile.get(path) ?? (await readFile(path, "utf8"));
 		const next = splice(current, b.key, b.render(), b.allowRetired);
 		if (next === null) {
-			console.warn(`  ! no <!-- econ:begin ${b.key} --> markers in ${b.file}`);
+			// 🚨 A FAILURE, not a warning (2026-08-30), for exactly the reason the missing-FILE
+			// case above became one. A block whose markers are gone is a target this guard has
+			// silently lost: deleting the `readme-model` block outright — markers and all two
+			// thousand characters of published money figures — left `--check` reporting "up to
+			// date". Renaming the file was caught and deleting the block was not, which is the
+			// same hole through a different door.
+			failures.push(`${b.file} — no <!-- econ:begin ${b.key} --> markers (block deleted?)`);
 			continue;
 		}
 		byFile.set(path, next);
