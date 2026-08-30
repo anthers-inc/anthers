@@ -23,6 +23,7 @@ import { db } from "@anthers/db/client";
 import { mediaQuarantine, mediaScans, moderationActions, users } from "@anthers/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import app from "../index";
+import { MIN_PDQ_QUALITY } from "../lib/pdq.js";
 import { isUnderHold } from "../services/legal-hold.js";
 import {
 	clearObjectQuarantine,
@@ -30,7 +31,7 @@ import {
 	quarantineSummary,
 	quarantineWork,
 } from "../services/quarantine.js";
-import { scanStoredImage } from "../services/safety-scan.js";
+import { scanInlineUpload, scanStoredImage } from "../services/safety-scan.js";
 import { QUARANTINE_PREFIX, scannedObjectKind } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
 import { artworkBytes, stubShield } from "./scan-fixtures.js";
@@ -218,6 +219,55 @@ describe("The scanner routes a match by its subject", () => {
 		expect(row.classification).toBe("harmful-abusive");
 		expect(row.classification).not.toBe(row.vendorMatch?.classification);
 		expect(row.vendorMatch?.classification).toBe("harmful-abusive-material");
+	});
+
+	it("🚨 keeps the fingerprint when the vendor does not answer, so the row is re-askable", async () => {
+		// ⭐ **This is the row a deferred-scan sweep will have to select on**, and getting it
+		// wrong is silent. `unscannable` has three causes and only one of them is worth
+		// re-asking: an object we could not fingerprint (no hash), one whose fingerprint
+		// carried no signal (hash, low quality), and one we had a good fingerprint for and
+		// never got an answer about. Discarding the hash on the outage path collapsed the
+		// first and third into the same row — so a sweep would either re-ask images that can
+		// never be hashed, forever, or skip the ones it exists for.
+		const key = await putObject("unanswered", 24);
+		const original = globalThis.fetch;
+		const priorUser = process.env.ARACHNID_SHIELD_USERNAME;
+		const priorPass = process.env.ARACHNID_SHIELD_PASSWORD;
+		process.env.ARACHNID_SHIELD_USERNAME = "test";
+		process.env.ARACHNID_SHIELD_PASSWORD = "test";
+		// The vendor is reachable and unhappy, which is the outage this has to survive.
+		globalThis.fetch = (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+			new Response("upstream is down", { status: 503 })) as typeof fetch;
+		try {
+			const outcome = await scanInlineUpload(key, { uploaderId: creatorId, objectKind: "avatar" });
+			// The upload is not failed. § 2258A(f) owes no search, so a third party being down
+			// must not stop somebody changing their avatar.
+			expect(outcome.determination).toBe("unscannable");
+			expect(outcome.quarantine).toBe(false);
+		} finally {
+			globalThis.fetch = original;
+			if (priorUser === undefined) delete process.env.ARACHNID_SHIELD_USERNAME;
+			else process.env.ARACHNID_SHIELD_USERNAME = priorUser;
+			if (priorPass === undefined) delete process.env.ARACHNID_SHIELD_PASSWORD;
+			else process.env.ARACHNID_SHIELD_PASSWORD = priorPass;
+		}
+
+		const [row] = await db
+			.select({
+				determination: mediaScans.determination,
+				pdqHash: mediaScans.pdqHash,
+				pdqQuality: mediaScans.pdqQuality,
+			})
+			.from(mediaScans)
+			.where(eq(mediaScans.storageKey, key));
+		expect(row.determination).toBe("unscannable");
+		// 🚨 The assertion that matters: a hash, at a quality worth asking about. Both halves,
+		// because either alone is satisfied by an image nobody could ever scan.
+		expect(row.pdqHash, "the fingerprint we already computed was discarded").toBeTruthy();
+		expect(row.pdqQuality).toBeGreaterThanOrEqual(MIN_PDQ_QUALITY);
+
+		// And the object is left where it is — an unanswered question is not a finding.
+		expect(await storage.exists(key)).toBe(true);
 	});
 
 	it("🚨 does not quarantine a match it was told nothing about", async () => {
