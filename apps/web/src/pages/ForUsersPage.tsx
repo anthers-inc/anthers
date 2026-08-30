@@ -45,7 +45,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-shared/decor/sections";
-import { BADGE_LADDER, PurchaseExample } from "@anthers/web-shared/economics";
+import { BADGE_LADDER, BadgeMark, PurchaseExample } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import { FAQBlock } from "../components/ui/FAQ";
@@ -313,13 +313,14 @@ export default function ForUsersPage() {
 						<Reveal key={b.name} delay={i * 90}>
 							<div className="relative text-center">
 								<div className="relative mx-auto mb-3 flex h-24 w-24 items-center justify-center">
-									<BrandGlyph
-										name={b.wreath}
-										className="absolute inset-0 h-full w-full text-primary/55"
+									<BadgeMark
+										shape={b.shape}
+										color={b.color}
+										emoji={b.emoji}
+										label={`${b.name} badge`}
+										clipId={`for-users-badge-${b.name}`}
+										size="h-24 w-24"
 									/>
-									<span aria-hidden="true" className="text-4xl">
-										{b.emoji}
-									</span>
 								</div>
 								<h3 style={serif} className="text-lg font-medium">
 									{b.name}

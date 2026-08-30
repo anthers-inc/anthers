@@ -26,11 +26,15 @@ import { InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
 import { FONTS } from "../../styles/fonts";
 import { BrandGlyph } from "../decor/BrandGlyph";
+import { BadgeMark } from "./BadgeMark";
+
+// Re-exported because `./economics` is this area's entry point in the package exports map.
+export { BadgeMark } from "./BadgeMark";
 
 const serif = { fontFamily: FONTS.fraunces };
 
 // ─── Rates — single source of truth: @anthers/shared (the same numbers the API
-// charges). Only the presentation (badge emoji/wreaths) lives here. ───
+// charges). Only the presentation (the badge's shape, field color and emoji) lives here. ───
 const TAX_PCT = SALES_TAX_RATE;
 
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -38,9 +42,8 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 const TAX_TIP =
 	"An average U.S. combined sales-tax rate. Your actual rate depends on your state and may be higher or lower.";
 
-// ─── Badge presentation. Every Badge shares one round botanical frame
-// (`frame-round`) — a single, consistent wreath across all of them; the emoji inside is
-// what differs. ───
+// ─── Badge presentation. Every Badge is a patch: a shape and a field color bound in the
+// same edging, with an emoji sewn onto it. ───
 /**
  * 🚨 **Keyed by `Badge`, not `BadgeKey`, because Free has no mark** (Parker, 2026-08-24).
  * A mark *is* a Badge, and Free is the absence of one rather than a Badge worth $0 — so
@@ -53,24 +56,65 @@ const TAX_TIP =
  * looked deliberate. Dropping `free` from the key makes the compiler carry the rule
  * instead: indexing this with a possibly-free key is now a type error.
  */
-export const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> = {
-	root: { emoji: "🫚", wreath: "frame-round" },
-	sprout: { emoji: "🌱", wreath: "frame-round" },
-	petal: { emoji: "🌷", wreath: "frame-round" },
-	blossom: { emoji: "🌼", wreath: "frame-round" },
+export const BADGE_ART: Record<Badge, { emoji: string; shape: string; color: string }> = {
+	// ⭐ One shape across Anthers' four, with the field color carrying the progression from
+	// earth to bloom. A creator picks freely from the same library — including this shape —
+	// and what makes the two ladders read as one collection is the edging every badge
+	// shares, exactly as a scout set does.
+	root: { emoji: "🫚", shape: "circle", color: "cream" },
+	sprout: { emoji: "🌱", shape: "circle", color: "meadow" },
+	petal: { emoji: "🌷", shape: "circle", color: "clay" },
+	blossom: { emoji: "🌼", shape: "circle", color: "sun" },
 };
 
-/** Ascending ladder (Root → Blossom) for the Badges section: wreath + emoji + $/mo. */
+/**
+ * One of Anthers' own Badges, by name.
+ *
+ * ⭐ **One component, because three surfaces used to draw this by hand and each of them
+ * encoded the layer structure.** A change to what a Badge looks like is one edit here, and
+ * it renders through the same `BadgeMark` a creator's rung does — which is what actually
+ * keeps the two ladders looking like one kind of object rather than two that agree today.
+ *
+ * 🚨 **Free has no mark, because a mark IS a Badge and Free is the absence of one** (Parker,
+ * 2026-08-24). `BADGE_ART` is keyed by `Badge` rather than `BadgeKey` so that indexing it
+ * with a possibly-free key is a type error rather than a stray acorn.
+ */
+export function AnthersBadgeMark({
+	badge,
+	lit = true,
+	size = "h-12 w-12",
+}: {
+	badge: Badge;
+	lit?: boolean;
+	size?: string;
+}) {
+	const art = BADGE_ART[badge];
+	return (
+		<BadgeMark
+			shape={art.shape}
+			color={art.color}
+			emoji={art.emoji}
+			label={`${badgeLabel(badge)} badge`}
+			clipId={`anthers-badge-${badge}`}
+			dim={!lit}
+			size={size}
+		/>
+	);
+}
+
+/** Ascending ladder (Root → Blossom) for the Badges section: the patch + emoji + $/mo. */
 export const BADGE_LADDER: {
 	name: string;
 	emoji: string;
 	threshold: string;
-	wreath: BrandIconName;
+	shape: string;
+	color: string;
 }[] = BADGE_ORDER.filter((b): b is Badge => b !== "free").map((b) => ({
 	name: badgeLabel(b),
 	emoji: BADGE_ART[b].emoji,
 	threshold: `$${thresholdForBadge(b)}/mo`,
-	wreath: BADGE_ART[b].wreath,
+	shape: BADGE_ART[b].shape,
+	color: BADGE_ART[b].color,
 }));
 
 // ─── shared bits ───
@@ -176,15 +220,7 @@ function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: Badge
 							</span>
 						) : (
 							<>
-								<span className="relative flex h-11 w-11 items-center justify-center">
-									<BrandGlyph
-										name={BADGE_ART[b].wreath}
-										className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/40"}`}
-									/>
-									<span aria-hidden="true" className="text-xl leading-none">
-										{BADGE_ART[b].emoji}
-									</span>
-								</span>
+								<AnthersBadgeMark badge={b} lit={active} size="h-11 w-11" />
 								<span
 									style={serif}
 									className={`text-sm font-medium ${active ? "text-primary" : "text-base-content/80"}`}

@@ -610,6 +610,23 @@ export const REFUND_CAP_WINDOW_MONTHS = 12;
 export const WITHDRAWN_RESCUE_DAYS = 90;
 
 /**
+ * The square every badge interior is normalized to, in pixels.
+ *
+ * ⭐ **Normalizing is what makes one shared frame possible.** Every badge — Anthers' own
+ * and every creator's — sits in the same round botanical frame, and a frame cannot fit art
+ * whose aspect ratio is whatever somebody's phone produced. It also drops EXIF and any
+ * trailing payload, and makes the bytes that are scanned exactly the bytes that are served.
+ *
+ * 512 because a badge is rendered small everywhere it appears and is worth having at twice
+ * that on a dense display; larger buys nothing a viewer can see and costs a creator's
+ * storage allowance on every rung.
+ */
+export const BADGE_ART_PX = 512;
+
+/** The largest file a creator may upload for one rung, before normalization. */
+export const BADGE_ART_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
  * How long a safety or copyright record keeps its **personal detail**, in years,
  * counted from the last thing that happened to it. Settled 2026-08-16.
  *

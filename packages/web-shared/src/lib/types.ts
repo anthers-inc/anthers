@@ -726,6 +726,18 @@ export interface CreatorGate {
 	threshold: string;
 	label: string;
 	description: string | null;
+	/**
+	 * Whether this rung has the creator's own art.
+	 *
+	 * ⚠️ **A boolean, never the storage key.** The object is private and served through an
+	 * access-checked route; handing a client the key would invite somebody to build a URL
+	 * out of it and quietly move badge art onto a path nothing checks.
+	 */
+	hasArt: boolean;
+	/** Ids into `@anthers/shared/badge-art`; null means the default. */
+	artShape: string | null;
+	artColor: string | null;
+	artEmblem: string | null;
 	sortOrder: number;
 	createdAt: string;
 	updatedAt: string;

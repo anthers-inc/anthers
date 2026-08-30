@@ -112,7 +112,7 @@ import {
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
-import { BADGE_ART } from "@anthers/web-shared/economics";
+import { AnthersBadgeMark, BADGE_ART } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -742,18 +742,7 @@ function BadgeLadder(props: LadderProps) {
  *  (Parker, 2026-08-24) — not a Badge worth $0. `BADGE_ART` is keyed by `Badge` rather than
  *  `BadgeKey`, so the caller's `key !== "free"` guard is a type error to drop. */
 function BadgeMark({ badge, lit, size }: { badge: Badge; lit: boolean; size: string }) {
-	return (
-		<span className={`relative flex ${size} shrink-0 items-center justify-center`}>
-			<BrandGlyph
-				name={BADGE_ART[badge].wreath}
-				className={`absolute inset-0 h-full w-full ${lit ? "text-primary/70" : "text-primary/30"}`}
-			/>
-			{/* The emoji is full-color artwork, so selection brightens the frame and leaves it. */}
-			<span aria-hidden="true" className="text-xl">
-				{BADGE_ART[badge].emoji}
-			</span>
-		</span>
-	);
+	return <AnthersBadgeMark badge={badge} lit={lit} size={size} />;
 }
 
 /**
@@ -1557,16 +1546,11 @@ function signupNoteSizers(signedIn: boolean): string[] {
 /**
  * The Badge art is `BADGE_ART` from `@anthers/web-shared/economics`, not a local map.
  *
- * 🚨 **A first pass here drew the four `wreath-{name}` icons and no emoji, which is a
- * different mark from the one every other page shows.** Anthers' Badges are drawn as one
- * consistent round frame — `frame-round`, Parker's call, recorded beside the asset — with
- * a per-Badge emoji inside it: 🌰 🫚 🌱 🌷 🌼. The `wreath-root`…`wreath-blossom` set in
- * `build-icons.ts` is an unused earlier idea, and picking it up produced a ladder that
- * matched nothing: `/for-users` renders the same rungs from `BADGE_ART` a screen away.
- *
- * ⚠️ **So the presentation is imported rather than restated.** A second copy of a brand
- * decision is a second thing to keep in step, and this one had already drifted before it
- * shipped.
+ * 🚨 **Restating the presentation here is what went wrong before and would go wrong
+ * again.** This page once drew its own marks and produced a ladder matching nothing —
+ * `/for-users` renders the same rungs a screen away — and when the design changed, three
+ * hand-drawn copies each had to be found and edited. A second copy of a brand decision is
+ * a second thing to keep in step, and this one had already drifted before it shipped.
  *
  * 🚨 **Free carries no mark**, which is why `BADGE_ART` is keyed by `Badge` and not
  * `BadgeKey`. A mark is a Badge, and Free is the absence of one rather than a Badge worth

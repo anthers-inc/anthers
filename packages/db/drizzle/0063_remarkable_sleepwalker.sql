@@ -1,0 +1,1 @@
+ALTER TABLE "creator_gates" ADD COLUMN "art_key" text;

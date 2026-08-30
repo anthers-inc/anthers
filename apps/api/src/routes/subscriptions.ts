@@ -28,8 +28,11 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
+import { isBadgeColor, isBadgeEmblem, isBadgeShape } from "@anthers/shared/badge-art";
 import {
 	amountMeets,
+	BADGE_ART_MAX_BYTES,
+	BADGE_ART_PX,
 	CHARGEABLE_AMOUNT_MESSAGE,
 	heldBadgeName,
 	isChargeableAmount,
@@ -44,6 +47,7 @@ import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
+import sharp from "sharp";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { getStripe } from "../lib/stripe.js";
@@ -67,7 +71,9 @@ import {
 	supportItems,
 } from "../services/billing.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
+import { scanStoredImage } from "../services/safety-scan.js";
 import { resolveShareToken } from "../services/share-links.js";
+import { storage } from "../services/storage/index.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -117,6 +123,24 @@ function badgeViewFor(anthersSupport: number) {
 	const held = heldBadgeName(anthersSupport);
 	return BADGE_VIEWS.find((v) => v.id === held) ?? BADGE_VIEWS[0];
 }
+
+/**
+ * A gate as a client may see it.
+ *
+ * 🚨 **`artKey` never leaves the server.** The object is private and served through an
+ * access-checked route, and a client holding the key is one URL away from fetching badge
+ * art on a path nothing checks — which is exactly the boundary the two-bucket split exists
+ * to hold. The client needs to know only *whether* to draw the creator's art or the
+ * default, so that is the whole of what it gets.
+ */
+type GateRow = typeof creatorGates.$inferSelect;
+function publicGate({ artKey, ...gate }: GateRow) {
+	return { ...gate, hasArt: Boolean(artKey) };
+}
+
+// ⭐ `artShape`, `artColor` and `artEmblem` DO reach the client, and only `artKey` does not.
+// They are ids into a library the browser already has, so there is nothing to protect — what
+// must not travel is the path to a private object.
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1177,7 +1201,7 @@ const subscriptionRoutes = new Hono()
 				.where(eq(creatorGates.creatorId, userId))
 				.orderBy(creatorGates.sortOrder, creatorGates.threshold);
 
-			return c.json({ gates });
+			return c.json({ gates: gates.map(publicGate) });
 		}
 
 		const [creator] = await db
@@ -1193,7 +1217,7 @@ const subscriptionRoutes = new Hono()
 			.where(eq(creatorGates.creatorId, creator.id))
 			.orderBy(creatorGates.gateType, creatorGates.threshold);
 
-		return c.json({ gates });
+		return c.json({ gates: gates.map(publicGate) });
 	})
 
 	.post(
@@ -1236,7 +1260,7 @@ const subscriptionRoutes = new Hono()
 				.values({ creatorId: user.id, ...data, sortOrder: Number(maxRow.max) + 1 })
 				.returning();
 
-			return c.json({ gate }, 201);
+			return c.json({ gate: publicGate(gate) }, 201);
 		},
 	)
 
@@ -1253,6 +1277,14 @@ const subscriptionRoutes = new Hono()
 					.optional(),
 				label: z.string().min(1).max(100).optional(),
 				description: z.string().max(1000).optional(),
+				// 🚨 Validated against `@anthers/shared/badge-art`, which is the one list the
+				// web layer renders from too. A id the server accepted and the library does
+				// not carry renders as nothing, with no error to explain it — so the check is
+				// here rather than left to the form. `null` is how a creator goes back to the
+				// default, which is why each is nullable rather than merely optional.
+				artShape: z.string().refine(isBadgeShape).nullable().optional(),
+				artColor: z.string().refine(isBadgeColor).nullable().optional(),
+				artEmblem: z.string().refine(isBadgeEmblem).nullable().optional(),
 			}),
 		),
 		async (c) => {
@@ -1267,7 +1299,7 @@ const subscriptionRoutes = new Hono()
 				.returning();
 
 			if (!updated) return c.json({ error: "Gate not found" }, 404);
-			return c.json({ gate: updated });
+			return c.json({ gate: publicGate(updated) });
 		},
 	)
 
@@ -1278,10 +1310,138 @@ const subscriptionRoutes = new Hono()
 		const deleted = await db
 			.delete(creatorGates)
 			.where(and(eq(creatorGates.id, Number(id)), eq(creatorGates.creatorId, user.id)))
-			.returning({ id: creatorGates.id });
+			.returning({ id: creatorGates.id, artKey: creatorGates.artKey });
 
 		if (deleted.length === 0) return c.json({ error: "Gate not found" }, 404);
+		// The rung is gone, so its art has nothing left to belong to. Swept after the row
+		// rather than before: an object stranded by a crash is findable, while a row
+		// pointing at an object we already destroyed renders a broken badge forever.
+		if (deleted[0].artKey) await storage.delete(deleted[0].artKey).catch(() => {});
 		return c.body(null, 204);
+	})
+
+	// ── Badge art ───────────────────────────────────────────────────────────────
+	//
+	// ⭐ Only the INTERIOR of the badge is uploaded. Every badge shares one round botanical
+	// frame — Anthers' own Root/Sprout/Petal/Blossom already render `frame-round` with an
+	// emoji inside it — and a creator's art replaces the emoji rather than the frame.
+	// Parker settled the format on 2026-08-29: shared frame, free interior, because the
+	// symmetry between the two ladders is most of why the model reads cleanly (30.01).
+	//
+	// 🚨 **Raster only, and never an SVG.** An SVG is a script-execution surface that would
+	// need sanitizing before it could be rendered, and it cannot be safety-scanned as it
+	// stands — PDQ hashes pixels, so an SVG would have to be rasterized before it could be
+	// fingerprinted at all. Accepting one means building a sanitizer AND a rasterize-then-
+	// hash step before a single badge is safe to display. Anthers' own defaults are SVG
+	// through `@anthers/brand`, and the two never mix.
+	.post("/gates/:id/art", requireAuth, async (c) => {
+		const user = c.get("user");
+		const gateId = Number(c.req.param("id"));
+
+		const [gate] = await db
+			.select()
+			.from(creatorGates)
+			.where(and(eq(creatorGates.id, gateId), eq(creatorGates.creatorId, user.id)))
+			.limit(1);
+		if (!gate) return c.json({ error: "Gate not found" }, 404);
+
+		const form = await c.req.formData();
+		const file = form.get("file");
+		if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
+		if (file.size > BADGE_ART_MAX_BYTES) {
+			return c.json({ error: "That image is too large — 4 MB at most.", code: "too_large" }, 413);
+		}
+
+		// Normalized rather than stored as sent, which does four jobs at once: every badge
+		// interior ends up the same square so the shared frame fits it, EXIF and any other
+		// trailing payload is dropped, an SVG or a PDF fails here rather than later, and
+		// what we scan is exactly what we serve.
+		let normalized: Buffer;
+		try {
+			normalized = await sharp(Buffer.from(await file.arrayBuffer()), { failOn: "none" })
+				.resize(BADGE_ART_PX, BADGE_ART_PX, { fit: "cover", position: "attention" })
+				.png()
+				.toBuffer();
+		} catch {
+			return c.json(
+				{
+					error: "That file is not an image we can read. PNG, JPEG or WebP.",
+					code: "not_an_image",
+				},
+				400,
+			);
+		}
+
+		const key = `creators/${user.id}/badges/${gateId}/${crypto.randomUUID().replace(/-/g, "")}.png`;
+		await storage.upload(key, normalized, "image/png", "private");
+
+		// 🚨 Scanned INLINE, before the key is ever written to the row. Badge art is
+		// user-supplied imagery on a surface other people see, so it is another ingest door
+		// for 40.12 — and unlike a Work there is no release gate behind which a queued scan
+		// could catch up. The bytes are already buffered here, so there is nothing to defer.
+		const outcome = await scanStoredImage(key, { workId: null });
+		if (outcome.quarantine) {
+			// ⚠️ **There is no quarantine subject for a badge.** `quarantineWork` writes
+			// `works.quarantine_status`, and this object belongs to no Work — so refusing the
+			// upload and destroying the object is the whole of the action available here. The
+			// `media_scans` row `scanStoredImage` wrote is the record that it was examined.
+			// A badge match reaching the Designated Child Safety Contact the way a Work's
+			// does is a real gap and is not closed by this route.
+			await storage.delete(key).catch(() => {});
+			return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
+		}
+
+		const previous = gate.artKey;
+		await db
+			.update(creatorGates)
+			.set({ artKey: key, updatedAt: new Date() })
+			.where(eq(creatorGates.id, gateId));
+		// Only after the row points somewhere else, so a failure here strands an object
+		// rather than blanking a badge.
+		if (previous) await storage.delete(previous).catch(() => {});
+
+		return c.json({ artPath: `/api/subscriptions/gates/${gateId}/art` }, 201);
+	})
+
+	.delete("/gates/:id/art", requireAuth, async (c) => {
+		const user = c.get("user");
+		const gateId = Number(c.req.param("id"));
+		const [updated] = await db
+			.update(creatorGates)
+			.set({ artKey: null, updatedAt: new Date() })
+			.where(and(eq(creatorGates.id, gateId), eq(creatorGates.creatorId, user.id)))
+			.returning({ artKey: creatorGates.artKey });
+		if (!updated) return c.json({ error: "Gate not found" }, 404);
+		return c.body(null, 204);
+	})
+
+	/**
+	 * Serve a rung's art.
+	 *
+	 * ⚠️ **404 rather than a placeholder when there is no art**, because the default is the
+	 * client's to draw. A default served from here would be a raster of something the brand
+	 * package renders as recolor-ready SVG, and it would go stale the moment the palette
+	 * moved. The client falls back; this route only ever answers with a creator's own file.
+	 */
+	.get("/gates/:id/art", async (c) => {
+		const [gate] = await db
+			.select({ artKey: creatorGates.artKey })
+			.from(creatorGates)
+			.where(eq(creatorGates.id, Number(c.req.param("id"))))
+			.limit(1);
+		if (!gate?.artKey) return c.json({ error: "No art" }, 404);
+
+		const bytes = await storage.read(gate.artKey);
+		// The row names an object storage does not have. 404 so the client draws the
+		// default, rather than 500 for a badge nobody can do anything about.
+		if (!bytes) return c.json({ error: "No art" }, 404);
+
+		return c.body(new Uint8Array(bytes), 200, {
+			"Content-Type": "image/png",
+			// Keyed by a uuid that changes on every upload, so a long cache is safe and a
+			// replacement is visible immediately.
+			"Cache-Control": "public, max-age=86400",
+		});
 	})
 
 	// ── Content Access Check ─────────────────────────────────────────────────
@@ -1335,7 +1495,7 @@ const subscriptionRoutes = new Hono()
 			return c.json({
 				badge: "free",
 				seedAmount: "0.00",
-				gates,
+				gates: gates.map(publicGate),
 				unlockedGates: [],
 			});
 		}
@@ -1372,7 +1532,7 @@ const subscriptionRoutes = new Hono()
 		return c.json({
 			badge,
 			seedAmount,
-			gates,
+			gates: gates.map(publicGate),
 			unlockedGates,
 		});
 	});
