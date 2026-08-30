@@ -36,17 +36,41 @@ import { join } from "node:path";
  */
 const FORBIDDEN = ["app.bsky.feed.post", "app.bsky.feed.repost", "app.bsky.actor.profile"] as const;
 
-const ROOTS = ["apps/api/src", "apps/web/src", "packages"] as const;
+/**
+ * Where a posting call could live.
+ *
+ * 🚨 **`scripts` and `.github` are here because the rule names an automated JOB**, and until
+ * 2026-08-30 neither was scanned — so the guard on *"no agent and no automated job may
+ * post"* was blind to the two places an automated job actually lives. A workflow step is the
+ * likeliest way this rule gets broken without anyone deciding to break it, because
+ * *publish when the thing is ready* is idiomatic there in a way it is not in a route
+ * handler, and a workflow runs with repository secrets in scope.
+ */
+const ROOTS = ["apps/api/src", "apps/web/src", "packages", "scripts", ".github"] as const;
 const SELF = "social-posting-guard.test.ts";
+
+/**
+ * Extensions worth scanning, per root.
+ *
+ * ⚠️ **A workflow is YAML and every other root is TypeScript**, so one glob cannot cover
+ * both. Getting this wrong is silent in the direction that matters: a `**\/*.{ts,tsx}` glob
+ * over `.github` matches nothing, adds zero files, and leaves the corpus check below
+ * perfectly happy.
+ */
+const EXTENSIONS: Record<string, string> = {
+	".github": "**/*.{yml,yaml}",
+};
+const DEFAULT_EXTENSIONS = "**/*.{ts,tsx}";
 
 async function sourceFiles(): Promise<string[]> {
 	const found: string[] = [];
 	for (const root of ROOTS) {
-		const glob = new Bun.Glob("**/*.{ts,tsx}");
+		const glob = new Bun.Glob(EXTENSIONS[root] ?? DEFAULT_EXTENSIONS);
 		for await (const rel of glob.scan({ cwd: root })) {
 			// Generated lexicon bindings are derived from `lexicons/`, which this guard
 			// covers at the source; and the guard must not find itself.
-			if (rel.includes("generated/") || rel.endsWith(SELF)) continue;
+			if (rel.includes("node_modules/") || rel.includes("generated/") || rel.endsWith(SELF))
+				continue;
 			found.push(join(root, rel));
 		}
 	}
@@ -59,6 +83,19 @@ describe("no social posting", () => {
 		// assertion in it while proving nothing at all.
 		const files = await sourceFiles();
 		expect(files.length).toBeGreaterThan(100);
+	});
+
+	it("🚨 reads every root, so adding one with the wrong glob cannot pass silently", async () => {
+		// A total over five roots is dominated by two of them, so `scripts` or `.github`
+		// contributing **nothing** moves the number above by a percent and fails no
+		// assertion. That is exactly how a root gets added with a glob that matches none of
+		// its files — which is the same coverage-shaped vacuum as an empty corpus, one root
+		// down. Each root has to answer for itself.
+		const files = await sourceFiles();
+		for (const root of ROOTS) {
+			const mine = files.filter((f) => f.startsWith(`${root}/`));
+			expect(mine.length, `${root} contributed no files — check its glob`).toBeGreaterThan(0);
+		}
 	});
 
 	it("🚨 still recognizes a posting call when it sees one, so the list cannot rot", async () => {
