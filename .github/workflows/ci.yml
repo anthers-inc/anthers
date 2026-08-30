@@ -35,19 +35,28 @@ on:
   pull_request:
 
 jobs:
-  # Has this exact commit already passed on `main`?
+  # Has this code already been tested?
   #
-  # A deploy fast-forwards `release` to a SHA that `main` has just tested, so the push
-  # triggers a SECOND full run of the same code. That buys nothing and costs something
-  # real: checks attach to a SHA rather than a branch, so a flake in the duplicate run
-  # paints a red mark on a commit that passed — twice now that has cost someone the time
-  # to decode a failure that meant nothing, which is how a team learns to ignore CI.
+  # Every push here is preceded by a run against the same work, twice over. A deploy
+  # fast-forwards `release` to a SHA `main` has just tested; a squash merge lands a tree
+  # a pull request has just tested. Both re-run the whole suite against code nothing has
+  # changed, and that buys nothing while costing something real: checks attach to a SHA
+  # rather than a branch, so a flake in the duplicate paints a red mark on work that
+  # passed — twice now that has cost someone the time to decode a failure that meant
+  # nothing, which is how a team learns to ignore CI.
   #
-  # So the release run is skipped when, and only when, this SHA already has a green `ci`
-  # run on `main`. What that deliberately preserves is the case the release trigger was
-  # added for: a `release` push that is NOT a fast-forward of `main` — a hotfix branch, a
-  # cherry-pick — has no such run, so it is tested in full. A run still in progress on
-  # `main` counts as "not passed", which errs toward running twice rather than not at all.
+  # 🚨 **The two cases need different keys, and getting that wrong is how a dedupe starts
+  # skipping things it should not.** A fast-forward preserves the SHA, so `release` can
+  # ask about the commit. A squash merge does not, so `main` has to ask about the **tree**
+  # — which is the whole of what a test run examines, and which differs the moment `main`
+  # moves under an open pull request. That difference is not an inconvenience: it is
+  # exactly the case where re-running is the only thing that catches a semantic conflict
+  # two independently-green branches produce together.
+  #
+  # A run still in progress counts as "not passed" in both cases, which errs toward
+  # running twice rather than not at all. A `release` push that is not a fast-forward —
+  # a hotfix branch, a cherry-pick — and a direct push to `main` both run in full, which
+  # is the case the `release` trigger was added for in the first place.
   precheck:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -56,27 +65,19 @@ jobs:
     outputs:
       skip: ${{ steps.decide.outputs.skip }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci-precheck.sh
+          sparse-checkout-cone-mode: false
       - id: decide
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Only ever skip a push to release. PRs and main pushes always run.
-          if [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref_name }}" != "release" ]; then
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "Not a release push — running in full."
-            exit 0
-          fi
-          passed=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&branch=main&status=success" \
-            --jq '.total_count' 2>/dev/null || echo 0)
-          if [ "${passed:-0}" -gt 0 ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::${{ github.sha }} already passed ci on main — skipping the duplicate release run."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No green ci run for ${{ github.sha }} on main — testing this release push in full."
-          fi
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+        run: ./scripts/ci-precheck.sh
 
   # Static checks + the Bun test suites (API routes, jobs, and the shared money/
   # attention policy). Deliberately its own job with its own database rather than a
