@@ -110,26 +110,29 @@ export const FAQ_ITEMS = {
 		answer: (
 			<div className="space-y-2">
 				<p>
-					The Anthers feed is not driven by a traditional engagement-maximizing algorithm. By
-					default, you see content in three layers:
+					No. Your feed is posts and releases from the creators you follow, newest first, and that
+					is the whole of it today — nothing scores it, nothing predicts what will hold your
+					attention, and nothing you did not ask for appears in it.
 				</p>
+				<p>Three things that stay true as it grows:</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Primary:</strong> Content from creators you follow and support
+						<strong>No engagement optimization.</strong> The feed will never rank by predicted
+						clicks or time spent. There is no advertiser to sell your attention to.
 					</li>
 					<li>
-						<strong>Network:</strong> Things your follows have liked, shared, or purchased
+						<strong>Everything says why it is there.</strong> Anything added later has to be
+						attributable — you follow this person, this matches a tag you chose.
 					</li>
 					<li>
-						<strong>Ambient:</strong> Content matching your stated interests (tags) -- never paid
-						promotion
+						<strong>You can turn it off.</strong> Any new signal arrives with a way to stop it.
 					</li>
 				</ul>
 				<p>
-					Everything in your feed is attributed so you know exactly why it's there. You can also
-					subscribe to Custom Feeds and Custom Algorithms created by other users, giving you full
-					control over what you see. Anthers never uses paid promotion or engagement optimization to
-					influence your feed.
+					Two further layers are designed and <strong>not built yet</strong>: things the people you
+					follow engaged with, and quiet discovery from tags you chose. So are custom feeds. When
+					they arrive they will meet all three rules above, and none of them will ever be paid
+					placement.
 				</p>
 			</div>
 		),
@@ -138,7 +141,7 @@ export const FAQ_ITEMS = {
 		category: "Feed & Discovery",
 		question: "What are Custom Feeds?",
 		answer:
-			"Custom Feeds are alternative feed views created by other users or creators. They can be algorithmic (dynamically adapting to your data) or curated (showing the same content to everyone who subscribes). You can subscribe to any published feed and switch between feeds from the selector on your Home page.",
+			"A planned feature rather than one you can use today. The intent is that anybody can publish an alternative view of Anthers — either a transparent rule you can inspect, or a hand-picked list — and that you can subscribe to it and switch between it and your own feed. None of it is built, and this answer will change when it is.",
 	},
 	"promoted-placement": {
 		category: "Feed & Discovery",
