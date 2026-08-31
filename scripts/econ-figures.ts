@@ -107,6 +107,27 @@ const REPO = join(import.meta.dir, "..");
 const OBSIDIAN = join(process.env.HOME ?? "", "Obsidian");
 
 /**
+ * The **public** wiki — a second Obsidian vault, holding the documentation written to be
+ * read by anyone rather than by us. Added 2026-08-30, when the Anthers documentation began
+ * moving out of Parker's personal vault into a vault of its own.
+ *
+ * ⭐ **It needs none of `findWiki`'s discovery apparatus, and that is the point of it being
+ * separate rather than a second entry in the same search.** Everything below `findWiki` — the
+ * project-root regex, the area-directory marker, the found-twice failure — exists because the
+ * project's folder *moves inside a personal vault whose shape is nobody's build input*. This
+ * vault **is** the project root, at a path that is its own reason to exist, so the resolution
+ * is one `existsSync`.
+ *
+ * ⚠️ **The absent-versus-broken discipline still applies and is what the override is for.**
+ * No vault on this machine (CI, a contributor's clone) skips silently and correctly. But
+ * `ANTHERS_WIKI` set to a path that does not exist is a **failure**, exactly as `ANTHERS_VAULT`
+ * is — an explicit pointer must never degrade into a skip. And a vault that *is* present with a
+ * block target missing fails in `writeBlocks`, which is the behavior that already catches a
+ * renamed document.
+ */
+const PUBLIC_WIKI = join(process.env.HOME ?? "", "Anthers-Wiki");
+
+/**
  * Where the wiki lives — **discovered, never hardcoded**.
  *
  * 🚨 **This was a literal path until 2026-08-28, and moving the project inside the vault
@@ -173,6 +194,19 @@ function findWiki(): { path: string } | { skip: true } | { error: string } {
  * loose one that starts matching the neighbours.
  */
 const PROJECT_DIR = /^(?:\d{2} )?Anthers$/;
+
+/**
+ * The public wiki, or a reason there is nothing to do. See {@link PUBLIC_WIKI}.
+ */
+function findPublicWiki(): { path: string } | { skip: true } | { error: string } {
+	const override = process.env.ANTHERS_WIKI;
+	if (override) {
+		return existsSync(override)
+			? { path: override }
+			: { error: `ANTHERS_WIKI is set to "${override}", which does not exist` };
+	}
+	return existsSync(PUBLIC_WIKI) ? { path: PUBLIC_WIKI } : { skip: true };
+}
 
 /**
  * Every `Anthers/` folder in the vault that looks like the project root.
@@ -413,6 +447,20 @@ function renderReadmeModelMarkdown(): string {
 	].join("\n");
 }
 
+/**
+ * The Badge ladder, for a reader who already holds the context.
+ *
+ * ⚠️ **The public wiki gets {@link renderBadgePublicMarkdown} instead, and the difference is
+ * not tone.** The last paragraph here explains the table by naming a *Bandwidth* column that
+ * was removed on 2026-08-12 — which is exactly the edit history a public document must not
+ * carry, and it is unusually hard to notice, because a generated block is the one part of a
+ * page nobody proofreads. It published into the public wiki once, on the first run after that
+ * vault was wired up, which is how this was found.
+ *
+ * 🚨 **A renderer is copy, and copy has an audience.** Any block rendered into both vaults has
+ * to be read as though it were written fresh for the public one, because that is where it will
+ * be judged.
+ */
 function renderBadgeMarkdown(): string {
 	const rows = badgeTable();
 	return [
@@ -434,6 +482,40 @@ function renderBadgeMarkdown(): string {
 		`Every row conserves exactly: Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
 		`**No row depends on how much anyone watches.** A *Bandwidth* column sat between the charge and the Time Pool until 2026-08-12, priced off a representative streamer's hours — so every remainder here was a scenario rather than a figure. Delivery costs $0 on R2 at any volume, so the column is gone and these numbers are exact. Watching more is free, and it takes nothing from the mission.`,
+	].join("\n");
+}
+
+/**
+ * The same ladder, for someone who has never read anything else we wrote. See the warning on
+ * {@link renderBadgeMarkdown} for why this exists rather than the two sharing one renderer.
+ *
+ * The figures are identical and come from the same `badgeTable()` — what differs is that
+ * nothing here dates a change, names a mechanism we no longer have, or names a vendor.
+ */
+function renderBadgePublicMarkdown(): string {
+	const rows = badgeTable();
+	return [
+		table(
+			[
+				"Badge",
+				"A month to Anthers",
+				"To the Time Pool",
+				"Card processing",
+				"Free access & programs",
+			],
+			[":--", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				`**${r.badge}**`,
+				`$${r.charge}`,
+				`$${r.timePool}`,
+				`$${r.payments}`,
+				`**$${r.remainder}**`,
+			]),
+		),
+		"",
+		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds free access and the programs, equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
+		"",
+		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you watch**, because delivery costs nothing at any volume.`,
 	].join("\n");
 }
 
@@ -834,6 +916,29 @@ const LADDER =
  */
 const REPO_BLOCKS: Block[] = [
 	{ file: "README.md", key: "readme-model", render: renderReadmeModelMarkdown },
+];
+
+/**
+ * Generated regions in the **public** wiki. See {@link PUBLIC_WIKI}.
+ *
+ * 🚨 **These are the highest-stakes blocks in the file, because their audience is not us.**
+ * A stale figure in the private vault misleads the person who wrote it; a stale figure here
+ * misleads someone deciding whether to trust the platform with their money, on a page whose
+ * whole argument is that Anthers is straight about where the money goes.
+ *
+ * ⚠️ **Every money figure in the public wiki that is *not* inside one of these regions is
+ * hand-typed and unguarded.** Several are, as of this writing — correct, because each was
+ * checked against `fees.ts` when written, and unprotected against the next time a constant
+ * moves. Pointing `scanDocs` at this vault is what closes that, and it is deliberately not in
+ * this change: it will report real hits, and a guard turned on in the same commit as the work
+ * it fails is a guard nobody can tell apart from a broken one.
+ */
+const PUBLIC_WIKI_BLOCKS: Block[] = [
+	{
+		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		key: "badge-table",
+		render: renderBadgePublicMarkdown,
+	},
 ];
 
 const BLOCKS: Block[] = [
@@ -1693,8 +1798,20 @@ if (wikiRequested) {
 		console.log(`  wiki: ${wiki.path}`);
 		await writeBlocks(wiki.path, BLOCKS);
 	}
+
+	// The public wiki, on the same absent-versus-broken rule and with none of the searching.
+	const publicWiki = findPublicWiki();
+	if ("error" in publicWiki) {
+		failures.push(`the public wiki blocks were not checked at all — ${publicWiki.error}`);
+	} else if ("skip" in publicWiki) {
+		console.log("  (no public wiki on this machine — skipping its blocks)");
+	} else {
+		console.log(`  public wiki: ${publicWiki.path}`);
+		await writeBlocks(publicWiki.path, PUBLIC_WIKI_BLOCKS);
+	}
 } else {
-	console.log(`  (wiki blocks not requested — ${BLOCKS.length} blocks skipped; make wiki-figures)`);
+	const total = BLOCKS.length + PUBLIC_WIKI_BLOCKS.length;
+	console.log(`  (wiki blocks not requested — ${total} blocks skipped; make wiki-figures)`);
 }
 
 await scanApp();
