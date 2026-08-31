@@ -25,6 +25,6 @@ If you have found a real bug in the platform, tell us — a good bug report is a
 Two things about the code that are worth knowing before you read much of it:
 
 - **Published money figures are generated, never typed.** Every dollar amount on the site, in the wiki and in the README is derived from `packages/shared/src/fees.ts` by `scripts/econ-figures.ts`. `bun run econ:figures --check` fails the build if any of them drift. If you find yourself typing a figure, that is the guard's cue, not a formatting choice.
-- **Comments cite documents you cannot open.** References like `51.05` or `63.01` point into a private working wiki. They are provenance rather than prerequisites — every comment that cites one also explains itself first, and if you find one that does not, that is a documentation bug worth reporting.
+- **Comments cite documents by number, and many of those are now public.** References like `40.09` or `63.01` point into Anthers' working documentation. Increasingly they point at the public wiki — the rating standard, the policies, the support model and the publishing model all live there — and the rest point at an internal vault. Either way they are provenance rather than prerequisites: every comment that cites one also explains itself first, and if you find one that does not, that is a documentation bug worth reporting.
 
 Thank you for looking. Come back when the sign flips.

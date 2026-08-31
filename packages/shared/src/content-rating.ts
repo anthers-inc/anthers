@@ -101,9 +101,14 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
 	{
 		value: "mature",
 		label: "Mature",
-		// ⚠️ Says nothing about a blur. Mature work will blur by default once the reader
-		// filters exist, and they do not — a hint describing a fence nobody has built yet
-		// would be telling creators something untrue about their own work today.
+		// ⚠️ Says nothing about the blur, which is a deliberate omission rather than a
+		// stale one. Mature work does blur by default — see `DEFAULT_MATURITY_DISPLAY`
+		// below, and the reader filters in `services/content-preferences.ts` — but a hint
+		// is what a creator reads while choosing a rating, and leading with the
+		// consequence invites them to pick the rung by its cost rather than by what the
+		// work is. The consequence is published where it can be read whole: the wiki's
+		// *Safety & Conduct → Content Standards → The Rating Standard*, § What Each Rung
+		// Costs You.
 		hint: "Made for adults — not because of what it is about, but because of how it treats it. A story that deals with violence, sex or addiction is not Mature for its subject; depiction, explicitness and intent are what this reads.",
 	},
 	{
