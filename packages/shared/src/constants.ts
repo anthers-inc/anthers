@@ -384,7 +384,8 @@ export function timePoolFor(anthersDollars: number): number {
  *
  * 🚨 **A dial, not a fact.** A third was chosen because it makes the Root budget reach two
  * $0.25 Stickers rather than one — the difference between a feature a person uses and one
- * they spend. Nothing depends on the specific value. 20.06 § Stickers.
+ * they spend. Nothing depends on the specific value. The design lives with the work now —
+ * see the Stickers task on the vault board.
  */
 export const STICKER_SHARE_OF_POOL = 1 / 3;
 
@@ -402,7 +403,8 @@ export const STICKER_SHARE_OF_POOL = 1 / 3;
  *
  * 🚨 **Stickers are DESIGNED, NOT BUILT.** There is no like primitive to attach one to.
  * This exists so the figure a marketing page quotes is derived rather than typed; it is not
- * evidence the feature ships. See 20.06 before writing copy that implies otherwise.
+ * evidence the feature ships. The public wiki's *Using Anthers → Supporting Creators →
+ * Badges* marks it unbuilt in the table itself; do not write copy that implies otherwise.
  */
 export function stickerBudgetFor(anthersDollars: number): number {
 	return anthersDollars <= 0 ? 0 : timePoolFor(anthersDollars) * STICKER_SHARE_OF_POOL;
@@ -422,9 +424,9 @@ export function stickerBudgetFor(anthersDollars: number): number {
  * spaced. `amountMeets` is the only comparison that survives a ladder with gaps.
  *
  * 🚨 **The per-rung scaling is DESIGNED, NOT BUILT** — `estimateStorageCost` bills every
- * creator against `FREE_STORAGE_GIB` flat, and there is no user-side storage at all. 20.06
- * also records that 50 GiB a rung is what the rung budget affords rather than a settled
- * increment.
+ * creator against `FREE_STORAGE_GIB` flat, and there is no user-side storage at all. 50 GiB
+ * a rung is what the rung budget affords rather than a settled increment; the storage-ladder
+ * task on the vault board carries that question.
  */
 export function storageGibFor(anthersDollars: number): number {
 	const rungs = ANTHERS_BADGES.filter((b) => amountMeets(anthersDollars, b.threshold)).length;

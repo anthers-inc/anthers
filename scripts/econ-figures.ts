@@ -72,9 +72,12 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	FREE_STORAGE_GIB,
+	FREE_TIME_POOL,
 	formatMultiple,
 	PUBLIC_ACCESS_PRICE,
 	SALES_TAX_RATE,
+	stickerBudgetFor,
+	storageGibFor,
 	TIME_POOL_RATE,
 	timePoolFor,
 } from "../packages/shared/src/constants.js";
@@ -516,6 +519,57 @@ function renderBadgePublicMarkdown(): string {
 		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds free access and the programs, equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
 		"",
 		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you watch**, because delivery costs nothing at any volume.`,
+	].join("\n");
+}
+
+/**
+ * What each rung of Anthers' own ladder carries, for a public reader.
+ *
+ * 🚨 **Two of these five columns are LIVE and three are COMMITTED AND UNBUILT**, and the
+ * table says so per column rather than in a footnote, because a reader scanning rows would
+ * otherwise take the whole thing as a description of today. Public Access and the Time Pool
+ * ship; the Sticker budget, the storage floor and purchase preservation do not.
+ *
+ * ⚠️ **This block exists so the unbuilt figures are DERIVED rather than typed.**
+ * `stickerBudgetFor` and `storageGibFor` both carry that instruction in their own doc
+ * comments — a marketing page quoting a Sticker budget must get it from the dial, not from
+ * a document that was right when it was written. It is not evidence any of it ships.
+ *
+ * ⭐ **The Sticker budget is carved OUT of the Time Pool, not added beside it**, so those
+ * two columns overlap by design and the note under the table has to say so — otherwise the
+ * row reads as though a Root account sends $2.00 to creators when it sends $1.50.
+ */
+function renderPerkLadderMarkdown(): string {
+	const rows = badgeTable();
+	return [
+		table(
+			["Rung", "A month to Anthers", "Free viewing", "To the Time Pool", "Stickers", "Storage"],
+			[":--", "--:", ":--", "--:", "--:", "--:"],
+			[
+				[
+					"*(no Badge)*",
+					"$0",
+					`${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`,
+					`$${FREE_TIME_POOL.toFixed(2)}`,
+					"—",
+					`${FREE_STORAGE_GIB} GiB`,
+				],
+				...rows.map((r) => [
+					`**${r.badge}**`,
+					`$${r.monthly}`,
+					"unlimited",
+					`$${r.timePool}`,
+					`$${stickerBudgetFor(r.monthly).toFixed(2)}`,
+					`${storageGibFor(r.monthly)} GiB`,
+				]),
+			],
+		),
+		"",
+		"**Free viewing and the Time Pool are live today. Stickers and the storage floor are committed and not built yet.**",
+		"",
+		`A free account's Time Pool is paid by Anthers on its behalf, and its ${FREE_STORAGE_GIB} GiB holds a creator's catalog only — so an account that has never published anything has no storage of its own until the first rung, where the same floor becomes usable for what you keep.`,
+		"",
+		"**The Sticker budget is carved out of the Time Pool rather than added to it.** A Sticker is money already on its way to creators, redirected by you to a particular one; anything you do not spend rejoins the pool at the end of the month and is shared out by time as usual. So the two columns overlap on purpose, and giving no Stickers costs creators nothing.",
 	].join("\n");
 }
 
@@ -1007,6 +1061,11 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
 		key: "badge-table",
 		render: renderBadgePublicMarkdown,
+	},
+	{
+		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		key: "perk-ladder",
+		render: renderPerkLadderMarkdown,
 	},
 	{
 		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
