@@ -1123,8 +1123,11 @@ const BLOCKS: Block[] = [
 		key: "creator-receipt",
 		render: renderCreatorReceiptMarkdown,
 	},
+	// `11.02 Free Access and Charitable Programs` was folded into `Charity References` and
+	// deleted. The block moved with the prose; this entry did not, so `--check --wiki` had
+	// been failing on "no such file" — which is the absent-vs-broken rule doing its job.
 	{
-		file: "10-19 Overview/11 Model & Mission/11.02 Free Access and Charitable Programs.md",
+		file: "KEEP PRIVATE/Charity References.md",
 		key: "self-sufficiency",
 		render: renderSelfSufficiencyMarkdown,
 	},
@@ -1141,11 +1144,11 @@ const BLOCKS: Block[] = [
 	{ file: LADDER, key: "growth-seed-mix", render: renderSeedMixMarkdown },
 	{ file: LADDER, key: "growth-ed-band", render: renderEdBandMarkdown },
 	{ file: LADDER, key: "growth-creator-segments", render: renderCreatorSegmentsMarkdown },
-	{
-		file: "10-19 Overview/11 Model & Mission/11.03 Open Questions re the Support Model.md",
-		key: "free-pot",
-		render: renderFreePotMarkdown,
-	},
+	// The pot's sensitivity table. It lived in `11.03 Open Questions re the Support Model`
+	// while the pot was an open question; that closed 2026-08-31 and the document went with
+	// it. Here because the thing this table varies is 61.01's own central number — the floor
+	// paying share — and the ⭐ note beside `growth-paying-share` already argues from it.
+	{ file: LADDER, key: "free-pot", render: renderFreePotMarkdown },
 ];
 
 // ── 3. The app: a published figure may be DERIVED, never TYPED ───────────────

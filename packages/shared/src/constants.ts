@@ -169,10 +169,17 @@ export const TIME_POOL_RATE = 0.5;
  * The Time Pool Anthers funds on a **free account's** behalf each month, so that a free
  * viewer's watching still pays the creators they watch. The user pays $0.
  *
- * 🚨 **$0.25 is an explicitly PROVISIONAL number (Parker, 2026-08-12) and is expected to
- * move.** It needs vetting against real modeling and real conversion data, not further
- * argument on paper — so treat it as a starting position rather than a settled dial, and
- * see [[11.03 Open Questions]] where it is flagged for review.
+ * **$0.25 is the number, and the review it was waiting for is closed** (Parker, 2026-08-31).
+ * It was flagged PROVISIONAL from 2026-08-12 pending "real modeling and real conversion
+ * data" — the modeling arrived and moved nothing, and the data cannot arrive before there
+ * are accounts. So it stands on its own reasoning rather than on a pending analysis: move it
+ * if it feels wrong once people are using the platform, not because a spreadsheet asked.
+ *
+ * ⚠️ **The stakes fell with the bandwidth bill.** While delivery was metered, free access
+ * cost bandwidth *plus* this pot; it is now this pot alone, on a per-account cost far below
+ * what the dial used to govern. Sensitivity — what each setting costs, as the floor paying
+ * share below which growth never closes the gap — is generated into the growth ladder's
+ * `free-pot` block; read it there before moving this.
  *
  * **Why it is deliberately low rather than deliberately right.** The Public Access revamp
  * proposed **$0.50**, and the docs were written against that figure before the code moved.
