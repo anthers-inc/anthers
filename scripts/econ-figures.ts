@@ -647,6 +647,42 @@ function renderPurchaseExamplesMarkdown(): string {
 	].join("\n");
 }
 
+/**
+ * The same purchase examples, for a creator reading the public wiki. Third sibling of
+ * {@link renderBadgePublicMarkdown}, and it was predicted by the same signal both times
+ * before it: this block carries an `allowRetired`, so it was always going to be carrying a
+ * sentence about a charge that no longer exists.
+ *
+ * ⚠️ **The size column stays and its caption changes.** Size is genuinely useful to a creator
+ * sizing up the table — it is how they find the row that looks like their work — so the column
+ * is not the problem. What had to go is the paragraph explaining that size *used to* change the
+ * arithmetic, which answers a question only somebody who remembers the old model would ask.
+ */
+function renderPurchaseExamplesPublicMarkdown(): string {
+	const rows = purchaseExamples();
+	const cart = cartSaving();
+	return [
+		table(
+			["Item", "You price it", "Size", "Card processing", "**You receive**", "Deduction"],
+			[":--", "--:", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				r.label,
+				`$${r.price}`,
+				r.sizeLabel,
+				`$${r.cardFee}`,
+				`**$${r.creatorReceives}**`,
+				r.deductionPct,
+			]),
+		),
+		"",
+		`**The deduction is card processing and nothing else** — ${(CARD_RATE * 100).toFixed(1)}% plus a flat $${CARD_FLAT.toFixed(2)}, paid to the payment processor, with Anthers keeping $0.00 from every row. The flat part is what the percentages track, and it is the whole reason a $${rows[0].price} track loses ${rows[0].deductionPct} while a $${rows[rows.length - 1].price} game loses ${rows[rows.length - 1].deductionPct}.`,
+		"",
+		`**Size is shown so you can find the row that looks like your work, and it does not affect what you earn.** A ${rows[rows.length - 1].sizeLabel} work and a ${rows[0].sizeLabel} one at the same price pay you exactly the same, and every download after the first costs nobody anything.`,
+		"",
+		`**Selling several things together is what fixes the small end.** ${cart.count} $${cart.unitPrice} tracks bought separately lose **$${cart.separately}** to card fees; bought in one basket they lose **$${cart.inOneCart}**, and every cent of that difference reaches you.`,
+	].join("\n");
+}
+
 /** A mid-size creator's monthly earnings, and the only cost that comes out of them. */
 function renderCreatorReceiptMarkdown(): string {
 	const r = creatorReceipt();
@@ -991,6 +1027,11 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 		file: "40-49 Where the Money Goes/40 The Support Model/40.01 What a Creator Takes Home.md",
 		key: "creator-receipt",
 		render: renderCreatorReceiptMarkdown,
+	},
+	{
+		file: "30-39 Creating on Anthers/31 Getting Paid/31.01 Selling a Work.md",
+		key: "purchase-examples",
+		render: renderPurchaseExamplesPublicMarkdown,
 	},
 ];
 
