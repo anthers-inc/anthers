@@ -1113,13 +1113,6 @@ const BLOCKS: Block[] = [
 			"names the retired first-download charge in the past tense, to explain why size left the table",
 	},
 	{
-		file: "30-39 Creator Experience/31 Monetization/31.02 Direct Creator Purchases.md",
-		key: "purchase-examples",
-		render: renderPurchaseExamplesMarkdown,
-		allowRetired:
-			"names the retired first-download charge in the past tense, to explain why size is shown for scale only",
-	},
-	{
 		file: "60-69 Governance & Strategy/63 Brand/63.01 Copy Style Guide.md",
 		key: "sale-table",
 		render: renderSaleMarkdown,
