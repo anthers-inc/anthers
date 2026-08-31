@@ -583,6 +583,39 @@ function renderSaleMarkdown(): string {
 }
 
 /**
+ * The same sale figures, for the public wiki. Sibling of {@link renderBadgePublicMarkdown},
+ * and the second instance of the same lesson.
+ *
+ * ⭐ **`allowRetired` on a public-wiki block is a contradiction, and it is the signal to
+ * watch for.** The exemption exists to license a deliberately historical sentence for a
+ * reader who was there — the paragraph above explaining that download size *used to* split
+ * these rows. A public document has no such license: it states what is true and deletes what
+ * is not, so a public block that needs the exemption is a public block carrying somebody
+ * else's changelog. **Reach for a public renderer rather than an exemption.**
+ */
+function renderSalePublicMarkdown(): string {
+	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
+	const seed = directedSupportWorstCase();
+	return [
+		table(
+			["Sale price", "The creator receives", "Card processing"],
+			[":--", "--:", "--:"],
+			rows.map((r) => [
+				`$${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"}`,
+				`**$${r.creatorReceives}**`,
+				`$${r.cardFee}`,
+			]),
+		),
+		"",
+		`**Anthers keeps $0.00 from every row.** The only deduction is card processing, which is paid to the payment processor rather than kept, and it is inside the price the buyer saw rather than added to it.`,
+		"",
+		`Monthly support has the same shape: of $${seed.gross} a month pointed at one creator, $${seed.cardFee} is card processing and **$${seed.net}** reaches them. Everything given in a month rides on one payment, so the $${CARD_FLAT.toFixed(2)} flat portion is paid once across every destination rather than once each — which is why supporting several creators together pays each of them more than supporting them separately would.`,
+		"",
+		`**File size does not appear here, because it changes nothing.** Delivery costs nothing at any volume, so every download of a purchased Work is included, forever, on as many devices as the buyer likes.`,
+	].join("\n");
+}
+
+/**
  * The creator-facing worked examples, and what a cart is worth at the small end.
  *
  * This table is the one a creator reads before deciding whether to sell here, and it
@@ -938,6 +971,26 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
 		key: "badge-table",
 		render: renderBadgePublicMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
+		key: "badge-table",
+		render: renderBadgePublicMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
+		key: "sample-receipt",
+		render: renderReceiptMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.01 What a Creator Takes Home.md",
+		key: "sale-table",
+		render: renderSalePublicMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.01 What a Creator Takes Home.md",
+		key: "creator-receipt",
+		render: renderCreatorReceiptMarkdown,
 	},
 ];
 
