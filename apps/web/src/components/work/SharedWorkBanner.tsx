@@ -14,7 +14,7 @@
  * `POST /auth/signup/start` and `/auth/signup/verify` create-or-sign-in and already treat the
  * password as optional (PR #229), and **verification is what creates the account and issues
  * the session** — so there is no half-built identity to reconcile if somebody closes the tab.
- * What is new here is a surface that uses them in place. 21.01 §9.2 is the full ceremony.
+ * What is new here is a surface that uses them in place. the public wiki's *Making an Account* is the full ceremony.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";

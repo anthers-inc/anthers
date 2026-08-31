@@ -77,7 +77,7 @@ export async function publicAccessSecondsThisMonth(
  * 🚨 **A signed-out caller has no allowance, and this returned the full one until
  * 2026-08-28.** The old answer was `publicAccessBudget(0, 0)` — ten hours, nothing spent —
  * justified in a comment as the shop window. Anonymous viewing was never approved
- * (21.01 §9.1): consuming a Work requires an account, because that is how terms are
+ * (the public wiki's *What Is Free, and What Is Gated*): consuming a Work requires an account, because that is how terms are
  * accepted, how 13+ is asserted, and above all how attention is attributed, since the Time
  * Pool cannot pay a creator for time it cannot attribute to anybody. So the generous answer
  * was not merely wrong about policy, it was the thing that let anonymous Public Access

@@ -21,7 +21,7 @@
  *      instead of something that has to be discovered by failing a request.
  *
  * 🚨 **An anonymous viewer has no allowance, so there is no meter to render them.** They
- * cannot consume a Work at all — delivery requires an account (21.01 §9.1) — so a budget
+ * cannot consume a Work at all — delivery requires an account (the public wiki's *What Is Free, and What Is Gated*) — so a budget
  * would be a countdown on something that never starts. `useMeteredBudget` returns null when
  * signed out, and what a signed-out visitor sees in place of a player is the invitation to
  * make an account, from `InlineUnlock`.
@@ -174,6 +174,6 @@ export function shouldWarn(budget: PublicAccessBudget | null): boolean {
 // to sign up is the thing standing where the player would be.
 //
 // Worth a note rather than a silent deletion, because the code was careful, well-tested and
-// entirely correct about a rule that had never been agreed. It was cited in 21.01 §9.1 step
+// entirely correct about a rule that had never been agreed. It was cited in the public wiki's *What Is Free, and What Is Gated* step
 // 3 — *"after approximately 30 minutes of cumulative viewing"* — which is the sentence that
 // section was rewritten to remove.

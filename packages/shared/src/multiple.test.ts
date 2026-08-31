@@ -3,7 +3,7 @@
 // The free-limit prompt's headline number.
 //
 // 🚨 This exists because the number is **copy**, and copy is where a stale figure hides
-// best: 21.01 §9.4 says "paid six times more for your attention", and six is not a fact
+// best: the public wiki's *Badges* says "paid six times more for your attention", and six is not a fact
 // about the world — it is `timePoolFor($3) / FREE_TIME_POOL`, a ratio between two dials,
 // one of which is explicitly provisional. Nothing errors when a dial moves and the
 // sentence doesn't. Same family as the generated econ figures, and the same rule: a

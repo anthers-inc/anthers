@@ -218,8 +218,8 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 		 * The whole account requirement, in one assertion. This read `expect(…G1,
 		 * anon).reason).toBe("free")` until 2026-08-28 — *"a free post is free to anyone,
 		 * logged in or not"* — which was the single fact anonymous viewing rested on, and
-		 * was never a decision anybody took. Consuming a Work requires an account (21.01
-		 * §9.1): it is how terms are accepted, how 13+ is asserted, and how attention is
+		 * was never a decision anybody took. Consuming a Work requires an account (the public wiki's
+		 * *What Is Free, and What Is Gated*): it is how terms are accepted, how 13+ is asserted, and how attention is
 		 * attributed, and the Time Pool cannot pay a creator for time it cannot attribute
 		 * to anyone.
 		 *

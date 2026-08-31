@@ -6,7 +6,7 @@
  * a passing suite cannot notice.** There was no decision to allow anonymous viewing. There
  * was no `requireAuth` on four delivery routes, and a justification for the gap was written
  * down afterwards — *"anonymous streaming of the commons is the shop window"* — which then
- * propagated into 21.01 §9.1, the Roadmap's Free-Limit lane, the meter's module docs and
+ * propagated into the public wiki's *What Is Free, and What Is Gated*, the Roadmap's Free-Limit lane, the meter's module docs and
  * `allowanceSpent`'s own docstring, where it read like settled policy because it was written
  * in the voice of one. Every test in the repo passed throughout. The repo has now been
  * bitten three times by a missing check that nothing asserted the presence of, which is why

@@ -438,7 +438,7 @@ export function storageGibFor(anthersDollars: number): number {
  * `dollars` a month, against giving nothing.
  *
  * 🚨 **This is the free-limit prompt's headline number and it must never be typed into
- * copy.** 21.01 §9.4 reads *"every creator you spend time with is also paid six times
+ * copy.** the public wiki's *Badges* reads *"every creator you spend time with is also paid six times
  * more for your attention"* — and that six is not a fact about the world, it is
  * `1.50 / 0.25`, a ratio between two dials. **`FREE_TIME_POOL` is explicitly provisional
  * and expected to move** (see its own note), so a typed "six" becomes a lie on the day

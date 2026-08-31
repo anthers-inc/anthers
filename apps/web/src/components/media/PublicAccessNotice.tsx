@@ -40,7 +40,7 @@ import {
 /**
  * The multiplier, derived rather than typed.
  *
- * 21.01 §9.4 words this as "six times more", and six is `timePoolFor(PUBLIC_ACCESS_PRICE) /
+ * the public wiki's *Badges* words this as "six times more", and six is `timePoolFor(PUBLIC_ACCESS_PRICE) /
  * FREE_TIME_POOL` — a ratio between two dials, one of which (`FREE_TIME_POOL`) is
  * explicitly provisional. Typing it would put a silent lie in the single piece of copy
  * the conversion argument rests on, the day anyone tunes it.

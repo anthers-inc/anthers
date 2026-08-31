@@ -35,7 +35,7 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  *
  * 🚨 **An allowance belongs to an account, so somebody with no account has none.** That is
  * not a refusal dressed up as arithmetic; it is what the word means here. Consuming a Work
- * requires an account (21.01 §9.1), which makes a signed-out visitor somebody the meter
+ * requires an account (the public wiki's *What Is Free, and What Is Gated*), which makes a signed-out visitor somebody the meter
  * never has to answer for rather than somebody it answers generously about. This module
  * said the opposite until 2026-08-28 — it handed a logged-out caller the full allowance
  * with nothing spent, and called anonymous streaming the shop window — and that sentence
@@ -80,7 +80,7 @@ export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
  * encourage, and it made a minute worth less for how the viewer arrived rather than for how
  * well attended it was, which sits badly beside the equal-time principle (40.05).
  *
- * The figure is illustrative in 21.01 (*"90% own time / 10% shared"*) and belongs to the
+ * The figure is illustrative in the share-link design (*"90% own time / 10% shared"*) and belongs to the
  * financial model rather than to a route.
  */
 export const SHARE_LINK_POOL_FRACTION = 0.1;

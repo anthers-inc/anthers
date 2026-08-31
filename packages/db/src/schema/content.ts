@@ -829,7 +829,7 @@ export const ratings = pgTable(
 /**
  * A link somebody sends a friend, that lets the friend open an **ungated** Work without an
  * account of their own — the single exception to the rule that consuming a Work requires
- * one (21.01 §9.1).
+ * one (the public wiki's *What Is Free, and What Is Gated*).
  *
  * 🚨 **A share link is a locator and never an entitlement** (Parker, 2026-08-27). It tells
  * somebody *where* a Work is; what they may reach is still decided by `resolveAccess` and by

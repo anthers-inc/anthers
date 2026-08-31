@@ -1113,11 +1113,6 @@ const BLOCKS: Block[] = [
 			"names the retired first-download charge in the past tense, to explain why size left the table",
 	},
 	{
-		file: "20-29 User Experience/20 Support Model/20.01 Badges.md",
-		key: "badge-table",
-		render: renderBadgeMarkdown,
-	},
-	{
 		file: "30-39 Creator Experience/31 Monetization/31.02 Direct Creator Purchases.md",
 		key: "purchase-examples",
 		render: renderPurchaseExamplesMarkdown,

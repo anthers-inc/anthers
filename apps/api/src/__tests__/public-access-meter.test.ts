@@ -421,7 +421,7 @@ describe("an anonymous viewer", () => {
 	 *
 	 * Nobody decided that. It was a missing `requireAuth` with a justification written
 	 * afterwards ("anonymous streaming of the commons is the shop window"), which then
-	 * propagated into 21.01, the Roadmap, this test's own comment and the meter's module
+	 * propagated into the onboarding doc, the Roadmap, this test's own comment and the meter's module
 	 * docs — where it read as settled policy because it was written in the voice of one.
 	 */
 	it("has no allowance at all, because an allowance belongs to an account", async () => {
