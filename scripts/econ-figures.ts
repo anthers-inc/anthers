@@ -107,6 +107,27 @@ const REPO = join(import.meta.dir, "..");
 const OBSIDIAN = join(process.env.HOME ?? "", "Obsidian");
 
 /**
+ * The **public** wiki — a second Obsidian vault, holding the documentation written to be
+ * read by anyone rather than by us. Added 2026-08-30, when the Anthers documentation began
+ * moving out of Parker's personal vault into a vault of its own.
+ *
+ * ⭐ **It needs none of `findWiki`'s discovery apparatus, and that is the point of it being
+ * separate rather than a second entry in the same search.** Everything below `findWiki` — the
+ * project-root regex, the area-directory marker, the found-twice failure — exists because the
+ * project's folder *moves inside a personal vault whose shape is nobody's build input*. This
+ * vault **is** the project root, at a path that is its own reason to exist, so the resolution
+ * is one `existsSync`.
+ *
+ * ⚠️ **The absent-versus-broken discipline still applies and is what the override is for.**
+ * No vault on this machine (CI, a contributor's clone) skips silently and correctly. But
+ * `ANTHERS_WIKI` set to a path that does not exist is a **failure**, exactly as `ANTHERS_VAULT`
+ * is — an explicit pointer must never degrade into a skip. And a vault that *is* present with a
+ * block target missing fails in `writeBlocks`, which is the behavior that already catches a
+ * renamed document.
+ */
+const PUBLIC_WIKI = join(process.env.HOME ?? "", "Anthers-Wiki");
+
+/**
  * Where the wiki lives — **discovered, never hardcoded**.
  *
  * 🚨 **This was a literal path until 2026-08-28, and moving the project inside the vault
@@ -173,6 +194,19 @@ function findWiki(): { path: string } | { skip: true } | { error: string } {
  * loose one that starts matching the neighbours.
  */
 const PROJECT_DIR = /^(?:\d{2} )?Anthers$/;
+
+/**
+ * The public wiki, or a reason there is nothing to do. See {@link PUBLIC_WIKI}.
+ */
+function findPublicWiki(): { path: string } | { skip: true } | { error: string } {
+	const override = process.env.ANTHERS_WIKI;
+	if (override) {
+		return existsSync(override)
+			? { path: override }
+			: { error: `ANTHERS_WIKI is set to "${override}", which does not exist` };
+	}
+	return existsSync(PUBLIC_WIKI) ? { path: PUBLIC_WIKI } : { skip: true };
+}
 
 /**
  * Every `Anthers/` folder in the vault that looks like the project root.
@@ -413,6 +447,20 @@ function renderReadmeModelMarkdown(): string {
 	].join("\n");
 }
 
+/**
+ * The Badge ladder, for a reader who already holds the context.
+ *
+ * ⚠️ **The public wiki gets {@link renderBadgePublicMarkdown} instead, and the difference is
+ * not tone.** The last paragraph here explains the table by naming a *Bandwidth* column that
+ * was removed on 2026-08-12 — which is exactly the edit history a public document must not
+ * carry, and it is unusually hard to notice, because a generated block is the one part of a
+ * page nobody proofreads. It published into the public wiki once, on the first run after that
+ * vault was wired up, which is how this was found.
+ *
+ * 🚨 **A renderer is copy, and copy has an audience.** Any block rendered into both vaults has
+ * to be read as though it were written fresh for the public one, because that is where it will
+ * be judged.
+ */
 function renderBadgeMarkdown(): string {
 	const rows = badgeTable();
 	return [
@@ -434,6 +482,40 @@ function renderBadgeMarkdown(): string {
 		`Every row conserves exactly: Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
 		`**No row depends on how much anyone watches.** A *Bandwidth* column sat between the charge and the Time Pool until 2026-08-12, priced off a representative streamer's hours — so every remainder here was a scenario rather than a figure. Delivery costs $0 on R2 at any volume, so the column is gone and these numbers are exact. Watching more is free, and it takes nothing from the mission.`,
+	].join("\n");
+}
+
+/**
+ * The same ladder, for someone who has never read anything else we wrote. See the warning on
+ * {@link renderBadgeMarkdown} for why this exists rather than the two sharing one renderer.
+ *
+ * The figures are identical and come from the same `badgeTable()` — what differs is that
+ * nothing here dates a change, names a mechanism we no longer have, or names a vendor.
+ */
+function renderBadgePublicMarkdown(): string {
+	const rows = badgeTable();
+	return [
+		table(
+			[
+				"Badge",
+				"A month to Anthers",
+				"To the Time Pool",
+				"Card processing",
+				"Free access & programs",
+			],
+			[":--", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				`**${r.badge}**`,
+				`$${r.charge}`,
+				`$${r.timePool}`,
+				`$${r.payments}`,
+				`**$${r.remainder}**`,
+			]),
+		),
+		"",
+		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds free access and the programs, equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
+		"",
+		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you watch**, because delivery costs nothing at any volume.`,
 	].join("\n");
 }
 
@@ -501,6 +583,39 @@ function renderSaleMarkdown(): string {
 }
 
 /**
+ * The same sale figures, for the public wiki. Sibling of {@link renderBadgePublicMarkdown},
+ * and the second instance of the same lesson.
+ *
+ * ⭐ **`allowRetired` on a public-wiki block is a contradiction, and it is the signal to
+ * watch for.** The exemption exists to license a deliberately historical sentence for a
+ * reader who was there — the paragraph above explaining that download size *used to* split
+ * these rows. A public document has no such license: it states what is true and deletes what
+ * is not, so a public block that needs the exemption is a public block carrying somebody
+ * else's changelog. **Reach for a public renderer rather than an exemption.**
+ */
+function renderSalePublicMarkdown(): string {
+	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
+	const seed = directedSupportWorstCase();
+	return [
+		table(
+			["Sale price", "The creator receives", "Card processing"],
+			[":--", "--:", "--:"],
+			rows.map((r) => [
+				`$${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"}`,
+				`**$${r.creatorReceives}**`,
+				`$${r.cardFee}`,
+			]),
+		),
+		"",
+		`**Anthers keeps $0.00 from every row.** The only deduction is card processing, which is paid to the payment processor rather than kept, and it is inside the price the buyer saw rather than added to it.`,
+		"",
+		`Monthly support has the same shape: of $${seed.gross} a month pointed at one creator, $${seed.cardFee} is card processing and **$${seed.net}** reaches them. Everything given in a month rides on one payment, so the $${CARD_FLAT.toFixed(2)} flat portion is paid once across every destination rather than once each — which is why supporting several creators together pays each of them more than supporting them separately would.`,
+		"",
+		`**File size does not appear here, because it changes nothing.** Delivery costs nothing at any volume, so every download of a purchased Work is included, forever, on as many devices as the buyer likes.`,
+	].join("\n");
+}
+
+/**
  * The creator-facing worked examples, and what a cart is worth at the small end.
  *
  * This table is the one a creator reads before deciding whether to sell here, and it
@@ -529,6 +644,42 @@ function renderPurchaseExamplesMarkdown(): string {
 		`**Size is in the table for scale, not for money.** A digital sale used to deduct the first download's delivery at cost as well; delivery is free since 2026-08-12, so a ${rows[rows.length - 1].sizeLabel} work and a ${rows[0].sizeLabel} one at the same price pay their creator exactly the same, and every later download costs nobody anything.`,
 		"",
 		`**The cart is the mechanism that fixes the small end.** ${cart.count} $${cart.unitPrice} tracks bought separately lose **$${cart.separately}** to card fees; bought in one cart they lose **$${cart.inOneCart}**, and every cent of that difference goes to the creators.`,
+	].join("\n");
+}
+
+/**
+ * The same purchase examples, for a creator reading the public wiki. Third sibling of
+ * {@link renderBadgePublicMarkdown}, and it was predicted by the same signal both times
+ * before it: this block carries an `allowRetired`, so it was always going to be carrying a
+ * sentence about a charge that no longer exists.
+ *
+ * ⚠️ **The size column stays and its caption changes.** Size is genuinely useful to a creator
+ * sizing up the table — it is how they find the row that looks like their work — so the column
+ * is not the problem. What had to go is the paragraph explaining that size *used to* change the
+ * arithmetic, which answers a question only somebody who remembers the old model would ask.
+ */
+function renderPurchaseExamplesPublicMarkdown(): string {
+	const rows = purchaseExamples();
+	const cart = cartSaving();
+	return [
+		table(
+			["Item", "You price it", "Size", "Card processing", "**You receive**", "Deduction"],
+			[":--", "--:", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				r.label,
+				`$${r.price}`,
+				r.sizeLabel,
+				`$${r.cardFee}`,
+				`**$${r.creatorReceives}**`,
+				r.deductionPct,
+			]),
+		),
+		"",
+		`**The deduction is card processing and nothing else** — ${(CARD_RATE * 100).toFixed(1)}% plus a flat $${CARD_FLAT.toFixed(2)}, paid to the payment processor, with Anthers keeping $0.00 from every row. The flat part is what the percentages track, and it is the whole reason a $${rows[0].price} track loses ${rows[0].deductionPct} while a $${rows[rows.length - 1].price} game loses ${rows[rows.length - 1].deductionPct}.`,
+		"",
+		`**Size is shown so you can find the row that looks like your work, and it does not affect what you earn.** A ${rows[rows.length - 1].sizeLabel} work and a ${rows[0].sizeLabel} one at the same price pay you exactly the same, and every download after the first costs nobody anything.`,
+		"",
+		`**Selling several things together is what fixes the small end.** ${cart.count} $${cart.unitPrice} tracks bought separately lose **$${cart.separately}** to card fees; bought in one basket they lose **$${cart.inOneCart}**, and every cent of that difference reaches you.`,
 	].join("\n");
 }
 
@@ -834,6 +985,54 @@ const LADDER =
  */
 const REPO_BLOCKS: Block[] = [
 	{ file: "README.md", key: "readme-model", render: renderReadmeModelMarkdown },
+];
+
+/**
+ * Generated regions in the **public** wiki. See {@link PUBLIC_WIKI}.
+ *
+ * 🚨 **These are the highest-stakes blocks in the file, because their audience is not us.**
+ * A stale figure in the private vault misleads the person who wrote it; a stale figure here
+ * misleads someone deciding whether to trust the platform with their money, on a page whose
+ * whole argument is that Anthers is straight about where the money goes.
+ *
+ * ⚠️ **Every money figure in the public wiki that is *not* inside one of these regions is
+ * hand-typed and unguarded.** Several are, as of this writing — correct, because each was
+ * checked against `fees.ts` when written, and unprotected against the next time a constant
+ * moves. Pointing `scanDocs` at this vault is what closes that, and it is deliberately not in
+ * this change: it will report real hits, and a guard turned on in the same commit as the work
+ * it fails is a guard nobody can tell apart from a broken one.
+ */
+const PUBLIC_WIKI_BLOCKS: Block[] = [
+	{
+		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		key: "badge-table",
+		render: renderBadgePublicMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
+		key: "badge-table",
+		render: renderBadgePublicMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
+		key: "sample-receipt",
+		render: renderReceiptMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.01 What a Creator Takes Home.md",
+		key: "sale-table",
+		render: renderSalePublicMarkdown,
+	},
+	{
+		file: "40-49 Where the Money Goes/40 The Support Model/40.01 What a Creator Takes Home.md",
+		key: "creator-receipt",
+		render: renderCreatorReceiptMarkdown,
+	},
+	{
+		file: "30-39 Creating on Anthers/31 Getting Paid/31.01 Selling a Work.md",
+		key: "purchase-examples",
+		render: renderPurchaseExamplesPublicMarkdown,
+	},
 ];
 
 const BLOCKS: Block[] = [
@@ -1693,8 +1892,20 @@ if (wikiRequested) {
 		console.log(`  wiki: ${wiki.path}`);
 		await writeBlocks(wiki.path, BLOCKS);
 	}
+
+	// The public wiki, on the same absent-versus-broken rule and with none of the searching.
+	const publicWiki = findPublicWiki();
+	if ("error" in publicWiki) {
+		failures.push(`the public wiki blocks were not checked at all — ${publicWiki.error}`);
+	} else if ("skip" in publicWiki) {
+		console.log("  (no public wiki on this machine — skipping its blocks)");
+	} else {
+		console.log(`  public wiki: ${publicWiki.path}`);
+		await writeBlocks(publicWiki.path, PUBLIC_WIKI_BLOCKS);
+	}
 } else {
-	console.log(`  (wiki blocks not requested — ${BLOCKS.length} blocks skipped; make wiki-figures)`);
+	const total = BLOCKS.length + PUBLIC_WIKI_BLOCKS.length;
+	console.log(`  (wiki blocks not requested — ${total} blocks skipped; make wiki-figures)`);
 }
 
 await scanApp();
