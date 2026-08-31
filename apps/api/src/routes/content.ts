@@ -1463,7 +1463,7 @@ function serializeWorkForViewer(
  * never spent: the server hands anonymous callers the full allowance on purpose, because
  * anonymous streaming of the commons is the shop window."* Nobody decided that. It was a
  * plausible-sounding sentence invented to explain a missing `requireAuth`, and from here it
- * reached 21.01, the Roadmap and the meter's own module docs, where it read like settled
+ * reached the onboarding doc, the Roadmap and the meter's own module docs, where it read like settled
  * policy because it was written in the voice of one. **A comment explaining why the code is
  * right is not evidence that anybody chose it.**
  *
@@ -2276,7 +2276,7 @@ const contentRoutes = new Hono()
 	 *
 	 * Anonymous delivery was never a decision. It was the absence of this middleware, which
 	 * later acquired a written justification ("anonymous streaming of the commons is the
-	 * shop window") that propagated into 21.01, the Roadmap and this file's own comments.
+	 * shop window") that propagated into the onboarding doc, the Roadmap and this file's own comments.
 	 * What it cost, concretely: `POST /attention` **is** authenticated, so the bytes went out
 	 * and no attention event was ever written — **the creator earned nothing for anonymous
 	 * viewing of their Public Access work**, silently, with no error and nothing logged. And

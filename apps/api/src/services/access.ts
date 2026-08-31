@@ -512,7 +512,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		 * fact the whole anonymous-viewing model rested on. It was never a decision: no
 		 * delivery route carried `requireAuth`, and a justification for the absence
 		 * ("anonymous streaming of the commons is the shop window") was written down
-		 * afterwards and propagated into 21.01, the Roadmap and this layer's own comments.
+		 * afterwards and propagated into the onboarding doc, the Roadmap and this layer's own comments.
 		 * Parker's correction on 2026-08-14 is that an account is how terms are accepted,
 		 * how 13+ is asserted, and above all how attention is attributed — **the Time Pool
 		 * cannot pay a creator for time it cannot attribute to anyone.** So the commons was
