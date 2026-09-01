@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Payments schema — see auth.ts for the role-classification legend. All four tables
- * are `org` by the treasury rule (41.02: "Payments, pools, payouts, KYC → Org only.
+ * are `org` by the treasury rule (boundary table: "Payments, pools, payouts, KYC → Org only.
  * Money cannot federate"). No exceptions.
  */
 import {
@@ -36,7 +36,7 @@ export const stripeAccounts = pgTable("stripe_accounts", {
 
 // org — a purchase is a financial record (the doc comment: "a receipt is not a detail
 // of the thing bought; it outlives it"). All three FKs are set-null because money
-// records outlive accounts. 41.02: money cannot federate.
+// records outlive accounts. Money cannot federate.
 export const purchases = pgTable(
 	"purchases",
 	{

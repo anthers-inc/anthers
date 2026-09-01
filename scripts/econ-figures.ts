@@ -1444,7 +1444,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 	{
 		// A mechanism the code never had, rather than one it lost — but the test the list
 		// applies is the same ("the only correct number of occurrences is zero"), and so is
-		// the fix. ATProto adoption is deferred (41.01): what ships is Bluesky identity
+		// the fix. ATProto adoption is deferred: what ships is Bluesky identity
 		// LINKING, and the `atproto_uri` columns sit unpopulated as future-proofing. This
 		// framing has drifted back onto marketing pages twice — PR #166 removed it from
 		// /for-creators, #183 from the Ghost comparison — which is what earns it a guard
@@ -1457,7 +1457,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			`${NOT_NEGATED}(?:built on the AT ?Protocol|portable DID|stored as ATProto records)`,
 			"gi",
 		),
-		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
+		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (wiki: What Anthers Would Put on the Network)",
 	},
 	{
 		// The same claim in a wording the rule above could not see, which is the third time
@@ -1476,7 +1476,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// guidelines"*. All three must stay silent, and all three do, because none of them
 		// uses the adjective. Verified by sabotage against each.
 		pattern: new RegExp(`${NOT_NEGATED}\\bfederated\\b`, "gi"),
-		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (63.01; 41.01)",
+		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (63.01; wiki: Federation and Creator Nodes)",
 	},
 	{
 		// The second mechanism the code never had, and the one that had spread furthest: a
@@ -1549,7 +1549,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// true now is open-source and no lock-in, which is what the canonical intro says
 		// instead.
 		pattern: new RegExp(`${NOT_NEGATED}open,?\\s+(?:and\\s+)?distributed network`, "gi"),
-		why: "Anthers is centralized-first — federation is coming, not here (63.01; 41.01)",
+		why: "Anthers is centralized-first — federation is coming, not here (63.01; wiki: Federation and Creator Nodes)",
 	},
 	{
 		// Not a retired *mechanism* like the two above — a retired *word* for a live one,

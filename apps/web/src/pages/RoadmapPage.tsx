@@ -296,6 +296,24 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							startQ: 5,
 							endQ: 7,
 						},
+						{
+							id: "c-audience-export",
+							title: "Taking Your Audience With You",
+							description:
+								"An export of who follows and supports you, so leaving costs you your audience relationship as little as possible. Handles and follow dates always; a contact address only for people who explicitly chose to share it with you, off by default; never payment or consumption data. Billing is between a supporter and Anthers rather than between a supporter and you, so what you get is an index over other people's own assertions, not a customer list — and for the people who shared nothing, the answer is a one-time migration notice we deliver rather than a contact detail we hand over.",
+							status: "exploring",
+							startQ: 4,
+							endQ: 6,
+						},
+						{
+							id: "c-network-catalog",
+							title: "Publishing Your Catalog to the Network",
+							description:
+								"Your Catalog as public records in a repository you own, so a listing of your work outlives any one host — the listing only, never the work itself, which no repository on this network could hold privately. Blocked on the AT Protocol's granular permissions, which are not ready to ask a creator for in production; hosting identities ourselves would unblock the whole class at once. The schemas are written and checked against real data, and deliberately not published, because publishing one is a promise to everybody else's software that cannot be withdrawn.",
+							status: "exploring",
+							startQ: 5,
+							endQ: 8,
+						},
 					],
 				},
 			],

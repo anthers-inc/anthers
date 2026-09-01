@@ -311,7 +311,7 @@ export default function CompareItchPage() {
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="Subscription pool model" anthers />
 								{/* Identity LINKING is what ships — OAuth against a Bluesky PDS. Record sync,
-								    lexicons and federation are deferred (41.01), so the row names the live
+								    lexicons and federation are deferred, so the row names the live
 								    thing rather than the protocol it might one day sit on. */}
 								<CompRow feature="Bluesky identity linking" anthers />
 								<CompRow feature="Desktop client" patreon />
@@ -354,7 +354,7 @@ export default function CompareItchPage() {
 					 * 🚨 This section claimed content was "stored as ATProto records" and identity
 					 * was "a portable DID you truly own". Neither ships: `atproto_uri` columns are
 					 * future-proofing and sit unpopulated, and what exists is Bluesky identity
-					 * LINKING (41.01). The replacement is not weaker — it is two things that are
+					 * LINKING. The replacement is not weaker — it is two things that are
 					 * actually true and testable today, plus a promise kept in the future tense.
 					 */}
 					<Reveal delay={0}>
