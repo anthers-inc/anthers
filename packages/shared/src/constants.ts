@@ -325,6 +325,14 @@ export function thresholdOf(name: string, badges: readonly BadgeDef[] = ANTHERS_
  * Anthers' Badges and a creator's differ solely in which amount is passed in. A gate
  * needn't sit on a Badge: with Badges at $2 and $4, a gate at $3 is legal and someone
  * giving $3 clears it.
+ *
+ * 🚨 **It compares in whole cents and ROUNDS rather than floors, and flooring here is a
+ * real defect that looks like caution.** Thresholds were integers once and could not go
+ * wrong; dollars are floats read off `numeric` columns. Flooring breaks precisely where
+ * the two sides are reached differently — an amount arrived at by *adding* allocations,
+ * against a threshold stored as a literal. `$1.00 + $1.14` is `2.1399999999999997`, which
+ * floors to 213c against $2.14's 214c and refuses a supporter who paid exactly the asking
+ * amount. Do not "tighten" this to a floor.
  */
 export function amountMeets(held: number, threshold: number): boolean {
 	return cents(held) >= cents(threshold);

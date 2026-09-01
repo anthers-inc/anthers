@@ -401,7 +401,32 @@ export function unlockRoute(
 
 /**
  * Resolve access for a single Work against an already-loaded viewer context.
- * Pure and synchronous, so a Catalog page resolves a batch cheaply.
+ * Pure and synchronous, so a Catalog page resolves a batch cheaply — and so access
+ * semantics are exhaustively testable without a browser.
+ *
+ * **This is the single source of truth for who may reach what.** The creator-facing rule
+ * it implements is public (the wiki's *Gating a Work*); what follows is the machinery,
+ * and each line of it has been got wrong at least once.
+ *
+ * - **A viewer qualifies for a row by meeting its threshold, and among the allowed rows
+ *   they qualify for, the CHEAPEST price wins.** Zero means free; above zero means a
+ *   one-time purchase unlocking the Work's enabled delivery. No qualifying allowed row is
+ *   a hard gate. **Each table is cumulative** — a row allowed at $3 is visible at $3 and above.
+ * - 🚨 **Resolution reads the AMOUNT GIVEN, never the Badge it names.** Collapsing to the
+ *   held Badge first would round somebody giving $9 down to a $6 Badge and deny them a
+ *   gate they clear.
+ * - **`offersFor` is one function serving both tables**, differing only in which amount is
+ *   passed in — Anthers' Badges and a creator's are the same comparison.
+ * - 🚨 **`anthersSupport` is deliberately NOT in `AccessContext`.** A Badge is *structurally*
+ *   unable to affect access rather than merely asserted not to, which is the same property
+ *   `following` has always had. Do not add it "for convenience".
+ * - ⚠️ **Older documents describe combinable AND/OR gate logic. It was never built**, and
+ *   there is no combinator column anywhere. If you meet that description, it is stale.
+ *
+ * Two things deliberately live OUTSIDE this function, and both would cost it its purity:
+ * the Public Access meter (an account's allowance is not a property of a Work — see the
+ * wiki's *What Is Free, and What Is Gated*) and the Library (a shelf entry is curation, and
+ * `resolveAccess` must never learn to read `library_items`).
  */
 export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): AccessResult {
 	const base = {

@@ -149,6 +149,24 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							endQ: 1,
 						},
 						{
+							id: "c-web-native-games",
+							title: "Web-Native Game Hosting",
+							description:
+								"Host a web build on Anthers and serve every file of it — loader, assets, the lot — through the same access check as everything else, so a gated web game is gated rather than merely unlisted. Today a browser-playable game is an embed pointing at a host we don't control.",
+							status: "planned",
+							startQ: 2,
+							endQ: 4,
+						},
+						{
+							id: "c-linux-compat",
+							title: "Linux Compatibility",
+							description:
+								"A published, openly-specified manifest per title so a Windows-only build runs on Linux — and so Heroic, Lutris, Bottles and anything else can support Anthers without our involvement. The manifest comes first deliberately: ship a packaging pipeline before the spec is public and we've rebuilt launcher lock-in under a different name.",
+							status: "exploring",
+							startQ: 5,
+							endQ: 7,
+						},
+						{
 							id: "c-multimedia-expand",
 							title: "Multi-Media Expansion",
 							description:
@@ -216,6 +234,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 								"Collaborative bundles with discounted combined gate access and engagement-time proportional revenue sharing.",
 							status: "exploring",
 							startQ: 5,
+							endQ: 7,
+						},
+						{
+							id: "c-license-toolkit",
+							title: "Ownership & Licensing Options",
+							description:
+								"A toolkit a creator picks from for what buying their work means — DRM-free, or a seat that moves between machines. The floor already holds and is not waiting on this: unpublishing a Work never revokes a purchase.",
+							status: "exploring",
+							startQ: 6,
 							endQ: 7,
 						},
 					],

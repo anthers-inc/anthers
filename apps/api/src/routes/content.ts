@@ -301,6 +301,12 @@ async function findWorkRow(param: string): Promise<typeof works.$inferSelect | n
  * rule in the system — prose in a post body earned nothing while the same prose as a
  * content element earned. The rule was right; the earning form just had no home.
  */
+/**
+ * The Work types, and **the authority on the list** — not any table in any document.
+ * There are nine. A doc listing eight is how `ebook` got missed once, so add a type
+ * here first and let the documentation follow; `CONSUMPTION` in `attention.ts` is tied
+ * to this by a test, because a type missing from there earns its creator nothing.
+ */
 const WORK_TYPES = [
 	"text",
 	"video",
