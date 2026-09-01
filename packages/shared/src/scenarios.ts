@@ -20,6 +20,8 @@
 import Decimal from "decimal.js";
 import {
 	BADGE_ORDER,
+	CARD_FLAT,
+	CARD_RATE,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	PUBLIC_ACCESS_PRICE,
@@ -706,5 +708,111 @@ export function directedSupportWorstCase(monthly = PUBLIC_ACCESS_PRICE) {
 		gross: money(new Decimal(monthly)),
 		net: money(s.creatorNet),
 		cardFee: money(s.payments),
+	};
+}
+
+// ── The published case studies ───────────────────────────────────────────────
+//
+// 🚨 **These exist because two public pages CLAIMED to be generated and were not.**
+// *What It Costs, Against What You Pay Now* opened by telling a reader that every
+// Anthers figure on it came from the platform's own code — while every one of them
+// had been typed by hand, on the page whose entire argument is that Anthers can be
+// checked. The figures happened to be right; the sentence about them was not, and it
+// was the sentence a reader would rely on. Corrected 2026-08-31 by making it true.
+//
+// Only the **Anthers** side belongs here. What a rival charges is research, dated and
+// perishable, and both pages say so in their own words — see `RIVAL_STOREFRONTS` for
+// the storefront rates and 62.04 in the vault for the sourcing discipline.
+
+/**
+ * A reader's month, as the public case studies state it.
+ *
+ * `anthers` and `creators` are the two ASSUMPTIONS — what this person gives Anthers
+ * and what they point at creators. Everything else derives. Sales tax is the only
+ * thing added on top of a support charge, per `SALES_TAX_RATE`.
+ */
+export const USER_CASES: { name: string; anthers: number; creators: number; note: string }[] = [
+	{ name: "Parker", anthers: PUBLIC_ACCESS_PRICE, creators: 25.5, note: "seven creators" },
+	{ name: "Jane", anthers: PUBLIC_ACCESS_PRICE, creators: 7, note: "two creators" },
+	{ name: "Tomas", anthers: PUBLIC_ACCESS_PRICE, creators: 10, note: "two artists" },
+];
+
+export function userCases() {
+	return USER_CASES.map(({ name, anthers, creators, note }) => {
+		const b = supportBreakdown({ anthersDollars: anthers, creatorDollars: creators });
+		return {
+			name,
+			note,
+			toAnthers: money(new Decimal(anthers)),
+			directed: money(new Decimal(creators)),
+			// What they actually pay: the support charge carries its own card cost
+			// inside it, and tax is the only thing added.
+			total: money(b.total.times(1 + SALES_TAX_RATE)),
+			// What reaches creators is directed support net of its share of the card
+			// fee, plus the Time Pool half of what went to Anthers.
+			directedNet: money(b.creatorNet),
+			timePool: money(b.timePool),
+			reachingCreators: money(b.creatorNet.plus(b.timePool)),
+		};
+	});
+}
+
+/**
+ * The purchase case, and the one row where a percentage marketplace wins.
+ *
+ * ⚠️ **The crossover is computed rather than asserted, and the asserted one was wrong.**
+ * Both public pages said a 30% storefront returns more "below about $1.15"; at $1.15
+ * Anthers is already ahead, because the true crossing is where `0.30p` meets
+ * `RATE·p + FLAT`. Rounding a crossover outward looks conservative and is simply a
+ * different claim — it concedes rows that are not lost.
+ */
+export function purchaseCase(prices = [30, 60], rivalCut = 0.3) {
+	const rows = prices.map((price) => {
+		const list = new Decimal(price);
+		const r = calculateFees(list, { type: "digital" });
+		return {
+			price: money(list),
+			buyerPays: money(list.times(1 + SALES_TAX_RATE)),
+			creatorReceives: money(r.creatorEarnings),
+			cardFee: money(r.processingFee),
+			rivalReceives: money(list.times(1 - rivalCut)),
+			rivalCut: money(list.times(rivalCut)),
+		};
+	});
+	// Solve `(1 − rivalCut)·p = p − (RATE·p + FLAT)` for p, then walk up in cents to
+	// the first price at which Anthers actually wins once both sides are rounded.
+	let p = new Decimal(CARD_FLAT).dividedBy(new Decimal(rivalCut).minus(CARD_RATE));
+	p = p.toDecimalPlaces(2, Decimal.ROUND_CEIL);
+	for (let i = 0; i < 200; i++) {
+		const mine = calculateFees(p, { type: "digital" }).creatorEarnings;
+		if (mine.greaterThanOrEqualTo(p.times(1 - rivalCut))) break;
+		p = p.plus(0.01);
+	}
+	return { rows, crossover: money(p), rivalCutPct: `${(rivalCut * 100).toFixed(0)}%` };
+}
+
+/**
+ * What a thousand accounts put into the Time Pool in a month, and who funds it.
+ *
+ * The one ASSUMPTION is the paying share; everything else derives from `TIME_POOL_RATE`
+ * and `FREE_TIME_POOL`. Published on the creator case-study page to answer the question
+ * that decides whether the model is worth moving to: **more viewing does not create more
+ * money.** The pot is set by headcount, and attention divides it.
+ */
+export function timePoolPerThousand(accounts = 1000, payingShare = 0.1) {
+	const paying = Math.round(accounts * payingShare);
+	const free = accounts - paying;
+	const fromPaying = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE)).times(paying);
+	const fromFree = new Decimal(FREE_TIME_POOL).times(free);
+	const total = fromPaying.plus(fromFree);
+	return {
+		accounts,
+		paying,
+		free,
+		payingSharePct: `${(payingShare * 100).toFixed(0)}%`,
+		fromPaying: money(fromPaying),
+		fromFree: money(fromFree),
+		total: money(total),
+		freeSharePct: `${fromFree.dividedBy(total).times(100).toFixed(0)}%`,
 	};
 }
