@@ -94,6 +94,7 @@ import {
 	MODELLED_PAYING_SHARE,
 	PAYING_BADGE_MIX,
 	payingShareSensitivity,
+	purchaseCase,
 	purchaseExamples,
 	RIVAL_STOREFRONTS,
 	salaryLandmarks,
@@ -102,6 +103,8 @@ import {
 	seedMixSensitivity,
 	selfSufficiency,
 	takeHomeComparison,
+	timePoolPerThousand,
+	userCases,
 } from "../packages/shared/src/scenarios.js";
 
 const REPO = join(import.meta.dir, "..");
@@ -1005,6 +1008,105 @@ function renderFreePotMarkdown(): string {
 	].join("\n");
 }
 
+/**
+ * The user case studies' Anthers side, for `11.05`.
+ *
+ * 🚨 **This block exists because the page lied about itself.** Its second paragraph told
+ * a reader that every Anthers figure on it was generated from the platform's own code —
+ * on a page whose whole argument is that Anthers can be checked — and every one of them
+ * had been typed by hand. They were *correct*, which is the part that makes this the
+ * dangerous kind of wrong: nothing looked broken, and the sentence a reader would rely
+ * on to trust the rest was the one that was false.
+ *
+ * Only the Anthers column is rendered. What an incumbent charges is dated research, and
+ * the page says so in its own voice rather than implying the same guarantee covers both.
+ */
+function renderUserCasesMarkdown(): string {
+	const cases = userCases();
+	const pc = purchaseCase();
+	const buy = pc.rows[0];
+	return [
+		"**A month of support, and what reaches creators.** Each row assumes only two things — what the person gives Anthers, and what they point at creators. Everything else is derived.",
+		"",
+		table(
+			[
+				"",
+				"To Anthers",
+				"Directed",
+				"They pay",
+				"Directed reaches",
+				"Time Pool",
+				"**Creators get**",
+			],
+			[":--", "--:", "--:", "--:", "--:", "--:", "--:"],
+			cases.map((c) => [
+				`**${c.name}** — ${c.note}`,
+				`$${c.toAnthers}`,
+				`$${c.directed}`,
+				`$${c.total}`,
+				`$${c.directedNet}`,
+				`$${c.timePool}`,
+				`**$${c.reachingCreators}**`,
+			]),
+		),
+		"",
+		`**They pay** is the whole monthly charge with sales tax, the only thing added on top; the card cost sits *inside* it and is paid to the processor. **Directed reaches** is what a creator receives after that charge's card fee is split pro-rata — so it rises as a share the more somebody gives, because the flat part is paid once per charge rather than once per creator.`,
+		"",
+		"**A purchase, against a storefront taking " + pc.rivalCutPct + ".**",
+		"",
+		table(
+			[
+				"A sale",
+				"The buyer pays",
+				"**Anthers → creator**",
+				"Card",
+				`${pc.rivalCutPct} storefront → creator`,
+			],
+			["--:", "--:", "--:", "--:", "--:"],
+			pc.rows.map((r) => [
+				`$${r.price}`,
+				`$${r.buyerPays}`,
+				`**$${r.creatorReceives}**`,
+				`$${r.cardFee}`,
+				`$${r.rivalReceives}`,
+			]),
+		),
+		"",
+		`**Below $${pc.crossover} the storefront returns more**, because a flat percentage is smaller than a flat fee at the very bottom. Above it Anthers wins by a widening margin — at $${buy.price} the difference is the storefront's entire $${pc.rows[0].rivalCut} cut. The crossover is computed rather than asserted; both pages said "about $1.15" until 2026-08-31, which conceded rows that were not lost.`,
+	].join("\n");
+}
+
+/**
+ * The Time Pool's size at a stated paying share, for `31.03`.
+ *
+ * This is the arithmetic a creator has to see before deciding whether to move, and it is
+ * the one that gets assumed backwards: **the pot is set by headcount, not by watching.**
+ * More viewing does not grow it; it divides the same money further. Generated because
+ * the page told readers it was, and was not.
+ */
+function renderTimePoolPerThousandMarkdown(): string {
+	const p = timePoolPerThousand();
+	return [
+		table(
+			[
+				`Per ${p.accounts.toLocaleString()} accounts, at ${p.payingSharePct} paying`,
+				"Funds the Time Pool with",
+			],
+			[":--", "--:"],
+			[
+				[
+					`**${p.paying}** supporting Anthers at $${PUBLIC_ACCESS_PRICE} a month`,
+					`$${p.fromPaying}`,
+				],
+				[`**${p.free}** free accounts, paid by Anthers on their behalf`, `$${p.fromFree}`],
+				["**The whole pot**", `**$${p.total}**`],
+			],
+		),
+		"",
+		`That is the entire pot, **however much anybody watches** — it is set by how many accounts exist and what they give, and attention only decides how it is divided. At this paying share **free accounts fund ${p.freeSharePct} of it**, which makes a free viewer a paying viewer that Anthers pays for.`,
+	].join("\n");
+}
+
 interface Block {
 	file: string;
 	key: string;
@@ -1091,6 +1193,16 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 		file: "30-39 Creating on Anthers/31 Getting Paid/31.01 Selling a Work.md",
 		key: "purchase-examples",
 		render: renderPurchaseExamplesPublicMarkdown,
+	},
+	{
+		file: "10-19 What Anthers Is/11 How It Works/11.05 What It Costs, Against What You Pay Now.md",
+		key: "user-cases",
+		render: renderUserCasesMarkdown,
+	},
+	{
+		file: "30-39 Creating on Anthers/31 Getting Paid/31.03 What You'd Earn, Against What You Earn Now.md",
+		key: "time-pool-size",
+		render: renderTimePoolPerThousandMarkdown,
 	},
 ];
 
@@ -1212,10 +1324,27 @@ const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"]
  * to `APP_ROOTS` got, and for the same reason — these patterns match retired *copy*, and
  * copy is not what a license is made of.
  */
-async function docFiles(): Promise<string[]> {
-	const out: string[] = [];
-	for await (const path of markdownFiles(REPO)) out.push(relative(REPO, path));
-	return out.sort();
+async function docFiles(): Promise<{ root: string; file: string }[]> {
+	const out: { root: string; file: string }[] = [];
+	for await (const path of markdownFiles(REPO))
+		out.push({ root: REPO, file: relative(REPO, path) });
+	// 🚨 **The public wiki is scanned too, and this closes the hazard PUBLIC_WIKI_BLOCKS
+	// documented against itself.** That list's comment said every money figure in the
+	// public wiki outside a generated region was hand-typed and unguarded, and that
+	// pointing this scan at the vault was what would close it — deliberately deferred,
+	// because a guard turned on in the same commit as the work it fails is a guard
+	// nobody can tell apart from a broken one. Two pages were then written that
+	// *claimed* to be generated and were not, which is the cost of leaving it open.
+	//
+	// ⚠️ Absent is not broken: the public wiki is a local vault that only Parker has, so
+	// CI has none and skips this silently. Its blocks are already checked the same way.
+	const pub = findPublicWiki();
+	if ("path" in pub) {
+		for await (const path of markdownFiles(pub.path)) {
+			out.push({ root: pub.path, file: `[wiki] ${relative(pub.path, path)}` });
+		}
+	}
+	return out.sort((a, b) => a.file.localeCompare(b.file));
 }
 
 /**
@@ -1239,7 +1368,22 @@ async function docFiles(): Promise<string[]> {
  * would have taught us to annotate good copy rather than fix bad copy, and that is how
  * a guard becomes noise people route around.
  */
-const NOT_NEGATED = /(?<!\b(?:no|never|not|without|nor|zero) )/.source;
+/**
+ * Exclude a phrase that is being denied rather than claimed.
+ *
+ * ⚠️ **The negator is not always the adjacent word, and assuming it was cost a false
+ * positive on correct copy** (found 2026-08-31, when this scan first reached the public
+ * wiki). The architecture page says *"Nothing is federated, nothing is distributed"* —
+ * the exact sentence a centralized-first platform should be publishing — and the guard
+ * flagged it, because the word before `federated` is `is`. A guard that fires on the
+ * right sentence teaches the next person to annotate good copy instead of fixing bad
+ * copy, which is the failure this file warns about elsewhere and then committed here.
+ *
+ * So the lookbehind scans a short window rather than one word. The window is deliberately
+ * small: far enough to clear *"nothing is"* and *"not yet a"*, short enough that a
+ * negation two clauses back cannot launder a claim made afterwards.
+ */
+const NOT_NEGATED = /(?<!\b(?:no|never|not|without|nor|zero|nothing|none)\b[^.!?]{0,24})/.source;
 const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 	{
 		// 🚨 The Seed retired as a FINANCIAL UNIT on 2026-08-16 — thresholds, Badge levels
@@ -1761,8 +1905,8 @@ async function scanApp() {
 
 async function scanDocs() {
 	const index = publishedFigures();
-	for (const file of await docFiles()) {
-		const path = join(REPO, file);
+	for (const { root, file } of await docFiles()) {
+		const path = join(root, file.replace(/^\[wiki\] /, ""));
 		if (!existsSync(path)) continue;
 		const source = await readFile(path, "utf8");
 		const fileWide = ALLOW_FILE.exec(source);
