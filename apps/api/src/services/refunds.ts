@@ -3,9 +3,10 @@
  * Refunds — the one place a purchase is reversed, whoever asked for it.
  *
  * A refund is what the never-contest posture actually *does*, so it has to work
- * before the storefront takes real money. Both the accounting rule (Billing Cycle and Arrears Model
- * § Refunds) and the policy above it (Terms of Service § Refunds, decided 2026-08-09) are
- * settled; this module is where they meet.
+ * before the storefront takes real money. Both the accounting rule and the policy above it
+ * (Terms of Service § Refunds, decided 2026-08-09) are settled; this module is where they
+ * meet. The vault document that used to state the accounting was retired on 2026-09-02 as a
+ * duplicate of this docblock, so **the three invariants below are now its only statement.**
  *
  * Three invariants, and each of them is a way to get money wrong:
  *
@@ -230,7 +231,7 @@ export async function refundPurchase(
 				// and delivery *to the creator* on a sale that was just undone. What the
 				// platform is left holding after a full refund plus a full transfer
 				// reversal is exactly Stripe's sunk processing fee, which is the
-				// documented outcome (Billing Cycle and Arrears Model).
+				// documented outcome — see the module note above.
 				reason: opts.initiator === "buyer" ? "requested_by_customer" : undefined,
 				metadata: {
 					purchaseId: String(purchase.id),
@@ -263,7 +264,7 @@ export async function refundPurchase(
 	 *
 	 * A basket therefore refunds **as a basket** — which is also why the buyer-facing copy
 	 * has to say so before they click. Refunding a single item would mean a *partial*
-	 * refund, and the Billing Cycle and Arrears Model's rule is full refunds only for now; it is genuinely available
+	 * refund, and the standing rule is full refunds only for now; it is genuinely available
 	 * later (a same-creator basket reverses the transfer proportionally, which is exactly
 	 * that item's earnings) but it is a decision, not a detail.
 	 */

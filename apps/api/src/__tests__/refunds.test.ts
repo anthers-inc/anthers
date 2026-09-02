@@ -3,7 +3,7 @@
  * Refunds — the reversal path, end to end.
  *
  * The rules under test are settled in two documents and neither is negotiable
- * from here: the accounting in the Billing Cycle and Arrears Model § Refunds (reverse the creator to exactly
+ * from here: the accounting in `services/refunds.ts` (reverse the creator to exactly
  * their earnings, let the remainder absorb the sunk card fee) and the policy in
  * Terms of Service § Refunds (refunds *after download* are automatic for the first three in
  * any twelve months; platform-initiated refunds don't count).
@@ -499,7 +499,7 @@ describe("What the remainder absorbs", () => {
 
 	/**
 	 * The refund has to balance: every cent the buyer gets back came from someone,
-	 * and the Billing Cycle and Arrears Model says exactly who. The creator gives back their earnings and nothing
+	 * and `services/refunds.ts` says exactly who. The creator gives back their earnings and nothing
 	 * more; the sales tax was only ever held for the state and is returned intact;
 	 * whatever is left over is what Anthers absorbs out of the remainder.
 	 *

@@ -120,7 +120,7 @@ async function resolvePurchase(slug: string, userId: number) {
  * What the basket buys is the **fixed $0.30**, which is per *charge* and not per item:
  * five $1 tracks pay $1.65 in card fees separately and $0.45 together, and the whole
  * $1.20 goes to the creator because Anthers keeps nothing either way. Same mechanism as
- * batching a month's support onto one transaction (Billing Cycle and Arrears Model).
+ * batching a month's support onto one transaction (the wiki's *How Money Moves*).
  */
 async function resolveBasket(workIds: number[], userId: number) {
 	const unique = [...new Set(workIds)];
