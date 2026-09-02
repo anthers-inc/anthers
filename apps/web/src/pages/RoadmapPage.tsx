@@ -245,6 +245,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							startQ: 6,
 							endQ: 7,
 						},
+						{
+							id: "c-processor-independence",
+							title: "Payment Processor Independence",
+							description:
+								"An interface in front of the payment processor, so that a creator's income never depends on one company's continued willingness to serve us. Three parts, and the interface alone is the cheapest and least useful of them: payment methods that can actually be carried to another processor, and a second rail arranged before it is needed rather than during an incident. Not a prediction about our processor, who have been good to work with — it is that the time to build an exit is while nothing is wrong, and that the same reasoning we apply to storage and hosting should apply to the part that touches people's livelihoods.",
+							status: "planned",
+							startQ: 2,
+							endQ: 4,
+						},
 					],
 				},
 				{
