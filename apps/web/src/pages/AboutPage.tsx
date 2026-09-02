@@ -60,7 +60,8 @@
 //     "soon" column says donations become deductible, the sentence beside it
 //     says they are not yet — same co-presence rule as "free forever" and the
 //     monthly limit, and the guard asserts the pairing.
-//   • ⚠️ **No date.** Parker's note proposed "later this year"; Colorado Nonprofit File and Backfill Reference puts the
+//   • ⚠️ **No date.** Parker's note proposed "later this year"; the vault's Colorado Nonprofit
+//     Compliance Reference puts the
 //     Form 1023 deadline at 2028-11-30, counsel is on its critical path and none
 //     is engaged, and the organizational meeting has not happened. A date is a
 //     claim about the future the project's own sequencing does not support, so

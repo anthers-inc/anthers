@@ -67,7 +67,8 @@ export interface Staffing {
  * can only ever confirm itself. Rungs 1–3 are underwater on purpose — that is Parker's own
  * subsidy, and the honest thing is for the model to show it rather than to size the plan to
  * hide it. The later rungs deliberately spend well under their ceiling so Admin's share
- * *declines* with scale, which is 50.01's stated design target.
+ * *declines* with scale, which is the design target the wiki's *How the Programs Are Funded*
+ * states.
  */
 export const PHASE_OVERHEAD: readonly Staffing[] = [
 	{ staff: 0, tooling: 0, services: 0 },

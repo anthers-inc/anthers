@@ -14,7 +14,7 @@ The OFL permits redistribution as part of this repository, bundled or not, provi
 
 # Why these are self-hosted
 
-They were loaded from `fonts.googleapis.com` until 2026-08-09. That sent **every visitor's IP address, user-agent and referring URL to Google on first paint**, before any consent existed and before the visitor had done anything but open the page. It was found while verifying the subprocessor list for the privacy policy (`51.05 Privacy Policy`, in the vault), and it is the kind of thing that policy's own "strictest applicable standard" decision rules out. A German court (LG München I, 3 O 17493/20) awarded damages against a site operator for exactly this pattern in 2022.
+They were loaded from `fonts.googleapis.com` until 2026-08-09. That sent **every visitor's IP address, user-agent and referring URL to Google on first paint**, before any consent existed and before the visitor had done anything but open the page. It was found while verifying the subprocessor list for the privacy policy, and it is the kind of thing that policy's own "strictest applicable standard" decision rules out. A German court (LG München I, 3 O 17493/20) awarded damages against a site operator for exactly this pattern in 2022.
 
 Self-hosting removes the disclosure question entirely rather than answering it: with no third-party request there is no third-party recipient, and nothing to put in the table.
 

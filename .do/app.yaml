@@ -230,7 +230,8 @@ envs:
   # DMCA designated agent — public statutory information (NOT secret). § 512(c)(2)
   # requires the agent's details to be published on the site; the Copyright Office's
   # own DMCA directory publishes them for every registered agent. Registered
-  # 2026-08-15. The three-year expiry clock is calendared in 51.03.
+  # 2026-08-15. The three-year expiry clock belongs in the vault's Colorado Nonprofit
+  # Compliance Reference and in its Compliance Calendar.
   - key: DMCA_AGENT_REGISTERED
     scope: RUN_TIME
     value: "true"

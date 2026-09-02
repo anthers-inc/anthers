@@ -254,6 +254,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							startQ: 2,
 							endQ: 4,
 						},
+						{
+							id: "c-cheaper-rails",
+							title: "Cheaper Ways to Pay",
+							description:
+								"Every leak in the model is one fixed cost meeting one small transaction, and a card's flat fee is the largest of them — it takes about an eighth of a $3 payment and about a twentieth of a $12 one. Three things reduce it, in the order they become available. Paying by bank costs a fraction of a card and carries no flat fee at all, and it would arrive as a discount beneath the ordinary price rather than as a card charge added on top. Paying for several months at once replaces several fixed fees with one. And instant bank-to-bank rails, once enough banks support them, cost pennies and cannot be charged back at all. None of the saving becomes Anthers' income — it is not a cut we take, so removing it leaves more for free access and the programs, or comes back to the person paying.",
+							status: "planned",
+							startQ: 3,
+							endQ: 4,
+						},
 					],
 				},
 				{

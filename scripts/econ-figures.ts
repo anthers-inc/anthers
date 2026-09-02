@@ -375,49 +375,16 @@ function renderReadmeModelMarkdown(): string {
 }
 
 /**
- * The Badge ladder, for a reader who already holds the context.
+ * The Badge ladder. There was a second, private renderer beside this one until 2026-09-02,
+ * whose closing paragraph explained the table by naming a *Bandwidth* column removed on
+ * 2026-08-12 — and it published that edit history into the public wiki once, on the first run
+ * after that vault was wired up. The private document it fed is gone, so only this renderer
+ * remains and the hazard cannot recur through it.
  *
- * ⚠️ **The public wiki gets {@link renderBadgePublicMarkdown} instead, and the difference is
- * not tone.** The last paragraph here explains the table by naming a *Bandwidth* column that
- * was removed on 2026-08-12 — which is exactly the edit history a public document must not
- * carry, and it is unusually hard to notice, because a generated block is the one part of a
- * page nobody proofreads. It published into the public wiki once, on the first run after that
- * vault was wired up, which is how this was found.
- *
- * 🚨 **A renderer is copy, and copy has an audience.** Any block rendered into both vaults has
- * to be read as though it were written fresh for the public one, because that is where it will
- * be judged.
- */
-function renderBadgeMarkdown(): string {
-	const rows = badgeTable();
-	return [
-		table(
-			["Badge", "Monthly to Anthers", "Charge", "Time Pool", "Payments\\*", "→ Remainder"],
-			[":--", "--:", "--:", "--:", "--:", "--:"],
-			rows.map((r) => [
-				`**${r.badge}**`,
-				`$${r.monthly}`,
-				`$${r.charge}`,
-				`$${r.timePool}`,
-				`$${r.payments}`,
-				`**$${r.remainder}**`,
-			]),
-		),
-		"",
-		`\\* **Payments is INSIDE the charge** (since 2026-08-03), charged once per transaction at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} and split pro-rata. Because the $${CARD_FLAT.toFixed(2)} is fixed per charge rather than per destination, it does not scale with the amount — which is why the remainder grows faster than linearly.`,
-		"",
-		`Every row conserves exactly: Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other two while creator pay stays fixed.`,
-		"",
-		`**No row depends on how much anyone watches.** A *Bandwidth* column sat between the charge and the Time Pool until 2026-08-12, priced off a representative streamer's hours — so every remainder here was a scenario rather than a figure. Delivery costs $0 on R2 at any volume, so the column is gone and these numbers are exact. Watching more is free, and it takes nothing from the mission.`,
-	].join("\n");
-}
-
-/**
- * The same ladder, for someone who has never read anything else we wrote. See the warning on
- * {@link renderBadgeMarkdown} for why this exists rather than the two sharing one renderer.
- *
- * The figures are identical and come from the same `badgeTable()` — what differs is that
- * nothing here dates a change, names a mechanism we no longer have, or names a vendor.
+ * 🚨 **The lesson outlives the pair: a renderer is copy, and copy has an audience.** A block
+ * rendered into a public page is the one part of that page nobody proofreads, so write every
+ * renderer as though it were being read there — no dated change, no retired mechanism, no
+ * vendor name.
  */
 function renderBadgePublicMarkdown(): string {
 	const rows = badgeTable();
@@ -826,7 +793,7 @@ function renderLadderVerdictMarkdown(): string {
 			]),
 		),
 		"",
-		`**Rungs 1–3 come back underwater on purpose.** That is Parker's own subsidy, and a model that hid it — by sizing each rung's plan to what that rung can afford — could only ever confirm itself. Admin's share then *declines* with scale, which is 50.01's stated design target.`,
+		`**Rungs 1–3 come back underwater on purpose.** That is Parker's own subsidy, and a model that hid it — by sizing each rung's plan to what that rung can afford — could only ever confirm itself. Admin's share then *declines* with scale, which is the design target the wiki's *How the Programs Are Funded* states.`,
 	].join("\n");
 }
 
@@ -1128,33 +1095,16 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 ];
 
 const BLOCKS: Block[] = [
-	{
-		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
-		key: "badge-table",
-		render: renderBadgeMarkdown,
-	},
-	{
-		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
-		key: "sample-receipt",
-		render: renderReceiptMarkdown,
-	},
-	{
-		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
-		key: "sale-table",
-		render: renderSaleMarkdown,
-		allowRetired:
-			"names the retired first-download charge in the past tense, to explain why size left the table",
-	},
+	// `50.01 Support Model Economics and Milestones` carried four of these blocks — the badge
+	// table, the sample receipt, the sale table and the creator receipt — and was deleted on
+	// 2026-09-02 as a duplicate of the public wiki's `40 The Support Model` and of this
+	// package's own constants. All four keys still render, into the public pages above.
 	{
 		file: "60-69 Governance & Strategy/63 Brand/63.01 Copy Style Guide.md",
 		key: "sale-table",
 		render: renderSaleMarkdown,
-		allowRetired: "same renderer as 50.01's sale-table, and the same past-tense sentence",
-	},
-	{
-		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
-		key: "creator-receipt",
-		render: renderCreatorReceiptMarkdown,
+		allowRetired:
+			"names the retired first-download charge in the past tense, to explain why size left the table",
 	},
 	// `11.02 Free Access and Charitable Programs` was folded into `Charity References` and
 	// deleted. The block moved with the prose; this entry did not, so `--check --wiki` had
@@ -1931,7 +1881,7 @@ await reconcile(
 /**
  * Splice every block for `root` and write the files that changed.
  *
- * One file may carry several blocks (50.01 carries four), so the spliced text is
+ * One file may carry several blocks (61.01 carries seven), so the spliced text is
  * accumulated per path before anything is written — otherwise the second block would
  * splice into the on-disk copy and drop the first.
  */

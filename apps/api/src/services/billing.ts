@@ -5,7 +5,8 @@
  * ONE subscription carries everything a user gives, as **one item per destination** —
  * Anthers and each creator, each priced at that destination's own monthly amount. Someone
  * giving Anthers $3, Alice $5 and Bob $2.50 has three items totaling $10.50, on one
- * invoice and one charge. That is Billing Cycle and Arrears Model's fully prepaid monthly charge, and it is also
+ * invoice and one charge. That is the fully prepaid monthly charge the wiki's *How Money
+ * Moves* describes, and it is also
  * what amortizes the fixed $0.30 across every creator on it.
  *
  * 🚨 **One item per destination, never one item with a quantity**, because a quantity of a

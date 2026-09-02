@@ -52,7 +52,7 @@ export const APP_NAME = "Anthers";
  * no remainder to absorb anything.
  *
  * Unlimited Public Access is $3/month; the Time Pool rate is the current tuned
- * value — see Subscription Economics (50.01).
+ * value — see the wiki's *The Support Model*.
  */
 // ── Badges (what a recipient returns for monthly support) ─────────────────────
 /**
@@ -548,7 +548,21 @@ export const FREE_STORAGE_GIB = 50;
 export const SELF_HOST_FEE = 0;
 
 // ── Payments (INSIDE the charge since 2026-08-03; it leaves the system) ───────
-/** Card processing: 2.9% + $0.30, charged once on the whole batched charge. */
+/**
+ * Card processing: 2.9% + $0.30, charged once on the whole batched charge.
+ *
+ * 🚨 **This is standard pricing, deliberately, and the discounted nonprofit rate must never
+ * be modeled here.** Stripe's nonprofit discount requires the large majority of processing
+ * volume to be tax-deductible donations, and *membership and subscription fees are named in
+ * the exclusion list* — support given to Anthers returns access and a Time Pool that pays
+ * creators, so almost none of our volume would qualify whatever our exempt status turns out
+ * to be. Assuming the discount would undersize the at-cost Payments line across the whole
+ * model, and the error would only surface as a shortfall once real money moved.
+ *
+ * Confirm the actual rate with Stripe before it lands in any projection. Amex is **not** an
+ * exception: Stripe prices by card *origin* rather than brand, so the commonly quoted 3.5% is
+ * the nonprofit-program rate we cannot use, not an Amex rate.
+ */
 export const CARD_RATE = 0.029;
 export const CARD_FLAT = 0.3;
 /** US average combined state+local sales tax, illustrative. */

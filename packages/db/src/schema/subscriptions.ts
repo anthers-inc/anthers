@@ -347,6 +347,16 @@ export const seedAllocations = pgTable(
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
+		// 🚨 **GROSS — what the user chose to give, before any card fee.** This is the column
+		// **gating** reads, and it has to be gross: paying the processor must never cost a
+		// supporter the Badge they paid for. Its counterpart `pool_distributions.seed_amount`
+		// is **net**, and the two are one word apart in every sentence that mentions them.
+		//
+		// Getting the pair backwards moves money and throws nothing. The distribution job
+		// credited gross where the fee module and its tests said net, so Anthers silently
+		// absorbed roughly $0.39 on every unbatched support charge — with no test coverage at
+		// all, which is why it ran unnoticed. **`supportBreakdown().creatorNet` is the only
+		// figure that may be described as a payout; `creatorDirect` is gross.**
 		amount: numeric("amount").notNull(),
 		billingCycle: text("billing_cycle").notNull(),
 		isLocked: boolean("is_locked").default(false),
@@ -386,6 +396,9 @@ export const poolDistributions = pgTable(
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
+		// 🚨 **NET — a payout figure, written after the destination's share of processing is
+		// deducted**, and every earnings reader draws from it. The gross counterpart is
+		// `seed_allocations.amount`; see the warning there for what confusing them costs.
 		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-support share
 		// The **Public Access** seconds that earned `poolAmount`, not all the time this
 		// viewer spent with this creator. It is the numerator of the pool split, so it has

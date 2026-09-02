@@ -5,7 +5,7 @@
  *
  * **Why this exists.** Before 2026-08-08 these figures were typed by hand into
  * marketing pages and wiki tables. When Payments moved inside the price on
- * 2026-08-03 a sweep updated most of them, and quietly missed 50.01's per-Badge
+ * 2026-08-03 a sweep updated most of them, and quietly missed the economics doc's per-Badge
  * table, its sample receipt, and a line on the Infrastructure page — which then
  * sat there overstating the remainder by exactly the card fee. A sweep cannot be
  * trusted to be complete; only derivation can.
@@ -114,7 +114,8 @@ export interface ReceiptScenario {
 }
 
 /**
- * The sample monthly receipt in 50.01 — a Sprout who also directs $6 to creators.
+ * The sample monthly receipt in the wiki's *The Support Model* — a Sprout who also directs
+ * $6 to creators.
  *
  * Note the shape, because it is the whole point of all-in pricing: the subtotal
  * IS what the user pays, and sales tax is the only thing added. Payments appears

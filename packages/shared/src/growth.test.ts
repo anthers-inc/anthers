@@ -363,7 +363,7 @@ describe("monotonicity — the model responds in the right direction", () => {
 		expect(at(6_700)).toBeGreaterThan(at(3_600));
 	});
 
-	test("Admin's share falls with scale, which is 50.01's stated design target", () => {
+	test("Admin's share falls with scale, which is the wiki's stated design target", () => {
 		const last = PHASE_ACCOUNTS.length - 1;
 		const early = modelAt({
 			accounts: PHASE_ACCOUNTS[3],
