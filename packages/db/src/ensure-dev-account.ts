@@ -18,6 +18,12 @@
  * overwriting a credential is the one change here that could lock you out of a
  * session or a flow mid-test. A drift is *reported* instead, with the fix.
  *
+ * 🚨 A `$` in DEV_ACCOUNT_PASSWORD is silently mangled, and the reported drift is
+ * then the only sign. Bun's `.env` parser performs variable expansion **even
+ * inside single quotes**, so `'p$ssw0rd'` loses everything from the `$` to the
+ * next word boundary and the value this script compares against is not the value
+ * you typed. Escape each as `\$`, or pick a password without one.
+ *
  * Credentials come from the environment (Bun auto-loads .env, which is
  * gitignored) so nothing sensitive is ever committed:
  *
