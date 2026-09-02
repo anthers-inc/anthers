@@ -354,6 +354,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							endQ: 0,
 						},
 						{
+							id: "u-edge-entitlement",
+							title: "Checking Access at the Edge",
+							description:
+								"Video should start faster, and the way to make that happen is to move the access check closer to you. Every segment of a video you are watching is fetched through an address minted for that one request, which is what stops a locked file being handed to somebody who should not have it — and it is also why those segments cannot be cached near you the way an ordinary file is. An edge service that checks entitlement itself and then serves from cache would fix the latency and the residual cost together. The constraint we will not trade away: the check moves, it does not disappear. Simply caching the segments is the version that quietly removes the gate.",
+							status: "exploring",
+							startQ: 4,
+							endQ: 6,
+						},
+						{
 							id: "u-audio-player",
 							title: "Persistent Audio Player",
 							description:
@@ -460,6 +469,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 								"Native iOS and Android apps for content consumption, notifications, and community interaction.",
 							status: "exploring",
 							startQ: 5,
+							endQ: 7,
+						},
+						{
+							id: "u-video-moderation",
+							title: "Moderating Video at Scale",
+							description:
+								"Video is harder to moderate than text and we do not yet know how we will do it. Today a rating is the creator's own declaration, corrected by report, and the only automated scanning is the child-safety hash matching described in our Child Safety Policy — which finds known material and nothing else. That is honest at our size and it does not survive a catalog one person cannot watch. What we are exploring is a review queue and a sampling policy rather than an automatic classifier: a machine that guesses at context is a machine that removes art, and we would rather be slow than wrong in that direction. Signposted here because it needs solving before it is urgent, not after.",
+							status: "exploring",
+							startQ: 4,
 							endQ: 7,
 						},
 					],
