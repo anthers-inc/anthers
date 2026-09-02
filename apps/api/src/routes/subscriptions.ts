@@ -1377,7 +1377,7 @@ const subscriptionRoutes = new Hono()
 
 		// 🚨 Scanned INLINE, before the key is ever written to the row. Badge art is
 		// user-supplied imagery on a surface other people see, so it is another ingest door
-		// for 40.12 — and unlike a Work there is no release gate behind which a queued scan
+		// for the child-safety coverage map, which is deliberately not public — and unlike a Work there is no release gate behind which a queued scan
 		// could catch up. The bytes are already buffered here, so there is nothing to defer.
 		const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind: "badge" });
 		if (outcome.quarantine) {

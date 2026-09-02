@@ -37,6 +37,26 @@
  * only, which reads as an upload bug rather than a configuration one. So the custom domain
  * is not merely the cheap path; it is the one that keeps this invariant true.
  * `storage-url-roundtrip.test.ts` asserts it.
+ *
+ * ── 🚨 And WRITES must use the opposite endpoint, which is the half nobody reconstructs ──
+ *
+ * Reads take the custom domain, for the reason above. **Presigned PUTs must take the S3 API
+ * endpoint**, and it is not a preference: a custom domain is proxied by the CDN, and the
+ * proxy caps a request body at **100 MB** on the plan Anthers is on. Sign against the custom
+ * domain and uploads still work — for avatars, covers and every file anybody tests with —
+ * while a game build or a video is rejected at the edge. The failure is therefore
+ * *"uploads broke, but only for large files"*, arriving long after the change that caused it.
+ *
+ * Same bucket pair, opposite requirements, and each half looks arbitrary alone:
+ *
+ *     reads  → custom domain      (virtual-hosted, so the pathname IS the key)
+ *     writes → S3 API endpoint    (bypasses the proxy, so the body cap does not apply)
+ *
+ * `getPresignedUploadUrl` signs against the client built with `endpoint: config.endpoint`
+ * rather than `publicBaseUrl`, which is what makes this correct today. Large media never
+ * traverses the proxy at all: the browser asks the API for a signature and PUTs the bytes
+ * straight to the bucket, so only the small `direct` branch — avatars, covers, inline
+ * images, capped in the UI well under the limit — goes through `anthers.org`.
  */
 
 export interface StorageConfig {

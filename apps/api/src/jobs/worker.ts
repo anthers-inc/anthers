@@ -223,7 +223,7 @@ async function start() {
 	await queue.work(QUEUES.ESCALATE_REPORTS, async (jobs) => {
 		for (const job of jobs) {
 			// Both intakes, one sweep. In-app reports and public no-account reports live in
-			// separate tables for the reasons 40.12 gives, but they owe the same alert to
+			// separate tables for the reasons the child-safety coverage map, which is deliberately not public gives, but they owe the same alert to
 			// the same mailbox against the same statutory "as soon as reasonably possible"
 			// — so a second cron would be a second thing to notice had stopped running.
 			const sent = await runEscalationSweep();

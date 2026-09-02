@@ -13,14 +13,14 @@ scripts/      The codegen
 
 The botanical icon set behind `iconSvg`/`iconGroup`/`iconDataUri` is ~650 Noun Project SVGs. It lived in this package until 2026-08-14, when it was **14 MiB of a 15.6 MiB repository — 91% of everything tracked**, to promote 18 icons into code. A platform's repository should not be, by weight, an icon mirror.
 
-It now lives in **[anthers-inc/anthers-brand](https://github.com/anthers-inc/anthers-brand)** alongside the layered design working files: the studio, as against this package, which is the product.
+It now lives in a **private** repository alongside the layered design working files: the studio, as against this package, which is the product. 🚨 **Private because it mixes Anthers' own working files with ~650 licensed Noun Project SVGs**, and a repository that is 91% somebody else's art is not one Anthers should be publishing wholesale. The 18 icons the product actually ships are here, in `src/generated/icons.ts`, and their attribution is in [`THIRD-PARTY.md`](./THIRD-PARTY.md) — which is the attribution of record precisely because this is the repository that redistributes them.
 
 **The split costs the app nothing**, which is what made it cheap. `src/generated/icons.ts` inlines each curated icon's `viewBox` and path markup, `src/` never reads the source tree, and nothing imports a raw SVG. **The app builds identically with the library absent** — verified by regenerating with it present and diffing: byte-identical. What you lose without a checkout is only the ability to re-run the codegen, so `bun run build` prints a pointer and exits 0 rather than failing.
 
 
 # Adding an icon
 
-1. Clone [anthers-brand](https://github.com/anthers-inc/anthers-brand) beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`.
+1. Check out the icon library beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`. ⚠️ **That library is private, so this step is Anthers-internal** — an outside contributor cannot re-run the codegen, and does not need to: `src/generated/icons.ts` is committed and complete, and the app builds identically without the source.
 2. Find the art. Its `preview/` holds per-collection contact sheets — the filenames are Noun Project `noun-<type>-<id>` and are not individually descriptive, so browse visually. If you're adding *new* art, download it as **SVG, single-color black**; multi-color art can't recolor from one value.
 3. Add `{ id, path }` to `CURATED` in `scripts/build-icons.ts`, with the path relative to the library's `svg/`.
 4. `cd packages/brand && bun run build`, and commit the regenerated `src/generated/icons.ts`.

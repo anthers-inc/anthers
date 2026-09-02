@@ -244,7 +244,7 @@ describe("Share links", () => {
 		 * share link is precisely the surface that would breach that, because whoever follows
 		 * one has no account and therefore has no opt-in setting to consult. So this asserts a
 		 * 404 rather than a denial — a response saying "this exists and you may not have it"
-		 * would leak exactly what the rung withholds. 40.13 § *A share link is a locator*.
+		 * would leak exactly what the rung withholds. The wiki's *The Rating Standard* § *A share link is a locator*.
 		 */
 		const token = await forceLink(sharerId, adultId);
 		const res = await req(`/api/content/works/${adultId}?share=${token}`);

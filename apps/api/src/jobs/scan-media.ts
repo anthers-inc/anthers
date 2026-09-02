@@ -8,7 +8,7 @@
  * never sees the bytes** — and that is the path every real video, audio file and game
  * build takes in production. For that path the object exists in R2 before anything here
  * knows about it, so detection has to be a job keyed on the storage key, run once the key
- * is registered against a Work. Wiki 40.12 § *The ingest inventory* has the full asymmetry.
+ * is registered against a Work. the child-safety coverage map, which is deliberately not public § *The ingest inventory* has the full asymmetry.
  *
  * ⚠️ **Failing is the correct outcome when a vendor is unreachable.** The job throws, pg-boss
  * retries it slowly, and the object stays unscanned in the meantime. The alternative —

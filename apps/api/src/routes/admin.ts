@@ -482,7 +482,7 @@ const adminRoutes = new Hono()
 	// included. Separate from both queues above because it is not a moderation
 	// judgment about ordinary content — it is a detection-and-preservation path with
 	// a different destination, and running it through the ordinary queue would lose
-	// it (40.12, "Why the reporting path is not a moderation feature").
+	// it (the child-safety coverage map, which is deliberately not public, "Why the reporting path is not a moderation feature").
 	//
 	// 🚨 **Everything here is metadata, and there is no endpoint that renders the
 	// material.** § 5.2 of the Child Safety Reporting Policy makes that a policy commitment: the operator sees the
@@ -559,7 +559,7 @@ const adminRoutes = new Hono()
 
 	// ── Content ratings ─────────────────────────────────────────────────────────
 	// 🚨 **The correction and the appeal ship together, and the appeal is not the
-	// optional half.** 40.09: because the Adult rung is payment-gated, an
+	// optional half.** The wiki's *Content Standards*: because the Adult rung is payment-gated, an
 	// over-cautious call does not merely add a warning to a work — it puts it behind a
 	// paywall, and for a queer coming-of-age story wrongly flagged that is exactly the
 	// harm the category exists to prevent, produced by the mechanism meant to prevent it.
@@ -610,7 +610,7 @@ const adminRoutes = new Hono()
 
 	// ── Public illegal-content reports ──────────────────────────────────────────
 	// The no-account intake's queue. Separate from `/moderation` above because the
-	// tables are separate and for the reason 40.12 gives — this is a report pipeline
+	// tables are separate and for the reason the child-safety coverage map, which is deliberately not public gives — this is a report pipeline
 	// with a different destination rather than a judgment about ordinary content.
 	// Every one of these has already been emailed to `abuse@` if its reason is on the
 	// floor; the queue is where the ones that are not get answered.

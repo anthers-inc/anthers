@@ -6,7 +6,7 @@
  * ordinary canonical URL carrying the token, so every question about what they may see is
  * asked by the same page, of the same resolver, that answers it for everybody else. A
  * separate "shared view" would be a second path to a deliverable, and therefore a second
- * place for the access rules to drift — which is precisely the failure 40.13 is guarding
+ * place for the access rules to drift — which is precisely the failure the wiki's *Rating Standard* is guarding
  * against when it says a share link is a locator and never an entitlement.
  *
  * The URL is short and carries no Work id, slug or username, so pasting it somewhere reveals

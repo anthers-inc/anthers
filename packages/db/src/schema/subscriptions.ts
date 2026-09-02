@@ -3,13 +3,13 @@
  * Support-model economics schema — see auth.ts for the role-classification legend.
  *
  * 🚨 This file is where the node/org boundary is *hardest* to draw, and most of it is
- * `org` by the treasury rule: 41.02 says "Payments, pools, payouts, KYC, charitable
+ * `org` by the treasury rule: the boundary table says "Payments, pools, payouts, KYC, charitable
  * accounting → Org only. Money cannot federate." A creator's *gates* (what they charge
  * for access) are the exception — those are the creator's own pricing, node-owned.
  *
- * `attentionEvents` is the table 41.02 predicts will be hardest to classify, and it
+ * `attentionEvents` is the table the boundary table predicts will be hardest to classify, and it
  * is: org-role by volume and by being pool-accounting input, node-role by being about
- * one creator's work. See the per-table comment and the findings in 41.02.
+ * one creator's work. See the per-table comment, which is where that finding lives.
  */
 import { sql } from "drizzle-orm";
 import {
@@ -37,7 +37,7 @@ import { works } from "./content.js";
  * it is a migration of its own.
  */
 // org — a user's support account carries the billing relationship (Stripe customer,
-// subscription, period). 41.02: "Payments, pools, payouts → Org only. Money cannot
+// subscription, period). Boundary table: "Payments, pools, payouts → Org only. Money cannot
 // federate." The `isSelfHosting` flag is a creator-side claim but the org prices it.
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
@@ -60,7 +60,7 @@ export const accounts = pgTable("accounts", {
 	stripeProductId: text("stripe_product_id").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active support subscription
 
-	// ── Adult access (wiki 40.09 § The funding type is the age signal) ──
+	// ── Adult access (the wiki's *Content Standards* § The funding type is the age signal) ──
 	// Three columns and no fourth, and the shortness is the design rather than a first
 	// pass. Reaching the Adult rung needs the account-level opt-in AND a verification;
 	// what is kept of the verification is that it happened, when, and by which method.
@@ -94,7 +94,7 @@ export const accounts = pgTable("accounts", {
 	// `hide` | `blur` | `show`, and two columns rather than one because the two rungs get
 	// SEPARATE controls. A reader who wants difficult work unblurred has said nothing about
 	// whether they want explicit work at all, and one setting covering both would make them
-	// say it (wiki 40.09).
+	// say it (the wiki's *Content Standards*).
 	//
 	// ⚠️ **The defaults live in `@anthers/shared/content-rating`, not here.** A signed-out
 	// visitor has no row at all and must still get the Mature blur, so the default has to be
@@ -162,14 +162,14 @@ export const accountCycles = pgTable(
 	(table) => [uniqueIndex("uq_account_cycles_user_cycle").on(table.userId, table.billingCycle)],
 );
 
-// both — the table 41.02 predicts will resist classification, and does. Org-role by
+// both — the table the boundary map predicts will resist classification, and does. Org-role by
 // volume (the highest-write table, "Time-event ingestion → Org") and by being
 // pool-accounting input. Node-role by being about *one creator's* work (`workId`,
 // `creatorId`). The row's *subject* is node content; the row's *purpose* is org
 // accounting. Classified `both` because neither half is decorative — the node needs
 // to know a Work earned minutes, the org needs to distribute them. This is the finding
-// to carry to 41.02: the boundary runs through the middle of this table, not between
-// it and its neighbors.
+// to carry into any node design: the boundary runs through the middle of this table,
+// not between it and its neighbors, so a row-level split is what federation costs here.
 export const attentionEvents = pgTable(
 	"attention_events",
 	{
@@ -181,7 +181,7 @@ export const attentionEvents = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		// Time is earned by a **Work**, never by a post. A post is connective tissue and
-		// earns nothing (40.05), which used to be a policy the endpoint enforced against a
+		// earns nothing (the wiki's *What the Time Pool Pays For*), which used to be a policy the endpoint enforced against a
 		// schema that couldn't express it; now the column says so. Null only on
 		// zero-duration visit pings, which are analytics and credit nothing.
 		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
@@ -334,7 +334,7 @@ export const attentionDaily = pgTable(
 // sum of these. (The table name `seed_allocations` stays: it is a schema identifier whose
 // meaning did not change, per the copy-rules-not-schema-rules norm.)
 // org — a user's directed support to a creator, this cycle. The billing contract is
-// org-side (41.02: "Subscriber relationships: Both; Billing contract org-side"). The
+// org-side (boundary table: "Subscriber relationships: Both; Billing contract org-side"). The
 // `atprotoUri` column anticipates a future where the canonical assertion moves to the
 // user's repo, but today the row is the org's billing record.
 export const seedAllocations = pgTable(
@@ -364,7 +364,7 @@ export const seedAllocations = pgTable(
 
 // org — a pool distribution is a *payment record* (the doc comment says so: "this row
 // is a payment record, not a viewing one"). Both FKs are set-null because financial
-// records outlive accounts. 41.02: money cannot federate; this is the org's ledger.
+// records outlive accounts. Money cannot federate; this is the org's ledger.
 export const poolDistributions = pgTable(
 	"pool_distributions",
 	{
@@ -497,6 +497,10 @@ export const creatorGates = pgTable(
  * See `@anthers/shared/parental-controls` for the policy the rows are read against; this table
  * stores it and decides nothing.
  */
+// org — a viewer-side setting, and viewers are org accounts in the current topology (there
+// is no viewer node). The same reasoning as `libraryItems`: this is one household's opinion
+// about node content, never a fact about the content, so no creator node has any business
+// holding it — least of all the creator whose work a guardian has excluded.
 export const parentalControls = pgTable("parental_controls", {
 	userId: integer("user_id")
 		.primaryKey()

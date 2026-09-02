@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Reporting a person — the third `subject_type`, and the shape 40.06 built for.
+ * Reporting a person — the third `subject_type`, and the shape the wiki's *Moderation & Reporting* built for.
  *
  * The assertions that matter are the ones about what a person report is NOT:
  *

@@ -139,7 +139,7 @@ describe("An object with no Work behind it", () => {
 		// worse than writing nothing: `loadModerationQueue` attaches the newest action to a
 		// queue item by `(subject_type, subject_id)`, so a *reported person* would render as
 		// hidden with reason `quarantine` when nothing whatever happened to their account —
-		// and suspending a person is exactly the decision 40.06 records as not taken.
+		// and suspending a person is exactly the decision the wiki's *Moderation & Reporting* records as not taken.
 		const actions = await db
 			.select({ id: moderationActions.id })
 			.from(moderationActions)
@@ -305,7 +305,7 @@ describe("The direct-upload door", () => {
 	}
 
 	it("🚨 scans an avatar, which this door never did", async () => {
-		// ⚠️ Wiki 40.12 § *The shape* has always said avatars and covers scan inline here.
+		// ⚠️ the child-safety coverage map, which is deliberately not public § *The shape* has always said avatars and covers scan inline here.
 		// They did not — badge art got its own endpoint precisely so that it could — so this
 		// is a documented claim being made true rather than a new feature.
 		//

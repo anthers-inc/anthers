@@ -314,7 +314,7 @@ export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
  * streaming carries ~600 Class B reads per watch-hour — about $0.0002/hr, against
  * 10 million free reads a month. It rounds to nothing at any scale this model
  * describes, and it is a platform line rather than a per-account one, so it is
- * deliberately not charged to a user here. 42.02 carries the figures.
+ * deliberately not charged to a user here. the `STORAGE_PER_GIB_MONTH` docblock carries the figures.
  */
 export const freeUserCost = () => new Decimal(FREE_TIME_POOL);
 

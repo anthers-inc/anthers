@@ -7,7 +7,7 @@
  * `FRONTEND_URL=https://anthers.org` with `NODE_ENV` deleted.** That distinction is the whole
  * point of this file. A test that sets `NODE_ENV="production"` and then asserts the strict
  * behavior describes the author's model of production rather than production, and two
- * ATProto defects shipped green past exactly that mistake (see the note in 42.05). Each
+ * ATProto defects shipped green past exactly that mistake (see the note in the wiki's *Writing Tests That Can Fail*). Each
  * `describe` therefore deletes `NODE_ENV` explicitly rather than relying on it being unset.
  *
  * ⚠️ **These are unit assertions and they are not the verification.** A `Set-Cookie` header

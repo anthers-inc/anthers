@@ -7,7 +7,7 @@
  * Post, but a Work could be referenced from any number of Posts and inherited each one's
  * gates independently — so the same bytes were genuinely free via one Post and gated via
  * another, resolved per URL. A gate belongs to the thing being gated. A Post's reference
- * to a Work is inert and confers nothing; see `40.08 Catalog and Posts` in the vault.
+ * to a Work is inert and confers nothing; see the wiki's *Publishing*.
  *
  * Access is expressed by **one** per-Work table (see `packages/db/src/schema/content.ts`),
  * whose rows are `{ threshold, allow, price }` with `threshold` in **monthly dollars given
@@ -82,7 +82,7 @@ export interface AccessibleWork {
 	 * rating is a warning and a filter input carrying no access consequence at all — the
 	 * Work stays Public Access if its creator left it ungated, stays earning, and stays
 	 * reachable by a signed-out visitor. Teaching this resolver to read `mature` would
-	 * silently paywall the work wiki 40.13 draws its rows to protect. See 40.09 § How
+	 * silently paywall the work the wiki's *Rating Standard* draws its rows to protect. See the wiki's *Content Standards* § How
 	 * Access Works When It Opens.
 	 */
 	maturity: string;
@@ -144,7 +144,7 @@ export interface AccessContext {
 	 * ⚠️ **Only consulted when `userId` is null.** A share link followed by somebody who has
 	 * an account does nothing at all: they resolve on their own standing and spend their own
 	 * allowance. A link that granted access would bypass that person's own Adult opt-in
-	 * exactly as it bypasses an anonymous visitor's absent one, which is the half of 40.13's
+	 * exactly as it bypasses an anonymous visitor's absent one, which is the half of the *The Rating Standard* page's
 	 * rule that is easiest to get wrong.
 	 */
 	sharedBy: number | null;
@@ -401,7 +401,32 @@ export function unlockRoute(
 
 /**
  * Resolve access for a single Work against an already-loaded viewer context.
- * Pure and synchronous, so a Catalog page resolves a batch cheaply.
+ * Pure and synchronous, so a Catalog page resolves a batch cheaply — and so access
+ * semantics are exhaustively testable without a browser.
+ *
+ * **This is the single source of truth for who may reach what.** The creator-facing rule
+ * it implements is public (the wiki's *Gating a Work*); what follows is the machinery,
+ * and each line of it has been got wrong at least once.
+ *
+ * - **A viewer qualifies for a row by meeting its threshold, and among the allowed rows
+ *   they qualify for, the CHEAPEST price wins.** Zero means free; above zero means a
+ *   one-time purchase unlocking the Work's enabled delivery. No qualifying allowed row is
+ *   a hard gate. **Each table is cumulative** — a row allowed at $3 is visible at $3 and above.
+ * - 🚨 **Resolution reads the AMOUNT GIVEN, never the Badge it names.** Collapsing to the
+ *   held Badge first would round somebody giving $9 down to a $6 Badge and deny them a
+ *   gate they clear.
+ * - **`offersFor` is one function serving both tables**, differing only in which amount is
+ *   passed in — Anthers' Badges and a creator's are the same comparison.
+ * - 🚨 **`anthersSupport` is deliberately NOT in `AccessContext`.** A Badge is *structurally*
+ *   unable to affect access rather than merely asserted not to, which is the same property
+ *   `following` has always had. Do not add it "for convenience".
+ * - ⚠️ **Older documents describe combinable AND/OR gate logic. It was never built**, and
+ *   there is no combinator column anywhere. If you meet that description, it is stale.
+ *
+ * Two things deliberately live OUTSIDE this function, and both would cost it its purity:
+ * the Public Access meter (an account's allowance is not a property of a Work — see the
+ * wiki's *What Is Free, and What Is Gated*) and the Library (a shelf entry is curation, and
+ * `resolveAccess` must never learn to read `library_items`).
  */
 export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): AccessResult {
 	const base = {
@@ -457,7 +482,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	if (blocked) return { ...base, canAccess: false, reason: blocked };
 
 	// 🚨 A Work rated `adult` is reachable only by an account that has both opted in and
-	// verified an adult. Wiki 40.09 § How Access Works When It Opens.
+	// verified an adult. The wiki's *Content Standards* § How Access Works When It Opens.
 	//
 	// **Above the purchase check on purpose, and it is the only rule here besides the two
 	// denials above that outranks a receipt.** A purchase outlives everything on Anthers, so

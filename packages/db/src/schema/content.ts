@@ -76,15 +76,15 @@ export type AuthoredPrecision = "year" | "month" | "day";
  * This replaced `content_items` in migration `0010`. That table was a *private media
  * staging record*: invisible until referenced from a published Post, with no visibility,
  * no gates, no dates of its own and no URL. The rename tracks a change of entity, not of
- * label — see `40.08 Catalog and Posts` in the vault.
+ * label — see the wiki's *Publishing*.
  *
  * Prose is a Work now (`type = "text"`, prose in `bodyHtml`). Under the old model rich
  * text was deliberately post-native and NOT a library item, which produced the model's
  * strangest rule — prose in a post body earned nothing while the same prose as a content
  * element earned. The rule was right; the earning form just had no home of its own.
  */
-// node — a creator's own Work, and the unit of their catalog. Node-canonical per 41.02
-// ("Content records live on the creator node; org indexes"). The `takedownStatus`
+// node — a creator's own Work, and the unit of their catalog. Node-canonical per the boundary
+// table ("Content records live on the creator node; org indexes"). The `takedownStatus`
 // column is an org-imposed annotation on the row (a DMCA action), which is why this is
 // `node` rather than `both`: the row's owner is the creator, and the org's flag is a
 // column on someone else's record.
@@ -209,7 +209,7 @@ export const works = pgTable(
 		// 🚨 This gates nothing today. Mature work is allowed on Anthers and is simply
 		// unlabeled; the adults-only category that will payment-gate it is closed on
 		// moderation-capacity grounds. What the value does now is give the viewer filters
-		// something to read. Wiki 40.09 carries the whole model, including the two standing
+		// something to read. The wiki's *Content Standards* carries the whole model, including the two standing
 		// principles that bound what `mature` may ever mean.
 		maturity: text("maturity").notNull().default("unrated"),
 		// Content notes — violence, sexual themes, substance use, and so on. Warnings for a
@@ -449,7 +449,7 @@ export const projects = pgTable(
  *
  * The counterpart to `project_posts`, and the half that was always missing. A project
  * could only ever hold announcements, which meant an album could not hold its tracks —
- * 40.02's own worked example ("a track in both an album and a best-of") was not
+ * the *Publishing* page's own worked example ("a track in both an album and a best-of") was not
  * expressible in the schema that document described.
  */
 // node — join table, two node-owned parents (project + work).
@@ -563,7 +563,7 @@ export const workPages = pgTable(
 // both — a transcoding job is node media processing (the creator's source → derived
 // renditions), but it runs on org infrastructure (ffmpeg, the worker) and the org's
 // delivery layer reads it. The row is node-owned (it is about one creator's Work); the
-// org runs it. This is one of 41.02's "Media originals + renditions; transcoding →
+// org runs it. This is one of the boundary table's "Media originals + renditions; transcoding →
 // Creator node" entries, classified `both` because the *compute* is org while the
 // *record* is node — the node owns the result, the org owns the execution.
 export const transcodingJobs = pgTable(
@@ -697,9 +697,9 @@ export const comments = pgTable(
 // org — the Library is a *viewer's* shelf, not the creator's content. A viewer's
 // account is org-side in the current topology (there is no viewer node; viewers are
 // org accounts), so their saved items are org records. This is a disagreement with
-// 41.02's boundary table, which lists "Content records" under the creator node — a
+// the boundary table, which lists "Content records" under the creator node — a
 // library item is not a content record, it is a viewer's pointer to one, and the
-// viewer has no node. See the findings written back to 41.02.
+// viewer has no node.
 export const libraryItems = pgTable(
 	"library_items",
 	{
@@ -778,7 +778,7 @@ export const bookmarks = pgTable(
  * Reviews — a reader's verdict on a **Work**, and deliberately not on a Post.
  *
  * Unlike comments this is NOT polymorphic, because reviewing an announcement is a category
- * error: 63.01 defines a review as "a reader's verdict on a work", and 40.06 makes reviews
+ * error: 63.01 defines a review as "a reader's verdict on a work", and the wiki's *Moderation & Reporting* makes reviews
  * floor-level moderation precisely because "a creator moderating reviews of their own work
  * is the conflict reviews exist to avoid". Both sentences are about works. Giving reviews a
  * subject type would invite a shape the model has no meaning for.
@@ -844,12 +844,18 @@ export const ratings = pgTable(
  * Work has no qualifying allowed row and falls to `login_required`, a priced one falls to
  * `payment_required`, and an **Adult** one is refused above both because a share context
  * carries no opt-in and can never carry one. Nothing but universally-free work can come out
- * the other side. See `resolveAccessSync`, and 40.13 § *A share link is a locator*.
+ * the other side. See `resolveAccessSync`, and the wiki's *Rating Standard* § *A share link is a locator*.
  *
  * One row per (sharer, Work): re-sharing returns the link you already have, so the thing you
  * pasted somewhere keeps working and revoking means something. `revokedAt` rather than a
  * delete, because a revoked token must stay un-mintable rather than becoming available again.
  */
+// org — the same reasoning as `libraryItems`, from the sharer's side rather than the
+// viewer's. A share link is not a content record: it is one account's pointer at somebody
+// else's Work, and what it actually conveys is an *allowance* drawn from the sharer's own
+// org-side balance. The Work is node content, referenced by id; the quantity being spent is
+// pool accounting, which is org by the boundary table and cannot move to a node without
+// moving the ledger with it.
 export const shareLinks = pgTable(
 	"share_links",
 	{

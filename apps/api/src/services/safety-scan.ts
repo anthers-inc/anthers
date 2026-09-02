@@ -533,7 +533,7 @@ export const SCAN_RELEASE_GRACE_MS = 2 * 60 * 1000;
  * sends a video to the image path and records the whole file as unscannable.
  *
  * Audio is still uncovered, and so is anything inside an archive: PDQ has nothing to say
- * about either. The coverage map lives in wiki 40.12 and deliberately not on the public
+ * about either. The coverage map is deliberately not public and deliberately not on the public
  * safety page, because a temporary gap published is an evasion map with a shelf life.
  */
 export type ScannableKind = "image" | "video";

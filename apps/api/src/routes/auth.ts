@@ -884,7 +884,7 @@ const authRoutes = new Hono()
 	// The desktop Studio never sees a password. It opens the authorize page in the
 	// SYSTEM browser, where the creator already holds a cookie session, and one
 	// confirm click mints an independently revocable desktop token. PKCE binds the
-	// app that started the flow to the app that redeems it. See 42.06 § Desktop auth.
+	// app that started the flow to the app that redeems it. See `apps/api/src/middleware/bearer.ts`.
 
 	// Step 1 — the app opens the flow with only a PKCE challenge. Deliberately
 	// unauthenticated: no session exists yet and no user is implied.

@@ -7,13 +7,12 @@
  *   make wiki-figures              # ALSO render the wiki's blocks, into the vault
  *   make wiki-figures CHECK=1      # ...and fail if any of those has drifted
  *
- * ⚠️ **The wiki half is opt-in and deliberately outside `make verify`** (2026-08-30). It
- * needs an Obsidian vault that only Parker has, so CI took the skip path on every run it
- * ever had — while on the machine that does have one, reorganizing the notes broke the
- * build twice in a day. Run it before publishing anything that quotes a wiki table. The
- * full reasoning is at the bottom of this file, beside the code it governs.
+ * ⚠️ **The wiki half is opt-in and deliberately outside `make verify`.** The wikis are
+ * separate repositories that a CI runner does not check out, so CI takes the skip path on
+ * every run it has. Run it before publishing anything that quotes a wiki table. The full
+ * reasoning is at the bottom of this file, beside the code it governs.
  *
- * Three outputs, of which only the third needs a vault:
+ * Three outputs, of which only the third needs a wiki:
  *
  *  1. `packages/shared/src/figures.generated.ts` — plain numbers for the app. Plain,
  *     because **the SPA bundle must never import `fees.ts`**: that is the one import
@@ -47,13 +46,11 @@
  *
  * And the opt-in half:
  *
- *  4. The wiki's tables and sample receipts — 18 blocks across 9 documents in the
- *     Obsidian vault, written between the same HTML-comment markers, and only with
- *     `--wiki`. Same pattern the vault already uses for roadmap bars: generated regions
- *     are never hand-edited. `findWiki` locates the project root, and everything that
- *     apparatus needs — `ANTHERS_VAULT`, `PROJECT_DIR`, `isProjectRoot` — exists solely
- *     to serve this one job, and would be deleted outright by moving the wiki into the
- *     repository.
+ *  4. The wikis' tables and sample receipts — 18 blocks across 9 documents, written
+ *     between the same HTML-comment markers, and only with `--wiki`. Same pattern the
+ *     wikis already use for roadmap bars: generated regions are never hand-edited. Both
+ *     wikis are siblings of this repository, so locating them is one `existsSync` each
+ *     and the discovery apparatus this used to need is gone.
  *
  * Why it exists: the 2026-08-03 pricing revamp swept these by hand and missed three
  * of them, which then sat in the "source of truth" doc overstating the remainder by
@@ -109,182 +106,106 @@ import {
 
 const REPO = join(import.meta.dir, "..");
 
-/** The Obsidian vault, if this machine has one. Its *contents* move; this doesn't. */
-const OBSIDIAN = join(process.env.HOME ?? "", "Obsidian");
-
 /**
- * The **public** wiki — a second Obsidian vault, holding the documentation written to be
- * read by anyone rather than by us. Added 2026-08-30, when the Anthers documentation began
- * moving out of Parker's personal vault into a vault of its own.
+ * The Anthers **organization** directory — the repository's own parent, holding both wikis
+ * and the sibling repositories.
  *
- * ⭐ **It needs none of `findWiki`'s discovery apparatus, and that is the point of it being
- * separate rather than a second entry in the same search.** Everything below `findWiki` — the
- * project-root regex, the area-directory marker, the found-twice failure — exists because the
- * project's folder *moves inside a personal vault whose shape is nobody's build input*. This
- * vault **is** the project root, at a path that is its own reason to exist, so the resolution
- * is one `existsSync`.
+ * 🚨 **Deriving the wikis from here is what finally kills this file's oldest bug, which had
+ * by then fired three times.** Every previous version resolved a wiki through somebody's
+ * personal notes folder: a literal path until 2026-08-28, then a recursive search with a
+ * project-root regex and an empty-husk check, and each fix was a patch on a coupling that
+ * should not have existed — a check in this repository has no business depending on the
+ * shape of a notes directory. On 2026-09-02 the wikis became siblings of this repository,
+ * so their position is now a structural fact about the organization rather than a fact
+ * about anybody's filing habits, and the entire discovery apparatus deletes itself.
  *
- * ⚠️ **The absent-versus-broken discipline still applies and is what the override is for.**
- * No vault on this machine (CI, a contributor's clone) skips silently and correctly. But
- * `ANTHERS_WIKI` set to a path that does not exist is a **failure**, exactly as `ANTHERS_VAULT`
- * is — an explicit pointer must never degrade into a skip. And a vault that *is* present with a
- * block target missing fails in `writeBlocks`, which is the behavior that already catches a
- * renamed document.
+ * ⚠️ **It fired one last time on the way out, in the worst of its two directions.** The move
+ * left `~/Obsidian` non-existent, which this file read as *no vault on this machine* — the
+ * silent, correct-for-CI skip — so `--check --wiki` reported "up to date" while checking
+ * neither wiki, with the public-wiki scan (turned on because two pages claimed generated
+ * figures that were hand-typed) quietly off. **A path that has moved and a path that was
+ * never there must not look alike**, which is the discipline below.
  */
-const PUBLIC_WIKI = join(process.env.HOME ?? "", "Anthers-Wiki");
+const ORG = join(REPO, "..");
+
+/** The private wiki: engineering and strategy notes, not written for anybody else. */
+const PRIVATE_WIKI = join(ORG, "Anthers-Wiki-Private");
+
+/** The public wiki: the documentation written to be read by anyone. */
+const PUBLIC_WIKI = join(ORG, "Anthers-Wiki");
 
 /**
- * Where the wiki lives — **discovered, never hardcoded**.
+ * Whether this checkout sits inside the Anthers organization, which decides what a missing
+ * wiki *means*.
  *
- * 🚨 **This was a literal path until 2026-08-28, and moving the project inside the vault
- * silently switched half of this script off.** `--check` printed *"(vault not present —
- * skipping wiki blocks)"* and **exited 0**, so every generated money table in the wiki
- * stopped being regenerated and stopped being checked, with nothing to notice. That is the
- * exact failure this file exists to prevent, one level up from the ones it catches — and
- * the same shape as the renamed document that `writeBlocks` was taught to fail on, except
- * that losing the *root* loses every target at once.
- *
- * ⚠️ **The bug was conflating two states that look alike and mean opposite things.** A
- * machine with no vault (CI, any contributor's clone) *should* skip the wiki silently.
- * A machine with a vault we cannot find inside is **broken**, and must say so. One
- * `existsSync` on a path that encoded both the vault and the project answered "skip" to
- * both, so a wrong path was indistinguishable from no path.
+ * ⭐ **This is the absent-versus-broken discriminator, and it detects the thing itself
+ * rather than a proxy for it.** A CI runner and a contributor's clone hold the repository
+ * alone, so a missing wiki there is simply absent and skipping is correct. A checkout
+ * sitting beside its sibling repositories is on a machine where the wikis are *expected*,
+ * so a missing one there is broken and has to say so. The marker is any other `Anthers-*`
+ * sibling, because the organization is exactly the directory that has them.
+ */
+function insideOrganization(): boolean {
+	try {
+		return readdirSync(ORG, { withFileTypes: true }).some(
+			(e) => e.isDirectory() && e.name.startsWith("Anthers-"),
+		);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Resolve one wiki, or say why there is nothing to do.
  *
  * Resolution, in order:
- *   1. `ANTHERS_VAULT`, for an explicit override. If it is set and wrong, that is a
- *      **failure** — an explicit pointer must never degrade into a skip.
- *   2. No `~/Obsidian` at all → skip, silently and correctly.
- *   3. Otherwise search the vault for the project root. Not found, or found twice → a
- *      failure naming what was searched.
+ *   1. The environment override, for an explicit pointer. Set and wrong is a **failure** —
+ *      an explicit pointer must never degrade into a skip.
+ *   2. The sibling directory, if it is there.
+ *   3. Missing, inside the organization → a **failure**, because it should have been there.
+ *   4. Missing, outside the organization → skip, silently and correctly.
  */
-function findWiki(): { path: string } | { skip: true } | { error: string } {
-	const override = process.env.ANTHERS_VAULT;
+function findVault(
+	label: string,
+	envVar: string,
+	path: string,
+): { path: string } | { skip: true } | { error: string } {
+	const override = process.env[envVar];
 	if (override) {
 		return existsSync(override)
 			? { path: override }
-			: { error: `ANTHERS_VAULT is set to "${override}", which does not exist` };
+			: { error: `${envVar} is set to "${override}", which does not exist` };
 	}
-	if (!existsSync(OBSIDIAN)) return { skip: true };
-
-	const found = searchVault(OBSIDIAN, 4);
-	if (found.length === 1) return { path: found[0] };
-	if (found.length === 0) {
+	if (existsSync(path)) return { path };
+	if (insideOrganization()) {
 		return {
 			error:
-				`the vault at ${OBSIDIAN} has no project root matching ${PROJECT_DIR} in it ` +
-				`(moved out of the vault, or renamed? set ANTHERS_VAULT to point at it)`,
+				`no ${label} at ${path}, but this checkout sits inside the Anthers organization ` +
+				`at ${ORG}, where one is expected (moved, or renamed? set ${envVar} to point at it)`,
 		};
 	}
-	return {
-		error:
-			`found ${found.length} candidate project roots and cannot choose between them ` +
-			`(${found.map((p) => relative(OBSIDIAN, p)).join(", ")}) — set ANTHERS_VAULT`,
-	};
+	return { skip: true };
 }
 
-/**
- * The folder the project lives in, wherever inside the vault it has been filed.
- *
- * ⚠️ **The name carries an optional Johnny-Decimal number**, because on 2026-08-30 the root
- * became `30-39 Anthers Projects/30 Anthers` and an exact match on `Anthers` stopped finding
- * it. The guard behaved correctly — it failed loudly and said the root had been "moved out of
- * the vault, or renamed?" rather than skipping — but every `make verify` on a machine with the
- * vault went red, including the pre-push hook, so it had to be taught the new shape.
- *
- * 🚨 **Matching "any directory whose name contains Anthers" was considered and rejected.** The
- * same reorganization created `31 Anthers-Brand`, `32 Anthers-Desktop`, `33 Anthers-Meta`,
- * `34 Anthers-Node` and `35 Anthers-Wiki` as siblings. They are empty today, so the area-
- * directory marker below would exclude them — but they are obviously going to be filled, and
- * the first one that gains a `00-09 Meta` would turn this into a permanent found-twice
- * failure. A tight pattern that fails loudly when the name changes again is better than a
- * loose one that starts matching the neighbours.
- */
-const PROJECT_DIR = /^(?:\d{2} )?Anthers$/;
-
-/**
- * The public wiki, or a reason there is nothing to do. See {@link PUBLIC_WIKI}.
- */
-function findPublicWiki(): { path: string } | { skip: true } | { error: string } {
-	const override = process.env.ANTHERS_WIKI;
-	if (override) {
-		return existsSync(override)
-			? { path: override }
-			: { error: `ANTHERS_WIKI is set to "${override}", which does not exist` };
-	}
-	return existsSync(PUBLIC_WIKI) ? { path: PUBLIC_WIKI } : { skip: true };
+/** The private wiki, or a reason there is nothing to do. See {@link PRIVATE_WIKI}. */
+function findWiki() {
+	return findVault("private wiki", "ANTHERS_VAULT", PRIVATE_WIKI);
 }
 
-/**
- * Every `Anthers/` folder in the vault that looks like the project root.
- *
- * ⚠️ **The marker is a Johnny-Decimal area (`00-09 Meta`, `40-49 Architecture`, …),
- * deliberately not one of the files in `BLOCKS`.** Validating against a block target would
- * make *renaming a document* read as *losing the vault*, which reports the wrong problem —
- * and `writeBlocks` already fails loudly and by name on a renamed target, so that case is
- * covered better one layer down. An area prefix survives every renumbering below it.
- */
-function searchVault(dir: string, depth: number): string[] {
-	if (depth < 0) return [];
-	let entries: Dirent[];
-	try {
-		entries = readdirSync(dir, { withFileTypes: true });
-	} catch {
-		return []; // Unreadable (permissions, a broken symlink) is not a match.
-	}
-	const out: string[] = [];
-	for (const entry of entries) {
-		if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-		const path = join(dir, entry.name);
-		if (PROJECT_DIR.test(entry.name) && isProjectRoot(path)) out.push(path);
-		else out.push(...searchVault(path, depth - 1));
-	}
-	return out;
-}
-
-/**
- * A Johnny-Decimal area directory inside it — `00-09 Meta`, `50-59 Business and Finance` —
- * **and at least one document under it.**
- *
- * 🚨 **The second half was added on 2026-08-30, after an empty husk broke every local
- * `make verify` on the machine that had the vault.** Reorganizing the vault in Obsidian
- * left `40-59 PhD Projects/Anthers/00-09 Meta/Tasks/Active` behind — three nested
- * directories and **zero files** — beside the real root at its new home. The area test
- * above passed on both, `findWiki` reported two candidates and refused to choose, and it
- * was right to: on the evidence it had, they were indistinguishable.
- *
- * ⭐ **An empty directory tree is the characteristic residue of a move**, so this will
- * happen again every time the vault is reorganized; a wiki with no documents in it is not
- * a wiki, and saying so is what makes the discovery survive the next one. Note the
- * refusal is still the correct behavior for two *real* roots — this narrows what counts
- * as a root rather than loosening what happens when there are two.
- *
- * The scan is recursive and unbounded, which is affordable because it runs only on a
- * directory that already matched `PROJECT_DIR`, and it stops at the first hit.
- */
-function isProjectRoot(path: string): boolean {
-	try {
-		const hasArea = readdirSync(path, { withFileTypes: true }).some(
-			(e) => e.isDirectory() && /^\d{2}-\d{2} /.test(e.name),
-		);
-		if (!hasArea) return false;
-		for (const entry of readdirSync(path, { recursive: true, withFileTypes: true })) {
-			if (entry.isFile() && entry.name.endsWith(".md")) return true;
-		}
-		return false;
-	} catch {
-		return false;
-	}
+/** The public wiki, or a reason there is nothing to do. See {@link PUBLIC_WIKI}. */
+function findPublicWiki() {
+	return findVault("public wiki", "ANTHERS_WIKI", PUBLIC_WIKI);
 }
 
 const check = process.argv.includes("--check");
 /**
- * Whether to render the wiki's generated blocks, which live in Parker's Obsidian vault.
+ * Whether to render the generated blocks that live in the two wikis.
  *
- * Opt-in since 2026-08-30, and **`make verify` does not pass it** — see the long note at
- * the bottom of this file for why. In short: a runner has no vault, so this half was never
- * enforced in CI, while on the one machine that does have a vault it failed whenever the
- * notes were reorganized. Run `make wiki-figures` to write them, and `make wiki-figures
- * CHECK=1` to assert they are current before publishing anything that quotes them.
+ * Opt-in, and **`make verify` does not pass it** — see the long note at the bottom of this
+ * file for why. In short: a CI runner checks out this repository and not the wikis beside
+ * it, so this half cannot be enforced there. Run `make wiki-figures` to write them, and
+ * `make wiki-figures CHECK=1` to assert they are current before publishing anything that
+ * quotes them.
  */
 const wikiRequested = process.argv.includes("--wiki");
 /** Generated regions that no longer match what the model says. */
@@ -1444,7 +1365,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 	{
 		// A mechanism the code never had, rather than one it lost — but the test the list
 		// applies is the same ("the only correct number of occurrences is zero"), and so is
-		// the fix. ATProto adoption is deferred (41.01): what ships is Bluesky identity
+		// the fix. ATProto adoption is deferred: what ships is Bluesky identity
 		// LINKING, and the `atproto_uri` columns sit unpopulated as future-proofing. This
 		// framing has drifted back onto marketing pages twice — PR #166 removed it from
 		// /for-creators, #183 from the Ghost comparison — which is what earns it a guard
@@ -1457,7 +1378,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			`${NOT_NEGATED}(?:built on the AT ?Protocol|portable DID|stored as ATProto records)`,
 			"gi",
 		),
-		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
+		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (wiki: What Anthers Would Put on the Network)",
 	},
 	{
 		// The same claim in a wording the rule above could not see, which is the third time
@@ -1476,7 +1397,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// guidelines"*. All three must stay silent, and all three do, because none of them
 		// uses the adjective. Verified by sabotage against each.
 		pattern: new RegExp(`${NOT_NEGATED}\\bfederated\\b`, "gi"),
-		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (63.01; 41.01)",
+		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (63.01; wiki: Federation and Creator Nodes)",
 	},
 	{
 		// The second mechanism the code never had, and the one that had spread furthest: a
@@ -1549,7 +1470,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// true now is open-source and no lock-in, which is what the canonical intro says
 		// instead.
 		pattern: new RegExp(`${NOT_NEGATED}open,?\\s+(?:and\\s+)?distributed network`, "gi"),
-		why: "Anthers is centralized-first — federation is coming, not here (63.01; 41.01)",
+		why: "Anthers is centralized-first — federation is coming, not here (63.01; wiki: Federation and Creator Nodes)",
 	},
 	{
 		// Not a retired *mechanism* like the two above — a retired *word* for a live one,
@@ -2055,18 +1976,22 @@ await writeBlocks(REPO, REPO_BLOCKS);
 // 🚨 **The wiki half runs only when it is asked for — `--wiki`, via `make wiki-figures`.**
 //
 // It was part of every `make verify` until 2026-08-30, and the reason it is not any more
-// is that **CI has never once run it.** A GitHub runner has no `~/Obsidian`, so the branch
-// below took the `skip` path on every CI run this check has ever had, printing a line and
-// passing. The drift protection on the wiki's blocks was therefore never "CI enforces
-// this" — it was "whoever last ran `make verify` on the one laptop with the vault
-// attached", which is the weakest enforcement available.
+// is that **CI has never once run it.** A GitHub runner checks out this repository and not
+// the wikis beside it, so the branch below takes the `skip` path on every CI run this check
+// has ever had, printing a line and passing. The drift protection on the wikis' blocks was
+// therefore never "CI enforces this" — it was "whoever last ran it on a machine with the
+// wikis attached", which is the weakest enforcement available.
 //
-// ⭐ **What it did reliably produce was failure on the developer machine**, because a
-// personal notes folder is not a build input: reorganizing it renamed the project root
-// (fixed 2026-08-30) and left an empty husk that looked like a second root (fixed the same
-// day). Both fixes are real and both are patches on a coupling that should not exist —
-// a test in this repository has no business failing because of the shape of somebody's
-// notes directory. The generation is worth keeping; making it a gate was the mistake.
+// ⭐ **The coupling that made it worse than that is now gone.** Until 2026-09-02 a wiki was
+// found by searching a personal notes folder, so reorganizing those notes broke the build
+// on the one machine that could run this at all — twice in a day, and once by going
+// silently green when the folder disappeared entirely. The wikis are siblings of this
+// repository now, which is a fact about the organization rather than about anybody's filing,
+// and `insideOrganization` is what keeps a moved wiki from reading as an absent one.
+//
+// ⚠️ **What would actually make CI enforce this is checking the wikis out beside the
+// repository in the workflow**, which is now a three-line change rather than a
+// reorganization. Until then the generation is worth keeping and the gate is still wrong.
 //
 // ⚠️ The repo's own blocks above are unaffected and stay in `make verify`, as does the
 // whole typed-figure scan over `apps/` and `packages/` — those are the parts that protect

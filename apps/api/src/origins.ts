@@ -7,7 +7,7 @@ import { isPublicDeployment } from "./lib/deployment.js";
  *
  * Admitting these is safe *because* the desktop app authenticates by bearer token,
  * never by cookie: its requests are non-credentialed, so allowlisting the origin
- * grants no ambient authority. (42.06 rejected an earlier version of this idea, on
+ * grants no ambient authority. (`apps/api/src/middleware/bearer.ts` rejected an earlier version of this idea, on
  * the grounds that the cookie still wouldn't be sent and it would have forced
  * `SameSite=None` — that reasoning applied to keeping cookie auth, which we didn't.)
  * These are constants present in every Tauri app, so they identify nothing and are

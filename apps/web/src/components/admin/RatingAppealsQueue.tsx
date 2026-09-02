@@ -6,7 +6,7 @@
  * half of the feature.** Anthers' Adult rung is payment-gated, so an
  * over-cautious call does not merely add a warning to a work — it puts it behind a
  * paywall. For a queer coming-of-age story wrongly flagged, that is exactly the harm the
- * category exists to prevent, produced by the mechanism meant to prevent it (wiki 40.09).
+ * category exists to prevent, produced by the mechanism meant to prevent it (the wiki's *Content Standards*).
  * An operator surface that could correct a rating and offered no way to contest it would
  * be only the half that can do damage.
  *

@@ -6,11 +6,11 @@
  * web app and any future creator-side or labeler tool read the same vocabulary rather than
  * each hard-coding its own. This file is the transcription and the place a value is added.
  *
- * **Two wiki documents own this between them and they do not overlap.** Wiki 40.13, The
- * Rating Standard, is the authority on what the values *mean* — the row-by-row table, where
- * each line falls, what may never be a factor, and worked examples. Wiki 40.09 is the
- * authority on what a rating *costs* and how that is enforced. Read 40.13 before rating
- * anything or adding a value; read 40.09 before building a surface that acts on one.
+ * **Two public wiki pages own this between them and they do not overlap.** *The Rating
+ * Standard* is the authority on what the values *mean* — the row-by-row table, where each
+ * line falls, what may never be a factor, and worked examples. *Content Standards* is the
+ * authority on what a rating *costs* and how that is enforced. Read the first before rating
+ * anything or adding a value; read the second before building a surface that acts on one.
  *
  * Three decisions are frozen here.
  *
@@ -34,7 +34,7 @@
  *    pressure to classify these as adult content is the pressure the category exists to
  *    resist. And subject matter is not the same as treatment: work *about* addiction,
  *    violence or sexuality is not rated for its subject, because depiction, explicitness and
- *    intent are what a rating reads. 40.13 § What Is Never a Factor carries both, together
+ *    intent are what a rating reads. The wiki's *The Rating Standard* § What Is Never a Factor carries both, together
  *    with the full list of what may never move a Work along the scale.
  */
 
@@ -119,7 +119,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
 		// Pool like anything else. Saying so is not reassurance padding: the rating was
 		// paid-only until 2026-08-28, and a creator who assumed the old cost would
 		// under-declare to avoid a price that no longer exists, which is the exact pressure
-		// 40.13 is built to remove.
+		// The wiki's *The Rating Standard* is built to remove.
 		//
 		// It describes the rung itself and not whether Anthers is currently accepting work
 		// at it — that is `ACCEPTED_MATURITY_RATINGS`, it changes, and a sentence here would
@@ -133,7 +133,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * The rungs Anthers currently accepts a Work at.
  *
  * 🚨 **This is an operational switch and not a property of the scale**, which is why it is a
- * separate list rather than a shorter `MaturityRating`. Wiki 40.13 § Classifying a Work Is
+ * separate list rather than a shorter `MaturityRating`. The wiki's *The Rating Standard* § Classifying a Work Is
  * Not the Same as Accepting It owns the distinction: a Work at a rung Anthers does not
  * accept is rated correctly and refused release with a reason naming the rung, rather than
  * being pushed into under-declaring at the rung below — which is the pressure the whole
@@ -149,7 +149,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * requirement, the exclusion from Public Access and so from the Time Pool, the invisibility
  * to anyone who has not opted in, the adulthood verification, and the reader's own controls.
  * Adding it earlier would have opened a rung with none of them, which is precisely the
- * failure 40.09's deferral principle names. **If a rung is ever added here again, that is
+ * failure the *Content Standards* page's deferral principle names. **If a rung is ever added here again, that is
  * the bar**: the fences before the content, never afterwards.
  *
  * A constant rather than configuration, deliberately: both inputs are judgments that deserve
@@ -267,7 +267,7 @@ export function maturityLabel(value: string): string {
  * - `show` — no treatment at all.
  *
  * 🚨 **This is the reader deciding what they meet, and it is never platform-side
- * suppression.** The pattern is Reddit's, and wiki 40.09 is explicit about the distinction:
+ * suppression.** The pattern is Reddit's, and the wiki's *Content Standards* is explicit about the distinction:
  * the platform picks the default and makes the choice explicit, rather than deciding what
  * anybody sees. A Work is not demoted, delisted for others, or paid less because somebody
  * blurred it.

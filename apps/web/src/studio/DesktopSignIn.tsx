@@ -5,7 +5,7 @@
  * No password is ever typed here — that is the point of the browser handoff. The
  * button opens the authorize page in the creator's own browser, where they are
  * usually already signed in, and one confirm click sends a one-time code back over
- * the `anthers://` scheme. See 42.06 § Desktop auth.
+ * the `anthers://` scheme. See `apps/api/src/middleware/bearer.ts`.
  *
  * Browser builds never render this; `StudioAuthGate` bounces to the consumer login.
  */

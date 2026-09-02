@@ -190,7 +190,7 @@ describe("adulthood verification by card funding", () => {
 			expect(res.status).toBe(409);
 			const body = await res.json();
 			expect(body.code).toBe("funding_not_credit");
-			// ⭐ Says plainly that nothing routes around it. Wiki 40.09 is explicit that the
+			// ⭐ Says plainly that nothing routes around it. The wiki's *Content Standards* is explicit that the
 			// exclusion is real and unmitigated, and that gesturing at a path which does not
 			// exist would be worse than the exclusion itself.
 			expect(body.error).toContain("credit card");

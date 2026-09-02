@@ -32,7 +32,7 @@
  * alone would be enough on a good day. This is not a good-day feature.
  *
  * **What this deliberately does not decide: whether the uploader's account is suspended.**
- * `40.06` refuses a `user` subject with `400 not_moderatable` because suspension has
+ * The wiki's *Moderation & Reporting* refuses a `user` subject with `400 not_moderatable` because suspension has
  * unanswered consequences for Works, purchases, support in flight and payouts, and
  * Child Safety Incident Runbook's Step 6 tells an operator not to invent one during an incident. Denying delivery
  * is this module; suspending a person is a decision that has not been taken.
@@ -129,7 +129,7 @@ interface WorkObject {
  * Every object of a Work's that could be delivered.
  *
  * ⚠️ **HLS renditions and processed audio are included even though they are derived**,
- * which is the opposite of the rule `40.12` states for *scanning* — there, a transform of
+ * which is the opposite of the rule the child-safety coverage map, which is deliberately not public states for *scanning* — there, a transform of
  * a source already handled needs no independent scan. Detection and quarantine ask
  * different questions: a rendition is not new material to check, and it is absolutely
  * still bytes a player can fetch. Leaving them behind would take the source out of reach
@@ -426,7 +426,7 @@ export interface QuarantineObjectResult {
  * would be worse than writing nothing: `loadModerationQueue` attaches the latest action to
  * a queue item by `(subject_type, subject_id)`, so a reported *person* would render as
  * hidden with reason `quarantine` when nothing whatever happened to their account — and
- * suspending a person is precisely the decision 40.06 records as not taken. The
+ * suspending a person is precisely the decision the wiki's *Moderation & Reporting* records as not taken. The
  * `media_quarantine` row is the record, and `GET /api/admin/quarantine` is where it surfaces.
  *
  * **Idempotent on the key**, on the same reasoning `quarantineWork` states: the realistic

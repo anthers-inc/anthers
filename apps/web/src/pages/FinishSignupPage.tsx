@@ -22,7 +22,7 @@
  * *naming* an address or a handle — see `services/pending-signups.ts`, which carries the
  * takeover that closes.
  *
- * ⚠️ **This page must not become a second signup door.** 40.10's rule is a prohibition on a
+ * ⚠️ **This page must not become a second signup door.** the *Making an Account* page's rule is a prohibition on a
  * second place *in the UI that mints accounts*, and a page reachable only by already having
  * a pending signup is a continuation of the one door rather than a rival to it. That is a
  * property of the guard below, not of the URL: somebody who navigates here directly with no

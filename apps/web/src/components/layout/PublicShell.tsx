@@ -20,6 +20,25 @@ import LoggedOutLayout from "./LoggedOutLayout";
  * chrome (sign up / log in), while shared pages show the app chrome to logged-in
  * users. It's a prop, not a component swap, so the shell type stays stable and the
  * decor never remounts for logged-out visitors.
+ *
+ * 🚨 **The stability above is across NAVIGATION only. Across a change of AUTH STATE this
+ * component unmounts everything beneath it, and that is the trap.** The return below picks
+ * `LoggedOutLayout` or `LoggedInLayout`, which are different component types — so React
+ * cannot reconcile one into the other and tears down the whole subtree, including the page
+ * the user is standing on and all of its state.
+ *
+ * **So any flow that signs somebody in AND THEN KEEPS WORKING on the same page has this
+ * shape, and it fails silently.** The subscribe ceremony is the case that found it: it
+ * refreshed the auth context the moment the emailed code verified, the payment modal's
+ * state update then landed on an unmounted component, and the modal simply never opened.
+ * No error, no warning, no failing test — React discards a state update on an unmounted
+ * tree without complaint.
+ *
+ * ⭐ **The fix is ORDERING, not detection: tell the auth context LAST, once the page is
+ * finished with it.** The session cookie is set at verification, so every request in
+ * between is already authenticated and nothing needs the context to be current — the
+ * context is the only thing that does not know yet, and it does not need to know until
+ * the user is leaving the page. Refreshing it early buys nothing and costs the subtree.
  */
 export default function PublicShell({ forceMarketing = false }: { forceMarketing?: boolean }) {
 	const { isAuthenticated, isLoading } = useAuth();

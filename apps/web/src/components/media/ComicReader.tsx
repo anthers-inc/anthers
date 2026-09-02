@@ -24,7 +24,7 @@
  *
  * **Attention is presence-mode** for an ebook — visible tab plus a sign of life within
  * 60s, which turning pages supplies naturally. The claim lives on the page that renders
- * this, keyed on the Work; see `40.05`.
+ * this, keyed on the Work; see the wiki's *What the Time Pool Pays For*.
  */
 import {
 	ArrowsPointingInIcon,

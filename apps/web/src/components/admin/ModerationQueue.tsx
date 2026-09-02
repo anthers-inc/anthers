@@ -184,7 +184,7 @@ export default function ModerationQueue() {
 	 *
 	 * ⚠️ **Two standing principles bound this call and neither is the operator's to
 	 * overturn**: a queer person existing in a story does not make it Mature, and subject
-	 * matter is not the same as treatment. Wiki 40.13. The creator can appeal, and the
+	 * matter is not the same as treatment. The wiki's *The Rating Standard*. The creator can appeal, and the
 	 * appeal queue on this page is where that lands.
 	 */
 	const correctRating = async (item: QueueItem, maturity: DeclarableMaturity) => {

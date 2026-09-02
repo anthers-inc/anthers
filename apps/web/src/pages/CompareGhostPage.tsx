@@ -306,7 +306,7 @@ export default function CompareGhostPage() {
 								<CompRow feature="Open-source codebase" anthers ghost />
 								{/* What actually ships is identity LINKING — OAuth against a Bluesky PDS, the DID
 								    stored on the account. Federation, record sync and portable content are
-								    deferred (41.01), so the row names the thing that exists. */}
+								    deferred, so the row names the thing that exists. */}
 								<CompRow feature="Bluesky identity linking" anthers />
 								<CompRow feature="Headless CMS / API" ghost />
 								<CompRow feature="Import from other platforms" anthers ghost />

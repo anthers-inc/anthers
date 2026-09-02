@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Schema role classification (41.02 Federation Topology):
+ * Schema role classification. The public statement of the topology this serves is the
+ * wiki's *How Anthers Is Built -> Federation and Creator Nodes*:
  *
  *   node = a creator's own — identity, content records, media, personal relationships.
  *   org  = network-wide or money — feeds, pools, payouts, moderation, telemetry.
  *   both = genuinely split by row, where one table serves both roles.
  *
- * The boundary table in 41.02 is the guiding map; disagreements are called out
- * per-table below and collected in the findings written back to 41.02.
+ * The boundary table on that page is the guiding map; disagreements are called out
+ * per-table, in the comment on the table that disagrees. There is no separate findings
+ * document and there should not be one -- a classification kept anywhere but beside the
+ * table drifts within a refactor.
+ *
+ * 🚨 `schema-role-tags.test.ts` requires a tag on every table, because this began as a
+ * one-time pass with nothing behind it and had decayed to 43 of 51 by 2026-09-01.
  */
 import {
 	boolean,
@@ -21,7 +27,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-// node — a person's identity. Node-canonical (41.02: "Identity lives on the creator
+// node — a person's identity. Node-canonical (boundary table: "Identity lives on the creator
 // node / ATProto-native"). `isAdmin` and `emailVerified` are org-imposed annotations on
 // the row, which is why this is `node` rather than `both`: the row's owner is the person,
 // not the org, and the org's flags are columns on someone else's record.
@@ -202,7 +208,7 @@ export const notifications = pgTable(
 	],
 );
 
-// node — a live auth credential. Identity is node-canonical (41.02), and a session
+// node — a live auth credential. Identity is node-canonical, and a session
 // is how that identity authenticates. The org holds a copy to verify requests, but the
 // relationship is node-owned (a creator can revoke their own sessions).
 export const sessions = pgTable(
@@ -354,7 +360,7 @@ export const signupCodes = pgTable(
 	(table) => [index("idx_signup_codes_expires").on(table.expiresAt)],
 );
 
-// node — ATProto DPoP tokens are node identity (41.02: "Identity lives on the creator
+// node — ATProto DPoP tokens are node identity (boundary table: "Identity lives on the creator
 // node / ATProto-native"). The org holds them to sign requests on the creator's behalf,
 // but they are the creator's credentials, not the org's.
 //
@@ -375,12 +381,6 @@ export const atprotoSessions = pgTable("atproto_sessions", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const atprotoOauthState = pgTable("atproto_oauth_state", {
-	key: text("key").primaryKey(),
-	state: jsonb("state").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
 // node — a pending OAuth authorization, keyed by the `state` parameter. This replaces an
 // in-process `Map`, which lost every in-flight authorization on restart and could not
 // survive a callback landing on a different instance than the initiation.
@@ -391,6 +391,11 @@ export const atprotoOauthState = pgTable("atproto_oauth_state", {
 //
 // ⚠️ Rows are swept on a TTL. Nothing else deletes them, so a store without the sweep
 // grows without bound — the SDK's own note says the cleanup is the implementation's job.
+export const atprotoOauthState = pgTable("atproto_oauth_state", {
+	key: text("key").primaryKey(),
+	state: jsonb("state").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 /**
  * A signup somebody has asked for and not yet finished — the **pending account**.
@@ -478,7 +483,7 @@ export const pendingSignups = pgTable(
 	],
 );
 
-// both — a follow is a relationship between two accounts. 41.02 names "Subscriber
+// both — a follow is a relationship between two accounts. The boundary table names "Subscriber
 // relationships" as both: the billing contract is org-side, the canonical assertion is
 // in the user's repo. The row's *existence* is node (a creator's followers are their
 // own), but the org's feed/index reads it, so both roles touch it.

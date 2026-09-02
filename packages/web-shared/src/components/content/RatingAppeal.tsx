@@ -6,7 +6,7 @@
  * Adult rung is payment-gated, an over-cautious call does not merely add a warning
  * to a work — it puts it behind a paywall, and for a queer coming-of-age story wrongly
  * flagged that is exactly the harm the category exists to prevent, produced by the mechanism
- * meant to prevent it (wiki 40.09). A correction surface without a contest would be only the
+ * meant to prevent it (the wiki's *Content Standards*). A correction surface without a contest would be only the
  * half that can do damage.
  *
  * ⭐ **It shows the answer, not just the outcome.** An appeal refused with no explanation is

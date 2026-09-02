@@ -12,7 +12,7 @@
  *   A pattern is *how many notices, against whom, upheld or not* — the sender's
  *   home address is no part of it. Deleting the row would destroy the evidence;
  *   keeping the address would hold PII for a purpose that had expired.
- * - **"Why was this removed?" must stay answerable.** 40.06's founding constraint
+ * - **"Why was this removed?" must stay answerable.** the *Moderation & Reporting* page's founding constraint
  *   is that removal is a state and never a `DELETE`, precisely so an appeal years
  *   later has something to read. A retention rule that deleted these rows would
  *   reintroduce, on a timer, exactly the failure that document exists to prevent.

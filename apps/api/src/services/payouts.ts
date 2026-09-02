@@ -23,7 +23,7 @@
  *
  *   1. **It is what makes every creator on Anthers an adult.** Stripe runs identity
  *      verification and will not verify a minor. Anthers deliberately collects no date of
- *      birth and no ID of its own (wiki 40.09; `/parents`), so this is the *only*
+ *      birth and no ID of its own (the wiki's *Content Standards*; `/parents`), so this is the *only*
  *      structural check standing behind that claim — and while free publishing skipped it,
  *      Anthers could not make the claim at all.
  *   2. **It means no Work on Anthers is payout-ineligible.** Ungated work earns from the

@@ -8,7 +8,8 @@
 // library is ~650 Noun Project SVGs — 14 MiB, of which this file promotes 18 —
 // and it lived here until 2026-08-14, when it was 91% of everything tracked. A
 // platform's repository should not be, by weight, an icon mirror. It moved to a
-// sibling repo (see SOURCE_HINT) alongside the layered design working files.
+// sibling PRIVATE repo alongside the layered design working files — private because
+// most of it is licensed third-party art rather than Anthers'.
 //
 // **This costs the app nothing**, which is the whole reason the split is cheap:
 // `icons.ts` inlines each icon's viewBox and path markup, `src/` never reads the
@@ -29,7 +30,11 @@ const ROOT = join(import.meta.dir, "..");
 const REPO = join(ROOT, "..", "..");
 const OUT_DIR = join(ROOT, "src", "generated");
 
-const SOURCE_HINT = "https://github.com/anthers-inc/anthers-brand";
+// The icon library is a PRIVATE repository — it mixes Anthers' own working files with
+// ~650 licensed Noun Project SVGs, which is not ours to publish wholesale. So this hint
+// names a path rather than a URL: an outside reader cannot fetch it and does not need to,
+// since `icons.ts` is committed and the app builds identically without the source.
+const SOURCE_HINT = "the Anthers icon library (private; set BRAND_SOURCE to a checkout)";
 /** Where the icon library lives. A sibling checkout by default, per the repo naming convention. */
 const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
 

@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Moderation — see auth.ts for the role-classification legend. Both tables are `org`
- * by the separation 41.02 mandates ("Moderation / labeling → Org + ATProto labelers;
- * separation of moderation from hosting, per the Bluesky model"). The *subjects* are
- * node content (comments, ratings); the *records* are the org's operator judgments.
+ * Moderation — see auth.ts for the role-classification legend. **Every table in this file
+ * is `org`, with no exceptions**, by the separation the federation topology mandates:
+ * moderation and labeling are the organization's, separated from hosting, per the Bluesky
+ * model. The *subjects* are node content (comments, ratings, Works); the *records* are the
+ * org's operator judgments about them, and a judgment does not move when its subject does.
  *
- * Both tables are polymorphic over (subject_type, subject_id) with no FK on the
- * subject, which is already the "soft cross-boundary FK" pattern 41.02's decision #2
- * asks for — the org references node content by id without a constraint that would
- * break if the content moved to a node.
+ * Most of them are polymorphic over (subject_type, subject_id) with no FK on the subject,
+ * which is already the "soft cross-boundary FK" pattern the topology asks for — the org
+ * references node content by id without a constraint that would break if the content
+ * moved to a node.
+ *
+ * ⚠️ This header said "both tables" until 2026-09-01, when the file held seven. A
+ * file-level classification is a claim that goes stale silently every time a table is
+ * added, which is why the per-table tags below are the authority and
+ * `schema-role-tags.test.ts` requires one on every table in the schema.
  */
 /**
  * Moderation — reports from users, and the append-only record of what an
@@ -187,7 +193,7 @@ export const moderationActions = pgTable(
 /**
  * An illegal-content report from anybody at all, including somebody with no account.
  *
- * 🚨 **A separate table from `moderation_reports`, and 40.12 says why in as many words:**
+ * 🚨 **A separate table from `moderation_reports`, and the child-safety coverage map, which is deliberately not public says why in as many words:**
  * *"This is not a moderation decision — it is a detection-and-report pipeline with a
  * different destination, and running it through the ordinary queue would lose it."* The
  * ordinary queue is polymorphic over `(subject_type, subject_id)` and assumes a row in one
@@ -205,6 +211,9 @@ export const moderationActions = pgTable(
  * never gave us any" — the same ambiguity `moderation_reports.redacted_at` exists to
  * resolve, arrived at from the opposite direction.
  */
+// org — a statutory intake obligation is the organization's and cannot be delegated to the
+// creator being reported about. `workId` is a soft reference into node content; most rows
+// name no subject at all, because DSA Art. 16 accepts free text.
 export const abuseReports = pgTable(
 	"abuse_reports",
 	{
@@ -316,6 +325,9 @@ export const abuseReportsRelations = relations(abuseReports, ({ one }) => ({
  * everything that would otherwise cascade from that user's row, which is precisely
  * what it exists to prevent.
  */
+// org — a hold is a legal obligation the organization is under, and it is the one record
+// here that must survive its subject leaving. Federating it would put the preservation
+// duty on the machine the hold most often exists to preserve *against*.
 export const legalHolds = pgTable(
 	"legal_holds",
 	{
@@ -397,7 +409,7 @@ export interface VendorMatch {
  * identifier both upload paths share. `POST /api/content/media-upload/direct` buffers
  * bytes in the handler, but `POST /api/content/media-upload/presign` hands the browser a
  * presigned PUT and the API never sees them — so the object exists in R2 before anything
- * here knows about it, and the key is what arrives first. Wiki 40.12 § *The ingest
+ * here knows about it, and the key is what arrives first. the child-safety coverage map, which is deliberately not public § *The ingest
  * inventory* has the full asymmetry.
  *
  * ⚠️ **A row means the question was asked, not that the content is safe.** `determination`
@@ -405,6 +417,9 @@ export interface VendorMatch {
  * is different from `clean` in the way that matters: one is an answer and the other is the
  * absence of one. Nothing may read the presence of a row as a clean bill of health.
  */
+// org — the scan is the organization's own evidence that it looked, held for the reporting
+// obligation. The bytes scanned are node media; the determination is not, and a creator
+// must never be the custodian of the record of whether their own upload was cleared.
 export const mediaScans = pgTable(
 	"media_scans",
 	{
@@ -454,6 +469,9 @@ export const mediaScans = pgTable(
 	],
 );
 
+// org — the same argument as `mediaScans`, one step further along: a quarantine is an
+// enforcement action taken against node media, so the machine hosting the media is exactly
+// the machine that must not be able to lift it.
 export const mediaQuarantine = pgTable(
 	"media_quarantine",
 	{
@@ -558,7 +576,7 @@ export const mediaQuarantine = pgTable(
 /**
  * A creator's appeal against an operator's correction of their Work's maturity rating.
  *
- * 🚨 **The appeal is part of the rating feature rather than a later refinement**, and 40.09
+ * 🚨 **The appeal is part of the rating feature rather than a later refinement**, and the wiki's *Content Standards*
  * is emphatic about why: the adults-only category is payment-gated, so an over-cautious call
  * does not merely add a warning to a work — it puts it behind a paywall. For a queer
  * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
@@ -572,6 +590,9 @@ export const mediaQuarantine = pgTable(
  * longer exists. The creator reference is `set null` on the usual footing: the decision
  * outlives whoever made it.
  */
+// org — an appeal is addressed to whoever made the decision, and the rating decision is the
+// org's. The subject is one creator's Work, but a creator holding the record of their own
+// appeal against the org would be holding both sides of it.
 export const workRatingAppeals = pgTable(
 	"work_rating_appeals",
 	{

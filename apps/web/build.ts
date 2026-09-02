@@ -64,11 +64,22 @@ if (match[2] !== entryUrl) {
 	console.log(`Repointed index.html: ${match[2]} → ${entryUrl} (Bun splitting bug)`);
 }
 
-// Copy static assets from public/ into dist/ — the self-hosted webfonts at /fonts/*,
-// which must stay OUT of the bundler (see the fonts note in the Agents Hub: routed
-// through it, all 83 subset cuts inline as base64 into one 4.5 MB chunk). Guarded
-// because public/ is committed content rather than generated, so an absent directory
-// should skip the copy rather than throw ENOENT.
+// Copy static assets from public/ into dist/ — the self-hosted webfonts at /fonts/*.
+//
+// 🚨 The fonts must stay OUT of the bundler, and this is the whole reason `external`
+// carries `/fonts/*` above. Bun resolves every `<link rel="stylesheet">` href and every
+// CSS `url()`, and it INLINES webfonts as base64 — so routed through it, all 83 subset
+// cuts collapse into a single render-blocking chunk of about 4.5 MB and the
+// `unicode-range` split stops meaning anything at all. They are pulled in instead by an
+// inline `<style>@import "/fonts/fonts.css";</style>`, which the bundler leaves alone.
+//
+// ⚠️ `external` fixes only THIS file. The dev server reads no such configuration, so a
+// change that works in `bun run dev` can still produce the 4.5 MB chunk in a build —
+// check a production build rather than the dev server after touching font loading.
+//
+// Note `public/fonts/` is COMMITTED, while its sibling `public/vendor/` is gitignored and
+// regenerated. Guarded below because public/ is committed content rather than generated,
+// so an absent directory should skip the copy rather than throw ENOENT.
 if (existsSync(`${import.meta.dir}/public`)) {
 	await cp(`${import.meta.dir}/public`, `${import.meta.dir}/dist`, { recursive: true });
 }

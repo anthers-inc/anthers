@@ -11,7 +11,7 @@
  * ── The one endpoint we call ────────────────────────────────────────────────────────
  *
  * `POST /v1/pdq` takes base64-encoded PDQ hashes and answers per hash. **No media and no
- * URL ever leaves Anthers** — wiki 40.12 § *What leaves Anthers is a hash, never the
+ * URL ever leaves Anthers** — the child-safety coverage map, which is deliberately not public § *What leaves Anthers is a hash, never the
  * media*.
  *
  * 🛑 **`POST /v1/media/submit` must never be called from this file or any other.** It

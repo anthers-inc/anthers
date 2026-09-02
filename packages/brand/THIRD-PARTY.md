@@ -6,9 +6,23 @@ Provenance and licensing for artwork this package carries. Third-party files are
 
 The botanical icons behind `iconSvg`/`iconGroup`/`iconDataUri` are from [The Noun Project](https://thenounproject.com/), obtained under a paid NounPro subscription and **used and redistributed under the Creative Commons Attribution 3.0 license (CC BY 3.0)**.
 
-**The full attribution — every collection, its creator, and links to both — lives with the art, in [anthers-inc/anthers-brand](https://github.com/anthers-inc/anthers-brand).** What this repository carries is the *derived* form: 18 icons normalized into path markup in `src/generated/icons.ts`. That file is a derivative of CC BY 3.0 art and so travels under the same condition, which is why the credit is restated here rather than only in the other repo:
+What this repository carries is the *derived* form: 18 icons normalized into path markup in `src/generated/icons.ts`. That file is a derivative of CC BY 3.0 art and travels under the same condition, so **this is the attribution** — it lives here, with the redistribution, rather than pointing anywhere else.
 
 > Botanical and bee icons by **Monika**, **Rachel Fredericks**, **Natcha Rochana**, **Pong Pong** and **Fauzi Arts**, via The Noun Project, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+
+The 18 are drawn from seven collections, and each collection is authored by a single creator — which is why five names cover 648 source icons:
+
+| Collection | Icons in the source set | Creator | Source |
+|---|--:|---|---|
+| `animals-38481` (bees) | 9 | [Monika](https://thenounproject.com/creator/NameIsMonika/) | [collection 38481](https://thenounproject.com/browse/collection-icon/animals-38481/) |
+| `botanical-borders-and-frames-228479` | 131 | [Rachel Fredericks](https://thenounproject.com/creator/hello6109e/) | [collection 228479](https://thenounproject.com/browse/collection-icon/botanical-borders-and-frames-228479/) |
+| `floral-borders-242604` | 15 | [Rachel Fredericks](https://thenounproject.com/creator/hello6109e/) | [collection 242604](https://thenounproject.com/browse/collection-icon/floral-borders-242604/) |
+| `flower-and-foliage-167008` | 276 | [Natcha Rochana](https://thenounproject.com/creator/rochanaa/) | [collection 167008](https://thenounproject.com/browse/collection-icon/flower-and-foliage-167008/) |
+| `grass-289179` | 20 | [Pong Pong](https://thenounproject.com/creator/pong085/) | [collection 289179](https://thenounproject.com/browse/collection-icon/grass-289179/) |
+| `wildflowers-outline-271978` | 100 | [Fauzi Arts](https://thenounproject.com/creator/fauziarts/) | [collection 271978](https://thenounproject.com/browse/collection-icon/wildflowers-outline-271978/) |
+| `wildflowers-solid-271979` | 97 | [Fauzi Arts](https://thenounproject.com/creator/fauziarts/) | [collection 271979](https://thenounproject.com/browse/collection-icon/wildflowers-solid-271979/) |
+
+🚨 **This table is the attribution of record and must stay in this repository.** The icon library it was copied from is a private repository, so a reader here cannot follow a link into it — and an attribution that points somewhere nobody can reach is not an attribution. **Attribution travels with the redistribution**, and this repository is where the redistribution happens.
 
 ### Why we attribute, having paid not to
 
@@ -30,7 +44,7 @@ Two scoping notes, because both are easy to get backwards:
 
 ## Anthers marks (`marks/`)
 
-First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources are in [anthers-brand](https://github.com/anthers-inc/anthers-brand) rather than here.
+First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources live in a **private** repository rather than here, because that repository mixes Anthers' own working files with licensed third-party art and is not ours to publish as a whole.
 
 ## Desktop packaging
 

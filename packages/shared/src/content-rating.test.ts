@@ -72,7 +72,7 @@ describe("the rating vocabulary", () => {
 	it("tells a creator the Adult rung costs them nothing, in the hint they read while choosing", () => {
 		// 🚨 The rating was paid-only until 2026-08-28, and a creator carrying that
 		// assumption would under-declare to avoid a price that no longer exists — the exact
-		// pressure wiki 40.13 is built to remove. So the hint has to say what the rung does
+		// pressure the wiki's *Rating Standard* is built to remove. So the hint has to say what the rung does
 		// NOT do, and this asserts it still does.
 		const adult = MATURITY_CHOICES.find((c) => c.value === "adult");
 		expect(adult?.hint).toContain("verified");
@@ -89,7 +89,7 @@ describe("requiresAdultVerification — the gate that has to fail closed", () =>
 		expect(requiresAdultVerification("unrated")).toBe(false);
 		expect(requiresAdultVerification("general")).toBe(false);
 		// 🚨 Mature especially. A mature rating is a warning and a filter input carrying no
-		// access consequence, and a gate that read it would silently put the work wiki 40.13
+		// access consequence, and a gate that read it would silently put the work the wiki's *Rating Standard*
 		// draws its rows to protect behind an age check.
 		expect(requiresAdultVerification("mature")).toBe(false);
 	});
@@ -144,7 +144,7 @@ describe("which rungs Anthers accepts", () => {
 	it("refuses release at a rung that is not accepted", () => {
 		// 🚨 Tested against an explicit set, because **every rung is open today and this is
 		// the only place the closed branch can be exercised at all.** The mechanism has to
-		// keep working: 40.13 is explicit that a rung can close again when the queue outruns
+		// keep working: the wiki's *Rating Standard* is explicit that a rung can close again when the queue outruns
 		// whoever is reading it, and that turning one off is the correct response rather
 		// than a failure. The day that happens, this proves the refusal already worked
 		// rather than being tried for the first time under pressure.
@@ -297,7 +297,7 @@ describe("content notes", () => {
 	it("does not list queer lives, and must never learn to", () => {
 		// 🚨 The one assertion here that is about values rather than mechanics. An early
 		// draft of Anthers' report copy listed "queer lives" as an example of mature work,
-		// which asserts precisely the premise 40.13 exists to refuse. A content note is a
+		// which asserts precisely the premise the wiki's *Rating Standard* exists to refuse. A content note is a
 		// warning about what is in a work; queer people existing in one is not a warning.
 		const values = CONTENT_NOTES.map((n) => n.value).join(" ");
 		expect(values).not.toContain("queer");

@@ -149,6 +149,24 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							endQ: 1,
 						},
 						{
+							id: "c-web-native-games",
+							title: "Web-Native Game Hosting",
+							description:
+								"Host a web build on Anthers and serve every file of it — loader, assets, the lot — through the same access check as everything else, so a gated web game is gated rather than merely unlisted. Today a browser-playable game is an embed pointing at a host we don't control.",
+							status: "planned",
+							startQ: 2,
+							endQ: 4,
+						},
+						{
+							id: "c-linux-compat",
+							title: "Linux Compatibility",
+							description:
+								"A published, openly-specified manifest per title so a Windows-only build runs on Linux — and so Heroic, Lutris, Bottles and anything else can support Anthers without our involvement. The manifest comes first deliberately: ship a packaging pipeline before the spec is public and we've rebuilt launcher lock-in under a different name.",
+							status: "exploring",
+							startQ: 5,
+							endQ: 7,
+						},
+						{
 							id: "c-multimedia-expand",
 							title: "Multi-Media Expansion",
 							description:
@@ -218,6 +236,24 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							startQ: 5,
 							endQ: 7,
 						},
+						{
+							id: "c-license-toolkit",
+							title: "Ownership & Licensing Options",
+							description:
+								"A toolkit a creator picks from for what buying their work means — DRM-free, or a seat that moves between machines. The floor already holds and is not waiting on this: unpublishing a Work never revokes a purchase.",
+							status: "exploring",
+							startQ: 6,
+							endQ: 7,
+						},
+						{
+							id: "c-processor-independence",
+							title: "Payment Processor Independence",
+							description:
+								"An interface in front of the payment processor, so that a creator's income never depends on one company's continued willingness to serve us. Three parts, and the interface alone is the cheapest and least useful of them: payment methods that can actually be carried to another processor, and a second rail arranged before it is needed rather than during an incident. Not a prediction about our processor, who have been good to work with — it is that the time to build an exit is while nothing is wrong, and that the same reasoning we apply to storage and hosting should apply to the part that touches people's livelihoods.",
+							status: "planned",
+							startQ: 2,
+							endQ: 4,
+						},
 					],
 				},
 				{
@@ -269,6 +305,24 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							startQ: 5,
 							endQ: 7,
 						},
+						{
+							id: "c-audience-export",
+							title: "Taking Your Audience With You",
+							description:
+								"An export of who follows and supports you, so leaving costs you your audience relationship as little as possible. Handles and follow dates always; a contact address only for people who explicitly chose to share it with you, off by default; never payment or consumption data. Billing is between a supporter and Anthers rather than between a supporter and you, so what you get is an index over other people's own assertions, not a customer list — and for the people who shared nothing, the answer is a one-time migration notice we deliver rather than a contact detail we hand over.",
+							status: "exploring",
+							startQ: 4,
+							endQ: 6,
+						},
+						{
+							id: "c-network-catalog",
+							title: "Publishing Your Catalog to the Network",
+							description:
+								"Your Catalog as public records in a repository you own, so a listing of your work outlives any one host — the listing only, never the work itself, which no repository on this network could hold privately. Blocked on the AT Protocol's granular permissions, which are not ready to ask a creator for in production; hosting identities ourselves would unblock the whole class at once. The schemas are written and checked against real data, and deliberately not published, because publishing one is a promise to everybody else's software that cannot be withdrawn.",
+							status: "exploring",
+							startQ: 5,
+							endQ: 8,
+						},
 					],
 				},
 			],
@@ -298,6 +352,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							status: "active",
 							startQ: 0,
 							endQ: 0,
+						},
+						{
+							id: "u-edge-entitlement",
+							title: "Checking Access at the Edge",
+							description:
+								"Video should start faster, and the way to make that happen is to move the access check closer to you. Every segment of a video you are watching is fetched through an address minted for that one request, which is what stops a locked file being handed to somebody who should not have it — and it is also why those segments cannot be cached near you the way an ordinary file is. An edge service that checks entitlement itself and then serves from cache would fix the latency and the residual cost together. The constraint we will not trade away: the check moves, it does not disappear. Simply caching the segments is the version that quietly removes the gate.",
+							status: "exploring",
+							startQ: 4,
+							endQ: 6,
 						},
 						{
 							id: "u-audio-player",
@@ -406,6 +469,15 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 								"Native iOS and Android apps for content consumption, notifications, and community interaction.",
 							status: "exploring",
 							startQ: 5,
+							endQ: 7,
+						},
+						{
+							id: "u-video-moderation",
+							title: "Moderating Video at Scale",
+							description:
+								"Video is harder to moderate than text and we do not yet know how we will do it. Today a rating is the creator's own declaration, corrected by report, and the only automated scanning is the child-safety hash matching described in our Child Safety Policy — which finds known material and nothing else. That is honest at our size and it does not survive a catalog one person cannot watch. What we are exploring is a review queue and a sampling policy rather than an automatic classifier: a machine that guesses at context is a machine that removes art, and we would rather be slow than wrong in that direction. Signposted here because it needs solving before it is urgent, not after.",
+							status: "exploring",
+							startQ: 4,
 							endQ: 7,
 						},
 					],
