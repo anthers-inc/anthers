@@ -30,7 +30,7 @@
 //
 // Anthers figures derive from @anthers/shared/constants (never hardcoded); competitor
 // figures are rough public estimates (illustrative). Claims follow the Copy Style
-// Guide (63.01): "0% cut" is now unconditionally true of EVERY creator transaction,
+// Guide (the wiki's *How Anthers Talks About Itself*): "0% cut" is now unconditionally true of EVERY creator transaction,
 // but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
 // of the price. Where a cut and a price appear together the take-home figure must
 // appear with them, or a reader concludes the creator gets the whole list price.
@@ -620,7 +620,7 @@ export default function ForCreatorsPage() {
 							</h3>
 							{/* ⚠️ These example rungs were `PUBLIC_ACCESS_PRICE × 1/2/3` — the Anthers
 							    ladder, borrowed. Read as a creator's own options it teaches a $3 step
-							    that no longer exists (63.01 § Badge: no granularity floor, "$2 / $7.50
+							    that no longer exists (the wiki's *How Anthers Talks About Itself* § The Words: no granularity floor, "$2 / $7.50
 							    / $15 is as valid as $3 / $6 / $9 / $12"), so the illustration is
 							    deliberately uneven and deliberately not derived from our price. */}
 							<p className="text-sm leading-relaxed text-base-content/70">

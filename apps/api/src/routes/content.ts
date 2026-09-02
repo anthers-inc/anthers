@@ -2167,7 +2167,7 @@ const contentRoutes = new Hono()
 
 	// ── Reviews (Works only) ───────────────────────────────────────────────────
 	//
-	// A review is "a reader's verdict on a work" (63.01), and reviews are floor-level
+	// A review is "a reader's verdict on a work" (the wiki's *How Anthers Talks About Itself*), and reviews are floor-level
 	// moderation because "a creator moderating reviews of their own work is the conflict
 	// reviews exist to avoid" (the wiki's *Moderation & Reporting*). Both are about works, so unlike comments this is
 	// NOT polymorphic — reviewing an announcement is a category error.

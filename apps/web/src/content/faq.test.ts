@@ -12,13 +12,13 @@
 // in `scripts/econ-figures.ts` runs repo-wide and already covers the vocabulary (Seeds,
 // watch-time, "federated", pay-what-you-want, Anthers Gates), so nothing here repeats it.
 // What is left is the handful of rules that are **about this file's claims** rather than
-// about words, and each one below is a rule 63.01 states and a regex can actually check.
+// about words, and each one below is a rule the wiki's *How Anthers Talks About Itself* states and a regex can actually check.
 //
 // ⚠️ The assertions read the RENDERED text, not the source, which matters for the answers
 // written as JSX: a rule checked against source would miss every claim that arrives inside
 // a `<strong>`, and about half of the load-bearing sentences here do.
 //
-// Sources: 63.01 § Claims & honesty (co-presence, take-home, Public Access), § Words.
+// Sources: the wiki's *How Anthers Talks About Itself* § Claims (co-presence, take-home, Public Access), § Words.
 
 import { describe, expect, it } from "bun:test";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
@@ -80,7 +80,7 @@ describe("the FAQ pool", () => {
 		});
 	}
 
-	// 🚨 63.01's co-presence rule, and the one most likely to be broken by an edit that
+	// 🚨 the wiki's *How Anthers Talks About Itself*'s co-presence rule, and the one most likely to be broken by an edit that
 	// looks like tightening. "Free forever" with no bound beside it reads as unlimited,
 	// and the bound is the entire reason anybody gives Anthers the Public Access price —
 	// so hiding it hollows out the offer as well as overstating it. Conditional on the
@@ -115,7 +115,7 @@ describe("the FAQ pool", () => {
 		}
 	});
 
-	// 🚨 "No cut" beside a price, with no take-home number, is 63.01's single easiest way
+	// 🚨 "No cut" beside a price, with no take-home number, is the wiki's *How Anthers Talks About Itself*'s single easiest way
 	// to turn a true claim into a false impression: a reader who meets *0% cut* next to
 	// *$20* concludes the creator receives $20. Both answers that pair them state the
 	// figure, and they must keep doing so — including when one is reworded, which is when

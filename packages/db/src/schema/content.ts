@@ -778,7 +778,7 @@ export const bookmarks = pgTable(
  * Reviews — a reader's verdict on a **Work**, and deliberately not on a Post.
  *
  * Unlike comments this is NOT polymorphic, because reviewing an announcement is a category
- * error: 63.01 defines a review as "a reader's verdict on a work", and the wiki's *Moderation & Reporting* makes reviews
+ * error: the wiki's *How Anthers Talks About Itself* defines a review as "a reader's verdict on a work", and the wiki's *Moderation & Reporting* makes reviews
  * floor-level moderation precisely because "a creator moderating reviews of their own work
  * is the conflict reviews exist to avoid". Both sentences are about works. Giving reviews a
  * subject type would invite a shape the model has no meaning for.

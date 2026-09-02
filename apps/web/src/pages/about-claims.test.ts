@@ -33,7 +33,7 @@
 // correct there. A repo-wide rule would need an `econ:allow` on honest copy, which is
 // how a guard becomes noise people route around.
 //
-// Sources: 63.01 § Claims & honesty (what may be said), Organizational Structure § Phase 1 (what is true).
+// Sources: the wiki's *How Anthers Talks About Itself* § Claims (what may be said), Organizational Structure § Phase 1 (what is true).
 
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -62,7 +62,7 @@ const COPY = SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
  * A claim the page may not make yet, and the day it becomes sayable.
  *
  * `phrases` are lowercase substrings. They are the wordings that actually appeared on
- * the page, not the ones we would have predicted — same rule 63.01 records for
+ * the page, not the ones we would have predicted — same rule the wiki's *How Anthers Talks About Itself* records for
  * `RETIRED_COPY`, for the same reason.
  */
 const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
@@ -103,7 +103,7 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 	{
 		claim: "Anthers already holds federal tax-exempt status, or has applied for it",
 		// 🚨 **This row was `["501(c)", "tax-exempt", …]` — the bare term — until 2026-08-21,
-		// when Parker's call moved 63.01 off *"say nothing about federal status at all"*.
+		// when Parker's call moved the wiki's *How Anthers Talks About Itself* off *"say nothing about federal status at all"*.
 		// The page now states the intention to file, and the § What Anthers Is two-column
 		// split (what binds us NOW / what recognition ADDS) is what makes that safe: it
 		// partitions present from future on the page itself rather than leaving a reader to

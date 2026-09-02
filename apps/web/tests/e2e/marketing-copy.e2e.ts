@@ -71,7 +71,7 @@ test.describe("marketing copy tells the truth about access", () => {
 	});
 
 	test("the pages that promise free access also state the limit", async ({ page }) => {
-		// 63.01 makes these co-present: "free forever" with no limit beside it reads as
+		// The wiki's *How Anthers Talks About Itself* makes these co-present: "free forever" with no limit beside it reads as
 		// unlimited, and the limit is the whole reason to give Anthers anything. This is the
 		// one POSITIVE assertion in the file, and it is what keeps the negatives honest —
 		// deleting the sentence to satisfy them would fail here.

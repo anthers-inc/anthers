@@ -13,9 +13,9 @@
  * renders, still converts somebody, and still passes every other spec. So what is pinned
  * here is **order and co-presence** rather than appearance.
  *
- * ⚠️ Deliberately not pinned: the wording of any of it. Copy is 63.01's to govern and it
+ * ⚠️ Deliberately not pinned: the wording of any of it. Copy is the wiki's *How Anthers Talks About Itself*'s to govern and it
  * moves; a spec that asserted sentences would fail on every edit and teach people to weaken
- * it. The exception is the free limit, which is pinned because 63.01 requires it to be
+ * it. The exception is the free limit, which is pinned because the wiki's *How Anthers Talks About Itself* requires it to be
  * *co-present* with "free forever" — that is a rule about structure, and structure is what
  * this file is for.
  */
@@ -79,12 +79,12 @@ test.describe("/subscribe leads with the free door", () => {
 	test("what free includes is stated above the signup control, limit and all", async ({ page }) => {
 		await page.goto("/subscribe");
 
-		// 🚨 63.01: "free forever" and the cap are co-present, on the same rule as "no cut"
+		// 🚨 the wiki's *How Anthers Talks About Itself*: "free forever" and the cap are co-present, on the same rule as "no cut"
 		// and the take-home. A reader who meets the promise without the bound beside it
 		// hears "unlimited", and then meets the limit as a surprise after signing up.
 		//
 		// ⚠️ **What is pinned is that a BOUND is stated before the reader signs up — not the
-		// wording of it, and not the period.** 63.01's requirement is a co-present limit;
+		// wording of it, and not the period.** The wiki's *How Anthers Talks About Itself*'s requirement is a co-present limit;
 		// what "forever" denies is an expiry, not that the free tier has edges. Naming the
 		// period is preferred where it fits, and the top label does name it ("hrs/mo"), but
 		// a spec that demanded the period would be enforcing the guide's example sentence

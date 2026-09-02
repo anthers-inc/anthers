@@ -77,7 +77,7 @@ describe("published legal documents", () => {
 		 * The privacy policy's own sentence enumerates *"play, watch, read, or listen"*
 		 * and then, until 2026-08-12, called the result **watch-time** — naming one medium
 		 * as the unit for a platform that hosts four, in the same breath as listing them.
-		 * 63.01 made the same mistake and worse: it blessed the term while citing this
+		 * The wiki's *How Anthers Talks About Itself* made the same mistake and worse: it blessed the term while citing this
 		 * principle as its authority.
 		 *
 		 * Nothing errors when copy drifts back, which is why this is a test rather than a

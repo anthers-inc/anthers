@@ -10,7 +10,7 @@
  * shows and the charge does not is exactly the class of defect `supportTotal` exists for.
  *
  * ⚠️ **`seed` keeps its name, and the name is retired copy.** "Seed" is no longer a
- * user-facing noun (63.01), but identifiers were deliberately left alone — `seed_allocations`
+ * user-facing noun (the wiki's *How Anthers Talks About Itself*), but identifiers were deliberately left alone — `seed_allocations`
  * and `works.seed_access` still exist and still mean what they say. Renaming this one field
  * would put a third spelling of the same concept in the codebase to fix a word no reader
  * ever sees.

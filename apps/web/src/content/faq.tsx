@@ -22,7 +22,7 @@
 // page rather than falling out of category order. Ordering by category instead would open
 // the signup page's FAQ with a question about the feed.
 //
-// **Copy rules apply here exactly as they do on a page** (63.01), because this *is* page
+// **Copy rules apply here exactly as they do on a page** (the wiki's *How Anthers Talks About Itself*), because this *is* page
 // copy — it merely lives one import away from the page. The three that bite most often:
 // money figures are derived from the generated tables and never typed; "free forever" and
 // the monthly Public Access limit are co-present in the same breath; and supporting

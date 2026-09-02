@@ -29,6 +29,8 @@ The codegen strips XML noise, `<title>`/`<metadata>`, and baked-in solid fills s
 
 ⚠️ **A source tree that exists but is missing a curated path is a hard error, not a skip.** Carrying on would silently drop an icon the app renders by id, so the codegen exits 1 and names what diverged. An *absent* library is fine; a *disagreeing* one is not.
 
+🚨 **Restart the web dev server after a rebuild, or you get a stale bundle and a baffling error.** Bun's dev server watches `apps/web/src` and **not** `packages/brand`, so a regenerated `src/generated/icons.ts` does not reach a running server. The symptom is not "my new icon is missing" — it is `Cannot read properties of undefined (reading 'viewBox')`, thrown from wherever the icon is composed, which reads like a bug in the consumer rather than a stale build. (The `@anthers/brand` helpers warn-and-noop on an unknown id, so an id that is genuinely wrong fails quietly and differently; this one throws.)
+
 
 # Using it
 

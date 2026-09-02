@@ -115,7 +115,7 @@ export const DIRECTED_SUPPORT_WORST_CASE = {
 /**
  * The storefronts a creator actually compares us with, and their revenue share.
  *
- * Generated rather than typed into the Studio because 63.01 § Comparisons binds every
+ * Generated rather than typed into the Studio because the wiki's *How Anthers Talks About Itself* § Comparisons binds every
  * comparison to **all-in against all-in** — a rival's take-home has to be computed from
  * the same card fee ours is, and must move when that fee moves. `absorbsProcessing` is
  * Valve's model: their 30% covers the card cost, so nothing further comes off.

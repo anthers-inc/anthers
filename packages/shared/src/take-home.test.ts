@@ -147,7 +147,7 @@ describe("the named-alternative comparison", () => {
 	/**
 	 * 🚨 **The concession, asserted so it cannot quietly disappear.** Steam absorbs
 	 * processing, so their 30% of a small sale costs the creator less than the flat fee we
-	 * pass through — they beat us below about $1.15. 63.01 § Comparisons binds us to
+	 * pass through — they beat us below about $1.15. The wiki's *How Anthers Talks About Itself* § Comparisons binds us to
 	 * conceding where we lose, and a comparison that only ever showed us winning would be
 	 * the exact dishonesty the rule exists to prevent.
 	 */
@@ -182,7 +182,7 @@ describe("the named-alternative comparison", () => {
 	});
 
 	test("every rival column includes the same card fee we itemize", () => {
-		// 63.01 § Comparisons: all-in against all-in. A rival's cut compared against our
+		// The wiki's *How Anthers Talks About Itself* § Comparisons: all-in against all-in. A rival's cut compared against our
 		// all-in would flatter us exactly where a creator would check.
 		const price = 10;
 		const itch = RIVAL_STOREFRONTS.find((r) => r.name === "itch.io");
