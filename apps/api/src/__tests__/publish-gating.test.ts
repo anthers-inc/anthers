@@ -17,7 +17,7 @@
  *
  * So if you build that gate, these tests will fail — and the fix is not to hand the
  * fixtures a Connect account and move on. Update `apps/web/src/pages/ParentsPage.tsx` in
- * the same change, along with 62.03, 40.09 and the Creator Terms, which all rest on the same premise.
+ * the same change, along with 62.03, the wiki's *Content Standards* and the Creator Terms, which all rest on the same premise.
  * A safety claim to parents and the code that does or doesn't back it have to move
  * together, in both directions.
  */

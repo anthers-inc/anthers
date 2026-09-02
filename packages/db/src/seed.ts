@@ -827,7 +827,7 @@ async function seed() {
 			// A creator's works go in the CATALOG. Every one is a released Work carrying its
 			// own delivery, gates and dates — no post required, which is the whole point.
 			// Text works are Works too (type "text"): prose that earns lives in the Catalog,
-			// while a post body is an announcement and earns nothing. See 40.05.
+			// while a post body is an announcement and earns nothing. See the wiki's *What the Time Pool Pays For*.
 			const authored = daysAgo(randomInt(200, 1500));
 			const [created] = await db
 				.insert(works)

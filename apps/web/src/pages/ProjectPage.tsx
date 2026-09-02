@@ -46,7 +46,7 @@ export default function ProjectPage() {
 	// A Project is a shelf holding no work of its own, so browsing one records the visit
 	// and earns no Time Pool minutes. The time is earned on the **Works**, which is where
 	// consumption actually happens. (This said "on the posts" until Works could appear
-	// here at all; only a Work has ever been able to earn — see 40.05.)
+	// here at all; only a Work has ever been able to earn — see the wiki's *What the Time Pool Pays For*.)
 	useReportVisit({ creatorId: project?.creatorId ?? null });
 
 	if (loading) {

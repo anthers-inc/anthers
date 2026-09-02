@@ -60,7 +60,7 @@ export const accounts = pgTable("accounts", {
 	stripeProductId: text("stripe_product_id").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active support subscription
 
-	// ── Adult access (wiki 40.09 § The funding type is the age signal) ──
+	// ── Adult access (the wiki's *Content Standards* § The funding type is the age signal) ──
 	// Three columns and no fourth, and the shortness is the design rather than a first
 	// pass. Reaching the Adult rung needs the account-level opt-in AND a verification;
 	// what is kept of the verification is that it happened, when, and by which method.
@@ -94,7 +94,7 @@ export const accounts = pgTable("accounts", {
 	// `hide` | `blur` | `show`, and two columns rather than one because the two rungs get
 	// SEPARATE controls. A reader who wants difficult work unblurred has said nothing about
 	// whether they want explicit work at all, and one setting covering both would make them
-	// say it (wiki 40.09).
+	// say it (the wiki's *Content Standards*).
 	//
 	// ⚠️ **The defaults live in `@anthers/shared/content-rating`, not here.** A signed-out
 	// visitor has no row at all and must still get the Mature blur, so the default has to be
@@ -181,7 +181,7 @@ export const attentionEvents = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		// Time is earned by a **Work**, never by a post. A post is connective tissue and
-		// earns nothing (40.05), which used to be a policy the endpoint enforced against a
+		// earns nothing (the wiki's *What the Time Pool Pays For*), which used to be a policy the endpoint enforced against a
 		// schema that couldn't express it; now the column says so. Null only on
 		// zero-duration visit pings, which are analytics and credit nothing.
 		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),

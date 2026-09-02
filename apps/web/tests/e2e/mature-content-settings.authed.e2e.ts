@@ -58,7 +58,7 @@ test("the page says what the age check actually reads, and what it excludes", as
 	await expect(section).toContainText(/credit/i);
 	await expect(section).toContainText(/Paying for something is not the check/i);
 
-	// ⚠️ And the exclusion is stated plainly rather than gestured past. Wiki 40.09: it is
+	// ⚠️ And the exclusion is stated plainly rather than gestured past. The wiki's *Content Standards*: it is
 	// real, it skews younger, lower-income and unbanked, and it is the accepted price of
 	// refusing to verify everybody. A page that hinted at an alternate route would be
 	// promising something that has deliberately not been built.

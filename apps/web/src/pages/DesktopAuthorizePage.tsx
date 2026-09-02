@@ -6,7 +6,7 @@
  * where the creator usually already holds a normal cookie session, and one confirm
  * click mints a separate, independently revocable desktop token. The token itself is
  * never shown here or put in the URL: the page hands back a one-time `code`, which the
- * app redeems with the PKCE verifier only it holds. See 42.06 § Desktop auth.
+ * app redeems with the PKCE verifier only it holds. See `apps/api/src/middleware/bearer.ts`.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { apiFetch } from "@anthers/web-shared/rpc";

@@ -10,7 +10,7 @@
  * What is asserted below is that a person can now *see* where they are: a rail naming the
  * steps, the choices they made read back, and one thing to do.
  *
- * 🚨 **And that this page is not a second signup door.** 40.10's rule is a prohibition on a
+ * 🚨 **And that this page is not a second signup door.** the *Making an Account* page's rule is a prohibition on a
  * second place in the UI that mints accounts, so a page reachable only by already having a
  * pending signup is a continuation of the one door rather than a rival to it. That is a
  * property of a guard, and a guard nothing exercises is a guard nobody will notice going.
@@ -56,7 +56,7 @@ test.describe("it cannot be an entry point", () => {
 	test("a visitor with no signup in progress is sent to the one door", async ({ page }) => {
 		// 🚨 The guard, exercised. The pending signup is read from an httpOnly cookie the
 		// browser cannot forge, so arriving here by typing the URL finds nothing — and a page
-		// that offered to start one instead would be the second door 40.10 forbids.
+		// that offered to start one instead would be the second door the wiki's *Making an Account* forbids.
 		await page.goto("/finish");
 
 		await expect(page).toHaveURL(/\/subscribe$/);

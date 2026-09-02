@@ -3,7 +3,7 @@
  * Creator Badge art — the upload, the scan that gates it, and the key that must not escape.
  *
  * 🚨 **Badge art is user-supplied imagery on a surface other people see**, so it is another
- * ingest door for wiki 40.12 — and unlike a Work there is no release gate behind which a
+ * ingest door for the child-safety coverage map, which is deliberately not public — and unlike a Work there is no release gate behind which a
  * queued scan could catch up. It is scanned inline, before the key is ever written to the
  * row, and a match refuses the upload outright.
  *

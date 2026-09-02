@@ -231,7 +231,7 @@ describe("what an Adult rating costs", () => {
 			// The rule most likely to be over-applied, and the most expensive to get wrong:
 			// a mature rating is a warning and a filter input carrying NO access
 			// consequence. Teaching the resolver to read it would silently paywall the work
-			// wiki 40.13 draws its rows to protect.
+			// The wiki's *The Rating Standard* draws its rows to protect.
 			const got = resolveAccessSync({ ...base, maturity: "mature" }, ctx());
 			expect(got.canAccess).toBe(true);
 			expect(got.reason).toBe("free");
@@ -347,7 +347,7 @@ describe("what an Adult rating costs", () => {
 		});
 
 		it("is absent for a signed-in account that has not opted in", async () => {
-			// Parker, 2026-08-28, settling 40.09's open question on the non-feed surfaces:
+			// Parker, 2026-08-28, settling the *Content Standards* page's open question on the non-feed surfaces:
 			// one rule for everyone without the opt-in, rather than an interstitial.
 			const titles = await catalogTitles(readerCookie);
 			expect(titles).toContain(MATURE_TITLE);
@@ -461,7 +461,7 @@ describe("what an Adult rating costs", () => {
 			// reachable and earning — the cover is covered and nothing else changes — so a
 			// `blur` preference must produce no query condition at all. If blurring quietly
 			// removed rows, Mature would carry an access consequence, which is exactly what
-			// wiki 40.13 says it must never do.
+			// The wiki's *The Rating Standard* says it must never do.
 			expect((await setDisplay({ mature: "blur" })).status).toBe(200);
 			expect(await catalogTitles(readerCookie)).toContain(MATURE_TITLE);
 		});

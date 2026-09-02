@@ -16,7 +16,7 @@
  * would drift the first time somebody added a fourth dimension.
  *
  * ⚠️ **The fifth — language filtering — is deliberately the odd one out and cannot be made to
- * fit.** Strong language never affects a Work's rating (40.13), so the filter runs over
+ * fit.** Strong language never affects a Work's rating (the wiki's *Rating Standard*), so the filter runs over
  * content **nobody classified**: it cannot read a rating or a content note to decide where to
  * apply, and it therefore behaves differently from every other control here. It is a courtesy
  * for a household, not a guarantee about anything, and the word list says so.
@@ -228,7 +228,7 @@ export function spentWindow(
  * to a household rather than a claim about content.
  *
  * ⚠️ **This is not a safety feature and must never be described as one.** Strong language does
- * not affect a Work's rating at all (40.13), so the filter runs over content nobody
+ * not affect a Work's rating at all (the wiki's *Rating Standard*), so the filter runs over content nobody
  * classified: it has no rating and no content note to consult, cannot know what it has not
  * been told about, and will miss things. What it does is stop a household being surprised by
  * a word — which is worth doing and worth being honest about.

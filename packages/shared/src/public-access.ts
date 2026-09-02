@@ -78,7 +78,7 @@ export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
  * alternative shape — share-link minutes accruing at a *lower rate* in one undivided pool.
  * The rejected shape taxed the sharer for the exact behavior the feature exists to
  * encourage, and it made a minute worth less for how the viewer arrived rather than for how
- * well attended it was, which sits badly beside the equal-time principle (40.05).
+ * well attended it was, which sits badly beside the equal-time principle (the wiki's *What the Time Pool Pays For*).
  *
  * The figure is illustrative in the share-link design (*"90% own time / 10% shared"*) and belongs to the
  * financial model rather than to a route.

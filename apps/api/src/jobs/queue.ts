@@ -168,7 +168,7 @@ export const QUEUES = {
 	// Hash a stored object and ask a detection vendor about the hash. Keyed on the storage
 	// key rather than the Work, because that is the only identifier both upload paths share:
 	// the presigned PUT never passes the bytes through the API, so the object exists in R2
-	// before anything here knows about it. See wiki 40.12.
+	// before anything here knows about it. See the child-safety coverage map, which is deliberately not public.
 	SCAN_MEDIA: "scan-media",
 	// Re-ask for the objects whose scan never came back. `SCAN_MEDIA` gives up after its
 	// retry budget, and release gives way after two minutes, so between them an object

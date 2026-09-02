@@ -24,7 +24,7 @@
  *   - a **gated** Work has no qualifying allowed row for a null viewer → `login_required`;
  *   - a **priced** Work → `payment_required`;
  *   - an **Adult** Work → `adult_gated`, because a share context carries no opt-in and can
- *     never be given one. That is the stronger property 40.13 asks for: Adult work is
+ *     never be given one. That is the stronger property the wiki's *Rating Standard* asks for: Adult work is
  *     invisible to a signed-out visitor entirely, and a link is precisely the surface that
  *     would otherwise breach it, since whoever follows it has no setting to consult;
  *   - a **quarantine** or a **takedown** outranks all of it, as everywhere else.
@@ -157,7 +157,7 @@ export async function revokeShareLink(sharerId: number, workId: number): Promise
  * 🚨 **Returns the sharer and the Work and nothing else, which is the module's whole
  * contract.** It cannot return an access verdict because it does not have one to give:
  * whether the bytes may go out is `resolveAccessSync`'s answer, and routing a token through
- * anything that looked like an entitlement is exactly the mistake 40.13 names.
+ * anything that looked like an entitlement is exactly the mistake the wiki's *Rating Standard* names.
  */
 export async function resolveShareToken(token: string): Promise<ResolvedShareLink | null> {
 	if (!token || token.length > 64) return null;

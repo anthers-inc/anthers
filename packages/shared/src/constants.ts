@@ -542,7 +542,7 @@ export const FREE_STORAGE_GIB = 50;
  *
  * ⚠️ `POST /api/subscriptions/self-hosting` still sets the flag on the creator's
  * own assertion and verifies no origin, so this is now a bigger unearned discount
- * than it was. The fix is origin registration, not a price — see 42.07 § *The one
+ * than it was. The fix is origin registration, not a price — see the wiki's *Federation and Creator Nodes* § *The one
  * thing that is currently untrue*.
  */
 export const SELF_HOST_FEE = 0;

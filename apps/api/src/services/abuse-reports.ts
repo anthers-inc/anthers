@@ -9,7 +9,7 @@
  * members, and the address registered with NCMEC was published nowhere a member of the
  * public could find it. An email address closed the live gap; this is the form.
  *
- * **Why this is not `services/moderation.ts`.** 40.12 states it directly: *"This is not
+ * **Why this is not `services/moderation.ts`.** the child-safety coverage map, which is deliberately not public states it directly: *"This is not
  * a moderation decision — it is a detection-and-report pipeline with a different
  * destination, and running it through the ordinary queue would lose it."* The ordinary
  * queue is polymorphic over a row in one of our own tables; a member of the public has a

@@ -798,7 +798,7 @@ const accountRoutes = new Hono()
 	// ── Adult access ─────────────────────────────────────────────────────────
 	// The account-level opt-in and the one-time adulthood verification that together
 	// decide whether an account can reach a Work rated Adult. `services/content-preferences.ts`
-	// is the only writer and carries the whole of the reasoning; wiki 40.09 § The funding
+	// is the only writer and carries the whole of the reasoning; the wiki's *Content Standards* § The funding
 	// type is the age signal is the authority.
 	//
 	// 🚨 **This is never described to anybody as "paying proves your age".** A payment
@@ -859,7 +859,7 @@ const accountRoutes = new Hono()
 				unavailable: "We can't check this right now. Please try again shortly.",
 				no_card:
 					"There's no card on your account yet. Add one by supporting a creator or Anthers, then come back.",
-				// Says plainly that nothing routes around it. Wiki 40.09: the exclusion is
+				// Says plainly that nothing routes around it. The wiki's *Content Standards*: the exclusion is
 				// real, it skews younger, lower-income and unbanked, and it is the accepted
 				// price of refusing to verify everybody. Gesturing at a path that does not
 				// exist would be worse than the exclusion.
@@ -883,7 +883,7 @@ const accountRoutes = new Hono()
 	//
 	// 🚨 **These change what the READER meets and reach nobody else.** A Work somebody
 	// blurred stays listed for everyone else, stays searchable, stays earning, and is never
-	// demoted. Wiki 40.09 is explicit that this is not platform-side suppression.
+	// demoted. The wiki's *Content Standards* is explicit that this is not platform-side suppression.
 
 	.get("/me/content-preferences", async (c) => {
 		const viewerId = await getOptionalUserId(c);

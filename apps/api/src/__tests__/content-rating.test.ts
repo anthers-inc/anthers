@@ -7,7 +7,7 @@
  * Adult rung is payment-gated, so an over-cautious call does not merely add a
  * warning to a work — it puts it behind a paywall, and for a queer coming-of-age story
  * wrongly flagged that is exactly the harm the category exists to prevent, produced by the
- * mechanism meant to prevent it (wiki 40.09). A suite that covered only the correction would
+ * mechanism meant to prevent it (the wiki's *Content Standards*). A suite that covered only the correction would
  * be green over the half that can do damage.
  *
  * ⚠️ **The lock is asymmetric, and both directions are asserted.** A creator may raise an

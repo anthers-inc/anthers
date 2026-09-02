@@ -193,7 +193,7 @@ export const moderationActions = pgTable(
 /**
  * An illegal-content report from anybody at all, including somebody with no account.
  *
- * 🚨 **A separate table from `moderation_reports`, and 40.12 says why in as many words:**
+ * 🚨 **A separate table from `moderation_reports`, and the child-safety coverage map, which is deliberately not public says why in as many words:**
  * *"This is not a moderation decision — it is a detection-and-report pipeline with a
  * different destination, and running it through the ordinary queue would lose it."* The
  * ordinary queue is polymorphic over `(subject_type, subject_id)` and assumes a row in one
@@ -409,7 +409,7 @@ export interface VendorMatch {
  * identifier both upload paths share. `POST /api/content/media-upload/direct` buffers
  * bytes in the handler, but `POST /api/content/media-upload/presign` hands the browser a
  * presigned PUT and the API never sees them — so the object exists in R2 before anything
- * here knows about it, and the key is what arrives first. Wiki 40.12 § *The ingest
+ * here knows about it, and the key is what arrives first. the child-safety coverage map, which is deliberately not public § *The ingest
  * inventory* has the full asymmetry.
  *
  * ⚠️ **A row means the question was asked, not that the content is safe.** `determination`
@@ -576,7 +576,7 @@ export const mediaQuarantine = pgTable(
 /**
  * A creator's appeal against an operator's correction of their Work's maturity rating.
  *
- * 🚨 **The appeal is part of the rating feature rather than a later refinement**, and 40.09
+ * 🚨 **The appeal is part of the rating feature rather than a later refinement**, and the wiki's *Content Standards*
  * is emphatic about why: the adults-only category is payment-gated, so an over-cautious call
  * does not merely add a warning to a work — it puts it behind a paywall. For a queer
  * coming-of-age story wrongly flagged, that is exactly the harm the category exists to

@@ -174,7 +174,7 @@ export interface ModerationReason {
  * definition, rather than the other way round** (Parker). The retired label leaned on
  * "explicit" to carry a distinction the word does not carry on its own and then defined it
  * in one word anyway. What the hint leans on instead is Anthers' own settled distinction
- * from wiki 40.13 — *subject matter is not the same as treatment* — because "explicit" is
+ * from the wiki's *Rating Standard* — *subject matter is not the same as treatment* — because "explicit" is
  * only a synonym for the thing being defined. 🚨 **The hint says "what Anthers allows at
  * all" rather than naming a rung**, because the boundary sits above the top of the rating
  * scale rather than above `mature`: once `adult` exists, a hint reading "beyond mature work"
@@ -182,7 +182,7 @@ export interface ModerationReason {
  *
  * 🚨 **Never list queer lives as an example of mature work.** An early draft of the
  * pornography hint read *"Anthers allows mature work — nudity, sexuality as a subject, queer
- * lives"*, which asserts precisely the premise 40.13 exists to refuse: said at that length
+ * lives"*, which asserts precisely the premise the wiki's *Rating Standard* exists to refuse: said at that length
  * it reads as agreement that queer life is an adult concept. The refusal belongs somewhere
  * long enough to *be* a refusal, which is `/safety`, and nowhere shorter — anything that
  * fits in a hint reads as the concession rather than the refusal.
@@ -229,7 +229,7 @@ export const MODERATION_REASONS: readonly ModerationReason[] = [
 		// whole scale — but a label reading "…that isn't marked Adult" would put the
 		// expensive rung in front of every reporter deciding what to click, which is how a
 		// rung meant to be rare becomes a general-purpose bucket for work somebody found
-		// disturbing. That is the outcome wiki 40.13 draws its rows to prevent, and the
+		// disturbing. That is the outcome the wiki's *Rating Standard* draws its rows to prevent, and the
 		// value `unrated-mature` is left alone because renaming a stored reason code would
 		// rewrite what past reports said they were about.
 		label: "Work that isn't rated for what it shows",
@@ -295,7 +295,7 @@ export function moderationReasonLabel(value: string): string {
 
 /**
  * The reasons that reach Anthers no matter who else holds the scope, and that a
- * scoped Keeper will never be able to dismiss away — 40.06's floor.
+ * scoped Keeper will never be able to dismiss away — the *Moderation & Reporting* page's floor.
  *
  * ⭐ **It is the `law` group, plus one retired code**, and stating it that way is the
  * point: the grouping a reporter sees and the routing they cannot see are the same

@@ -19,7 +19,7 @@
  * `/posts/{slug}-{publicId}` and `/works/{slug}-{publicId}`, and a route param of either
  * the bare publicId or the slug-publicId form resolves the same row (slug alone works too).
  *
- * See Architecture › "40.08 Catalog and Posts".
+ * See the wiki's *Publishing*.
  */
 
 import { db } from "@anthers/db/client";
@@ -615,7 +615,7 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * video is sampled into frames and hashed frame by frame — a different job body behind the
  * same queue, dispatched on the `kind` that `scannableKeys` attaches. Audio has no coverage
  * under a perceptual image hash at all, and neither does anything inside an archive. The
- * current coverage map stays in wiki 40.12 and off the public safety page.
+ * current coverage map is deliberately not public and stays off the public safety page.
  */
 async function queueScanForWork(item: WorkRow): Promise<void> {
 	// `beginScans` decides which objects are scannable and starts the Work's clock; this
@@ -2169,7 +2169,7 @@ const contentRoutes = new Hono()
 	//
 	// A review is "a reader's verdict on a work" (63.01), and reviews are floor-level
 	// moderation because "a creator moderating reviews of their own work is the conflict
-	// reviews exist to avoid" (40.06). Both are about works, so unlike comments this is
+	// reviews exist to avoid" (the wiki's *Moderation & Reporting*). Both are about works, so unlike comments this is
 	// NOT polymorphic — reviewing an announcement is a category error.
 	//
 	// The route path stays `/ratings` (and the table stays `ratings`): "review" is a copy
@@ -2687,7 +2687,7 @@ const contentRoutes = new Hono()
 		// to anyone who has not opted in and verified — its existence, title and cover art
 		// included — so a response saying "this exists and you may not have it" would leak
 		// exactly what the rung withholds. This is also the surface a share link arrives at,
-		// and 40.13 is explicit that a share link is a locator and never an entitlement: the
+		// and the wiki's *Rating Standard* is explicit that a share link is a locator and never an entitlement: the
 		// person following one has no setting for the opt-in to consult, so they meet the
 		// same absence a search would have given them.
 		//
@@ -2979,7 +2979,7 @@ const contentRoutes = new Hono()
 		// A creator browsing their own Catalog sees drafts too; nobody else does.
 		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
 		if (type) conditions.push(eq(works.type, type));
-		// 🚨 A creator profile is one of the non-feed surfaces 40.09 left open, and it is
+		// 🚨 A creator profile is one of the non-feed surfaces the wiki's *Content Standards* left open, and it is
 		// settled: a reader who has not opted in meets nothing at all rather than an
 		// interstitial. The accepted cost is that this Catalog is silently incomplete for
 		// them — the alternative was announcing the existence and usually the title of work
@@ -3112,7 +3112,7 @@ const contentRoutes = new Hono()
 		// gates until 2026-08-28, so declaring Adult and releasing together answered 409 and
 		// left the Work `unrated`: the creator's honest answer was discarded, and the
 		// cheapest way out was to pick a lower rung and have it work. That is exactly the
-		// under-declaration pressure wiki 40.13 exists to remove, produced by the gate meant
+		// under-declaration pressure the wiki's *Rating Standard* exists to remove, produced by the gate meant
 		// to enforce it. Every readiness refusal below now leaves the rating stored, so a
 		// creator whose media is still encoding keeps their answer too.
 		//
@@ -3200,7 +3200,7 @@ const contentRoutes = new Hono()
 		// 🚨 **It asks two questions rather than one, and the second is not the same
 		// question later.** Whether a rating has been *declared* is about the creator;
 		// whether the declared rung is one Anthers currently *accepts* is about Anthers, and
-		// a Work can fail the second while answering the first perfectly. Wiki 40.13 §
+		// a Work can fail the second while answering the first perfectly. The wiki's *Rating Standard* §
 		// Classifying a Work Is Not the Same as Accepting It is why they are separate: a
 		// Work at a closed rung is rated correctly and refused, rather than pushed into
 		// under-declaring one rung down.
@@ -3241,7 +3241,7 @@ const contentRoutes = new Hono()
 		}
 
 		// Detection is the second readiness condition, and it is the same kind of thing as
-		// the first: 40.08 settles that publishing is not gated on encoding but release is
+		// the first: the wiki's *Publishing* settles that publishing is not gated on encoding but release is
 		// gated on readiness, and an image whose scan has not come back is not ready. It is
 		// checked here rather than on the queued job because release is the moment the object
 		// becomes reachable by somebody other than its uploader.
@@ -3359,7 +3359,7 @@ const contentRoutes = new Hono()
 	/**
 	 * Appealing an operator's correction of a Work's rating.
 	 *
-	 * 🚨 **This is part of the rating feature rather than a later refinement**, on 40.09's
+	 * 🚨 **This is part of the rating feature rather than a later refinement**, on the *Content Standards* page's
 	 * reasoning: because the Adult rung is payment-gated, an over-cautious call
 	 * does not merely add a warning to a work, it puts it behind a paywall — and for a queer
 	 * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
@@ -3989,7 +3989,7 @@ const contentRoutes = new Hono()
 	// ── Project membership (Works) ────────────────────────────────────────────
 	//
 	// The half that was always missing. A project could only hold announcements, which
-	// meant an album could not hold its tracks — 40.02's own worked example ("a track in
+	// meant an album could not hold its tracks — the *Publishing* page's own worked example ("a track in
 	// both an album and a best-of") was not expressible in the schema it described.
 	.post(
 		"/projects/:slug/works",
@@ -4328,7 +4328,7 @@ const contentRoutes = new Hono()
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type, acl);
 
-		// 🚨 **Scanned inline, and this is the door 40.12 § *The shape* has always claimed
+		// 🚨 **Scanned inline, and this is the door the child-safety coverage map, which is deliberately not public § *The shape* has always claimed
 		// scanned.** The bytes are fully buffered here, so there is nothing to defer to a
 		// job — and unlike a Work there is no release gate behind which a queued scan could
 		// catch up, because an avatar is visible the moment the row points at it.

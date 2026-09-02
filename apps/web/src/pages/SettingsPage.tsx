@@ -271,7 +271,7 @@ function AdultVerificationCard({ onVerified }: { onVerified: () => Promise<void>
  * 🚨 **The two rungs get separate controls, and that separation is the design rather than
  * layout.** A reader who wants difficult work unblurred has said nothing about whether they
  * want explicit work at all, and one control covering both would make them say it (wiki
- * 40.09).
+ * The wiki's *Content Standards*).
  *
  * 🚨 **Nothing here may describe paying as an age check.** A payment proves nothing about
  * age — debit and prepaid cards have no age floor. What carries the signal is the card's

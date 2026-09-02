@@ -2,7 +2,7 @@
 /**
  * Desktop auth — the bearer transport and the browser-handoff enrollment that mints it.
  *
- * These are the three things a packaged Tauri window breaks (42.06 § Desktop auth):
+ * These are the three things a packaged Tauri window breaks (`apps/api/src/middleware/bearer.ts`):
  * the session cookie is never sent from `tauri://localhost`, every mutation 403s on
  * the CSRF Origin check, and there was previously no way to hold a session except as
  * a cookie. So the suite drives requests the way the desktop app really will — bearer

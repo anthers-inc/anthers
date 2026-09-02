@@ -4,7 +4,7 @@
  * PDQ is Meta's open perceptual image hash: a 256-bit fingerprint of an image's structure
  * that survives re-encoding, resizing and mild cropping. Anthers computes it locally and
  * sends **only the hash** to a detection vendor, so no user media ever leaves the platform
- * for detection purposes. That decision, and the reasoning behind it, is wiki 40.12
+ * for detection purposes. That decision, and the reasoning behind it, is the child-safety coverage map, which is deliberately not public
  * § *What leaves Anthers is a hash, never the media*.
  *
  * ── Two findings from validating this against Meta's published vectors ──────────────

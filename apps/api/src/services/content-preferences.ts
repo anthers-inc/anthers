@@ -16,7 +16,7 @@
  *
  * 🚨 **Every setting here belongs to the READER and reaches nobody else.** A reader hiding or
  * blurring a rung changes what *they* meet: the Work stays listed for everyone else, stays
- * searchable, stays earning, and is never demoted or paid less. Wiki 40.09 is explicit that
+ * searchable, stays earning, and is never demoted or paid less. The wiki's *Content Standards* is explicit that
  * this is deliberately not platform-side suppression — the platform picks the default and
  * makes the choice explicit, rather than deciding what anybody sees. The one setting with a
  * consequence beyond its owner is the Adult opt-in, and even that only decides what its own
@@ -26,7 +26,7 @@
  * reader who wants difficult work unblurred has said nothing about whether they want explicit
  * work at all, and one control covering both would make them say it.
  *
- * Wiki 40.09 § The funding type is the age signal owns the reasoning. The headline, because
+ * The wiki's *Content Standards* § The funding type is the age signal owns the reasoning. The headline, because
  * it is the part most easily got wrong: **a payment proves nothing about age and the copy may
  * never describe it as an age check.** Debit and prepaid cards have no age floor at all —
  * teen debit programs, family cash accounts and Cash App from 13 all clear an undifferentiated
@@ -156,7 +156,7 @@ export async function setMaturityDisplay(
  * What an account may currently do with Adult work.
  *
  * `canReach` is the predicate everything else asks for, and it is deliberately the AND of
- * both facts rather than either one. Wiki 40.09: reaching the rung requires the account-level
+ * both facts rather than either one. The wiki's *Content Standards*: reaching the rung requires the account-level
  * opt-in *and* a verification. Somebody who verified and later turned the setting off has
  * said they do not want to be shown this, and their old verification does not overrule that.
  */
@@ -220,11 +220,11 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
  *
  * 🚨 **Adult is INVISIBLE rather than merely inaccessible** — its existence, title and cover
  * art included — so this is a `WHERE` clause on every listing rather than a lock the reader
- * meets on arrival. Wiki 40.09: a signed-out visitor has no account-level setting for the
+ * meets on arrival. The wiki's *Content Standards*: a signed-out visitor has no account-level setting for the
  * opt-in to consult, so Adult work is invisible to them entirely; and a signed-in account
  * that has not opted in meets the same absence on every other surface — creator profiles,
  * Catalog listings, the followed-creator feed, and search (Parker, 2026-08-28, settling
- * 40.09's open question). Following somebody is not the opt-in.
+ * the *Content Standards* page's open question). Following somebody is not the opt-in.
  *
  * ⭐ **One rule for everyone without the opt-in, which is what makes it testable as an
  * absence.** The alternative considered was an interstitial saying an Adult Work is here,
@@ -431,7 +431,7 @@ export async function beginAdultVerification(
  * an adult who has since canceled the credit card that verified them.
  *
  * 🚨 **A guardian's lock is checked first, and this is the route the lock exists for.** Wiki
- * 40.09 tells a parent that locking the content settings closes the borrowed-card gap, and it
+ * The wiki's *Content Standards* tells a parent that locking the content settings closes the borrowed-card gap, and it
  * only does so because of this line: a credit-funded card in a teenager's hand passes the
  * funding check honestly, so the thing that has to refuse is the account, not the card. The
  * lock deliberately sits *above* the already-verified shortcut described in the paragraph

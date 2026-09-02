@@ -8,7 +8,7 @@ import type { AppType } from "../../../../apps/api/src/index.js";
  * A Tauri window serves from `tauri://localhost`, where host-sniffing cannot work and
  * the `.anthers.org` session cookie is never sent — so the shell supplies the API
  * origin explicitly and carries the session as a bearer token instead. See
- * 42.06 § Desktop auth.
+ * `apps/api/src/middleware/bearer.ts`.
  *
  * `fetch` is optional and is where `tauri-plugin-http` goes: routing requests through
  * Rust means CORS never enters the picture and the token need not live in JS.

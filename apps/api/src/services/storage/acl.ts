@@ -57,7 +57,7 @@ export function aclForMediaType(mediaType: string | null | undefined): "public" 
  * 🚨 **Video, audio and assets are the deliberate omission and are not a gap.** PDQ has
  * nothing to say about audio or a game archive, a video needs decoding into frames rather
  * than hashing whole, and all three arrive here at up to 500 MB. They are scanned by
- * `QUEUES.SCAN_MEDIA` once a key is attached to a Work, which is the path 40.12 §
+ * `QUEUES.SCAN_MEDIA` once a key is attached to a Work, which is the path the child-safety coverage map, which is deliberately not public §
  * *The ingest inventory* describes and the only one available for the presigned door.
  *
  * ⚠️ **`thumbnail` returns a `WorkObjectKind` and that is correct.** A thumbnail is minted

@@ -19,7 +19,7 @@
  * true of every platform doing hash matching, it tells an adversary nothing they do not
  * already know, and stating it is what keeps the page from implying coverage it will
  * never have. Everything temporary — *"we do not unpack archives yet"* — stays in the
- * wiki (40.12).
+ * wiki (the child-safety coverage map, which is deliberately not public).
  *
  * **Why this route rather than `/abuse`.** The subject-named URL matches the
  * `/privacy` · `/terms` · `/copyright` · `/parents` family and leaves room for the rest
@@ -182,7 +182,7 @@ export default function SafetyPage() {
 				    the reason. Anything short enough to fit beside a radio button reads as the
 				    concession rather than as the refusal, and an early draft that tried to fit
 				    it into a hint ended up listing queer lives as an example of mature work —
-				    asserting exactly the premise this paragraph exists to refuse. Wiki 40.13. */}
+				    asserting exactly the premise this paragraph exists to refuse. The wiki's *The Rating Standard*. */}
 				<p>
 					<strong>
 						Work about queer lives is routinely reported as sexual content on other platforms.

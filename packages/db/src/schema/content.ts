@@ -76,7 +76,7 @@ export type AuthoredPrecision = "year" | "month" | "day";
  * This replaced `content_items` in migration `0010`. That table was a *private media
  * staging record*: invisible until referenced from a published Post, with no visibility,
  * no gates, no dates of its own and no URL. The rename tracks a change of entity, not of
- * label — see `40.08 Catalog and Posts` in the vault.
+ * label — see the wiki's *Publishing*.
  *
  * Prose is a Work now (`type = "text"`, prose in `bodyHtml`). Under the old model rich
  * text was deliberately post-native and NOT a library item, which produced the model's
@@ -209,7 +209,7 @@ export const works = pgTable(
 		// 🚨 This gates nothing today. Mature work is allowed on Anthers and is simply
 		// unlabeled; the adults-only category that will payment-gate it is closed on
 		// moderation-capacity grounds. What the value does now is give the viewer filters
-		// something to read. Wiki 40.09 carries the whole model, including the two standing
+		// something to read. The wiki's *Content Standards* carries the whole model, including the two standing
 		// principles that bound what `mature` may ever mean.
 		maturity: text("maturity").notNull().default("unrated"),
 		// Content notes — violence, sexual themes, substance use, and so on. Warnings for a
@@ -449,7 +449,7 @@ export const projects = pgTable(
  *
  * The counterpart to `project_posts`, and the half that was always missing. A project
  * could only ever hold announcements, which meant an album could not hold its tracks —
- * 40.02's own worked example ("a track in both an album and a best-of") was not
+ * the *Publishing* page's own worked example ("a track in both an album and a best-of") was not
  * expressible in the schema that document described.
  */
 // node — join table, two node-owned parents (project + work).
@@ -778,7 +778,7 @@ export const bookmarks = pgTable(
  * Reviews — a reader's verdict on a **Work**, and deliberately not on a Post.
  *
  * Unlike comments this is NOT polymorphic, because reviewing an announcement is a category
- * error: 63.01 defines a review as "a reader's verdict on a work", and 40.06 makes reviews
+ * error: 63.01 defines a review as "a reader's verdict on a work", and the wiki's *Moderation & Reporting* makes reviews
  * floor-level moderation precisely because "a creator moderating reviews of their own work
  * is the conflict reviews exist to avoid". Both sentences are about works. Giving reviews a
  * subject type would invite a shape the model has no meaning for.
@@ -844,7 +844,7 @@ export const ratings = pgTable(
  * Work has no qualifying allowed row and falls to `login_required`, a priced one falls to
  * `payment_required`, and an **Adult** one is refused above both because a share context
  * carries no opt-in and can never carry one. Nothing but universally-free work can come out
- * the other side. See `resolveAccessSync`, and 40.13 § *A share link is a locator*.
+ * the other side. See `resolveAccessSync`, and the wiki's *Rating Standard* § *A share link is a locator*.
  *
  * One row per (sharer, Work): re-sharing returns the link you already have, so the thing you
  * pasted somewhere keeps working and revoking means something. `revokedAt` rather than a

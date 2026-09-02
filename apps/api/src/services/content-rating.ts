@@ -20,7 +20,7 @@
  * locking them would take a creator's own warnings to their own readers out of their hands.
  *
  * 🚨 **A rating is corrected, never deleted, and the appeal record outlives the decision.**
- * Same reasoning as 40.06's removal-is-a-state rule: an appeal years later has to have
+ * Same reasoning as the *Moderation & Reporting* page's removal-is-a-state rule: an appeal years later has to have
  * something to read, and a granted appeal that erased the correction would destroy the record
  * of the mistake it was correcting.
  */
@@ -112,7 +112,7 @@ export async function declareRating(
  * **One operator may do this while Anthers has one operator** (Parker, 2026-08-28). Dual
  * sign-off is wanted and is a good idea, and it arrives when there is a second moderator to
  * sign — until then the protection against inconsistency is a written standard detailed
- * enough to apply the same way twice, which is what wiki 40.13 is for, plus the cited row
+ * enough to apply the same way twice, which is what the wiki's *Rating Standard* is for, plus the cited row
  * and cell every correction has to record.
  */
 export async function correctRating(input: {
@@ -155,7 +155,7 @@ export async function correctRating(input: {
 
 	// 🚨 The creator is told, and this is the half that makes the correction legitimate
 	// rather than merely permitted. A correction they are not told about is one they cannot
-	// appeal, and the appeal path is what wiki 40.09 calls part of the feature rather than a
+	// appeal, and the appeal path is what the wiki's *Content Standards* calls part of the feature rather than a
 	// later refinement. `essential` because it is not activity about their work — it is a
 	// decision taken about their work, and it may have just closed its only open door.
 	if (updated?.creatorId != null) {
