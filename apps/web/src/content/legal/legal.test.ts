@@ -21,6 +21,8 @@
 import { describe, expect, it } from "bun:test";
 import { LEGAL_DOCUMENTS } from "./index.js";
 
+const CREATOR_TERMS_TEXT = () => LEGAL_DOCUMENTS["creator-terms"].blocks.join("\n");
+
 describe("published legal documents", () => {
 	it("🚨 carries no effective date — they are pending, not in force", () => {
 		for (const [slug, doc] of Object.entries(LEGAL_DOCUMENTS)) {
@@ -32,10 +34,12 @@ describe("published legal documents", () => {
 		expect(Object.keys(LEGAL_DOCUMENTS).sort()).toEqual(["creator-terms", "privacy", "terms"]);
 	});
 
-	it("carries none of the vault's internal apparatus", () => {
-		// The vault copies are specifications and carry markers, a DO-NOT-PUBLISH banner
-		// and a "Notes for us" section. Shipping any of that would be worse than not
-		// publishing: it would tell a reader we knew the document was untrue.
+	it("carries no drafting apparatus", () => {
+		// These were an abridgement of a vault specification until 2026-09-02, and that
+		// specification carried `NOT YET BUILT` markers, a DO-NOT-PUBLISH banner and a
+		// "Notes for us" section. The vault copies are gone and this file is canonical, so
+		// nothing should reintroduce any of it — a reader meeting a marker is being told we
+		// knew the document was untrue and published it anyway.
 		for (const doc of Object.values(LEGAL_DOCUMENTS)) {
 			const text = doc.blocks.join("\n");
 			expect(text).not.toContain("NOT YET BUILT");
@@ -43,6 +47,27 @@ describe("published legal documents", () => {
 			expect(text).not.toContain("Notes for us");
 			expect(text).not.toContain("⚠️");
 		}
+	});
+
+	it("🚨 promises no storage exemption for Public Access work", () => {
+		/*
+		 * A retired promise is worse in an instrument than anywhere else, because a reader
+		 * can act on it and then hold us to it.
+		 *
+		 * The Creator Terms told creators that "anything you release as Public Access does
+		 * not count against your storage at all" — a deliberate commons incentive, retired
+		 * on 2026-08-30 and **never implemented at any point**: `estimateStorageCost` has no
+		 * such parameter and the cost job has always summed every asset on a creator's
+		 * works. It was retired because its cost is set by how much creators choose to
+		 * store, which modeled out at the edge of what the charitable budget could carry and
+		 * breached it as soon as library sizes were doubled.
+		 *
+		 * It survived in the vault copy until the vault copy was retired, and it is exactly
+		 * the sentence somebody would restore from a backup while "restoring the full text".
+		 */
+		const text = CREATOR_TERMS_TEXT();
+		expect(text).not.toContain("does not count against your storage");
+		expect(text.toLowerCase()).not.toMatch(/public access[^.]{0,80}storage[^.]{0,40}free/);
 	});
 
 	it('never says "watch-time" — a minute is a minute across four media', () => {
