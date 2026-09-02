@@ -41,7 +41,7 @@ const serif = { fontFamily: FONTS.fraunces };
  * months, and survived the sweep that retired the charge it was built from.
  *
  * itch.io's column quotes the same `cardFee` on purpose: every platform pays the same
- * card cost, and 63.01 § Comparisons requires all-in against all-in. Only their
+ * card cost, and the wiki's *How Anthers Talks About Itself* § Comparisons requires all-in against all-in. Only their
  * revenue share is theirs.
  */
 const GAME_10 = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
@@ -318,7 +318,7 @@ export default function CompareItchPage() {
 								{/* 🚨 Ours was checked here until 2026-08-16 and **we have never had it**.
 								    `resolvePurchase` charges the stored `access.price` and the checkout call
 								    sends no amount at all, so there is nothing a buyer could pay more with.
-								    itch genuinely does have it, so the row stays and the ✓ moves — 63.01
+								    itch genuinely does have it, so the row stays and the ✓ moves — the wiki's *How Anthers Talks About Itself*
 								    § Comparisons requires conceding where we lose, and deleting the row
 								    would concede by omission.
 								    econ:allow — credits itch.io, not us; `patreon` is the itch column */}

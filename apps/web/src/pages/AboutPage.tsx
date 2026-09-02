@@ -46,11 +46,11 @@
 //
 // ── 🚨 Federal status: the rule CHANGED on 2026-08-21 ────────────────────────
 //
-// 63.01 § Claims & honesty used to read *"say nothing about federal status at
+// The wiki's *How Anthers Talks About Itself* § Claims used to read *"say nothing about federal status at
 // all"*, and this page said nothing. **Parker's call is that the page states the
 // intention** — the two-list structure below is what makes that safe, because it
 // partitions present from future explicitly rather than leaving a reader to guess
-// which column a sentence belongs in. 63.01 carries the narrowed rule now.
+// which column a sentence belongs in. The wiki's *How Anthers Talks About Itself* carries the narrowed rule now.
 //
 // What did NOT change, and what `about-claims.test.ts` still holds:
 //
@@ -95,7 +95,8 @@
 // aim to do"), set in bold, not on a quip. Its **What I Do / How I Do It** pair
 // is where this page's two mission cards come from, down to the lock and key.
 //
-// The hero is 63.01 § The canonical introduction, verbatim, split across the
+// The hero is the standing introduction, verbatim (the wiki's *How Anthers Talks About
+// Itself* § The Standing Introduction), split across the
 // headline and the lede. Quote it rather than writing a fresh introduction, so
 // the platform sounds like one thing wherever a reader meets it. ⚠️ It replaced
 // a hero reading *"Anthers is a federated, open content network…"*, which
@@ -125,7 +126,7 @@ const serif = { fontFamily: FONTS.fraunces };
 
 // What the Colorado Act and Anthers' own filed Articles already bind, quoted from
 // the additional-information attachment rather than from anyone's summary of it.
-// Each of these survives the test 63.01 § Claims & honesty sets — it still holds
+// Each of these survives the test the wiki's *How Anthers Talks About Itself* § Claims sets — it still holds
 // with one director and no federal recognition — because each is in the filing.
 const BINDING_NOW = [
 	"There are no owners and no shares, and the Articles give Anthers no voting members. Nobody holds a piece of it, so there is nobody to pay a profit to and nothing for anyone to buy.",

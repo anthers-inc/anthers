@@ -258,7 +258,7 @@ export default function LoginPage() {
 						    somebody without an account is most likely to arrive at by mistake — they
 						    came to log in and cannot — so it is the second-best place after the
 						    navbar to say that joining costs nothing. The destination page states the
-						    monthly Public Access limit in the same breath, per 63.01. */}
+						    monthly Public Access limit in the same breath, per the wiki's *How Anthers Talks About Itself*. */}
 						<div className="text-center text-sm text-base-content/70">
 							New to Anthers?{" "}
 							<Link to="/subscribe" className="link link-primary">

@@ -33,7 +33,7 @@ import { join } from "node:path";
  * reach too: *"Seed the database"* is ordinary English and this repository's dev fixtures are
  * full of it.
  *
- * ⚠️ **`watch-time` and `watch-hour` are deliberately absent.** The Copy Style Guide bans them
+ * ⚠️ **`watch-time` and `watch-hour` are deliberately absent.** The the wiki's *How Anthers Talks About Itself* bans them
  * in user-facing copy and `econ:figures` enforces that; a byte-derived engineering figure may
  * say "per watch-hour" because there it names a real unit of streaming cost. Putting them here
  * would flag the one place they are correct.

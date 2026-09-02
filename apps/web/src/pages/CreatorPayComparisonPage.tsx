@@ -18,7 +18,7 @@
 //   • On monthly support there is no platform fee at all; only the pro-rata share of
 //     the at-cost card fee on the fan's whole monthly charge comes out.
 //
-// EVERY row is all-in take-home at the same list price, per 63.01 § Comparisons.
+// EVERY row is all-in take-home at the same list price, per the wiki's *How Anthers Talks About Itself* § Comparisons.
 // Rival figures include THEIR payment processing, because every platform pays the
 // same card cost — comparing our all-in against their headline cut would flatter us
 // and a creator would catch it. Where a rival wins (Steam below ~$1.15) or ties
@@ -107,7 +107,7 @@ const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")
  * A rival's all-in take-home at the SAME list price: their revenue share off, then the
  * same at-cost card processing every platform pays.
  *
- * Derived rather than typed because 63.01 § Comparisons binds us to all-in against
+ * Derived rather than typed because the wiki's *How Anthers Talks About Itself* § Comparisons binds us to all-in against
  * all-in — so a rival's row has to move when the card cost moves, exactly as ours
  * does. Quoting their headline cut against our all-in would flatter us, and a creator
  * would catch it.
@@ -180,7 +180,7 @@ const PLATFORMS: Platform[] = [
 				rival: {
 					keep: "45% of the revenue",
 					// econ:allow — YouTube Premium really is pooled by watch-time; that is THEIR
-					// mechanism and their word for it. 63.01 bans it for OURS, and § Comparisons
+					// mechanism and their word for it. The wiki's *How Anthers Talks About Itself* bans it for OURS, and § Comparisons
 					// binds us to describing a rival accurately — renaming their metric to suit our
 					// vocabulary would misdescribe them, which is the worse failure.
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",

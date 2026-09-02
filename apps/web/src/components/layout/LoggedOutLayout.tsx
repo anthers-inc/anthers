@@ -215,7 +215,7 @@ export default function LoggedOutLayout() {
 						creator and supporting Anthers — so a bare "Sign Up" invites the reader to
 						assume the door has a price on it. It does not: an email address is the
 						whole of it. The claim is safe to make outright because the free tier is
-						free forever by charter rather than by pricing decision (63.01), and the
+						free forever by charter rather than by pricing decision (the wiki's *How Anthers Talks About Itself*), and the
 						page it lands on states the monthly Public Access limit in the same breath.
 
 						⚠️ Sign Up Free now sits FIRST, with Log In to its right. Reading order and

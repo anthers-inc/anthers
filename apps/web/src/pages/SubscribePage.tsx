@@ -43,7 +43,7 @@
 //
 // ⚠️ The free hours are stated **up front and as an inclusion**, which is the other half
 // of the same instruction: a limit discovered after signing up is a surprise, and a limit
-// read as a warning turns the whole list into a trial. 63.01 already required "free
+// read as a warning turns the whole list into a trial. The wiki's *How Anthers Talks About Itself* already required "free
 // forever" and the cap to be co-present in the same breath; this page now does it in the
 // first thing anybody sees.
 //
@@ -1376,7 +1376,7 @@ function SectionEcho({
 /**
  * What signing up actually costs, said as a list rather than as a paragraph.
  *
- * 🚨 **The limit is in here, not in a footnote, and 63.01 requires it to be.** *"Free
+ * 🚨 **The limit is in here, not in a footnote, and the wiki's *How Anthers Talks About Itself* requires it to be.** *"Free
  * forever"* met without a bound beside it is heard as *unlimited*, so the offer has to be
  * stated whole: permanent **and** bounded. Hiding the cap would also hollow out the only
  * honest reason to give Anthers anything, since the cap is the thing that lifts.
@@ -1416,7 +1416,7 @@ function FreeInclusions() {
 			// there is no user-side storage quota to describe. A draft of this line offered
 			// the same allowance to users for preserving delisted purchases and storing
 			// cloud saves; neither exists, and a delisted purchase already survives without
-			// drawing on anybody's quota, since that is a free-access obligation under 63.01.
+			// drawing on anybody's quota, since that is a free-access obligation under the wiki's *How Anthers Talks About Itself*.
 			//
 			// ⚠️ The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`. Only the numeral
 			// is computed; the sentence is Parker's, word for word.

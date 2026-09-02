@@ -24,9 +24,9 @@
 // **standing, not entitlement**. What supporting Anthers buys is the *lifted Public Access
 // limit* (at the Public Access price, whole) and a *larger Time Pool* for the creators you
 // spend time with (linearly, at every level). Write the ladder as what your giving does,
-// never as what you get to see — 63.01 § Words, "Anthers' Badges".
+// never as what you get to see — the wiki's *How Anthers Talks About Itself* § The Words, "Anthers' Badges".
 //
-// ⚠️ And the free tier is bounded: FREE_PUBLIC_ACCESS_HOURS a month. 63.01 makes
+// ⚠️ And the free tier is bounded: FREE_PUBLIC_ACCESS_HOURS a month. The wiki's *How Anthers Talks About Itself* makes
 // co-presence mandatory — "free forever" without the limit beside it reads as unlimited,
 // and the limit is the whole reason to start giving. Never write streaming as unmetered.
 //

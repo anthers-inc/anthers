@@ -7,7 +7,7 @@
  * derived from each Work's latest transcode and polled while anything is still encoding.
  *
  * 🚨 **Catalog, not "Library".** Library is a bound term meaning the *user's* own owned
- * content — see the Copy Style Guide. This page said "Content Library" until 2026-08-13.
+ * content — see the wiki's *How Anthers Talks About Itself*. This page said "Content Library" until 2026-08-13.
  */
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";

@@ -404,7 +404,7 @@ export function selfSufficiency() {
  *
  * ⚠️ **These rates are PERISHABLE** — checked 2026-08-03, and a competitor can change
  * one without telling us. Re-check before anything ships. They live here rather than
- * in the document because they are arithmetic, not copy: 63.01 § Comparisons binds
+ * in the document because they are arithmetic, not copy: the wiki's *How Anthers Talks About Itself* § Comparisons binds
  * every row to be **all-in against all-in**, which means a rival's column must be
  * computed from the same card fee ours is and must move when that fee moves. Typed by
  * hand, they don't — the $5 row disagreed with itself by a cent for exactly that

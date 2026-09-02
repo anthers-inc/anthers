@@ -11,7 +11,19 @@ import { FONTS } from "../../styles/fonts";
 
 const serif = { fontFamily: FONTS.fraunces };
 
-/** A full-width band: `tint` paints the alternating bg-base-200/70 surface. */
+/**
+ * A full-width band: `tint` paints the alternating bg-base-200/70 surface.
+ *
+ * **The rhythm is the point, and it is a whole-page property rather than a per-section
+ * one.** A marketing page is a vertical stack of these alternating tinted/plain, with the
+ * hero and the closing band each tinted so the page reads as bookended. The canonical For
+ * Users order is hero (tint) → how it works → free use (tint) → support → purchases (tint)
+ * → Badges → closing (tint) → footer. Add a section in the middle and the alternation has
+ * to be re-checked from there down; two tinted bands touching is the tell.
+ *
+ * The footer is deliberately transparent and compact so it sits directly on the grassy
+ * floor decor, contrasting with the tinted closing band above it.
+ */
 export function Section({ children, tint }: { children: React.ReactNode; tint?: boolean }) {
 	return (
 		<section className={tint ? "bg-base-200/70" : ""}>

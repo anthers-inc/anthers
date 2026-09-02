@@ -276,7 +276,7 @@ export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
 /**
  * The storefronts a creator actually compares us with, and their revenue share.
  *
- * Generated rather than typed into the Studio because 63.01 § Comparisons binds every
+ * Generated rather than typed into the Studio because the wiki's *How Anthers Talks About Itself* § Comparisons binds every
  * comparison to **all-in against all-in** — a rival's take-home has to be computed from
  * the same card fee ours is, and must move when that fee moves. \`absorbsProcessing\` is
  * Valve's model: their 30% covers the card cost, so nothing further comes off.
@@ -502,41 +502,19 @@ function renderReceiptMarkdown(): string {
 	].join("\n");
 }
 
-function renderSaleMarkdown(): string {
-	// One row per list price. Size used to split them — a $10 1 GiB game and a $10
-	// 2 GiB game took home different amounts — and since 2026-08-12 it doesn't, so
-	// keeping both would print the same row twice.
-	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
-	const seed = directedSupportWorstCase();
-	return [
-		table(
-			["Sale", "Creator receives", "Card"],
-			[":--", "--:", "--:"],
-			rows.map((r) => [
-				`$${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"}`,
-				`**$${r.creatorReceives}**`,
-				`$${r.cardFee}`,
-			]),
-		),
-		"",
-		`**Download size does not appear, because it no longer changes anything.** A digital sale used to carry the first download's bandwidth at cost, and redownloads drew the buyer's own allowance; delivery is free on R2, so every download of a purchased work is included, forever, on any number of devices.`,
-		"",
-		`A lone directed $${seed.gross} a month is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator. Batching every destination onto one monthly charge pays each creator on it more, because the $${CARD_FLAT.toFixed(2)} is fixed per charge.`,
-		"",
-		`Anthers keeps **$0.00** from every row. Creator storage is the only creator-side charge: the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again.`,
-	].join("\n");
-}
-
 /**
- * The same sale figures, for the public wiki. Sibling of {@link renderBadgePublicMarkdown},
- * and the second instance of the same lesson.
+ * The sale figures. Sibling of {@link renderBadgePublicMarkdown}, and the second instance
+ * of the same lesson.
  *
- * ⭐ **`allowRetired` on a public-wiki block is a contradiction, and it is the signal to
- * watch for.** The exemption exists to license a deliberately historical sentence for a
- * reader who was there — the paragraph above explaining that download size *used to* split
- * these rows. A public document has no such license: it states what is true and deletes what
- * is not, so a public block that needs the exemption is a public block carrying somebody
- * else's changelog. **Reach for a public renderer rather than an exemption.**
+ * There was a private variant beside this one until 2026-09-02, kept alive by an
+ * `allowRetired` exemption so it could explain the table by saying download size *used to*
+ * split these rows. Both the exemption and the document it fed are gone.
+ *
+ * ⭐ **`allowRetired` on a public block is a contradiction, and it is the signal to watch
+ * for.** The exemption licenses a deliberately historical sentence for a reader who was
+ * there. A public document has no such license — it states what is true and deletes what is
+ * not — so a public block needing the exemption is a public block carrying somebody else's
+ * changelog. **Reach for a public renderer rather than an exemption.**
  */
 function renderSalePublicMarkdown(): string {
 	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
@@ -561,42 +539,14 @@ function renderSalePublicMarkdown(): string {
 }
 
 /**
- * The creator-facing worked examples, and what a cart is worth at the small end.
+ * The purchase examples a creator reads before deciding whether to sell here. Third sibling
+ * of {@link renderBadgePublicMarkdown}, and the last of the three.
  *
- * This table is the one a creator reads before deciding whether to sell here, and it
- * was typed by hand in two docs — including the Copy Style Guide, inside the very rule
- * that forbids re-typing a figure from another page.
- */
-function renderPurchaseExamplesMarkdown(): string {
-	const rows = purchaseExamples();
-	const cart = cartSaving();
-	return [
-		table(
-			["Item", "List", "Size", "Card", "**Creator receives**", "Deduction"],
-			[":--", "--:", "--:", "--:", "--:", "--:"],
-			rows.map((r) => [
-				r.item,
-				`$${r.price}`,
-				r.sizeLabel,
-				`$${r.cardFee}`,
-				`**$${r.creatorReceives}**`,
-				r.deductionPct,
-			]),
-		),
-		"",
-		`**The deduction is Stripe's card fee and nothing else** — ${(CARD_RATE * 100).toFixed(1)}% + a flat $${CARD_FLAT.toFixed(2)}, paid to Stripe, with Anthers keeping $0.00 from every row. The flat part is what the percentages track: it is the whole reason a $${rows[0].price} track loses ${rows[0].deductionPct} while a $${rows[rows.length - 1].price} game loses ${rows[rows.length - 1].deductionPct}.`,
-		"",
-		`**Size is in the table for scale, not for money.** A digital sale used to deduct the first download's delivery at cost as well; delivery is free since 2026-08-12, so a ${rows[rows.length - 1].sizeLabel} work and a ${rows[0].sizeLabel} one at the same price pay their creator exactly the same, and every later download costs nobody anything.`,
-		"",
-		`**The cart is the mechanism that fixes the small end.** ${cart.count} $${cart.unitPrice} tracks bought separately lose **$${cart.separately}** to card fees; bought in one cart they lose **$${cart.inOneCart}**, and every cent of that difference goes to the creators.`,
-	].join("\n");
-}
-
-/**
- * The same purchase examples, for a creator reading the public wiki. Third sibling of
- * {@link renderBadgePublicMarkdown}, and it was predicted by the same signal both times
- * before it: this block carries an `allowRetired`, so it was always going to be carrying a
- * sentence about a charge that no longer exists.
+ * ⭐ **All three had a private twin, and every one of them was predicted by the same signal:
+ * the twin carried an `allowRetired`.** That exemption licenses a sentence about a mechanism
+ * that no longer exists, so a renderer needing it was always a renderer explaining the past
+ * to somebody who had not been there. The private documents they fed are gone, the twins with
+ * them, and no `allowRetired` block remains — which is the state to keep.
  *
  * ⚠️ **The size column stays and its caption changes.** Size is genuinely useful to a creator
  * sizing up the table — it is how they find the row that looks like their work — so the column
@@ -1095,17 +1045,16 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 ];
 
 const BLOCKS: Block[] = [
-	// `50.01 Support Model Economics and Milestones` carried four of these blocks — the badge
-	// table, the sample receipt, the sale table and the creator receipt — and was deleted on
-	// 2026-09-02 as a duplicate of the public wiki's `40 The Support Model` and of this
-	// package's own constants. All four keys still render, into the public pages above.
-	{
-		file: "60-69 Governance & Strategy/63 Brand/63.01 Copy Style Guide.md",
-		key: "sale-table",
-		render: renderSaleMarkdown,
-		allowRetired:
-			"names the retired first-download charge in the past tense, to explain why size left the table",
-	},
+	// 🚨 **Every private-wiki economics document that carried a block is now gone**, and with
+	// them the last `allowRetired` block. `50.01 Support Model Economics` carried four (badge
+	// table, sample receipt, sale table, creator receipt) and `63.01 Copy Style Guide` carried
+	// a fifth; both were deleted in September 2026 as duplicates of the public wiki and of
+	// this package's own constants. Every key still renders, into the public pages above.
+	//
+	// ⭐ **`allowRetired` existed so an INTERNAL block could name a retired mechanism in the
+	// past tense.** With no internal blocks left it is unused, and it should stay that way:
+	// a public block needing it is publishing edit history, and the fix there is a public
+	// renderer rather than an exemption.
 	// `11.02 Free Access and Charitable Programs` was folded into `Charity References` and
 	// deleted. The block moved with the prose; this entry did not, so `--check --wiki` had
 	// been failing on "no such file" — which is the absent-vs-broken rule doing its job.
@@ -1221,7 +1170,7 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
 /**
  * Copy for a charge that no longer exists.
  *
- * This is NOT a copy linter — 63.01 is the guide, and adding every rule there to a
+ * This is NOT a copy linter — the wiki's *How Anthers Talks About Itself* is the guide, and adding every rule there to a
  * build script would rot. It is the second half of one specific defect, and it earns
  * its place because the figure scan above could not have found it: *"the only
  * deductions are card processing and your buyer's first download"* carries no number,
@@ -1295,7 +1244,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// `setSeedAllocs` are all out of reach, and the lowercase and SCREAMING forms
 		// (`seedAccess`, `BADGE_RUNGS`) miss on case. What is left is the word standing on
 		// its own, which in code means a string or JSX text — copy, which is exactly what
-		// 63.01 governs. Comments are blanked before matching, so engineering prose keeps
+		// The wiki's *How Anthers Talks About Itself* governs. Comments are blanked before matching, so engineering prose keeps
 		// its history notes.
 		pattern: new RegExp(`${NOT_NEGATED}\\bSeeds?\\b`, "g"),
 		why: "the Seed retired as a noun 2026-08-16 — name the amount ($3, $7.50), say 'Badge' for a level, or 'support' for the act",
@@ -1332,7 +1281,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 	},
 	{
 		// The same claim in a wording the rule above could not see, which is the third time
-		// 63.01's *"a guard covers a phrasing, never a claim"* has been paid for. /about's
+		// The wiki's *How Anthers Talks About Itself*'s *"a guard covers a phrasing, never a claim"* has been paid for. /about's
 		// hero read **"Anthers is a federated, open content network"** for months, one band
 		// above a page whose entire subject is being honest about what does and doesn't
 		// exist yet — while the ATProto rule matched `built on the AT Protocol` and the
@@ -1347,7 +1296,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// guidelines"*. All three must stay silent, and all three do, because none of them
 		// uses the adjective. Verified by sabotage against each.
 		pattern: new RegExp(`${NOT_NEGATED}\\bfederated\\b`, "gi"),
-		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (63.01; wiki: Federation and Creator Nodes)",
+		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (the wiki's *How Anthers Talks About Itself*; wiki: Federation and Creator Nodes)",
 	},
 	{
 		// The second mechanism the code never had, and the one that had spread furthest: a
@@ -1363,7 +1312,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// both get — and this one does not get it: PWYW is written as **absent**. So the
 		// guard is permanent rather than a placeholder to delete once the feature lands,
 		// which is what a reader would otherwise reasonably assume from `why` alone.
-		// Recorded in the vault at `31.02 Direct Creator Purchases` and `63.01 § Prices`;
+		// Recorded in the vault at `31.02 Direct Creator Purchases` and `the wiki's *How Anthers Talks About Itself* § Prices`;
 		// the itch.io import consequence is in `62.01 § 5.1` (a PWYW game imports as a
 		// draft with no price set, rather than a number the creator never chose).
 		//
@@ -1390,7 +1339,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 	},
 	{
 		// The organization's own name for itself, and the one place a copy error becomes a
-		// factual error: **there is one legal person and it is `Anthers, Inc.`** (63.01,
+		// factual error: **there is one legal person and it is `Anthers, Inc.`** (the wiki's *How Anthers Talks About Itself*,
 		// retired 2026-08-05). Writing "supported by a non-profit foundation" invents a
 		// second organization for the reader to track, and does it two sentences before the
 		// page names the actual corporation — so the reader is left with two entities and no
@@ -1406,7 +1355,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			`${NOT_NEGATED}(?:Anthers Foundation|\\b(?:our|a new|the)\\s+non-profit\\s+foundation)`,
 			"gi",
 		),
-		why: "there is one legal person and it is `Anthers, Inc.` — name the function, not an entity (63.01 § Words)",
+		why: "there is one legal person and it is `Anthers, Inc.` — name the function, not an entity (the wiki's *How Anthers Talks About Itself* § The Words)",
 	},
 	{
 		// The federation claim wearing different clothes. The ATProto rule above matches
@@ -1420,22 +1369,22 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// true now is open-source and no lock-in, which is what the canonical intro says
 		// instead.
 		pattern: new RegExp(`${NOT_NEGATED}open,?\\s+(?:and\\s+)?distributed network`, "gi"),
-		why: "Anthers is centralized-first — federation is coming, not here (63.01; wiki: Federation and Creator Nodes)",
+		why: "Anthers is centralized-first — federation is coming, not here (the wiki's *How Anthers Talks About Itself*; wiki: Federation and Creator Nodes)",
 	},
 	{
 		// Not a retired *mechanism* like the two above — a retired *word* for a live one,
 		// which is the other way this list earns its keep. The Time Pool is real; calling
 		// what it measures "watch-time" makes video the default unit of a platform that
-		// hosts four media and measures them on one clock. 63.01 blessed the word until
+		// hosts four media and measures them on one clock. The wiki's *How Anthers Talks About Itself* blessed the word until
 		// 2026-08-12 **while citing the equal-time principle as its authority**, which
 		// refutes itself in a line.
 		//
-		// ⚠️ Scoped to user-facing copy, exactly as 63.01 is. This scanner only walks
+		// ⚠️ Scoped to user-facing copy, exactly as the wiki's *How Anthers Talks About Itself* is. This scanner only walks
 		// `APP_ROOTS` and blanks comments first, so the engineering uses it deliberately
 		// keeps — `distribute-pool.ts`'s job comments, the ~600 Class B reads per
 		// watch-hour figure — are out of reach by construction rather than by exception.
 		pattern: new RegExp(`${NOT_NEGATED}watch[- ](?:time|hours?)`, "gi"),
-		why: 'a minute is a minute across four media — say "time" (63.01 § Vocabulary)',
+		why: `a minute is a minute across four media — say "time" (the wiki's *How Anthers Talks About Itself* § The Words)`,
 	},
 	{
 		// Retired 2026-08-12 with the second access table (migration `0029`). There is one
@@ -1456,7 +1405,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			`${NOT_NEGATED}Anthers[- ](?:[Gg]ates?\\b(?!\\s+(?:nothing|no\\b))|gated)`,
 			"g",
 		),
-		why: "Anthers Gates were retired 2026-08-12 — one gate primitive, pointed only at a creator (63.01 § Seed Gate)",
+		why: "Anthers Gates were retired 2026-08-12 — one gate primitive, pointed only at a creator (the wiki's *How Anthers Talks About Itself* § The Words)",
 	},
 	{
 		// The other half of the same 2026-08-12 change, and the subtler one. Deleting the
@@ -1466,14 +1415,14 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// up claiming unbounded streaming while the app itself rendered the limit.
 		//
 		// 🚨 Downloads really are unlimited, so this must not fire on them. It matches only
-		// the retired formulations that put STREAMING inside the unbounded claim — 63.01
+		// the retired formulations that put STREAMING inside the unbounded claim — the wiki's *How Anthers Talks About Itself*
 		// makes "free forever" and the limit co-present, on the same rule as "no cut" and
 		// the take-home.
 		pattern: new RegExp(
 			`${NOT_NEGATED}(?:stream(?:s|ing)?[^.]{0,30}without a meter|stream(?:ing|s)? and download(?:s|ing)? are unlimited|streams and downloads freely)`,
 			"gi",
 		),
-		why: "a free account's Public Access is capped monthly — say the limit beside the freedom (63.01 § Claims: co-presence)",
+		why: "a free account's Public Access is capped monthly — say the limit beside the freedom (the wiki's *How Anthers Talks About Itself* § Claims: co-presence)",
 	},
 	{
 		// 🚨 **A support rung written as a bare number reads as a count of the retired unit,

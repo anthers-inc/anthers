@@ -105,7 +105,7 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 		return { name: r.name, net: absorbs ? afterShare : afterShare - fee };
 	});
 	// Computed, not marked by hand: Steam beats us below about $1.15, because their 30% of
-	// a small sale is less than the flat fee they absorb. 63.01 § Comparisons requires we
+	// a small sale is less than the flat fee they absorb. The wiki's *How Anthers Talks About Itself* § Comparisons requires we
 	// concede that, and generating it means we cannot quietly stop.
 	const best = Math.max(net, ...rivals.map((r) => r.net ?? 0));
 
@@ -129,7 +129,7 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 
 			<p className="mt-1 text-xs text-base-content/60">
 				{/* Never "our fee" and never a percentage on its own — Anthers keeps $0 here, and
-				    saying so plainly is the claim that survives (63.01 § Claims). */}
+				    saying so plainly is the claim that survives (the wiki's *How Anthers Talks About Itself* § Claims). */}
 				Anthers takes <strong>nothing</strong>. The {usd(fee)} is card processing, paid to Stripe.
 			</p>
 

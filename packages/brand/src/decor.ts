@@ -148,6 +148,16 @@ export type VineStrand = {
  * depth). Blooms ride the front strand (bees are overlaid separately, see
  * <MeadowVines>). `c.casing` should be the page's base color so the casings read as
  * gaps. Colors are baked in.
+ *
+ * ⚠️ **A bordered "frame" vine was built and dropped, and it is worth not rebuilding.** A
+ * rigid border around the content reads wrong against a page that scrolls — the decor
+ * stops being scenery and starts being chrome. What won is organic and meandering, with
+ * scattered real blooms. Prefer that shape for any new decor.
+ *
+ * ⚠️ **Open: the decor does not fully recolor between light and dark.** It should follow
+ * the palette tokens like everything else, and historically the vines did not track light
+ * mode correctly. If you touch decor, check it in both themes rather than the one you are
+ * working in.
  */
 export function wovenVineTileDataUri(
 	c: { stem: string; flower: string; casing: string },
