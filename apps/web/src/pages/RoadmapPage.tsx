@@ -1,1197 +1,451 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { DIRECTED_SUPPORT_WORST_CASE } from "@anthers/shared/figures";
+//
+// The public roadmap. Content lives in `content/roadmap.ts`; this file only renders it.
+//
+// 🚨 **What this replaced, and why none of it came across.** The page was a fixed-quarter
+// SVG Gantt running Q1 2026 to Q4 2027, with every goal drawn as a bar spanning quarters
+// somebody had guessed at. It was written before the support model and before the Catalog,
+// and its drift was structural rather than cosmetic: Direct Purchases and Gated Content
+// were marked *planned* and both had shipped, the Catalog and the Studio and moderation
+// did not appear at all, the vocabulary was pre-support-model throughout, and a
+// "Non-Profit" tab ran on a retired four-pillar framing and on subscriber-count
+// milestones. Anyone reading it learned what Anthers was planning a year ago.
+//
+// ⚠️ **The Gantt is the part most worth not rebuilding.** Its entire axis was time, so
+// every goal on it made a scheduling claim whether or not anybody had made a schedule —
+// *"federation functioning"* sat inside a dated bar, which was both a promise nobody held
+// and a present-tense claim about something that is signposted rather than scheduled.
+// Three buckets and no dates outside Launched is the shape that cannot do that.
+//
+// **Everything renders at once — no tabs, no accordions, no lazy sections.** Two reasons,
+// and the second is the load-bearing one. A roadmap is skimmed, so hiding two thirds of it
+// behind a control makes the reader work to find out there is more. And
+// `marketing-copy.e2e.ts` reads this page's `body.textContent` and asserts that retired
+// claims are *absent* — a negative assertion that unrendered copy satisfies perfectly. Put
+// content behind a tab and the guard stops covering it, silently.
+
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
+import { FONTS } from "@anthers/web-shared/fonts";
+import { Link } from "@anthers/web-shared/router";
+import {
+	BUCKETS,
+	type Bucket,
+	countIn,
+	itemsIn,
+	ROADMAP,
+	type RoadmapGroup,
+	type RoadmapItem,
+	shippedQuarters,
+} from "../content/roadmap";
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+const serif = { fontFamily: FONTS.fraunces };
 
-type ItemStatus = "launched" | "active" | "planned" | "exploring";
-
-interface RoadmapItem {
-	id: string;
-	title: string;
-	description: string;
-	status: ItemStatus;
-	/** Quarter index the item starts at (0-based). */
-	startQ: number;
-	/** Quarter index the item ends at (0-based, inclusive). */
-	endQ: number;
-	/** Visual row (0-based) — assigned by layout. */
-	row?: number;
-}
-
-interface RoadmapLane {
-	id: string;
-	label: string;
-	color: string;
-	items: RoadmapItem[];
-}
-
-interface RoadmapSection {
-	id: string;
-	label: string;
-	lanes: RoadmapLane[];
-}
-
-interface RoadmapDef {
-	id: string;
-	label: string;
-	description: string;
-	quarters: string[];
-	sections: RoadmapSection[];
-}
-
-/* ------------------------------------------------------------------ */
-/*  Status colors & labels                                            */
-/* ------------------------------------------------------------------ */
-
-const STATUS_META: Record<
-	ItemStatus,
-	{ label: string; bg: string; bgDim: string; text: string; dot: string }
-> = {
+/**
+ * Bucket accents. Deliberately not a red/amber/green traffic light: Planned is not a
+ * warning and Active is not a problem, and coloring them that way turns an honest list of
+ * unfinished work into a page that looks like a status board in trouble.
+ */
+const ACCENT: Record<Bucket, { dot: string; chip: string; rule: string }> = {
+	active: { dot: "bg-primary", chip: "bg-primary/10 text-primary", rule: "border-primary/25" },
+	planned: { dot: "bg-accent", chip: "bg-accent/15 text-accent", rule: "border-accent/25" },
 	launched: {
-		label: "Launched",
-		bg: "bg-success/20",
-		bgDim: "bg-success/8",
-		text: "text-success",
-		dot: "#22c55e",
-	},
-	active: {
-		label: "In Progress",
-		bg: "bg-info/20",
-		bgDim: "bg-info/8",
-		text: "text-info",
-		dot: "#3b82f6",
-	},
-	planned: {
-		label: "Planned",
-		bg: "bg-warning/20",
-		bgDim: "bg-warning/8",
-		text: "text-warning",
-		dot: "#eab308",
-	},
-	exploring: {
-		label: "Exploring",
-		bg: "bg-base-content/10",
-		bgDim: "bg-base-content/5",
-		text: "text-base-content/50",
-		dot: "#a3a3a3",
+		dot: "bg-success",
+		chip: "bg-success/15 text-success",
+		rule: "border-success/25",
 	},
 };
-
-/* ------------------------------------------------------------------ */
-/*  Roadmap data                                                      */
-/* ------------------------------------------------------------------ */
-
-const QUARTERS = [
-	"Q1 2026",
-	"Q2 2026",
-	"Q3 2026",
-	"Q4 2026",
-	"Q1 2027",
-	"Q2 2027",
-	"Q3 2027",
-	"Q4 2027",
-];
-
-const PLATFORM_ROADMAP: RoadmapDef = {
-	id: "platform",
-	label: "Platform Roadmap",
-	description:
-		"Everything we're building for creators and users on Anthers — from publishing and monetization tools to content playback, subscriptions, and community features.",
-	quarters: QUARTERS,
-	sections: [
-		{
-			id: "for-creators",
-			label: "For Creators",
-			lanes: [
-				{
-					id: "publishing",
-					label: "Publishing",
-					color: "#7c3aed",
-					items: [
-						{
-							id: "c-game-hosting",
-							title: "Game Hosting & Marketplace",
-							description:
-								"Host games with build management, differential updates, web game embedding, and flexible pricing (free / fixed / Badge-gated).",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "c-rich-text",
-							title: "Rich Text Posts",
-							description:
-								"TipTap-powered editor for devlogs, articles, and written content with inline images and embeds.",
-							status: "active",
-							startQ: 0,
-							endQ: 0,
-						},
-						{
-							id: "c-video",
-							title: "Video Hosting",
-							description:
-								"Upload and transcode video to HLS for adaptive streaming. Automatic thumbnail generation.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "c-audio",
-							title: "Audio Hosting",
-							description:
-								"Upload audio with normalization, waveform generation, and persistent playback across navigation.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "c-web-native-games",
-							title: "Web-Native Game Hosting",
-							description:
-								"Host a web build on Anthers and serve every file of it — loader, assets, the lot — through the same access check as everything else, so a gated web game is gated rather than merely unlisted. Today a browser-playable game is an embed pointing at a host we don't control.",
-							status: "planned",
-							startQ: 2,
-							endQ: 4,
-						},
-						{
-							id: "c-linux-compat",
-							title: "Linux Compatibility",
-							description:
-								"A published, openly-specified manifest per title so a Windows-only build runs on Linux — and so Heroic, Lutris, Bottles and anything else can support Anthers without our involvement. The manifest comes first deliberately: ship a packaging pipeline before the spec is public and we've rebuilt launcher lock-in under a different name.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 7,
-						},
-						{
-							id: "c-multimedia-expand",
-							title: "Multi-Media Expansion",
-							description:
-								"Visual art galleries, podcast series support, and mixed-media project pages.",
-							status: "planned",
-							startQ: 3,
-							endQ: 5,
-						},
-					],
-				},
-				{
-					id: "monetization",
-					label: "Monetization",
-					color: "#c026d3",
-					items: [
-						{
-							id: "c-stripe-connect",
-							title: "Stripe Connect Payouts",
-							description:
-								"Creator onboarding to Stripe Connect for direct payouts from marketplace sales and subscription distributions.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "c-pool-income",
-							title: "Subscription Pool Income",
-							description:
-								"Earn from the Time Pool proportional to engagement time across all subscribers.",
-							status: "planned",
-							startQ: 1,
-							endQ: 2,
-						},
-						{
-							id: "c-boost-income",
-							title: "Support Income",
-							description:
-								"Additional subscriber-directed support—no platform cut—with manual or automatic allocation.",
-							status: "planned",
-							startQ: 1,
-							endQ: 3,
-						},
-						{
-							id: "c-gated-content",
-							title: "Gated Content",
-							description:
-								"Set monthly thresholds to unlock exclusive content. Subscribers giving enough get access.",
-							status: "planned",
-							startQ: 2,
-							endQ: 3,
-						},
-						{
-							id: "c-direct-purchases",
-							title: "Direct Purchases",
-							description:
-								"Marketplace for one-time purchases: digital downloads, experiences, physical goods. 0% creator cut — transparent pass-through fees.",
-							status: "planned",
-							startQ: 2,
-							endQ: 4,
-						},
-						{
-							id: "c-bundles",
-							title: "Creator Bundles",
-							description:
-								"Collaborative bundles with discounted combined gate access and engagement-time proportional revenue sharing.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 7,
-						},
-						{
-							id: "c-license-toolkit",
-							title: "Ownership & Licensing Options",
-							description:
-								"A toolkit a creator picks from for what buying their work means — DRM-free, or a seat that moves between machines. The floor already holds and is not waiting on this: unpublishing a Work never revokes a purchase.",
-							status: "exploring",
-							startQ: 6,
-							endQ: 7,
-						},
-						{
-							id: "c-processor-independence",
-							title: "Payment Processor Independence",
-							description:
-								"An interface in front of the payment processor, so that a creator's income never depends on one company's continued willingness to serve us. Three parts, and the interface alone is the cheapest and least useful of them: payment methods that can actually be carried to another processor, and a second rail arranged before it is needed rather than during an incident. Not a prediction about our processor, who have been good to work with — it is that the time to build an exit is while nothing is wrong, and that the same reasoning we apply to storage and hosting should apply to the part that touches people's livelihoods.",
-							status: "planned",
-							startQ: 2,
-							endQ: 4,
-						},
-						{
-							id: "c-cheaper-rails",
-							title: "Cheaper Ways to Pay",
-							description:
-								"Every leak in the model is one fixed cost meeting one small transaction, and a card's flat fee is the largest of them — it takes about an eighth of a $3 payment and about a twentieth of a $12 one. Three things reduce it, in the order they become available. Paying by bank costs a fraction of a card and carries no flat fee at all, and it would arrive as a discount beneath the ordinary price rather than as a card charge added on top. Paying for several months at once replaces several fixed fees with one. And instant bank-to-bank rails, once enough banks support them, cost pennies and cannot be charged back at all. None of the saving becomes Anthers' income — it is not a cut we take, so removing it leaves more for free access and the programs, or comes back to the person paying.",
-							status: "planned",
-							startQ: 3,
-							endQ: 4,
-						},
-					],
-				},
-				{
-					id: "tools",
-					label: "Creator Tools",
-					color: "#0ea5e9",
-					items: [
-						{
-							id: "c-analytics",
-							title: "Analytics Dashboard",
-							description:
-								"Views, purchases, engagement timeseries, content performance breakdown. Unified analytics across all content types.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "c-cross-publish",
-							title: "Cross-Publishing",
-							description:
-								"Publish once, distribute everywhere. YouTube, itch.io, Steam, Substack, and more.",
-							status: "planned",
-							startQ: 2,
-							endQ: 4,
-						},
-						{
-							id: "c-itch-import",
-							title: "itch.io Import",
-							description: "One-click import of games, metadata, and assets from itch.io.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "c-creator-hubs",
-							title: "Custom Creator Pages",
-							description:
-								"Branded creator profile pages with customizable layout, featured content, and social links.",
-							status: "planned",
-							startQ: 2,
-							endQ: 3,
-						},
-						{
-							id: "c-native-first",
-							title: "Native-First Publishing",
-							description:
-								"Tools optimized for Anthers as the primary publishing destination, with cross-posting to legacy platforms as secondary.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 7,
-						},
-						{
-							id: "c-audience-export",
-							title: "Taking Your Audience With You",
-							description:
-								"An export of who follows and supports you, so leaving costs you your audience relationship as little as possible. Handles and follow dates always; a contact address only for people who explicitly chose to share it with you, off by default; never payment or consumption data. Billing is between a supporter and Anthers rather than between a supporter and you, so what you get is an index over other people's own assertions, not a customer list — and for the people who shared nothing, the answer is a one-time migration notice we deliver rather than a contact detail we hand over.",
-							status: "exploring",
-							startQ: 4,
-							endQ: 6,
-						},
-						{
-							id: "c-network-catalog",
-							title: "Publishing Your Catalog to the Network",
-							description:
-								"Your Catalog as public records in a repository you own, so a listing of your work outlives any one host — the listing only, never the work itself, which no repository on this network could hold privately. Blocked on the AT Protocol's granular permissions, which are not ready to ask a creator for in production; hosting identities ourselves would unblock the whole class at once. The schemas are written and checked against real data, and deliberately not published, because publishing one is a promise to everybody else's software that cannot be withdrawn.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 8,
-						},
-					],
-				},
-			],
-		},
-		{
-			id: "for-users",
-			label: "For Users",
-			lanes: [
-				{
-					id: "consumption",
-					label: "Content & Playback",
-					color: "#2563eb",
-					items: [
-						{
-							id: "u-browse",
-							title: "Browse & Discover",
-							description:
-								"Browse projects by category, tag, and media type. Search with full-text matching.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "u-hls-playback",
-							title: "Adaptive Video Playback",
-							description: "HLS-based adaptive streaming for video content with quality selection.",
-							status: "active",
-							startQ: 0,
-							endQ: 0,
-						},
-						{
-							id: "u-edge-entitlement",
-							title: "Checking Access at the Edge",
-							description:
-								"Video should start faster, and the way to make that happen is to move the access check closer to you. Every segment of a video you are watching is fetched through an address minted for that one request, which is what stops a locked file being handed to somebody who should not have it — and it is also why those segments cannot be cached near you the way an ordinary file is. An edge service that checks entitlement itself and then serves from cache would fix the latency and the residual cost together. The constraint we will not trade away: the check moves, it does not disappear. Simply caching the segments is the version that quietly removes the gate.",
-							status: "exploring",
-							startQ: 4,
-							endQ: 6,
-						},
-						{
-							id: "u-audio-player",
-							title: "Persistent Audio Player",
-							description:
-								"Mini-player that persists across page navigation. Full waveform visualization.",
-							status: "active",
-							startQ: 0,
-							endQ: 0,
-						},
-						{
-							id: "u-web-games",
-							title: "Web Game Embedding",
-							description: "Play HTML5/WebGL games directly in the browser from project pages.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "u-playlists",
-							title: "Playlists & Watch History",
-							description:
-								"Create and manage playlists. Track watch/listen/play history across all content types.",
-							status: "planned",
-							startQ: 3,
-							endQ: 4,
-						},
-						{
-							id: "u-notifications",
-							title: "Notifications",
-							description: "Get notified when creators you follow publish new content or go live.",
-							status: "planned",
-							startQ: 3,
-							endQ: 4,
-						},
-					],
-				},
-				{
-					id: "subscription",
-					label: "Subscriptions",
-					color: "#c026d3",
-					items: [
-						{
-							id: "u-sub-tiers",
-							title: "Monthly support — to Anthers, and to creators",
-							description: `Give Anthers a monthly amount (the level is your Badge, Root to Blossom) and give straight to creators (Anthers takes no cut; $${DIRECTED_SUPPORT_WORST_CASE.gross} a month reaches its creator as $${DIRECTED_SUPPORT_WORST_CASE.net} at worst, the difference being card processing paid to the processor). What goes to Anthers funds the Time Pool (shared by time) and a remainder that funds free access and the charitable programs, and the Public Access price lifts your monthly limit. Downloads are unlimited and cost nothing. Every dollar is money to creators, the at-cost card processing, or that remainder.`,
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "u-boost-alloc",
-							title: "Directing your support",
-							description:
-								"Direct your monthly support to favorite creators with sliders. Unlocks gated content.",
-							status: "planned",
-							startQ: 1,
-							endQ: 2,
-						},
-						{
-							id: "u-sub-dashboard",
-							title: "Subscription Dashboard",
-							description:
-								"See exactly where your money goes each month: which creators, how much, why.",
-							status: "planned",
-							startQ: 2,
-							endQ: 3,
-						},
-					],
-				},
-				{
-					id: "community",
-					label: "Community",
-					color: "#0f766e",
-					items: [
-						{
-							id: "u-follows",
-							title: "Follow Creators",
-							description:
-								"Follow creators to build your chronological feed. No algorithmic ranking.",
-							status: "active",
-							startQ: 0,
-							endQ: 0,
-						},
-						{
-							id: "u-comments",
-							title: "Comments & Ratings",
-							description: "Rate and review projects. Comment on posts and game pages.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "u-contests",
-							title: "Contests & Calls for Content",
-							description:
-								"Multi-media contests, sponsor-backed events, panel judging, prize escrow.",
-							status: "planned",
-							startQ: 3,
-							endQ: 5,
-						},
-						{
-							id: "u-mobile",
-							title: "Mobile Apps",
-							description:
-								"Native iOS and Android apps for content consumption, notifications, and community interaction.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 7,
-						},
-						{
-							id: "u-video-moderation",
-							title: "Moderating Video at Scale",
-							description:
-								"Video is harder to moderate than text and we do not yet know how we will do it. Today a rating is the creator's own declaration, corrected by report, and the only automated scanning is the child-safety hash matching described in our Child Safety Policy — which finds known material and nothing else. That is honest at our size and it does not survive a catalog one person cannot watch. What we are exploring is a review queue and a sampling policy rather than an automatic classifier: a machine that guesses at context is a machine that removes art, and we would rather be slow than wrong in that direction. Signposted here because it needs solving before it is urgent, not after.",
-							status: "exploring",
-							startQ: 4,
-							endQ: 7,
-						},
-					],
-				},
-			],
-		},
-	],
-};
-
-const FOUNDATION_ROADMAP: RoadmapDef = {
-	id: "foundation",
-	label: "Non-Profit Roadmap",
-	description:
-		"Milestones and initiatives for Anthers, Inc. — a Colorado nonprofit corporation. From incorporation to charitable programs at scale.",
-	quarters: QUARTERS,
-	sections: [
-		{
-			id: "on-platform",
-			label: "On-Platform",
-			lanes: [
-				{
-					id: "legal",
-					label: "Organization",
-					color: "#c2410c",
-					items: [
-						{
-							id: "f-pre-inc",
-							title: "Pre-Incorporation",
-							description:
-								"Attorney engaged, board recruited, governance documents drafted, fiscal planning completed.",
-							status: "active",
-							startQ: 0,
-							endQ: 0,
-						},
-						{
-							id: "f-incorporation",
-							title: "Incorporation & Filing",
-							description:
-								"Colorado incorporation, EIN obtained, Form 1023 submitted, first board meeting held.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
-							id: "f-building",
-							title: "Building in the Open",
-							description:
-								"Platform development, community forming, early donations, vendor conversations, transparent progress reports.",
-							status: "active",
-							startQ: 1,
-							endQ: 2,
-						},
-						{
-							id: "f-alpha",
-							title: "Alpha Launch",
-							description:
-								"Invite-only launch with 20-50 creators, a few hundred consumers. Charitable programs operational. IRS determination letter (ideally).",
-							status: "planned",
-							startQ: 2,
-							endQ: 3,
-						},
-						{
-							id: "f-beta",
-							title: "Beta Launch",
-							description:
-								"Open registration, multiple media formats, charitable programs expanding, active fundraising, first 990 filed.",
-							status: "planned",
-							startQ: 4,
-							endQ: 5,
-						},
-						{
-							id: "f-ga",
-							title: "General Availability",
-							description:
-								"Stable public platform, all four program pillars active, federation functioning, organizational maturity.",
-							status: "exploring",
-							startQ: 6,
-							endQ: 7,
-						},
-					],
-				},
-				{
-					id: "crf",
-					label: "Resilience Fund",
-					color: "#0f766e",
-					items: [
-						{
-							id: "f-infra-equity",
-							title: "Pillar 1: Infrastructure Equity",
-							description:
-								"Small creator subsidies, storage support for new creators, and free-tier infrastructure access.",
-							status: "planned",
-							startQ: 2,
-							endQ: 4,
-						},
-						{
-							id: "f-education",
-							title: "Pillar 2: Education & Development",
-							description:
-								"Creators as Educators initiative, structured mentorship programs, skill-building content and workshops.",
-							status: "planned",
-							startQ: 3,
-							endQ: 5,
-						},
-						{
-							id: "f-relief",
-							title: "Pillar 3: Economic Resilience & Relief",
-							description:
-								"Creation grants ($1-5K range), emergency assistance for creators, supplementary professional resources.",
-							status: "exploring",
-							startQ: 4,
-							endQ: 6,
-						},
-						{
-							id: "f-community",
-							title: "Pillar 4: Community & Public Benefit",
-							description:
-								"Open-source tool development, research and advocacy, community partnerships and outreach programs.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 7,
-						},
-					],
-				},
-				{
-					id: "growth",
-					label: "Growth Milestones",
-					color: "#7c3aed",
-					items: [
-						{
-							id: "f-founding-creators",
-							title: "Founding Creators (20-50)",
-							description:
-								"Recruit initial cohort of founding creators, primarily from the indie game development community.",
-							status: "active",
-							startQ: 0,
-							endQ: 2,
-						},
-						{
-							id: "f-2500-subs",
-							title: "2,500 Subscribers",
-							description:
-								"Covers basic overhead ($13-16K/yr). Infrastructure subsidies begin. Reserve accumulation starts.",
-							status: "planned",
-							startQ: 3,
-							endQ: 4,
-						},
-						{
-							id: "f-10000-subs",
-							title: "10,000 Subscribers",
-							description:
-								"Minimum viable one-person operation ($50-65K/yr). Pillar 1 funded. First small grants possible.",
-							status: "exploring",
-							startQ: 5,
-							endQ: 6,
-						},
-						{
-							id: "f-25000-subs",
-							title: "25,000 Subscribers",
-							description:
-								"Inflection point: ED salary + admin overhead ($125-164K/yr). All four program pillars active. Meaningful creation grants.",
-							status: "exploring",
-							startQ: 6,
-							endQ: 7,
-						},
-					],
-				},
-			],
-		},
-		{
-			id: "off-platform",
-			label: "Off-Platform",
-			lanes: [],
-		},
-	],
-};
-
-const ROADMAPS: RoadmapDef[] = [PLATFORM_ROADMAP, FOUNDATION_ROADMAP];
-
-/* ------------------------------------------------------------------ */
-/*  Layout helper: assign rows within each lane to avoid overlaps     */
-/* ------------------------------------------------------------------ */
-
-function assignRows(items: RoadmapItem[]): RoadmapItem[] {
-	const sorted = [...items].sort((a, b) => a.startQ - b.startQ || a.endQ - b.endQ);
-	const rows: number[][] = []; // rows[r] = list of endQ values in that row
-
-	return sorted.map((item) => {
-		let placed = -1;
-		for (let r = 0; r < rows.length; r++) {
-			// Check if this row has space (no overlap)
-			const lastEnd = Math.max(...rows[r]);
-			if (item.startQ > lastEnd) {
-				placed = r;
-				break;
-			}
-		}
-		if (placed === -1) {
-			placed = rows.length;
-			rows.push([]);
-		}
-		rows[placed].push(item.endQ);
-		return { ...item, row: placed };
-	});
-}
-
-/* ------------------------------------------------------------------ */
-/*  Timeline chart (SVG-based interactive Gantt)                       */
-/* ------------------------------------------------------------------ */
-
-const MIN_Q_WIDTH = 160; // minimum px per quarter column
-const ROW_HEIGHT = 40; // px per item row
-const LANE_HEADER = 32; // px for lane label
-const LANE_GAP = 16; // px between lanes
-const SECTION_HEADER = 36; // px for section group header
-const SECTION_GAP = 24; // px between sections
-const BAR_PAD_Y = 6; // vertical padding inside row
-const BAR_RADIUS = 6;
-const LEFT_GUTTER = 0; // no left gutter — labels are inside bars
-const TOP_PAD = 40; // space for quarter headers
-
-interface TimelineProps {
-	roadmap: RoadmapDef;
-	selectedItem: string | null;
-	onSelect: (id: string | null) => void;
-}
-
-function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
-	const svgRef = useRef<SVGSVGElement>(null);
-	const containerRef = useRef<HTMLDivElement>(null);
-	const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-	const [containerWidth, setContainerWidth] = useState(0);
-
-	// Measure container width and update on resize
-	useEffect(() => {
-		const el = containerRef.current;
-		if (!el) return;
-
-		const observer = new ResizeObserver((entries) => {
-			for (const entry of entries) {
-				setContainerWidth(entry.contentRect.width);
-			}
-		});
-		observer.observe(el);
-		return () => observer.disconnect();
-	}, []);
-
-	// Compute Q_WIDTH: fill container, but never go below MIN_Q_WIDTH
-	const numQuarters = roadmap.quarters.length;
-	const Q_WIDTH =
-		containerWidth > 0
-			? Math.max(MIN_Q_WIDTH, (containerWidth - LEFT_GUTTER) / numQuarters)
-			: MIN_Q_WIDTH;
-
-	// Layout all sections → lanes
-	const layoutSections = useMemo(() => {
-		return roadmap.sections
-			.filter((s) => s.lanes.length > 0)
-			.map((section) => {
-				const lanes = section.lanes.map((lane) => {
-					const laidOut = assignRows(lane.items);
-					const maxRow = laidOut.reduce((max, item) => Math.max(max, (item.row ?? 0) + 1), 0);
-					return { ...lane, items: laidOut, rowCount: maxRow };
-				});
-				return { ...section, lanes };
-			});
-	}, [roadmap]);
-
-	// Total SVG height
-	const totalHeight = useMemo(() => {
-		return (
-			TOP_PAD +
-			layoutSections.reduce(
-				(h, section) =>
-					h +
-					SECTION_HEADER +
-					section.lanes.reduce(
-						(lh, lane) => lh + LANE_HEADER + lane.rowCount * ROW_HEIGHT + LANE_GAP,
-						0,
-					) +
-					SECTION_GAP,
-				0,
-			)
-		);
-	}, [layoutSections]);
-
-	const totalWidth = LEFT_GUTTER + numQuarters * Q_WIDTH;
-
-	const handleBarClick = useCallback(
-		(id: string) => {
-			onSelect(selectedItem === id ? null : id);
-		},
-		[selectedItem, onSelect],
-	);
-
-	// Accumulate Y offset for each lane
-	let laneY = TOP_PAD;
-
-	return (
-		<div ref={containerRef} className="overflow-x-auto rounded-xl border border-base-300/50">
-			<svg
-				role="img"
-				ref={svgRef}
-				width={totalWidth}
-				height={totalHeight}
-				className="select-none"
-				style={{ minWidth: numQuarters * MIN_Q_WIDTH }}
-			>
-				<title>Roadmap timeline</title>
-				{/* Quarter columns */}
-				{roadmap.quarters.map((q, i) => {
-					const x = LEFT_GUTTER + i * Q_WIDTH;
-					return (
-						<g key={q}>
-							{/* Alternating column background */}
-							<rect
-								x={x}
-								y={0}
-								width={Q_WIDTH}
-								height={totalHeight}
-								className={i % 2 === 0 ? "fill-base-200/30" : "fill-base-200/60"}
-							/>
-							{/* Vertical divider */}
-							{i > 0 && (
-								<line
-									x1={x}
-									y1={0}
-									x2={x}
-									y2={totalHeight}
-									className="stroke-base-300/40"
-									strokeWidth={1}
-								/>
-							)}
-							{/* Quarter label */}
-							<text
-								x={x + Q_WIDTH / 2}
-								y={24}
-								textAnchor="middle"
-								className="fill-base-content/50"
-								fontSize={12}
-								fontWeight={600}
-							>
-								{q}
-							</text>
-						</g>
-					);
-				})}
-
-				{/* "Now" indicator line for current quarter */}
-				{(() => {
-					const now = new Date();
-					const year = now.getFullYear();
-					const month = now.getMonth(); // 0-11
-					const currentQLabel = `Q${Math.floor(month / 3) + 1} ${year}`;
-					const qIndex = roadmap.quarters.indexOf(currentQLabel);
-					if (qIndex === -1) return null;
-					// Position within the quarter (0-1)
-					const monthInQ = month % 3;
-					const dayFrac = (now.getDate() - 1) / 30;
-					const frac = (monthInQ + dayFrac) / 3;
-					const x = LEFT_GUTTER + qIndex * Q_WIDTH + frac * Q_WIDTH;
-					return (
-						<g>
-							<line
-								x1={x}
-								y1={TOP_PAD - 6}
-								x2={x}
-								y2={totalHeight}
-								stroke="#f43f5e"
-								strokeWidth={2}
-								strokeDasharray="6 4"
-								opacity={0.6}
-							/>
-							<text
-								x={x}
-								y={TOP_PAD - 10}
-								textAnchor="middle"
-								fontSize={10}
-								fontWeight={700}
-								fill="#f43f5e"
-								opacity={0.8}
-							>
-								Today
-							</text>
-						</g>
-					);
-				})()}
-
-				{/* Sections → Lanes */}
-				{layoutSections.map((section) => {
-					// Section header
-					const sectionStartY = laneY;
-					laneY += SECTION_HEADER;
-
-					return (
-						<g key={section.id}>
-							{/* Section group label */}
-							<text
-								x={8}
-								y={sectionStartY + SECTION_HEADER - 12}
-								fontSize={13}
-								fontWeight={800}
-								className="fill-base-content/60"
-								style={{ letterSpacing: 0.5 }}
-							>
-								{section.label}
-							</text>
-
-							{/* Section divider line */}
-							<line
-								x1={0}
-								y1={sectionStartY + SECTION_HEADER - 4}
-								x2={totalWidth}
-								y2={sectionStartY + SECTION_HEADER - 4}
-								className="stroke-base-300/50"
-								strokeWidth={1}
-							/>
-
-							{/* Lanes within section */}
-							{section.lanes.map((lane) => {
-								const currentLaneY = laneY;
-								const laneHeight = LANE_HEADER + lane.rowCount * ROW_HEIGHT;
-								laneY += laneHeight + LANE_GAP;
-
-								return (
-									<g key={lane.id}>
-										{/* Lane label */}
-										<text
-											x={8}
-											y={currentLaneY + LANE_HEADER - 10}
-											fontSize={11}
-											fontWeight={700}
-											className="fill-base-content/40"
-											style={{ letterSpacing: 1 }}
-										>
-											{lane.label.toUpperCase()}
-										</text>
-
-										{/* Lane separator line */}
-										<line
-											x1={0}
-											y1={currentLaneY + LANE_HEADER - 2}
-											x2={totalWidth}
-											y2={currentLaneY + LANE_HEADER - 2}
-											className="stroke-base-300/30"
-											strokeWidth={1}
-										/>
-
-										{/* Items */}
-										{lane.items.map((item) => {
-											const row = item.row ?? 0;
-											const x = LEFT_GUTTER + item.startQ * Q_WIDTH + 4;
-											const w = (item.endQ - item.startQ + 1) * Q_WIDTH - 8;
-											const y = currentLaneY + LANE_HEADER + row * ROW_HEIGHT + BAR_PAD_Y;
-											const h = ROW_HEIGHT - BAR_PAD_Y * 2;
-											const isHovered = hoveredItem === item.id;
-											const isSelected = selectedItem === item.id;
-											const status = STATUS_META[item.status];
-
-											return (
-												<g
-													key={item.id}
-													style={{ cursor: "pointer" }}
-													onMouseEnter={() => setHoveredItem(item.id)}
-													onMouseLeave={() => setHoveredItem(null)}
-													onClick={() => handleBarClick(item.id)}
-												>
-													{/* Bar background */}
-													<rect
-														x={x}
-														y={y}
-														width={w}
-														height={h}
-														rx={BAR_RADIUS}
-														fill={lane.color}
-														fillOpacity={isSelected ? 0.35 : isHovered ? 0.25 : 0.15}
-														stroke={lane.color}
-														strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 0}
-														strokeOpacity={0.6}
-														style={{ transition: "fill-opacity 150ms, stroke-width 150ms" }}
-													/>
-													{/* Status dot */}
-													<circle cx={x + 14} cy={y + h / 2} r={4} fill={status.dot} />
-													{/* Title */}
-													<text
-														x={x + 26}
-														y={y + h / 2}
-														dominantBaseline="central"
-														fontSize={12}
-														fontWeight={600}
-														className="fill-base-content"
-														style={{ pointerEvents: "none" }}
-													>
-														{item.title}
-													</text>
-												</g>
-											);
-										})}
-									</g>
-								);
-							})}
-
-							{/* Section gap spacer (advance laneY) */}
-							{(() => {
-								laneY += SECTION_GAP;
-								return null;
-							})()}
-						</g>
-					);
-				})}
-			</svg>
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  Detail panel (shown when an item is selected)                     */
-/* ------------------------------------------------------------------ */
-
-function DetailPanel({
-	item,
-	lane,
-	quarters,
-	onClose,
-}: {
-	item: RoadmapItem;
-	lane: RoadmapLane;
-	quarters: string[];
-	onClose: () => void;
-}) {
-	const status = STATUS_META[item.status];
-	const span =
-		item.startQ === item.endQ
-			? quarters[item.startQ]
-			: `${quarters[item.startQ]} — ${quarters[item.endQ]}`;
-
-	return (
-		<div className={`card ${status.bg} border border-base-300/50 shadow-lg`}>
-			<div className="card-body p-5">
-				<div className="flex items-start justify-between gap-4">
-					<div>
-						<div className="flex items-center gap-2 mb-1">
-							<span
-								className="inline-block w-3 h-3 rounded-full"
-								style={{ backgroundColor: status.dot }}
-							/>
-							<span className={`text-xs font-semibold uppercase tracking-wide ${status.text}`}>
-								{status.label}
-							</span>
-							<span className="text-xs text-base-content/30 mx-1">|</span>
-							<span className="text-xs font-medium" style={{ color: lane.color }}>
-								{lane.label}
-							</span>
-						</div>
-						<h3 className="text-lg font-bold">{item.title}</h3>
-						<p className="text-xs text-base-content/50 mt-0.5">{span}</p>
-					</div>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs btn-square"
-						onClick={onClose}
-						aria-label="Close detail"
-					>
-						<svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-							<path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-						</svg>
-					</button>
-				</div>
-				<p className="text-sm text-base-content/70 mt-2 leading-relaxed">{item.description}</p>
-			</div>
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  Status legend                                                     */
-/* ------------------------------------------------------------------ */
-
-function StatusLegend() {
-	return (
-		<div className="flex flex-wrap gap-4 text-xs">
-			{(Object.entries(STATUS_META) as [ItemStatus, (typeof STATUS_META)[ItemStatus]][]).map(
-				([key, meta]) => (
-					<div key={key} className="flex items-center gap-1.5">
-						<span
-							className="inline-block w-2.5 h-2.5 rounded-full"
-							style={{ backgroundColor: meta.dot }}
-						/>
-						<span className="text-base-content/60">{meta.label}</span>
-					</div>
-				),
-			)}
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main page component                                               */
-/* ------------------------------------------------------------------ */
 
 export default function RoadmapPage() {
-	const [activeTab, setActiveTab] = useState(0);
-	const [selectedItem, setSelectedItem] = useState<string | null>(null);
-
-	const roadmap = ROADMAPS[activeTab];
-
-	// Find the selected item and its lane for the detail panel
-	const selectedData = useMemo(() => {
-		if (!selectedItem) return null;
-		for (const section of roadmap.sections) {
-			for (const lane of section.lanes) {
-				const item = lane.items.find((i) => i.id === selectedItem);
-				if (item) return { item, lane };
-			}
-		}
-		return null;
-	}, [selectedItem, roadmap]);
-
-	// Reset selection when switching tabs
-	const handleTabChange = useCallback((index: number) => {
-		setActiveTab(index);
-		setSelectedItem(null);
-	}, []);
-
 	return (
-		// `min-w-0 w-full` breaks the flex-column min-content cascade so this
-		// wrapper can shrink below its inner timeline's wide min-content —
-		// without `w-full`, `mx-auto` on a flex item disables the default
-		// `align-self: stretch`, so the wrapper falls back to its content's
-		// intrinsic width (up to the cap), which the SVG timeline (intentionally
-		// wider than the viewport, scrolling inside its own `overflow-x-auto`
-		// container) blows past the mobile viewport. The wide-screen cap is
-		// `max-w-[110rem]` (was an inline style, which wins over `max-w-full`
-		// and so defeated the cap below the cap, leaving the page able to grow
-		// to 1760px on mobile).
-		<div className="mx-auto min-w-0 w-full max-w-full max-w-[110rem] px-4 py-8">
-			{/* Header */}
-			<div className="text-center mb-8">
+		<div>
+			<Hero />
+			{BUCKETS.map((bucket, i) => (
+				<BucketSection key={bucket.id} bucket={bucket} tint={i % 2 === 1} />
+			))}
+			<Growth />
+			<Closing />
+		</div>
+	);
+}
+
+function Hero() {
+	return (
+		<header className="bg-base-200/70">
+			<div className="mx-auto max-w-5xl px-6 pt-24 pb-16 text-center">
 				<Reveal>
-					<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
-						Non-profit · no profit-taking
+					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+						Roadmap
 					</p>
-					<h1 className="text-3xl font-bold mb-2">Roadmap</h1>
+					<h1 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
+						What we are building
+					</h1>
 				</Reveal>
-				<Reveal delay={120}>
-					<p className="text-base-content/70 max-w-xl mx-auto">
-						See what we're building, what's next, and where we're headed. Anthers is built in the
-						open — everything here reflects our actual plans and priorities.
+				<Reveal delay={150}>
+					<Lede>
+						Everything Anthers is working toward, and everything it has finished, with nothing
+						dressed up as further along than it is. Each unfinished goal below says where it
+						actually stands, because a page like this is worth reading only if the disappointing
+						half is on it too.
+					</Lede>
+				</Reveal>
+				<Reveal delay={250}>
+					<p className="mx-auto mt-8 max-w-2xl text-sm leading-relaxed text-base-content/55">
+						Only finished work carries a date here, and it carries the quarter it shipped in. The
+						other two columns carry none at all. That is deliberate rather than an oversight: a
+						quarter on something already built is a fact about the past, and a quarter on something
+						planned is a promise — and Anthers would rather tell you the order of things than a
+						schedule it has no way to keep.
 					</p>
 				</Reveal>
 			</div>
+		</header>
+	);
+}
 
-			<Reveal delay={150}>
-				{/* Tab selector */}
-				<div className="flex justify-center mb-6">
-					<div className="tabs tabs-boxed bg-base-200/60">
-						{ROADMAPS.map((rm, i) => (
-							<button
-								type="button"
-								key={rm.id}
-								className={`tab ${activeTab === i ? "tab-active" : ""}`}
-								onClick={() => handleTabChange(i)}
-							>
-								{rm.label.replace(" Roadmap", "")}
-							</button>
-						))}
-					</div>
-				</div>
+/** One bucket, with every group that has something in it. */
+function BucketSection({ bucket, tint }: { bucket: (typeof BUCKETS)[number]; tint: boolean }) {
+	const groups = ROADMAP.map((g) => ({ group: g, subgroups: itemsIn(g, bucket.id) })).filter(
+		(g) => g.subgroups.length > 0,
+	);
+	const accent = ACCENT[bucket.id];
+	const quarters = bucket.id === "launched" ? shippedQuarters() : [];
 
-				{/* Roadmap description */}
-				<div className="max-w-3xl mx-auto mb-6">
-					<p className="text-sm text-base-content/60 text-center">{roadmap.description}</p>
-				</div>
-
-				{/* Legend + hint */}
-				<div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-					<StatusLegend />
-					<p className="text-xs text-base-content/30">Click any item for details.</p>
-				</div>
-
-				{/* Timeline chart */}
-				<Timeline roadmap={roadmap} selectedItem={selectedItem} onSelect={setSelectedItem} />
-
-				{/* Detail panel */}
-				{selectedData && (
-					<div className="mt-6 max-w-2xl">
-						<DetailPanel
-							item={selectedData.item}
-							lane={selectedData.lane}
-							quarters={roadmap.quarters}
-							onClose={() => setSelectedItem(null)}
-						/>
-					</div>
+	return (
+		<Section tint={tint}>
+			<Reveal>
+				<Eyebrow>
+					{countIn(bucket.id)} {countIn(bucket.id) === 1 ? "goal" : "goals"}
+				</Eyebrow>
+				<H2>{bucket.label}</H2>
+				<Lede>{bucket.blurb}</Lede>
+				{/* One quarter today, and the heading says so rather than pretending to a series.
+				    When a second arrives, this becomes a per-quarter grouping — the data already
+				    carries the field. */}
+				{quarters.length > 0 && (
+					<p className="mt-6 text-sm font-medium tracking-wide text-base-content/45">
+						{quarters.join(" · ")}
+					</p>
 				)}
 			</Reveal>
 
-			{/* Bottom section — Contributing */}
-			<Reveal className="mt-16 max-w-3xl mx-auto text-center pb-4">
-				<h2 className="text-xl font-bold mb-3">Built in the Open</h2>
-				<p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
-					Anthers is a non-profit, and our roadmap reflects our commitment to transparency.
-					Priorities are shaped by creator and user feedback, not investor demands. Have a feature
-					request or want to get involved? Join our community or reach out directly.
+			<div className="mt-14 space-y-16 text-left">
+				{groups.map(({ group, subgroups }) => (
+					<GroupBlock key={group.id} group={group} subgroups={subgroups} accent={accent} />
+				))}
+			</div>
+		</Section>
+	);
+}
+
+function GroupBlock({
+	group,
+	subgroups,
+	accent,
+}: {
+	group: RoadmapGroup;
+	subgroups: ReturnType<typeof itemsIn>;
+	accent: (typeof ACCENT)[Bucket];
+}) {
+	return (
+		<Reveal>
+			<div className={`border-l-2 pl-6 sm:pl-8 ${accent.rule}`}>
+				<h3 style={serif} className="text-2xl font-light">
+					{group.label}
+				</h3>
+				<p className="mt-1 max-w-2xl text-sm leading-relaxed text-base-content/55">{group.blurb}</p>
+
+				<div className="mt-8 space-y-10">
+					{subgroups.map((sub) => (
+						<div key={sub.label}>
+							<h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/40">
+								{sub.label}
+							</h4>
+							{/* `min-w-0` on the grid children is what keeps a long unbroken word from
+							    pushing the card past the viewport; the mobile-overflow checker in
+							    `make verify` is what would catch it if this were removed. */}
+							<div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-2">
+								{sub.items.map((item) => (
+									<ItemCard key={item.id} item={item} accent={accent} />
+								))}
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		</Reveal>
+	);
+}
+
+/**
+ * One goal.
+ *
+ * 🚨 The standing line is not an aside and is not styled as one. It is the sentence that
+ * keeps the card honest — without it a fluent blurb about something unbuilt reads exactly
+ * like a description of something that works — so it sits in the card's own flow with a
+ * label, rather than in the small gray text a reader's eye skips.
+ */
+function ItemCard({ item, accent }: { item: RoadmapItem; accent: (typeof ACCENT)[Bucket] }) {
+	return (
+		<article
+			id={`goal-${item.id}`}
+			className="min-w-0 rounded-3xl border border-base-content/10 bg-base-100 p-6 shadow-sm"
+		>
+			<div className="flex items-start gap-3">
+				<span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${accent.dot}`} aria-hidden="true" />
+				<h5 style={serif} className="min-w-0 text-lg font-medium">
+					{item.title}
+				</h5>
+			</div>
+			<p className="mt-2 text-sm leading-relaxed text-base-content/70">{item.blurb}</p>
+			{item.bucket !== "launched" && (
+				<p className="mt-4 border-t border-base-content/10 pt-3 text-sm leading-relaxed text-base-content/70">
+					<span
+						className={`mr-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${accent.chip}`}
+					>
+						Where it stands
+					</span>
+					{item.standing}
 				</p>
+			)}
+			{item.bucket === "launched" && (
+				<p className="mt-4 text-xs font-medium uppercase tracking-wider text-base-content/35">
+					Shipped {item.quarter}
+				</p>
+			)}
+		</article>
+	);
+}
+
+/**
+ * How Anthers grows — the second half of the roadmap, and the one people ask about.
+ *
+ * ⚠️ **Numbers are deliberately absent and their absence is stated** (Parker, 2026-09-03).
+ * The ladder's rungs are not settled, and publishing a figure that will move is a choice
+ * with a cost: a reader remembers the number and not the caveat beside it. So this section
+ * publishes the *mechanism*, which is the part that will still be true afterwards. The two
+ * structural points on the ladder are described by what becomes possible at each rather
+ * than by the account count that reaches it — the counts are anchored on a compensation
+ * figure that is Parker's own income, and attaching that to a growth target pre-launch is a
+ * different act from it appearing on an annual return later.
+ *
+ * 🚨 The joiner-facing half of this is governed by the wiki's *Why Joining May Have to
+ * Wait*. **Where this section and that page disagree, that page is right.** It is not
+ * linked here because the wiki is not served from this site yet — which is itself a goal on
+ * this page.
+ */
+function Growth() {
+	return (
+		<Section>
+			<Reveal>
+				<Eyebrow>How Anthers grows</Eyebrow>
+				<H2>Behind a ceiling, on purpose</H2>
+				<Lede>
+					Anthers intends to grow through a series of stages. Each one has a limit on how many
+					accounts exist and a separate limit on how many creators, and when a limit is reached new
+					signups stop and arrivals join a queue. None of it is enforced yet, and the specific
+					numbers are not settled — what follows is a commitment about how Anthers will grow rather
+					than a description of a gate you can meet today.
+				</Lede>
 			</Reveal>
+
+			<div className="mx-auto mt-14 max-w-3xl space-y-10 text-left">
+				<Reveal>
+					<GrowthBlock title="Why a Ceiling Rather Than a Plan">
+						<p>
+							A growth plan says what an organization expects. A ceiling says what it permits. The
+							difference matters because both of the things that actually bound Anthers are rates
+							measured against a capacity, and neither announces itself before it is exceeded.
+						</p>
+						<p>
+							<strong>Safety capacity is the first.</strong> The obligations that cannot be
+							delegated — illegal content, platform-wide abuse, anything with a legal clock attached
+							— scale with the number of incidents, and incidents scale roughly with accounts and
+							uploads. The people handling them number one. A cap belongs on the thing incidents
+							scale with, because the alternative is discovering the limit by missing something.
+						</p>
+						<p>
+							<strong>Money is the second, and it is the less obvious one.</strong> Every account
+							carries a subsidized share of the Time Pool whether it pays anything or not, which is
+							what makes free access real rather than a trial. So self-sufficiency here is a ratio
+							rather than a size: below a certain share of people paying, each new group of arrivals
+							costs more in free access than it brings in, and growing makes the gap worse instead
+							of better.
+						</p>
+						<p>
+							<strong>A ceiling is also the measuring instrument, not only the brake.</strong> The
+							only way to learn the real paying share is to admit a group of people and watch what
+							they do, and a ceiling is what makes a group a group rather than an unbounded inflow.
+							That is why the early limits sit close together: each one is a measurement, and
+							measurements are worth taking often while the number is still unknown.
+						</p>
+					</GrowthBlock>
+				</Reveal>
+
+				<Reveal>
+					<GrowthBlock title="Filling a Ceiling Does Not Open the Next One">
+						<p>
+							<strong>
+								This is the rule most likely to disappoint, and it is the one Anthers most intends
+								to keep.
+							</strong>{" "}
+							Reaching a limit is evidence of demand and nothing else. What opens the next stage is
+							a checklist, and until it is met the correct behavior is to stay closed and let the
+							queue grow.
+						</p>
+						<p>
+							That checklist asks four things: that the safety floor is actually covered at the{" "}
+							<em>next</em> stage's incident rate rather than merely provisioned for it; that the
+							share of people paying clears the line the arithmetic needs, measured on people who
+							actually joined rather than modeled; that whatever legal obligations the next stage
+							newly trips have been discharged, since those land at thresholds rather than on dates;
+							and that the organization has grown to match, because a stage's costs are committed
+							before its people arrive.
+						</p>
+						<p>
+							<strong>Nothing on that list is a date, and that is deliberate.</strong> A ceiling
+							tied to a calendar is a plan with extra steps. A ceiling tied to a checklist is a
+							commitment that survives the platform growing faster or slower than anyone guessed.
+						</p>
+					</GrowthBlock>
+				</Reveal>
+
+				<Reveal>
+					<GrowthBlock title="How the Door Widens">
+						<p>
+							Admission is expected to open in three steps and then stay open.{" "}
+							<strong>First, creators invite.</strong> Anthers seeds a first group of creators by
+							hand and those creators bring their own audiences. This is not "people the founder
+							knows" — that would test nothing except whether he has friends.
+						</p>
+						<p>
+							There is a better reason for that order than pacing.{" "}
+							<strong>A creator who invites is overwhelmingly inviting audience</strong>, so
+							admission through creators moves the balance of accounts to creators in the direction
+							it needs to go. That recruits the shape Anthers needs rather than refusing the shape
+							it does not want, which a bare cap can only ever do.
+						</p>
+						<p>
+							<strong>Then any account can invite</strong>, which tests whether Anthers spreads
+							person to person without a creator in the middle.{" "}
+							<strong>Then a public queue opens</strong>, and from that point the queue is the main
+							door with invites continuing alongside it.
+						</p>
+						<p>
+							<strong>The invite period is short and explicitly temporary.</strong> It buys organic
+							pacing and real accountability — every early account traceable to somebody who vouched
+							for them — and what it costs is exclusion-as-status, which sits badly beside
+							everything else Anthers is for. An invite should read as{" "}
+							<em>somebody wanted you here</em>, not as <em>you got past a rope</em>, and the queue
+							opening is what stops the second reading taking hold.
+						</p>
+					</GrowthBlock>
+				</Reveal>
+
+				<Reveal>
+					<GrowthBlock title="What Being Blocked Should Feel Like">
+						<p>
+							<strong>A closed door has to fail legibly.</strong> If you cannot join you should be
+							told the real reason, given your position, and told what changes it. Anything less
+							reads as a broken signup form, which is both worse and less honest. Three things
+							Anthers commits to about the queue:
+						</p>
+						<p>
+							<strong>There are two queues and they move independently.</strong> Accounts and
+							creators are bounded by different things, so you may be admitted as a reader while
+							still waiting as a creator, and the creator queue may be closed while the reader queue
+							moves.
+						</p>
+						<p>
+							<strong>Admissions are metered rather than released all at once.</strong> Opening a
+							stage to its full ceiling on day one produces exactly the support and moderation spike
+							the ceiling exists to prevent. On the early stages the rate matters more than the
+							limit, because a small number of admissions is still a lot if they all arrive in an
+							afternoon.
+						</p>
+						<p>
+							<strong>Where you are matters, and Anthers cannot yet say how much.</strong>{" "}
+							Publishing currently depends on the countries our payment processor operates in, and
+							how many creators that excludes, and from where, is not something we can presently
+							measure.
+						</p>
+					</GrowthBlock>
+				</Reveal>
+
+				<Reveal>
+					<GrowthBlock title="Two Points on the Ladder That Are Not Pacing">
+						<p>
+							Most of the stages are pacing. Two are structural, and the ladder is built around
+							them:{" "}
+							<strong>the scale at which running Anthers can be somebody's full-time job</strong>,
+							and the later scale at which <strong>it can pay somebody besides its founder</strong>.
+							Everything below the first is Anthers as a side project with a bounded blast radius.
+							Everything above it is Anthers as a job.
+						</p>
+						<p>
+							The second lands a good deal further up than people expect, which is worth saying
+							plainly: by the time a first hire is affordable, Anthers is already carrying a
+							full-time director and is a materially different organization. Hiring is not the
+							escape hatch from an overloaded solo stage; reaching the first point sooner is.
+						</p>
+						<p>
+							<strong>The account numbers behind those two points are not published here.</strong>{" "}
+							They are anchored on a compensation figure, and they will move as the model does. What
+							is durable is the shape — that there is a scale at which this becomes a job, and a
+							later one at which it becomes an organization — and the shape is the part worth
+							committing to in public.
+						</p>
+					</GrowthBlock>
+				</Reveal>
+			</div>
+		</Section>
+	);
+}
+
+function GrowthBlock({ title, children }: { title: string; children: React.ReactNode }) {
+	return (
+		<div className="rounded-3xl border border-base-content/10 bg-base-100 p-7 shadow-sm sm:p-9">
+			<h3 style={serif} className="text-2xl font-light">
+				{title}
+			</h3>
+			<div className="mt-4 space-y-4 text-sm leading-relaxed text-base-content/70 sm:text-base">
+				{children}
+			</div>
 		</div>
+	);
+}
+
+function Closing() {
+	return (
+		<Section tint>
+			<Reveal>
+				<Eyebrow>Built in the open</Eyebrow>
+				<H2>Hold us to this</H2>
+				<Lede>
+					This page is written by hand rather than generated from anything, which means it can go
+					out of date without anything noticing. The source that runs Anthers is public, so the
+					fastest way to check a claim on this page is to go and read the thing it describes.
+					Priorities here are shaped by creators and readers rather than by investors, because there
+					are no investors.
+				</Lede>
+				<div className="mt-9 flex flex-wrap justify-center gap-3">
+					<a
+						href="https://github.com/anthers-inc/anthers"
+						className="btn btn-primary rounded-lg px-7"
+						rel="noreferrer"
+					>
+						Read the source
+					</a>
+					<Link to="/faq" className="btn btn-ghost rounded-lg px-7">
+						The FAQ
+					</Link>
+					<Link to="/about" className="btn btn-ghost rounded-lg px-7">
+						About Anthers
+					</Link>
+				</div>
+			</Reveal>
+		</Section>
 	);
 }
