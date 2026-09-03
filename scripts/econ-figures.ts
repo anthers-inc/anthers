@@ -1276,7 +1276,9 @@ async function unpublished(root: string, file: string): Promise<boolean> {
 	// Never served: kept back by location, which is the vault's opt-out mechanism.
 	if (file.startsWith("Internal Wiki/")) return true;
 	// Agent instructions. Written for whoever is working on Anthers, not for a reader.
-	if (file.startsWith("90-99 Agents/")) return true;
+	// `CLAUDE.md` sits at the root where reference pages sit, and is machinery: it exists
+	// only so the harness auto-loads something that routes to the Agents Hub.
+	if (file.startsWith("90-99 Agents/") || file === "CLAUDE.md") return true;
 	// Vault machinery — attachments, conventions, templates, the task board's Base — with
 	// the one exception that a task note may opt in to being published.
 	if (!file.startsWith("00-09 Metafiles/")) return false;
