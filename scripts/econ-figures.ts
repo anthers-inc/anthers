@@ -81,6 +81,7 @@ import {
 import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
 import {
 	badgeTable,
+	batchingComparison,
 	cartSaving,
 	creatorReceipt,
 	creatorSegments,
@@ -89,10 +90,12 @@ import {
 	freePotSensitivity,
 	growthLadder,
 	MODELLED_PAYING_SHARE,
+	membershipComparison,
 	PAYING_BADGE_MIX,
 	payingShareSensitivity,
 	purchaseCase,
 	purchaseExamples,
+	RIVAL_MEMBERSHIPS,
 	RIVAL_STOREFRONTS,
 	salaryLandmarks,
 	saleTable,
@@ -646,14 +649,20 @@ function renderSelfSufficiencyMarkdown(): string {
 }
 
 /**
- * 62.04's headline table: what reaches a creator here versus on each storefront.
+ * What reaches a creator here versus on each storefront, at the same list price.
  *
- * This block is why the task existed. The Anthers column was a **hand-mirror** of the
- * generated figures — the doc said so in its own warning — and it went a cent low
- * everywhere the day the delivery charge was retired, because a mirror only reflects
- * when someone remembers to polish it. Two competitor cells were a cent out too, in
- * the other direction: they rounded the card fee at the end of the row while ours
- * rounded it first, so a single table disagreed with itself about one number.
+ * The Anthers column was a **hand-mirror** of the generated figures until 2026-08-12 — the
+ * document said so in its own warning — and it went a cent low everywhere the day the
+ * delivery charge was retired, because a mirror only reflects when somebody remembers to
+ * polish it. Two competitor cells were a cent out in the other direction, because the rival
+ * columns rounded the card fee at the end of the row while ours rounded it first: one table
+ * disagreeing with itself about a single number.
+ *
+ * 🚨 **This renders into a PUBLIC page and is written accordingly** — second person to a
+ * creator, no "we", no markers. It fed a private research document until 2026-09-02 and was
+ * written in the first person plural; when that document was published the prose had to
+ * change, which is the fourth time a renderer's audience has moved underneath it. Write
+ * every renderer as though a reader will meet it, because eventually one does.
  */
 function renderTakeHomeMarkdown(): string {
 	const rows = takeHomeComparison();
@@ -670,11 +679,60 @@ function renderTakeHomeMarkdown(): string {
 			]),
 		),
 		"",
-		`Every column is **all-in take-home at the same list price** — each rival's figure includes the same ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} card cost we itemize, because every platform pays it. Comparing our all-in against a competitor's headline cut would flatter us exactly where a creator would check.`,
+		`Every column is **all-in take-home at the same list price**, and each platform's figure includes the same ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} card cost, because every one of them pays it. A dash means no claim is made for that platform at that price.`,
 		"",
-		`**The bold cell is the best row, and it is computed rather than chosen.** Steam returns more than us at $${rows[0].price}: their ${(RIVAL_STOREFRONTS[0].share * 100).toFixed(0)}% of a small sale is less than the flat card fee they absorb, so a percentage model beats a flat-fee model at the very bottom. Conceding that is what makes the rest of the table believable, and generating it means we cannot quietly stop conceding it when a dial moves.`,
+		`**The bold cell is the best in its row, and it is computed rather than chosen.** Steam returns more at $${rows[0].price}, where their ${(RIVAL_STOREFRONTS[0].share * 100).toFixed(0)}% of a small sale costs less than the flat card fee they absorb — a percentage model beats a flat-fee model at the very bottom. Generating the winner is what stops that concession quietly disappearing the next time a rate moves.`,
 		"",
-		`⚠️ **Competitor rates are perishable** — they live in \`RIVAL_STOREFRONTS\` in \`packages/shared/src/scenarios.ts\`, were last checked 2026-08-03, and a storefront can change one without telling us. Re-check before anything ships. Only the arithmetic is guaranteed here; the rates are an input.`,
+		`**Only the arithmetic here is guaranteed; the competitor rates are an input.** They were read on 2026-08-03 and any storefront can change one without notice.`,
+	].join("\n");
+}
+
+/**
+ * Recurring support and the batching advantage, against the membership platforms.
+ *
+ * ⭐ **Batching is the most defensible claim on that page and it is the one a hand-typed
+ * table gets wrong**, because the rival side has to round each membership to cents before
+ * summing — four charges really do settle separately. Generating it is what keeps the
+ * concession and the advantage honest at the same time.
+ */
+function renderMembershipMarkdown(): string {
+	const rows = membershipComparison();
+	const b = batchingComparison();
+	const names = RIVAL_MEMBERSHIPS.map((r) => r.name);
+	// Money strings with two decimals compare correctly as numbers; no Decimal needed to
+	// pick the largest of three already-rounded values.
+	const best = (v: string, all: string[]) =>
+		all.every((o) => Number(v) >= Number(o)) ? `**$${v}**` : `$${v}`;
+	return [
+		table(
+			["Supporter pays", "**Anthers**", ...names],
+			[":--", "--:", ...names.map(() => "--:")],
+			rows.map((r) => {
+				const all = [r.anthers, ...r.rivals.map((x) => x.net)];
+				return [`$${r.monthly}`, best(r.anthers, all), ...r.rivals.map((x) => `$${x.net}`)];
+			}),
+		),
+		"",
+		`**Anthers** — the whole monthly charge sets the card fee and it is allocated pro-rata, so these hold whether the supporter points everything at one creator or spreads it across several. That is what the second table below is measuring.`,
+		"",
+		table(
+			[`Somebody giving $${b.total} a month`, "**Anthers**", ...names],
+			[":--", "--:", ...names.map(() => "--:")],
+			[
+				[
+					"All of it to one creator",
+					`**$${b.concentrated.anthers}**`,
+					...b.concentrated.rivals.map((x) => `$${x.net}`),
+				],
+				[
+					`$${b.each} each to ${b.split} creators`,
+					`**$${b.spread.anthers}**`,
+					...b.spread.rivals.map((x) => `$${x.net}`),
+				],
+			],
+		),
+		"",
+		`**The Anthers row does not move**, because every destination rides one monthly charge and the flat part of the card fee is paid once. A platform that bills each membership separately pays it ${b.split} times, and the difference is larger than any percentage on the page.`,
 	].join("\n");
 }
 
@@ -1042,6 +1100,20 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 		key: "time-pool-size",
 		render: renderTimePoolPerThousandMarkdown,
 	},
+	// Moved out of the private research document on 2026-09-02 when that document was
+	// published. Note it is deliberately NOT on `31.03`, which is the whole-month comparison:
+	// this table is take-home on one transaction, and a figure here is an input to a figure
+	// there. Collapsing them loses a distinction the two pages are easy to confuse over.
+	{
+		file: "30-39 Creating on Anthers/31 Getting Paid/31.06 What You Keep on Each Platform.md",
+		key: "take-home",
+		render: renderTakeHomeMarkdown,
+	},
+	{
+		file: "30-39 Creating on Anthers/31 Getting Paid/31.06 What You Keep on Each Platform.md",
+		key: "membership",
+		render: renderMembershipMarkdown,
+	},
 ];
 
 const BLOCKS: Block[] = [
@@ -1063,11 +1135,7 @@ const BLOCKS: Block[] = [
 		key: "self-sufficiency",
 		render: renderSelfSufficiencyMarkdown,
 	},
-	{
-		file: "60-69 Governance & Strategy/62 Positioning & Audience/62.04 Creator Take-Home Comparisons.md",
-		key: "take-home",
-		render: renderTakeHomeMarkdown,
-	},
+
 	// The growth ladder. 61.01 is canonical for the RUNGS, which are policy and stay
 	// hand-written; everything derived from them is generated here.
 	{ file: LADDER, key: "growth-landmarks", render: renderLandmarksMarkdown },

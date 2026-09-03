@@ -19,6 +19,7 @@
  */
 import Decimal from "decimal.js";
 import {
+	ANTHERS_BADGES,
 	BADGE_ORDER,
 	CARD_FLAT,
 	CARD_RATE,
@@ -426,13 +427,106 @@ export const RIVAL_STOREFRONTS: {
 	{ name: "Bandcamp", share: 0.15, maxPrice: 20 },
 ];
 
+/**
+ * Membership platforms, for the recurring-support comparison.
+ *
+ * Same discipline as {@link RIVAL_STOREFRONTS}: all-in against all-in, with each rival's
+ * own card processing included, because every one of them pays it. Read 2026-08-03.
+ *
+ * 🚨 **`perCreatorCharge` is the whole batching argument and it is a property rather than a
+ * rate.** Patreon bills each membership separately, so somebody backing four creators pays
+ * the flat fee four times; on Anthers every destination rides one monthly charge and the
+ * flat part is paid once. That difference is worth more than either platform's percentage.
+ *
+ * `recurringRate` is Substack's billing surcharge on subscriptions started after mid-2024 —
+ * easy to miss, and the reason their column sits just under Patreon's.
+ */
+export const RIVAL_MEMBERSHIPS: {
+	name: string;
+	share: number;
+	recurringRate?: number;
+	perCreatorCharge: boolean;
+}[] = [
+	{ name: "Patreon", share: 0.1, perCreatorCharge: true },
+	{ name: "Substack", share: 0.1, recurringRate: 0.007, perCreatorCharge: true },
+];
+
+/** What one supporter's monthly amount leaves with one creator, per platform. */
+function membershipNet(monthly: Decimal, r: (typeof RIVAL_MEMBERSHIPS)[number]): Decimal {
+	const card = monthly.times(CARD_RATE).plus(CARD_FLAT);
+	const recurring = monthly.times(r.recurringRate ?? 0);
+	return monthly
+		.times(1 - r.share)
+		.minus(card)
+		.minus(recurring);
+}
+
+/**
+ * Creator take-home at each rung of Anthers' own ladder, against the membership platforms.
+ *
+ * The levels come from {@link ANTHERS_BADGES} rather than being typed, so the table follows
+ * the ladder if it ever moves.
+ */
+export function membershipComparison() {
+	return ANTHERS_BADGES.map(({ threshold }) => {
+		const monthly = new Decimal(threshold);
+		const anthers = directedSupportWorstCase(threshold);
+		return {
+			monthly: money(monthly),
+			anthers: anthers.net,
+			rivals: RIVAL_MEMBERSHIPS.map((r) => ({
+				name: r.name,
+				net: money(membershipNet(monthly, r)),
+			})),
+		};
+	});
+}
+
+/**
+ * The batching advantage, as the one table that shows it: the same monthly outlay spent on
+ * one creator and spread across several.
+ *
+ * 🚨 **Each rival membership is rounded to cents BEFORE summing, because each is a separate
+ * charge that really settles.** Summing first and rounding once gives a cent more and would
+ * overstate the rival — the same rounding-order hazard that made the storefront table
+ * disagree with itself, pointed the other way.
+ */
+export function batchingComparison(total = 12, split = 4) {
+	const whole = new Decimal(total);
+	const each = whole.dividedBy(split);
+	return {
+		total: money(whole),
+		split,
+		each: money(each),
+		concentrated: {
+			anthers: directedSupportWorstCase(total).net,
+			rivals: RIVAL_MEMBERSHIPS.map((r) => ({
+				name: r.name,
+				net: money(membershipNet(whole, r)),
+			})),
+		},
+		spread: {
+			// Anthers does not move: one charge carries every destination.
+			anthers: directedSupportWorstCase(total).net,
+			rivals: RIVAL_MEMBERSHIPS.map((r) => ({
+				name: r.name,
+				net: money(
+					r.perCreatorCharge
+						? new Decimal(money(membershipNet(each, r))).times(split)
+						: membershipNet(whole, r),
+				),
+			})),
+		},
+	};
+}
+
 export interface TakeHomeRow {
 	price: string;
 	/** What reaches the creator here — the list price less at-cost card processing. */
 	anthers: string;
 	/** Per storefront, all-in at the same list price. `null` where we make no claim. */
 	rivals: { name: string; net: string | null }[];
-	/** The best take-home in the row. Steam wins below ~$1.15 and the table must say so. */
+	/** The best take-home in the row. Steam wins below ~$1.11 and the table must say so. */
 	best: string;
 }
 
@@ -441,8 +535,14 @@ export interface TakeHomeRow {
  *
  * The winner is computed rather than marked by hand, because *"concede where we lose"*
  * is a rule we would otherwise have to remember on every dial change: Steam beats us
- * below about $1.15, where their 30% of a small sale is less than the flat card fee
+ * below about **$1.11**, where their 30% of a small sale is less than the flat card fee
  * they absorb. A generated table concedes it by construction.
+ *
+ * ⚠️ **Do not re-type that figure — it is `0.30 / (1 - CARD_RATE - 0.30)` and it moves with
+ * the card rate.** It read `$1.15` here, in the test below and in the research doc until
+ * 2026-09-02, having been corrected only on the public page that prints it generated. A
+ * rounded crossover concedes rows that are not actually lost, which is the one direction
+ * a concession must not err in.
  */
 export function takeHomeComparison(): TakeHomeRow[] {
 	return PURCHASE_EXAMPLES.map(({ price }) => {

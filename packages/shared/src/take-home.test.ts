@@ -15,9 +15,10 @@
 // file adds is the *comparison* arithmetic and the low-price claims the UI makes in words.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import { CARD_FLAT, CARD_RATE, cardFeeDisplay } from "./constants.js";
+import { ANTHERS_BADGES, CARD_FLAT, CARD_RATE, cardFeeDisplay } from "./constants.js";
 import { calculateFees } from "./fees.js";
 import { RIVAL_STOREFRONTS } from "./figures.generated.js";
+import { batchingComparison, membershipComparison } from "./scenarios.js";
 
 /** What the component renders as "You receive". */
 const net = (amount: number) => amount - cardFeeDisplay(amount);
@@ -147,7 +148,8 @@ describe("the named-alternative comparison", () => {
 	/**
 	 * 🚨 **The concession, asserted so it cannot quietly disappear.** Steam absorbs
 	 * processing, so their 30% of a small sale costs the creator less than the flat fee we
-	 * pass through — they beat us below about $1.15. The wiki's *How Anthers Talks About Itself* § Comparisons binds us to
+	 * pass through — they beat us below about **$1.11**, which is computed rather than
+	 * rounded. The wiki's *How Anthers Talks About Itself* § Comparisons binds us to
 	 * conceding where we lose, and a comparison that only ever showed us winning would be
 	 * the exact dishonesty the rule exists to prevent.
 	 */
@@ -220,5 +222,49 @@ describe("the Badge worst case", () => {
 		const alone = cardFeeDisplay(3);
 		const shared = cardFeeDisplay(6) / 2;
 		expect(shared).toBeLessThan(alone);
+	});
+});
+
+describe("the membership comparison", () => {
+	/**
+	 * 🚨 **The rival side must round each membership to cents BEFORE summing**, because on a
+	 * platform that bills per creator each membership is a separate charge that really
+	 * settles. Summing the unrounded nets and rounding once gives a cent more and quietly
+	 * overstates the rival.
+	 *
+	 * That is the same rounding-order hazard that once made the storefront table disagree
+	 * with itself about a single cell, pointed the other way — and it lands on the most
+	 * defensible claim on the page, which is the one worth being unimpeachable about.
+	 */
+	test("spreading support across creators rounds per charge, not once at the end", () => {
+		const b = batchingComparison(12, 4);
+		const patreon = b.spread.rivals.find((r) => r.name === "Patreon");
+		const each = membershipComparison().find((r) => r.monthly === "3.00");
+		const perCharge = each?.rivals.find((r) => r.name === "Patreon")?.net;
+
+		// Four settled charges of the $3 figure, exactly — not the unrounded sum.
+		expect(patreon?.net).toBe((Number(perCharge) * 4).toFixed(2));
+	});
+
+	test("🚨 Anthers does not move when support is split — that is the whole batching claim", () => {
+		const b = batchingComparison(12, 4);
+		expect(b.spread.anthers).toBe(b.concentrated.anthers);
+	});
+
+	test("every rival loses money to splitting, and Anthers is the only one that doesn't", () => {
+		const b = batchingComparison(12, 4);
+		for (const spread of b.spread.rivals) {
+			const whole = b.concentrated.rivals.find((r) => r.name === spread.name);
+			expect(
+				Number(spread.net),
+				`${spread.name} bills per creator, so splitting must cost the creator more`,
+			).toBeLessThan(Number(whole?.net));
+		}
+	});
+
+	test("the levels come from the Badge ladder rather than being typed", () => {
+		expect(membershipComparison().map((r) => r.monthly)).toEqual(
+			ANTHERS_BADGES.map((b) => b.threshold.toFixed(2)),
+		);
 	});
 });
