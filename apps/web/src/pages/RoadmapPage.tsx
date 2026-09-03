@@ -29,15 +29,16 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
 import {
 	BUCKETS,
 	type Bucket,
 	countIn,
+	docHref,
 	itemsIn,
 	ROADMAP,
 	type RoadmapGroup,
 	type RoadmapItem,
-	shippedQuarters,
 } from "../content/roadmap";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -47,14 +48,10 @@ const serif = { fontFamily: FONTS.fraunces };
  * warning and Active is not a problem, and coloring them that way turns an honest list of
  * unfinished work into a page that looks like a status board in trouble.
  */
-const ACCENT: Record<Bucket, { dot: string; chip: string; rule: string }> = {
-	active: { dot: "bg-primary", chip: "bg-primary/10 text-primary", rule: "border-primary/25" },
-	planned: { dot: "bg-accent", chip: "bg-accent/15 text-accent", rule: "border-accent/25" },
-	launched: {
-		dot: "bg-success",
-		chip: "bg-success/15 text-success",
-		rule: "border-success/25",
-	},
+const ACCENT: Record<Bucket, { pill: string; rule: string }> = {
+	active: { pill: "bg-primary/10 text-primary", rule: "border-primary/25" },
+	planned: { pill: "bg-accent/15 text-accent", rule: "border-accent/25" },
+	launched: { pill: "bg-success/15 text-success", rule: "border-success/25" },
 };
 
 export default function RoadmapPage() {
@@ -86,18 +83,19 @@ function Hero() {
 				<Reveal delay={150}>
 					<Lede>
 						Everything Anthers is working toward, and everything it has finished, with nothing
-						dressed up as further along than it is. Each unfinished goal below says where it
-						actually stands, because a page like this is worth reading only if the disappointing
-						half is on it too.
+						dressed up as further along than it is. Every goal carries its own status, and where
+						something half-exists the card says so — a page like this is worth reading only if the
+						disappointing half is on it too.
 					</Lede>
 				</Reveal>
 				<Reveal delay={250}>
 					<p className="mx-auto mt-8 max-w-2xl text-sm leading-relaxed text-base-content/55">
-						Only finished work carries a date here, and it carries the quarter it shipped in. The
-						other two columns carry none at all. That is deliberate rather than an oversight: a
-						quarter on something already built is a fact about the past, and a quarter on something
-						planned is a promise — and Anthers would rather tell you the order of things than a
-						schedule it has no way to keep.
+						Only finished work carries a date, and it carries the quarter it shipped in. Nothing
+						else carries one at all — a quarter on something already built is a fact about the past,
+						and a quarter on something planned is a promise, and Anthers would rather give you the
+						order of things than a schedule it has no way to keep. Where a goal has documentation
+						behind it the card names the page, shown dimmed until the documentation itself is
+						published.
 					</p>
 				</Reveal>
 			</div>
@@ -111,7 +109,6 @@ function BucketSection({ bucket, tint }: { bucket: (typeof BUCKETS)[number]; tin
 		(g) => g.subgroups.length > 0,
 	);
 	const accent = ACCENT[bucket.id];
-	const quarters = bucket.id === "launched" ? shippedQuarters() : [];
 
 	return (
 		<Section tint={tint}>
@@ -121,14 +118,6 @@ function BucketSection({ bucket, tint }: { bucket: (typeof BUCKETS)[number]; tin
 				</Eyebrow>
 				<H2>{bucket.label}</H2>
 				<Lede>{bucket.blurb}</Lede>
-				{/* One quarter today, and the heading says so rather than pretending to a series.
-				    When a second arrives, this becomes a per-quarter grouping — the data already
-				    carries the field. */}
-				{quarters.length > 0 && (
-					<p className="mt-6 text-sm font-medium tracking-wide text-base-content/45">
-						{quarters.join(" · ")}
-					</p>
-				)}
 			</Reveal>
 
 			<div className="mt-14 space-y-16 text-left">
@@ -180,42 +169,85 @@ function GroupBlock({
 }
 
 /**
- * One goal.
+ * One goal: a title, one sentence, and the status on the card itself.
  *
- * 🚨 The standing line is not an aside and is not styled as one. It is the sentence that
- * keeps the card honest — without it a fluent blurb about something unbuilt reads exactly
- * like a description of something that works — so it sits in the card's own flow with a
- * label, rather than in the small gray text a reader's eye skips.
+ * 🚨 **The pill is what carries the tense, now that the descriptions are one line.** An
+ * earlier draft ran a paragraph per goal plus a separate sentence saying where it actually
+ * stood, which was honest and unreadable. The trade is that the section heading alone is
+ * no longer allowed to be the only thing telling a reader that a goal is unbuilt — so
+ * every card states its own status, adjacent to its own text, and `note` corrects the
+ * cases where the pill is not enough on its own.
  */
 function ItemCard({ item, accent }: { item: RoadmapItem; accent: (typeof ACCENT)[Bucket] }) {
+	const status =
+		item.bucket === "launched" ? item.quarter : item.bucket === "active" ? "Active" : "Planned";
+
 	return (
 		<article
 			id={`goal-${item.id}`}
-			className="min-w-0 rounded-3xl border border-base-content/10 bg-base-100 p-6 shadow-sm"
+			className="flex min-w-0 flex-col rounded-2xl border border-base-content/10 bg-base-100 p-5 shadow-sm"
 		>
-			<div className="flex items-start gap-3">
-				<span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${accent.dot}`} aria-hidden="true" />
-				<h5 style={serif} className="min-w-0 text-lg font-medium">
+			<div className="flex items-start justify-between gap-3">
+				<h5 style={serif} className="min-w-0 text-base font-medium leading-snug">
 					{item.title}
 				</h5>
+				<span
+					className={`shrink-0 rounded-full px-2.5 py-0.5 text-[0.7rem] font-semibold ${accent.pill}`}
+				>
+					{status}
+				</span>
 			</div>
-			<p className="mt-2 text-sm leading-relaxed text-base-content/70">{item.blurb}</p>
-			{item.bucket !== "launched" && (
-				<p className="mt-4 border-t border-base-content/10 pt-3 text-sm leading-relaxed text-base-content/70">
-					<span
-						className={`mr-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${accent.chip}`}
-					>
-						Where it stands
-					</span>
-					{item.standing}
-				</p>
+			<p className="mt-1.5 text-sm leading-relaxed text-base-content/65">{item.blurb}</p>
+			{item.note && (
+				<p className="mt-2 text-sm leading-relaxed text-base-content/45">{item.note}</p>
 			)}
-			{item.bucket === "launched" && (
-				<p className="mt-4 text-xs font-medium uppercase tracking-wider text-base-content/35">
-					Shipped {item.quarter}
-				</p>
-			)}
+			{item.doc && <DocChip doc={item.doc} />}
 		</article>
+	);
+}
+
+/**
+ * The documentation button.
+ *
+ * ⏳ **Inert today, by design.** `docHref` returns null for every page because the wiki is
+ * not served from this site yet, so the chip names the page rather than linking to it. That
+ * is more honest than hiding the button: it tells a reader the documentation exists and has
+ * not been published, which is true, and which is itself a goal on this page. **A button
+ * that navigated to a 404 would be the failure this avoids** — nothing typechecks a route
+ * that does not exist.
+ *
+ * When the wiki ships, `docHref` learns the scheme and this renders an anchor. The chip's
+ * appearance is deliberately near-identical either way, so the page does not visibly
+ * change shape on the day it happens.
+ */
+function DocChip({ doc }: { doc: NonNullable<RoadmapItem["doc"]> }) {
+	const href = docHref(doc);
+	const inner = (
+		<>
+			<BookOpenIcon className="h-3.5 w-3.5 shrink-0" />
+			<span className="truncate">{doc.title}</span>
+		</>
+	);
+	const shape =
+		"mt-4 inline-flex max-w-full items-center gap-1.5 self-start rounded-full border px-3 py-1 text-xs";
+
+	if (!href) {
+		return (
+			<span
+				className={`${shape} border-dashed border-base-content/15 text-base-content/35`}
+				title="Not published yet — the wiki is not served from this site"
+			>
+				{inner}
+			</span>
+		);
+	}
+	return (
+		<Link
+			to={href}
+			className={`${shape} border-base-content/15 text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary`}
+		>
+			{inner}
+		</Link>
 	);
 }
 
