@@ -131,11 +131,26 @@ const REPO = join(import.meta.dir, "..");
  */
 const ORG = join(REPO, "..");
 
-/** The private wiki: engineering and strategy notes, not written for anybody else. */
-const PRIVATE_WIKI = join(ORG, "Anthers-Wiki-Private");
-
 /** The public wiki: the documentation written to be read by anyone. */
 const PUBLIC_WIKI = join(ORG, "Anthers-Wiki");
+
+/**
+ * The internal documents: governance and financial modeling, not written for anybody else.
+ *
+ * ⭐ **These stopped being a separate vault on 2026-09-03 and became a folder inside the
+ * public one.** Everything moved to `Anthers-Wiki`, and what genuinely cannot be published
+ * is kept back by living in `Internal Wiki/` — so the two blocks this list still writes,
+ * the growth ladder and the charity references, are at the same relative paths under a new
+ * root. Pointing the constant at the folder rather than re-writing eight entries keeps
+ * their paths correct and makes the rename cost one line.
+ *
+ * 🚨 **`make wiki-figures` was broken from the moment those files moved until this was
+ * fixed**, and nothing said so, because `make verify` runs `--check` *without* `--wiki` —
+ * so the eight generated blocks were neither rendered nor drift-checked while every gate
+ * stayed green. The tool itself was blameless: it reported *"no such file (renamed? then
+ * update BLOCKS)"* on every one of them, to a target nobody was running.
+ */
+const PRIVATE_WIKI = join(PUBLIC_WIKI, "Internal Wiki");
 
 /**
  * Whether this checkout sits inside the Anthers organization, which decides what a missing

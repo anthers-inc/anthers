@@ -132,6 +132,28 @@ describe("the roadmap is shaped the way the page renders it", () => {
 const ORG = join(import.meta.dir, "../../../../..");
 
 /**
+ * Whether this checkout sits inside the Anthers organization, which decides whether a
+ * missing wiki is a skip or a failure. Mirrors `insideOrganization()` in
+ * `scripts/econ-figures.ts`.
+ *
+ * 🚨 **This asked whether `Anthers-Wiki-Private` existed until 2026-09-03, which was the
+ * wrong question and was about to answer itself wrongly.** That vault was being dissolved
+ * into `Anthers-Wiki`, so deleting the last of it would have flipped this to `false` and
+ * quietly switched every documentation check below into skip mode — on the one machine
+ * that actually has a wiki to check against. The question is whether we are in the
+ * organization, and the answer is any sibling named for it.
+ */
+function insideOrganization(): boolean {
+	try {
+		return readdirSync(ORG, { withFileTypes: true }).some(
+			(e) => e.isDirectory() && e.name.startsWith("Anthers-"),
+		);
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Every `NN.NN` page in the public wiki, as `id → title`.
  *
  * ⚠️ **Absent is a skip; absent where it should exist is a FAILURE.** The wiki is a local
@@ -148,7 +170,7 @@ const ORG = join(import.meta.dir, "../../../../..");
 function wikiPages(): Map<string, string> | { error: string } {
 	const root = process.env.ANTHERS_WIKI ?? join(ORG, "Anthers-Wiki");
 	if (!existsSync(root)) {
-		return existsSync(join(ORG, "Anthers-Wiki-Private"))
+		return insideOrganization()
 			? {
 					error:
 						`no public wiki at ${root}, but this checkout sits inside the Anthers ` +
