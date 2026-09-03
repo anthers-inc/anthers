@@ -1229,10 +1229,44 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
 	const pub = findPublicWiki();
 	if ("path" in pub) {
 		for await (const path of markdownFiles(pub.path)) {
-			out.push({ root: pub.path, file: `[wiki] ${relative(pub.path, path)}` });
+			const file = relative(pub.path, path);
+			if (await unpublished(pub.path, file)) continue;
+			out.push({ root: pub.path, file: `[wiki] ${file}` });
 		}
 	}
 	return out.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+/**
+ * Whether a public-wiki page is one the site will never serve.
+ *
+ * 🚨 **This scan follows the PUBLISH boundary, not the vault boundary, and the difference
+ * became load-bearing on 2026-09-03.** The vault used to hold reference pages and nothing
+ * else, so "in the wiki" and "published" were the same set. It now also holds `Internal
+ * Wiki/` — documents deliberately kept back — and a 274-note task board, and scanning
+ * those produced **783 hits in one run**, every one of them correct copy in the wrong
+ * scanner.
+ *
+ * ⭐ **A task note is an audit trail, so naming a retired mechanism is what it is FOR.** A
+ * task called *"it still teaches the $3 Seed"* is doing its job; flagging it teaches people
+ * that this guard cries wolf, which is the one way to lose a guard that works. The same
+ * goes for `Internal Wiki/`, where the reasoning behind a retired mechanism is exactly what
+ * is being kept.
+ *
+ * ⚠️ **A task that opts in IS published and IS scanned.** `task-public: true` is the
+ * boundary, so the exception is read from the note rather than assumed from its folder —
+ * otherwise the first task Parker publishes would be the first one nothing checks.
+ */
+async function unpublished(root: string, file: string): Promise<boolean> {
+	// Never served: kept back by location, which is the vault's opt-out mechanism.
+	if (file.startsWith("Internal Wiki/")) return true;
+	// Agent instructions. Written for whoever is working on Anthers, not for a reader.
+	if (file.startsWith("90-99 Agents/")) return true;
+	// Vault machinery — attachments, conventions, templates, the task board's Base — with
+	// the one exception that a task note may opt in to being published.
+	if (!file.startsWith("00-09 Metafiles/")) return false;
+	const head = (await Bun.file(join(root, file)).text()).slice(0, 400);
+	return !/^task-public:\s*true\s*$/m.test(head);
 }
 
 /**
