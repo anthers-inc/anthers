@@ -27,8 +27,12 @@ import sharp from "sharp";
 import app from "../index";
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { artwork, stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 const RUN = crypto.randomUUID().slice(0, 8);

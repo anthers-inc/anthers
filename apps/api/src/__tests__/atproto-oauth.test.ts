@@ -24,6 +24,10 @@ import {
 	setAtprotoClient,
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const RUN = `t${Date.now().toString(36)}`;
 const testKeys: string[] = [];

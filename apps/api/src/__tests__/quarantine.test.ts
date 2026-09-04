@@ -39,9 +39,13 @@ import { isUnderHold } from "../services/legal-hold.js";
 import { clearQuarantine, loadQuarantineFindings, quarantineWork } from "../services/quarantine.js";
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

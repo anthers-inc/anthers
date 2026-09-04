@@ -30,8 +30,12 @@ import {
 } from "../services/abuse-reports.js";
 import { placeHold } from "../services/legal-hold.js";
 import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

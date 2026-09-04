@@ -3,7 +3,10 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import app from "../index";
 import { isReservedUsername } from "../reserved-usernames";
-import { purgeFixtureAccounts } from "./cleanup";
+import { purgeAccountsCreatedHere, purgeFixtureAccounts } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 

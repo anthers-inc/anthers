@@ -22,7 +22,11 @@ import { db } from "@anthers/db/client";
 import { follows, users, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 

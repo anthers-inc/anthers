@@ -24,6 +24,10 @@ import {
 } from "../services/atproto.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import { createSession } from "../services/auth.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const RUN = `bl${Date.now().toString(36)}`;
 const did = (tag: string) => `did:plc:${RUN}${tag}`;

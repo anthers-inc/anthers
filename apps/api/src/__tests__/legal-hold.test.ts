@@ -33,7 +33,11 @@ import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions } from "../services/auth.js";
 import { isUnderHold, liftHold, placeHold, preservationExpiry } from "../services/legal-hold.js";
 import { redactClosedModerationReports } from "../services/retention.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

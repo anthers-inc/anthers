@@ -33,6 +33,10 @@ import {
 	SIGNUP_CODE_RESEND_MS,
 	SIGNUP_CODE_TTL_MS,
 } from "../services/signup-codes.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 /** Unique per run, so concurrent runs and leftovers never collide. */
 const RUN = `cer${Date.now()}${Math.floor(Math.random() * 1000)}`;

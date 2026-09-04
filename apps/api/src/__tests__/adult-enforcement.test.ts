@@ -29,9 +29,13 @@ import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../services/access";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

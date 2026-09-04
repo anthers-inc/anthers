@@ -10,6 +10,10 @@
 import { describe, expect, it } from "bun:test";
 import { pdqHexToBase64, ShieldError, scanPdqHashes } from "../lib/arachnid-shield";
 import { determinationFor, scanPdqHash, VENDOR } from "../services/safety-scan";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const CREDS = { username: "u", password: "p" };
 const HASH = "d8f8f0cee0f4a84f0637022a078f67f0b36e2ed596621e1d33e6339c4e9c9b22";
