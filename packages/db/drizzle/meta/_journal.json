@@ -470,6 +470,13 @@
       "when": 1788556052467,
       "tag": "0066_lowly_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1788571135926,
+      "tag": "0067_faulty_william_stryker",
+      "breakpoints": true
     }
   ]
 }

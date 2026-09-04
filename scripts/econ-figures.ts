@@ -444,9 +444,15 @@ function renderBadgePublicMarkdown(): string {
  * comments — a marketing page quoting a Sticker budget must get it from the dial, not from
  * a document that was right when it was written. It is not evidence any of it ships.
  *
- * ⭐ **The Sticker budget is carved OUT of the Time Pool, not added beside it**, so those
- * two columns overlap by design and the note under the table has to say so — otherwise the
- * row reads as though a Root account sends $2.00 to creators when it sends $1.50.
+ * ⭐ **A Sticker is an OVERRIDE of the Time Pool, never a second pot beside it** (Parker,
+ * 2026-09-04), so those two columns overlap by design and the note under the table has to
+ * say so — otherwise the row reads as though a Root account sends $2.00 to creators when it
+ * sends $1.50.
+ *
+ * 🚨 **Never write that unspent budget "rejoins" or "goes back to" the pool.** Nothing is
+ * held out and nothing returns: the pool is paid out by time except for whatever the user
+ * directed themselves. This prose renders into the public wiki, so the rejected model would
+ * land there rather than staying in the repository.
  */
 function renderPerkLadderMarkdown(): string {
 	const rows = badgeTable();
@@ -478,7 +484,7 @@ function renderPerkLadderMarkdown(): string {
 		"",
 		`A free account's Time Pool is paid by Anthers on its behalf, and its ${FREE_STORAGE_GIB} GiB holds a creator's catalog only — so an account that has never published anything has no storage of its own until the first rung, where the same floor becomes usable for what you keep.`,
 		"",
-		"**The Sticker budget is carved out of the Time Pool rather than added to it.** A Sticker is money already on its way to creators, redirected by you to a particular one; anything you do not spend rejoins the pool at the end of the month and is shared out by time as usual. So the two columns overlap on purpose, and giving no Stickers costs creators nothing.",
+		"**The Sticker column is part of the Time Pool column rather than an addition to it.** A Sticker is money already on its way to creators, handed by you to a particular one instead of being shared out by the time you spend. Whatever you do not hand out is shared by time as usual, so the two columns overlap on purpose and giving no Stickers costs creators nothing.",
 	].join("\n");
 }
 

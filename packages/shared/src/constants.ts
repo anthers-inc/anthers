@@ -395,31 +395,52 @@ export function timePoolFor(anthersDollars: number): number {
 }
 
 /**
- * Share of a Badge's Time Pool held back to be given as Stickers.
+ * Share of a Badge's Time Pool a user may direct by hand, as Stickers.
  *
- * 🚨 **A dial, not a fact.** A third was chosen because it makes the Root budget reach two
- * $0.25 Stickers rather than one — the difference between a feature a person uses and one
- * they spend. Nothing depends on the specific value. The design lives with the work now —
- * see the Stickers task on the vault board.
+ * 🚨 **A dial, not a fact.** A third was chosen because it makes the Root allowance reach
+ * two $0.25 Stickers rather than one — the difference between a feature a person uses and
+ * one they spend. Nothing depends on the specific value.
  */
 export const STICKER_SHARE_OF_POOL = 1 / 3;
 
 /**
- * A Badge's monthly Sticker budget, in dollars.
+ * The Sticker denominations, in dollars. The same three for every creator, because
+ * Anthers designs them and a creator setting their own would make a Sticker a price.
+ */
+export const STICKER_DENOMINATIONS = [0.25, 0.5, 1] as const;
+
+export function isStickerDenomination(amount: unknown): boolean {
+	return typeof amount === "number" && STICKER_DENOMINATIONS.some((d) => d === amount);
+}
+
+/**
+ * The most of a Badge's Time Pool its holder may direct by hand in a cycle, in dollars.
  *
- * ⚠️ **Carved OUT of the Time Pool rather than added beside it**, which is what makes
- * Stickers cost Anthers nothing and take nothing from creators in aggregate: the money was
- * already on its way to creators, and unspent budget rolls back into the pool at the end of
- * the cycle. So a rung's Time Pool figure and its Sticker figure overlap by design — the
- * second is part of the first — and any surface showing both has to say so.
+ * ⭐ **A Sticker is an OVERRIDE of the Time Pool, never a second pool beside it** (Parker,
+ * 2026-09-04). Nothing is held back and nothing is returned: a user's Time Pool is
+ * distributed by time *except* for whatever they directed themselves, so a user who gives
+ * no Stickers ends the cycle exactly where they would have. That framing is why there is no
+ * rollback anywhere in this feature — there is nothing to roll back, and describing it as a
+ * separate budget that reverts was the model Parker rejected.
  *
- * A free account has none: a third of the subsidized pot buys no Sticker at any
+ * ⚠️ **So a rung's Time Pool figure and its Sticker figure OVERLAP**, the second being part
+ * of the first, and any surface showing both has to say so or the money reads as appearing
+ * twice.
+ *
+ * A free account may direct nothing: a third of the subsidized pot buys no Sticker at any
  * denomination, so the arithmetic settles this before policy has to.
  *
- * 🚨 **Stickers are DESIGNED, NOT BUILT.** There is no like primitive to attach one to.
- * This exists so the figure a marketing page quotes is derived rather than typed; it is not
- * evidence the feature ships. The public wiki's *Using Anthers → Supporting Creators →
- * Badges* marks it unbuilt in the table itself; do not write copy that implies otherwise.
+ * 🚨 **The money routing exists; the giving interface does not.** This figure is derived so
+ * that a page quoting it cannot drift from the model, and it is NOT evidence a user can give
+ * a Sticker yet. Until the interface ships, no surface may describe giving one as something
+ * a reader can go and do — the public wiki marks it unbuilt in its own table and `/subscribe`
+ * does not, which is the gap to close rather than to copy.
+ *
+ * 🚨 **The cap is evaluated when a Sticker is GIVEN and never afterwards.** A user who
+ * lowers their Badge mid-cycle can end up having directed more than this now returns, and
+ * that is correct: the money was committed at the moment of giving and Anthers does not
+ * claw a gift back out of a creator's hands. Never treat this as a figure a stored total
+ * must stay under.
  */
 export function stickerBudgetFor(anthersDollars: number): number {
 	return anthersDollars <= 0 ? 0 : timePoolFor(anthersDollars) * STICKER_SHARE_OF_POOL;

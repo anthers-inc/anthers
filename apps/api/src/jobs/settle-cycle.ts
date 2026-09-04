@@ -157,7 +157,16 @@ async function settleAccount(
 	const [distributedRow] = cycleStillOpen(acct, cycle)
 		? [undefined]
 		: await db
-				.select({ total: sql<string>`COALESCE(SUM(${poolDistributions.poolAmount}), 0)` })
+				// 🚨 **Stickers count as distributed, and leaving them out would book money a
+				// user aimed at a creator to Anthers' own remainder instead.** A Sticker is an
+				// override of the Time Pool: `distribute-pool` distributes by time only what was
+				// not directed, so the directed part is missing from `pool_amount` by design and
+				// would read as a shortfall. That is the failure this file exists to prevent,
+				// pointed the wrong way — silently cutting creator earnings while every total
+				// still adds up.
+				.select({
+					total: sql<string>`COALESCE(SUM(${poolDistributions.poolAmount} + ${poolDistributions.stickerAmount}), 0)`,
+				})
 				.from(poolDistributions)
 				.where(
 					and(

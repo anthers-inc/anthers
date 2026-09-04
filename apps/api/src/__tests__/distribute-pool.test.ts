@@ -17,6 +17,7 @@ import {
 	attentionEvents,
 	poolDistributions,
 	seedAllocations,
+	stickers,
 	users,
 } from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
@@ -422,5 +423,128 @@ describe("distributePool — the share-link slice is a ceiling, not a reservatio
 
 		const whole = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE));
 		expect((await poolPaid(userId)).get(viaLink)?.toFixed(2)).toBe(whole.mul("0.1").toFixed(2));
+	});
+});
+
+/** A Sticker this viewer directed at this creator, out of their own Time Pool. */
+async function giveSticker(
+	userId: number,
+	creatorId: number,
+	amount: number,
+	opts: { removed?: boolean } = {},
+): Promise<void> {
+	await db.insert(stickers).values({
+		giverId: userId,
+		creatorId,
+		subjectType: "work",
+		subjectId: 1,
+		billingCycle: CYCLE,
+		amount: amount.toFixed(2),
+		removedAt: opts.removed ? new Date("2031-03-20T12:00:00Z") : null,
+	});
+}
+
+async function stickerPaid(userId: number) {
+	const rows = await ledger(userId);
+	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.stickerAmount)]));
+}
+
+/**
+ * A Sticker moves money WITHIN the Time Pool, so the pool's total is the invariant.
+ *
+ * 🚨 **Every test here checks conservation rather than an individual figure.** The failure
+ * this feature can produce is not a wrong number in one column — it is money appearing or
+ * vanishing between two columns that each look right on their own, which is exactly what
+ * "the Time Pool is a fixed half of what you give" stops being able to catch once part of
+ * that half is directed by hand.
+ */
+describe("distributePool — a Sticker overrides the Time Pool rather than adding to it", () => {
+	it("🚨 pays a Sticker out of the pool, never on top of it", async () => {
+		const [a, b] = [await makeUser("c"), await makeUser("c")];
+		const { userId, accountId } = await seedCycle(12, []);
+		await watch(userId, a, 600, true);
+		await watch(userId, b, 600, true);
+		await giveSticker(userId, a, 1);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		const stuck = await stickerPaid(userId);
+		const total = [...pool.values()].reduce((s, d) => s.plus(d), new Decimal(0));
+		const directed = [...stuck.values()].reduce((s, d) => s.plus(d), new Decimal(0));
+
+		expect(directed.toFixed(2)).toBe("1.00");
+		// The whole point: time-distributed + directed == the pool it always was.
+		expect(total.plus(directed).toFixed(2)).toBe(timePoolFor(12).toFixed(2));
+		// And the creator who got the Sticker is not paid twice for it.
+		expect(total.toFixed(2)).toBe(new Decimal(timePoolFor(12)).minus(1).toFixed(2));
+	});
+
+	it("⭐ leaves a viewer who gave none exactly where they were", async () => {
+		const [a, b] = [await makeUser("c"), await makeUser("c")];
+		const { userId, accountId } = await seedCycle(12, []);
+		await watch(userId, a, 600, true);
+		await watch(userId, b, 600, true);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		const total = [...pool.values()].reduce((s, d) => s.plus(d), new Decimal(0));
+		expect(total.toFixed(2)).toBe(timePoolFor(12).toFixed(2));
+		for (const amount of (await stickerPaid(userId)).values()) {
+			expect(amount.toFixed(2)).toBe("0.00");
+		}
+	});
+
+	it("🚨 pays a Sticker the giver removed — removal is display, the money is committed", async () => {
+		// The rule that stops standing being rentable: give a Sticker, take it off the page
+		// before the cycle settles, and the creator is still paid.
+		const a = await makeUser("c");
+		const { userId, accountId } = await seedCycle(12, []);
+		await watch(userId, a, 600, true);
+		await giveSticker(userId, a, 1, { removed: true });
+
+		await distributePool({ accountId });
+
+		expect((await stickerPaid(userId)).get(a)?.toFixed(2)).toBe("1.00");
+	});
+
+	it("pays a creator the viewer never watched, if they were handed a Sticker", async () => {
+		// Without `stickerAmount` in the write guard this row is computed and dropped, and
+		// the money vanishes with it.
+		const [watched, unwatched] = [await makeUser("c"), await makeUser("c")];
+		const { userId, accountId } = await seedCycle(12, []);
+		await watch(userId, watched, 600, true);
+		await giveSticker(userId, unwatched, 0.5);
+
+		await distributePool({ accountId });
+
+		const stuck = await stickerPaid(userId);
+		expect(stuck.get(unwatched)?.toFixed(2)).toBe("0.50");
+		expect((await poolPaid(userId)).get(unwatched)?.toFixed(2)).toBe("0.00");
+	});
+
+	it("⚠️ floors at zero when more was directed than the pool now holds", async () => {
+		// The cap is checked when a Sticker is given and never again, so lowering a Badge
+		// mid-cycle can over-commit the pool. The money stays with the creators; what gives is
+		// the time-distributed remainder, which must not go negative.
+		const [a, b] = [await makeUser("c"), await makeUser("c")];
+		const { userId, accountId } = await seedCycle(3, []); // pool of $1.50
+		await watch(userId, a, 600, true);
+		await giveSticker(userId, b, 1);
+		await giveSticker(userId, b, 1);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		for (const amount of pool.values()) expect(amount.gte(0)).toBe(true);
+		// The creators keep the over-committed money.
+		expect((await stickerPaid(userId)).get(b)?.toFixed(2)).toBe("2.00");
+		// And nothing is left to distribute by time. ⚠️ The watched creator gets no row at
+		// all rather than a zero one — the write guard drops a creator who earned nothing,
+		// which is pre-existing behavior and is why this asserts the total rather than a cell.
+		const byTime = [...pool.values()].reduce((s, d) => s.plus(d), new Decimal(0));
+		expect(byTime.toFixed(2)).toBe("0.00");
+		expect(pool.has(a)).toBe(false);
 	});
 });
