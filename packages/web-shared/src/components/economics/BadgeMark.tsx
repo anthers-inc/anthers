@@ -12,6 +12,14 @@
  * nothing here.** They are decorative assets other surfaces may use; a Badge does not wear
  * one, and reaching for them to "frame" a badge is how this grows a second outline again.
  *
+ * ⭐ **The foreground is placed by the shape's own boxes rather than by a fixed fraction of
+ * the badge.** `emblemBox` is the largest square that clears the edging and `artBox` is the
+ * roomier one an upload gets for being cropped to the silhouette, both stated in the same
+ * 0-100 viewBox units as the paths — so a triangle's emblem lands low and small while a
+ * circle's fills the field, and every foreground scales with the badge from a chip to a
+ * patch. Adding a shape means measuring it once in `@anthers/shared/badge-art`; nothing
+ * here needs to know which shape it is drawing.
+ *
  * ⭐ **Anthers' Root/Sprout/Petal/Blossom render through here too, and that is the point.**
  * The symmetry between the two ladders is most of why the support model reads cleanly, and
  * the strongest way to keep two things looking like one kind of object is for them to be one
@@ -20,9 +28,29 @@
  */
 
 import type { BrandIconName } from "@anthers/brand";
-import { BADGE_EDGE, BADGE_EDGE_WIDTH, badgeColor, badgeShape } from "@anthers/shared/badge-art";
+import {
+	BADGE_EDGE,
+	BADGE_EDGE_WIDTH,
+	badgeBoxStyle,
+	badgeColor,
+	badgeShape,
+} from "@anthers/shared/badge-art";
 import type { ReactNode } from "react";
 import { BrandGlyph } from "../decor/BrandGlyph";
+
+/**
+ * What to multiply `emblemBox.size` by to get an emoji's font-size.
+ *
+ * ⚠️ **An emoji draws WIDER than its font-size, so the box size cannot be used directly.**
+ * Measured in Chromium: every emoji in the ladder renders 1.25× its font-size across and
+ * 1.18× down, so 0.8 is the factor that lands the glyph exactly on the box's width — the
+ * binding dimension. Without it the glyph runs a quarter of its width into the stitching.
+ *
+ * The exact ratio is a property of whichever emoji font the viewer has, and the ones in
+ * circulation sit between about 1.16 and 1.25 — so this errs a little small on macOS rather
+ * than colliding with the edging anywhere.
+ */
+const EMOJI_FONT_SIZE = 0.8;
 
 export function BadgeMark({
 	shape,
@@ -58,6 +86,13 @@ export function BadgeMark({
 	const s = badgeShape(shape);
 	const c = badgeColor(color);
 
+	// One foreground, and an upload wins because it is the creator's own art. The emblem is
+	// the fallback the ladder editor always supplies, so testing it last is what keeps a
+	// creator's upload from being drawn under their default.
+	const showImage = Boolean(imageSrc);
+	const showEmoji = !showImage && Boolean(emoji);
+	const showEmblem = !showImage && !showEmoji && Boolean(emblem);
+
 	return (
 		<span
 			className={`relative flex ${size} shrink-0 items-center justify-center ${dim ? "opacity-45" : ""}`}
@@ -91,29 +126,50 @@ export function BadgeMark({
 						strokeLinejoin="round"
 					/>
 				</g>
+				{/* ⭐ Anthers' emoji is drawn INSIDE the SVG, in the same viewBox units as the
+				    shape and its box. That is the only way a glyph scales with the badge: a
+				    `font-size` given as a percentage is a share of the inherited font, so an
+				    emoji laid over the badge as HTML text drew at one fixed size forever. In
+				    viewBox units the number means what it says.
+				    ⚠️ `fill` matters only when the emoji font is missing, which is the state a
+				    bare Linux CI container is in — it keeps the fallback glyph readable rather
+				    than black on a dark field. */}
+				{showEmoji ? (
+					<text
+						x={s.emblemBox.x + s.emblemBox.size / 2}
+						y={s.emblemBox.y + s.emblemBox.size / 2}
+						textAnchor="middle"
+						dominantBaseline="central"
+						fontSize={s.emblemBox.size * EMOJI_FONT_SIZE}
+						fill={c.on}
+					>
+						{emoji}
+					</text>
+				) : null}
 			</svg>
 
-			{imageSrc ? (
+			{showImage ? (
 				// Sits ON the field with the edging showing all round it, the way artwork is
 				// sewn onto a patch rather than printed to its edge — and cropped by the same
-				// shape, so a rectangular upload takes the badge's outline.
+				// shape, so a rectangular upload takes the badge's outline. `artBox` is the
+				// roomier of the two boxes precisely because of that cropping.
 				<img
-					src={imageSrc}
+					src={imageSrc ?? undefined}
 					alt=""
 					aria-hidden="true"
 					onError={onImageError}
-					className="absolute inset-[17%] h-[66%] w-[66%] object-cover"
-					style={{ clipPath: `url(#${clipId})` }}
+					className="absolute object-cover"
+					style={{ ...badgeBoxStyle(s.artBox), clipPath: `url(#${clipId})` }}
 				/>
-			) : emoji ? (
-				<span aria-hidden="true" className="relative text-[46%] leading-none">
-					{emoji}
-				</span>
-			) : emblem ? (
+			) : showEmblem ? (
+				// `.brand-glyph` masks at `mask-size: contain`, so the emblem fits itself into
+				// the box on its own longest side and keeps its proportions. That is what lets
+				// an emblem of any aspect — ours or one a creator picks later — drop into this
+				// without a per-emblem correction.
 				<BrandGlyph
 					name={emblem as BrandIconName}
-					className="relative h-[48%] w-[48%]"
-					style={{ color: c.on }}
+					className="absolute"
+					style={{ ...badgeBoxStyle(s.emblemBox), color: c.on }}
 				/>
 			) : null}
 		</span>

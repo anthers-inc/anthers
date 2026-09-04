@@ -18,6 +18,7 @@ import {
 	BADGE_COLORS,
 	BADGE_EMBLEMS,
 	BADGE_SHAPES,
+	badgeBoxStyle,
 	badgeColor,
 	badgeShape,
 	DEFAULT_BADGE_COLOR,
@@ -42,6 +43,50 @@ describe("the badge library", () => {
 		for (const shape of BADGE_SHAPES) {
 			expect(shape.path, shape.id).toMatch(/^M/);
 			expect(shape.path.length, shape.id).toBeGreaterThan(20);
+		}
+	});
+
+	it("🚨 gives every shape both foreground boxes, inside the badge", () => {
+		// A box that runs outside the viewBox puts art under the edging or off the badge, and
+		// the only thing that would say so is somebody looking at it.
+		for (const shape of BADGE_SHAPES) {
+			for (const [which, box] of [
+				["emblemBox", shape.emblemBox],
+				["artBox", shape.artBox],
+			] as const) {
+				const where = `${shape.id}.${which}`;
+				expect(box.size, where).toBeGreaterThan(0);
+				expect(box.x, where).toBeGreaterThanOrEqual(0);
+				expect(box.y, where).toBeGreaterThanOrEqual(0);
+				expect(box.x + box.size, where).toBeLessThanOrEqual(100);
+				expect(box.y + box.size, where).toBeLessThanOrEqual(100);
+			}
+			// An upload wears the badge's silhouette, so it always gets at least the room an
+			// uncropped drawing does. The reverse would mean a photo drawn smaller than a line
+			// emblem, which reads as two different objects rather than one badge.
+			expect(shape.artBox.size, shape.id).toBeGreaterThanOrEqual(shape.emblemBox.size);
+		}
+	});
+
+	it("⭐ sizes no emblem larger than the circle's, so a mixed ladder reads as a set", () => {
+		// A rounded square could hold an emblem nearer 64 and a triangle only 32. Letting each
+		// take what it could hold would make the rungs look mismatched rather than varied,
+		// which is the same reasoning that keeps the edging a constant.
+		const circle = badgeShape("circle").emblemBox.size;
+		for (const shape of BADGE_SHAPES) {
+			expect(shape.emblemBox.size, shape.id).toBeLessThanOrEqual(circle);
+		}
+	});
+
+	it("🚨 states a foreground's position as a share of the badge, never as a length", () => {
+		// The whole defect this replaced, in one assertion. `font-size: 46%` is a share of the
+		// inherited font rather than of the badge, so Anthers' emoji rungs drew at about seven
+		// pixels on a ninety-six pixel patch and did not grow with it. Anything here carrying a
+		// unit is measured against something that is not the badge.
+		for (const shape of BADGE_SHAPES) {
+			for (const value of Object.values(badgeBoxStyle(shape.emblemBox))) {
+				expect(value, shape.id).toMatch(/^-?[\d.]+%$/);
+			}
 		}
 	});
 
