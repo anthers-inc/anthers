@@ -16,6 +16,7 @@ import type { Comment } from "@anthers/web-shared/types";
 import { FlagIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import ReportDialog from "../ui/ReportDialog";
+import ReactionControl from "./ReactionControl";
 
 interface CommentThreadProps {
 	subject: { kind: "post"; slug: string } | { kind: "work"; id: number };
@@ -103,42 +104,12 @@ export default function CommentThread({ subject, canComment = true }: CommentThr
 			) : (
 				<div className="flex flex-col gap-4">
 					{comments.map((comment) => (
-						<div key={comment.id} className="flex gap-3">
-							{comment.avatar ? (
-								<img
-									src={comment.avatar}
-									alt={comment.username}
-									className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-								/>
-							) : (
-								<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-									{comment.username.charAt(0).toUpperCase()}
-								</div>
-							)}
-							<div className="flex-1">
-								<div className="flex items-center gap-2 text-sm">
-									<span className="font-medium">{comment.username}</span>
-									<span className="text-base-content/40 text-xs">
-										{new Date(comment.createdAt).toLocaleDateString()}
-									</span>
-									{/* Reporting needs a session — there's nobody to hold accountable for
-									    an anonymous report, and the one-per-person rule that keeps the
-									    queue honest needs a person to count. */}
-									{isAuthenticated && (
-										<button
-											type="button"
-											className="ml-auto text-base-content/30 hover:text-base-content/70"
-											onClick={() => setReporting(comment.id)}
-											title="Report this comment"
-											aria-label={`Report ${comment.username}'s comment`}
-										>
-											<FlagIcon className="w-3.5 h-3.5" />
-										</button>
-									)}
-								</div>
-								<p className="text-sm mt-1">{comment.body}</p>
-							</div>
-						</div>
+						<CommentRow
+							key={comment.id}
+							comment={comment}
+							isAuthenticated={isAuthenticated}
+							onReport={() => setReporting(comment.id)}
+						/>
 					))}
 				</div>
 			)}
@@ -151,6 +122,97 @@ export default function CommentThread({ subject, canComment = true }: CommentThr
 					onClose={() => setReporting(null)}
 				/>
 			)}
+		</div>
+	);
+}
+
+/**
+ * One comment, which may be folded.
+ *
+ * 🚨 **Collapsed is neither hidden nor deleted, and it must not be drawn like either.** A
+ * moderation removal never reaches the browser at all, and a tombstone is an author who
+ * left. This is a comment readers pushed below the threshold: it is still here, it says why
+ * it is folded, and anyone can open it. Drawing it like a removal would have Anthers telling
+ * people a moderator acted when the crowd did.
+ *
+ * ⭐ **Opening it is per-reader and not remembered.** Unfolding is a decision about this
+ * comment right now, not a setting — and a "show me collapsed comments" preference is a
+ * different feature with a different argument behind it.
+ */
+function CommentRow({
+	comment,
+	isAuthenticated,
+	onReport,
+}: {
+	comment: Comment;
+	isAuthenticated: boolean;
+	onReport: () => void;
+}) {
+	const [collapsed, setCollapsed] = useState(comment.collapsed);
+
+	if (collapsed) {
+		return (
+			<div className="flex items-center gap-2 text-sm text-base-content/45">
+				<button
+					type="button"
+					className="link link-hover"
+					onClick={() => setCollapsed(false)}
+					aria-expanded={false}
+				>
+					Show comment
+				</button>
+				{/* Says who did it. "Heavily disliked" is the crowd; a moderator would not be
+				    mentioned here at all, because a removed comment never arrives. */}
+				<span className="text-xs">collapsed — heavily disliked ({comment.username})</span>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex gap-3">
+			{comment.avatar ? (
+				<img
+					src={comment.avatar}
+					alt={comment.username}
+					className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+				/>
+			) : (
+				<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+					{comment.username.charAt(0).toUpperCase()}
+				</div>
+			)}
+			<div className="flex-1">
+				<div className="flex items-center gap-2 text-sm">
+					<span className="font-medium">{comment.username}</span>
+					<span className="text-base-content/40 text-xs">
+						{new Date(comment.createdAt).toLocaleDateString()}
+					</span>
+					{/* Reporting needs a session — there's nobody to hold accountable for an
+					    anonymous report, and the one-per-person rule that keeps the queue
+					    honest needs a person to count. */}
+					{isAuthenticated && (
+						<button
+							type="button"
+							className="ml-auto text-base-content/30 hover:text-base-content/70"
+							onClick={onReport}
+							title="Report this comment"
+							aria-label={`Report ${comment.username}'s comment`}
+						>
+							<FlagIcon className="w-3.5 h-3.5" />
+						</button>
+					)}
+				</div>
+				<p className="text-sm mt-1">{comment.body}</p>
+				<div className="mt-1.5">
+					<ReactionControl
+						subjectType="comment"
+						subjectId={comment.id}
+						score={comment.score}
+						viewerReaction={comment.viewerReaction}
+						label={`${comment.username}'s comment`}
+					/>
+				</div>
+			</div>
 		</div>
 	);
 }

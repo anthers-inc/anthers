@@ -495,6 +495,26 @@ export interface Comment {
 	createdAt: string;
 	username: string;
 	avatar: string | null;
+	/**
+	 * The published score: likes minus dislikes, floored at zero.
+	 *
+	 * 🚨 **The raw counts are not sent and must not be reconstructed here.** One number is
+	 * the whole contract — a dislike does visible work by pulling this down, and a pile-on
+	 * gets no counter to run up. It is also the ranking key, so what a reader sees is what
+	 * ordered the thread.
+	 */
+	score: number;
+	/**
+	 * Pushed below the collapse threshold by readers.
+	 *
+	 * ⚠️ **A third state, and never to be drawn like the other two.** A moderation removal
+	 * never reaches the client at all, and a tombstone is an author who deleted their
+	 * account. This comment is here, readable, and folded — the crowd did it, not a
+	 * moderator, and the UI has to say so.
+	 */
+	collapsed: boolean;
+	/** What this viewer did: `1`, `-1`, or nothing yet. */
+	viewerReaction: 1 | -1 | null;
 }
 
 /** One written review: a score plus the words that justify it. */

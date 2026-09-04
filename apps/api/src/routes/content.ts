@@ -37,6 +37,7 @@ import {
 	projects,
 	purchases,
 	ratings,
+	reactions,
 	stripeAccounts,
 	transcodingJobs,
 	users,
@@ -64,6 +65,15 @@ import {
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
+import {
+	commentScore,
+	isCollapsed,
+	isReactionValue,
+	REACTION_MAX_PER_WINDOW,
+	REACTION_WINDOW_MS,
+	type ReactionTally,
+	type ReactionValue,
+} from "@anthers/shared/reactions";
 import { zValidator } from "@hono/zod-validator";
 import {
 	and,
@@ -149,6 +159,145 @@ const visibleComment = eq(comments.moderationStatus, "visible");
 const visibleRating = eq(ratings.moderationStatus, "visible");
 
 /**
+ * A per-account cap on how fast reactions can be cast.
+ *
+ * ⚠️ **Best-effort, in-memory and per-instance, exactly as the abuse-report cap is.** What
+ * it buys is that one scripted account cannot walk a whole thread in a second. 🚨 **It does
+ * nothing about the threat that actually matters** — many accounts arriving together — and
+ * saying so is better than a number that implies brigading was handled. The unique index
+ * bounds one person on one item; the collapse threshold is the only place a coordinated
+ * group can do lasting damage, and that is where the defense has to get real.
+ *
+ * It fails CLOSED, unlike the abuse-report cap: the cost of dropping a like is nothing, and
+ * this route is authenticated so there is always a key.
+ */
+const REACTION_CAPS = new Map<number, number[]>();
+
+function tooManyReactionsFrom(userId: number): boolean {
+	const now = Date.now();
+	const recent = (REACTION_CAPS.get(userId) ?? []).filter((at) => now - at < REACTION_WINDOW_MS);
+	if (recent.length >= REACTION_MAX_PER_WINDOW) {
+		REACTION_CAPS.set(userId, recent);
+		return true;
+	}
+	recent.push(now);
+	REACTION_CAPS.set(userId, recent);
+	// Bounded, so a long-running process cannot keep a key per account ever seen. Dropping
+	// the map only ever forgives.
+	if (REACTION_CAPS.size > 5000) {
+		for (const [key, at] of REACTION_CAPS) {
+			if (at.length === 0 || now - at[at.length - 1] > REACTION_WINDOW_MS)
+				REACTION_CAPS.delete(key);
+		}
+	}
+	return false;
+}
+
+/**
+ * Whether there is something there to react to.
+ *
+ * ⚠️ **A hidden comment is not reactable**, because a reader cannot see it — accepting a
+ * reaction on one would let a caller both discover that it exists and move a score nobody
+ * can read. Moderation state is checked here for the same reason every public read checks
+ * it, and forgetting it is the quiet version of the same bug.
+ */
+async function reactableExists(subjectType: ReactionSubject, subjectId: number): Promise<boolean> {
+	if (subjectType === "comment") {
+		const [row] = await db
+			.select({ id: comments.id })
+			.from(comments)
+			.where(and(eq(comments.id, subjectId), visibleComment))
+			.limit(1);
+		return Boolean(row);
+	}
+	if (subjectType === "post") {
+		const [row] = await db
+			.select({ id: posts.id })
+			.from(posts)
+			.where(eq(posts.id, subjectId))
+			.limit(1);
+		return Boolean(row);
+	}
+	const [row] = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(eq(works.id, subjectId))
+		.limit(1);
+	return Boolean(row);
+}
+
+/** What a reaction may be attached to. Mirrors `comments`, plus comments themselves. */
+const REACTION_SUBJECTS = ["work", "post", "comment"] as const;
+type ReactionSubject = (typeof REACTION_SUBJECTS)[number];
+
+const NO_REACTIONS: ReactionTally = { likes: 0, dislikes: 0 };
+
+const reactionTargetSchema = z.object({
+	subjectType: z.enum(REACTION_SUBJECTS),
+	subjectId: z.number().int().positive(),
+});
+/** Query params arrive as strings, so the id is coerced rather than rejected. */
+const reactionQuerySchema = z.object({
+	subjectType: z.enum(REACTION_SUBJECTS),
+	subjectId: z.coerce.number().int().positive(),
+});
+const reactionSchema = reactionTargetSchema.extend({
+	value: z.number().refine(isReactionValue, "A reaction is +1 or -1"),
+});
+
+/**
+ * The like and dislike totals for a set of subjects, plus the viewer's own reaction.
+ *
+ * ⭐ **Aggregated on read rather than kept in a counter column.** A denormalized count is
+ * two writes that can disagree, and the disagreement is invisible — a score drifting from
+ * its rows looks exactly like a score. At the size of one thread this is a grouped scan of
+ * an indexed table, and the moment that stops being true is the moment to add a counter
+ * *and* something that checks it.
+ *
+ * ⚠️ **A tally is absent, not zero, when nobody has reacted.** Callers use `NO_REACTIONS`,
+ * so a subject nobody touched and a subject whose reactions all canceled read the same —
+ * which is correct, because the published score of both is 0.
+ */
+async function reactionTallies(
+	subjectType: ReactionSubject,
+	subjectIds: number[],
+	viewerId: number | null,
+): Promise<{ tallies: Map<number, ReactionTally>; mine: Map<number, ReactionValue> }> {
+	const tallies = new Map<number, ReactionTally>();
+	const mine = new Map<number, ReactionValue>();
+	if (subjectIds.length === 0) return { tallies, mine };
+
+	const scope = and(
+		eq(reactions.subjectType, subjectType),
+		inArray(reactions.subjectId, subjectIds),
+	);
+
+	const rows = await db
+		.select({
+			subjectId: reactions.subjectId,
+			likes: sql<number>`count(*) filter (where ${reactions.value} = 1)`.mapWith(Number),
+			dislikes: sql<number>`count(*) filter (where ${reactions.value} = -1)`.mapWith(Number),
+		})
+		.from(reactions)
+		.where(scope)
+		.groupBy(reactions.subjectId);
+	for (const r of rows) tallies.set(r.subjectId, { likes: r.likes, dislikes: r.dislikes });
+
+	// A signed-out reader has no reaction to show, and asking for one costs a query that
+	// can only come back empty.
+	if (viewerId !== null) {
+		const own = await db
+			.select({ subjectId: reactions.subjectId, value: reactions.value })
+			.from(reactions)
+			.where(and(scope, eq(reactions.userId, viewerId)));
+		for (const r of own) {
+			if (isReactionValue(r.value)) mine.set(r.subjectId, r.value);
+		}
+	}
+	return { tallies, mine };
+}
+
+/**
  * A subject's visible comments, newest first.
  *
  * One function for both subject types — the Post thread and the Work thread differ only in
@@ -181,15 +330,55 @@ async function listComments(
 			),
 		)
 		.orderBy(desc(comments.createdAt));
-	return rows.map((r) => ({
-		...r.comment,
-		username: r.username,
-		avatar: r.avatar,
-		// 🚨 Says only WHO, never WHY. A moderation removal is `moderation_status` and
-		// never reaches here at all; this flag means the author left. Conflating the two
-		// would have us telling readers a user deleted something they didn't.
-		deletedByAuthor: r.comment.userId === null,
-	}));
+
+	const { tallies, mine } = await reactionTallies(
+		"comment",
+		rows.map((r) => r.comment.id),
+		viewerId,
+	);
+
+	const scored = rows.map((r) => {
+		const tally = tallies.get(r.comment.id) ?? NO_REACTIONS;
+		return {
+			...r.comment,
+			username: r.username,
+			avatar: r.avatar,
+			// 🚨 Says only WHO, never WHY. A moderation removal is `moderation_status` and
+			// never reaches here at all; this flag means the author left. Conflating the two
+			// would have us telling readers a user deleted something they didn't.
+			deletedByAuthor: r.comment.userId === null,
+			/**
+			 * The published score, floored at zero — and the only ranking key.
+			 *
+			 * 🚨 The raw counts are deliberately NOT sent. Publishing them would hand a
+			 * pile-on the dislike counter the floor exists to withhold, and the client has no
+			 * use for them: everything it draws and everything that decides the order is this
+			 * one number plus `collapsed`.
+			 */
+			score: commentScore(tally),
+			/**
+			 * ⚠️ A THIRD state, and it is neither of the other two. Moderation-hidden
+			 * comments never leave the server; `deletedByAuthor` is an author who left. This
+			 * one is still here, still readable, and folded because readers pushed it down.
+			 */
+			collapsed: isCollapsed(tally),
+			/** What this viewer did, so the control can show itself as pressed. */
+			viewerReaction: mine.get(r.comment.id) ?? null,
+		};
+	});
+
+	/**
+	 * ⭐ **Sorted by the number on screen, then by recency.**
+	 *
+	 * Sorting on the true net instead would order two comments that both display `0` by a
+	 * difference nobody can see, which is the invisible ranking Parker ruled out on
+	 * 2026-09-04. Below zero every comment ties here and falls back to recency; what
+	 * separates a merely unpopular one from a buried one is `collapsed`, which is visible.
+	 *
+	 * ⚠️ Sorted in memory on purpose. One thread is small, and doing it here keeps the
+	 * ordering rule in the same place as the score it reads rather than half in SQL.
+	 */
+	return scored.sort((a, b) => b.score - a.score || b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 function estimateReadMinutes(text: string): number {
@@ -2163,6 +2352,98 @@ const contentRoutes = new Hono()
 			.returning();
 
 		return c.json({ comment: { ...comment, username: user.username } }, 201);
+	})
+
+	// ── Reactions (Works, posts and comments) ──────────────────────────────────
+	//
+	// One like or one dislike per person per thing. The published score is the net floored
+	// at zero and it is also the ranking key — see `@anthers/shared/reactions` for why those
+	// have to be the same number.
+	//
+	// 🚨 **Access is deliberately NOT required.** A Sticker rides a like and may be given on
+	// any Work "gated or not, purchased or not", because it is a gift to the creator rather
+	// than payment for the Work — so requiring access to like would make the Sticker rule
+	// unbuildable. This differs from commenting, which does require access, and the reason
+	// is that a comment is a claim about content you have seen.
+
+	/**
+	 * The reaction state of one subject.
+	 *
+	 * ⭐ **A separate read rather than a field on the Work and post payloads.** Those
+	 * responses come back through `serializeWork` down several branches — owner, preview,
+	 * gated viewer — and threading a score through every one of them would put the same
+	 * three lines in four places for a control that can ask for itself. A comment thread
+	 * still gets its scores inline, because the list already fetches them in one grouped
+	 * query and a request per comment would not be a trade at all.
+	 */
+	.get("/reactions", zValidator("query", reactionQuerySchema), async (c) => {
+		const { subjectType, subjectId } = c.req.valid("query");
+		const viewerId = await getOptionalUserId(c);
+		const { tallies, mine } = await reactionTallies(subjectType, [subjectId], viewerId);
+		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		return c.json({
+			score: commentScore(tally),
+			collapsed: isCollapsed(tally),
+			viewerReaction: mine.get(subjectId) ?? null,
+		});
+	})
+
+	.put("/reactions", requireAuth, zValidator("json", reactionSchema), async (c) => {
+		const user = c.get("user");
+		if (tooManyReactionsFrom(user.id)) {
+			return c.json(
+				{
+					error: "That is a lot of reactions very quickly. Try again shortly.",
+					code: "rate_limited",
+				},
+				429,
+			);
+		}
+
+		const { subjectType, subjectId, value } = c.req.valid("json");
+		if (!(await reactableExists(subjectType, subjectId))) {
+			return c.json({ error: "Nothing to react to" }, 404);
+		}
+
+		// Changing a like to a dislike UPDATES the one row. Inserting a second would let
+		// both count, which is the unique index's whole job and is worth doing in one
+		// statement so there is no window where neither or both exist.
+		await db
+			.insert(reactions)
+			.values({ userId: user.id, subjectType, subjectId, value })
+			.onConflictDoUpdate({
+				target: [reactions.userId, reactions.subjectType, reactions.subjectId],
+				set: { value },
+			});
+
+		const { tallies } = await reactionTallies(subjectType, [subjectId], null);
+		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		return c.json({
+			score: commentScore(tally),
+			collapsed: isCollapsed(tally),
+			viewerReaction: value,
+		});
+	})
+
+	.delete("/reactions", requireAuth, zValidator("json", reactionTargetSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId } = c.req.valid("json");
+		await db
+			.delete(reactions)
+			.where(
+				and(
+					eq(reactions.userId, user.id),
+					eq(reactions.subjectType, subjectType),
+					eq(reactions.subjectId, subjectId),
+				),
+			);
+		const { tallies } = await reactionTallies(subjectType, [subjectId], null);
+		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		return c.json({
+			score: commentScore(tally),
+			collapsed: isCollapsed(tally),
+			viewerReaction: null,
+		});
 	})
 
 	// ── Reviews (Works only) ───────────────────────────────────────────────────
