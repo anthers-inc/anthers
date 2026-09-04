@@ -3,9 +3,11 @@
 The Anthers brand assets that **ship**: the first-party marks and lockups, and recolor-ready icon markup generated from the icon library. Consumed by every surface — the web SPA, the desktop shell, and anything later.
 
 ```
-marks/        First-party Anthers identity — SVG masters, lockups, raster exports
-src/          The public API + generated icon markup
-scripts/      The codegen
+marks/            First-party Anthers identity — SVG masters, lockups, raster exports
+src/              The public API + generated icon markup
+scripts/          The codegen
+icons.json        The curated set — authored, and what the codegen reads
+provenance.json   Who drew each icon and under what license — generated from the API
 ```
 
 
@@ -20,14 +22,36 @@ It now lives in a **private** repository alongside the layered design working fi
 
 # Adding an icon
 
-🚨 **The codegen runs at AUTHORING time and must never become a build-time fetch.** `src/generated/icons.ts` is committed precisely so the app builds with no credentials, no network call and no access to the private library — verified byte-identical, and the reason a fork of this repository is genuinely buildable. Sourcing art through the Noun Project API is planned (the vault task *Source brand iconography through the Noun Project API*) and it lands as `brand:search` / `brand:add`: **scripts a person runs and commits the output of**, exactly as this codegen already is. Wiring a fetch into `bun run build` would put a vendor key on the deploy path for artwork that changes twice a year, cost an API call per asset on every cold build, and give away the property this whole split was made to keep.
+🚨 **The codegen runs at AUTHORING time and must never become a build-time fetch.** `src/generated/icons.ts` is committed precisely so the app builds with no credentials, no network call and no access to the private library — verified byte-identical, and the reason a fork of this repository is genuinely buildable. `brand:search` and `brand:add` are **scripts a person runs and commits the output of**, exactly as this codegen is. Wiring a fetch into `bun run build` would put a vendor key on the deploy path for artwork that changes twice a year, cost an API call per asset on every cold build, and give away the property this whole split was made to keep. `scripts/noun/authoring-time.test.ts` fails if the credential's name ever appears anywhere but `scripts/`.
 
-⚠️ **Do not recolor at the source.** `normalize()` strips baked fills so one injected color controls each icon, and every consumer recolors from the design tokens — so a palette change re-downloads nothing, and must not start to. The Noun Project API will hand you a pre-colored file if you ask it to; don't.
+⚠️ **Do not recolor at the source.** `normalize()` strips baked fills so one injected color controls each icon, and every consumer recolors from the design tokens — so a palette change re-downloads nothing, and must not start to. The Noun Project API will hand you a pre-colored file if you ask it to; the client refuses to pass the parameter.
+
+**From the terminal, against the whole library.** Nearly ten million icons, with style matching, and the credential comes from the "Anthers Dev" Bitwarden project without your having to export anything:
+
+```sh
+bun run brand:search "wildflower" --style solid    # ids, terms, creators, licenses, permalinks
+bun run brand:search --like 7595393               # icons drawn in the same hand — build a set
+bun run brand:add 7595393 --as bloom-cluster --why "reads at small size"
+```
+
+`brand:add` puts the SVG in the private library, registers it in `icons.json`, regenerates `src/generated/icons.ts`, and rewrites the attribution table in `THIRD-PARTY.md` from the API's own `creator`, `permalink` and `license_description` fields. `--dry-run` shows you the art's provenance and its destination without writing anything, and `--group <name>` files it somewhere other than `nature/`.
+
+🚨 **The API will not hand over the file on the current plan, so download it yourself and pass `--file`.** It is a catch-22 rather than a wrong parameter: `/v2/icon/<id>/download` answers `400 Must provide a hexadecimal color value` without `color`, and `403 You are not authorized to edit this icon` with it — for SVG and PNG alike, and for an icon whose file this library already holds. So take the SVG from the icon's permalink under the NounPro subscription, as **single-color black**, and hand it over:
+
+```sh
+bun run brand:add 8040550 --as bloom-outline --file ~/Downloads/noun-wildflower-8040550.svg
+```
+
+That still automates six of the seven steps and costs one icon call for the metadata. Nothing here changes on the day the plan allows downloads — drop `--file` and the same command fetches the file itself.
+
+**By hand, from art already in the library**, when there is nothing to fetch:
 
 1. Check out the icon library beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`. ⚠️ **That library is private, so this step is Anthers-internal** — an outside contributor cannot re-run the codegen, and does not need to: `src/generated/icons.ts` is committed and complete, and the app builds identically without the source.
 2. Find the art. Its `preview/` holds per-collection contact sheets — the filenames are Noun Project `noun-<type>-<id>` and are not individually descriptive, so browse visually. If you're adding *new* art, download it as **SVG, single-color black**; multi-color art can't recolor from one value.
-3. Add `{ id, path }` to `CURATED` in `scripts/build-icons.ts`, with the path relative to the library's `svg/`.
-4. `cd packages/brand && bun run build`, and commit the regenerated `src/generated/icons.ts`.
+3. Add `{ id, nounId, path, why }` to `icons.json`, with the path relative to the library's `svg/`.
+4. `cd packages/brand && bun run build`, then `bun run brand:add --backfill` from the repo root to fetch the provenance the attribution needs, and commit both generated files.
+
+⚠️ **A hand-added icon fails `brand:attribution --check` until its provenance is fetched**, which is the point: the credit is a license condition, and an icon nobody can attribute is one this repository may not redistribute.
 
 The codegen strips XML noise, `<title>`/`<metadata>`, and baked-in solid fills so the consumer controls the color. (`fill="none"` is preserved, so stroke-only art passes through — but it won't recolor from a single value.)
 

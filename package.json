@@ -37,7 +37,12 @@
 		"db:gauntlet:media": "bun run apps/api/src/scripts/seed-gauntlet-media.ts",
 		"db:media-fixture": "bun run apps/api/src/scripts/seed-media-fixture.ts",
 		"db:gauntlet:state": "bun run packages/db/src/gauntlet-state.ts",
-		"econ:figures": "bun run scripts/econ-figures.ts"
+		"econ:figures": "bun run scripts/econ-figures.ts",
+		"brand:build": "bun run --filter @anthers/brand build",
+		"brand:search": "bun run scripts/brand-search.ts",
+		"brand:add": "bun run scripts/brand-add.ts",
+		"brand:usage": "bun run scripts/brand-usage.ts",
+		"brand:attribution": "bun run scripts/brand-attribution.ts"
 	},
 	"devDependencies": {
 		"@atproto/lex": "0.3.6",

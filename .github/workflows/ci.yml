@@ -177,6 +177,14 @@ jobs:
       - name: Lexicon types are in sync
         run: bun run lex:check
 
+      # Third-party icon artwork is redistributed from this repository under CC BY 3.0,
+      # so the credit is a license condition rather than a courtesy. This fails if a
+      # curated icon has no provenance, if one carries a license nobody has established
+      # we may redistribute under, or if the attribution table has drifted from either.
+      # It needs no API key: both files it reads are committed.
+      - name: Icon attribution is in sync
+        run: bun run brand:attribution --check
+
       # A hand-written migration that skips drizzle's snapshot makes its view of the
       # schema permanently stale, and the symptom is a rename prompt that reads like an
       # ordinary question. Nothing else can see it: typecheck passes, tests pass, and the
