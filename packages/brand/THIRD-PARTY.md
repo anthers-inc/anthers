@@ -42,6 +42,12 @@ Two scoping notes, because both are easy to get backwards:
 - **The "Restricted Activities" list is about Photos, not Icons.** The Terms' prohibitions on redistributing images in templates, on using them in logos, and on redistributing an unaltered image as your own artwork are defined "for purposes of this Section 3(B)" — the Photos section. We use no Noun Project photos.
 - ⚠️ **Using this art in a trademark is a separate question from redistributing it, and it is not settled here.** CC BY 3.0 grants copyright permissions and expressly grants no trademark rights. The interim Anthers mark was traced from Noun Project source art, which is fine as *use* and is a real question as *a mark to claim exclusively*. The commissioned replacement noted below is the clean answer; until then, do not file on the interim mark without asking counsel.
 
+### What this file does not cover
+
+**This is the attribution for what the REPOSITORY redistributes** — the derived markup in `src/generated/icons.ts`. Creator Badge emblems are a separate population: a creator chooses one at runtime from the Noun Project library, and its artist is credited **in the product, beside that Badge**, from the `creator` and `permalink` the API returns with the icon. Those never enter this repository and must not be listed here, because the set is unbounded and changes without a commit.
+
+The reasoning is the same one this file already rests on. The attribution belongs where the redistribution happens; for the eighteen that is here, and for a creator's Badge that is the page the Badge appears on.
+
 ## Anthers marks (`marks/`)
 
 First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources live in a **private** repository rather than here, because that repository mixes Anthers' own working files with licensed third-party art and is not ours to publish as a whole.
