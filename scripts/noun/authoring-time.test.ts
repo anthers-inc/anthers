@@ -121,3 +121,38 @@ describe("the fork property", () => {
 		}).toEqual({ inlinesGeometry: true, resolvesAtRuntime: false });
 	});
 });
+
+describe("no authoring script writes an SVG the API handed over", () => {
+	/**
+	 * 🚨 **The key-creation flow required agreeing that the app will not cache SVG
+	 * files** (Parker, 2026-09-04) — a term in neither the published Terms of Use nor
+	 * the API documentation. Writing an API-fetched SVG into the private library is the
+	 * clearest instance of it, so `brand:add` takes the file from `--file` and the
+	 * subscription supplies it.
+	 *
+	 * ⚠️ **This is a test because the violation reintroduces itself.** The download
+	 * endpoint also refuses us today (`403 You are not authorized to edit this icon`),
+	 * so a reader meeting only that reads a plan limitation and writes a fallback for
+	 * the day it lifts — which is what the first version of `brand-add.ts` did, in as
+	 * many words. A latent breach that switches itself on when somebody upgrades a plan
+	 * for unrelated reasons is worse than one that never worked at all.
+	 */
+	it("🚨 keeps downloadSvg out of every script that writes to the library", () => {
+		for (const p of scan("scripts/**/*.ts")) {
+			if (p.endsWith(".test.ts") || p === "scripts/noun/client.ts") continue;
+			const source = read(p);
+			expect({
+				p,
+				fetchesAndWrites: /downloadSvg/.test(source) && /writeFileSync/.test(source),
+			}).toEqual({ p, fetchesAndWrites: false });
+		}
+	});
+
+	it("requires --file rather than falling back to the API", () => {
+		const source = read("scripts/brand-add.ts");
+		expect({
+			importsDownload: /\bdownloadSvg\b/.test(source),
+			readsLocalFile: /values\.get\("file"\)/.test(source),
+		}).toEqual({ importsDownload: false, readsLocalFile: true });
+	});
+});
