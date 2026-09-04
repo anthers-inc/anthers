@@ -34,7 +34,11 @@ import { db } from "@anthers/db/client";
 import { posts, projectPosts, projects, users } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 let seq = 0;
 /** A minimal published post. Both join tables key on `posts`, not `works`. */

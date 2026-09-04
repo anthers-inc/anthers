@@ -24,7 +24,11 @@ import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import { distributePool } from "../jobs/distribute-pool";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 /** A cycle far enough out that it can't collide with fixture or dev data. */
 const CYCLE = "2031-03-01";

@@ -34,9 +34,13 @@ import {
 import { scanInlineUpload, scanStoredImage } from "../services/safety-scan.js";
 import { QUARANTINE_PREFIX, scannedObjectKind } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { artworkBytes, stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 const RUN = crypto.randomUUID().slice(0, 8);

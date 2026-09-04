@@ -26,7 +26,11 @@ import { eq, like } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import { liftHold, placeHold } from "../services/legal-hold.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const RUN = Date.now().toString(36);
 

@@ -39,7 +39,11 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES } from "../jobs/queue";
 import { resumeOrphanedTranscodes, type SendJob } from "../jobs/resume-orphans";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

@@ -23,8 +23,12 @@ import { mediaScans, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { scanStoredVideo, worstOutcome } from "../services/safety-scan";
 import { storage } from "../services/storage/index.js";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const CREDS = { username: "u", password: "p" };
 const RUN = crypto.randomUUID().slice(0, 8);

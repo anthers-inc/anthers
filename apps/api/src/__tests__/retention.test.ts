@@ -36,8 +36,12 @@ import {
 	redactSettledDmcaNotices,
 	runRetentionSweep,
 } from "../services/retention";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `ret_creator_${run}`;

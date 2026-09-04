@@ -2,6 +2,10 @@
 import { describe, expect, it } from "bun:test";
 import app from "../index";
 import { sanitizePostHtml } from "../services/sanitize";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 

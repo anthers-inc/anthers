@@ -23,7 +23,11 @@ import { users } from "@anthers/db/schema";
 import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import { like } from "drizzle-orm";
 import app from "../index";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 const RUN = Date.now().toString(36);

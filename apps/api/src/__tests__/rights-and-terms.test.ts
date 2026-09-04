@@ -20,6 +20,10 @@ import { rightsRequests, users } from "@anthers/db/schema";
 import { RIGHTS_RESPONSE_DAYS } from "@anthers/shared/rights";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

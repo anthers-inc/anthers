@@ -38,8 +38,12 @@ import Stripe from "stripe";
 import app from "../index";
 import { settleCycle } from "../jobs/settle-cycle";
 import { getStripe, setStripeClient } from "../lib/stripe";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
+
+// Every account this suite creates is taken back afterward, on success or failure.
+purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
