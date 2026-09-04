@@ -214,6 +214,8 @@ function CommentRow({
 						subjectId={comment.id}
 						score={comment.score}
 						viewerReaction={comment.viewerReaction}
+						likes={comment.likes}
+						dislikes={comment.dislikes}
 						label={`${author}'s comment`}
 					/>
 				</div>

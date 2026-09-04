@@ -176,12 +176,43 @@ describe("reactions", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("🚨 publishes the score and NEVER the raw counts", async () => {
-		const [first] = await thread();
-		expect(first).toHaveProperty("score");
-		// Two numbers is the pile-on scoreboard the single net exists to withhold.
-		expect(first).not.toHaveProperty("likes");
-		expect(first).not.toHaveProperty("dislikes");
+	it("🚨 publishes the score and NEVER the raw counts to a reader", async () => {
+		// Signed out, and to anybody who did not write the comment. Two numbers is the
+		// pile-on scoreboard the single net exists to withhold.
+		for (const rows of [await thread(), await thread(voterCookies[0])]) {
+			const first = rows[0];
+			expect(first).toHaveProperty("score");
+			expect(first).not.toHaveProperty("likes");
+			expect(first).not.toHaveProperty("dislikes");
+		}
+	});
+
+	it("⭐ gives an AUTHOR the exact counts on their own comment", async () => {
+		// Parker, 2026-09-04: "the creator should have full visibility into exact like
+		// values and dislike values, not just the net". The comments here are the creator's.
+		const own = (await thread(creatorCookie)).find((c) => c.id === likedId) as unknown as {
+			likes: number;
+			dislikes: number;
+			score: number;
+		};
+		expect(own.likes).toBeGreaterThan(0);
+		expect(own.dislikes).toBe(0);
+		expect(own.score).toBe(own.likes - own.dislikes);
+	});
+
+	it("🚨 gives the counts to the author through the single-subject read, and to nobody else", async () => {
+		const read = async (cookie?: string) => {
+			const res = await req(
+				`/api/content/reactions?subjectType=comment&subjectId=${likedId}`,
+				cookie ? { headers: { Cookie: cookie } } : {},
+			);
+			expect(res.status).toBe(200);
+			return (await res.json()) as { score: number; likes?: number; dislikes?: number };
+		};
+		expect(await read(creatorCookie)).toHaveProperty("likes");
+		// The voter has reacted to it, which is the closest anybody gets to a claim on it.
+		expect(await read(voterCookies[0])).not.toHaveProperty("likes");
+		expect(await read()).not.toHaveProperty("likes");
 	});
 
 	it("shows a viewer their own reaction, and shows nobody else's", async () => {

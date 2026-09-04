@@ -14,8 +14,8 @@
  * what is on screen.
  */
 import { db } from "@anthers/db/client";
-import { GAUNTLET_SLUG_PREFIX } from "@anthers/db/gauntlet";
-import { comments, posts, reactions } from "@anthers/db/schema";
+import { GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "@anthers/db/gauntlet";
+import { comments, posts, reactions, users } from "@anthers/db/schema";
 import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/reactions";
 import { eq, inArray, like } from "drizzle-orm";
 import { expect, signInAsCreator, test } from "./fixtures";
@@ -68,16 +68,19 @@ test.beforeAll(async () => {
 	expect(row, `the gauntlet post ${POST_SLUG} is missing`).toBeTruthy();
 	postId = row.id;
 
+	// ⭐ ORDINARY is the signed-in creator's own, BURIED is a tombstone. The pair covers
+	// both author states in one thread: the breakdown an author is owed, and the null
+	// username that a deleted account leaves behind.
+	const [author] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.username, GAUNTLET_CREATOR_USERNAME));
 	const made = await db
 		.insert(comments)
-		.values(
-			[BURIED, ORDINARY].map((body) => ({
-				userId: null,
-				subjectType: "post" as const,
-				subjectId: postId,
-				body,
-			})),
-		)
+		.values([
+			{ userId: null, subjectType: "post" as const, subjectId: postId, body: BURIED },
+			{ userId: author.id, subjectType: "post" as const, subjectId: postId, body: ORDINARY },
+		])
 		.returning({ id: comments.id, body: comments.body });
 	buriedId = made.find((m) => m.body === BURIED)!.id;
 	ordinaryId = made.find((m) => m.body === ORDINARY)!.id;
@@ -116,6 +119,10 @@ test("🚨 the post carries a reaction control at all, with a score on it", asyn
 	// thread below is full of them and they are the same component.
 	const control = page.getByRole("button", { name: /^Like Anyone can read this$/ });
 	await expect(control).toBeVisible();
+
+	// ⭐ This post is the signed-in creator's own, so they are owed the figures behind the
+	// net. Everybody else gets one number, and the server does not send the keys at all.
+	await expect(page.getByText(/\d+ liked, \d+ disliked/).first()).toBeVisible();
 });
 
 test("⭐ a like moves the number the reader can see", async ({ page, context }) => {
@@ -129,6 +136,10 @@ test("⭐ a like moves the number the reader can see", async ({ page, context })
 	// Reconciled against the server rather than left on the optimistic guess, so this is
 	// also the assertion that the write landed.
 	await expect(score).toHaveText("1");
+
+	// The author's own breakdown moves with it, or the two numbers on screen disagree
+	// until a reload.
+	await expect(row.getByText(/1 liked, 0 disliked/)).toBeVisible();
 
 	// Pressing it again takes the reaction back, which is not the same as disliking.
 	await row.getByRole("button", { name: /^Like/ }).click();

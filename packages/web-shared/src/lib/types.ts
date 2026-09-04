@@ -514,6 +514,16 @@ export interface Comment {
 	 */
 	score: number;
 	/**
+	 * What the score is made of — present ONLY on a comment this viewer wrote.
+	 *
+	 * ⭐ An author gets the exact figures on their own words; everybody else gets the net.
+	 * ⚠️ **Absent rather than null for everyone else**, which is why these are optional: the
+	 * server does not send the keys at all, so a renderer that forgets to check gets
+	 * `undefined` and draws nothing, rather than a confident `0 likes, 0 dislikes`.
+	 */
+	likes?: number;
+	dislikes?: number;
+	/**
 	 * Pushed below the collapse threshold by readers.
 	 *
 	 * ⚠️ **A third state, and never to be drawn like the other two.** A moderation removal

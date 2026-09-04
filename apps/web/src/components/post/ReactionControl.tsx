@@ -34,6 +34,8 @@ export default function ReactionControl({
 	subjectId,
 	score,
 	viewerReaction,
+	likes,
+	dislikes,
 	label,
 	onChange,
 }: {
@@ -49,6 +51,16 @@ export default function ReactionControl({
 	 */
 	score?: number;
 	viewerReaction?: ReactionValue | null;
+	/**
+	 * The exact counts, shown only to whoever authored the thing.
+	 *
+	 * ⚠️ **Undefined means "not yours to see", never "zero".** The server omits the keys for
+	 * anybody else, so a falsy check that treated `0` and absent alike would hide a real
+	 * count of zero from its own author and — worse the other way — invite a default that
+	 * shows everyone a breakdown.
+	 */
+	likes?: number;
+	dislikes?: number;
 	/** Names the thing being reacted to, for a screen reader. */
 	label: string;
 	onChange?: (next: {
@@ -61,6 +73,9 @@ export default function ReactionControl({
 	const given = score !== undefined;
 	const [mine, setMine] = useState<ReactionValue | null>(viewerReaction ?? null);
 	const [shown, setShown] = useState(score ?? 0);
+	const [detail, setDetail] = useState<{ likes: number; dislikes: number } | null>(
+		likes === undefined || dislikes === undefined ? null : { likes, dislikes },
+	);
 	const [busy, setBusy] = useState(false);
 	// Starts hidden when it has to ask, so a control does not flash "0" and then correct
 	// itself — a score that changes on its own reads as somebody else having just voted.
@@ -73,9 +88,17 @@ export default function ReactionControl({
 			.$get({ query: { subjectType, subjectId: String(subjectId) } })
 			.then(async (res) => {
 				if (!res.ok || !live) return;
-				const data = (await res.json()) as { score: number; viewerReaction: ReactionValue | null };
+				const data = (await res.json()) as {
+					score: number;
+					viewerReaction: ReactionValue | null;
+					likes?: number;
+					dislikes?: number;
+				};
 				setShown(data.score);
 				setMine(data.viewerReaction);
+				if (data.likes !== undefined && data.dislikes !== undefined) {
+					setDetail({ likes: data.likes, dislikes: data.dislikes });
+				}
 				setReady(true);
 			})
 			.catch(() => {});
@@ -107,8 +130,15 @@ export default function ReactionControl({
 				score: number;
 				collapsed: boolean;
 				viewerReaction: ReactionValue | null;
+				likes?: number;
+				dislikes?: number;
 			};
 			setShown(data.score);
+			// An author reacting to their own thing has to see their own vote land in the
+			// breakdown too, or the two numbers on screen disagree until a reload.
+			if (data.likes !== undefined && data.dislikes !== undefined) {
+				setDetail({ likes: data.likes, dislikes: data.dislikes });
+			}
 			setMine(next);
 			onChange?.({ ...data, viewerReaction: next });
 		} catch {
@@ -149,6 +179,14 @@ export default function ReactionControl({
 				{shown}
 			</span>
 			<span className="sr-only">{`${label}: score ${shown}`}</span>
+			{/* ⭐ Only an author ever gets here. The public number is deliberately one figure
+			    so a pile-on has no counter to run up; the person whose work it is gets the
+			    figures, because withholding them from them protects nobody. */}
+			{detail && (
+				<span className="ml-1 text-xs text-base-content/40">
+					{detail.likes} liked, {detail.dislikes} disliked
+				</span>
+			)}
 			<button
 				type="button"
 				className="hover:text-primary disabled:opacity-40 disabled:hover:text-base-content/50"

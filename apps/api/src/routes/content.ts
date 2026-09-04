@@ -201,6 +201,49 @@ function tooManyReactionsFrom(userId: number): boolean {
  * can read. Moderation state is checked here for the same reason every public read checks
  * it, and forgetting it is the quiet version of the same bug.
  */
+/**
+ * Whether this viewer authored the thing being reacted to.
+ *
+ * ⭐ **Authorship, not the Work's creator.** A creator seeing the breakdown on *their own*
+ * Work or post is what Parker asked for (2026-09-04: *"the creator should have full
+ * visibility into exact like values and dislike values, not just the net"*). Extending it to
+ * every comment under their Work would be showing them a dislike count on somebody else's
+ * words, which is a different thing and was not asked for.
+ *
+ * 🚨 **This is the only gate on the raw counts.** Everything else in the reaction path
+ * publishes one number precisely so a pile-on has no counter to run up; getting this
+ * predicate wrong hands that counter to everybody.
+ */
+async function ownsSubject(
+	subjectType: ReactionSubject,
+	subjectId: number,
+	viewerId: number | null,
+): Promise<boolean> {
+	if (viewerId === null) return false;
+	if (subjectType === "comment") {
+		const [row] = await db
+			.select({ userId: comments.userId })
+			.from(comments)
+			.where(eq(comments.id, subjectId))
+			.limit(1);
+		return row?.userId === viewerId;
+	}
+	if (subjectType === "post") {
+		const [row] = await db
+			.select({ creatorId: posts.creatorId })
+			.from(posts)
+			.where(eq(posts.id, subjectId))
+			.limit(1);
+		return row?.creatorId === viewerId;
+	}
+	const [row] = await db
+		.select({ creatorId: works.creatorId })
+		.from(works)
+		.where(eq(works.id, subjectId))
+		.limit(1);
+	return row?.creatorId === viewerId;
+}
+
 async function reactableExists(subjectType: ReactionSubject, subjectId: number): Promise<boolean> {
 	if (subjectType === "comment") {
 		const [row] = await db
@@ -356,6 +399,18 @@ async function listComments(
 			 * one number plus `collapsed`.
 			 */
 			score: commentScore(tally),
+			/**
+			 * The raw counts, and ONLY for whoever wrote this comment.
+			 *
+			 * ⭐ Parker, 2026-09-04: an author gets *"full visibility into exact like values
+			 * and dislike values, not just the net"* on their own words. 🚨 Spread
+			 * conditionally rather than sent as nulls, so a non-author's payload does not
+			 * carry the keys at all — a client cannot render, cache or leak a field that is
+			 * not there.
+			 */
+			...(viewerId !== null && r.comment.userId === viewerId
+				? { likes: tally.likes, dislikes: tally.dislikes }
+				: {}),
 			/**
 			 * ⚠️ A THIRD state, and it is neither of the other two. Moderation-hidden
 			 * comments never leave the server; `deletedByAuthor` is an author who left. This
@@ -2381,10 +2436,13 @@ const contentRoutes = new Hono()
 		const viewerId = await getOptionalUserId(c);
 		const { tallies, mine } = await reactionTallies(subjectType, [subjectId], viewerId);
 		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		// The author sees what it is made of; everybody else sees the one number.
+		const owner = await ownsSubject(subjectType, subjectId, viewerId);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			viewerReaction: mine.get(subjectId) ?? null,
+			...(owner ? { likes: tally.likes, dislikes: tally.dislikes } : {}),
 		});
 	})
 
@@ -2418,10 +2476,16 @@ const contentRoutes = new Hono()
 
 		const { tallies } = await reactionTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		// ⚠️ The breakdown comes back from a WRITE too, not only from the read. An author
+		// reacting to their own thing would otherwise watch the score move while the figures
+		// behind it sat still until a reload — two numbers on screen disagreeing, which is
+		// worse than either being absent.
+		const owner = await ownsSubject(subjectType, subjectId, user.id);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			viewerReaction: value,
+			...(owner ? { likes: tally.likes, dislikes: tally.dislikes } : {}),
 		});
 	})
 
@@ -2439,10 +2503,12 @@ const contentRoutes = new Hono()
 			);
 		const { tallies } = await reactionTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		const owner = await ownsSubject(subjectType, subjectId, user.id);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			viewerReaction: null,
+			...(owner ? { likes: tally.likes, dislikes: tally.dislikes } : {}),
 		});
 	})
 
