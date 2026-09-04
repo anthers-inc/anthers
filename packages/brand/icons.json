@@ -1,0 +1,104 @@
+{
+	"note": "The curated set: source art promoted for use in code, with friendly ids. Authored, not generated — `bun run brand:add <icon-id> --as <friendly-id>` appends here, and hand edits are fine. `path` is relative to svg/ in the private icon library; `nounId` is the Noun Project icon id, which the filename also carries and which the codegen checks against it. `why` is the reason this particular asset was chosen, and it is the only place that reason survives.",
+	"icons": [
+		{
+			"id": "bee",
+			"nounId": 1248042,
+			"path": "nature/animals-38481-(bees)/noun-bee-1248042.svg"
+		},
+		{
+			"id": "bee-flying",
+			"nounId": 1248044,
+			"path": "nature/animals-38481-(bees)/noun-bee-1248044.svg"
+		},
+		{
+			"id": "grass-band",
+			"nounId": 8183011,
+			"path": "nature/grass-289179/noun-grass-8183011.svg"
+		},
+		{
+			"id": "grass-tall",
+			"nounId": 8183007,
+			"path": "nature/grass-289179/noun-grass-8183007.svg"
+		},
+		{
+			"id": "grass-clump",
+			"nounId": 8183013,
+			"path": "nature/grass-289179/noun-grass-8183013.svg"
+		},
+		{
+			"id": "grass-cattail",
+			"nounId": 8183001,
+			"path": "nature/grass-289179/noun-grass-8183001.svg"
+		},
+		{
+			"id": "grass-reed",
+			"nounId": 8183009,
+			"path": "nature/grass-289179/noun-grass-8183009.svg"
+		},
+		{
+			"id": "divider-botanical",
+			"nounId": 7282328,
+			"path": "nature/botanical-borders-and-frames-228479/noun-botanical-border-7282328.svg"
+		},
+		{
+			"id": "bloom-cluster",
+			"nounId": 7595393,
+			"path": "nature/wildflowers-solid-271979/noun-wildflower-7595393.svg",
+			"why": "A solid single bloom scattered along the hand-drawn side vines for life. Bloom-dominant with minimal stem, so it stays legible at small size."
+		},
+		{
+			"id": "bloom-round",
+			"nounId": 7762479,
+			"path": "nature/wildflowers-solid-271979/noun-wildflower-7762479.svg",
+			"why": "A solid single bloom scattered along the hand-drawn side vines for life. Bloom-dominant with minimal stem, so it stays legible at small size."
+		},
+		{
+			"id": "bloom-tulip",
+			"nounId": 7595473,
+			"path": "nature/wildflowers-solid-271979/noun-wildflower-7595473.svg",
+			"why": "A solid single bloom scattered along the hand-drawn side vines for life. Bloom-dominant with minimal stem, so it stays legible at small size."
+		},
+		{
+			"id": "wreath",
+			"nounId": 7366648,
+			"path": "nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg"
+		},
+		{
+			"id": "frame-round",
+			"nounId": 7366626,
+			"path": "nature/botanical-borders-and-frames-228479/noun-botanical-round-frame-7366626.svg",
+			"why": "The single round botanical frame that sits behind every Anthers Badge on the marketing site — one consistent wreath for all of them."
+		},
+		{
+			"id": "wreath-root",
+			"nounId": 7366645,
+			"path": "nature/botanical-borders-and-frames-228479/noun-botanical-circle-border-7366645.svg",
+			"why": "One wreath per Anthers Badge, sparse through full, so the ladder echoes growing support."
+		},
+		{
+			"id": "wreath-sprout",
+			"nounId": 6832659,
+			"path": "nature/botanical-borders-and-frames-228479/noun-leafy-wreath-6832659.svg",
+			"why": "One wreath per Anthers Badge, sparse through full, so the ladder echoes growing support."
+		},
+		{
+			"id": "wreath-petal",
+			"nounId": 6832663,
+			"path": "nature/botanical-borders-and-frames-228479/noun-floral-wreath-6832663.svg",
+			"why": "One wreath per Anthers Badge, sparse through full, so the ladder echoes growing support."
+		},
+		{
+			"id": "wreath-blossom",
+			"nounId": 7366620,
+			"path": "nature/botanical-borders-and-frames-228479/noun-leafy-circle-border-7366620.svg",
+			"why": "One wreath per Anthers Badge, sparse through full, so the ladder echoes growing support."
+		},
+		{
+			"id": "corner-leafy",
+			"nounId": 7366617,
+			"path": "nature/botanical-borders-and-frames-228479/noun-corner-leafy-frame-7366617.svg",
+			"why": "An L-shaped trailing-leaf corner flourish, placed at all four corners rotated to frame the auth card, which lets it adapt to any card aspect without distortion. It is corners rather than an arch because an arch frame's tall crown clips behind the header on the vertically centered auth card."
+		}
+	]
+}

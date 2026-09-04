@@ -236,6 +236,7 @@ verify: ## Run everything CI runs: typecheck, lint, migrate, unit tests, full Pl
 	bun run lint
 	bun run econ:figures --check
 	bun run lex:check
+	bun run brand:attribution --check
 	bun run db:snapshots
 	$(MAKE) db-ready
 	bun test

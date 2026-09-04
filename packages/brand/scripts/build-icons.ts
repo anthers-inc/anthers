@@ -30,6 +30,18 @@ const ROOT = join(import.meta.dir, "..");
 const REPO = join(ROOT, "..", "..");
 const OUT_DIR = join(ROOT, "src", "generated");
 
+/** One entry of the curated set, as `icons.json` carries it. */
+export interface CuratedIcon {
+	/** The friendly name code renders by. */
+	id: string;
+	/** The Noun Project icon id, which is what makes provenance and attribution findable. */
+	nounId: number;
+	/** Path within the private library's `svg/`, whose filename also carries the id. */
+	path: string;
+	/** Why this particular asset, in Anthers' terms rather than the vendor's. */
+	why?: string;
+}
+
 // The icon library is a PRIVATE repository — it mixes Anthers' own working files with
 // ~650 licensed Noun Project SVGs, which is not ours to publish wholesale. So this hint
 // names a path rather than a URL: an outside reader cannot fetch it and does not need to,
@@ -38,61 +50,14 @@ const SOURCE_HINT = "the Anthers icon library (private; set BRAND_SOURCE to a ch
 /** Where the icon library lives. A sibling checkout by default, per the repo naming convention. */
 const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
 
-// ── Curated set: assets promoted for use in code, with friendly ids. Add here,
-// then reference by id via iconSvg/iconGroup/iconDataUri. Paths are relative to svg/.
-const CURATED: { id: string; path: string }[] = [
-	{ id: "bee", path: "nature/animals-38481-(bees)/noun-bee-1248042.svg" },
-	{ id: "bee-flying", path: "nature/animals-38481-(bees)/noun-bee-1248044.svg" },
-	{ id: "grass-band", path: "nature/grass-289179/noun-grass-8183011.svg" },
-	{ id: "grass-tall", path: "nature/grass-289179/noun-grass-8183007.svg" },
-	{ id: "grass-clump", path: "nature/grass-289179/noun-grass-8183013.svg" },
-	{ id: "grass-cattail", path: "nature/grass-289179/noun-grass-8183001.svg" },
-	{ id: "grass-reed", path: "nature/grass-289179/noun-grass-8183009.svg" },
-	{
-		id: "divider-botanical",
-		path: "nature/botanical-borders-and-frames-228479/noun-botanical-border-7282328.svg",
-	},
-	// Solid single blooms scattered along the hand-drawn side vines for life. Chosen
-	// as bloom-dominant (minimal stem) shapes that stay legible at ~small size.
-	{ id: "bloom-cluster", path: "nature/wildflowers-solid-271979/noun-wildflower-7595393.svg" },
-	{ id: "bloom-round", path: "nature/wildflowers-solid-271979/noun-wildflower-7762479.svg" },
-	{ id: "bloom-tulip", path: "nature/wildflowers-solid-271979/noun-wildflower-7595473.svg" },
-	{
-		id: "wreath",
-		path: "nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg",
-	},
-	// The single round botanical frame used behind every Anthers Badge on the
-	// marketing site (one consistent wreath for all Badges, per Parker's call).
-	{
-		id: "frame-round",
-		path: "nature/botanical-borders-and-frames-228479/noun-botanical-round-frame-7366626.svg",
-	},
-	// One wreath per Anthers Badge — sparse → full to echo growing support.
-	{
-		id: "wreath-root",
-		path: "nature/botanical-borders-and-frames-228479/noun-botanical-circle-border-7366645.svg",
-	},
-	{
-		id: "wreath-sprout",
-		path: "nature/botanical-borders-and-frames-228479/noun-leafy-wreath-6832659.svg",
-	},
-	{
-		id: "wreath-petal",
-		path: "nature/botanical-borders-and-frames-228479/noun-floral-wreath-6832663.svg",
-	},
-	{
-		id: "wreath-blossom",
-		path: "nature/botanical-borders-and-frames-228479/noun-leafy-circle-border-7366620.svg",
-	},
-	// An L-shaped trailing-leaf corner flourish. Placed at all four corners (rotated)
-	// to frame the auth (login/signup) card — adapts to any card aspect without
-	// distortion. (An arch-frame was tried first but its tall crown clips behind the
-	// header on the vertically-centered auth card, so corners it is.)
-	{
-		id: "corner-leafy",
-		path: "nature/botanical-borders-and-frames-228479/noun-corner-leafy-frame-7366617.svg",
-	},
-];
+// ── Curated set: assets promoted for use in code, with friendly ids. The list is
+// `icons.json` beside this package, so `brand:add` can append to it and the reason
+// each asset was chosen survives as a field rather than as a comment a rewrite
+// would eat. Add by hand or with the tool, then reference by id via
+// iconSvg/iconGroup/iconDataUri. Paths are relative to svg/.
+const CURATED: CuratedIcon[] = (
+	JSON.parse(readFileSync(join(ROOT, "icons.json"), "utf8")) as { icons: CuratedIcon[] }
+).icons;
 
 function normalize(raw: string, file: string): { viewBox: string; inner: string } {
 	const s = raw
@@ -132,6 +97,35 @@ if (!existsSync(SVG_ROOT)) {
 			`        (or set BRAND_SOURCE=/path/to/checkout) and run this again.`,
 	);
 	process.exit(0);
+}
+
+// 🚨 The id in the filename is what ties an asset to its artist, so a mismatch here
+// would attribute an icon to the wrong person in THIRD-PARTY.md while everything
+// still rendered. Both numbers are written down precisely so they can disagree out
+// loud: `nounId` is what provenance is keyed on, and the filename is what a person
+// reads. Nothing downstream can catch this, because both values are plausible.
+const mislabeled = CURATED.filter((c) => {
+	const inName = /-(\d+)\.svg$/.exec(c.path)?.[1];
+	return inName !== undefined && Number(inName) !== c.nounId;
+});
+if (mislabeled.length > 0) {
+	console.error("[brand] curated entries whose nounId disagrees with their filename:");
+	for (const m of mislabeled)
+		console.error(`          ${m.id} → nounId ${m.nounId}, file ${m.path}`);
+	process.exit(1);
+}
+
+const duplicates = ["id", "nounId"].flatMap((field) => {
+	const seen = new Map<string, number>();
+	for (const c of CURATED) {
+		const k = String(c[field as "id" | "nounId"]);
+		seen.set(k, (seen.get(k) ?? 0) + 1);
+	}
+	return [...seen].filter(([, n]) => n > 1).map(([k]) => `${field} ${k}`);
+});
+if (duplicates.length > 0) {
+	console.error(`[brand] duplicate curated entries: ${duplicates.join(", ")}`);
+	process.exit(1);
 }
 
 const missing = CURATED.filter((c) => !existsSync(join(SVG_ROOT, c.path)));
