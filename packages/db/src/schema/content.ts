@@ -886,3 +886,54 @@ export const shareLinks = pgTable(
 		index("idx_share_links_work").on(table.workId),
 	],
 );
+
+/**
+ * A **reaction** — one person's like or dislike of one thing.
+ *
+ * ⭐ **One table for Works, posts and comments**, on the same `(subject_type, subject_id)`
+ * shape `comments` already uses. A Sticker rides a like and a Sticker may be given on any
+ * Work or post, so a like has to exist everywhere a Sticker may land; splitting that across
+ * three tables would give the score three implementations to drift apart.
+ *
+ * ⭐ **`value` is +1 or -1 rather than a `kind` string**, so the net score is `SUM(value)`
+ * and the counts are filtered sums of the same column. A text column would need a CASE in
+ * every aggregate, which is three places to get a sign backwards.
+ *
+ * 🚨 **The stored net goes negative and the DISPLAYED score is floored at zero** (Parker,
+ * 2026-09-04). Never write the floored value here or sort on it: the floor exists so a
+ * pile-on has no counter to run up, while the true net is what the collapse threshold and
+ * moderation read. `commentScore()` in `@anthers/shared/reactions` owns both.
+ *
+ * ⚠️ **`user_id` is nullable + SET NULL, exactly as `ratings` is.** A deleted account's
+ * votes stay counted, because removing them would move every score that person ever touched
+ * through no fault of the people who wrote those comments. The link to a person goes; the
+ * vote stays. Postgres treats NULLs as distinct, so the unique index below still holds for
+ * live accounts and does not collide across departed ones.
+ */
+// both — a reaction is a viewer's verdict on a creator's thing, so it splits the same way
+// `ratings` does: the vote is org-side (a viewer has no node), the thing voted on is a
+// creator's. It is polymorphic over (work|post|comment), and a comment is itself `both`.
+export const reactions = pgTable(
+	"reactions",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+		subjectType: text("subject_type").notNull(), // work | post | comment
+		subjectId: integer("subject_id").notNull(),
+		/** +1 like, -1 dislike. Nothing else is a valid value. */
+		value: integer("value").notNull(),
+		/**
+		 * ⚠️ **Kept because a burst is the only visible signature of brigading.** A single
+		 * account is bounded by the unique index below; many accounts arriving together are
+		 * not bounded by anything, and the timestamps are what let a moderator see it happened.
+		 */
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One reaction per person per thing. Changing a like to a dislike UPDATES this row
+		// rather than adding a second, so the two can never both count.
+		uniqueIndex("uq_reactions_user_subject").on(table.userId, table.subjectType, table.subjectId),
+		// Every read is "the score of this subject", so this is the whole access pattern.
+		index("idx_reactions_subject").on(table.subjectType, table.subjectId),
+	],
+);

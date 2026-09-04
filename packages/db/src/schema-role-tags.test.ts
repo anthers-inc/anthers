@@ -31,7 +31,16 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SCHEMA_DIR = dirname(fileURLToPath(import.meta.url));
+/**
+ * 🚨 **This test lives OUTSIDE the schema directory it reads, and must stay there.**
+ * `drizzle.config.ts` points `schema` at that directory, and drizzle-kit imports every
+ * `.ts` in it — so a file calling `describe` at module scope makes `drizzle-kit generate`
+ * fail outright. Migrations were ungeneratable from 2026-09-01, when this test landed
+ * inside the directory, until 2026-09-04, and nothing said so until somebody tried to add
+ * a table. The guard below (it finds the files it is checking) is what catches this path
+ * going stale.
+ */
+const SCHEMA_DIR = join(dirname(fileURLToPath(import.meta.url)), "schema");
 
 /** A tag comment: `// node — …`, `// org — …`, or `// both — …`, on its own line. */
 const TAG = /^\s*\/\/\s*(node|org|both)\s+[—–-]/;

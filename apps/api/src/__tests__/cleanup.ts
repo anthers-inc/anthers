@@ -46,6 +46,7 @@ import {
 	posts,
 	purchases,
 	ratings,
+	reactions,
 	rightsRequests,
 	users,
 	workRatingAppeals,
@@ -128,6 +129,11 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 		// cascade when the Work goes, but these are the ones left on other people's.
 		await db.delete(comments).where(inArray(comments.userId, ids));
 		await db.delete(ratings).where(inArray(ratings.userId, ids));
+		// `reactions.user_id` is `set null` too, for the same reason ratings is: a departing
+		// account must not move everyone else's scores. So a fixture's votes outlive the
+		// fixture unless they are taken explicitly, which is the shape of every leak this
+		// file exists to stop.
+		await db.delete(reactions).where(inArray(reactions.userId, ids));
 		await db.delete(rightsRequests).where(inArray(rightsRequests.userId, ids));
 		await db
 			.delete(workRatingAppeals)

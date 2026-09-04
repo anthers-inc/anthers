@@ -36,6 +36,7 @@ import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
 import CommentThread from "../components/post/CommentThread";
 import InlineUnlock from "../components/post/InlineUnlock";
+import ReactionControl from "../components/post/ReactionControl";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
@@ -515,11 +516,14 @@ export default function WorkPage() {
 			    particular Work can be shared — a client-side copy of that rule would be free to
 			    disagree, and the direction that matters is a stale page offering to share
 			    something that has since become gated or Adult. */}
-			{isAuthenticated && !shareToken && (
-				<div className="flex justify-end">
-					<ShareLinkButton workId={work.id} />
-				</div>
-			)}
+			{/* ⭐ A like on a Work needs NO access, unlike a review or a comment. A Sticker
+			    rides a like and may be given on any Work "gated or not, purchased or not",
+			    because it is a gift to the creator rather than payment for the Work — so
+			    gating this control would make that rule unbuildable. */}
+			<div className="flex items-center justify-between">
+				<ReactionControl subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
+				{isAuthenticated && !shareToken && <ShareLinkButton workId={work.id} />}
+			</div>
 
 			{/* Reviews — a verdict on the work itself, which is the only thing a review
 			    was ever about. Gated behind access on the server: you can't review what you
