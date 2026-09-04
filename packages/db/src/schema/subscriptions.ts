@@ -81,6 +81,22 @@ export const accounts = pgTable("accounts", {
 	// The reader's own choice — "do you ever want to be shown Adult work, anywhere?".
 	// Separate from the verification because they answer different questions and either
 	// can be true without the other: somebody may verify and later turn the setting off.
+	/**
+	 * Whether this person appears on the public supporters page.
+	 *
+	 * ⭐ **Listed by default, and told so at the moment they start** (Parker, 2026-09-04).
+	 * The wiki promises "a place on the supporters page, if you want one", and the way that
+	 * promise is kept is the heads-up in the support flow rather than an unchecked box — the
+	 * standard shape for this kind of page, and the one that gets a decision out of somebody
+	 * while they are thinking about it instead of never.
+	 *
+	 * 🚨 **A default of `true` only honors the promise for people who SAW the notice.**
+	 * Anybody who supported before it shipped has not been asked, and turning the page on
+	 * would list them without their knowing. The page filters on this column, so switching
+	 * those rows to `false` — or asking them — is a launch step and not an implementation
+	 * detail.
+	 */
+	listedAsSupporter: boolean("listed_as_supporter").notNull().default(true),
 	adultOptIn: boolean("adult_opt_in").notNull().default(false),
 	// When adulthood was verified, or null if it never has been. A timestamp rather than
 	// a boolean so a method that later needs re-verifying has something to measure from.

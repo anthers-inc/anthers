@@ -63,6 +63,9 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		links: [
 			["About Us", "/about"],
 			["Roadmap", "/roadmap"],
+			// A thank-you nobody can find is not much of a thank-you, and the only other
+			// routes to it are inside the support flow and account settings.
+			["Supporters", "/supporters"],
 		],
 	},
 	{
