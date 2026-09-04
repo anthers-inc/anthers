@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Comment, Post } from "@anthers/web-shared/types";
@@ -159,7 +160,7 @@ export default function PostPage() {
 				query: purgeMedia ? { purgeMedia: "true" } : {},
 			});
 			if (res.status === 204 || res.ok) {
-				navigate(post.creator?.username ? `/${post.creator.username}` : "/");
+				navigate(post.creator?.username ? profileUrl(post.creator.username) : "/");
 			}
 		} finally {
 			setActioning(false);
@@ -197,7 +198,10 @@ export default function PostPage() {
 						</div>
 					)}
 					<div>
-						<Link to={`/${post.creator?.username}`} className="font-medium link link-hover">
+						<Link
+							to={profileUrl(post.creator?.username ?? "")}
+							className="font-medium link link-hover"
+						>
 							{post.creator?.displayName || post.creator?.username}
 						</Link>
 						<p className="text-base-content/50 text-xs">

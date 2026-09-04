@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
@@ -117,7 +118,10 @@ export default function ProjectPage() {
 						{project.creator && (
 							<p className="text-sm text-base-content/70 mb-3">
 								by{" "}
-								<Link to={`/${project.creator.username}`} className="link link-hover font-medium">
+								<Link
+									to={profileUrl(project.creator.username)}
+									className="link link-hover font-medium"
+								>
 									{project.creator.displayName || project.creator.username}
 								</Link>
 							</p>
@@ -157,7 +161,7 @@ export default function ProjectPage() {
 							creator={
 								project.creator && (
 									<Link
-										to={`/${project.creator.username}`}
+										to={profileUrl(project.creator.username)}
 										className="hover:text-primary hover:underline"
 									>
 										{project.creator.displayName || project.creator.username}

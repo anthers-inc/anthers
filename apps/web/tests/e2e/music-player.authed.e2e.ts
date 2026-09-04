@@ -23,12 +23,21 @@
 import {
 	MEDIA_FIXTURE_PROJECT,
 	MEDIA_FIXTURE_TRACKS,
+	MEDIA_FIXTURE_USERNAME,
 	mediaFixtureWork,
 } from "@anthers/db/media-fixture";
+import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-const ALBUM_URL = `/projects/${MEDIA_FIXTURE_PROJECT.slug}`;
+/**
+ * ⚠️ **A project is addressed under its creator, and there is no `/projects/:slug` route.**
+ * This read `/projects/${slug}` until 2026-09-03 and rendered the right album anyway: the old
+ * root-level `/:username/:slug` catch-all matched it with the username "projects", and
+ * `ProjectPage` fetches by slug alone, so nothing needed the first segment to be real. Handles
+ * carry an `@` now, that path 404s, and this is the URL a reader actually has.
+ */
+const ALBUM_URL = creatorProjectUrl(MEDIA_FIXTURE_USERNAME, MEDIA_FIXTURE_PROJECT.slug);
 const BAR = "[data-testid=player-bar]";
 const NOW_PLAYING = `${BAR} [data-testid=now-playing-title]`;
 

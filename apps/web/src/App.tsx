@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { usernameFromHandleParam } from "@anthers/web-shared/profile";
 import { lazy } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
 import PublicShell from "./components/layout/PublicShell";
@@ -106,6 +107,26 @@ const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalcul
 const WikiPage = lazy(() => import("./pages/WikiPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+
+/**
+ * The one place that decides whether a root path segment names a person.
+ *
+ * 🚨 **A `/:handle` catch-all still MATCHES every unclaimed root path, so something has to
+ * refuse the ones that are not handles.** That is the whole mechanism: a person is `/@name`
+ * and a page is `/name`, and a segment arriving without the `@` is neither — so it 404s here
+ * rather than reaching `CreatorProfilePage` and turning into a profile lookup. Without the
+ * refusal every mis-typed internal link renders a real-looking page instead of erroring,
+ * which is a defect no test in this repository can see.
+ *
+ * ⚠️ **The `@` cannot live in the route pattern instead.** React Router's `compilePath` only
+ * treats `:param` as dynamic where the colon follows a slash, so `path="/@:handle"` compiles
+ * to a literal and matches nothing at all. See `@anthers/web-shared/profile`.
+ */
+function HandleRoute() {
+	const { handle } = useParams<{ handle: string }>();
+	return usernameFromHandleParam(handle) ? <Outlet /> : <NotFoundPage />;
+}
 
 /**
  * A LAST-RESORT boundary, for routes that render outside a layout. The boundaries that
@@ -317,8 +338,7 @@ export default function App() {
 					<Route path="/abuse" element={<Navigate to="/safety" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 
-					{/* Resource tools / calculators — public, work logged-in or out.
-					Must be registered before the /:username catch-alls below. */}
+					{/* Resource tools / calculators — public, work logged-in or out. */}
 					<Route element={<MeadowDecorLayout />}>
 						{/* The resources landing gets the botanical decor; the calculators and the
 						pay-comparison stay plain so nothing crowds their dense controls/tables. */}
@@ -331,12 +351,12 @@ export default function App() {
 						element={<CreatorMonetizationCalculatorPage />}
 					/>
 
-					{/* The Studio. Placed before the /:username catch-alls for readability, NOT for
-					correctness — React Router v6 ranks matches by specificity rather than by
-					registration order, so a static `/studio` segment beats a dynamic `/:username`
-					wherever it sits. Verified by moving this block below the catch-all: every
-					route test still passed. The real hazard is a creator actually named
-					"studio", which route order cannot help with either. */}
+					{/* The Studio. Registration order is a readability choice rather than a
+					correctness one — React Router ranks matches by specificity rather than by
+					registration order, so a static `/studio` segment beats a dynamic `/:handle`
+					wherever it sits. Verified by moving this block below the handle routes: every
+					route test still passed. A creator named "studio" is no longer a hazard either,
+					since they live at `/@studio`. */}
 					<Route path="/studio" element={<StudioLayout />}>
 						<Route index element={<DashboardPage />} />
 						<Route path="catalog" element={<CatalogPage />} />
@@ -355,13 +375,24 @@ export default function App() {
 						<Route path="settings" element={<StudioSettingsPage />} />
 					</Route>
 
-					{/* Creator site routes */}
-					<Route path="/:username/:slug" element={<ProjectPage />} />
-					<Route path="/:username/posts/:slug" element={<PostPage />} />
-					<Route path="/:username/works/:slug" element={<WorkPage />} />
+					{/* Creator site routes. `/@name` is a person, `/name` is a page, and the two
+					no longer compete for the same segment — which is what lets a username be
+					anything at all rather than anything not on a blacklist.
 
-					{/* Creator profile -- must be last to avoid catching other routes */}
-					<Route path="/:username" element={<CreatorProfilePage />} />
+					Nested under one guard rather than repeated four times: `HandleRoute` is the
+					only thing that reads the `@`, and every page below it is reached only once a
+					handle has been recognized. Registration order is still irrelevant — React
+					Router ranks by specificity, so `posts/:slug` beats `:slug` wherever it sits. */}
+					<Route path="/:handle" element={<HandleRoute />}>
+						<Route index element={<CreatorProfilePage />} />
+						<Route path="posts/:slug" element={<PostPage />} />
+						<Route path="works/:slug" element={<WorkPage />} />
+						<Route path=":slug" element={<ProjectPage />} />
+					</Route>
+
+					{/* Everything nothing else claims. Registered last for readability; it wins
+					only by ranking last, which `*` always does. */}
+					<Route path="*" element={<NotFoundPage />} />
 				</Route>
 			</Routes>
 		</RouteSuspense>

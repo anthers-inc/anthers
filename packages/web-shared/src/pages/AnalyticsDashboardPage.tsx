@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
+import { creatorPostUrl, creatorProjectUrl } from "../lib/profile";
 import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
 import type {
@@ -239,14 +240,17 @@ function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] 
 											<div>
 												{item.type === "project" && item.slug ? (
 													<Link
-														to={`/${user?.username}/${item.slug}`}
+														to={creatorProjectUrl(user?.username ?? "", item.slug)}
 														className="link link-hover text-sm font-medium"
 													>
 														{item.title}
 													</Link>
-												) : item.type === "post" ? (
+												) : /* `item.id` is nullable, and a row without one has no post to link to —
+												       guarded here the way the project branch above guards its slug, so
+												       the fallback renders plain text rather than a link to `/posts/null`. */
+												item.type === "post" && item.id != null ? (
 													<Link
-														to={`/${user?.username}/posts/${item.id}`}
+														to={creatorPostUrl(user?.username ?? "", item.id)}
 														className="link link-hover text-sm font-medium"
 													>
 														{item.title}

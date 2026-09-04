@@ -20,6 +20,7 @@
  * to generalize from rather than one to argue about.
  */
 import { workUrl } from "@anthers/web-shared/postUrl";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Work } from "@anthers/web-shared/types";
@@ -265,7 +266,7 @@ function AlbumCard({
 				<div className="flex items-center gap-1.5 text-xs text-base-content/55">
 					{album.creatorUsername ? (
 						<Link
-							to={`/${album.creatorUsername}`}
+							to={profileUrl(album.creatorUsername)}
 							className="min-w-0 truncate hover:text-primary hover:underline"
 						>
 							{album.creatorDisplayName || album.creatorUsername}

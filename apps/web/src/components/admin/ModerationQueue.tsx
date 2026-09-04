@@ -41,6 +41,7 @@ import {
 	moderationReasonLabel,
 	reasonsInGroup,
 } from "@anthers/shared/moderation";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
@@ -97,9 +98,9 @@ const FILTERS = [
 	{ value: "hidden", label: "Hidden" },
 ] as const;
 
-/** Where an operator goes to look at this item. A profile is the bare `/:username`. */
+/** Where an operator goes to look at this item. A profile is `/@handle`. */
 function contextHref(context: NonNullable<QueueItem["context"]>): string {
-	if (context.kind === "profile") return `/${context.slug}`;
+	if (context.kind === "profile") return profileUrl(context.slug);
 	return `/${context.kind === "work" ? "works" : "posts"}/${context.slug}`;
 }
 

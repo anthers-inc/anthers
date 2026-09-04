@@ -19,8 +19,10 @@
  * apart. It is also the surface that replaced `AnonymousViewerBanner` — the invitation to
  * make an account now stands *instead of* the player rather than underneath one.
  */
+
 import { withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation } from "@anthers/web-shared/router";
 import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon, UserPlusIcon } from "@heroicons/react/24/solid";
@@ -140,13 +142,13 @@ export default function InlineUnlock({
 			}
 		>
 			{creatorRoute && creatorUsername ? (
-				<Link to={`/${creatorUsername}?tab=badges`} className="btn btn-primary btn-wide">
+				<Link to={`${profileUrl(creatorUsername)}?tab=badges`} className="btn btn-primary btn-wide">
 					{`Unlock with ${seedsToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
 				</Link>
 			) : null}
 
 			{!creatorRoute && creatorUsername ? (
-				<Link to={`/${creatorUsername}?tab=badges`} className="btn btn-primary btn-wide">
+				<Link to={`${profileUrl(creatorUsername)}?tab=badges`} className="btn btn-primary btn-wide">
 					Join to unlock
 				</Link>
 			) : null}

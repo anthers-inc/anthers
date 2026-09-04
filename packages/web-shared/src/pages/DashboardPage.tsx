@@ -12,6 +12,7 @@ import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { postUrl } from "../lib/postUrl";
+import { creatorProjectUrl } from "../lib/profile";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import {
@@ -245,7 +246,7 @@ export default function DashboardPage() {
 									<tr key={project.id}>
 										<td>
 											<Link
-												to={`/${user?.username}/${project.slug}`}
+												to={creatorProjectUrl(user?.username ?? "", project.slug)}
 												className="link link-hover font-medium"
 											>
 												{project.title}

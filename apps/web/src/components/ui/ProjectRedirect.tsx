@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import { client } from "@anthers/web-shared/rpc";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
@@ -9,7 +10,7 @@ import { Navigate, useParams } from "react-router-dom";
  * Legacy /discover/:slug redirect.
  *
  * Fetches the project to resolve the creator username, then redirects
- * to the canonical /:username/:slug URL on the creator's site.
+ * to the canonical /@username/:slug URL on the creator's site.
  */
 export default function ProjectRedirect() {
 	const { slug } = useParams<{ slug: string }>();
@@ -27,7 +28,7 @@ export default function ProjectRedirect() {
 				}
 				const { project } = await res.json();
 				if (project.creator?.username) {
-					setTarget(`/${project.creator.username}/${project.slug}`);
+					setTarget(creatorProjectUrl(project.creator.username, project.slug));
 				} else {
 					setNotFound(true);
 				}

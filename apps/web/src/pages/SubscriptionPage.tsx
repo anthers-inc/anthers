@@ -16,6 +16,7 @@
 import { PUBLIC_ACCESS_PRICE, supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type {
@@ -704,7 +705,7 @@ export default function SubscriptionPage() {
 												style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
 											/>
 											<Link
-												to={`/${row.username}`}
+												to={profileUrl(row.username)}
 												className="text-base-content/70 truncate flex-1 link-hover"
 											>
 												{row.displayName || row.username}
@@ -779,7 +780,7 @@ export default function SubscriptionPage() {
 														)}
 													</div>
 													<Link
-														to={`/${row.username}`}
+														to={profileUrl(row.username)}
 														className="text-xs text-base-content/70 truncate flex-1 link-hover"
 													>
 														{row.displayName || row.username}

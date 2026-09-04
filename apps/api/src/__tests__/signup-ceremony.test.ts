@@ -576,12 +576,26 @@ describe("POST /auth/onboarding/claim", () => {
 		const { cookie } = await pendingAccount("reserved");
 		const res = await post(
 			"/api/auth/onboarding/claim",
+			{ username: "moderation", acceptTerms: true },
+			{ Cookie: cookie },
+		);
+		// Impersonation is the only thing left that reserves a name: somebody posting as
+		// "moderation" borrows an authority they do not have.
+		expect(res.status).toBe(400);
+	});
+
+	test("🚨 a handle that is also a page is NOT refused", async () => {
+		// This endpoint carries its own copy of the `isReservedUsername` refine, separately
+		// from sign-up, so the two can disagree — and a blacklist growing back in one of
+		// them would be invisible from the other. Profiles live at `/@name`, so "settings"
+		// is an ordinary handle.
+		const { cookie } = await pendingAccount("page-named");
+		const res = await post(
+			"/api/auth/onboarding/claim",
 			{ username: "settings", acceptTerms: true },
 			{ Cookie: cookie },
 		);
-		// A name the router already answers to would sign up fine and strand the profile
-		// at an unreachable URL.
-		expect(res.status).toBe(400);
+		expect(res.status).toBe(200);
 	});
 
 	test("requires a signed-in account", async () => {
