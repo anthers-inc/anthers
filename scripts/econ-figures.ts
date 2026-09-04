@@ -131,11 +131,26 @@ const REPO = join(import.meta.dir, "..");
  */
 const ORG = join(REPO, "..");
 
-/** The private wiki: engineering and strategy notes, not written for anybody else. */
-const PRIVATE_WIKI = join(ORG, "Anthers-Wiki-Private");
-
 /** The public wiki: the documentation written to be read by anyone. */
 const PUBLIC_WIKI = join(ORG, "Anthers-Wiki");
+
+/**
+ * The internal documents: governance and financial modeling, not written for anybody else.
+ *
+ * ⭐ **These stopped being a separate vault on 2026-09-03 and became a folder inside the
+ * public one.** Everything moved to `Anthers-Wiki`, and what genuinely cannot be published
+ * is kept back by living in `Internal Wiki/` — so the two blocks this list still writes,
+ * the growth ladder and the charity references, are at the same relative paths under a new
+ * root. Pointing the constant at the folder rather than re-writing eight entries keeps
+ * their paths correct and makes the rename cost one line.
+ *
+ * 🚨 **`make wiki-figures` was broken from the moment those files moved until this was
+ * fixed**, and nothing said so, because `make verify` runs `--check` *without* `--wiki` —
+ * so the eight generated blocks were neither rendered nor drift-checked while every gate
+ * stayed green. The tool itself was blameless: it reported *"no such file (renamed? then
+ * update BLOCKS)"* on every one of them, to a target nobody was running.
+ */
+const PRIVATE_WIKI = join(PUBLIC_WIKI, "Internal Wiki");
 
 /**
  * Whether this checkout sits inside the Anthers organization, which decides what a missing
@@ -1229,10 +1244,46 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
 	const pub = findPublicWiki();
 	if ("path" in pub) {
 		for await (const path of markdownFiles(pub.path)) {
-			out.push({ root: pub.path, file: `[wiki] ${relative(pub.path, path)}` });
+			const file = relative(pub.path, path);
+			if (await unpublished(pub.path, file)) continue;
+			out.push({ root: pub.path, file: `[wiki] ${file}` });
 		}
 	}
 	return out.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+/**
+ * Whether a public-wiki page is one the site will never serve.
+ *
+ * 🚨 **This scan follows the PUBLISH boundary, not the vault boundary, and the difference
+ * became load-bearing on 2026-09-03.** The vault used to hold reference pages and nothing
+ * else, so "in the wiki" and "published" were the same set. It now also holds `Internal
+ * Wiki/` — documents deliberately kept back — and a 274-note task board, and scanning
+ * those produced **783 hits in one run**, every one of them correct copy in the wrong
+ * scanner.
+ *
+ * ⭐ **A task note is an audit trail, so naming a retired mechanism is what it is FOR.** A
+ * task called *"it still teaches the $3 Seed"* is doing its job; flagging it teaches people
+ * that this guard cries wolf, which is the one way to lose a guard that works. The same
+ * goes for `Internal Wiki/`, where the reasoning behind a retired mechanism is exactly what
+ * is being kept.
+ *
+ * ⚠️ **A task that opts in IS published and IS scanned.** `task-public: true` is the
+ * boundary, so the exception is read from the note rather than assumed from its folder —
+ * otherwise the first task Parker publishes would be the first one nothing checks.
+ */
+async function unpublished(root: string, file: string): Promise<boolean> {
+	// Never served: kept back by location, which is the vault's opt-out mechanism.
+	if (file.startsWith("Internal Wiki/")) return true;
+	// Agent instructions. Written for whoever is working on Anthers, not for a reader.
+	// `CLAUDE.md` sits at the root where reference pages sit, and is machinery: it exists
+	// only so the harness auto-loads something that routes to the Agents Hub.
+	if (file.startsWith("90-99 Agents/") || file === "CLAUDE.md") return true;
+	// Vault machinery — attachments, conventions, templates, the task board's Base — with
+	// the one exception that a task note may opt in to being published.
+	if (!file.startsWith("00-09 Metafiles/")) return false;
+	const head = (await Bun.file(join(root, file)).text()).slice(0, 400);
+	return !/^task-public:\s*true\s*$/m.test(head);
 }
 
 /**
