@@ -986,6 +986,9 @@ export default function SettingsPage() {
 				</div>
 			</div>
 
+			{/* The one setting that decides whether a person's name appears in public. */}
+			<SupporterListingSection />
+
 			{/* Bluesky / ATProto */}
 			<BlueskySection />
 
@@ -1023,6 +1026,83 @@ export default function SettingsPage() {
 					</div>
 				</div>
 			)}
+		</div>
+	);
+}
+
+/**
+ * Whether this person is thanked by name on the public supporters page.
+ *
+ * ⭐ **Listed by default, and this is the control the promise points at** (Parker,
+ * 2026-09-04). The wiki offers "a place on the supporters page, if you want one", and an
+ * opt-out default keeps that promise only when the person was told at the moment they
+ * started supporting *and* can find the switch afterwards. `/subscribe` does the telling;
+ * this is the finding.
+ *
+ * ⚠️ **Renders nothing for somebody who has never supported.** A switch controlling whether
+ * you appear on a page you cannot appear on is a setting that does nothing, and a settings
+ * page full of those is how people stop reading them.
+ */
+function SupporterListingSection() {
+	const [listed, setListed] = useState<boolean | null>(null);
+	const [saving, setSaving] = useState(false);
+
+	useEffect(() => {
+		apiFetch("/api/subscriptions/supporters/listing")
+			.then(async (res) => {
+				if (!res.ok) return;
+				setListed(((await res.json()) as { listed: boolean }).listed);
+			})
+			.catch(() => {});
+	}, []);
+
+	if (listed === null) return null;
+
+	async function change(next: boolean) {
+		setSaving(true);
+		const before = listed;
+		setListed(next);
+		try {
+			const res = await apiFetch("/api/subscriptions/supporters/listing", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ listed: next }),
+			});
+			if (!res.ok) throw new Error(String(res.status));
+		} catch {
+			// A switch that stays where you put it without saving is worse than one that
+			// snaps back, because it tells you a thing about your privacy that is not true.
+			setListed(before);
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	return (
+		<div className="card bg-base-200 mb-6">
+			<div className="card-body">
+				<div className="form-control">
+					<label className="label cursor-pointer justify-start gap-3">
+						<input
+							type="checkbox"
+							className="toggle toggle-primary"
+							checked={listed}
+							onChange={(e) => change(e.target.checked)}
+							disabled={saving}
+						/>
+						<div>
+							<span className="label-text font-medium">List me on the supporters page</span>
+							<p className="text-xs text-base-content/50 mt-0.5">
+								Your name only — never what you gave. Turning this off takes you off{" "}
+								<Link to="/supporters" className="link link-hover">
+									the page
+								</Link>{" "}
+								and changes nothing else.
+							</p>
+						</div>
+					</label>
+				</div>
+			</div>
 		</div>
 	);
 }

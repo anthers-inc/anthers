@@ -13,6 +13,7 @@
 
 import { db } from "@anthers/db/client";
 import {
+	accountCycles,
 	accounts,
 	attentionEvents,
 	creatorGates,
@@ -42,6 +43,7 @@ import {
 import { badgeViews } from "@anthers/shared/fees";
 import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
+import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -1447,6 +1449,82 @@ const subscriptionRoutes = new Hono()
 	// ── Content Access Check ─────────────────────────────────────────────────
 	// Access lives on the Work (the two access tables); resolveAccess is the single
 	// source of truth, shared with the content and payment routes.
+	// ── The supporters page ────────────────────────────────────────────────────
+
+	/**
+	 * Everybody who has ever supported Anthers and has not opted out.
+	 *
+	 * 🚨 **Reads the per-cycle record, never live standing.** Eligibility is having *ever*
+	 * supported, so somebody who gave for three months and stopped keeps their place — a
+	 * query over `accounts.anthers_support` would quietly drop them the month they stopped,
+	 * which is the opposite of what the page is for.
+	 *
+	 * ⚠️ **The lifetime total leaves this function and never leaves the server.**
+	 * `groupSupporters` is what strips it; the response carries names and an order.
+	 */
+	.get("/supporters", async (c) => {
+		const rows = await db
+			.select({
+				username: users.username,
+				displayName: users.displayName,
+				lifetime: sql<string>`COALESCE(SUM(${accountCycles.anthersSupport}), 0)`,
+			})
+			.from(accountCycles)
+			.innerJoin(users, eq(users.id, accountCycles.userId))
+			.innerJoin(accounts, eq(accounts.userId, accountCycles.userId))
+			.where(eq(accounts.listedAsSupporter, true))
+			.groupBy(users.id, users.username, users.displayName)
+			.having(sql`COALESCE(SUM(${accountCycles.anthersSupport}), 0) > 0`);
+
+		// ⚠️ **A supporter with no name at all is left off rather than rendered blank.**
+		// `users.username` is nullable, so a row can reach here with nothing to display —
+		// and an empty line on a thank-you page is worse than an absence, because it looks
+		// like the page is broken rather than like somebody is missing.
+		const named = rows.flatMap((r) => {
+			const username = r.username ?? "";
+			const displayName = r.displayName || null;
+			if (!username && !displayName) return [];
+			return [{ username, displayName, lifetimeDollars: Number(r.lifetime) }];
+		});
+
+		return c.json({ groups: groupSupporters(named) });
+	})
+
+	/**
+	 * Whether this person appears there.
+	 *
+	 * ⭐ Listed by default and told so when they start supporting, so this is the control
+	 * that notice points at rather than a setting somebody has to go looking for.
+	 */
+	.get("/supporters/listing", requireAuth, async (c) => {
+		const user = c.get("user");
+		const [acct] = await db
+			.select({ listed: accounts.listedAsSupporter })
+			.from(accounts)
+			.where(eq(accounts.userId, user.id))
+			.limit(1);
+		return c.json({ listed: acct?.listed ?? true });
+	})
+
+	.patch(
+		"/supporters/listing",
+		requireAuth,
+		zValidator("json", z.object({ listed: z.boolean() })),
+		async (c) => {
+			const user = c.get("user");
+			const { listed } = c.req.valid("json");
+			const [row] = await db
+				.update(accounts)
+				.set({ listedAsSupporter: listed })
+				.where(eq(accounts.userId, user.id))
+				.returning({ listed: accounts.listedAsSupporter });
+			// No account row yet means nothing has been given, so there is nothing to list —
+			// and the preference will take its default when one is created.
+			if (!row) return c.json({ error: "No account" }, 404);
+			return c.json({ listed: row.listed });
+		},
+	)
+
 	.get("/access/:workId", async (c) => {
 		const { workId } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);

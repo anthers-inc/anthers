@@ -98,6 +98,7 @@ const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SubscribePage = lazy(() => import("./pages/SubscribePage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
@@ -179,6 +180,7 @@ export default function App() {
 						    that prompted the review. See the vault's "Decide what resources we
 						    actually need". */}
 						<Route path="/about" element={<AboutPage />} />
+						<Route path="/supporters" element={<SupportersPage />} />
 					</Route>
 					<Route path="/wiki/*" element={<WikiPage />} />
 					{/* Logging in to an account that already exists. Signing UP is /subscribe —

@@ -576,7 +576,12 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Our Appreciation",
-		desc: "A place on the Anthers supporters page, for anyone who has ever supported Anthers.",
+		// ⭐ **Says the default out loud, because the default is opt-OUT** (Parker,
+		// 2026-09-04). The wiki promises a place "if you want one", and a listed-by-default
+		// page keeps that promise only if the person is told while they are deciding —
+		// otherwise the first they hear of it is seeing their own name. The control is in
+		// account settings and the sentence has to point at it.
+		desc: "A place on the Anthers supporters page, for anyone who has ever supported Anthers. You are listed by name — never by amount — and you can take yourself off at any time in your account settings.",
 		cell: (amount) => ({ value: amount > 0 ? "Yes" : NOT_CARRIED }),
 	},
 ];
@@ -1960,6 +1965,25 @@ function Summary({
 					plus any applicable tax
 				</p>
 			</div>
+
+			{/* ⚠️ The perk table says this too, and repeating it here is deliberate rather
+			    than sloppy: a row in a comparison matrix is something a person scans, and
+			    this is the moment they commit. Being listed is the one perk that discloses
+			    something about them, so it is the one that has to be said twice. */}
+			{/* ⚠️ Held in place at $0 rather than dropped, exactly as the tax line above is and
+			    for the same reason: `subscribe-free-first.e2e.ts` asserts that choosing a rung
+			    moves nothing on the page, and rendering this conditionally grew the page by
+			    sixty pixels the moment somebody picked a paid rung. */}
+			<p
+				aria-hidden={total === 0}
+				className={`mt-3 text-xs text-base-content/45 ${total > 0 ? "" : "invisible"}`}
+			>
+				Supporters are thanked by name on the{" "}
+				<Link to="/supporters" className="link link-hover">
+					supporters page
+				</Link>
+				. Never by amount, and you can take yourself off at any time.
+			</p>
 
 			<SignupForm idPrefix="summary" className="mt-4" {...signup} />
 		</div>

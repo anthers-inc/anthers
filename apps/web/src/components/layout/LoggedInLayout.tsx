@@ -273,6 +273,9 @@ function LoggedInLayoutInner() {
 									<Link to="/roadmap" className="link link-hover">
 										Roadmap
 									</Link>
+									<Link to="/supporters" className="link link-hover">
+										Supporters
+									</Link>
 									<Link to="/resources" className="link link-hover">
 										Resources
 									</Link>

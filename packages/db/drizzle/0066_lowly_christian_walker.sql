@@ -1,0 +1,1 @@
+ALTER TABLE "accounts" ADD COLUMN "listed_as_supporter" boolean DEFAULT true NOT NULL;
