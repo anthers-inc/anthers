@@ -150,6 +150,11 @@ function CommentRow({
 }) {
 	const [collapsed, setCollapsed] = useState(comment.collapsed);
 
+	// 🚨 A tombstone: the author deleted their account and the comment stayed so the thread
+	// still reads. Says only WHO, never WHY — a moderation removal never reaches the browser
+	// at all, and conflating them would tell readers a user deleted something they did not.
+	const author = comment.username ?? "deleted by user";
+
 	if (collapsed) {
 		return (
 			<div className="flex items-center gap-2 text-sm text-base-content/45">
@@ -163,7 +168,7 @@ function CommentRow({
 				</button>
 				{/* Says who did it. "Heavily disliked" is the crowd; a moderator would not be
 				    mentioned here at all, because a removed comment never arrives. */}
-				<span className="text-xs">collapsed — heavily disliked ({comment.username})</span>
+				<span className="text-xs">collapsed — heavily disliked ({author})</span>
 			</div>
 		);
 	}
@@ -173,17 +178,17 @@ function CommentRow({
 			{comment.avatar ? (
 				<img
 					src={comment.avatar}
-					alt={comment.username}
+					alt={author}
 					className="w-8 h-8 rounded-full object-cover flex-shrink-0"
 				/>
 			) : (
 				<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-					{comment.username.charAt(0).toUpperCase()}
+					{author.charAt(0).toUpperCase()}
 				</div>
 			)}
 			<div className="flex-1">
 				<div className="flex items-center gap-2 text-sm">
-					<span className="font-medium">{comment.username}</span>
+					<span className="font-medium">{author}</span>
 					<span className="text-base-content/40 text-xs">
 						{new Date(comment.createdAt).toLocaleDateString()}
 					</span>
@@ -196,7 +201,7 @@ function CommentRow({
 							className="ml-auto text-base-content/30 hover:text-base-content/70"
 							onClick={onReport}
 							title="Report this comment"
-							aria-label={`Report ${comment.username}'s comment`}
+							aria-label={`Report ${author}'s comment`}
 						>
 							<FlagIcon className="w-3.5 h-3.5" />
 						</button>
@@ -209,7 +214,7 @@ function CommentRow({
 						subjectId={comment.id}
 						score={comment.score}
 						viewerReaction={comment.viewerReaction}
-						label={`${comment.username}'s comment`}
+						label={`${author}'s comment`}
 					/>
 				</div>
 			</div>

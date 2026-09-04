@@ -493,8 +493,17 @@ export interface Comment {
 	body: string;
 	atprotoUri: string | null;
 	createdAt: string;
-	username: string;
+	/**
+	 * 🚨 **Null when the author deleted their account**, and the server has always sent it
+	 * that way — a tombstoned comment keeps its text so the conversation around it still
+	 * reads, and the join that fetches the author finds nobody. Typing this as `string` was
+	 * a promise the server never made, and it turned every renderer into a crash waiting for
+	 * the first deleted account.
+	 */
+	username: string | null;
 	avatar: string | null;
+	/** True exactly when `username` is null. Says WHO left, never why. */
+	deletedByAuthor?: boolean;
 	/**
 	 * The published score: likes minus dislikes, floored at zero.
 	 *
