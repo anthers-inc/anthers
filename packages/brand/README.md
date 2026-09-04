@@ -20,6 +20,10 @@ It now lives in a **private** repository alongside the layered design working fi
 
 # Adding an icon
 
+🚨 **The codegen runs at AUTHORING time and must never become a build-time fetch.** `src/generated/icons.ts` is committed precisely so the app builds with no credentials, no network call and no access to the private library — verified byte-identical, and the reason a fork of this repository is genuinely buildable. Sourcing art through the Noun Project API is planned (the vault task *Source brand iconography through the Noun Project API*) and it lands as `brand:search` / `brand:add`: **scripts a person runs and commits the output of**, exactly as this codegen already is. Wiring a fetch into `bun run build` would put a vendor key on the deploy path for artwork that changes twice a year, cost an API call per asset on every cold build, and give away the property this whole split was made to keep.
+
+⚠️ **Do not recolor at the source.** `normalize()` strips baked fills so one injected color controls each icon, and every consumer recolors from the design tokens — so a palette change re-downloads nothing, and must not start to. The Noun Project API will hand you a pre-colored file if you ask it to; don't.
+
 1. Check out the icon library beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`. ⚠️ **That library is private, so this step is Anthers-internal** — an outside contributor cannot re-run the codegen, and does not need to: `src/generated/icons.ts` is committed and complete, and the app builds identically without the source.
 2. Find the art. Its `preview/` holds per-collection contact sheets — the filenames are Noun Project `noun-<type>-<id>` and are not individually descriptive, so browse visually. If you're adding *new* art, download it as **SVG, single-color black**; multi-color art can't recolor from one value.
 3. Add `{ id, path }` to `CURATED` in `scripts/build-icons.ts`, with the path relative to the library's `svg/`.
