@@ -2,21 +2,19 @@
 /**
  * Paths into the Creator Studio — the ONE place the `/studio` prefix is written.
  *
- * 🚨 The Studio's pages live in this package while its ROUTES are mounted by the consuming
- * app, and that split is what made every in-Studio link rot silently on 2026-08-11. Until
- * then the Studio was its own app at `studio.anthers.org`, where the Dashboard was `/` and
- * the project form was `/projects/new`; the merge into `apps/web` moved every one of those
- * under `/studio` and re-prefixed the shell's nav — but the pages still linked to the old
- * root-absolute paths. Nothing 404'd, because `apps/web` has `/:username` and
- * `/:username/:slug` catch-alls that happily matched them: **"New Project" resolved to the
- * public project page for a creator named "projects" and rendered "Project not found"**,
- * and Import/Analytics/Settings each rendered a stranger's profile.
+ * 🚨 **The Studio's pages live in this package while its ROUTES are mounted by the consuming
+ * app, so a page here cannot see where it was mounted.** That split is what made every
+ * in-Studio link rot silently when the Studio stopped being its own app at
+ * `studio.anthers.org`: the shell's nav was re-prefixed and the pages went on linking to
+ * root-absolute paths like `/projects/new` and `/analytics`, which is a whole navigation
+ * pointing outside the Studio with nothing anywhere reporting it.
  *
- * That is the failure mode to design against here — a broken in-app link does not error, it
- * renders a *different real page*. So the prefix belongs in one exported function rather
- * than in ~10 string literals, and `apps/web/src/lib/studio.ts` re-exports this module
- * instead of keeping its own copy: a duplicated constant agrees with its original right up
- * until one of them moves.
+ * ⚠️ **A wrong in-app link need not 404, which is what makes this worth centralizing.**
+ * `/settings`, `/library` and `/@somebody` are all real destinations a stale Studio path can
+ * reach, and each renders a page rather than an error. So the prefix belongs in one exported
+ * function rather than in ~10 string literals, and `apps/web/src/lib/studio.ts` re-exports
+ * this module instead of keeping its own copy: a duplicated constant agrees with its original
+ * right up until one of them moves.
  */
 
 /** The Studio's root path. */

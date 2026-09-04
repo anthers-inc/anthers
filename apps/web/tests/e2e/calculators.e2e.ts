@@ -33,12 +33,10 @@ test.describe("Resources calculators", () => {
 		await expect(page.getByRole("heading", { name: "Run the numbers yourself" })).toBeVisible();
 		await expect(page.getByRole("heading", { name: "How we stack up" })).toBeVisible();
 
-		// 🚨 **A link to a deleted `/demo-*` page would not look broken.** `App.tsx` ends in
-		// a `/:username` catch-all, so those paths now fall through to a profile lookup
-		// rather than to anything that announces itself as missing — and the handles stay
-		// reserved, so the lookup renders "not found" instead of erroring. A dangling card
-		// would therefore navigate, render, and pass every other assertion on this page.
-		// This is the only thing that would say so.
+		// 🚨 **A dangling `/demo-*` card is not visible from this page's other assertions.**
+		// Every one of them looks at what rendered; a link nobody clicks renders fine. So the
+		// count below is the only thing here that would notice one, and it is cheap enough to
+		// keep even though those paths now answer with a 404 rather than a plausible page.
 		const demoLinks = await page.locator('a[href*="/demo-"]').count();
 		expect(demoLinks, "the resources index links to a retired demo page").toBe(0);
 

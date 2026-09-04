@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import type { Project } from "@anthers/web-shared/types";
 import { RectangleStackIcon } from "@heroicons/react/24/outline";
@@ -8,7 +9,7 @@ import { RectangleStackIcon } from "@heroicons/react/24/outline";
 export default function ProjectCard({ project }: { project: Project }) {
 	return (
 		<Link
-			to={`/${project.creator?.username ?? "unknown"}/${project.slug}`}
+			to={creatorProjectUrl(project.creator?.username ?? "unknown", project.slug)}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
 		>
 			{project.coverImage ? (

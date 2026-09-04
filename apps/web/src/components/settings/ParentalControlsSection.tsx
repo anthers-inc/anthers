@@ -19,11 +19,13 @@
  * does not exist, and a guardian would discover the gap by watching a child sit on the site
  * all evening with the limit untouched.
  */
+
 import {
 	PARENTAL_MEDIA_TYPES,
 	type ParentalList,
 	type ParentalPolicy,
 } from "@anthers/shared/parental-controls";
+import { displayHandle } from "@anthers/web-shared/profile";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { LockClosedIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
@@ -102,7 +104,7 @@ export default function ParentalControlsSection() {
 		try {
 			const res = await apiFetch(`/api/accounts/users/${encodeURIComponent(handle)}`);
 			if (!res.ok) {
-				setError(`No creator called @${handle}.`);
+				setError(`No creator called ${displayHandle(handle)}.`);
 				return;
 			}
 			const { user } = (await res.json()) as { user: { id: number; username: string } };

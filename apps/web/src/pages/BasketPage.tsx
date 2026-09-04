@@ -15,6 +15,7 @@
  */
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { creatorWorkUrl, profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
@@ -92,7 +93,7 @@ export default function BasketPage() {
 			{creator && (
 				<p className="text-sm text-base-content/60 mb-6">
 					Work by{" "}
-					<Link to={`/${creator}`} className="link link-hover font-medium">
+					<Link to={profileUrl(creator)} className="link link-hover font-medium">
 						{creator}
 					</Link>
 					. A basket holds one creator at a time, because each is paid directly.
@@ -109,7 +110,7 @@ export default function BasketPage() {
 				{items.map((item) => (
 					<li key={item.workId} className="flex items-center gap-3 p-3">
 						<div className="min-w-0 flex-1">
-							<Link to={`/${item.creatorUsername}/works/${item.slug}`} className="link-hover">
+							<Link to={creatorWorkUrl(item.creatorUsername, item.slug)} className="link-hover">
 								<span className="block truncate text-sm font-medium">{item.title}</span>
 							</Link>
 						</div>

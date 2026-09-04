@@ -6,10 +6,9 @@
  * not have been found any other way.** Connect's onboarding returned creators to
  * `/studio/payouts?onboarded=1` from the day it was written until 2026-08-29. That route has
  * never existed and that parameter has never been read — but the server only ever *composed*
- * the string and handed it to Stripe, so no request of ours was ever made against it, and this
- * app's `/:username` catch-all rendered a stranger's profile rather than a 404. Nothing was
- * red. `scripts/stripe-redirect-guard.test.ts` is the other half: it keeps every such URL in
- * `STRIPE_RETURN_PATHS`, which is what makes the walk below exhaustive.
+ * the string and handed it to Stripe, so no request of ours was ever made against it and
+ * nothing was red. `scripts/stripe-redirect-guard.test.ts` is the other half: it keeps every
+ * such URL in `STRIPE_RETURN_PATHS`, which is what makes the walk below exhaustive.
  *
  * ⚠️ **Assert what is on the page, never only the URL.** A wrong path here resolves — that is
  * the whole trap — so `toHaveURL` would pass on the broken version. The same lesson
@@ -55,9 +54,9 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	},
 
 	/**
-	 * The subscription page. Either heading proves the route matched — a `/:username` fall
-	 * through would have rendered a profile — and which one appears depends on whether the
-	 * fixture creator has a billing account, which is not this test's subject.
+	 * The subscription page. Either heading proves the route matched, and which one appears
+	 * depends on whether the fixture creator has a billing account, which is not this test's
+	 * subject.
 	 */
 	billingPortalReturn: async (page) => {
 		await expect(

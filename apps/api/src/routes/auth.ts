@@ -63,8 +63,8 @@ const signUpSchema = z.object({
 		.min(3)
 		.max(150)
 		.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
-		// A name the router already answers to would sign up fine and then strand
-		// the profile at an unreachable URL — see reserved-usernames.ts.
+		// Impersonation only: profiles live under `/@name`, so a handle cannot collide
+		// with a page and there is no route blacklist — see reserved-usernames.ts.
 		.refine((name) => !isReservedUsername(name), "That username is reserved"),
 	email: z.string().email().max(254),
 	password: z.string().min(8).max(128),

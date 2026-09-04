@@ -34,7 +34,7 @@ import {
 export const users = pgTable("users", {
 	id: serial("id").primaryKey(),
 	/**
-	 * The handle, and the `/:username` profile URL. **Null until onboarding claims one.**
+	 * The handle, and the `/@username` profile URL. **Null until onboarding claims one.**
 	 *
 	 * The signup ceremony creates the account the moment an emailed code is verified —
 	 * before a username has been chosen — so that payment is an ordinary authenticated
@@ -50,7 +50,7 @@ export const users = pgTable("users", {
 	 * Nothing strands: sign-in already accepts an email *or* a username, so someone who
 	 * abandons onboarding can come back and finish. What null costs is that every public
 	 * surface has to refuse an account that has not claimed one — see `publicHandle()` in
-	 * `routes/accounts.ts` and the `/:username` route's own guard.
+	 * `routes/accounts.ts` and the `/@username` route's own guard.
 	 */
 	username: text("username").unique(),
 	email: text("email").notNull().unique(),

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import { Link, useNavigate } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
@@ -141,7 +142,7 @@ export default function SearchBar() {
 									return (
 										<li key={project.id}>
 											<Link
-												to={`/${project.creator?.username ?? "unknown"}/${project.slug}`}
+												to={creatorProjectUrl(project.creator?.username ?? "unknown", project.slug)}
 												className="flex items-center gap-3 px-3 py-2"
 												onClick={() => {
 													setFocused(false);

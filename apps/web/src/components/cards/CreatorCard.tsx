@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
@@ -36,7 +37,7 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
 
 	return (
 		<Link
-			to={`/${creator.username}`}
+			to={profileUrl(creator.username)}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
 		>
 			<div className="card-body p-4 gap-2 items-center text-center">

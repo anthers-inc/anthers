@@ -7,6 +7,7 @@ import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
+import { creatorProjectUrl } from "../lib/profile";
 import { apiFetch, client } from "../lib/rpc";
 import { studioEditProjectUrl, studioUrl } from "../lib/studio";
 import type { Project } from "../lib/types";
@@ -122,7 +123,7 @@ export default function ProjectFormPage() {
 					return;
 				}
 				const { project } = (await res.json()) as { project: Project };
-				navigate(`/${user?.username ?? "me"}/${project.slug}`);
+				navigate(creatorProjectUrl(user?.username ?? "me", project.slug));
 				// ^ Editing ends at the public page: the creator already had the shelf in front
 				// of them, so what they want to see is the result.
 			} else {

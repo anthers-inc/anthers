@@ -14,10 +14,10 @@
  *
  * What they pin:
  *
- *   - **That `/studio` resolves to the Studio at all**, rather than to the `/:username`
- *     catch-all. The gauntlet viewer is NOT a creator, so the creator gate redirects them
- *     to `/settings`; that redirect is the observable proof the Studio route matched,
- *     because a `/:username` match would have rendered a profile instead.
+ *   - **That `/studio` resolves to the Studio at all.** The gauntlet viewer is NOT a
+ *     creator, so the creator gate redirects them to `/settings`; that redirect is the
+ *     observable proof the Studio route matched, because any other match renders
+ *     something that is not the Studio.
  *
  *     ⚠️ These do NOT pin route ORDER, and an earlier version of this comment claimed they
  *     did. Moving the `/studio` block below the catch-all was tried and every test still
@@ -31,29 +31,25 @@
  *     is the point. Every test above reaches a route by typing its URL, which is precisely
  *     what cannot see a wrong `<Link to>`. The Studio's pages live in `@anthers/web-shared`
  *     while its routes are mounted in `apps/web`, so the merge re-prefixed the shell's nav
- *     and left the pages linking to the pre-merge root paths — and because this app has
- *     `/:username` and `/:username/:slug` catch-alls, **none of them 404'd**. "New Project"
- *     went to `/projects/new`, matched the catch-all and rendered *"Project not found"*;
- *     Import and Analytics each rendered a stranger's profile. So these tests click, and
- *     they assert the Studio shell is still on screen afterwards rather than only checking
- *     the URL: falling through to a real public page is the failure mode here, not a 404.
+ *     and left the pages linking to the pre-merge root paths, none of which announced
+ *     themselves as broken. ⚠️ **A wrong in-app link still need not 404** — `/settings`,
+ *     `/library` and `/@somebody` are all real destinations a stale Studio link could
+ *     reach. So these tests click, and they assert the Studio shell is still on screen
+ *     afterwards rather than only checking the URL.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { API_URL, signInAsCreator, WEB_ORIGIN } from "./fixtures";
 
 /**
  * The Studio chrome. Asserting on it is what distinguishes "the link went to the Studio
- * page" from "the link fell through to a public page that happens to render". A URL check
- * alone would have passed on `/projects/new` — that URL exists, it is just somebody's
- * project page.
+ * page" from "the link fell through to a page that happens to render". A URL check alone
+ * passes on any destination at all, including the ones that look like a page.
  */
 function studioNav(page: Page) {
 	return page.getByRole("navigation").getByRole("link", { name: "Dashboard" });
 }
 
-test("/studio resolves to the Studio and its creator gate, not the /:username catch-all", async ({
-	page,
-}) => {
+test("/studio resolves to the Studio and its creator gate", async ({ page }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 

@@ -16,10 +16,10 @@ import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
  * Payouts — where Connect onboarding starts, and where Stripe returns somebody afterwards.
  *
  * 🚨 **This section is the destination of `STRIPE_RETURN_PATHS.connectReturn`, so the `stripe`
- * parameter it reads is a contract with the API rather than a local detail.** The API pointed
- * Connect's return leg at `/studio/payouts?onboarded=1` until 2026-08-29 — a route that has
- * never existed, carrying a parameter nothing has ever read — so a creator who finished
- * onboarding was returned to the `/:username` catch-all and shown a stranger's profile.
+ * parameter it reads is a contract with the API rather than a local detail.** Renaming this
+ * section, moving it to a page of its own, or changing which value of `stripe` it answers to
+ * breaks the end of Connect onboarding, and it breaks it in the one place no test of ours
+ * makes a request: the return URL is navigated by the creator's browser, not by us.
  *
  * ⚠️ **Called "Payouts" rather than "Stripe Payments" because that is what a creator is
  * looking for.** Stripe is how it is done and the body says so; getting paid is the thing.

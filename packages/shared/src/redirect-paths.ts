@@ -7,9 +7,8 @@
  * Stripe sends the person there afterwards — so a typecheck sees a valid string, a lint sees
  * valid syntax, and every route test passes because no request was ever made. Connect's
  * onboarding pointed at `/studio/payouts` from the day it was written until 2026-08-29, and
- * `/studio/payouts` has never existed: a creator who finished onboarding was returned to the
- * `/:username` catch-all, which renders somebody's profile rather than a 404, so it did not
- * even look broken.
+ * `/studio/payouts` has never existed — so the end of onboarding, the moment a creator is
+ * furthest into a flow they cannot repeat, landed nowhere.
  *
  * ⚠️ **The absence of a route is not the only way to get this wrong.** A path that resolves
  * but ignores the query is the same failure one step quieter — the page renders, the creator

@@ -2,10 +2,10 @@
 /**
  * What a brand-new account sees instead of its own empty profile.
  *
- * The signup ceremony used to end with `navigate(`/${username}`)` — dropping someone who
- * had held an account for ninety seconds onto a page about themselves, with nothing on
- * it. That is the worst available answer to *"what now?"*, and it lands at the one moment
- * a person is most willing to be told.
+ * 🚨 **Do not end the signup ceremony by navigating to the new account's own profile.** That
+ * drops someone who has held an account for ninety seconds onto a page about themselves with
+ * nothing on it — the worst available answer to *"what now?"*, arriving at the one moment a
+ * person is most willing to be told something.
  *
  * 🚨 **It branches, because the arriving account is not in one state** (Parker's call,
  * 2026-08-12). Three people reach this page having been asked completely different

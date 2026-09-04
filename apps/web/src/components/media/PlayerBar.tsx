@@ -20,6 +20,7 @@
  */
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { workUrl } from "@anthers/web-shared/postUrl";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowPathIcon,
@@ -90,7 +91,7 @@ export default function PlayerBar() {
 						</Link>
 						{track.creatorUsername ? (
 							<Link
-								to={`/${track.creatorUsername}`}
+								to={profileUrl(track.creatorUsername)}
 								className="block truncate text-xs text-base-content/55 hover:text-primary hover:underline"
 							>
 								{track.creator}

@@ -114,6 +114,7 @@ import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { AnthersBadgeMark, BADGE_ART } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
@@ -1146,7 +1147,7 @@ function CreatorFinder({
 									)}
 									<span className="min-w-0">
 										<Link
-											to={`/${creator.username}`}
+											to={profileUrl(creator.username)}
 											className="block truncate text-sm font-bold hover:underline"
 										>
 											{nameOf(creator)}
@@ -1155,7 +1156,7 @@ function CreatorFinder({
 											{(creator.mediums ?? [])
 												.map((m) => MEDIUMS.find((x) => x.key === m)?.label ?? m)
 												.slice(0, 2)
-												.join(" · ") || `@${creator.username}`}
+												.join(" · ") || displayHandle(creator.username)}
 										</span>
 									</span>
 								</div>

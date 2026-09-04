@@ -13,11 +13,13 @@
  * "2015" and never "1 January 2015". **Released** is when we made it public. The upload
  * date is bookkeeping and is deliberately not shown.
  */
+
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type { TranscodingJob, Work } from "@anthers/web-shared/types";
@@ -294,7 +296,7 @@ export default function WorkPage() {
 					<ContentTypeBadge contentType={work.type} />
 					{work.creator && (
 						<Link
-							to={`/${work.creator.username}`}
+							to={profileUrl(work.creator.username)}
 							className="flex items-center gap-2 text-sm hover:underline"
 						>
 							{work.creator.avatar ? (

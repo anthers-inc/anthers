@@ -36,6 +36,7 @@ import {
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
 import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import { profileUrl } from "@anthers/web-shared/profile";
 
 /** The purchase rung's key — derived, so extending BADGE_RUNGS doesn't strand it. */
 const BUY = `G${2 + BADGE_RUNGS.length}`;
@@ -397,7 +398,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 test("rung 2 — follow: the feed fills, access does not change", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 
-	await page.goto(`/${GAUNTLET_CREATOR_USERNAME}`);
+	await page.goto(profileUrl(GAUNTLET_CREATOR_USERNAME));
 	await page.getByRole("button", { name: "Follow", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
 
@@ -511,7 +512,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
-		await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
+		await page.goto(`${profileUrl(GAUNTLET_CREATOR_USERNAME)}?tab=badges`);
 		await page.getByLabel("Monthly amount").fill(String(seeds));
 		await page.getByRole("button", { name: `Give $${added.toFixed(2)}` }).click();
 		// The give settles when the button returns to its resting label.
@@ -526,7 +527,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 
 test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
+	await page.goto(`${profileUrl(GAUNTLET_CREATOR_USERNAME)}?tab=badges`);
 	// The full ladder is committed; within the cycle the control's floor IS that amount.
 	await expect(page.getByRole("button", { name: "Give less" })).toBeDisabled();
 	expect(errors).toEqual([]);

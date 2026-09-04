@@ -232,12 +232,11 @@ const paymentRoutes = new Hono()
 
 		// Return here after the hosted flow; the account.updated webhook syncs enablement.
 		//
-		// 🚨 **Both legs come from `STRIPE_RETURN_PATHS`, and typing one inline here is what
-		// went wrong.** They pointed at `/studio/payouts?onboarded=1` from the day they were
-		// written until 2026-08-29, and no such route has ever existed — the app's
-		// `/:username` catch-all rendered a stranger's profile instead of a 404, so a creator
-		// finishing onboarding landed somewhere plausible and wrong. Nothing could catch it:
-		// this string is handed to Stripe and never navigated by us.
+		// 🚨 **Both legs come from `STRIPE_RETURN_PATHS`, and typing one inline here is the
+		// way to get it wrong.** This string is composed, handed to Stripe, and navigated by
+		// somebody else's browser minutes later, so our own suite cannot make the request
+		// that would find a bad one — a typecheck sees a valid string and every route test
+		// passes. What a creator sees is the end of onboarding landing nowhere.
 		const base =
 			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
 		const link = await stripe.accountLinks.create({

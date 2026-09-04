@@ -22,8 +22,9 @@
  * subject. Reading the suite's own source asks the question that actually matters: does
  * anything here file one of these without meaning to?
  *
- * Same family as the reserved-usernames drift guard against `App.tsx`: where a design says a
- * thing does not happen, the absence needs a test, because a new one arrives silently.
+ * Same family as `scripts/stripe-redirect-guard.test.ts` and `scripts/profile-url-guard.test.ts`:
+ * where a design says a thing does not happen, the absence needs a test, because a new one
+ * arrives silently.
  */
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";

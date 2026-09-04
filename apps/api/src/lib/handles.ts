@@ -5,7 +5,7 @@
  *
  * Since the signup ceremony (migration `0032`) an account exists from the moment its
  * emailed code is verified, and claims a handle later, during onboarding. So there is a
- * real window in which a row in `users` has no name — and `username` is the `/:username`
+ * real window in which a row in `users` has no name — and `username` is the `/@username`
  * profile URL, so a null one is not a cosmetic gap but an account with no public
  * existence at all.
  *

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useNavigate } from "@anthers/web-shared/router";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
@@ -130,7 +131,7 @@ function LoggedInLayoutInner() {
 								    redirects before this renders — this is what it degrades to if that
 								    guard is ever removed. */}
 								<span className="text-xs text-base-content/50">
-									{user?.username ? `@${user.username}` : "Finish setting up"}
+									{user?.username ? displayHandle(user.username) : "Finish setting up"}
 								</span>
 							</li>
 							<div className="divider my-0 px-2" />
@@ -142,7 +143,7 @@ function LoggedInLayoutInner() {
 							</li>
 							<li>
 								{user?.username ? (
-									<Link to={`/${user.username}`}>Profile</Link>
+									<Link to={profileUrl(user.username)}>Profile</Link>
 								) : (
 									<Link to="/welcome">Pick your username</Link>
 								)}

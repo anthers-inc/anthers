@@ -21,6 +21,7 @@
  * somebody notice they have just preserved the wrong account.
  */
 
+import { displayHandle } from "@anthers/web-shared/profile";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
@@ -332,7 +333,7 @@ export default function LegalHolds() {
 									<td className="whitespace-nowrap">
 										<div>{shortDate(hold.placedAt)}</div>
 										<div className="text-xs text-base-content/60">
-											{hold.placedBy ? `@${hold.placedBy}` : "by a job"}
+											{hold.placedBy ? displayHandle(hold.placedBy) : "by a job"}
 										</div>
 									</td>
 									<td className="whitespace-nowrap">

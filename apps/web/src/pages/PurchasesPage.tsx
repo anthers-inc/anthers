@@ -2,6 +2,7 @@
 
 import { amountLabel } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Purchase } from "@anthers/web-shared/types";
@@ -123,7 +124,7 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 							{/* Creator → profile link. A support top-up has no creator side. */}
 							{p.creator?.username ? (
 								<Link
-									to={`/${p.creator.username}`}
+									to={profileUrl(p.creator.username)}
 									className="text-sm text-base-content/50 link link-hover"
 								>
 									@{p.creator.username}

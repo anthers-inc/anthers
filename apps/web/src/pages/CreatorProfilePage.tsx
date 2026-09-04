@@ -3,6 +3,7 @@
 import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
+import { displayHandle, usernameFromHandleParam } from "@anthers/web-shared/profile";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
@@ -342,7 +343,11 @@ function BadgesTab({
 const TABS: Tab[] = ["all", "games", "videos", "audio", "writing", "badges", "about"];
 
 export default function CreatorProfilePage() {
-	const { username } = useParams<{ username: string }>();
+	const { handle } = useParams<{ handle: string }>();
+	// The route param carries the `@`; everything below this line — the API calls, the
+	// ownership check, the printed byline — wants the bare username. `HandleRoute` has already
+	// turned away a segment without one, so in practice this never falls back.
+	const username = usernameFromHandleParam(handle) ?? undefined;
 	const { isAuthenticated, user: currentUser, refreshUser } = useAuth();
 	const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1083,7 +1088,7 @@ export default function CreatorProfilePage() {
 				<ReportDialog
 					subjectType="user"
 					subjectId={creator.id}
-					label={`@${creator.username}`}
+					label={displayHandle(creator.username)}
 					onClose={() => setReporting(false)}
 				/>
 			)}
