@@ -73,18 +73,49 @@ export const LICENSES: Record<string, { label: string; url: string | null }> = {
 	"public-domain": { label: "Public Domain", url: null },
 };
 
-export function readCurated(): CuratedIcon[] {
-	const parsed = JSON.parse(readFileSync(ICONS_PATH, "utf8")) as { icons?: CuratedIcon[] };
+/**
+ * The register: what the product uses, and what it is waiting on.
+ *
+ * ⭐ **`wanted` is the half that makes this a workflow rather than a record.** The API
+ * will not hand over a file, so somebody has to click download — and the step that used
+ * to be missing was any way to say *"this icon, for this reason"* before the file
+ * existed. An entry lands in `wanted` with its provenance already fetched, which turns
+ * the human job into opening a link, and `brand:collect` promotes it into `icons` when
+ * the file arrives.
+ *
+ * ⚠️ **The codegen reads `icons` only.** A wanted entry has no file, and `build-icons.ts`
+ * treats a curated path with no file as a hard error — correctly, because that means the
+ * library and the register have diverged. Keeping the two lists apart is what stops a
+ * thing we have merely asked for from looking like a thing that has gone missing.
+ */
+export interface Register {
+	note: string;
+	icons: CuratedIcon[];
+	wanted: CuratedIcon[];
+}
+
+export function readRegister(): Register {
+	const parsed = JSON.parse(readFileSync(ICONS_PATH, "utf8")) as Partial<Register>;
 	if (!Array.isArray(parsed.icons)) throw new Error("icons.json: no `icons` array");
-	return parsed.icons;
+	return { note: parsed.note ?? "", icons: parsed.icons, wanted: parsed.wanted ?? [] };
+}
+
+export function writeRegister(reg: Register): void {
+	// `wanted` is omitted when empty so the common state of the file stays uncluttered.
+	const body = reg.wanted.length > 0 ? reg : { note: reg.note, icons: reg.icons };
+	writeFileSync(ICONS_PATH, `${JSON.stringify(body, null, "\t")}\n`);
+}
+
+export function readCurated(): CuratedIcon[] {
+	return readRegister().icons;
 }
 
 export function writeCurated(icons: CuratedIcon[], note: string): void {
-	writeFileSync(ICONS_PATH, `${JSON.stringify({ note, icons }, null, "\t")}\n`);
+	writeRegister({ ...readRegister(), note, icons });
 }
 
 export function curatedNote(): string {
-	return (JSON.parse(readFileSync(ICONS_PATH, "utf8")) as { note: string }).note;
+	return readRegister().note;
 }
 
 export function readProvenance(): Map<number, IconProvenance> {
