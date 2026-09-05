@@ -416,6 +416,21 @@ export const poolDistributions = pgTable(
 		// deducted**, and every earnings reader draws from it. The gross counterpart is
 		// `seed_allocations.amount`; see the warning there for what confusing them costs.
 		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-support share
+		/**
+		 * What this subscriber directed at this creator as Stickers in the cycle.
+		 *
+		 * 🚨 **Part of `pool_amount`'s source, not additional to it.** A Sticker is an
+		 * override of the Time Pool, so the money here was already the subscriber's Time Pool
+		 * money — `distribute-pool` distributes by time only what was NOT directed. Adding
+		 * these two together to get "what the Time Pool paid" is correct; treating this as a
+		 * fourth source of creator money on top of the pool would double-count it.
+		 *
+		 * ⚠️ **Gross, unlike `seed_amount`.** A Sticker moves money already given to Anthers
+		 * and already processed, so there is no card fee left to take out of it — the fee came
+		 * off when the user paid Anthers. `seed_amount` is net because directed support is a
+		 * separate charge.
+		 */
+		stickerAmount: numeric("sticker_amount").notNull().default("0.00"),
 		// The **Public Access** seconds that earned `poolAmount`, not all the time this
 		// viewer spent with this creator. It is the numerator of the pool split, so it has
 		// to be the same set of seconds the money was divided by — a row whose seconds and
@@ -570,3 +585,70 @@ export const parentalControls = pgTable("parental_controls", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// both — a Sticker is a viewer's directed payment to a creator, so it splits exactly as
+// `pool_distributions` does: the giver is org-side (a viewer has no node), the recipient
+// and the thing it sits on are a creator's. The payment half is org accounting; the
+// display half is node content.
+/**
+ * A **Sticker** — a user directing part of their own Time Pool at one creator, by hand.
+ *
+ * ⭐ **An override of the Time Pool, never a second pool beside it** (Parker, 2026-09-04).
+ * Nothing is held back and nothing is returned: a user's Time Pool is distributed by time
+ * *except* for whatever they directed here. A user who gives no Stickers ends the cycle
+ * exactly where they would have, which is why this feature has no rollback anywhere in it.
+ *
+ * 🚨 **The payment is a COMMITMENT and `removed_at` is only about display.** Giving a
+ * Sticker commits the money irreversibly; taking it off the page returns nothing, and the
+ * giver is told so before they do it. The reason is that a Sticker may buy standing —
+ * visibility, or treatment from the creator or the community — and standing must not be
+ * rentable by giving one and withdrawing it before the cycle settles. So settlement reads
+ * `amount` and never `removed_at`, and nothing anywhere may offer a refund path.
+ *
+ * ⚠️ **`creator_id` is stored rather than derived from the subject.** The subject can be
+ * moderated, its creator can leave, and a comment can outlive the account that wrote it —
+ * but the payment record has to name who was paid, years later, without re-resolving
+ * anything. Same reasoning as `pool_distributions`, which is where this lands at settlement.
+ */
+export const stickers = pgTable(
+	"stickers",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * Who gave it. SET NULL on account deletion, exactly as `pool_distributions` does:
+		 * the person comes off the record and the record stays, because it is a financial
+		 * artifact belonging to the creator as much as to the giver.
+		 */
+		giverId: integer("giver_id").references(() => users.id, { onDelete: "set null" }),
+		/** Who was paid. SET NULL for the same reason, from the other side. */
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** Where it sits — the same `(subject_type, subject_id)` shape `reactions` uses. */
+		subjectType: text("subject_type").notNull(), // work | post | comment
+		subjectId: integer("subject_id").notNull(),
+		/** `YYYY-MM-01`, matching `account_cycles.billing_cycle` — the cycle this is drawn from. */
+		billingCycle: text("billing_cycle").notNull(),
+		/** Dollars, and one of `STICKER_DENOMINATIONS`. Never a count of anything. */
+		amount: numeric("amount").notNull(),
+		/**
+		 * Which piece of art, once there is a batch to choose from.
+		 *
+		 * ⚠️ Nullable because the money routing is built before any art exists. A row with no
+		 * art key predates the first batch; it is not a Sticker whose art was removed.
+		 */
+		artKey: text("art_key"),
+		/**
+		 * When the giver took it off the page. **Display only** — see the class note above.
+		 * Removal is a state and never a delete, as everywhere else in this schema.
+		 */
+		removedAt: timestamp("removed_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The cap is "how much has this giver directed this cycle", which is this index.
+		index("idx_stickers_giver_cycle").on(table.giverId, table.billingCycle),
+		// Settlement asks the same question per creator.
+		index("idx_stickers_creator_cycle").on(table.creatorId, table.billingCycle),
+		// Drawing a thread asks what sits on each subject.
+		index("idx_stickers_subject").on(table.subjectType, table.subjectId),
+	],
+);

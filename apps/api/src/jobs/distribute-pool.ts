@@ -39,7 +39,13 @@
  */
 
 import { db } from "@anthers/db";
-import { accounts, attentionEvents, poolDistributions, seedAllocations } from "@anthers/db/schema";
+import {
+	accounts,
+	attentionEvents,
+	poolDistributions,
+	seedAllocations,
+	stickers,
+} from "@anthers/db/schema";
 import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
@@ -86,6 +92,8 @@ export function billingCycleDate(cycleStart: Date): string {
 interface Dist {
 	poolAmount: Decimal;
 	seedAmount: Decimal;
+	/** What this viewer directed at this creator by hand, out of their own Time Pool. */
+	stickerAmount: Decimal;
 	attentionSeconds: number;
 }
 
@@ -161,7 +169,12 @@ async function distributeForAccount(acct: {
 	const ensure = (creatorId: number): Dist => {
 		let d = distributions.get(creatorId);
 		if (!d) {
-			d = { poolAmount: new Decimal(0), seedAmount: new Decimal(0), attentionSeconds: 0 };
+			d = {
+				poolAmount: new Decimal(0),
+				seedAmount: new Decimal(0),
+				stickerAmount: new Decimal(0),
+				attentionSeconds: 0,
+			};
 			distributions.set(creatorId, d);
 		}
 		return d;
@@ -230,11 +243,45 @@ async function distributeForAccount(acct: {
 	// against the budget — so leaving money undistributed here is a decision about *creators*
 	// and never a decision to lose it.
 	const timePool = computeTimePoolAmount(supportAmount(acct.anthersSupport));
-	const sharedPool =
-		totalShared > 0 ? CENTS(timePool.mul(SHARE_LINK_POOL_FRACTION)) : new Decimal(0);
-	const ownPool = totalOwn > 0 ? timePool.minus(sharedPool) : new Decimal(0);
 
-	if (timePool.gt(0)) {
+	// 3a. Stickers — the part of this viewer's Time Pool they directed themselves.
+	//
+	// ⭐ **An OVERRIDE of the pool, never a second pool beside it** (Parker, 2026-09-04).
+	// Nothing was held back and nothing is being returned: what follows distributes by time
+	// only what the viewer did NOT direct, so a viewer who gave no Stickers ends the cycle in
+	// exactly the position they were in before the feature existed.
+	//
+	// 🚨 **Read `amount` and never `removed_at`.** Taking a Sticker off the page returns no
+	// money — the giver is told so before they do it — because a Sticker may buy standing, and
+	// standing must not be rentable by giving one and withdrawing it before the cycle settles.
+	const stickerRows = await db
+		.select({ creatorId: stickers.creatorId, amount: stickers.amount })
+		.from(stickers)
+		.where(and(eq(stickers.giverId, acct.userId), eq(stickers.billingCycle, cycleDate)));
+
+	let stickerTotal = new Decimal(0);
+	for (const row of stickerRows) {
+		// The recipient deleted their account, so there is nobody to pay. The amount stays out
+		// of `stickerTotal` too, which returns it to the time-distributed pool rather than
+		// stranding it — the same direction `pool_distributions` takes when an identity goes.
+		if (row.creatorId === null) continue;
+		const amount = new Decimal(row.amount);
+		ensure(row.creatorId).stickerAmount = ensure(row.creatorId).stickerAmount.plus(amount);
+		stickerTotal = stickerTotal.plus(amount);
+	}
+
+	// ⚠️ **Floored at zero rather than trusted to fit.** The cap is checked when a Sticker is
+	// given and never afterwards, so a viewer who lowered their Badge mid-cycle can have
+	// directed more than this cycle's pool now holds. The money was committed at the moment of
+	// giving and is not clawed back; what gives is the time-distributed remainder, which
+	// simply reaches zero.
+	const directable = Decimal.max(0, timePool.minus(stickerTotal));
+
+	const sharedPool =
+		totalShared > 0 ? CENTS(directable.mul(SHARE_LINK_POOL_FRACTION)) : new Decimal(0);
+	const ownPool = totalOwn > 0 ? directable.minus(sharedPool) : new Decimal(0);
+
+	if (directable.gt(0)) {
 		for (const [pot, byCreator, total] of [
 			[ownPool, own, totalOwn],
 			[sharedPool, shared, totalShared],
@@ -278,7 +325,9 @@ async function distributeForAccount(acct: {
 
 	// 4. Write PoolDistribution ledger entries
 	for (const [creatorId, data] of distributions) {
-		if (data.poolAmount.lte(0) && data.seedAmount.lte(0)) continue;
+		// A creator the viewer never watched but did hand a Sticker to still needs a row —
+		// without `stickerAmount` in this guard their payment would be computed and dropped.
+		if (data.poolAmount.lte(0) && data.seedAmount.lte(0) && data.stickerAmount.lte(0)) continue;
 		await db
 			.insert(poolDistributions)
 			.values({
@@ -287,6 +336,7 @@ async function distributeForAccount(acct: {
 				billingCycle: cycleDate,
 				poolAmount: data.poolAmount.toString(),
 				seedAmount: data.seedAmount.toString(),
+				stickerAmount: data.stickerAmount.toString(),
 				attentionSeconds: data.attentionSeconds,
 			})
 			.onConflictDoUpdate({
@@ -298,6 +348,7 @@ async function distributeForAccount(acct: {
 				set: {
 					poolAmount: data.poolAmount.toString(),
 					seedAmount: data.seedAmount.toString(),
+					stickerAmount: data.stickerAmount.toString(),
 					attentionSeconds: data.attentionSeconds,
 				},
 			});

@@ -27,6 +27,7 @@ import {
 	attentionEvents,
 	crfLedger,
 	poolDistributions,
+	stickers,
 	users,
 } from "@anthers/db/schema";
 import { supportAmount, timePoolFor } from "@anthers/shared/constants";
@@ -200,6 +201,34 @@ describe("settleCycle — an undistributed Time Pool falls to the remainder", ()
 		const snap = await snapshotFor(userId);
 		expect(snap?.timePoolUndistributed).toBe("0.00");
 		expect(new Decimal(snap!.foundation).toFixed(2)).toBe(remainderFor(6).toFixed(2));
+	});
+
+	it("🚨 books a directed Sticker as PAID, never as an undistributed pool", async () => {
+		// The failure this guards is silent and points the wrong way: a Sticker is an override
+		// of the Time Pool, so `distribute-pool` deliberately leaves the directed part out of
+		// `pool_amount`. Measuring the shortfall against `pool_amount` alone would read that
+		// gap as money that reached nobody and hand it to Anthers' own remainder — money a
+		// user aimed at a named creator, quietly redirected, with every total still adding up.
+		const creatorId = await makeUser("creator");
+		const { userId, accountId } = await makeViewer(12);
+		await watch(userId, creatorId, 1800);
+		await db.insert(stickers).values({
+			giverId: userId,
+			creatorId,
+			subjectType: "work",
+			subjectId: 1,
+			billingCycle: CYCLE,
+			amount: "1.00",
+		});
+
+		await distributePool({ accountId });
+		await endPeriod(accountId);
+		await settleCycle({ accountId, cycle: CYCLE });
+
+		const snap = await snapshotFor(userId);
+		// The pool reached creators in full — part by time, part by hand.
+		expect(snap?.timePoolUndistributed).toBe("0.00");
+		expect(new Decimal(snap!.foundation).toFixed(2)).toBe(remainderFor(12).toFixed(2));
 	});
 
 	it("🚨 books only the part a share-link ceiling left behind", async () => {

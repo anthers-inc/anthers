@@ -37,8 +37,10 @@ import {
 	PROVENANCE_NOTE,
 	readCurated,
 	readProvenance,
+	readRegister,
 	writeCurated,
 	writeProvenance,
+	writeRegister,
 } from "./noun/provenance";
 
 const REPO = join(import.meta.dir, "..");
@@ -236,22 +238,49 @@ if (!existsSync(SVG_ROOT)) {
  * runtime Badge Maker fetches, composes and discards within one request and never
  * writes a file; nothing at authoring time has that shape.
  */
-function markup(): string {
+function markup(): string | null {
 	const local = values.get("file");
-	if (local) return readFileSync(local, "utf8");
-	console.error(
-		"\nbrand:add: --file is required, and deliberately so.\n\n" +
-			`  Download it yourself from ${absolute(p.permalink)} as SVG, single color black,\n` +
-			"  then re-run with the file:\n\n" +
-			`    bun run brand:add ${nounId} --as ${friendly} --file <path-to-downloaded.svg>\n\n` +
-			"  The API supplies search and metadata; the subscription supplies files, because\n" +
-			"  the API terms forbid caching an SVG it hands over. Nothing was written, and the\n" +
-			"  metadata call has already been spent.",
-	);
-	process.exit(1);
+	return local ? readFileSync(local, "utf8") : null;
 }
 
 const svg = markup();
+
+/**
+ * No file yet: record what we want and where it goes, and hand back the link.
+ *
+ * ⭐ **This is the step the workflow was missing.** Somebody has to click download, so the
+ * useful thing a tool can do is know *which* icons are outstanding, why each was chosen,
+ * and where each one's file belongs — leaving a human with one job, opening a link.
+ * `brand:wanted` prints the list; `brand:collect` files what comes back.
+ *
+ * The provenance is fetched now rather than later, so a wanted entry already carries its
+ * artist, license and permalink and the register is complete before the art arrives.
+ */
+if (!svg) {
+	const reg = readRegister();
+	if (reg.wanted.some((w) => w.nounId === nounId)) {
+		console.log("\n  Already on the wanted list.");
+	} else {
+		reg.wanted.push({
+			id: friendly,
+			nounId,
+			path: relPath,
+			...(values.get("why") ? { why: values.get("why") as string } : {}),
+		});
+		writeRegister(reg);
+		const pending = readProvenance();
+		pending.set(nounId, p);
+		writeProvenance(pending, PROVENANCE_NOTE);
+		console.log("\n  Added to the wanted list in packages/brand/icons.json.");
+	}
+	console.log(
+		`\n  Download it as SVG, single color black:\n    ${absolute(p.permalink)}\n\n` +
+			"  Then `bun run brand:collect` files everything waiting in ~/Downloads at once.\n" +
+			"  The API supplies search and metadata; the subscription supplies files.",
+	);
+	reportSpend();
+	process.exit(0);
+}
 if (!/<svg[\s>]/i.test(svg)) {
 	console.error(`brand:add: what came back for ${nounId} is not SVG markup.`);
 	process.exit(1);

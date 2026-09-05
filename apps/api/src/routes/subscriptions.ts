@@ -16,9 +16,12 @@ import {
 	accountCycles,
 	accounts,
 	attentionEvents,
+	comments,
 	creatorGates,
 	poolDistributions,
+	posts,
 	seedAllocations,
+	stickers,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -38,14 +41,16 @@ import {
 	heldBadgeName,
 	isChargeableAmount,
 	STRIPE_MIN_CHARGE,
+	stickerBudgetFor,
 	supportAmount,
 } from "@anthers/shared/constants";
 import { badgeViews } from "@anthers/shared/fees";
 import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
+import { isGiveable, stickerAmount } from "@anthers/shared/stickers";
 import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
@@ -116,6 +121,118 @@ const MIN_INVOICE_TOTAL = STRIPE_MIN_CHARGE;
 /** The Badge ladder (Free … Blossom), each with its monthly amount + decomposition. Shared
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
 const BADGE_VIEWS = badgeViews();
+
+// ── Stickers ─────────────────────────────────────────────────────────────────
+
+/** Dollars, rounded the way money is compared here rather than by float chance. */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const STICKER_SUBJECTS = ["work", "post", "comment"] as const;
+type StickerSubject = (typeof STICKER_SUBJECTS)[number];
+
+/**
+ * 🚨 **The client picks art, never an amount.** The art is the denomination, so accepting
+ * both would let a caller pair the most elaborate drawing with the smallest sum — and the
+ * drawing is what tells a creator and everyone reading the page how generous somebody was.
+ * That is a misrepresentation rather than an accounting error, and the only way to make it
+ * impossible is to never take the number from the request.
+ */
+const giveStickerSchema = z.object({
+	subjectType: z.enum(STICKER_SUBJECTS),
+	subjectId: z.number().int().positive(),
+	artKey: z.string().max(64).refine(isGiveable, "Not a Sticker in the current batch"),
+});
+
+/** This user's current cycle key and what they may direct by hand within it. */
+async function stickerCycleFor(
+	userId: number,
+): Promise<{ billingCycle: string; allowance: number } | null> {
+	const [acct] = await db
+		.select({ support: accounts.anthersSupport, periodStart: accounts.currentPeriodStart })
+		.from(accounts)
+		.where(eq(accounts.userId, userId))
+		.limit(1);
+	if (!acct) return null;
+	const start = acct.periodStart ?? new Date();
+	// The same key `distribute-pool` writes, so a Sticker lands in the cycle that pays it.
+	const billingCycle = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-01`;
+	return { billingCycle, allowance: round2(stickerBudgetFor(supportAmount(acct.support))) };
+}
+
+/** What this user has already directed in the cycle — removed Stickers included. */
+async function stickersDirectedIn(userId: number, billingCycle: string): Promise<number> {
+	// 🚨 **No `removed_at` predicate, deliberately.** Taking a Sticker off the page returns
+	// no money, so a removed one still counts against the cap — otherwise give, remove and
+	// give again would spend the same allowance twice, which is the rentable-standing hole
+	// arriving through the back door.
+	const [row] = await db
+		.select({ total: sql<string>`COALESCE(SUM(${stickers.amount}), 0)` })
+		.from(stickers)
+		.where(and(eq(stickers.giverId, userId), eq(stickers.billingCycle, billingCycle)));
+	return round2(Number(row?.total ?? 0));
+}
+
+async function creatorOf(kind: "work" | "post", id: number): Promise<number | null> {
+	if (kind === "work") {
+		const [row] = await db
+			.select({ creatorId: works.creatorId })
+			.from(works)
+			.where(eq(works.id, id))
+			.limit(1);
+		return row?.creatorId ?? null;
+	}
+	const [row] = await db
+		.select({ creatorId: posts.creatorId })
+		.from(posts)
+		.where(eq(posts.id, id))
+		.limit(1);
+	return row?.creatorId ?? null;
+}
+
+/**
+ * Who a Sticker on this subject pays.
+ *
+ * 🚨 **A Sticker pays the CREATOR of the Work or post, never the author of the comment.**
+ * It rides the giver's own like or comment and is never placed on somebody else's, so a
+ * Sticker on a comment pays whoever made the thing being discussed. Paying commenters would
+ * have Anthers moving money between users — a different regulatory question and a different
+ * product — and it is one line of code away from happening by accident.
+ */
+async function stickerRecipient(
+	giverId: number,
+	subjectType: StickerSubject,
+	subjectId: number,
+): Promise<{ creatorId: number } | { error: string; code: string; status: 403 | 404 }> {
+	const notFound = { error: "Nothing to sticker", code: "no_subject", status: 404 } as const;
+
+	let creatorId: number | null = null;
+	if (subjectType === "comment") {
+		const [row] = await db
+			.select({ userId: comments.userId, type: comments.subjectType, id: comments.subjectId })
+			.from(comments)
+			.where(eq(comments.id, subjectId))
+			.limit(1);
+		if (!row) return notFound;
+		if (row.userId !== giverId) {
+			return {
+				error: "A Sticker rides your own comment, not somebody else's.",
+				code: "not_yours",
+				status: 403,
+			};
+		}
+		creatorId = await creatorOf(row.type === "work" ? "work" : "post", row.id);
+	} else {
+		creatorId = await creatorOf(subjectType, subjectId);
+	}
+	if (creatorId === null) return notFound;
+
+	// Paying yourself would move your own Time Pool into your own pocket, which is not a
+	// gift and would let an account cycle money back to itself.
+	if (creatorId === giverId) {
+		return { error: "You cannot sticker your own work.", code: "own_work", status: 403 };
+	}
+	return { creatorId };
+}
 
 /** The Badge view for monthly dollars given to Anthers (capped at Blossom for display). */
 function badgeViewFor(anthersSupport: number) {
@@ -1446,9 +1563,6 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Content Access Check ─────────────────────────────────────────────────
-	// Access lives on the Work (the two access tables); resolveAccess is the single
-	// source of truth, shared with the content and payment routes.
 	// ── The supporters page ────────────────────────────────────────────────────
 
 	/**
@@ -1524,7 +1638,139 @@ const subscriptionRoutes = new Hono()
 			return c.json({ listed: row.listed });
 		},
 	)
+	// ── Stickers ───────────────────────────────────────────────────────────────
+	//
+	// A user directing part of their own Time Pool at one creator, by hand. The money is
+	// not new: `distribute-pool` distributes by time only what was not directed here.
 
+	.get("/stickers/allowance", requireAuth, async (c) => {
+		const user = c.get("user");
+		const cycle = await stickerCycleFor(user.id);
+		if (!cycle) return c.json({ allowance: 0, directed: 0, remaining: 0, cycle: null });
+		const directed = await stickersDirectedIn(user.id, cycle.billingCycle);
+		return c.json({
+			allowance: cycle.allowance,
+			directed,
+			// ⚠️ Floored: lowering a Badge mid-cycle can put `directed` above `allowance`, and
+			// a negative remaining would render as a debt the user does not owe.
+			remaining: Math.max(0, round2(cycle.allowance - directed)),
+			cycle: cycle.billingCycle,
+		});
+	})
+
+	/**
+	 * The Stickers showing on one subject.
+	 *
+	 * ⚠️ **Public, and it publishes art and a count rather than who gave what.** A Sticker
+	 * is a visible gesture, so the page has to show it — but pairing a name with a sum is
+	 * a statement about somebody's finances, exactly as the supporters page reasons. The
+	 * viewer's own Stickers come back identified, because you may take back only your own.
+	 *
+	 * 🚨 **Removed Stickers are excluded here and nowhere else.** Removal is display-only;
+	 * `stickersDirectedIn` still counts them against the giver's allowance and the creator
+	 * still gets paid. This endpoint is the display, so this is the one place it applies.
+	 */
+	.get("/stickers", async (c) => {
+		const subjectType = c.req.query("subjectType") ?? "";
+		const subjectId = Number(c.req.query("subjectId"));
+		if (!STICKER_SUBJECTS.includes(subjectType as StickerSubject) || !Number.isInteger(subjectId)) {
+			return c.json({ error: "Bad subject" }, 400);
+		}
+		const viewerId = await getOptionalUserId(c);
+		const rows = await db
+			.select({ id: stickers.id, artKey: stickers.artKey, giverId: stickers.giverId })
+			.from(stickers)
+			.where(
+				and(
+					eq(stickers.subjectType, subjectType),
+					eq(stickers.subjectId, subjectId),
+					isNull(stickers.removedAt),
+				),
+			)
+			.orderBy(stickers.id);
+
+		// Grouped by art, because a wall of twenty identical butterflies says less than
+		// "twenty butterflies" and costs a page more to render.
+		const byArt = new Map<string, { artKey: string; count: number; mine: number[] }>();
+		for (const row of rows) {
+			const key = row.artKey ?? "";
+			const entry = byArt.get(key) ?? { artKey: key, count: 0, mine: [] };
+			entry.count++;
+			if (viewerId && row.giverId === viewerId) entry.mine.push(row.id);
+			byArt.set(key, entry);
+		}
+		return c.json({ stickers: [...byArt.values()] });
+	})
+
+	.post("/stickers", requireAuth, zValidator("json", giveStickerSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId, artKey } = c.req.valid("json");
+		// Read off the batch, never off the request — see `giveStickerSchema`. The schema
+		// already refused a key that is not giveable, so this cannot be undefined.
+		const amount = stickerAmount(artKey) as number;
+
+		const cycle = await stickerCycleFor(user.id);
+		if (!cycle) return c.json({ error: "No active billing cycle" }, 409);
+		if (cycle.allowance <= 0) {
+			return c.json(
+				{ error: "A free account has no Time Pool to direct by hand.", code: "no_allowance" },
+				403,
+			);
+		}
+
+		const target = await stickerRecipient(user.id, subjectType, subjectId);
+		if ("error" in target) return c.json({ error: target.error, code: target.code }, target.status);
+
+		// 🚨 The cap is checked HERE and nowhere else. Once given, the money is committed —
+		// removing the Sticker returns nothing — so this is the only moment it can be refused.
+		const directed = await stickersDirectedIn(user.id, cycle.billingCycle);
+		if (round2(directed + amount) > cycle.allowance) {
+			return c.json(
+				{
+					error: `That is more than you have left to direct this month ($${(cycle.allowance - directed).toFixed(2)}).`,
+					code: "over_allowance",
+					remaining: Math.max(0, round2(cycle.allowance - directed)),
+				},
+				409,
+			);
+		}
+
+		const [row] = await db
+			.insert(stickers)
+			.values({
+				giverId: user.id,
+				creatorId: target.creatorId,
+				subjectType,
+				subjectId,
+				billingCycle: cycle.billingCycle,
+				amount: amount.toFixed(2),
+				artKey: artKey ?? null,
+			})
+			.returning();
+		return c.json({ sticker: row }, 201);
+	})
+
+	.delete("/stickers/:id", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		if (!Number.isInteger(id) || id <= 0) return c.json({ error: "Not found" }, 404);
+
+		// ⚠️ **Sets a timestamp; never deletes the row and never touches the money.** The
+		// giver was told the creator stays paid, and settlement reads `amount` alone. A
+		// `DELETE` verb here is about the Sticker leaving the page, not the record leaving
+		// the table — removal is a state, as everywhere else in this schema.
+		const [row] = await db
+			.update(stickers)
+			.set({ removedAt: new Date() })
+			.where(and(eq(stickers.id, id), eq(stickers.giverId, user.id), isNull(stickers.removedAt)))
+			.returning();
+		if (!row) return c.json({ error: "Not found" }, 404);
+		return c.json({ removed: true, creatorStaysPaid: true });
+	})
+
+	// ── Content Access Check ─────────────────────────────────────────────────
+	// Access lives on the Work (the two access tables); resolveAccess is the single
+	// source of truth, shared with the content and payment routes.
 	.get("/access/:workId", async (c) => {
 		const { workId } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);

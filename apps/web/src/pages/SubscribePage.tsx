@@ -546,10 +546,14 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Monthly Sticker Budget",
-		// ⚠️ "Held back from" rather than "on top of" — the budget is carved out of the Time
-		// Pool in the row above, and what goes unspent returns to it. Two figures that
-		// overlap have to say they overlap, or the matrix reads as money appearing twice.
-		desc: "Held back from the Time Pool for you to attach to a like or a comment. Anything you don't spend goes back into the pool at the end of the month.",
+		// ⭐ **An OVERRIDE of the Time Pool, never a second pot beside it** (Parker,
+		// 2026-09-04). The row above is paid out by the time you spend *except* for whatever
+		// you hand out yourself. 🚨 **Never write this as "held back" or "goes back into the
+		// pool"** — that describes a separate pot that reverts, which is one more concept than
+		// a reader needs and is not what the money does.
+		// ⚠️ The two figures still OVERLAP, the second being part of the first, and the copy
+		// has to say so or the matrix reads as money appearing twice.
+		desc: "Part of the Time Pool above, which you can hand out yourself on a like or a comment instead of leaving it to be paid out by time.",
 		cell: (amount) => ({
 			value: stickerBudgetFor(amount) > 0 ? columnMoney(stickerBudgetFor(amount)) : NOT_CARRIED,
 		}),

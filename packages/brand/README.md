@@ -6,7 +6,7 @@ The Anthers brand assets that **ship**: the first-party marks and lockups, and r
 marks/            First-party Anthers identity — SVG masters, lockups, raster exports
 src/              The public API + generated icon markup
 scripts/          The codegen
-icons.json        The curated set — authored, and what the codegen reads
+icons.json        The register — what the product uses, and what it is waiting on
 provenance.json   Who drew each icon and under what license — generated from the API
 ```
 
@@ -26,28 +26,28 @@ It now lives in a **private** repository alongside the layered design working fi
 
 ⚠️ **Do not recolor at the source.** `normalize()` strips baked fills so one injected color controls each icon, and every consumer recolors from the design tokens — so a palette change re-downloads nothing, and must not start to. The Noun Project API will hand you a pre-colored file if you ask it to; the client refuses to pass the parameter.
 
-**From the terminal, against the whole library.** Nearly ten million icons, with style matching, and the credential comes from the "Anthers Dev" Bitwarden project without your having to export anything:
+**Three commands, and one job for a human.** Choosing happens against nearly ten million icons; the credential comes from the "Anthers Dev" Bitwarden project without your having to export anything.
 
 ```sh
-bun run brand:search "wildflower" --style solid    # ids, terms, creators, licenses, permalinks
-bun run brand:search --like 7595393               # icons drawn in the same hand — build a set
-bun run brand:add 8040550 --as bloom-outline --file ~/Downloads/noun-wildflower-8040550.svg
+bun run brand:search "wildflower" --style solid   # ids, terms, creators, licenses, permalinks
+bun run brand:search --like 7595393              # icons drawn in the same hand — build a set
+bun run brand:add 8040550 --as bloom-outline --why "reads at small size"
+bun run brand:wanted                             # what is waiting on a file, with a link each
+#   …open the links, save each as SVG single-color black, anywhere
+bun run brand:collect                            # files them all and regenerates everything
 ```
 
-`brand:add` puts the SVG in the private library, registers it in `icons.json`, regenerates `src/generated/icons.ts`, and rewrites the attribution table in `THIRD-PARTY.md` from the API's own `creator`, `permalink` and `license_description` fields. `--dry-run` shows you the art's provenance and its destination without writing anything, and `--group <name>` files it somewhere other than `nature/`.
+`brand:add` fetches the artist, license and permalink, records the entry with the path its file will occupy, and puts it on the **wanted** list. `brand:collect` sweeps `~/Downloads` (or a directory you name), matches each file on the Noun Project id inside its filename — which is what their download already uses, so nothing needs renaming — files them into the library, promotes them out of `wanted`, and regenerates `src/generated/icons.ts` and the attribution table in `THIRD-PARTY.md`.
 
-🚨 **The file comes from `--file`, and may never come from the API.** Creating the API key required agreeing that **the app will not cache SVG files** — a term in neither the published Terms of Use nor the API documentation — and writing an API-fetched SVG into this library is the clearest instance of it. So the division is: **the API supplies search and metadata; the NounPro subscription supplies files.** Download the one file from the icon's permalink as single-color black and hand it over. That is the only step that stays manual, and six of the seven still go.
+`brand:wanted` needs no API key, so it works offline and in a fresh checkout, and it also lists any *curated* icon whose file has gone missing — from a person's side that is the same job. `brand:add --file <path>` does the whole thing in one step when you already have the file, and `--dry-run` shows provenance and destination without recording anything.
 
-⚠️ **Do not reinstate an API fetch here on the grounds that the endpoint started working.** `/v2/icon/<id>/download` also refuses us today — `400 Must provide a hexadecimal color value` without `color`, `403 You are not authorized to edit this icon` with it — and read alone that looks like a plan limitation to route around until it lifts. It is not: the constraint is contractual, so a fallback written for the day the plan changes is a breach that switches itself on when somebody upgrades for unrelated reasons. `scripts/noun/authoring-time.test.ts` fails if any script that writes to the library so much as reaches for `downloadSvg`.
+🚨 **Files come from the subscription and may never come from the API.** Creating the API key required agreeing that **the app will not cache SVG files** — a term in neither the published Terms of Use nor the API documentation — and writing an API-fetched SVG into this library is the clearest instance of it. **The API supplies search and metadata; the NounPro subscription supplies files.** Opening a link is the one step that stays manual.
 
-**By hand, from art already in the library**, when there is nothing to fetch:
+⚠️ **Do not reinstate an API fetch here on the grounds that the endpoint started working.** `/v2/icon/<id>/download` also refuses us today — `400 Must provide a hexadecimal color value` without `color`, `403 You are not authorized to edit this icon` with it, for SVG and PNG alike — and read alone that looks like a plan limitation to route around until it lifts. It is not: the constraint is contractual, so a fallback written for the day the plan changes is a breach that switches itself on when somebody upgrades for unrelated reasons. `scripts/noun/authoring-time.test.ts` fails if any script that writes to the library so much as reaches for `downloadSvg`.
 
-1. Check out the icon library beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`. ⚠️ **That library is private, so this step is Anthers-internal** — an outside contributor cannot re-run the codegen, and does not need to: `src/generated/icons.ts` is committed and complete, and the app builds identically without the source.
-2. Find the art. Its `preview/` holds per-collection contact sheets — the filenames are Noun Project `noun-<type>-<id>` and are not individually descriptive, so browse visually. If you're adding *new* art, download it as **SVG, single-color black**; multi-color art can't recolor from one value.
-3. Add `{ id, nounId, path, why }` to `icons.json`, with the path relative to the library's `svg/`.
-4. `cd packages/brand && bun run build`, then `bun run brand:add --backfill` from the repo root to fetch the provenance the attribution needs, and commit both generated files.
+**`icons.json` is the register**, and it is readable by hand: `icons` is what the product uses, `wanted` is what it is waiting on, and each entry carries `why` it was chosen. `provenance.json` beside it holds the artist, license and permalink for every entry, fetched once and never typed. ⚠️ **A hand-added entry fails `brand:attribution --check` until its provenance is fetched** — run `bun run brand:add --backfill`. The credit is a license condition, so an icon nobody can attribute is one this repository may not redistribute.
 
-⚠️ **A hand-added icon fails `brand:attribution --check` until its provenance is fetched**, which is the point: the credit is a license condition, and an icon nobody can attribute is one this repository may not redistribute.
+**`bun run brand:prune`** removes library files nothing in the register names. It dry-runs by default and refuses to delete from a dirty checkout, because being able to `git restore` is the whole safety of it.
 
 The codegen strips XML noise, `<title>`/`<metadata>`, and baked-in solid fills so the consumer controls the color. (`fill="none"` is preserved, so stroke-only art passes through — but it won't recolor from a single value.)
 

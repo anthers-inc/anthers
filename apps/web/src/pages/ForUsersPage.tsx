@@ -316,7 +316,7 @@ export default function ForUsersPage() {
 									<BadgeMark
 										shape={b.shape}
 										color={b.color}
-										emoji={b.emoji}
+										emblem={b.emblem}
 										label={`${b.name} badge`}
 										clipId={`for-users-badge-${b.name}`}
 										size="h-24 w-24"

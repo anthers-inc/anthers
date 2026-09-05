@@ -11,6 +11,7 @@
 		"./attention": "./src/attention.ts",
 		"./badge-art": "./src/badge-art.ts",
 		"./reactions": "./src/reactions.ts",
+		"./stickers": "./src/stickers.ts",
 		"./supporters": "./src/supporters.ts",
 		"./parental-controls": "./src/parental-controls.ts",
 		"./public-access": "./src/public-access.ts",

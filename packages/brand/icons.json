@@ -99,6 +99,48 @@
 			"nounId": 7366617,
 			"path": "nature/botanical-borders-and-frames-228479/noun-corner-leafy-frame-7366617.svg",
 			"why": "An L-shaped trailing-leaf corner flourish, placed at all four corners rotated to frame the auth card, which lets it adapt to any card aspect without distortion. It is corners rather than an arch because an arch frame's tall crown clips behind the header on the vertically centered auth card."
+		},
+		{
+			"id": "badge-root",
+			"nounId": 4158770,
+			"path": "nature/uncollected/noun-roots-4158770.svg",
+			"why": "Anthers' first rung. Roots below ground — the ladder starts underneath and grows up."
+		},
+		{
+			"id": "badge-sprout",
+			"nounId": 8388170,
+			"path": "nature/biodiversity-295851/noun-sprout-8388170.svg",
+			"why": "Anthers' second rung, the first thing visible above ground."
+		},
+		{
+			"id": "badge-petal",
+			"nounId": 8293781,
+			"path": "nature/spring-solid-292679/noun-tulip-8293781.svg",
+			"why": "Anthers' third rung. A tulip, keeping the flower the emoji ladder used."
+		},
+		{
+			"id": "badge-blossom",
+			"nounId": 8410334,
+			"path": "nature/summertime-glyph-296340/noun-sunflower-8410334.svg",
+			"why": "Anthers' top rung. A sunflower — the most open and most drawn of the four."
+		},
+		{
+			"id": "sticker-butterfly-small",
+			"nounId": 6418766,
+			"path": "nature/animals-216574/noun-butterfly-6418766.svg",
+			"why": "First Sticker batch, $0.25. The simplest of the three butterflies."
+		},
+		{
+			"id": "sticker-butterfly-medium",
+			"nounId": 4617437,
+			"path": "nature/uncollected/noun-butterfly-4617437.svg",
+			"why": "First Sticker batch, $0.50. The middle of the three butterflies."
+		},
+		{
+			"id": "sticker-butterfly-large",
+			"nounId": 3662383,
+			"path": "nature/uncollected/noun-butterfly-3662383.svg",
+			"why": "First Sticker batch, $1.00. The most elaborate of the three butterflies."
 		}
 	]
 }

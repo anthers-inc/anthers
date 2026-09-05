@@ -56,15 +56,21 @@ const TAX_TIP =
  * looked deliberate. Dropping `free` from the key makes the compiler carry the rule
  * instead: indexing this with a possibly-free key is now a type error.
  */
-export const BADGE_ART: Record<Badge, { emoji: string; shape: string; color: string }> = {
+export const BADGE_ART: Record<Badge, { emblem: string; shape: string; color: string }> = {
 	// ⭐ One shape across Anthers' four, with the field color carrying the progression from
 	// earth to bloom. A creator picks freely from the same library — including this shape —
 	// and what makes the two ladders read as one collection is the edging every badge
 	// shares, exactly as a scout set does.
-	root: { emoji: "🫚", shape: "circle", color: "cream" },
-	sprout: { emoji: "🌱", shape: "circle", color: "meadow" },
-	petal: { emoji: "🌷", shape: "circle", color: "clay" },
-	blossom: { emoji: "🌼", shape: "circle", color: "sun" },
+	//
+	// ⭐ **Emblems rather than emoji** (Parker, 2026-09-04). The ladder was drawn with 🫚 🌱
+	// 🌷 🌼, which is somebody else's artwork rendered in whatever emoji font the viewer
+	// happens to have — so the same four Badges looked different on every platform and
+	// matched nothing else on the site. These are chosen art, credited in THIRD-PARTY.md,
+	// and they go through the same per-shape box a creator's emblem does.
+	root: { emblem: "badge-root", shape: "circle", color: "cream" },
+	sprout: { emblem: "badge-sprout", shape: "circle", color: "meadow" },
+	petal: { emblem: "badge-petal", shape: "circle", color: "clay" },
+	blossom: { emblem: "badge-blossom", shape: "circle", color: "sun" },
 };
 
 /**
@@ -93,7 +99,7 @@ export function AnthersBadgeMark({
 		<BadgeMark
 			shape={art.shape}
 			color={art.color}
-			emoji={art.emoji}
+			emblem={art.emblem}
 			label={`${badgeLabel(badge)} badge`}
 			clipId={`anthers-badge-${badge}`}
 			dim={!lit}
@@ -105,13 +111,13 @@ export function AnthersBadgeMark({
 /** Ascending ladder (Root → Blossom) for the Badges section: the patch + emoji + $/mo. */
 export const BADGE_LADDER: {
 	name: string;
-	emoji: string;
+	emblem: string;
 	threshold: string;
 	shape: string;
 	color: string;
 }[] = BADGE_ORDER.filter((b): b is Badge => b !== "free").map((b) => ({
 	name: badgeLabel(b),
-	emoji: BADGE_ART[b].emoji,
+	emblem: BADGE_ART[b].emblem,
 	threshold: `$${thresholdForBadge(b)}/mo`,
 	shape: BADGE_ART[b].shape,
 	color: BADGE_ART[b].color,

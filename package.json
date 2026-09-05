@@ -41,6 +41,9 @@
 		"brand:build": "bun run --filter @anthers/brand build",
 		"brand:search": "bun run scripts/brand-search.ts",
 		"brand:add": "bun run scripts/brand-add.ts",
+		"brand:wanted": "bun run scripts/brand-wanted.ts",
+		"brand:collect": "bun run scripts/brand-collect.ts",
+		"brand:prune": "bun run scripts/brand-prune.ts",
 		"brand:usage": "bun run scripts/brand-usage.ts",
 		"brand:attribution": "bun run scripts/brand-attribution.ts"
 	},

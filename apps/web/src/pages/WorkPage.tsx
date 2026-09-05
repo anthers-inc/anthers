@@ -37,6 +37,7 @@ import VideoPlayer from "../components/media/VideoPlayer";
 import CommentThread from "../components/post/CommentThread";
 import InlineUnlock from "../components/post/InlineUnlock";
 import ReactionControl from "../components/post/ReactionControl";
+import StickerBar from "../components/post/StickerBar";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
@@ -524,6 +525,11 @@ export default function WorkPage() {
 				<ReactionControl subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
 				{isAuthenticated && !shareToken && <ShareLinkButton workId={work.id} />}
 			</div>
+
+			{/* A Sticker rides a like and follows the same access rule: it may be given on any
+			    Work, gated or not, purchased or not, because it is a gift to the creator
+			    rather than payment for the Work. */}
+			<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
 
 			{/* Reviews — a verdict on the work itself, which is the only thing a review
 			    was ever about. Gated behind access on the server: you can't review what you

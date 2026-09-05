@@ -37,6 +37,71 @@
 			},
 			"fetchedAt": "2026-09-04"
 		},
+		"3662383": {
+			"nounId": 3662383,
+			"term": "Butterfly",
+			"license": "creative-commons-attribution",
+			"attribution": "Butterfly by Abby from Noun Project",
+			"permalink": "/icon/butterfly-3662383/",
+			"creator": {
+				"name": "Abby",
+				"username": "abbydesign",
+				"permalink": "/creator/abbydesign/"
+			},
+			"collection": {
+				"id": 103999,
+				"name": "North America Animals"
+			},
+			"fetchedAt": "2026-09-05"
+		},
+		"4158770": {
+			"nounId": 4158770,
+			"term": "roots",
+			"license": "creative-commons-attribution",
+			"attribution": "roots by Lewis K-T from Noun Project",
+			"permalink": "/icon/roots-4158770/",
+			"creator": {
+				"name": "Lewis K-T",
+				"username": "teaindreamland",
+				"permalink": "/creator/teaindreamland/"
+			},
+			"fetchedAt": "2026-09-05"
+		},
+		"4617437": {
+			"nounId": 4617437,
+			"term": "Butterfly",
+			"license": "creative-commons-attribution",
+			"attribution": "Butterfly by Shakeel Ch. from Noun Project",
+			"permalink": "/icon/butterfly-4617437/",
+			"creator": {
+				"name": "Shakeel Ch.",
+				"username": "shakeel.choudhary234",
+				"permalink": "/creator/shakeel.choudhary234/"
+			},
+			"collection": {
+				"id": 152969,
+				"name": "Spring  (Solid)"
+			},
+			"fetchedAt": "2026-09-05"
+		},
+		"6418766": {
+			"nounId": 6418766,
+			"term": "Butterfly",
+			"license": "creative-commons-attribution",
+			"attribution": "Butterfly by Lucas Rathgeb from Noun Project",
+			"permalink": "/icon/butterfly-6418766/",
+			"creator": {
+				"name": "Lucas Rathgeb",
+				"username": "lrathgeb47",
+				"permalink": "/creator/lrathgeb47/"
+			},
+			"collection": {
+				"id": 216574,
+				"name": "Animals",
+				"permalink": "/browse/collection-icon/animals-216574/"
+			},
+			"fetchedAt": "2026-09-05"
+		},
 		"6832659": {
 			"nounId": 6832659,
 			"term": "leafy wreath",
@@ -322,6 +387,60 @@
 				"permalink": "/browse/collection-icon/grass-289179/"
 			},
 			"fetchedAt": "2026-09-04"
+		},
+		"8293781": {
+			"nounId": 8293781,
+			"term": "Tulip",
+			"license": "creative-commons-attribution",
+			"attribution": "Tulip by Hilmy Abiyyu Asad from Noun Project",
+			"permalink": "/icon/tulip-8293781/",
+			"creator": {
+				"name": "Hilmy Abiyyu Asad",
+				"username": "hillvector",
+				"permalink": "/creator/hillvector/"
+			},
+			"collection": {
+				"id": 292679,
+				"name": "Spring (Solid)",
+				"permalink": "/browse/collection-icon/spring-solid-292679/"
+			},
+			"fetchedAt": "2026-09-05"
+		},
+		"8388170": {
+			"nounId": 8388170,
+			"term": "sprout",
+			"license": "creative-commons-attribution",
+			"attribution": "sprout by BnB Studio from Noun Project",
+			"permalink": "/icon/sprout-8388170/",
+			"creator": {
+				"name": "BnB Studio",
+				"username": "bnbstudio",
+				"permalink": "/creator/bnbstudio/"
+			},
+			"collection": {
+				"id": 295851,
+				"name": "Biodiversity",
+				"permalink": "/browse/collection-icon/biodiversity-295851/"
+			},
+			"fetchedAt": "2026-09-05"
+		},
+		"8410334": {
+			"nounId": 8410334,
+			"term": "Sunflower",
+			"license": "creative-commons-attribution",
+			"attribution": "Sunflower by Side Project from Noun Project",
+			"permalink": "/icon/sunflower-8410334/",
+			"creator": {
+				"name": "Side Project",
+				"username": "Side_Project",
+				"permalink": "/creator/Side_Project/"
+			},
+			"collection": {
+				"id": 296340,
+				"name": "Summertime (Glyph)",
+				"permalink": "/browse/collection-icon/summertime-glyph-296340/"
+			},
+			"fetchedAt": "2026-09-05"
 		}
 	}
 }
