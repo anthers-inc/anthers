@@ -431,7 +431,7 @@ async function giveSticker(
 	userId: number,
 	creatorId: number,
 	amount: number,
-	opts: { removed?: boolean } = {},
+	opts: { removed?: boolean; voided?: boolean } = {},
 ): Promise<void> {
 	await db.insert(stickers).values({
 		giverId: userId,
@@ -441,6 +441,7 @@ async function giveSticker(
 		billingCycle: CYCLE,
 		amount: amount.toFixed(2),
 		removedAt: opts.removed ? new Date("2031-03-20T12:00:00Z") : null,
+		voidedAt: opts.voided ? new Date("2031-03-21T12:00:00Z") : null,
 	});
 }
 
@@ -507,6 +508,35 @@ describe("distributePool — a Sticker overrides the Time Pool rather than addin
 		await distributePool({ accountId });
 
 		expect((await stickerPaid(userId)).get(a)?.toFixed(2)).toBe("1.00");
+	});
+
+	it("🚨 pays NOTHING for a Sticker Anthers voided, and hands the money back to time", async () => {
+		// The other side of the removal rule. A giver taking a Sticker off the page keeps the
+		// creator paid; Anthers taking the WORK down reverts the direction, because paying
+		// directed money out on content we removed would be funding the violation.
+		//
+		// ⭐ The assertion that matters is not the zero — it is where the dollar went. A
+		// voided Sticker is simply not carved out of the pool, so the money flows back into
+		// time-based distribution on its own. Nothing transfers it; it never left.
+		const [a, b] = [await makeUser("c"), await makeUser("c")];
+		const { userId, accountId } = await seedCycle(12, []);
+		await watch(userId, a, 600, true);
+		await watch(userId, b, 600, true);
+		await giveSticker(userId, a, 1, { voided: true });
+
+		await distributePool({ accountId });
+
+		// Not a penny booked as directed.
+		for (const amount of (await stickerPaid(userId)).values()) {
+			expect(amount.toFixed(2)).toBe("0.00");
+		}
+		// And the two creators split the whole pool evenly on watch time, exactly as they
+		// would have had nobody given a Sticker at all.
+		const rows = await ledger(userId);
+		const paidA = new Decimal(rows.get(a)?.poolAmount ?? "0");
+		const paidB = new Decimal(rows.get(b)?.poolAmount ?? "0");
+		expect(paidA.minus(paidB).abs().toNumber()).toBeLessThanOrEqual(0.01);
+		expect(paidA.plus(paidB).toFixed(2)).toBe(timePoolFor(12).toFixed(2));
 	});
 
 	it("pays a creator the viewer never watched, if they were handed a Sticker", async () => {
