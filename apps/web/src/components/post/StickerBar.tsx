@@ -17,7 +17,13 @@
  * sum twice unless it says so; this control quotes only what is left to direct.
  */
 
-import { STICKER_BATCH, stickerArt } from "@anthers/shared/stickers";
+import {
+	ALL_STICKER_ART,
+	CURRENT_BATCH,
+	STICKER_BATCHES,
+	type StickerArt,
+	stickerArt,
+} from "@anthers/shared/stickers";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BadgeMark } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
@@ -56,6 +62,7 @@ export default function StickerBar({
 	const [groups, setGroups] = useState<StickerGroup[]>([]);
 	const [allowance, setAllowance] = useState<Allowance | null>(null);
 	const [picking, setPicking] = useState(false);
+	const [showAll, setShowAll] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [problem, setProblem] = useState<string | null>(null);
 
@@ -124,6 +131,15 @@ export default function StickerBar({
 
 	const total = groups.reduce((n, g) => n + g.count, 0);
 
+	/**
+	 * ⚠️ **Nothing is ever retired from giving** (Parker, 2026-09-04), so this list grows by
+	 * three every quarter and cannot simply be rendered flat. The current batch leads and
+	 * everything before it is one click away — which keeps the ordinary choice three wide
+	 * while honoring the rule that a Sticker somebody liked never stops being giveable.
+	 */
+	const older = STICKER_BATCHES.filter((b) => b.id !== CURRENT_BATCH.id);
+	const pickable: StickerArt[] = showAll ? ALL_STICKER_ART.slice() : CURRENT_BATCH.art.slice();
+
 	return (
 		<div className="flex flex-wrap items-center gap-2">
 			{groups.map((group) => {
@@ -175,7 +191,9 @@ export default function StickerBar({
 			{picking && (
 				<div className="flex w-full flex-col gap-2 rounded-box border border-base-300 p-3">
 					<div className="flex items-center justify-between">
-						<span className="font-medium text-sm">Give a Sticker</span>
+						<span className="font-medium text-sm">
+							Give a Sticker{showAll ? "" : ` — ${CURRENT_BATCH.name}`}
+						</span>
 						<button
 							type="button"
 							className="btn btn-ghost btn-xs"
@@ -193,7 +211,7 @@ export default function StickerBar({
 					</p>
 
 					<div className="flex flex-wrap gap-3">
-						{STICKER_BATCH.map((art) => {
+						{pickable.map((art: StickerArt) => {
 							const tooDear = allowance ? art.amount > allowance.remaining + 0.001 : false;
 							return (
 								<button
@@ -220,6 +238,18 @@ export default function StickerBar({
 							);
 						})}
 					</div>
+
+					{older.length > 0 && (
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs self-start"
+							onClick={() => setShowAll((v) => !v)}
+						>
+							{showAll
+								? `Just ${CURRENT_BATCH.name.toLowerCase()}`
+								: `Earlier Stickers (${older.reduce((n, b) => n + b.art.length, 0)})`}
+						</button>
+					)}
 
 					{allowance && (
 						<p className="text-base-content/60 text-xs">

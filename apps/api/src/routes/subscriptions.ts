@@ -165,10 +165,21 @@ async function stickersDirectedIn(userId: number, billingCycle: string): Promise
 	// no money, so a removed one still counts against the cap — otherwise give, remove and
 	// give again would spend the same allowance twice, which is the rentable-standing hole
 	// arriving through the back door.
+	//
+	// ⚠️ **`voided_at` is the opposite case and DOES come out.** That is Anthers reverting
+	// the direction because it took the Work down, so the money went back to being
+	// distributed by time and the giver never spent it. Charging them for a Sticker on
+	// something Anthers removed would be charging them for our decision.
 	const [row] = await db
 		.select({ total: sql<string>`COALESCE(SUM(${stickers.amount}), 0)` })
 		.from(stickers)
-		.where(and(eq(stickers.giverId, userId), eq(stickers.billingCycle, billingCycle)));
+		.where(
+			and(
+				eq(stickers.giverId, userId),
+				eq(stickers.billingCycle, billingCycle),
+				isNull(stickers.voidedAt),
+			),
+		);
 	return round2(Number(row?.total ?? 0));
 }
 

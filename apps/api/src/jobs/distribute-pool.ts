@@ -50,7 +50,7 @@ import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
-import { and, eq, gte, lt, sum } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sum } from "drizzle-orm";
 
 export interface DistributePoolData {
 	/** If set, distribute for a single account. Otherwise all active accounts. */
@@ -257,7 +257,17 @@ async function distributeForAccount(acct: {
 	const stickerRows = await db
 		.select({ creatorId: stickers.creatorId, amount: stickers.amount })
 		.from(stickers)
-		.where(and(eq(stickers.giverId, acct.userId), eq(stickers.billingCycle, cycleDate)));
+		// ⚠️ A voided Sticker is one Anthers reverted after taking the Work down. Leaving it
+		// out here is the whole mechanism: the amount never leaves `directable`, so it flows
+		// straight back into time-based distribution — exactly where it would have gone had
+		// nobody directed it. Same direction as a deleted recipient, one line below.
+		.where(
+			and(
+				eq(stickers.giverId, acct.userId),
+				eq(stickers.billingCycle, cycleDate),
+				isNull(stickers.voidedAt),
+			),
+		);
 
 	let stickerTotal = new Decimal(0);
 	for (const row of stickerRows) {

@@ -4,7 +4,7 @@
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
-        e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
+        e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
         spec-diff spec-apply deploy-status webhook-check dev-local \
 
 # ─── OS detection ───
@@ -44,6 +44,20 @@ else
 endif
 
 API_PORT ?= 8000
+
+# ─── Playwright browsers ───
+# 🚨 **Browsers live in THIS repo, not the machine-wide cache** — locally. Playwright keys
+# them by BUILD number and prunes builds its own version does not reference, so installing
+# browsers for another project deletes the one pinned here. That happened on 2026-09-04 and
+# presented as 162 tests failing in two milliseconds each.
+#
+# ⚠️ **Not in CI, deliberately.** A runner is ephemeral and has no other project to collide
+# with, and `ci.yml` caches `~/.cache/ms-playwright` keyed on the lockfile — moving the
+# binaries into node_modules would defeat that cache for no benefit.
+ifndef CI
+export PLAYWRIGHT_BROWSERS_PATH := 0
+endif
+
 WEB_PORT ?= 3000
 STUDIO_PORT ?= 3001
 
@@ -241,6 +255,7 @@ verify: ## Run everything CI runs: typecheck, lint, migrate, unit tests, full Pl
 	$(MAKE) db-ready
 	bun test
 	$(MAKE) free-preview-port
+	$(MAKE) e2e-preflight
 	cd apps/web && bunx playwright test
 
 # The SPA preview server is never reused (see playwright.config.ts), so Playwright now
@@ -319,16 +334,21 @@ wiki-figures: ## Render the wiki's generated money blocks into the vault (CHECK=
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium
 
+# Refuses, and names the command that fixes it, for the two environment failures that both
+# present as every test failing instantly. See scripts/e2e-preflight.ts.
+e2e-preflight: ## Assert the browser launches and the API port is ours or free
+	@bun run scripts/e2e-preflight.ts
+
 screenshots: ## Screenshot routes and flag JS errors (ROUTES="/a /b" to override)
 	cd apps/web && bun run build.ts && bun run scripts/screenshot.ts $(ROUTES)
 
-test-e2e: free-preview-port ## Run the Playwright e2e suite (builds + serves automatically)
+test-e2e: free-preview-port e2e-preflight ## Run the Playwright e2e suite (builds + serves automatically)
 	cd apps/web && bunx playwright test
 
-test-e2e-ui: free-preview-port ## Run the Playwright e2e suite in UI mode
+test-e2e-ui: free-preview-port e2e-preflight ## Run the Playwright e2e suite in UI mode
 	cd apps/web && bunx playwright test --ui
 
-test-gauntlet: free-preview-port ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
+test-gauntlet: free-preview-port e2e-preflight ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
 	cd apps/web && bunx playwright test --project=gauntlet
 
 

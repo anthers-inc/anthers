@@ -1,74 +1,89 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * The Sticker batch, and the two rules that make the money safe.
+ * The Sticker batches, and the rules that keep the money and the art honest.
  *
- * 🚨 **The art determines the amount, and a stored key outlives its batch.** Everything
- * here defends one of those: a batch whose amounts were not real denominations would put
- * un-chargeable sums on rows, and a lookup that only knew the live batch would erase a
- * gift somebody paid for the moment a season turned.
+ * 🚨 **The art determines the amount, and nothing is ever retired from giving.** Every
+ * assertion here defends one of those: a batch that priced two Stickers the same would
+ * break the rule that the drawing tells you the cost, and a key that stopped resolving
+ * would erase a gift somebody paid for.
  */
 
 import { describe, expect, it } from "bun:test";
 import { STICKER_DENOMINATIONS } from "./constants";
 import {
-	batchAmountsAreDenominations,
+	ALL_STICKER_ART,
+	batchesAreWellFormed,
+	batchProblems,
+	CURRENT_BATCH,
 	isGiveable,
-	STICKER_BATCH,
+	STICKER_BATCHES,
 	stickerAmount,
 	stickerArt,
 } from "./stickers";
 
-describe("the Sticker batch", () => {
-	it("🚨 prices every Sticker at a real denomination", () => {
-		expect(batchAmountsAreDenominations()).toBe(true);
-		// Widened, because the constant is a readonly tuple of its own literals — comparing
-		// against it unwidened asks the compiler to prove the answer rather than the test.
-		for (const art of STICKER_BATCH) {
-			expect(STICKER_DENOMINATIONS as readonly number[]).toContain(art.amount);
+describe("the batches", () => {
+	it("🚨 are well formed, and say precisely what is wrong when they are not", () => {
+		expect(batchProblems()).toEqual([]);
+		expect(batchesAreWellFormed()).toBe(true);
+	});
+
+	it("⭐ hold one Sticker per denomination, so the drawing tells you the amount", () => {
+		// Three per batch is the whole reason a reader never has to compare numbers. Two at
+		// the same price would leave the elaborateness signal ambiguous.
+		for (const batch of STICKER_BATCHES) {
+			expect(batch.art.length).toBe(STICKER_DENOMINATIONS.length);
+			expect([...batch.art.map((a) => a.amount)].sort((a, b) => a - b)).toEqual(
+				[...STICKER_DENOMINATIONS].sort((a, b) => a - b),
+			);
 		}
 	});
 
-	it("⭐ runs simple to elaborate, which is what makes the art readable as an amount", () => {
-		// The order carries the meaning: a reader should be able to tell what a Sticker cost
-		// from how much drawing is in it. A batch that broke the progression would leave the
-		// amount legible only to somebody reading the numbers.
-		const amounts = STICKER_BATCH.map((a) => a.amount);
-		expect(amounts).toEqual([...amounts].sort((a, b) => a - b));
+	it("⭐ run simple to elaborate within each batch", () => {
+		for (const batch of STICKER_BATCHES) {
+			const amounts = batch.art.map((a) => a.amount);
+			expect(amounts).toEqual([...amounts].sort((a, b) => a - b));
+		}
 	});
 
-	it("has a unique key and a unique emblem for every entry", () => {
-		expect(new Set(STICKER_BATCH.map((a) => a.key)).size).toBe(STICKER_BATCH.length);
-		expect(new Set(STICKER_BATCH.map((a) => a.emblem)).size).toBe(STICKER_BATCH.length);
+	it("never reuse a key or an emblem across batches", () => {
+		expect(new Set(ALL_STICKER_ART.map((a) => a.key)).size).toBe(ALL_STICKER_ART.length);
+		expect(new Set(ALL_STICKER_ART.map((a) => a.emblem)).size).toBe(ALL_STICKER_ART.length);
 	});
 
-	it("names something for a screen reader on every entry", () => {
-		for (const art of STICKER_BATCH) expect(art.label.length).toBeGreaterThan(0);
+	it("lead with the newest batch", () => {
+		expect(CURRENT_BATCH).toBe(STICKER_BATCHES[0] as (typeof STICKER_BATCHES)[number]);
+		const released = STICKER_BATCHES.map((b) => b.released);
+		expect(released).toEqual([...released].sort().reverse());
 	});
 });
 
-describe("looking a Sticker up", () => {
-	const known = STICKER_BATCH[0] as (typeof STICKER_BATCH)[number];
+describe("giving and drawing", () => {
+	const known = ALL_STICKER_ART[0] as (typeof ALL_STICKER_ART)[number];
 
 	it("reads the amount off the art and nowhere else", () => {
 		expect(stickerAmount(known.key)).toBe(known.amount);
 		expect(stickerAmount("nothing-like-this")).toBeUndefined();
 	});
 
-	it("🚨 refuses a key that is not in the batch, including near misses", () => {
+	it("🚨 refuses a key that is not in any batch, including near misses", () => {
 		expect(isGiveable(known.key)).toBe(true);
 		for (const bad of [known.key.toUpperCase(), ` ${known.key}`, "", null, undefined]) {
 			expect(isGiveable(bad)).toBe(false);
 		}
 	});
 
-	it("⚠️ still draws art for a key that is no longer giveable", () => {
-		// A row outlives the batch it came from. `stickerArt` is the display lookup and has
-		// to keep answering after `isGiveable` stops — otherwise retiring a batch silently
-		// blanks every Sticker given from it, which is taking back a gift.
-		for (const art of STICKER_BATCH) {
-			expect(stickerArt(art.key)).toEqual(art);
-		}
+	it("⭐ keeps every released Sticker giveable, however old", () => {
+		// Parker, 2026-09-04: nothing retires. A Sticker somebody liked never becomes one
+		// they may no longer send — the cost is a picker that grows, which the interface
+		// carries by leading with the current batch.
+		for (const art of ALL_STICKER_ART) expect(isGiveable(art.key)).toBe(true);
+	});
+
+	it("⚠️ draws art for every key it will ever accept", () => {
+		// A row outlives everything. If `isGiveable` ever narrows again, `stickerArt` must
+		// not — otherwise a stored Sticker renders as nothing, which is taking back a gift.
+		for (const art of ALL_STICKER_ART) expect(stickerArt(art.key)).toEqual(art);
 		expect(stickerArt(null)).toBeUndefined();
-		expect(stickerArt("retired-from-a-season-that-never-existed")).toBeUndefined();
+		expect(stickerArt("a-season-that-never-existed")).toBeUndefined();
 	});
 });

@@ -641,6 +641,26 @@ export const stickers = pgTable(
 		 * Removal is a state and never a delete, as everywhere else in this schema.
 		 */
 		removedAt: timestamp("removed_at", { withTimezone: true }),
+		/**
+		 * When Anthers reverted the direction, because it removed what this sits on.
+		 *
+		 * 🚨 **This is the opposite of `removed_at` and the two must never be conflated.**
+		 * A giver removing a Sticker keeps the creator paid: the money was committed at the
+		 * moment of giving, and letting somebody take it back would make standing rentable.
+		 * A **takedown** is Anthers removing the Work, and paying directed money out on
+		 * content Anthers removed would be funding the violation — so the direction reverts
+		 * and the money goes back to being distributed by time, which is what it would have
+		 * done had nobody directed it. Nothing is created or destroyed.
+		 *
+		 * ⚠️ **A creator WITHDRAWING their own Work does not set this** (Parker,
+		 * 2026-09-04). They broke no rule, and a creator has to stay free to take a Work
+		 * out of circulation without it costing them money already given.
+		 *
+		 * ⚠️ **Only ever set on a cycle that has not settled.** Once `distribute-pool` has
+		 * written the payouts, the money is somewhere else and this becomes a claim about
+		 * the past rather than a routing instruction.
+		 */
+		voidedAt: timestamp("voided_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [

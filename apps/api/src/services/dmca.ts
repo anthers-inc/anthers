@@ -35,6 +35,7 @@ import {
 import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { notify } from "../services/notifications.js";
 import { refundPurchase } from "./refunds.js";
+import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void";
 
 /**
  * How long a creator has to file a counter-notice before the takedown becomes
@@ -205,6 +206,17 @@ export async function takeDownWork(input: {
 			reason: "dmca",
 			note,
 		});
+
+		// 🚨 Anthers removed this, so directed money on it reverts: it goes back to being
+		// distributed by time rather than paid out on content we took down. A creator
+		// WITHDRAWING their own Work does not do this — they broke no rule. Only unsettled
+		// cycles move; a takedown does not reach into a month already paid.
+		const reverted = await voidStickersOnSubject("work", work.id);
+		if (reverted.voided > 0) {
+			console.log(
+				`[dmca] takedown of work ${work.id} reverted ${reverted.voided} Sticker(s), $${reverted.dollars.toFixed(2)} back to time-based distribution`,
+			);
+		}
 	});
 
 	// Notify the creator — the counter-notice route and the exposure stated plainly.
@@ -360,6 +372,14 @@ export async function restoreWork(input: {
 			reason: "",
 			note,
 		});
+
+		// The takedown is undone, so the directions come back — but only for a cycle that has
+		// not settled. A counter-notice can arrive after the month closed, and by then the money
+		// has been distributed by time and paid; restoring the Work does not rewrite that.
+		const back = await restoreStickersOnSubject("work", work.id);
+		if (back.restored > 0) {
+			console.log(`[dmca] restore of work ${work.id} reinstated ${back.restored} Sticker(s)`);
+		}
 	});
 
 	return { status: "restored" };

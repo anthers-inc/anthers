@@ -67,9 +67,16 @@ export const BADGE_ART: Record<Badge, { emblem: string; shape: string; color: st
 	// happens to have — so the same four Badges looked different on every platform and
 	// matched nothing else on the site. These are chosen art, credited in THIRD-PARTY.md,
 	// and they go through the same per-shape box a creator's emblem does.
+	//
+	// ⭐ **All four are dark art on a light field** (Parker, 2026-09-04). The ladder ran
+	// three that way and `clay` the other way round — a light emblem on a dark field — so
+	// the set read as two designs rather than one. The palette is not at fault: each color
+	// picks the `on` that contrasts with its own fill, so consistency here is a question of
+	// choosing four fills from the same lightness band. `amber` is `clay`'s warm neighbour
+	// on the light side of it, which keeps the earth-to-bloom progression intact.
 	root: { emblem: "badge-root", shape: "circle", color: "cream" },
 	sprout: { emblem: "badge-sprout", shape: "circle", color: "meadow" },
-	petal: { emblem: "badge-petal", shape: "circle", color: "clay" },
+	petal: { emblem: "badge-petal", shape: "circle", color: "amber" },
 	blossom: { emblem: "badge-blossom", shape: "circle", color: "sun" },
 };
 
