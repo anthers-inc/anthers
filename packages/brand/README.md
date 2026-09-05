@@ -31,18 +31,14 @@ It now lives in a **private** repository alongside the layered design working fi
 ```sh
 bun run brand:search "wildflower" --style solid    # ids, terms, creators, licenses, permalinks
 bun run brand:search --like 7595393               # icons drawn in the same hand — build a set
-bun run brand:add 7595393 --as bloom-cluster --why "reads at small size"
+bun run brand:add 8040550 --as bloom-outline --file ~/Downloads/noun-wildflower-8040550.svg
 ```
 
 `brand:add` puts the SVG in the private library, registers it in `icons.json`, regenerates `src/generated/icons.ts`, and rewrites the attribution table in `THIRD-PARTY.md` from the API's own `creator`, `permalink` and `license_description` fields. `--dry-run` shows you the art's provenance and its destination without writing anything, and `--group <name>` files it somewhere other than `nature/`.
 
-🚨 **The API will not hand over the file on the current plan, so download it yourself and pass `--file`.** It is a catch-22 rather than a wrong parameter: `/v2/icon/<id>/download` answers `400 Must provide a hexadecimal color value` without `color`, and `403 You are not authorized to edit this icon` with it — for SVG and PNG alike, and for an icon whose file this library already holds. So take the SVG from the icon's permalink under the NounPro subscription, as **single-color black**, and hand it over:
+🚨 **The file comes from `--file`, and may never come from the API.** Creating the API key required agreeing that **the app will not cache SVG files** — a term in neither the published Terms of Use nor the API documentation — and writing an API-fetched SVG into this library is the clearest instance of it. So the division is: **the API supplies search and metadata; the NounPro subscription supplies files.** Download the one file from the icon's permalink as single-color black and hand it over. That is the only step that stays manual, and six of the seven still go.
 
-```sh
-bun run brand:add 8040550 --as bloom-outline --file ~/Downloads/noun-wildflower-8040550.svg
-```
-
-That still automates six of the seven steps and costs one icon call for the metadata. Nothing here changes on the day the plan allows downloads — drop `--file` and the same command fetches the file itself.
+⚠️ **Do not reinstate an API fetch here on the grounds that the endpoint started working.** `/v2/icon/<id>/download` also refuses us today — `400 Must provide a hexadecimal color value` without `color`, `403 You are not authorized to edit this icon` with it — and read alone that looks like a plan limitation to route around until it lifts. It is not: the constraint is contractual, so a fallback written for the day the plan changes is a breach that switches itself on when somebody upgrades for unrelated reasons. `scripts/noun/authoring-time.test.ts` fails if any script that writes to the library so much as reaches for `downloadSvg`.
 
 **By hand, from art already in the library**, when there is nothing to fetch:
 
