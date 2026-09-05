@@ -2,8 +2,7 @@
 /**
  * Take one icon from the Noun Project into the curated set, in a single step.
  *
- *     bun run brand:add 7595393 --as bloom-cluster --why "reads at small size"
- *     bun run brand:add 7595393 --as bloom-cluster --file ~/Downloads/noun-x.svg
+ *     bun run brand:add 7595393 --as bloom-cluster --file ~/Downloads/noun-x.svg --why "…"
  *     bun run brand:add 7595393 --as bloom-cluster --dry-run   # metadata only, no download
  *     bun run brand:add --backfill        # provenance for curated icons that lack it
  *
@@ -20,14 +19,15 @@
  * key, no network and no private library — see authoring-time.test.ts, which fails
  * if this credential's name ever appears on the deploy path.
  *
- * ⚠️ **One icon call for the metadata, plus one for the file if the API will hand it
- * over** — at $0.0095 each. It will not on the current plan, so pass the SVG with
- * `--file` and the add costs one. `--backfill` costs one per icon it fills.
+ * ⚠️ **One icon call, for the metadata.** The file comes from `--file` and spends
+ * nothing: the API terms forbid caching an SVG it hands over, so the subscription
+ * supplies files and the API supplies search and metadata. `--backfill` costs one
+ * per icon it fills.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { downloadSvg, icon as fetchIcon, type NounIcon, reportSpend } from "./noun/client";
+import { icon as fetchIcon, type NounIcon, reportSpend } from "./noun/client";
 import {
 	absolute,
 	BRAND_DIR,
@@ -139,7 +139,7 @@ const friendly = values.get("as");
 if (!Number.isFinite(nounId) || nounId <= 0 || !friendly) {
 	console.error(
 		'brand:add: usage: bun run brand:add <icon-id> --as <friendly-id> [--why "…"]\n' +
-			"                  [--file <local.svg>] [--group nature] [--dry-run]\n" +
+			"                  --file <local.svg> [--group nature] [--dry-run]\n" +
 			"                  bun run brand:add --backfill",
 	);
 	process.exit(2);
@@ -212,36 +212,46 @@ if (!existsSync(SVG_ROOT)) {
 }
 
 /**
- * The icon's markup, from disk if `--file` named one and from the API otherwise.
+ * The icon's markup, which comes from disk and may never come from the API.
  *
- * 🚨 **The `download` endpoint is refused on the current plan, so `--file` is the
- * working path today.** It is a catch-22 rather than a wrong parameter: omitting
- * `color` answers `400 Must provide a hexadecimal color value`, and supplying it
- * answers `403 You are not authorized to edit this icon` — for SVG and PNG alike,
- * and for an icon whose file the library already holds. Everything else here works,
- * so the fallback is to fetch the one file by hand from the permalink above, under
- * the NounPro subscription, and hand it to `--file`. That still automates six of the
- * seven steps, and the download path starts working the day the plan allows it
- * without anything here changing.
+ * 🚨 **The key-creation flow requires agreeing that the app will not cache SVG
+ * files** (Parker, 2026-09-04), and writing an API-fetched SVG into the private
+ * library is the clearest instance of that. So `--file` is not a fallback for a
+ * download that is temporarily refused — **it is the only permitted route**, and
+ * the API supplies search and metadata rather than files.
+ *
+ * ⭐ **A subscription is what makes the file side unambiguous.** NounPro exists
+ * precisely so a subscriber may download and keep artwork, and every one of the 648
+ * icons already in the library arrived that way. Hand-fetching one file from the
+ * permalink is the single step that stays manual, and six of the seven still go.
+ *
+ * ⚠️ **This is a contract constraint and not a plan limitation, which matters
+ * because the two look identical from here.** The endpoint does also refuse us
+ * today — omitting `color` answers `400 Must provide a hexadecimal color value`
+ * and supplying it answers `403 You are not authorized to edit this icon`, for SVG
+ * and PNG alike — and an earlier version of this file read that as a catch-22 to
+ * route around, noting that the download path would start working the day the plan
+ * allowed it. **That is exactly the outcome to prevent**: a latent violation that
+ * switches itself on when somebody upgrades a plan for unrelated reasons. The
+ * runtime Badge Maker fetches, composes and discards within one request and never
+ * writes a file; nothing at authoring time has that shape.
  */
-async function markup(): Promise<string> {
+function markup(): string {
 	const local = values.get("file");
 	if (local) return readFileSync(local, "utf8");
-	try {
-		return await downloadSvg(nounId);
-	} catch (err) {
-		console.error(
-			`\nbrand:add: the API would not hand over the file — ${err instanceof Error ? err.message.split("\n")[0] : String(err)}\n\n` +
-				`  Download it yourself from ${absolute(p.permalink)} as SVG, single color black,\n` +
-				"  then re-run with the file:\n\n" +
-				`    bun run brand:add ${nounId} --as ${friendly} --file <path-to-downloaded.svg>\n\n` +
-				"  Nothing was written. The metadata call has already been spent, and --file spends none.",
-		);
-		process.exit(1);
-	}
+	console.error(
+		"\nbrand:add: --file is required, and deliberately so.\n\n" +
+			`  Download it yourself from ${absolute(p.permalink)} as SVG, single color black,\n` +
+			"  then re-run with the file:\n\n" +
+			`    bun run brand:add ${nounId} --as ${friendly} --file <path-to-downloaded.svg>\n\n` +
+			"  The API supplies search and metadata; the subscription supplies files, because\n" +
+			"  the API terms forbid caching an SVG it hands over. Nothing was written, and the\n" +
+			"  metadata call has already been spent.",
+	);
+	process.exit(1);
 }
 
-const svg = await markup();
+const svg = markup();
 if (!/<svg[\s>]/i.test(svg)) {
 	console.error(`brand:add: what came back for ${nounId} is not SVG markup.`);
 	process.exit(1);

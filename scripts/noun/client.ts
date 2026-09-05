@@ -218,8 +218,18 @@ export const moreLikeThis = (
 /**
  * The icon's SVG in {@link DOWNLOAD_COLOR}, base64-decoded. Costs one icon call.
  *
- * ⚠️ **Fetch each icon once, ever.** The color is pinned rather than chosen, so there
- * is never a reason to call this twice for the same id — see the note on `get`.
+ * 🚨 **WHAT THIS RETURNS MAY NOT BE WRITTEN TO DISK.** Creating the API key required
+ * agreeing that the app will not cache SVG files, so this exists for a runtime path
+ * that fetches, composes and discards inside one request — the Badge Maker — and for
+ * nothing else. `authoring-time.test.ts` fails if any script that writes to the
+ * private library reaches for it. Art that is kept comes from the NounPro
+ * subscription, which is what `brand:add --file` takes.
+ *
+ * ⚠️ **It also refuses us today**, and the two facts are easy to conflate. Omitting
+ * `color` answers `400 Must provide a hexadecimal color value`; supplying it answers
+ * `403 You are not authorized to edit this icon`. That is a plan limitation and it may
+ * lift; the caching term will not, so a lifted 403 changes nothing about where a kept
+ * file may come from.
  */
 export async function downloadSvg(id: string | number): Promise<string> {
 	const res = await get<{ base64_encoded_file?: string; content_type?: string }>(
