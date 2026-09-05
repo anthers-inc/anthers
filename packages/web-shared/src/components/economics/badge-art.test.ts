@@ -18,6 +18,7 @@ import {
 	BADGE_COLORS,
 	BADGE_EMBLEMS,
 	BADGE_SHAPES,
+	type BadgeColor,
 	badgeBoxStyle,
 	badgeColor,
 	badgeShape,
@@ -29,6 +30,9 @@ import {
 	isBadgeEmblem,
 	isBadgeShape,
 } from "@anthers/shared/badge-art";
+import type { Badge } from "@anthers/shared/constants";
+import { BADGE_ORDER } from "@anthers/shared/constants";
+import { BADGE_ART } from "./economics";
 
 describe("the badge library", () => {
 	it("🚨 names only emblems the brand package can actually draw", () => {
@@ -150,5 +154,44 @@ describe("the badge library", () => {
 		// that subtracted before it checked.
 		expect(defaultBadgeEmblem(BADGE_EMBLEMS.length)).toBe(defaultBadgeEmblem(0));
 		expect(BADGE_EMBLEMS).toContain(defaultBadgeEmblem(-1));
+	});
+});
+
+/**
+ * ⭐ **Anthers' own four have to read as one design** (Parker, 2026-09-04). The ladder
+ * once ran three Badges as dark art on a light field and one the other way round, and the
+ * odd one out made the set look like two designs rather than a progression.
+ *
+ * ⚠️ **The palette is not what enforces this and must not be blamed for it.** Every color
+ * picks the `on` that contrasts with its own `fill`, which is right — a creator choosing
+ * `clay` should get a light emblem on it. Consistency across Anthers' four is a question
+ * of choosing four fills from the same lightness band, and that choice lives in
+ * `BADGE_ART` where nothing else would notice it changing.
+ */
+describe("Anthers' own ladder reads as one design", () => {
+	/** The `L` of an `oklch(L% C H)` value. */
+	const lightness = (c: string) => Number(/oklch\(\s*([\d.]+)%/.exec(c)?.[1] ?? Number.NaN);
+
+	it("🚨 draws every rung the same way round — dark art on a light field", () => {
+		const pattern = BADGE_ORDER.filter((b) => b !== "free").map((b) => {
+			const color = BADGE_COLORS.find((c) => c.id === BADGE_ART[b as Badge].color);
+			expect(color, `${b} names a color the palette does not have`).toBeDefined();
+			const field = lightness((color as BadgeColor).fill);
+			const art = lightness((color as BadgeColor).on);
+			expect(Number.isNaN(field) || Number.isNaN(art)).toBe(false);
+			return { rung: b, darkArtOnLightField: art < field };
+		});
+		// Reported as a list so a failure names which rung broke ranks, not just that one did.
+		expect(pattern).toEqual(pattern.map((p) => ({ rung: p.rung, darkArtOnLightField: true })));
+	});
+
+	it("keeps the four fields close enough in lightness to belong together", () => {
+		const ls = BADGE_ORDER.filter((b) => b !== "free").map((b) => {
+			const color = BADGE_COLORS.find((c) => c.id === BADGE_ART[b as Badge].color);
+			return lightness((color as BadgeColor).fill);
+		});
+		// A generous band: the point is to catch a field from the dark half of the palette
+		// being dropped in, not to police a designer's taste inside the light half.
+		expect(Math.max(...ls) - Math.min(...ls)).toBeLessThanOrEqual(35);
 	});
 });
