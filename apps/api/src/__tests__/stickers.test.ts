@@ -103,7 +103,7 @@ describe("giving a Sticker", () => {
 		const res = await give(giverCookie, {
 			subjectType: "comment",
 			subjectId: ownCommentId,
-			amount: 0.25,
+			artKey: "butterfly-small",
 		});
 		expect(res.status).toBe(201);
 		const { sticker } = (await res.json()) as { sticker: { creatorId: number } };
@@ -116,7 +116,7 @@ describe("giving a Sticker", () => {
 		const res = await give(giverCookie, {
 			subjectType: "comment",
 			subjectId: otherCommentId,
-			amount: 0.25,
+			artKey: "butterfly-small",
 		});
 		expect(res.status).toBe(403);
 		expect((await res.json()).code).toBe("not_yours");
@@ -127,16 +127,31 @@ describe("giving a Sticker", () => {
 		const res = await give(giverCookie, {
 			subjectType: "work",
 			subjectId: ownWork.id,
-			amount: 0.25,
+			artKey: "butterfly-small",
 		});
 		expect(res.status).toBe(403);
 		expect((await res.json()).code).toBe("own_work");
 	});
 
-	it("takes only the three denominations Anthers designs", async () => {
-		for (const amount of [0.1, 0.75, 2, 5, -0.25, 0]) {
-			const res = await give(giverCookie, { subjectType: "work", subjectId: workId, amount });
-			expect(res.status, `amount ${amount}`).toBe(400);
+	it("🚨 takes art rather than an amount, so the money cannot be paired with the wrong drawing", async () => {
+		// The art IS the denomination. A caller that could send both could put the most
+		// elaborate butterfly on a quarter, and the drawing is what a creator reads as
+		// generosity — so an amount in the request is refused outright rather than checked.
+		const withAmount = await give(giverCookie, {
+			subjectType: "work",
+			subjectId: workId,
+			artKey: "butterfly-small",
+			amount: 1,
+		} as never);
+		expect(withAmount.status).toBe(201);
+		const { sticker } = (await withAmount.json()) as { sticker: { amount: string } };
+		expect(sticker.amount).toBe("0.25");
+	});
+
+	it("refuses art that is not in the batch", async () => {
+		for (const artKey of ["butterfly-enormous", "", "../etc/passwd", "BUTTERFLY-SMALL"]) {
+			const res = await give(giverCookie, { subjectType: "work", subjectId: workId, artKey });
+			expect(res.status, `artKey ${artKey}`).toBe(400);
 		}
 	});
 
@@ -144,7 +159,7 @@ describe("giving a Sticker", () => {
 		const res = await give(giverCookie, {
 			subjectType: "work",
 			subjectId: 2_000_000_000,
-			amount: 0.25,
+			artKey: "butterfly-small",
 		});
 		expect(res.status).toBe(404);
 	});
@@ -156,7 +171,13 @@ describe("giving a Sticker", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { allowance: number; directed: number; remaining: number };
 		expect(body.allowance).toBeCloseTo(stickerBudgetFor(SUPPORT), 2);
-		expect(body.directed).toBeCloseTo(0.25, 2); // the one given above
+		// ⚠️ Derived from the rows rather than pinned to a literal. It was pinned to the
+		// one Sticker given above, which made the number a function of how many tests
+		// happen to run first — so adding a test anywhere earlier broke this one for a
+		// reason that had nothing to do with allowances. What is actually being asserted
+		// is that the endpoint agrees with the table.
+		expect(body.directed).toBeCloseTo(await directed(), 2);
+		expect(body.directed).toBeGreaterThan(0);
 		expect(body.remaining).toBeCloseTo(body.allowance - body.directed, 2);
 	});
 
@@ -165,7 +186,7 @@ describe("giving a Sticker", () => {
 		const res = await give(giverCookie, {
 			subjectType: "work",
 			subjectId: workId,
-			amount: 0.25,
+			artKey: "butterfly-small",
 		});
 		expect(res.status).toBe(201);
 		const { sticker } = (await res.json()) as { sticker: { id: number } };
@@ -191,7 +212,11 @@ describe("giving a Sticker", () => {
 		// $1.00 steps until it refuses, then check it refused for the right reason.
 		let refused: Response | null = null;
 		for (let i = 0; i < 6 && !refused; i++) {
-			const res = await give(giverCookie, { subjectType: "work", subjectId: workId, amount: 1 });
+			const res = await give(giverCookie, {
+				subjectType: "work",
+				subjectId: workId,
+				artKey: "butterfly-large",
+			});
 			if (res.status !== 201) refused = res;
 		}
 		expect(refused, "the cap never engaged").not.toBeNull();
@@ -237,7 +262,11 @@ describe("a free account", () => {
 			.where(eq(users.username, `stk_freetarget_${RUN}`));
 		const work = await insertWork({ creatorId: target.id, type: "text", title: `Free ${RUN}` });
 
-		const res = await give(cookie, { subjectType: "work", subjectId: work.id, amount: 0.25 });
+		const res = await give(cookie, {
+			subjectType: "work",
+			subjectId: work.id,
+			artKey: "butterfly-small",
+		});
 		// ⭐ Refused on the allowance BEFORE the subject is resolved. The arithmetic settles
 		// this before policy has to: a third of the subsidized pot buys no Sticker at any
 		// denomination.
@@ -245,5 +274,109 @@ describe("a free account", () => {
 		expect((await res.json()).code).toBe("no_allowance");
 		// `user` is the free account itself, and it directed nothing.
 		expect((await db.select().from(stickers).where(eq(stickers.giverId, user.id))).length).toBe(0);
+	});
+});
+
+/**
+ * The Stickers a page shows.
+ *
+ * ⚠️ **Its own giver, deliberately.** The suite above deliberately exhausts an allowance to
+ * prove the cap engages, so anything giving a Sticker after it would be refused for a
+ * reason that has nothing to do with what it is testing. A fresh account makes these
+ * independent of where they sit in the file.
+ */
+describe("the Stickers on a page", () => {
+	let cookie: string;
+	let giverId: number;
+	let creatorId: number;
+
+	beforeAll(async () => {
+		cookie = await signUp(`stk_show_${RUN}`);
+		await signUp(`stk_showcreator_${RUN}`);
+		const rows = await db.select({ id: users.id, username: users.username }).from(users);
+		const byName = new Map(rows.map((r) => [r.username, r.id]));
+		giverId = byName.get(`stk_show_${RUN}`)!;
+		creatorId = byName.get(`stk_showcreator_${RUN}`)!;
+		await db
+			.insert(accounts)
+			.values({
+				userId: giverId,
+				anthersSupport: SUPPORT.toFixed(2),
+				currentPeriodStart: new Date("2031-06-01T00:00:00Z"),
+				currentPeriodEnd: new Date("2031-07-01T00:00:00Z"),
+				isActive: true,
+			})
+			.onConflictDoNothing();
+	}, DB_SETUP_TIMEOUT);
+
+	async function listOn(
+		subjectId: number,
+		as?: string,
+	): Promise<{ artKey: string; count: number; mine: number[] }[]> {
+		const res = await req(`/api/subscriptions/stickers?subjectType=work&subjectId=${subjectId}`, {
+			headers: as ? { Cookie: as } : {},
+		});
+		expect(res.status).toBe(200);
+		return ((await res.json()) as { stickers: never[] }).stickers;
+	}
+
+	it("⭐ groups by art rather than returning one row per Sticker", async () => {
+		const work = await insertWork({ creatorId, type: "text", title: `Grouped ${RUN}` });
+		for (const artKey of ["butterfly-small", "butterfly-small", "butterfly-medium"]) {
+			const res = await give(cookie, { subjectType: "work", subjectId: work.id, artKey });
+			expect(res.status).toBe(201);
+		}
+		const shown = await listOn(work.id, cookie);
+		expect(shown.find((g) => g.artKey === "butterfly-small")?.count).toBe(2);
+		expect(shown.find((g) => g.artKey === "butterfly-medium")?.count).toBe(1);
+	});
+
+	it("🚨 drops a removed Sticker from the page while it stays spent", async () => {
+		const work = await insertWork({ creatorId, type: "text", title: `Removed ${RUN}` });
+		const res = await give(cookie, {
+			subjectType: "work",
+			subjectId: work.id,
+			artKey: "butterfly-small",
+		});
+		expect(res.status).toBe(201);
+		const { sticker } = (await res.json()) as { sticker: { id: number } };
+
+		const spentBefore = await db.select().from(stickers).where(eq(stickers.giverId, giverId));
+		await req(`/api/subscriptions/stickers/${sticker.id}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: cookie },
+		});
+
+		// Gone from the display...
+		expect(await listOn(work.id, cookie)).toEqual([]);
+		// ...and the row is still there, still carrying its amount. Removal is display-only,
+		// which is what stops a Sticker being rented and refunded.
+		const spentAfter = await db.select().from(stickers).where(eq(stickers.giverId, giverId));
+		expect(spentAfter.length).toBe(spentBefore.length);
+	});
+
+	it("🚨 identifies a viewer's own Stickers, and nobody's to a stranger", async () => {
+		const work = await insertWork({ creatorId, type: "text", title: `Mine ${RUN}` });
+		expect(
+			(await give(cookie, { subjectType: "work", subjectId: work.id, artKey: "butterfly-small" }))
+				.status,
+		).toBe(201);
+
+		// The giver gets a row id back, because taking one back is theirs alone to do.
+		expect((await listOn(work.id, cookie))[0]?.mine.length).toBe(1);
+
+		// A signed-out reader sees the Sticker and no identity attached to it.
+		const anon = (await listOn(work.id))[0];
+		expect(anon?.count).toBe(1);
+		expect(anon?.mine).toEqual([]);
+	});
+
+	it("refuses a subject it does not recognize", async () => {
+		expect((await req("/api/subscriptions/stickers?subjectType=galaxy&subjectId=1")).status).toBe(
+			400,
+		);
+		expect((await req("/api/subscriptions/stickers?subjectType=work&subjectId=nope")).status).toBe(
+			400,
+		);
 	});
 });

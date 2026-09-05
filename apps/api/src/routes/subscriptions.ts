@@ -40,7 +40,6 @@ import {
 	CHARGEABLE_AMOUNT_MESSAGE,
 	heldBadgeName,
 	isChargeableAmount,
-	isStickerDenomination,
 	STRIPE_MIN_CHARGE,
 	stickerBudgetFor,
 	supportAmount,
@@ -48,6 +47,7 @@ import {
 import { badgeViews } from "@anthers/shared/fees";
 import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
+import { isGiveable, stickerAmount } from "@anthers/shared/stickers";
 import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
@@ -130,11 +130,17 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const STICKER_SUBJECTS = ["work", "post", "comment"] as const;
 type StickerSubject = (typeof STICKER_SUBJECTS)[number];
 
+/**
+ * 🚨 **The client picks art, never an amount.** The art is the denomination, so accepting
+ * both would let a caller pair the most elaborate drawing with the smallest sum — and the
+ * drawing is what tells a creator and everyone reading the page how generous somebody was.
+ * That is a misrepresentation rather than an accounting error, and the only way to make it
+ * impossible is to never take the number from the request.
+ */
 const giveStickerSchema = z.object({
 	subjectType: z.enum(STICKER_SUBJECTS),
 	subjectId: z.number().int().positive(),
-	amount: z.number().refine(isStickerDenomination, "Not a Sticker denomination"),
-	artKey: z.string().max(64).optional(),
+	artKey: z.string().max(64).refine(isGiveable, "Not a Sticker in the current batch"),
 });
 
 /** This user's current cycle key and what they may direct by hand within it. */
@@ -1652,9 +1658,56 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
+	/**
+	 * The Stickers showing on one subject.
+	 *
+	 * ⚠️ **Public, and it publishes art and a count rather than who gave what.** A Sticker
+	 * is a visible gesture, so the page has to show it — but pairing a name with a sum is
+	 * a statement about somebody's finances, exactly as the supporters page reasons. The
+	 * viewer's own Stickers come back identified, because you may take back only your own.
+	 *
+	 * 🚨 **Removed Stickers are excluded here and nowhere else.** Removal is display-only;
+	 * `stickersDirectedIn` still counts them against the giver's allowance and the creator
+	 * still gets paid. This endpoint is the display, so this is the one place it applies.
+	 */
+	.get("/stickers", async (c) => {
+		const subjectType = c.req.query("subjectType") ?? "";
+		const subjectId = Number(c.req.query("subjectId"));
+		if (!STICKER_SUBJECTS.includes(subjectType as StickerSubject) || !Number.isInteger(subjectId)) {
+			return c.json({ error: "Bad subject" }, 400);
+		}
+		const viewerId = await getOptionalUserId(c);
+		const rows = await db
+			.select({ id: stickers.id, artKey: stickers.artKey, giverId: stickers.giverId })
+			.from(stickers)
+			.where(
+				and(
+					eq(stickers.subjectType, subjectType),
+					eq(stickers.subjectId, subjectId),
+					isNull(stickers.removedAt),
+				),
+			)
+			.orderBy(stickers.id);
+
+		// Grouped by art, because a wall of twenty identical butterflies says less than
+		// "twenty butterflies" and costs a page more to render.
+		const byArt = new Map<string, { artKey: string; count: number; mine: number[] }>();
+		for (const row of rows) {
+			const key = row.artKey ?? "";
+			const entry = byArt.get(key) ?? { artKey: key, count: 0, mine: [] };
+			entry.count++;
+			if (viewerId && row.giverId === viewerId) entry.mine.push(row.id);
+			byArt.set(key, entry);
+		}
+		return c.json({ stickers: [...byArt.values()] });
+	})
+
 	.post("/stickers", requireAuth, zValidator("json", giveStickerSchema), async (c) => {
 		const user = c.get("user");
-		const { subjectType, subjectId, amount, artKey } = c.req.valid("json");
+		const { subjectType, subjectId, artKey } = c.req.valid("json");
+		// Read off the batch, never off the request — see `giveStickerSchema`. The schema
+		// already refused a key that is not giveable, so this cannot be undefined.
+		const amount = stickerAmount(artKey) as number;
 
 		const cycle = await stickerCycleFor(user.id);
 		if (!cycle) return c.json({ error: "No active billing cycle" }, 409);

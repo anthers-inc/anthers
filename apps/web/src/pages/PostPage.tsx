@@ -20,6 +20,7 @@ import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
 import CommentThread from "../components/post/CommentThread";
 import ReactionControl from "../components/post/ReactionControl";
+import StickerBar from "../components/post/StickerBar";
 import ReportDialog from "../components/ui/ReportDialog";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { studioEditPostUrl } from "../lib/studio";
@@ -381,6 +382,8 @@ export default function PostPage() {
 			)}
 
 			<ReactionControl subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
+
+			<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
 
 			<CommentThread subject={{ kind: "post", slug: post.slug }} />
 		</div>
