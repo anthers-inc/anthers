@@ -267,8 +267,10 @@ export const works = pgTable(
 		scanQueuedAt: timestamp("scan_queued_at", { withTimezone: true }),
 
 		// ── ATProto ──
-		// A Work wants its own lexicon rather than riding a post record; deferred with
-		// ATProto adoption itself, and unpopulated meanwhile.
+		// A Work wants its own lexicon rather than riding a post record, which is what
+		// `org.anthers.work` is. Unpopulated on every row: the schema is unpublished and
+		// nothing anywhere writes a record, because doing so means writing into a repository
+		// Anthers does not host. Wiki: *Federation → Records beyond the Catalog*.
 		atprotoUri: text("atproto_uri").unique(),
 
 		/** The UPLOAD date — when the Work entered the Catalog. Creator-visible only. */
