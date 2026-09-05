@@ -60,7 +60,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-shared/decor/sections";
-import { BADGE_ART } from "@anthers/web-shared/economics";
+import { AnthersBadgeMark } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import {
@@ -568,7 +568,13 @@ export default function ForCreatorsPage() {
 											className={`border-base-content/10 ${isFree ? "text-base-content/45" : ""}`}
 										>
 											<td className={isFree ? "" : "font-medium"}>
-												{!isFree && BADGE_ART[b].emoji} {badgeLabel(b)}
+												{/* The mark rather than a glyph beside the name: an emblem is art on a
+												    field, so it cannot be dropped into a cell as a character the way
+												    the emoji it replaced could. */}
+												<span className="flex items-center gap-2">
+													{!isFree && <AnthersBadgeMark badge={b} size="h-5 w-5" />}
+													{badgeLabel(b)}
+												</span>
 											</td>
 											<td className="text-right text-base-content/70">{n}</td>
 											<td className="text-right text-base-content/70">

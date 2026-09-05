@@ -6,10 +6,15 @@
  *     bun run brand:collect ~/Desktop       # sweep somewhere else
  *     bun run brand:collect --keep          # copy instead of moving
  *
- * ⭐ **Matches on the Noun Project id inside the filename, so nothing needs renaming.**
- * Their download is named `noun-<term>-<id>.svg`, and the id is what ties a file to the
- * artist it must be credited to — so that is what this reads rather than the term, which
- * is neither unique nor stable.
+ * ⭐ **Matches on the Noun Project id anywhere in the filename, so nothing needs renaming.**
+ * The id is what ties a file to the artist it must be credited to, and it is the only part
+ * of a download's name worth trusting — the term is neither unique nor stable, and the
+ * punctuation around it is not ours to predict.
+ *
+ * ⚠️ **Do not narrow this to a naming scheme.** It matched `noun-<term>-<id>.svg` at first,
+ * from the shape of the files already in the library — which are named the way *we* file
+ * them, not the way they arrive. A real download is `noun_Butterfly_3662383.svg`, and the
+ * mismatch presented as the tool quietly finding nothing.
  *
  * ⚠️ **Needs no API key.** Provenance was fetched when the icon was chosen. This moves
  * files, promotes them out of the wanted list, and re-runs the two generators.
@@ -64,14 +69,30 @@ if (outstanding.size === 0) {
 }
 
 const collected: { icon: CuratedIcon; source: string }[] = [];
+const unmatched: string[] = [];
 const seen = new Set<number>();
 for (const name of readdirSync(from)) {
 	if (!name.toLowerCase().endsWith(".svg")) continue;
-	const id = Number(/-(\d+)\.svg$/i.exec(name)?.[1]);
-	const want = Number.isFinite(id) ? outstanding.get(id) : undefined;
+	// Every run of four or more digits is a candidate id. Four is the floor because a
+	// shorter run is far more likely to be a size, a date or a version than an icon.
+	const candidates = [...name.matchAll(/\d{4,}/g)]
+		.map((m) => Number(m[0]))
+		.filter((n) => outstanding.has(n));
+	const unique = [...new Set(candidates)];
+	if (unique.length > 1) {
+		// Two ids we are waiting on, in one filename. Guessing would credit the wrong artist.
+		console.error(`  skipped ${name} — names more than one wanted icon (${unique.join(", ")})`);
+		continue;
+	}
+	const id = unique[0];
+	const want = id === undefined ? undefined : outstanding.get(id);
 	// ⚠️ A directory of downloads is somebody's whole desktop, not a delivery. Anything
-	// that is not an SVG named for an icon we are actually waiting on is left alone.
-	if (!want || seen.has(id)) continue;
+	// that is not an SVG naming an icon we are actually waiting on is left alone.
+	if (!want || id === undefined) {
+		unmatched.push(name);
+		continue;
+	}
+	if (seen.has(id)) continue;
 	const source = join(from, name);
 	if (!statSync(source).isFile()) continue;
 	const svg = readFileSync(source, "utf8");
@@ -84,11 +105,15 @@ for (const name of readdirSync(from)) {
 }
 
 if (collected.length === 0) {
-	console.log(
-		`brand:collect: found nothing in ${from} matching the ${outstanding.size} icon(s) waiting.\n` +
-			"  Files are matched on the Noun Project id in the filename, as their download names it.\n" +
-			"  `bun run brand:wanted` lists what is outstanding.",
-	);
+	// 🚨 Names what it looked at. "Found nothing" with no list is indistinguishable from
+	// "looked in the wrong place", and that ambiguity is what made the first wrong matcher
+	// cost somebody a round trip instead of being obvious from the output.
+	console.log(`brand:collect: nothing in ${from} matches the ${outstanding.size} icon(s) waiting.`);
+	if (unmatched.length > 0) {
+		console.log(`\n  ${unmatched.length} SVG(s) there named no wanted icon id:`);
+		for (const n of unmatched.slice(0, 12)) console.log(`    ${n}`);
+	}
+	console.log("\n  `bun run brand:wanted` lists what is outstanding, with the id of each.");
 	process.exit(0);
 }
 
