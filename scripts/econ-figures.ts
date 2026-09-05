@@ -480,7 +480,7 @@ function renderPerkLadderMarkdown(): string {
 			],
 		),
 		"",
-		"**Free viewing and the Time Pool are live today. Stickers and the storage floor are committed and not built yet.**",
+		"**Free viewing, the Time Pool and Stickers are live today. The storage floor is committed and not built yet.**",
 		"",
 		`A free account's Time Pool is paid by Anthers on its behalf, and its ${FREE_STORAGE_GIB} GiB holds a creator's catalog only — so an account that has never published anything has no storage of its own until the first rung, where the same floor becomes usable for what you keep.`,
 		"",
