@@ -2,6 +2,7 @@
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
+        pds-up pds-test pds-down \
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
@@ -203,6 +204,34 @@ db-down: ## Stop the local dev Postgres (keeps data)
 
 db-generate: ## Generate Drizzle migration from schema changes
 	bun run db:generate
+
+# ─── Local Personal Data Server (compose.pds.yaml) ───
+# 🚨 The safe place to exercise anything that writes AT Protocol records. A record on a real
+# server is world-readable the moment it lands and is broadcast to everyone listening, and
+# deleting it afterwards broadcasts only the deletion — so prove it here first.
+#
+# Secrets are generated per run and never written to a file: this server holds nothing worth
+# protecting, and a value that exists only in the shell cannot be committed by accident.
+
+pds-up: ## Start a throwaway local PDS for record-writing tests
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "  -> ERROR: Docker isn't running. Start Docker Desktop/daemon, then retry."; \
+		exit 1; \
+	fi
+	@PDS_JWT_SECRET=$$(openssl rand -hex 16) \
+	 PDS_ADMIN_PASSWORD=$$(openssl rand -hex 16) \
+	 PDS_ROTATION_KEY=$$(openssl rand -hex 32) \
+	 docker compose -f compose.pds.yaml up -d
+	@echo "  -> waiting for the PDS to answer..."
+	@until curl -sf -m 2 http://localhost:2583/xrpc/_health >/dev/null 2>&1; do sleep 1; done
+	@echo "  -> PDS ready at http://localhost:2583"
+
+pds-test: ## Run the record-writing integration test against the local PDS
+	ATPROTO_TEST_PDS=http://localhost:2583 bun test scripts/atproto-writer.integration.test.ts
+
+pds-down: ## Stop the local PDS and discard everything it held
+	@PDS_JWT_SECRET=x PDS_ADMIN_PASSWORD=x PDS_ROTATION_KEY=x \
+	 docker compose -f compose.pds.yaml down
 
 db-migrate: ## Apply pending migrations
 	bun run db:migrate
