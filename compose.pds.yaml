@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# A throwaway Personal Data Server for exercising Anthers' record-writing path locally.
+#
+#   make pds-up      # start it (secrets are generated fresh each time)
+#   make pds-test    # run the integration test against it
+#   make pds-down    # stop it and delete everything it held
+#
+# 🚨 **This is the safe target for record writes, and it exists because the unsafe one is
+# one flag away.** A record written to a real server is world-readable the moment it lands
+# and is broadcast to everyone listening; deleting it afterwards broadcasts only the fact of
+# a deletion, so anybody keeping copies keeps that one. Anything that writes records should
+# be proven here first.
+#
+# ⚠️ **`PDS_DEV_MODE` is required rather than convenient.** Without it the server refuses to
+# start at all on a plaintext hostname — "Resource URL must use the https scheme" — because
+# OAuth resource identifiers must be https. Dev mode is what lets it run on `localhost`
+# without a certificate.
+#
+# Secrets are generated per run by the make target and never written to a file. This server
+# holds nothing worth protecting, and a generated-per-run value cannot be committed by
+# accident, which is the failure mode `scripts/credential-shape-guard.test.ts` exists for.
+services:
+  pds:
+    image: ghcr.io/bluesky-social/pds:latest
+    container_name: anthers-pds-dev
+    environment:
+      PDS_DEV_MODE: "true"
+      PDS_HOSTNAME: localhost
+      # 🚨 NOT 3000. `apps/web/serve.ts` defaults to that port, and it is the server the
+      # Playwright suite drives — so a PDS sitting there does not merely clash, it answers
+      # the browser tests with protocol JSON. 2583 is the port the AT Protocol dev tooling
+      # conventionally uses, so it also collides with nothing in this repo.
+      PDS_PORT: "2583"
+      PDS_DATA_DIRECTORY: /pds
+      PDS_BLOBSTORE_DISK_LOCATION: /pds/blocks
+      # Anyone may make an account: this server is a scratchpad, and an invite flow would
+      # only add a step to a test that creates its own throwaway account.
+      PDS_INVITE_REQUIRED: "false"
+      PDS_JWT_SECRET: ${PDS_JWT_SECRET:?run via "make pds-up", which generates this}
+      PDS_ADMIN_PASSWORD: ${PDS_ADMIN_PASSWORD:?run via "make pds-up", which generates this}
+      PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX: ${PDS_ROTATION_KEY:?run via "make pds-up", which generates this}
+    ports:
+      - "2583:2583"
+    # No named volume on purpose. The data is meant to die with the container, so that a
+    # test run never inherits records an earlier one left behind.
+    tmpfs:
+      - /pds
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2583/xrpc/_health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 15

@@ -48,6 +48,7 @@
 		"brand:attribution": "bun run scripts/brand-attribution.ts"
 	},
 	"devDependencies": {
+		"@atproto/api": "0.20.42",
 		"@atproto/lex": "0.3.6",
 		"@biomejs/biome": "2.4.16",
 		"@playwright/test": "1.61.1",
