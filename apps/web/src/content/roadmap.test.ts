@@ -180,22 +180,35 @@ function wikiPages(): Map<string, string> | { error: string } {
 	}
 
 	const pages = new Map<string, string>();
+	const collisions: string[] = [];
 	const walk = (dir: string) => {
 		for (const entry of readdirSync(dir)) {
 			// `Internal Wiki` is Parker's opt-out folder: pages there are deliberately not
 			// published, so a roadmap card must never point at one. Skipping it here is what
 			// turns such a reference into a failure rather than a silently dead chip.
-			if (entry.startsWith(".") || entry === "Internal Wiki") continue;
+			//
+			// `Old Docs` holds superseded drafts, kept for reference under the `NN.NN` names
+			// they had while they were live. They are not pages, and walking them would give
+			// a live page's id to an archived draft.
+			if (entry.startsWith(".") || entry === "Internal Wiki" || entry === "Old Docs") continue;
 			const path = join(dir, entry);
 			if (statSync(path).isDirectory()) {
 				walk(path);
 				continue;
 			}
 			const match = entry.match(/^(\d\d\.\d\d) (.+)\.md$/);
-			if (match) pages.set(match[1], match[2]);
+			if (!match) continue;
+			// 🚨 Two pages sharing an id used to be a silent overwrite, which resolves a
+			// roadmap card to whichever file the walk happened to reach second — so the same
+			// reference passes or fails on directory order. An id is the handle a card points
+			// at, so a collision is a defect in the wiki rather than something to tolerate.
+			const clash = pages.get(match[1]);
+			if (clash) collisions.push(`${match[1]} is both "${clash}" and "${match[2]}"`);
+			pages.set(match[1], match[2]);
 		}
 	};
 	walk(root);
+	if (collisions.length > 0) return { error: `two pages share an id: ${collisions.join("; ")}` };
 	return pages.size > 0
 		? pages
 		: { error: `${root} exists but holds no NN.NN pages — is that really the wiki?` };
