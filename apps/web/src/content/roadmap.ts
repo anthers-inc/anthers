@@ -897,7 +897,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"A listing of your work in a repository you control, so it outlives any one host. The listing only, never the work.",
 						bucket: "planned",
-						note: "Blocked: the protocol offers no permission at the right grain.",
+						note: "The write path works; what it lacks is a repository we may write into.",
 						doc: { id: "71.00", title: "The AT Protocol" },
 					},
 					{
