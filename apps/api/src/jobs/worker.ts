@@ -279,7 +279,13 @@ async function start() {
 
 	console.log("Worker ready. Listening for jobs...");
 	console.log(
-		"Scheduled: distribute-pool (daily), settle-cycle (monthly), calculate-crf (daily), fetch-metrics (6h), publish-scheduled (1m)",
+		// ⚠️ **Derived from CRON_SCHEDULES rather than typed.** This line named five crons
+		// while fourteen were registered — a hand-maintained list beside the data it
+		// describes, which is the same drift a schema annotation pass had and for the same
+		// reason. It matters more than a log line usually would: this banner is how somebody
+		// confirms a cron is actually scheduled after a deploy, so a stale one answers that
+		// question wrongly.
+		`Scheduled ${CRON_SCHEDULES.length}: ${CRON_SCHEDULES.map(([q]) => q).join(", ")}`,
 	);
 }
 
