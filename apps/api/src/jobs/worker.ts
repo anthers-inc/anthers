@@ -246,10 +246,19 @@ async function start() {
 	// something. A sweep that alerts always logs.
 	await queue.work(QUEUES.WATCH_IDENTITIES, async (jobs) => {
 		for (const job of jobs) {
-			const { checked, alerts } = await watchHostedIdentities();
-			if (alerts > 0) {
+			const { checked, alerts, findings } = await watchHostedIdentities();
+			const recorded = findings.filter((f) => f.kind === "first-seen").length;
+			// ⚠️ **A clean sweep is silent, and that was very nearly the whole problem.** This
+			// job exists so that silence about an identity means something, and a job whose
+			// success and whose total failure both log nothing cannot deliver that — after the
+			// first deploy there was no way to tell "watching, nothing moved" from "never ran".
+			// A first sighting is rare and is the one moment worth a line: it says the sweep
+			// reached both the server and the directory, and names what it will watch from now
+			// on. Steady state stays quiet on purpose.
+			if (alerts > 0 || recorded > 0) {
 				console.log(
-					`[watch-identities] job ${job.id}: ${alerts} ALERT(S) across ${checked} identity(ies)`,
+					`[watch-identities] job ${job.id}: ${alerts} ALERT(S), ${recorded} newly watched, ` +
+						`${checked} identity(ies) checked`,
 				);
 			}
 		}
