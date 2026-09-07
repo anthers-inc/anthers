@@ -905,6 +905,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "Hosting Identities Here",
 						blurb: "Anthers running the identity server, which unblocks the above in one step.",
 						bucket: "planned",
+						note: "The server is up with one test account. No handle is offered until leaving it works.",
 						doc: { id: "71.03", title: "The Anthers PDS and Creator Nodes" },
 					},
 					{
