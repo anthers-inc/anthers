@@ -484,6 +484,13 @@
       "when": 1788578929551,
       "tag": "0068_chief_dreaming_celestial",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1788821022211,
+      "tag": "0069_sticky_onslaught",
+      "breakpoints": true
     }
   ]
 }

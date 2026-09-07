@@ -213,6 +213,18 @@ export const QUEUES = {
 	// possible" after actual knowledge. A retry that waits until 3 AM is a retry that
 	// has already spent most of the tolerance.
 	ESCALATE_REPORTS: "escalate-reports",
+	// Read the public identity document of every account Anthers hosts and shout when one
+	// moves.
+	//
+	// 🚨 It runs HOURLY rather than nightly, and the cadence is the feature. A rotation key
+	// ranked above the one that signed a hostile operation can undo it, but only within 72
+	// hours — so the remedy expires on a clock nobody is watching, and a nightly check
+	// spends a third of the tolerance before anyone is told. Hourly leaves seventy-odd
+	// chances to notice.
+	//
+	// ⭐ It is in the HUB's worker rather than beside the server it watches, which is the
+	// only arrangement where the alarm survives the compromise it describes.
+	WATCH_IDENTITIES: "watch-identities",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -274,6 +286,14 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 5,
 	},
+	// Reads two third-party services, so a transient failure is expected rather than
+	// exceptional — but a retry budget is not what covers that. The sweep is idempotent and
+	// runs again in an hour, and an unreadable directory is deliberately not a finding, so
+	// the correct response to failure is to stop and try later rather than to hammer.
+	[QUEUES.WATCH_IDENTITIES]: {
+		retryLimit: 1,
+		expireInMinutes: 15,
+	},
 };
 
 /**
@@ -299,6 +319,10 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// creators out of these rows, so pruning ahead of it would cost earnings rather
 	// than privacy. The retention window is months wide, so the ordering has enormous
 	// slack — it is stated here so a future reschedule has to notice the dependency.
+	// Hourly at :23, off the hour so it does not queue behind whatever else fires at :00.
+	// See the queue comment for why hourly rather than daily: the remedy it protects expires
+	// in 72 hours.
+	[QUEUES.WATCH_IDENTITIES, "23 * * * *"],
 	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
 	// 3:30 AM daily. Nothing depends on the ordering — an expired session is dead to every
 	// reader the moment it expires, so this only reclaims the row and the IP on it.
