@@ -555,3 +555,44 @@ export const userBlocks = pgTable(
 		index("idx_user_blocks_blocked").on(table.blockedId),
 	],
 );
+
+// org — Anthers watching identities it hosts, which is organizational telemetry rather
+// than anybody's identity. The identity itself is `node` and lives at whichever server
+// holds it; this row is only the hub's record of what that identity looked like last time
+// it checked, so a split would leave it with the org along with the rest of the monitoring.
+//
+// 🚨 **The whole point is that this runs somewhere the watched server cannot reach.** A
+// rotation key ranked above Anthers' can undo a hostile operation, but only within 72 hours
+// of it happening — so the remedy expires whether or not anybody noticed, and a watcher
+// living on the server it watches is silenced by the very compromise it exists to detect.
+// This table is in the hub's database and the job runs in the hub's worker, on separate
+// infrastructure from the Personal Data Server, for that reason alone.
+//
+// ⚠️ **`last_listed_at` is what makes hiding an account visible.** The watch list is fed by
+// asking the server which repositories it holds, and a compromised server could simply stop
+// listing one. So the list only ever GROWS: a DID that has been seen once is watched
+// forever, and a row that stops appearing in a listing that otherwise succeeded is itself
+// the alert. Removing a row is a deliberate act by a person, never something the watched
+// server can cause.
+export const hostedIdentities = pgTable("hosted_identities", {
+	// The DID is the identity and never changes, which is exactly why it is the key: the
+	// handle beside it is a label that can move, and keying on it would lose the row the
+	// moment somebody renamed themselves.
+	did: text("did").primaryKey(),
+	/** The handle last seen in the identity document. For humans reading an alert. */
+	handle: text("handle"),
+	/** Where the identity document says the repository lives. A change here is a migration. */
+	pdsEndpoint: text("pds_endpoint"),
+	// The identifier of the newest operation in the identity's public audit log. This is the
+	// whole comparison: a different value means somebody signed something.
+	headCid: text("head_cid"),
+	firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+	/** Last time the audit log was successfully read. Not the same as the last change. */
+	lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+	// Last time the hosting server admitted to holding this repository. Only ever written
+	// when a listing SUCCEEDS, so an unreachable server cannot be mistaken for a server
+	// that has dropped an account.
+	lastListedAt: timestamp("last_listed_at", { withTimezone: true }),
+	/** When the last alert about this identity went out, so one change alerts once. */
+	alertedAt: timestamp("alerted_at", { withTimezone: true }),
+});

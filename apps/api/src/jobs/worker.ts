@@ -35,6 +35,7 @@ import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
+import { watchHostedIdentities } from "./watch-identities.js";
 
 async function start() {
 	console.log("Starting job worker...");
@@ -239,6 +240,21 @@ async function start() {
 	// Re-ask about objects whose scan never came back. Quiet when there is nothing owed,
 	// for the same reason the escalation sweep is: an hourly "0 owed" line makes the worker
 	// log unreadable, and this one has to stay readable.
+	// Watch the identity documents of accounts Anthers hosts. Quiet on a clean sweep, for
+	// the same reason the escalation sweep is: an hourly "0 changed" line makes the worker
+	// log unreadable, and this is a log somebody has to be able to read on the day it says
+	// something. A sweep that alerts always logs.
+	await queue.work(QUEUES.WATCH_IDENTITIES, async (jobs) => {
+		for (const job of jobs) {
+			const { checked, alerts } = await watchHostedIdentities();
+			if (alerts > 0) {
+				console.log(
+					`[watch-identities] job ${job.id}: ${alerts} ALERT(S) across ${checked} identity(ies)`,
+				);
+			}
+		}
+	});
+
 	await queue.work(QUEUES.RESCAN_OWED, async (jobs) => {
 		for (const job of jobs) {
 			const sent = await rescanOwed();

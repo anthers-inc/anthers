@@ -139,7 +139,12 @@ function verifyBody(intro: string, verifyUrl: string): string {
 		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This link expires in 24 hours. If you didn't create an Anthers account, you can ignore this email.</p>`;
 }
 
-function escapeHtml(s: string): string {
+/**
+ * ⚠️ **Exported, and there are four private copies of this in `services/` besides.** This
+ * one is exported rather than a fifth being written; consolidating the others is a tidy-up
+ * nobody has done, and adding to the pile would have made it worse.
+ */
+export function escapeHtml(s: string): string {
 	return s.replace(/[&<>"']/g, (ch) => {
 		switch (ch) {
 			case "&":
@@ -292,4 +297,37 @@ export async function sendAbuseAlert(args: { subject: string; html: string }): P
 		return { sent: false, messageId: null };
 	}
 	return sendEmail({ to: ABUSE_EMAIL, subject: args.subject, html: args.html });
+}
+
+/**
+ * An alert to whoever operates Anthers' infrastructure.
+ *
+ * 🛑 **Deliberately NOT `abuse@`.** That mailbox summons a person to stop what they are
+ * doing and look at reported content, and the standing rule is that nothing may train its
+ * reader to skim it. An infrastructure alert is a different job for a different person on a
+ * different clock, so it gets its own address rather than borrowing the one that already
+ * commands attention.
+ *
+ * ⚠️ **The recipient is configuration and there is no default**, because a default would be
+ * a guess at a mailbox that may not exist — and an alert delivered to a bouncing address is
+ * indistinguishable from no alert at all. Unset, this logs loudly and reports that it did
+ * not send, so the caller can record that nobody was told.
+ */
+export async function sendOperationalAlert(args: {
+	subject: string;
+	html: string;
+}): Promise<SendResult> {
+	const to = process.env.OPS_ALERT_EMAIL?.trim();
+	if (!to) {
+		console.error(
+			`[email] NOBODY WAS TOLD: "${args.subject}" — OPS_ALERT_EMAIL is unset, so this ` +
+				"operational alert had no recipient. Set it.",
+		);
+		return { sent: false, messageId: null };
+	}
+	if (!abuseAlertsEnabled()) {
+		console.warn(`[email] withheld operational alert "${args.subject}" — not a public deployment.`);
+		return { sent: false, messageId: null };
+	}
+	return sendEmail({ to, subject: args.subject, html: args.html });
 }
