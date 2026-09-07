@@ -348,6 +348,36 @@ workers:
     run_command: bun run apps/api/src/jobs/worker.ts
     instance_size_slug: basic-xxs
     instance_count: 1
+    envs:
+      # 🚨 **Without this the worker sends NO ALERTS, and does it silently.**
+      # `abuseAlertsEnabled()` is `isPublicDeployment()`, which is true only when an https
+      # `BASE_URL` or `FRONTEND_URL` is present — and `FRONTEND_URL` was declared on the api
+      # component ONLY. So on this component the check was false in production, and both
+      # escalation sweeps take their `if (!abuseAlertsEnabled()) return 0` branch before
+      # reaching a sender. `escalate-reports` has therefore run every five minutes and
+      # returned 0 without ever sending: the retry for a floor report whose inline send
+      # failed. The inline send itself is fine — it happens in the api process, which has
+      # the variable.
+      #
+      # ⚠️ Declared HERE rather than app-level on purpose. The app-level block above warns
+      # that declaring a key in both places lets an empty component copy shadow the
+      # app-level value, and `FRONTEND_URL` is already on the api component — so mirroring
+      # it here keeps both components explicit and introduces no precedence question.
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+      # The Personal Data Server whose hosted identities `watch-identities` watches. Unset,
+      # the job still watches every identity it already knows about, and discovers none.
+      - key: HOSTED_PDS_URL
+        scope: RUN_TIME
+        value: https://anthers.social
+      # Where operational alerts go. 🛑 Deliberately NOT `abuse@`, which summons a person to
+      # look at reported content and must not be diluted. There is no default in code,
+      # because a default is a guess at a mailbox that may not exist and an alert to a
+      # bouncing address is indistinguishable from no alert.
+      - key: OPS_ALERT_EMAIL
+        scope: RUN_TIME
+        value: admin@anthers.org
 
 jobs:
   - name: migrate
