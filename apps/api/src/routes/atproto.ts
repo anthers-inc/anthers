@@ -7,6 +7,7 @@
  *   POST /auth                 — Initiate OAuth flow (returns authorization URL)
  *   GET  /callback             — OAuth callback (exchanges code, creates session, redirects)
  *   GET  /pending              — What a signup waiting on an address knows about itself
+ *   GET  /handle-available     — Is a name Anthers could issue still free?
  *   POST /unlink               — Unlink ATProto identity from account
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
@@ -46,6 +47,13 @@ import {
 } from "../services/atproto-client.js";
 import { createSession, validateSession } from "../services/auth.js";
 import {
+	checkHandleAvailability,
+	hostedHandleFor,
+	hostedHandleSuffix,
+	hostedIdentityOffered,
+	normalizeHandleName,
+} from "../services/hosted-accounts.js";
+import {
 	bindIdentityToPending,
 	findPendingByDid,
 	issueCodeForPending,
@@ -54,6 +62,15 @@ import {
 } from "../services/pending-signups.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
+
+/**
+ * A name to check, bounded before it reaches the node.
+ *
+ * Generous rather than exact: the real rules are `handleNameProblem`'s and are answered as
+ * sentences somebody can act on, so a strict regex here would turn a typo into a 400 with no
+ * explanation instead of a message saying which character is the problem.
+ */
+const handleQuerySchema = z.object({ name: z.string().min(1).max(300) });
 
 const authInitSchema = z.object({
 	handle: z.string().min(1),
@@ -340,7 +357,38 @@ const atprotoRoutes = new Hono()
 	// should look exactly as it did before this existed rather than advertising a door and
 	// then apologizing. The API refuses either way — this only decides whether anyone is
 	// invited to try.
-	.get("/config", (c) => c.json({ signupEnabled: atprotoSignupEnabled() }))
+	//
+	// The third door has its own answer and its own switch: hosting is offered only when every
+	// piece it needs is configured, and the suffix travels with it so the browser can show a
+	// handle in full without a second copy of `anthers.social` living in the front end.
+	.get("/config", (c) =>
+		c.json({
+			signupEnabled: atprotoSignupEnabled(),
+			hostedIdentityOffered: hostedIdentityOffered(),
+			hostedHandleSuffix: hostedHandleSuffix(),
+		}),
+	)
+
+	// ── Is this handle free? ─────────────────────────────────────────────────
+	//
+	// ⭐ **Answered while somebody is still typing, which is the whole reason it exists.** The
+	// alternative is finding out after the address is confirmed and the account is made, at the
+	// one moment there is nothing useful to do about it.
+	//
+	// ⚠️ **It enumerates nothing that is not already public.** The node answers
+	// `com.atproto.identity.resolveHandle` to anybody who asks, so this adds no way of learning
+	// which handles exist — it only saves the browser from talking to a second origin. What it
+	// deliberately does NOT reveal is anything about Anthers accounts: a handle is free or not
+	// at the node, and whether somebody has an Anthers account is a different question this
+	// route cannot be asked.
+	.get("/handle-available", zValidator("query", handleQuerySchema), async (c) => {
+		if (!hostedIdentityOffered()) {
+			return c.json({ status: "unknown" as const, handle: "" });
+		}
+		const name = normalizeHandleName(c.req.valid("query").name);
+		const result = await checkHandleAvailability(name);
+		return c.json({ ...result, handle: hostedHandleFor(name) });
+	})
 
 	// ── A signup waiting on an address ───────────────────────────────────────
 	//

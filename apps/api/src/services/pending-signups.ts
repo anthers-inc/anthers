@@ -2,10 +2,16 @@
 /**
  * The pending account — a signup somebody has asked for and not yet finished.
  *
- * 🚨 **This module is the only writer of `pending_signups`.** Both signup doors go through
- * it, and so does every way of coming back to one, because the rules about what may be
- * carried across from an unfinished signup are the whole of the security here and they do
+ * 🚨 **This module is the only writer of `pending_signups`.** All three signup doors go
+ * through it, and so does every way of coming back to one, because the rules about what may
+ * be carried across from an unfinished signup are the whole of the security here and they do
  * not survive being restated at three call sites.
+ *
+ * The doors are an address, an identity somebody already has, and an identity they are asking
+ * Anthers to issue. ⭐ **The third one changes nothing about the shape of this file**, which
+ * is the argument for putting it here: a requested handle is one more thing a pending signup
+ * carries and hands over at the same moment as everything else — after a code has been read
+ * out of a mailbox — rather than a second route that mints something.
  *
  * **What a pending signup is for.** `/subscribe` is where a visitor makes their choices;
  * pressing *Create My Account* writes them here and takes the person off that page to one
@@ -102,6 +108,16 @@ export async function startPendingSignup(input: {
 	picks?: unknown;
 	next?: string | null;
 	identity?: AtprotoIdentity;
+	/**
+	 * The handle somebody asked Anthers to issue — the third door.
+	 *
+	 * ⚠️ **Mutually exclusive with `identity` by construction rather than by a check here.**
+	 * The doors are tabs: somebody either brings an identity or asks for one, and the card
+	 * cannot submit both. If a row ever carried both, `consumePendingSignup` prefers the
+	 * proved identity, because a DID somebody has demonstrably signed for outranks a name
+	 * they merely typed.
+	 */
+	hostedHandle?: string | null;
 }): Promise<string> {
 	if (input.previousToken) await clearPendingSignup(input.previousToken);
 
@@ -114,6 +130,7 @@ export async function startPendingSignup(input: {
 		atprotoDid: input.identity?.did ?? null,
 		atprotoHandle: input.identity?.handle ?? "",
 		atprotoPdsUrl: input.identity?.pdsUrl ?? "",
+		hostedHandle: input.hostedHandle || null,
 		expiresAt: expiry(),
 	});
 	return token;
@@ -225,6 +242,13 @@ export async function resumeByProvedAddress(email: string): Promise<PendingSignu
 			atprotoDid: null,
 			atprotoHandle: "",
 			atprotoPdsUrl: "",
+			// 🚨 **The requested handle goes with it, for a smaller version of the same reason.**
+			// It is a preference rather than a credential, so carrying it across would not hand
+			// anybody an account — it would attach a permanent, public name **somebody else
+			// chose** to the identity of whoever proves the address. A stranger who types your
+			// address and asks for an ugly name would be naming you. Retyping a handle is
+			// recoverable; a published identity document is not.
+			hostedHandle: null,
 			// The clock restarts: they are here and finishing, not abandoning.
 			expiresAt: expiry(),
 		})
@@ -326,7 +350,15 @@ export async function markCodeSent(token: string | undefined): Promise<void> {
 export async function consumePendingSignup(
 	token: string | undefined,
 	userId: number,
-): Promise<{ picks: SignupPicks; next: string; atprotoLinked: boolean } | null> {
+): Promise<{
+	picks: SignupPicks;
+	next: string;
+	atprotoLinked: boolean;
+	/** The handle Anthers issued, or null when none was asked for or none could be. */
+	hostedHandle: string | null;
+	/** Why an asked-for handle was not issued. Shown to the person, so it is a sentence. */
+	hostedHandleError: string | null;
+} | null> {
 	const row = await readPendingSignup(token);
 	if (!row) return null;
 
@@ -350,7 +382,37 @@ export async function consumePendingSignup(
 		if (atprotoLinked) await attachSessionToUser(row.atprotoDid, userId);
 	}
 
-	return { picks: picksOf(row), next: row.next, atprotoLinked };
+	/**
+	 * 🚨 **The third door is served here and nowhere else, which is what keeps it a door on
+	 * the one signup rather than a second way to mint an account.** An identity is issued only
+	 * after the address has been proved, on exactly the same footing as the Bluesky door's DID
+	 * being attached here — and for the same reason. A name typed at `/subscribe` is a request;
+	 * the code just read out of a mailbox is what makes it somebody's.
+	 *
+	 * ⚠️ **A proved identity wins over a requested one.** A row should never carry both — the
+	 * doors are tabs — and if one somehow does, the DID somebody signed for outranks the name
+	 * they typed, and issuing a second identity to an account that already has one would leave
+	 * the account holding two with no way to say which is theirs.
+	 */
+	let hostedHandle: string | null = null;
+	let hostedHandleError: string | null = null;
+	if (row.hostedHandle && !atprotoLinked) {
+		const { provisionHostedIdentity } = await import("./hosted-accounts.js");
+		const issued = await provisionHostedIdentity({
+			userId,
+			handleName: row.hostedHandle,
+			email: row.email ?? "",
+		});
+		hostedHandle = issued.handle;
+		hostedHandleError = issued.error?.message ?? null;
+		// An operational failure is nobody's fault and is invisible from outside, so it is the
+		// one that has to be logged. A refused name is reported to the person who chose it.
+		if (issued.error?.fault === "operational") {
+			console.error(`[pending-signups] could not issue a handle: ${issued.error.message}`);
+		}
+	}
+
+	return { picks: picksOf(row), next: row.next, atprotoLinked, hostedHandle, hostedHandleError };
 }
 
 /** Abandon a pending signup outright. Safe to call with no token, or a stale one. */

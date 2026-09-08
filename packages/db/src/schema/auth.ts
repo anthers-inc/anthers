@@ -467,6 +467,17 @@ export const pendingSignups = pgTable(
 		atprotoDid: text("atproto_did"),
 		atprotoHandle: text("atproto_handle").notNull().default(""),
 		atprotoPdsUrl: text("atproto_pds_url").notNull().default(""),
+		/**
+		 * The handle somebody asked Anthers to issue them, when they came through the third
+		 * door. Just the name — `alice`, not `alice.anthers.social`.
+		 *
+		 * 🚨 **A request rather than a reservation, and nothing here holds the name.** The
+		 * identity is created only once the address has been proved, so two people may ask for
+		 * the same name and the second one is refused at that point. Reserving it on this row
+		 * instead would let anybody take a name off the board by typing it, which is the same
+		 * hazard that keeps the pre-account address out of `users`.
+		 */
+		hostedHandle: text("hosted_handle"),
 		/** `SignupPicks` from `@anthers/shared/signup` — validated at the route, never trusted raw. */
 		picks: jsonb("picks").notNull().default({}),
 		/** Where the visitor was headed before signing up interrupted them. Sanitized on write. */
@@ -608,4 +619,35 @@ export const hostedIdentities = pgTable("hosted_identities", {
 	lastListedAt: timestamp("last_listed_at", { withTimezone: true }),
 	/** When the last alert about this identity went out, so one change alerts once. */
 	alertedAt: timestamp("alerted_at", { withTimezone: true }),
+});
+
+// node — the credentials to an identity Anthers issued. They are the account holder's
+// identity and not the organization's, exactly as `atproto_sessions` is: Anthers holds them
+// because it operates the server the identity lives on, which is a hosting arrangement rather
+// than ownership. A split would take this row to the node along with the repository it opens.
+//
+// 🚨 **The password is sealed and the seal is not decoration.** A copy of this table without
+// `HOSTED_ACCOUNT_KEY` is a list of DIDs, which is public information anyway; a copy with the
+// key is the ability to sign as everybody Anthers hosts. See `services/secret-box.ts` for
+// exactly what that buys and what it does not.
+//
+// ⚠️ **It exists because there is no other way back into one of these accounts.** The node
+// has no mail configured, so its own password reset cannot run, and the account was created
+// with a password nobody has ever seen. Forgetting it would leave an identity only the node's
+// admin password could open — recoverable by hand, and by nothing the person could do
+// themselves. Holding it is also what makes writing a record into the repository possible,
+// which is the reason hosting exists at all.
+export const hostedAccounts = pgTable("hosted_accounts", {
+	// The DID is the key for the same reason it is on `hosted_identities`: the handle beside
+	// it is a label that can move, and the account it opens does not change when it does.
+	did: text("did").primaryKey(),
+	// ⚠️ Nullable and `set null` rather than `cascade`. A deleted Anthers account does not
+	// delete the identity — the repository is still out there and the credentials are still
+	// the only way into it, so dropping them with the user row would strand it permanently.
+	userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+	/** The full handle as issued, for a person reading this row. */
+	handle: text("handle").notNull(),
+	/** The account's password at the node, sealed by `services/secret-box.ts`. */
+	sealedPassword: text("sealed_password").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
