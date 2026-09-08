@@ -51,9 +51,16 @@
  * page, and walks away. You sign up later in a browser with no cookie, complete a code sent
  * to your own mailbox, and — if the row handed its DID over — your account would come into
  * existence with a stranger's Bluesky identity linked to it, which they could then sign in
- * with. So `resumeByProvedAddress` **clears the identity** rather than trusting it, and the
- * finishing page offers to connect Bluesky again. That is the same argument the table's own
- * note makes about being keyed by a token instead of by a DID, applied to the address.
+ * with. So `resumeByProvedAddress` **clears the identity** rather than trusting it. That is the
+ * same argument the table's own note makes about being keyed by a token instead of by a DID,
+ * applied to the address.
+ *
+ * ⚠️ **The route back is settings, not the finishing page.** This note used to say the
+ * finishing page offers to connect Bluesky again; it does not, and has not since that page
+ * was cut back — `signUpWithBluesky` is reachable from `/subscribe` alone. What the person
+ * actually does is finish the signup and link the identity from settings, which costs one
+ * round trip and proves the thing that needs proving. The clearing is right either way; the
+ * sentence justifying it was describing a button that is not there.
  */
 
 import { db } from "@anthers/db/client";
@@ -232,9 +239,9 @@ export async function findPendingByDid(did: string): Promise<PendingSignup | und
  * 🚨 **The ATProto identity is cleared rather than carried across.** The caller has proved
  * a mailbox, not an identity, and the row's DID was written by whoever completed an OAuth
  * round trip — which is not necessarily the same person, because the address on the row was
- * only ever typed. See the module note for the takeover this closes. The finishing page
- * offers to connect Bluesky again, which is a route back that costs one round trip and
- * proves the thing that actually needs proving.
+ * only ever typed. See the module note for the takeover this closes. Linking the identity from
+ * settings once the account exists is the route back — it costs one round trip and proves the
+ * thing that actually needs proving. ⚠️ Not the finishing page, which does not offer it.
  *
  * Returns the row's token, so the caller can rebind the cookie, or undefined when there is
  * no unfinished signup for that address.

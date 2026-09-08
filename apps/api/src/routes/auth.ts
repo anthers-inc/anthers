@@ -464,9 +464,12 @@ const authRoutes = new Hono()
 		const row = await readPendingSignup(getCookie(c, PENDING_SIGNUP_COOKIE));
 		return c.json({
 			pending: serializePendingSignup(row),
-			// So the finishing page knows whether to offer connecting Bluesky at all — the
-			// same reason `/api/atproto/config` exists. A button that refuses when pressed is
-			// worse than no button.
+			// ⚠️ **Answered, and currently read by nobody.** This was for the finishing page
+			// deciding whether to offer connecting Bluesky, on the same footing as
+			// `/api/atproto/config` — and that page no longer offers it, so the field is a
+			// capability the client can ask about rather than one it uses. Left in place
+			// because it is honest and cheap; the comment is corrected because a comment
+			// describing a caller that does not exist is how a reader learns a false fact.
 			atprotoSignupEnabled: atprotoSignupEnabled(),
 		});
 	})
