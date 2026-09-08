@@ -73,6 +73,12 @@ test.describe("signing up with a handle Anthers issues", () => {
 			topSignup(page).getByRole("button", { name: /create my free account/i }),
 			"the button should refuse until there is a name to ask for",
 		).toBeDisabled();
+
+		// ⭐ **The suffix is named before anything is typed.** Somebody picking a name is
+		// picking a domain, and meeting that only once the name is accepted is meeting it too
+		// late to have changed the choice. Matched loosely because this suite's suffix is the
+		// test environment's, not production's.
+		await expect(topSignup(page).getByText(/your handle will end in \./i)).toBeVisible();
 	});
 
 	// ⚠️ **The address is not asked for here, and somebody pressing the button needs to know

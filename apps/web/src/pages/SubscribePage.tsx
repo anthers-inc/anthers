@@ -1584,10 +1584,15 @@ function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
  * approval, and the one thing that must not happen is somebody believing a name is theirs
  * because a failed request left the line empty.
  */
-function handleStatusLine(status: HandleStatus): string {
+function handleStatusLine(status: HandleStatus, suffix: string): string {
 	switch (status.status) {
 		case "idle":
-			return "Letters, numbers and hyphens.";
+			// ⭐ **The suffix is named before anything is typed, not after.** Somebody choosing a
+			// name is choosing a domain, and meeting that fact only once the name is accepted is
+			// meeting it too late to have influenced the choice.
+			return suffix
+				? `Your handle will end in .${suffix} — letters, numbers and hyphens.`
+				: "Letters, numbers and hyphens.";
 		case "checking":
 			return "Checking…";
 		case "invalid":
@@ -1671,6 +1676,7 @@ function SignupForm({
 	hostedName,
 	onHostedNameChange,
 	hostedStatus,
+	hostedSuffix,
 	door,
 	onDoorChange,
 	className,
@@ -1710,6 +1716,8 @@ function SignupForm({
 	onHostedNameChange: (value: string) => void;
 	/** What the API last said about `hostedName`. */
 	hostedStatus: HandleStatus;
+	/** The suffix issued handles hang under, as the API reports it. Empty until it answers. */
+	hostedSuffix: string;
 	door: Door;
 	onDoorChange: (door: Door) => void;
 	/** Outer spacing only — the card's own box is this component's, not a caller's. */
@@ -1921,7 +1929,7 @@ function SignupForm({
 				aria-live="polite"
 				className={`mt-1.5 min-h-[2.25rem] text-xs leading-snug ${handleStatusTone(hostedStatus)}`}
 			>
-				{handleStatusLine(hostedStatus)}
+				{handleStatusLine(hostedStatus, hostedSuffix)}
 			</p>
 			<button
 				type="submit"
@@ -2231,6 +2239,8 @@ export default function SubscribePage() {
 	/** The name being typed into the handle door, and what the API last said about it. */
 	const [hostedName, setHostedName] = useState("");
 	const [hostedStatus, setHostedStatus] = useState<HandleStatus>({ status: "idle" });
+	/** The suffix the API says handles hang under. Empty until it answers, like the door. */
+	const [hostedSuffix, setHostedSuffix] = useState("");
 
 	const [picks, setPicks] = useState<Picks>(EMPTY_PICKS);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
@@ -2273,10 +2283,11 @@ export default function SubscribePage() {
 		client.api.atproto.config
 			.$get()
 			.then((res) => res.json())
-			.then(({ signupEnabled, hostedIdentityOffered }) => {
+			.then(({ signupEnabled, hostedIdentityOffered, hostedHandleSuffix }) => {
 				if (!live) return;
 				setBlueskySignupOpen(signupEnabled);
 				setHostedOpen(hostedIdentityOffered);
+				setHostedSuffix(hostedHandleSuffix);
 			})
 			.catch(() => {
 				/* Unreachable API: leave both doors closed. */
@@ -2729,6 +2740,7 @@ export default function SubscribePage() {
 		hostedName,
 		onHostedNameChange: setHostedName,
 		hostedStatus,
+		hostedSuffix,
 		door,
 		onDoorChange: setDoor,
 	};
