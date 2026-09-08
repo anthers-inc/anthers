@@ -1910,13 +1910,16 @@ function SignupForm({
 				value={hostedName}
 				onChange={(e) => onHostedNameChange(e.target.value)}
 			/>
-			{/* ⚠️ **Always rendered, even with nothing to say**, so the panel does not grow the
-			    first time somebody types. A line that appears mid-typing moves the button out
-			    from under the pointer heading for it. */}
+			{/* ⚠️ **Always rendered, and always two lines tall, even with nothing to say.** The
+			    panel must not grow as somebody types, or the button moves out from under the
+			    pointer heading for it — and one reserved line is not enough: at 390px the
+			    longest of these messages wraps, which is exactly where the growth would hurt
+			    most. Two lines is the tallest any of them gets, so the region is fixed at every
+			    width. Same trade the note under the button makes with its invisible sizers. */}
 			<p
 				id={`${hostedFieldId}-status`}
 				aria-live="polite"
-				className={`mt-1.5 min-h-[1.25rem] text-xs ${handleStatusTone(hostedStatus)}`}
+				className={`mt-1.5 min-h-[2.25rem] text-xs leading-snug ${handleStatusTone(hostedStatus)}`}
 			>
 				{handleStatusLine(hostedStatus)}
 			</p>

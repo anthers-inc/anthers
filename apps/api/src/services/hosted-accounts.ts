@@ -172,7 +172,9 @@ export function handleNameProblem(name: string): string | null {
 	// ⚠️ Underscores are the one people are surprised by, because Anthers usernames allow
 	// them — so the message names the character instead of restating the rule.
 	if (name.includes("_")) {
-		return "A handle is a web address, so it can't contain underscores. Try a hyphen instead.";
+		// ⚠️ Kept short as well as specific: this is the longest of these messages, and it sits
+		// in a fixed two-line region under the field. A third line would grow the panel.
+		return "A handle is a web address, so no underscores. Use a hyphen.";
 	}
 	if (!/^[a-z0-9-]+$/.test(name)) {
 		return "A handle can only contain letters, numbers and hyphens.";

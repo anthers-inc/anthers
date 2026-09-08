@@ -418,8 +418,8 @@ export default function FinishSignupPage() {
 					    tense: it reads as a feature to whoever meets it. What is true and worth
 					    saying is that nothing is waiting on this. */}
 					<p className="mt-3 text-sm text-base-content/70">
-						Nothing else about your signup is affected, and nothing is waiting on it — an
-						Anthers handle is an extra rather than a part of your account.
+						Nothing else about your signup is affected, and nothing is waiting on it — an Anthers
+						handle is an extra rather than a part of your account.
 					</p>
 				</div>
 				<button
