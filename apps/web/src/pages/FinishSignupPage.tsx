@@ -412,9 +412,14 @@ export default function FinishSignupPage() {
 						Your account is set up and you are signed in. What did not work is the handle:{" "}
 						<strong>{handleTrouble}</strong>
 					</p>
+					{/* ⚠️ **It does not promise a way to try again, because there is not one yet.**
+					    Asking for a handle from settings is not built, and copy that says
+					    otherwise is the same failure as a roadmap entry written in the present
+					    tense: it reads as a feature to whoever meets it. What is true and worth
+					    saying is that nothing is waiting on this. */}
 					<p className="mt-3 text-sm text-base-content/70">
-						Nothing else about your signup is affected, and an Anthers handle is something you can
-						ask for later rather than only now.
+						Nothing else about your signup is affected, and nothing is waiting on it — an
+						Anthers handle is an extra rather than a part of your account.
 					</p>
 				</div>
 				<button
