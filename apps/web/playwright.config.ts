@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
@@ -149,8 +150,30 @@ export default defineConfig({
 			 * ⚠️ It does NOT apply to a reused server. `reuseExistingServer` is on locally, so
 			 * a running `make dev` brings its own environment and this is ignored — if those
 			 * specs fail against a dev API, the flag is missing from your `.env`.
+			 *
+			 * The handle door needs three variables rather than one switch, because
+			 * `hostedIdentityOffered` is a claim that everything hosting needs is present. All
+			 * three are deliberately fake:
+			 *
+			 * 🚨 **The server is `.invalid`, which RFC 2606 reserves so it can never resolve.**
+			 * A suite pointed at the real node would create accounts on it, and an availability
+			 * check that reached production would make the tests depend on which names people
+			 * had taken that week. Specs intercept the check in the browser; anything that does
+			 * not simply gets `unknown`, which is the correct answer about a server nobody can
+			 * reach.
+			 *
+			 * ⚠️ **The sealing key is generated here rather than written down.** It has to be 32
+			 * real bytes to satisfy `secretBoxConfigured`, and any 32-byte constant in this file
+			 * would be a credential-shaped string in the repository — a thing worth avoiding
+			 * even when it is invented, because nothing downstream can tell the difference. A
+			 * throwaway per run is also what a test key should be.
 			 */
-			env: { ATPROTO_SIGNUP_ENABLED: "true" },
+			env: {
+				ATPROTO_SIGNUP_ENABLED: "true",
+				HOSTED_PDS_URL: "https://node.invalid",
+				HOSTED_PDS_INVITE_CODE: "e2e-no-such-invite",
+				HOSTED_ACCOUNT_KEY: randomBytes(32).toString("hex"),
+			},
 			reuseExistingServer: !process.env.CI,
 			timeout: 180_000,
 		},

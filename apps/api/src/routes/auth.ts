@@ -43,6 +43,11 @@ import {
 	sendWelcomeEmail,
 } from "../services/email.js";
 import {
+	hostedHandleFor,
+	hostedIdentityOffered,
+	normalizeHandleName,
+} from "../services/hosted-accounts.js";
+import {
 	clearPendingSignup,
 	consumePendingSignup,
 	markCodeSent,
@@ -121,6 +126,15 @@ const signupBeginSchema = z.object({
 	email: z.string().email().max(254).optional(),
 	picks: signupPicksSchema,
 	next: z.string().max(2048).optional(),
+	/**
+	 * The name somebody asked Anthers to issue them a handle under — the third door.
+	 *
+	 * ⚠️ **Bounded here and judged later.** The rules a name has to satisfy are
+	 * `handleNameProblem`'s and they answer in sentences, so refusing a bad one with a 400 at
+	 * the schema would replace an explanation with nothing. This only rejects what could not be
+	 * a name at all.
+	 */
+	hostedHandle: z.string().max(300).optional(),
 });
 
 const emailCodeVerifySchema = z.object({
@@ -251,6 +265,13 @@ function serializePendingSignup(row: Awaited<ReturnType<typeof readPendingSignup
 		/** Whether a code sent to that address has already been completed — see the resume path. */
 		addressProved: row.emailProvedAt !== null,
 		atprotoHandle: row.atprotoDid ? row.atprotoHandle : null,
+		/**
+		 * The handle Anthers has been asked to issue, in full.
+		 *
+		 * ⚠️ Sent as the whole handle rather than the name, so the finishing page states what is
+		 * about to exist rather than assembling it from a suffix it keeps its own copy of.
+		 */
+		hostedHandle: row.hostedHandle ? hostedHandleFor(row.hostedHandle) : null,
 		picks: picksOf(row),
 		next: row.next,
 	};
@@ -318,6 +339,11 @@ async function mintFromProvedAddress(
 			picks: spent?.picks ?? null,
 			next: spent?.next || null,
 			atprotoLinked: spent?.atprotoLinked ?? false,
+			// What the third door produced, so the page that finishes a signup can say the
+			// handle out loud once — and say what went wrong when there isn't one, rather than
+			// leaving somebody to discover the absence in settings later.
+			hostedHandle: spent?.hostedHandle ?? null,
+			hostedHandleError: spent?.hostedHandleError ?? null,
 		},
 		created: !existing,
 	};
@@ -387,18 +413,26 @@ const authRoutes = new Hono()
 	// moment this endpoint answers differently for an address that already has an account,
 	// it becomes a way to ask "is this person on Anthers?" and get a reliable answer.
 	.post("/signup/begin", zValidator("json", signupBeginSchema, invalidBody), async (c) => {
-		const { email, picks, next } = c.req.valid("json");
+		const { email, picks, next, hostedHandle } = c.req.valid("json");
 
 		// Opportunistic rather than scheduled. `prune-credentials` sweeps these overnight
 		// too; doing it here as well means the table cannot grow unboundedly between runs on
 		// the one route that creates rows in it.
 		void sweepExpiredPendingSignups().catch(() => {});
 
+		// ⚠️ **Kept only while the door is actually open**, so that turning hosting off cannot
+		// leave rows carrying a request nothing will ever serve. Normalized here rather than at
+		// the browser, since the row is what the provisioning reads and a name that arrives in
+		// somebody's own spelling has to be stored in the node's.
+		const requestedHandle =
+			hostedHandle && hostedIdentityOffered() ? normalizeHandleName(hostedHandle) : null;
+
 		const token = await startPendingSignup({
 			previousToken: getCookie(c, PENDING_SIGNUP_COOKIE),
 			email,
 			picks,
 			next,
+			hostedHandle: requestedHandle,
 		});
 		setPendingSignupCookie(c, token);
 
@@ -430,9 +464,12 @@ const authRoutes = new Hono()
 		const row = await readPendingSignup(getCookie(c, PENDING_SIGNUP_COOKIE));
 		return c.json({
 			pending: serializePendingSignup(row),
-			// So the finishing page knows whether to offer connecting Bluesky at all — the
-			// same reason `/api/atproto/config` exists. A button that refuses when pressed is
-			// worse than no button.
+			// ⚠️ **Answered, and currently read by nobody.** This was for the finishing page
+			// deciding whether to offer connecting Bluesky, on the same footing as
+			// `/api/atproto/config` — and that page no longer offers it, so the field is a
+			// capability the client can ask about rather than one it uses. Left in place
+			// because it is honest and cheap; the comment is corrected because a comment
+			// describing a caller that does not exist is how a reader learns a false fact.
 			atprotoSignupEnabled: atprotoSignupEnabled(),
 		});
 	})

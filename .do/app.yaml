@@ -157,6 +157,22 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
+  # The key that seals the password of every identity Anthers hosts, so that a copy of the
+  # database is not a copy of the credentials. 32 bytes, hex or base64.
+  #
+  # 🚨 **Losing this loses every hosted account.** The node has no mail configured, so its
+  # own password reset cannot run, and the passwords were generated rather than chosen — a
+  # sealed value nobody can open leaves an identity only the node's admin password could
+  # ever get back into. It belongs in the vault before it belongs here.
+  #
+  # ⚠️ **Unset closes the handle door rather than breaking anything.** `hostedIdentityOffered`
+  # checks for it, so an API that boots without it simply does not offer to issue handles.
+  #
+  # At APP level because the api issues identities today and the worker will write records
+  # into them, and a component-level copy would shadow the app-level value for the other.
+  - key: HOSTED_ACCOUNT_KEY
+    scope: RUN_TIME
+    type: SECRET
   # Signs Resend's delivery webhook (POST /api/webhooks/resend). Distinct from the
   # API key on purpose: the key SENDS and this only VERIFIES what Resend pushes back,
   # so nothing here ever needs a credential that can read mail. Unset means the
@@ -334,8 +350,29 @@ services:
       - key: COOKIE_DOMAIN
         scope: RUN_TIME
         value: .anthers.org
-      # SITE_PASSWORD + RESEND_API_KEY live at app level (see the envs: block
-      # above) to avoid component-level shadowing.
+      # The Personal Data Server that issues Anthers handles. Declared here as well as on the
+      # worker rather than app-level, for the reason `FRONTEND_URL` gives over there: the two
+      # components each name it explicitly, so there is no precedence question and no empty
+      # component copy able to shadow an app-level value.
+      - key: HOSTED_PDS_URL
+        scope: RUN_TIME
+        value: https://anthers.social
+      # The credential the node requires of anybody creating an account on it.
+      #
+      # 🚨 **An invite code and deliberately NOT the node's admin password.** Both would work.
+      # An invite code can create accounts and nothing else; the admin password can reset any
+      # account's password, rename any handle and delete any account — so holding that here
+      # would make a compromise of this app a compromise of every identity Anthers hosts.
+      # Minted by hand on the node with a `useCount`, and replacing it is one command.
+      #
+      # ⚠️ It runs out silently. The node answers `InvalidInviteCode` when the count is spent,
+      # which is reported as an operational failure and alerted rather than shown to whoever
+      # was signing up, because it is not their fault and they cannot fix it.
+      - key: HOSTED_PDS_INVITE_CODE
+        scope: RUN_TIME
+        type: SECRET
+      # SITE_PASSWORD, RESEND_API_KEY and HOSTED_ACCOUNT_KEY live at app level (see the
+      # envs: block above) to avoid component-level shadowing.
 
 workers:
   - name: worker

@@ -39,6 +39,7 @@ import { useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import { AtSymbolIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeForm from "../components/auth/EmailCodeForm";
@@ -56,6 +57,8 @@ interface Pending {
 	codeSent: boolean;
 	addressProved: boolean;
 	atprotoHandle: string | null;
+	/** The handle Anthers has been asked to issue, in full. Null unless the third door. */
+	hostedHandle: string | null;
 	picks: SignupPicks;
 	next: string;
 }
@@ -101,6 +104,8 @@ export default function FinishSignupPage() {
 	const [email, setEmail] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	/** Set when the account was made and the handle asked for was not issued. */
+	const [handleTrouble, setHandleTrouble] = useState<string | null>(null);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [charge, setCharge] = useState<{
 		anthersSupport: number;
@@ -118,6 +123,12 @@ export default function FinishSignupPage() {
 	 */
 	const owedOnboarding = useRef(false);
 	const destination = useRef<string | null>(null);
+	/** What the finished signup was carrying, held while the handle news is on screen. */
+	const pendingCommit = useRef<{
+		needsOnboarding: boolean;
+		picks: SignupPicks | null;
+		next: string | null;
+	} | null>(null);
 
 	// ── What this browser is finishing ───────────────────────────────────────
 	useEffect(() => {
@@ -263,18 +274,42 @@ export default function FinishSignupPage() {
 		[byUsername, leave, next, picks],
 	);
 
-	/** Shared by the code path and the resumed path: an account now exists. */
+	/**
+	 * Shared by the code path and the resumed path: an account now exists.
+	 *
+	 * 🚨 **A handle that could not be issued stops the page rather than travelling with it.**
+	 * The account is real either way and nothing is broken, but somebody who asked for a name
+	 * and did not get it must be told at the moment it happened — carrying the news to the next
+	 * page, or dropping it, would leave them believing they have an identity they do not have.
+	 * Everything else about the signup still commits; it commits on the button.
+	 */
 	const accountMade = useCallback(
 		async (result: {
 			needsOnboarding: boolean;
 			picks: SignupPicks | null;
 			next: string | null;
+			hostedHandleError?: string | null;
 		}) => {
 			owedOnboarding.current = result.needsOnboarding;
+			if (result.hostedHandleError) {
+				pendingCommit.current = result;
+				setHandleTrouble(result.hostedHandleError);
+				setBusy(false);
+				return;
+			}
 			await commit(result);
 		},
 		[commit],
 	);
+
+	/** Carry on after being told the handle did not happen. */
+	const continuePastHandleTrouble = async () => {
+		const result = pendingCommit.current;
+		if (!result) return;
+		setHandleTrouble(null);
+		setBusy(true);
+		await commit(result);
+	};
 
 	// ── Asking for an address ────────────────────────────────────────────────
 	const sendCode = async () => {
@@ -361,6 +396,44 @@ export default function FinishSignupPage() {
 		username: "todo",
 	});
 
+	/**
+	 * The account was made and the handle was not.
+	 *
+	 * ⭐ **It says what is true in the order that matters**: the account exists, then what did
+	 * not happen, then that it is not the end of the road. Somebody who has just confirmed an
+	 * address and been shown a refusal needs the first of those before they can read the rest.
+	 * The button is the only way on, so the news cannot be scrolled past.
+	 */
+	if (handleTrouble) {
+		return (
+			<SignupSteps steps={steps} eyebrow="Almost There" title="Your account is ready">
+				<div className="mt-6 rounded-xl bg-base-200 p-4 text-left">
+					<p className="text-sm text-base-content/70">
+						Your account is set up and you are signed in. What did not work is the handle:{" "}
+						<strong>{handleTrouble}</strong>
+					</p>
+					{/* ⚠️ **It does not promise a way to try again, because there is not one yet.**
+					    Asking for a handle from settings is not built, and copy that says
+					    otherwise is the same failure as a roadmap entry written in the present
+					    tense: it reads as a feature to whoever meets it. What is true and worth
+					    saying is that nothing is waiting on this. */}
+					<p className="mt-3 text-sm text-base-content/70">
+						Nothing else about your signup is affected, and nothing is waiting on it — an Anthers
+						handle is an extra rather than a part of your account.
+					</p>
+				</div>
+				<button
+					type="button"
+					className={`btn btn-primary btn-lg mt-6 w-full ${busy ? "btn-disabled" : ""}`}
+					disabled={busy}
+					onClick={() => void continuePastHandleTrouble()}
+				>
+					{busy ? "Working…" : "Continue"}
+				</button>
+			</SignupSteps>
+		);
+	}
+
 	return (
 		<SignupSteps
 			steps={steps}
@@ -377,6 +450,27 @@ export default function FinishSignupPage() {
 						Bluesky confirmed you as <strong className="break-all">@{pending.atprotoHandle}</strong>
 						. Anthers still needs an email address it can reach you at, for receipts and account
 						notices — every account is confirmed by a code we send, including this one.
+					</p>
+				</div>
+			)}
+
+			{/* ⭐ **The same job as the Bluesky panel above, from the other direction.** That one
+			    explains why an email field is in front of somebody who just authenticated
+			    elsewhere; this one explains why it is in front of somebody who only asked for a
+			    name. Both answer the question a page that appears to have forgotten what it was
+			    doing provokes.
+
+			    🚨 It also says the name is not yet theirs, because it is not. Nothing is
+			    reserved by asking — the identity is created when the code is read — and a page
+			    that let somebody believe otherwise would be making a promise the next person to
+			    type the same name would break. */}
+			{pending.hostedHandle && (
+				<div className="mt-6 flex items-start gap-3 rounded-xl bg-base-200 p-4 text-left">
+					<AtSymbolIcon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+					<p className="text-sm text-base-content/70">
+						You asked for <strong className="break-all">{pending.hostedHandle}</strong>. It is
+						issued once you confirm your email below, and not before — so confirm now if you would
+						like to keep it.
 					</p>
 				</div>
 			)}
