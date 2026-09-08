@@ -186,11 +186,7 @@ function wikiPages(): Map<string, string> | { error: string } {
 			// `Internal Wiki` is Parker's opt-out folder: pages there are deliberately not
 			// published, so a roadmap card must never point at one. Skipping it here is what
 			// turns such a reference into a failure rather than a silently dead chip.
-			//
-			// `Old Docs` holds superseded drafts, kept for reference under the `NN.NN` names
-			// they had while they were live. They are not pages, and walking them would give
-			// a live page's id to an archived draft.
-			if (entry.startsWith(".") || entry === "Internal Wiki" || entry === "Old Docs") continue;
+			if (entry.startsWith(".") || entry === "Internal Wiki") continue;
 			const path = join(dir, entry);
 			if (statSync(path).isDirectory()) {
 				walk(path);
