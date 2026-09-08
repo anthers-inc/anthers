@@ -30,6 +30,17 @@ export interface ObservedIdentity {
 	handle: string | null;
 	/** Where the identity says its repository lives. */
 	pdsEndpoint: string | null;
+	/**
+	 * The keys that may sign for this identity, in order — the first outranks the rest.
+	 *
+	 * 🚨 **This is the field an alert is actually about, and it was missing until 2026-09-08.**
+	 * The 72-hour window exists to undo a rotation-key change made by somebody who should not
+	 * have made one, and the first two real alerts this job sent reported the handle and the
+	 * server as unchanged — because they were. What had changed in both was this list, and the
+	 * mail did not mention it. An alert that describes everything except the thing you would be
+	 * recovering from is an alert somebody learns to skim.
+	 */
+	rotationKeys: string[];
 }
 
 /** What the hub recorded last time. `null` when this identity has never been seen. */
@@ -38,6 +49,8 @@ export interface StoredIdentity {
 	headCid: string | null;
 	handle: string | null;
 	pdsEndpoint: string | null;
+	/** Null for a row written before this was recorded; see {@link ObservedIdentity}. */
+	rotationKeys: string[] | null;
 }
 
 export interface AssessInput {
@@ -79,6 +92,9 @@ export type IdentityFinding =
 			handleTo: string | null;
 			endpointFrom: string | null;
 			endpointTo: string | null;
+			/** Null when nothing was recorded last time, which reads as "not comparable". */
+			rotationFrom: string[] | null;
+			rotationTo: string[];
 	  }
 	/** The hosting server stopped admitting it holds this repository. */
 	| { kind: "vanished"; did: string };
@@ -129,6 +145,8 @@ export function assessIdentity(input: AssessInput): IdentityFinding[] {
 			handleTo: observed.handle,
 			endpointFrom: stored.pdsEndpoint,
 			endpointTo: observed.pdsEndpoint,
+			rotationFrom: stored.rotationKeys,
+			rotationTo: observed.rotationKeys,
 		});
 		return findings;
 	}
@@ -160,6 +178,7 @@ export async function readIdentityHead(
 			nullified?: boolean;
 			operation?: {
 				alsoKnownAs?: string[];
+				rotationKeys?: string[];
 				services?: { atproto_pds?: { endpoint?: string } };
 			};
 		}>;
@@ -174,6 +193,10 @@ export async function readIdentityHead(
 			headCid: head.cid,
 			handle: aka?.startsWith("at://") ? aka.slice("at://".length) : aka,
 			pdsEndpoint: head.operation?.services?.atproto_pds?.endpoint ?? null,
+			// ⚠️ Order is authority, so this is kept as written rather than sorted. A key that
+			// moved from first to third has lost the ability to undo the other two, which is a
+			// change worth reporting even though the same keys are present.
+			rotationKeys: head.operation?.rotationKeys ?? [],
 		};
 	} catch {
 		return null;

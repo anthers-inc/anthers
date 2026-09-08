@@ -1,0 +1,1 @@
+ALTER TABLE "hosted_identities" ADD COLUMN "rotation_keys" jsonb;
