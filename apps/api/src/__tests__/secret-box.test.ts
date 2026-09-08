@@ -7,13 +7,22 @@
  * choose what the plaintext decrypts to — which for a stored password means choosing a
  * password. The authentication tag is the whole point, so tampering is what gets the coverage.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 const KEY_A = "a".repeat(64);
 const KEY_B = "b".repeat(64);
 
+const before = process.env.HOSTED_ACCOUNT_KEY;
+
 beforeAll(() => {
 	process.env.HOSTED_ACCOUNT_KEY = KEY_A;
+});
+
+// `bun test` runs every file in one process, so a key left set here is a key the rest of the
+// suite runs under. See `hosted-accounts.test.ts` for the hazard that closes.
+afterAll(() => {
+	if (before === undefined) delete process.env.HOSTED_ACCOUNT_KEY;
+	else process.env.HOSTED_ACCOUNT_KEY = before;
 });
 
 const { open, seal, secretBoxConfigured } = await import("../services/secret-box.js");

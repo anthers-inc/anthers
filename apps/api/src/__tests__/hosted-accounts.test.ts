@@ -12,15 +12,41 @@
  * as "taken" would tell somebody their name was gone during an outage. Same distinction, same
  * reason, as `listHostedRepos` returning `null` rather than `[]`.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 const PDS_URL = "https://anthers.social";
 
 // Set before the module is imported: every reader is a function called at use, but the tests
 // below assume the door is open, and a suffix derived from an unset variable is empty.
+//
+// 🚨 **Put back afterwards, because `bun test` runs every file in one process.** Left set,
+// these would open the handle door for the rest of the suite — pointed at the REAL node, on
+// the strength of a variable this file set for its own purposes. Nothing in the suite asks
+// for a handle today, so nothing would reach production; the reason to close it is that a
+// test which *could* reach production is the kind of hazard that is discovered by accident.
+//
+// ⚠️ Nothing here touches the network regardless: every test that would goes through an
+// injected `fetchImpl`. The real address is used only because a readable suffix makes the
+// assertions readable.
+const before = {
+	url: process.env.HOSTED_PDS_URL,
+	invite: process.env.HOSTED_PDS_INVITE_CODE,
+};
+
 beforeAll(() => {
 	process.env.HOSTED_PDS_URL = PDS_URL;
 });
+
+afterAll(() => {
+	restore("HOSTED_PDS_URL", before.url);
+	restore("HOSTED_PDS_INVITE_CODE", before.invite);
+});
+
+/** Put a variable back exactly as it was, including having been unset. */
+function restore(key: string, value: string | undefined) {
+	if (value === undefined) delete process.env[key];
+	else process.env[key] = value;
+}
 
 const {
 	checkHandleAvailability,
