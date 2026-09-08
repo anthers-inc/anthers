@@ -413,7 +413,13 @@ export async function provisionHostedIdentity(input: {
 
 	// First, because this is the only copy. Everything below can be reconstructed by looking
 	// at the node; a password that was never written down cannot be.
-	await db
+	//
+	// ⚠️ **The conflict clause is defensive and the log under it is the point.** The DID was
+	// minted a moment ago, so a row cannot already exist — but `onConflictDoNothing` would
+	// swallow it if one somehow did, and what it would be swallowing is the only copy of a
+	// password nobody has ever seen. A silent no-op here produces an identity only the node's
+	// admin password can ever open, so it says so instead.
+	const stored = await db
 		.insert(hostedAccounts)
 		.values({
 			did: account.did,
@@ -421,7 +427,14 @@ export async function provisionHostedIdentity(input: {
 			handle: account.handle,
 			sealedPassword: seal(account.password),
 		})
-		.onConflictDoNothing();
+		.onConflictDoNothing()
+		.returning({ did: hostedAccounts.did });
+	if (stored.length === 0) {
+		console.error(
+			`[hosted-accounts] ${account.did} already had a credential row — the password just ` +
+				`generated for it was NOT stored and cannot be recovered`,
+		);
+	}
 
 	const { linkAtprotoToUser } = await import("./atproto.js");
 	const linked = await linkAtprotoToUser(input.userId, {

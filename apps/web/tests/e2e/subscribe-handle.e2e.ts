@@ -175,4 +175,38 @@ test.describe("signing up with a handle Anthers issues", () => {
 		// taken.
 		await expect(page).toHaveURL(/\/finish$/);
 	});
+
+	// ⭐ **The other half of the handoff, and the reason it is a separate test.** The one above
+	// intercepts `/signup/begin` so it can read what was sent; this one lets it through so
+	// there is a real pending signup to come back to, and asserts on what `/finish` then says.
+	// Without this, "the name travels" is only checked as far as the request body.
+	test("the finishing page names the handle, and says it is not yours yet", async ({ page }) => {
+		await page.goto("/subscribe");
+		await stubAvailability(page, (name) => ({
+			status: "available",
+			handle: `${name}.anthers.social`,
+		}));
+		await openHandleDoor(page);
+		await topSignup(page).getByLabel("The handle you'd like").fill("someonenewentirely");
+		await topSignup(page)
+			.getByRole("button", { name: /create my free account/i })
+			.click();
+
+		await expect(page).toHaveURL(/\/finish$/);
+		// ⚠️ **Matched as `name` followed by a suffix, not as `name.anthers.social`.** This
+		// suite points the API at `node.invalid` (see `playwright.config.ts`), so the suffix
+		// here is the test environment's rather than production's — and what is being asserted
+		// is that the WHOLE handle is shown rather than the part somebody typed, which is the
+		// property that survives either.
+		await expect(page.getByText(/someonenewentirely\.[a-z.]+/)).toBeVisible();
+
+		// 🚨 **Nothing is reserved by asking**, and the page has to say so. Two people may ask
+		// for the same name and the second is told when the first confirms — a page that let
+		// somebody believe the name was already theirs would be making a promise on behalf of
+		// whoever confirms first.
+		await expect(page.getByText(/issued once you confirm your email/i)).toBeVisible();
+
+		// And it asks for the address, which is the whole reason the card did not.
+		await expect(page.getByLabel(/where should we reach you/i)).toBeVisible();
+	});
 });
