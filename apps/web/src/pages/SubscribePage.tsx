@@ -1735,6 +1735,15 @@ function SignupForm({
 	 * and the handle door is shut unless every piece of hosting is configured. The strip appears
 	 * only when at least two survive: one tab above a panel reads as a control that has lost its
 	 * other half, which is worse than the plain card a single door falls back to.
+	 *
+	 * 🚨 **Bluesky is LAST, and that is the brand rule deciding the layout rather than a
+	 * preference.** The butterfly keeps its own color whether or not its tab is selected —
+	 * dimming it would be tinting somebody else's trademark — so it is the most saturated thing
+	 * in the strip at all times. With two tabs it sat at one end and read as an accent. Put in
+	 * the middle of three it becomes the visual center of a control whose center carries no
+	 * meaning, and the eye lands there instead of on the selected tab. Keeping it at the end
+	 * puts the two doors Anthers itself provides together and leaves the anchor where an anchor
+	 * does no harm.
 	 */
 	const doors: { key: Door; label: string; icon: React.ReactNode }[] = [
 		...(email !== null
@@ -1750,11 +1759,6 @@ function SignupForm({
 					},
 				]
 			: []),
-		// 🚨 The label is "Bluesky", never "Bsky" — their brand guidance rules out that
-		// abbreviation in public-facing material by name.
-		...(onBluesky
-			? [{ key: "bluesky" as const, label: "Bluesky", icon: <BlueskyMark className="h-5 w-5" /> }]
-			: []),
 		...(onHostedHandle
 			? [
 					{
@@ -1767,6 +1771,11 @@ function SignupForm({
 						),
 					},
 				]
+			: []),
+		// 🚨 The label is "Bluesky", never "Bsky" — their brand guidance rules out that
+		// abbreviation in public-facing material by name.
+		...(onBluesky
+			? [{ key: "bluesky" as const, label: "Bluesky", icon: <BlueskyMark className="h-5 w-5" /> }]
 			: []),
 	];
 	const tabbed = doors.length > 1;
