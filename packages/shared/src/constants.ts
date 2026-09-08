@@ -430,11 +430,10 @@ export function isStickerDenomination(amount: unknown): boolean {
  * A free account may direct nothing: a third of the subsidized pot buys no Sticker at any
  * denomination, so the arithmetic settles this before policy has to.
  *
- * 🚨 **The money routing exists; the giving interface does not.** This figure is derived so
- * that a page quoting it cannot drift from the model, and it is NOT evidence a user can give
- * a Sticker yet. Until the interface ships, no surface may describe giving one as something
- * a reader can go and do — the public wiki marks it unbuilt in its own table and `/subscribe`
- * does not, which is the gap to close rather than to copy.
+ * ⭐ **Giving one is real now**, so a surface may describe it as something a reader can go
+ * and do: `StickerBar` sits on a Work and a post, the batch is in `@anthers/shared/
+ * stickers`, and the money routes through `distribute-pool`. This figure is still derived
+ * rather than typed, so a page quoting it cannot drift from the model.
  *
  * 🚨 **The cap is evaluated when a Sticker is GIVEN and never afterwards.** A user who
  * lowers their Badge mid-cycle can end up having directed more than this now returns, and
