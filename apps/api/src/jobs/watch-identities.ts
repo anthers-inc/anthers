@@ -58,6 +58,7 @@ export async function watchHostedIdentities(): Promise<WatchResult> {
 			headCid: hostedIdentities.headCid,
 			handle: hostedIdentities.handle,
 			pdsEndpoint: hostedIdentities.pdsEndpoint,
+			rotationKeys: hostedIdentities.rotationKeys,
 		})
 		.from(hostedIdentities);
 
@@ -85,6 +86,7 @@ export async function watchHostedIdentities(): Promise<WatchResult> {
 				handle: observed.handle,
 				pdsEndpoint: observed.pdsEndpoint,
 				headCid: observed.headCid,
+				rotationKeys: observed.rotationKeys,
 				lastCheckedAt: now,
 			};
 			if (stored === null) {
@@ -141,13 +143,20 @@ export function describeFinding(finding: IdentityFinding): { subject: string; ht
 			html: `<p>${finding.kind}</p>`,
 		};
 	}
+	const keys = describeRotationChange(finding.rotationFrom, finding.rotationTo);
 	return {
-		subject: `[Anthers] identity document CHANGED — ${finding.did} — 72 hours to undo`,
+		// 🚨 **The subject says which kind of change it was**, because on a phone it is the
+		// whole message. A rotation-key change is the one this job exists for: it is the change
+		// the 72-hour window undoes, and the one that can end Anthers' ability to help at all.
+		subject: keys
+			? `[Anthers] SIGNING KEYS CHANGED — ${finding.did} — 72 hours to undo`
+			: `[Anthers] identity document CHANGED — ${finding.did} — 72 hours to undo`,
 		html:
 			`<p>The identity document for <strong>${escapeHtml(finding.did)}</strong> has a new operation.</p>` +
 			`<p><strong>A higher-ranked rotation key can undo this, but only within 72 hours of it ` +
 			`being signed.</strong> After that it is permanent. If this change was not made by you ` +
 			`or on your instruction, act now rather than after reading the rest of this mail.</p>` +
+			(keys ?? "") +
 			`<ul>` +
 			`<li>handle: ${escapeHtml(finding.handleFrom ?? "—")} &rarr; ${escapeHtml(finding.handleTo ?? "—")}</li>` +
 			`<li>server: ${escapeHtml(finding.endpointFrom ?? "—")} &rarr; ${escapeHtml(finding.endpointTo ?? "—")}</li>` +
@@ -156,4 +165,48 @@ export function describeFinding(finding: IdentityFinding): { subject: string; ht
 			`<p>The full history is at ` +
 			`https://plc.directory/${encodeURIComponent(finding.did)}/log/audit</p>`,
 	};
+}
+
+/**
+ * Say what happened to the keys that may sign for an identity, or nothing when they held.
+ *
+ * 🚨 **Written after the first two live alerts said nothing useful.** Both reported the handle
+ * and the server as unchanged — correctly — while the rotation keys had been replaced, which
+ * is the change that decides who controls the identity and whether a recovery is still
+ * possible at all. The reader of this mail has ninety seconds and one question: *can I still
+ * fix this?*
+ *
+ * ⚠️ **A key that merely moved is still a change.** Order is authority — a key can only undo
+ * an operation signed by one ranked below it — so a list holding the same keys in a new order
+ * has moved real power around, and reporting it as unchanged would be wrong.
+ */
+function describeRotationChange(from: string[] | null, to: string[]): string | null {
+	// Nothing recorded last time. There is no comparison to draw, and inventing one by
+	// treating an unknown past as empty would report every key as newly added.
+	if (from === null) return null;
+	if (from.length === to.length && from.every((key, i) => key === to[i])) return null;
+
+	const gone = from.filter((key) => !to.includes(key));
+	const added = to.filter((key) => !from.includes(key));
+
+	// The same keys in a different order. Worth its own sentence, because "no keys were added
+	// or removed" reads as reassuring and this is not.
+	const reorderedOnly = gone.length === 0 && added.length === 0;
+
+	const line = (key: string, mark: string) => `<li>${mark} <code>${escapeHtml(key)}</code></li>`;
+
+	return (
+		`<p><strong>The keys that can sign for this identity have changed.</strong> ` +
+		(reorderedOnly
+			? `The same keys are listed in a different order, which moves authority between them — ` +
+				`a key can only undo an operation signed by one ranked below it.`
+			: `${gone.length} removed, ${added.length} added. A key that has been removed can no ` +
+				`longer act, including to undo this.`) +
+		`</p>` +
+		`<p>Now listed, highest authority first:</p>` +
+		`<ul>${to.map((key) => line(key, added.includes(key) ? "NEW &mdash;" : "&nbsp;&nbsp;&mdash;")).join("")}</ul>` +
+		(gone.length > 0
+			? `<p>No longer listed:</p><ul>${gone.map((key) => line(key, "GONE &mdash;")).join("")}</ul>`
+			: "")
+	);
 }

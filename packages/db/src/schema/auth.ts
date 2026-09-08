@@ -586,6 +586,19 @@ export const hostedIdentities = pgTable("hosted_identities", {
 	// The identifier of the newest operation in the identity's public audit log. This is the
 	// whole comparison: a different value means somebody signed something.
 	headCid: text("head_cid"),
+	/**
+	 * The keys that could sign for this identity when it was last read, in order.
+	 *
+	 * 🚨 **This is what an alert is actually about.** The 72-hour window exists to undo a
+	 * rotation-key change, and the first two real alerts this job sent reported the handle and
+	 * the server as unchanged — correctly, because they were. What had changed in both was this
+	 * list, and the mail could not say so because nothing recorded it. Stored so a change can be
+	 * described as *which keys*, rather than as an opaque operation identifier.
+	 *
+	 * A JSON array of `did:key:` strings, and **order is authority** — the first outranks the
+	 * rest — so it is never sorted.
+	 */
+	rotationKeys: jsonb("rotation_keys").$type<string[]>(),
 	firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
 	/** Last time the audit log was successfully read. Not the same as the last change. */
 	lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
