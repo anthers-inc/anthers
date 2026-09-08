@@ -36,6 +36,7 @@ import {
 	PENDING_SIGNUP_TTL_MS,
 	readPendingSignup,
 	setPendingEmail,
+	shouldIssueHandle,
 	startPendingSignup,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
@@ -484,6 +485,40 @@ describe("what an address-resumed signup may NOT carry across", () => {
 
 		// The old token was rebound rather than left alive in the stranger's browser.
 		expect(await readPendingSignup(token)).toBeUndefined();
+	});
+
+	// ⭐ **A smaller version of the same takeover, and the reason it still matters.** Nobody
+	// gets an account out of this one — a requested handle is a preference rather than a
+	// credential. What a stranger would get is the right to **name** whoever proves the
+	// address, permanently and in public: the handle goes into an identity document the moment
+	// the account exists, and no part of that is undone by deleting an Anthers account.
+	// Retyping a handle is recoverable; a published identity is not.
+	it("drops a requested handle, because a stranger must not get to name you", async () => {
+		await startPendingSignup({
+			email: addr("named"),
+			hostedHandle: "somethingtheychose",
+		});
+
+		const signin = await spendCode("/api/auth/signin/verify", addr("named"), "");
+		const rebound = (signin.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1];
+
+		const row = await readPendingSignup(rebound);
+		expect(
+			row?.hostedHandle,
+			"a name typed by whoever started this signup must not survive the hand-over",
+		).toBeNull();
+	});
+});
+
+describe("which identity a finished signup gets", () => {
+	// 🚨 The rule, as a rule rather than as a condition buried in a long function. Inverting
+	// it would give somebody who came through the Bluesky door a second identity they never
+	// asked for, with Anthers holding its keys.
+	it("prefers an identity somebody proved over a name they typed", () => {
+		expect(shouldIssueHandle("alice", false)).toBe(true);
+		expect(shouldIssueHandle("alice", true)).toBe(false);
+		expect(shouldIssueHandle(null, false)).toBe(false);
+		expect(shouldIssueHandle(null, true)).toBe(false);
 	});
 });
 

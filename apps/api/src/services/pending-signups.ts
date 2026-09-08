@@ -157,6 +157,26 @@ export function picksOf(row: PendingSignup): SignupPicks {
 }
 
 /**
+ * Whether to issue the handle a signup asked for.
+ *
+ * 🚨 **A proved identity beats a requested one, and that is the whole of this function.** The
+ * doors are tabs on one card, so a row should never carry both — but if one ever did, issuing
+ * an identity to an account that has just linked a different one would leave somebody holding
+ * two, with nothing saying which is theirs and Anthers holding the keys to the one they did
+ * not ask for. A DID somebody has demonstrably signed for outranks a name they typed.
+ *
+ * Pure and exported because it is a decision rather than a step: the alternative is one
+ * condition inside a long function, which is exactly the shape that gets inverted by somebody
+ * simplifying a boolean.
+ */
+export function shouldIssueHandle(
+	requestedHandle: string | null,
+	atprotoLinked: boolean,
+): requestedHandle is string {
+	return !!requestedHandle && !atprotoLinked;
+}
+
+/**
  * Attach a proved ATProto identity to the signup this browser is in the middle of, or start
  * one if there is none.
  *
@@ -396,7 +416,8 @@ export async function consumePendingSignup(
 	 */
 	let hostedHandle: string | null = null;
 	let hostedHandleError: string | null = null;
-	if (row.hostedHandle && !atprotoLinked) {
+	// See {@link shouldIssueHandle} for the rule and the reason.
+	if (shouldIssueHandle(row.hostedHandle, atprotoLinked)) {
 		const { provisionHostedIdentity } = await import("./hosted-accounts.js");
 		const issued = await provisionHostedIdentity({
 			userId,
