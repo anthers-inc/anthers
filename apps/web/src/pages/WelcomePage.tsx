@@ -81,6 +81,29 @@ export default function WelcomePage() {
 	}, [isLoading, user, navigate]);
 
 	/**
+	 * Offer the handle's own name as the username, for an account that arrived with one.
+	 *
+	 * ⭐ **Signing up starts by picking a handle, so asking for a second name unprompted is
+	 * asking somebody to name themselves twice.** Prefilling makes it one choice they confirm.
+	 *
+	 * ⚠️ **A suggestion rather than a derivation, and the alphabets are why.** A handle is a
+	 * domain name and a username is not: usernames allow underscores and handles do not,
+	 * the two reserved lists differ, and somebody arriving with `alice.bsky.social` may find
+	 * `alice` already taken here. So the field is seeded and stays editable, and the claim is
+	 * checked exactly as it always was — nothing here may assume the suggestion is available.
+	 *
+	 * Only the first label is taken: `alice.anthers.social` suggests `alice`, not the domain.
+	 * It seeds once, and never overwrites something already typed.
+	 */
+	const seeded = useRef(false);
+	useEffect(() => {
+		if (seeded.current || !user?.atprotoHandle) return;
+		seeded.current = true;
+		const suggestion = user.atprotoHandle.split(".")[0]?.replace(/[^a-zA-Z0-9_-]/g, "") ?? "";
+		if (suggestion.length >= 3) setUsername((current) => current || suggestion);
+	}, [user?.atprotoHandle]);
+
+	/**
 	 * What this account chose on the way in, captured **once, on mount**.
 	 *
 	 * A ref rather than state read at render time: claiming a handle re-renders this

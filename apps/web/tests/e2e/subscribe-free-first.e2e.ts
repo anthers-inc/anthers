@@ -338,12 +338,17 @@ test.describe("/subscribe leads with the free door", () => {
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
 		await page.goto("/subscribe");
 
-		// Typing at the top fills the bottom. They read the same state deliberately: two
-		// fields that disagreed would let somebody submit an address they had corrected.
-		await page.locator('[data-signup="top"] input[type="email"]').fill("someone@example.com");
-		await expect(page.locator('[data-signup="summary"] input[type="email"]')).toHaveValue(
-			"someone@example.com",
-		);
+		// ⚠️ **Typed into the handle field rather than an address field** (2026-09-08). The card
+		// stopped asking for an address: signing up begins by picking a handle. The property is
+		// unchanged and is the reason this test exists — the page renders this control twice and
+		// both copies read the same state, because two fields that disagreed would let somebody
+		// submit a value they had corrected in the other one.
+		const top = page.locator('[data-signup="top"]');
+		await expect(top.getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+		await top.getByLabel("The handle you'd like").fill("someonespecific");
+		await expect(
+			page.locator('[data-signup="summary"]').getByLabel("The handle you'd like"),
+		).toHaveValue("someonespecific");
 	});
 });
 
