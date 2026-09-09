@@ -67,7 +67,7 @@ export const FAQ_ITEMS = {
 	"card-required": {
 		category: "Getting Started",
 		question: "Do I need a card to sign up?",
-		answer: `No. An email address makes an account — or your Bluesky handle, if you'd rather — and what is free stays free forever: downloads of anything free or anything you buy, with no allowance to run out of and no limit on how many devices you use, and ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month. A card is asked for at the moment you choose something that needs one: backing a creator, buying a Work, or supporting Anthers. Signing up is not one of those moments, and there is no trial to forget to cancel.`,
+		answer: `No. Signing up takes a handle and an email address: pick a name and we issue you one, or bring the Bluesky account you already have. What is free stays free forever — downloads of anything free or anything you buy, with no allowance to run out of and no limit on how many devices you use, and ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month. A card is asked for at the moment you choose something that needs one: backing a creator, buying a Work, or supporting Anthers. Signing up is not one of those moments, and there is no trial to forget to cancel.`,
 	},
 	"whats-free": {
 		category: "Getting Started",
@@ -347,7 +347,7 @@ export const FAQ_ITEMS = {
 		category: "Platform & Identity",
 		question: "What is the Bluesky integration?",
 		answer:
-			"You can link your Bluesky account to your Anthers account, so the two identities are connected. That's what exists today. Federation -- your content living across a network of independent servers -- is a direction we're committed to and haven't built yet. We'd rather say that plainly than describe it as though it already works.",
+			"Bluesky runs on the AT Protocol, and so does Anthers. You can link a Bluesky account you already have, or sign in and sign up through it. Anthers also runs an identity server of its own, so if you'd rather start fresh we can issue you a handle on anthers.social -- which is a name on that same network, not a row in our database, and one you can move elsewhere later. What is not built yet is your content living out there as records you own. That's a direction we're committed to, and we'd rather say so plainly than describe it as though it already works.",
 	},
 	"open-source": {
 		category: "Platform & Identity",
