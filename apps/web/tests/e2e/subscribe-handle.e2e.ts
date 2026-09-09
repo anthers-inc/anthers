@@ -81,6 +81,22 @@ test.describe("signing up with a handle Anthers issues", () => {
 		await expect(topSignup(page).getByText(/your handle will end in \./i)).toBeVisible();
 	});
 
+	// 🚨 **Bluesky is last, and this is a layout constraint the brand rule imposes rather than
+	// a preference somebody can reorder past.** The butterfly keeps its own color in both the
+	// selected and unselected state — dimming it would be tinting somebody else's trademark —
+	// so it is the most saturated thing in the strip at all times. In the middle of three tabs
+	// it becomes the visual center of a control whose center carries no meaning, and the eye
+	// lands there rather than on the selected tab. A test rather than a comment alone, because
+	// the order is one line and the reason for it is nowhere near that line.
+	test("the butterfly sits at the end, where the strongest color does no harm", async ({
+		page,
+	}) => {
+		await page.goto("/subscribe");
+		const tabs = topSignup(page).getByRole("tab");
+		await expect(tabs).toHaveCount(3);
+		await expect(tabs.nth(2)).toHaveAccessibleName("Bluesky");
+	});
+
 	// ⚠️ **The address is not asked for here, and somebody pressing the button needs to know
 	// one is coming.** This is the only place that says so before `/finish` says it — which
 	// makes it the same kind of promise as the Bluesky panel's email-scope warning, pinned for
