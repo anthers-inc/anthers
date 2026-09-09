@@ -37,6 +37,15 @@
  * | Works someone bought | **withdrawn** | a purchase outlives the Work — buyers keep what they paid for |
  * | purchases | **buyer detached, row kept** | sales-tax remittance records; settled 2026-08-10 |
  * | moderation reports & actions | **kept, actor nulled** | after a `DELETE`, "why was my comment removed?" has no honest answer |
+ * | a handle Anthers issued | **emptied on the node** | the records and the address are Anthers'; the DID is in a public directory nothing deletes from |
+ *
+ * 🚨 **Hosting made this a promise about three places rather than two** (2026-09-08). Before
+ * the handle door, everything personal lived in one database and one object store and this
+ * function covered both. An account issued a handle has a second account on the identity
+ * server carrying the same address, plus a repository — so the job grew a third step, and
+ * without it the wipe would run while a live account with that person's address went on
+ * existing on a machine Anthers operates. `releaseHostedIdentities` is that step, and
+ * `services/hosted-accounts.ts` carries what it can and cannot reach.
  *
  * 🚨 **The tombstone says only WHO, never WHY.** A null author renders "deleted by
  * user"; a moderation removal is `moderation_status` and renders separately. The two
@@ -63,6 +72,7 @@ import {
 } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { revokeAtprotoGrant } from "./atproto-client.js";
+import { hostedHandlesFor, releaseHostedIdentities } from "./hosted-accounts.js";
 import { isUnderHold } from "./legal-hold.js";
 import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
@@ -93,6 +103,15 @@ export interface DeletionPreview {
 	worksWithdrawn: number;
 	/** Kept with the buyer detached, for tax records. */
 	purchases: number;
+	/**
+	 * Handles Anthers issued to this account, which are emptied rather than destroyed.
+	 *
+	 * 🚨 **Named rather than counted, because this is the one outcome somebody might want to
+	 * avoid by doing something else first.** Every other line here describes something only
+	 * Anthers holds; an identity can be moved to another server and kept, and a person who
+	 * finds that out afterwards has lost something they could have taken with them.
+	 */
+	hostedHandles: string[];
 }
 
 /**
@@ -128,6 +147,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		reviews_,
 		posts_,
 		purchases_,
+		handles,
 	] = await Promise.all([
 		countRows("follows", "follower_id"),
 		countRows("bookmarks", "user_id"),
@@ -138,6 +158,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		countRows("ratings", "user_id"),
 		countRows("posts", "creator_id"),
 		countRows("purchases", "buyer_id"),
+		hostedHandlesFor(userId),
 	]);
 
 	return {
@@ -152,6 +173,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		worksDeleted: workIds.length - purchasedWorkIds.length,
 		worksWithdrawn: purchasedWorkIds.length,
 		purchases: purchases_,
+		hostedHandles: handles,
 	};
 }
 
@@ -242,6 +264,38 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 		.where(eq(users.id, userId))
 		.limit(1);
 	if (!user) return { erased: false };
+
+	// 🚨 **The identity server is reached BEFORE anything is destroyed, and this step can stop
+	// the whole erasure.** `hosted_accounts.user_id` is `set null` rather than `cascade`, so
+	// after the wipe nothing joins a person to the identities Anthers issued them — the same
+	// ordering hazard as the Works classification below, and with a worse failure, because the
+	// thing that would be stranded is a live account holding their address on a machine Anthers
+	// operates.
+	//
+	// ⚠️ **Deferring is right here and would be wrong one paragraph down.** The grant revoke is
+	// best-effort because a third party's outage must not refuse somebody their erasure. This
+	// is not a third party. An unreachable node is Anthers failing to finish its own job, and
+	// the answer is the one the legal hold already uses: leave `deletionRequestedAt` set, so
+	// the daily sweep re-selects this account and tries again, and destroy nothing meanwhile.
+	//
+	// A credential the hub cannot open is the opposite case and must not defer — retrying never
+	// opens it, and blocking an erasure forever on an unusable key is worse than finishing and
+	// saying loudly that a shell was left behind.
+	const released = await releaseHostedIdentities(userId);
+	if (released.status === "deferred") {
+		console.warn(
+			`account-deletion: user ${userId} holds an Anthers-issued identity the node did not ` +
+				`release — deletion deferred (${released.reason})`,
+		);
+		return { erased: false };
+	}
+	if (released.status === "stranded") {
+		console.error(
+			`account-deletion: user ${userId} is being erased with an Anthers-issued identity ` +
+				`LEFT ON THE NODE — the hub cannot open it and only the node's admin password can ` +
+				`now reach it (${released.reason})`,
+		);
+	}
 
 	// 🚨 **Revoke the ATProto grant BEFORE the account goes, and after the hold check.**
 	// Erasure deleted the `atproto_sessions` row by cascade and stopped until 2026-08-29, so

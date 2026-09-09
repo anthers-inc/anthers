@@ -33,9 +33,10 @@ import {
 	handleSyntaxProblem,
 	normalizeHandleName as sharedNormalize,
 } from "@anthers/shared/handles";
+import { eq } from "drizzle-orm";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
-import { seal, secretBoxConfigured } from "./secret-box.js";
+import { open, seal, secretBoxConfigured } from "./secret-box.js";
 
 /** Where the Anthers-run Personal Data Server answers, or the empty string when unset. */
 function pdsUrl(): string {
@@ -445,4 +446,336 @@ export async function provisionHostedIdentity(input: {
 	}
 
 	return { did: account.did, handle: account.handle };
+}
+
+// ─── Giving one back ─────────────────────────────────────────────────────────
+
+/**
+ * Erasing a hosted identity, which is the other end of the lifecycle above.
+ *
+ * 🚨 **The node will not destroy an account for anybody but an admin, and the hub is
+ * deliberately not one.** `com.atproto.admin.deleteAccount` takes a DID and removes the
+ * account, the repository, the blobs and the signing key in one call — and it needs the node's
+ * admin password, which can also reset any account's password and rename any handle. Putting
+ * that in the hub's environment would make a compromise of the hub a compromise of every
+ * identity Anthers hosts, which is the whole reason accounts are created with an invite code
+ * instead (see {@link inviteCode}). The other route, `com.atproto.server.deleteAccount`, wants
+ * a token the node **emails** to the account, and the node has no mail configured.
+ *
+ * ⭐ **So the account is emptied rather than destroyed, using its own credential**, which the
+ * hub does hold. Every record goes, and the blobs go with them because the reference server
+ * dereferences a blob when the record naming it is deleted. The handle is replaced, so the
+ * name somebody chose is both gone from the node and free for somebody else. The address is
+ * replaced, which is the piece that actually matters — it is the only personal data in the
+ * account row. Then the account is deactivated, and the hub drops the credential and stops
+ * watching the identity.
+ *
+ * ⚠️ **What is left is a shell with no name, no address and no contents, plus a DID.** The DID
+ * is in a public directory that nothing can delete from, so it survives every design including
+ * the admin one; a person who took a recovery key can still sign for it, which is theirs
+ * rather than Anthers' to end. `deletionPreview` says so before anybody presses the button.
+ * Sweeping the empty shells off the node is an operator's chore rather than a privacy step,
+ * because by then they hold nothing about anybody.
+ *
+ * ⚠️ **Order is not incidental.** Records first, because a deactivated repository refuses
+ * writes — `applyWrites` checks it in the handler rather than in its auth. Deactivation last
+ * for the same reason.
+ */
+
+/** How far the node got. Every value is a different thing for the caller to do. */
+export type HostedPurgeOutcome =
+	/** Emptied and deactivated, or already was. */
+	| { status: "purged" }
+	/** The node has no such account. Nothing is owed and nothing went wrong. */
+	| { status: "absent" }
+	/**
+	 * The node could not be reached, or refused in a way that will pass.
+	 *
+	 * 🚨 **The caller must DEFER rather than shrug**, and this is the one place where that
+	 * differs from `revokeAtprotoGrant` next door. That call is best-effort because a third
+	 * party's outage is not a reason to refuse somebody their erasure. This is not a third
+	 * party — it is Anthers' own machine holding that person's records, so an outage here is a
+	 * reason to try again tomorrow, not a reason to declare the erasure done.
+	 */
+	| { status: "unreachable"; reason: string }
+	/**
+	 * There is an account and the hub cannot open it — a credential sealed under a key this
+	 * deployment does not have, or a password the node no longer accepts.
+	 *
+	 * ⚠️ **Retrying never fixes this, so the caller must NOT defer on it.** Blocking somebody's
+	 * erasure forever on a key nobody can use is worse than finishing without this step and
+	 * saying loudly that a shell was left behind.
+	 */
+	| { status: "unusable"; reason: string };
+
+/** One call to the node, with the two failure kinds kept apart. */
+async function nodeCall(
+	path: string,
+	init: RequestInit & { token?: string },
+	doFetch: typeof fetch,
+): Promise<
+	{ ok: true; body: Record<string, unknown> } | { ok: false; retryable: boolean; error: string }
+> {
+	const { token, ...rest } = init;
+	const headers: Record<string, string> = { "Content-Type": "application/json" };
+	if (token) headers.Authorization = `Bearer ${token}`;
+	let res: Response;
+	try {
+		res = await doFetch(`${pdsUrl()}${path}`, {
+			...rest,
+			headers: { ...headers, ...(rest.headers as Record<string, string> | undefined) },
+			signal: AbortSignal.timeout(30_000),
+		});
+	} catch (err) {
+		return { ok: false, retryable: true, error: err instanceof Error ? err.message : "no answer" };
+	}
+	if (res.ok) {
+		const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+		return { ok: true, body };
+	}
+	const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+	// A 5xx is the node having a bad day; a 4xx is the node's considered answer. Retrying the
+	// first is the whole point, and retrying the second is a loop.
+	return {
+		ok: false,
+		retryable: res.status >= 500 || res.status === 429,
+		error: body.error || body.message || `HTTP ${res.status}`,
+	};
+}
+
+/** A name that says only that something was here. Same token in both, so one row reads as one account. */
+function purgeToken(): string {
+	return Buffer.from(crypto.getRandomValues(new Uint8Array(4))).toString("hex");
+}
+
+/**
+ * Empty one account on the node, using its own password.
+ *
+ * Every step is idempotent, because a run that fails partway is retried tomorrow: the records
+ * are re-listed rather than remembered, and replacing an already-replaced handle or address
+ * just replaces it again.
+ */
+export async function purgeHostedIdentity(
+	did: string,
+	sealedPassword: string,
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<HostedPurgeOutcome> {
+	if (!pdsUrl()) return { status: "unusable", reason: "no HOSTED_PDS_URL is configured" };
+	const doFetch = opts.fetchImpl ?? fetch;
+
+	let password: string;
+	try {
+		password = open(sealedPassword);
+	} catch (err) {
+		return {
+			status: "unusable",
+			reason: `the sealed password could not be opened (${err instanceof Error ? err.message : "unknown"})`,
+		};
+	}
+
+	// Asked first because it is also how the collections are enumerated, so it costs nothing
+	// beyond what the record deletion needs anyway.
+	const described = await nodeCall(
+		`/xrpc/com.atproto.repo.describeRepo?repo=${encodeURIComponent(did)}`,
+		{ method: "GET" },
+		doFetch,
+	);
+	let collections: string[] = [];
+	let alreadyDeactivated = false;
+	if (described.ok) {
+		collections = ((described.body.collections as string[] | undefined) ?? []).filter(Boolean);
+	} else if (described.error === "RepoNotFound" || described.error === "AccountNotFound") {
+		// Migrated away, or an operator already removed it. Nothing here is owed.
+		return { status: "absent" };
+	} else if (described.error === "RepoDeactivated" || described.error === "RepoTakendown") {
+		// A previous run got as far as deactivating, so the records are already gone and the
+		// repository will refuse writes anyway. Carry on and finish the rest.
+		alreadyDeactivated = true;
+	} else if (described.retryable) {
+		return { status: "unreachable", reason: `describeRepo: ${described.error}` };
+	} else {
+		return { status: "unusable", reason: `describeRepo: ${described.error}` };
+	}
+
+	const session = await nodeCall(
+		"/xrpc/com.atproto.server.createSession",
+		{ method: "POST", body: JSON.stringify({ identifier: did, password }) },
+		doFetch,
+	);
+	if (!session.ok) {
+		if (session.retryable)
+			return { status: "unreachable", reason: `createSession: ${session.error}` };
+		return { status: "unusable", reason: `createSession: ${session.error}` };
+	}
+	const token = session.body.accessJwt as string | undefined;
+	if (!token) return { status: "unusable", reason: "createSession answered with no token" };
+
+	if (!alreadyDeactivated) {
+		const emptied = await deleteEveryRecord(did, collections, token, doFetch);
+		if (emptied) return emptied;
+	}
+
+	const mark = purgeToken();
+	// The handle before the address, because a failure between them leaves the address — which
+	// is the piece that matters — still to be dealt with by the retry rather than already done.
+	const renamed = await nodeCall(
+		"/xrpc/com.atproto.identity.updateHandle",
+		{
+			method: "POST",
+			token,
+			body: JSON.stringify({ handle: `deleted-${mark}.${hostedHandleSuffix()}` }),
+		},
+		doFetch,
+	);
+	if (!renamed.ok && renamed.retryable) {
+		return { status: "unreachable", reason: `updateHandle: ${renamed.error}` };
+	}
+
+	const readdressed = await nodeCall(
+		"/xrpc/com.atproto.server.updateEmail",
+		{
+			method: "POST",
+			token,
+			body: JSON.stringify({ email: `deleted-${mark}@${hostedHandleSuffix()}` }),
+		},
+		doFetch,
+	);
+	if (!readdressed.ok) {
+		// 🚨 Not softened even when the node's refusal looks final. The address is the personal
+		// data in that row, so an erasure that could not replace it has not finished, and saying
+		// so leaves a retry to try again rather than reporting a job done.
+		return { status: "unreachable", reason: `updateEmail: ${readdressed.error}` };
+	}
+
+	if (!alreadyDeactivated) {
+		const off = await nodeCall(
+			"/xrpc/com.atproto.server.deactivateAccount",
+			{ method: "POST", token, body: JSON.stringify({}) },
+			doFetch,
+		);
+		if (!off.ok && off.retryable) {
+			return { status: "unreachable", reason: `deactivateAccount: ${off.error}` };
+		}
+	}
+
+	return { status: "purged" };
+}
+
+/**
+ * Delete every record in every collection, in the batches `applyWrites` accepts.
+ *
+ * Answers an outcome only when something went wrong; `null` means the repository is empty.
+ * The listing is re-read each pass rather than paged through, because the deletes are changing
+ * the thing being paged.
+ */
+async function deleteEveryRecord(
+	did: string,
+	collections: string[],
+	token: string,
+	doFetch: typeof fetch,
+): Promise<HostedPurgeOutcome | null> {
+	for (const collection of collections) {
+		// A bound rather than a belief about how many records anybody has. 200 passes of 100 is
+		// twenty thousand records, and stopping is better than a loop that never ends against a
+		// node that has stopped deleting.
+		for (let pass = 0; pass < 200; pass++) {
+			const url =
+				`/xrpc/com.atproto.repo.listRecords?repo=${encodeURIComponent(did)}` +
+				`&collection=${encodeURIComponent(collection)}&limit=100`;
+			const listed = await nodeCall(url, { method: "GET" }, doFetch);
+			if (!listed.ok) {
+				if (listed.retryable)
+					return { status: "unreachable", reason: `listRecords: ${listed.error}` };
+				return { status: "unusable", reason: `listRecords: ${listed.error}` };
+			}
+			const records = (listed.body.records as Array<{ uri?: string }> | undefined) ?? [];
+			if (records.length === 0) break;
+
+			const writes = records
+				.map((r) => r.uri?.split("/").pop())
+				.filter((rkey): rkey is string => !!rkey)
+				.map((rkey) => ({ $type: "com.atproto.repo.applyWrites#delete", collection, rkey }));
+			if (writes.length === 0) break;
+
+			const applied = await nodeCall(
+				"/xrpc/com.atproto.repo.applyWrites",
+				{ method: "POST", token, body: JSON.stringify({ repo: did, writes }) },
+				doFetch,
+			);
+			if (!applied.ok) {
+				if (applied.retryable)
+					return { status: "unreachable", reason: `applyWrites: ${applied.error}` };
+				return { status: "unusable", reason: `applyWrites: ${applied.error}` };
+			}
+		}
+	}
+	return null;
+}
+
+/** What releasing an account's hosted identities did, for the deletion job to act on. */
+export type HostedRelease =
+	/** This account had none. */
+	| { status: "none" }
+	/** Every identity it had is emptied, and the hub holds nothing about them. */
+	| { status: "released"; handles: string[] }
+	/** Try again. The caller must not treat the erasure as done. */
+	| { status: "deferred"; reason: string }
+	/** A shell was left on the node that the hub can never reach. Carry on and say so. */
+	| { status: "stranded"; reason: string };
+
+/**
+ * Release every hosted identity belonging to one Anthers account.
+ *
+ * 🚨 **Read before the account row goes.** `hosted_accounts.user_id` is `set null` rather than
+ * `cascade`, deliberately, so a deleted Anthers account cannot strand a live identity — which
+ * means that after the wipe nothing joins the two and there is no way left to ask which
+ * identities were this person's. Same ordering hazard the Works classification has, for the
+ * same reason.
+ *
+ * 🚨 **And the rows go only once the node has actually let go.** The sealed password is the one
+ * copy; dropping it while the identity still holds somebody's records would leave an account
+ * only the node's admin password can ever open, which is the state the runbook describes for
+ * `signup-probe` and does not want repeated on purpose.
+ */
+export async function releaseHostedIdentities(userId: number): Promise<HostedRelease> {
+	const rows = await db
+		.select({
+			did: hostedAccounts.did,
+			handle: hostedAccounts.handle,
+			sealedPassword: hostedAccounts.sealedPassword,
+		})
+		.from(hostedAccounts)
+		.where(eq(hostedAccounts.userId, userId));
+	if (rows.length === 0) return { status: "none" };
+
+	const released: string[] = [];
+	const stranded: string[] = [];
+	for (const row of rows) {
+		const outcome = await purgeHostedIdentity(row.did, row.sealedPassword);
+		if (outcome.status === "unreachable") {
+			return { status: "deferred", reason: `${row.did}: ${outcome.reason}` };
+		}
+		if (outcome.status === "unusable") {
+			stranded.push(`${row.did}: ${outcome.reason}`);
+			continue;
+		}
+		// Purged or absent: there is nothing on the node this credential opens, so holding it is
+		// keeping a secret about somebody who asked to be forgotten. The watch row goes with it,
+		// because an identity nobody is hosting on anybody's behalf is not one to alert about.
+		await db.delete(hostedAccounts).where(eq(hostedAccounts.did, row.did));
+		await db.delete(hostedIdentities).where(eq(hostedIdentities.did, row.did));
+		released.push(row.handle);
+	}
+
+	if (stranded.length > 0) return { status: "stranded", reason: stranded.join("; ") };
+	return { status: "released", handles: released };
+}
+
+/** The handles this account was issued, for the confirmation screen. Empty when it has none. */
+export async function hostedHandlesFor(userId: number): Promise<string[]> {
+	const rows = await db
+		.select({ handle: hostedAccounts.handle })
+		.from(hostedAccounts)
+		.where(eq(hostedAccounts.userId, userId));
+	return rows.map((r) => r.handle);
 }

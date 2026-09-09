@@ -674,6 +674,7 @@ interface DeletionPreview {
 	worksDeleted: number;
 	worksWithdrawn: number;
 	purchases: number;
+	hostedHandles: string[];
 }
 
 interface DeletionState {
@@ -869,6 +870,20 @@ function DataSection() {
 											{p.purchases === 1 ? "" : "s"}, because we have to be able to evidence sales
 											tax.
 										</li>
+										{/*
+										 * Named rather than counted, and last because it is the only line describing
+										 * something Anthers cannot fully undo. Everything above is ours to destroy; an
+										 * identity is a public record in a directory nobody can delete from, so the
+										 * honest sentence says what goes, what is freed, and what stays.
+										 */}
+										{p.hostedHandles.length > 0 ? (
+											<li>
+												<strong>The handle Anthers issued you:</strong> {p.hostedHandles.join(", ")}{" "}
+												— everything stored in it is deleted, your address comes off it, and the
+												name is freed for somebody else. The identity behind the name is a public
+												record that nothing can remove, so it stays, empty.
+											</li>
+										) : null}
 									</ul>
 								) : (
 									<p className="mt-2 text-sm text-base-content/60">Loading your counts…</p>
