@@ -904,8 +904,9 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "identity-hosting",
 						title: "Hosting Identities Here",
 						blurb: "Anthers running the identity server, which unblocks the above in one step.",
-						bucket: "active",
-						note: "Signing up starts with a handle. Built and merged; not yet open on the site.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						note: "Signing up starts by picking a handle — a new one here, or one you already have.",
 						doc: { id: "71.03", title: "The Anthers PDS and Creator Nodes" },
 					},
 					{
