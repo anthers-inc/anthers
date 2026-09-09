@@ -412,14 +412,15 @@ export default function FinishSignupPage() {
 						Your account is set up and you are signed in. What did not work is the handle:{" "}
 						<strong>{handleTrouble}</strong>
 					</p>
-					{/* ⚠️ **It does not promise a way to try again, because there is not one yet.**
-					    Asking for a handle from settings is not built, and copy that says
-					    otherwise is the same failure as a roadmap entry written in the present
-					    tense: it reads as a feature to whoever meets it. What is true and worth
-					    saying is that nothing is waiting on this. */}
+					{/* ⭐ **It names settings now, because settings can do it.** This paragraph
+					    deliberately promised nothing while asking for a handle later was unbuilt —
+					    copy that offers a way out of a dead end is the same failure as a roadmap
+					    entry written in the present tense. The sentence is true as of the identity
+					    section in settings, and it should go back to promising nothing if that ever
+					    stops being so. */}
 					<p className="mt-3 text-sm text-base-content/70">
-						Nothing else about your signup is affected, and nothing is waiting on it — an Anthers
-						handle is an extra rather than a part of your account.
+						Nothing else about your signup is affected, and nothing is waiting on it. You can ask
+						for a handle again from your settings whenever you like.
 					</p>
 				</div>
 				<button

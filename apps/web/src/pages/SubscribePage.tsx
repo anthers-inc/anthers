@@ -101,7 +101,6 @@ import {
 	timePoolFor,
 	WITHDRAWN_RESCUE_DAYS,
 } from "@anthers/shared/constants";
-import { handleSyntaxProblem, normalizeHandleName } from "@anthers/shared/handles";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import {
@@ -144,6 +143,12 @@ import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
 import { FAQBlock } from "../components/ui/FAQ";
+import {
+	type HandleStatus,
+	handleStatusLine,
+	handleStatusTone,
+	useHandleAvailability,
+} from "../lib/hosted-handle";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
  * Both of these were quarantined in a named `SPIKE` block until 2026-08-12, because
@@ -1533,15 +1538,6 @@ function GoFurtherCard({
  */
 type Door = "email" | "bluesky" | "handle";
 
-/** What the API says about a name somebody is typing into the handle door. */
-type HandleStatus =
-	| { status: "idle" }
-	| { status: "checking" }
-	| { status: "invalid"; problem: string }
-	| { status: "taken"; handle: string }
-	| { status: "available"; handle: string }
-	| { status: "unknown" };
-
 /**
  * The line under the signup button, for one reading of the page.
  *
@@ -1582,46 +1578,6 @@ function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
  * may resize the card. `signedIn` is the one input that cannot change while the page is up,
  * so it narrows the set rather than joining it.
  */
-/**
- * What to say under the handle field.
- *
- * ⭐ **The available case names the whole handle rather than saying "available"**, because the
- * suffix is the part somebody has not thought about. A person types `alice` and is picking
- * `alice.anthers.social`, which is a domain name they will effectively control — telling them
- * that once, at the moment they choose it, is cheaper than explaining it later.
- *
- * ⚠️ **`unknown` says we could not check rather than nothing.** Silence there reads as
- * approval, and the one thing that must not happen is somebody believing a name is theirs
- * because a failed request left the line empty.
- */
-function handleStatusLine(status: HandleStatus): string {
-	switch (status.status) {
-		case "idle":
-			// ⭐ **Nothing, deliberately** (Parker, 2026-09-08). This line used to name the suffix
-			// and state the alphabet before anybody had typed anything. The field now shows the
-			// suffix itself, and the alphabet is better said by validation at the moment it is
-			// broken than as a rule to remember beforehand — which is also one less sentence
-			// between somebody and the only field on the card.
-			return "";
-		case "checking":
-			return "Checking…";
-		case "invalid":
-			return status.problem;
-		case "taken":
-			return `${status.handle} is taken.`;
-		case "available":
-			return `${status.handle} is yours.`;
-		case "unknown":
-			return "We couldn't check that just now — we'll try again when you finish.";
-	}
-}
-
-function handleStatusTone(status: HandleStatus): string {
-	if (status.status === "available") return "text-success";
-	if (status.status === "invalid" || status.status === "taken") return "text-error";
-	return "text-base-content/50";
-}
-
 function signupNoteSizers(signedIn: boolean): string[] {
 	if (signedIn) return [signupNote(true, false, "email")];
 	return [
@@ -2352,9 +2308,8 @@ export default function SubscribePage() {
 	 * configured, and a door that refuses when pressed is worse than no door.
 	 */
 	const [hostedOpen, setHostedOpen] = useState(false);
-	/** The name being typed into the handle door, and what the API last said about it. */
+	/** The name being typed into the handle door. */
 	const [hostedName, setHostedName] = useState("");
-	const [hostedStatus, setHostedStatus] = useState<HandleStatus>({ status: "idle" });
 	/** The suffix the API says handles hang under. Empty until it answers, like the door. */
 	const [hostedSuffix, setHostedSuffix] = useState("");
 	/**
@@ -2431,62 +2386,13 @@ export default function SubscribePage() {
 		};
 	}, [signedIn]);
 
-	/**
-	 * Ask whether the name being typed is free.
-	 *
-	 * ⚠️ **Debounced, and every answer is discarded if a newer one is in flight.** Without the
-	 * second half a slow request about `ali` lands after a fast one about `alice` and the line
-	 * describes a name nobody is looking at any more — which is the worst possible thing for a
-	 * field whose whole job is telling you whether you may have what you typed.
-	 *
-	 * The idle state is deliberately restored the moment the field empties, rather than left
-	 * showing the last verdict about a name that is no longer there.
-	 */
-	useEffect(() => {
-		const name = normalizeHandleName(hostedName, hostedSuffix);
-		if (!hostedOpen || !name) {
-			setHostedStatus({ status: "idle" });
-			return;
-		}
-
-		// 🚨 **Spelling is answered here, without asking and without waiting.** An underscore is
-		// wrong in a way the browser already knows, so sending it would spend a debounce plus a
-		// round trip to say something immediate — and would report *"we couldn't check"* rather
-		// than *"that is not allowed"* whenever the API is unreachable, which is the wrong
-		// answer given locally sufficient information. Only a name that could be a handle is
-		// worth asking the node about. See `@anthers/shared/handles` for why the reserved-name
-		// list stays on the server and this half does not.
-		const problem = handleSyntaxProblem(name);
-		if (problem) {
-			setHostedStatus({ status: "invalid", problem });
-			return;
-		}
-
-		let live = true;
-		setHostedStatus({ status: "checking" });
-		const timer = setTimeout(() => {
-			client.api.atproto["handle-available"]
-				.$get({ query: { name } })
-				.then((res) => res.json())
-				.then((body) => {
-					if (!live) return;
-					setHostedStatus(
-						body.status === "invalid"
-							? { status: "invalid", problem: body.problem }
-							: body.status === "taken" || body.status === "available"
-								? { status: body.status, handle: body.handle }
-								: { status: "unknown" },
-					);
-				})
-				.catch(() => {
-					if (live) setHostedStatus({ status: "unknown" });
-				});
-		}, 400);
-		return () => {
-			live = false;
-			clearTimeout(timer);
-		};
-	}, [hostedName, hostedOpen, hostedSuffix]);
+	// The debounce, the stale-answer rule and the copy are `lib/hosted-handle.ts`'s, because
+	// settings asks the same question of the same endpoint and a second copy of the stale-answer
+	// rule is the one that would be written wrong.
+	const hostedStatus = useHandleAvailability(hostedName, {
+		open: hostedOpen,
+		suffix: hostedSuffix,
+	});
 
 	useEffect(() => {
 		try {
