@@ -29,6 +29,10 @@
  */
 import { db } from "@anthers/db";
 import { hostedAccounts, hostedIdentities } from "@anthers/db/schema";
+import {
+	handleSyntaxProblem,
+	normalizeHandleName as sharedNormalize,
+} from "@anthers/shared/handles";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { seal, secretBoxConfigured } from "./secret-box.js";
@@ -106,28 +110,13 @@ export function hostedHandleFor(name: string): string {
 /**
  * Turn whatever somebody typed into the name part of a handle.
  *
- * People write handles several ways and none of them are wrong: with a leading `@`, with the
- * suffix already on the end, in the case they think in. Stripping all of that on the way in
- * means the field never fights anybody, which is the same argument the Bluesky door's handle
- * input makes about its own leading `@`.
+ * The rule is `@anthers/shared/handles`'; this only supplies the suffix, which that module
+ * takes as an argument because a browser learns it from the API and a server derives it from
+ * the node's own URL.
  */
 export function normalizeHandleName(raw: string): string {
-	let value = raw.trim().toLowerCase().replace(/^@/, "");
-	const suffix = `.${hostedHandleSuffix()}`;
-	if (suffix.length > 1 && value.endsWith(suffix)) {
-		value = value.slice(0, -suffix.length);
-	}
-	return value;
+	return sharedNormalize(raw, hostedHandleSuffix());
 }
-
-/** The shortest name Anthers will issue. Two characters is a namespace worth squatting in. */
-const MIN_HANDLE_NAME = 3;
-/**
- * The longest. A DNS label may be 63 characters and a handle 253, so this is Anthers' limit
- * rather than the protocol's — a name has to be sayable, and nobody is served by a 63-
- * character one.
- */
-const MAX_HANDLE_NAME = 30;
 
 /**
  * Names Anthers refuses on top of the node's own list.
@@ -162,26 +151,11 @@ const RESERVED = new Set<string>([...PDS_RESERVED_HANDLE_NAMES, ...ANTHERS_RESER
  * and there is nothing here a caller needs to branch on.
  */
 export function handleNameProblem(name: string): string | null {
-	if (name.length < MIN_HANDLE_NAME) {
-		return `A handle needs at least ${MIN_HANDLE_NAME} characters.`;
-	}
-	if (name.length > MAX_HANDLE_NAME) {
-		return `A handle can be at most ${MAX_HANDLE_NAME} characters.`;
-	}
-	// A handle is a domain name, so the alphabet is a DNS label's rather than a username's.
-	// ⚠️ Underscores are the one people are surprised by, because Anthers usernames allow
-	// them — so the message names the character instead of restating the rule.
-	if (name.includes("_")) {
-		// ⚠️ Kept short as well as specific: this is the longest of these messages, and it sits
-		// in a fixed two-line region under the field. A third line would grow the panel.
-		return "A handle is a web address, so no underscores. Use a hyphen.";
-	}
-	if (!/^[a-z0-9-]+$/.test(name)) {
-		return "A handle can only contain letters, numbers and hyphens.";
-	}
-	if (name.startsWith("-") || name.endsWith("-")) {
-		return "A handle can't start or end with a hyphen.";
-	}
+	// ⭐ **Syntax first, and it is shared with the browser.** The card runs the same check as
+	// somebody types, so a name with an underscore in it never becomes a request at all — see
+	// `@anthers/shared/handles` for why only this half is shared.
+	const syntax = handleSyntaxProblem(name);
+	if (syntax) return syntax;
 	if (RESERVED.has(name)) {
 		return "That handle is reserved.";
 	}

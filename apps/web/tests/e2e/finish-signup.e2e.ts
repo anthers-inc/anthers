@@ -25,9 +25,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-/** An address that cannot collide with a real account or another run. */
-const addr = () => `e2e-finish-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /**
@@ -41,11 +38,30 @@ const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 const rung = (page: Page, name: RegExp) =>
 	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
 
-/** Start a signup at the one door and land where it takes you. */
+/**
+ * A handle nobody else will ask for. Lowercase letters and digits, inside the 30-character
+ * ceiling `handleNameProblem` enforces.
+ */
+const handleName = () =>
+	`e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 30);
+
+/**
+ * Start a signup at the one door and land where it takes you.
+ *
+ * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/subscribe`
+ * stopped asking for an address: signing up begins by picking a handle, and the address is
+ * taken at `/finish`. A spec that filled `input[type="email"]` here was filling a field that
+ * no longer exists, which is why these read as failures the moment the card changed.
+ *
+ * The availability check answers `unknown` in this suite — `playwright.config.ts` points the
+ * API at `node.invalid` — and an unknown answer deliberately does not block the button, so
+ * nothing here needs to stub it.
+ */
 async function startSignup(page: Page, picks?: () => Promise<void>) {
 	await page.goto("/subscribe");
 	if (picks) await picks();
-	await topSignup(page).locator('input[type="email"]').fill(addr());
+	await expect(topSignup(page).getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+	await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
 	await topSignup(page)
 		.getByRole("button", { name: /create my (free )?account/i })
 		.click();

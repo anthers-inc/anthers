@@ -48,6 +48,44 @@ const addr = () =>
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /**
+ * A handle nobody else will ask for, inside the 30-character ceiling the name rules enforce.
+ */
+const handleName = () =>
+	`e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 30);
+
+/**
+ * Ask for an account and land on the page that finishes it.
+ *
+ * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/subscribe`
+ * stopped asking for an address: signing up begins by picking a handle, and the address is
+ * taken at `/finish`. The availability check answers `unknown` in this suite — the API points
+ * at `node.invalid` — and an unknown answer deliberately does not block the button.
+ */
+async function askForAccount(page: Page, cta = /create my (free )?account/i) {
+	await expect(topSignup(page).getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+	await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
+	await topSignup(page).getByRole("button", { name: cta }).click();
+	await expect(page).toHaveURL(/\/finish$/);
+}
+
+/**
+ * Give `/finish` an address, which is what puts a code in the post.
+ *
+ * ⭐ **This step is new and is the shape of the flow rather than an inconvenience.** The card
+ * no longer collects an address, so the code cannot have been sent by the time this page
+ * opens — `/finish` asks, and only then is there a mailbox to post to.
+ */
+async function giveAddress(page: Page) {
+	const address = addr();
+	await page.getByLabel(/where should we reach you/i).fill(address);
+	await page
+		.getByRole("button", { name: /send|continue|confirm|code/i })
+		.first()
+		.click();
+	return address;
+}
+
+/**
  * A rung on the Anthers ladder, as the clickable card rather than the input inside it.
  *
  * ⚠️ **Filtered by the RADIO's accessible name, never by the label's text.** Two traps
@@ -150,10 +188,7 @@ test.describe("starting an account from /subscribe", () => {
 	}) => {
 		await page.goto("/subscribe");
 
-		await topSignup(page).locator('input[type="email"]').fill(addr());
-		await topSignup(page)
-			.getByRole("button", { name: /create my free account/i })
-			.click();
+		await askForAccount(page, /create my free account/i);
 
 		// 🚨 **The property this whole change exists for.** The code box used to open as a
 		// modal *over this page* — the last thing asked of somebody, on top of a page still
@@ -184,7 +219,10 @@ test.describe("starting an account from /subscribe", () => {
 		const cta = topSignup(page).getByRole("button", { name: /create my account & continue/i });
 		await expect(cta, "the CTA should promise more than a free account").toBeVisible();
 
-		await topSignup(page).locator('input[type="email"]').fill(addr());
+		await expect(
+			topSignup(page).getByRole("tab", { name: "New Handle", exact: true }),
+		).toBeVisible();
+		await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
 		await cta.click();
 
 		// ⚠️ **The rail lists what will actually happen and nothing else.** A paying signup
@@ -228,12 +266,7 @@ test.describe("starting an account from /subscribe", () => {
 
 	test("the free path has no payment step to promise", async ({ page }) => {
 		await page.goto("/subscribe");
-		await topSignup(page).locator('input[type="email"]').fill(addr());
-		await topSignup(page)
-			.getByRole("button", { name: /create my free account/i })
-			.click();
-
-		await expect(page).toHaveURL(/\/finish$/);
+		await askForAccount(page, /create my free account/i);
 		const rail = page.getByRole("list", { name: "Signup Progress" });
 		await expect(rail.getByText("Your Email", { exact: true })).toBeVisible();
 		await expect(rail.getByText("Payment", { exact: true })).toHaveCount(0);
@@ -251,11 +284,8 @@ test.describe("starting an account from /subscribe", () => {
 test.describe("the code field", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/subscribe");
-		await topSignup(page).locator('input[type="email"]').fill(addr());
-		await topSignup(page)
-			.getByRole("button", { name: /create my free account/i })
-			.click();
-		await expect(page).toHaveURL(/\/finish$/);
+		await askForAccount(page);
+		await giveAddress(page);
 
 		// 🚨 Wait for the autofocus, not just for the page. Every test below drives the
 		// field with bare `keyboard.type`, which goes wherever focus currently is — and
