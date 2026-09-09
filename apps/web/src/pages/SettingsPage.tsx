@@ -548,6 +548,12 @@ function BlockedSection() {
  * that means the same thing and can disagree with the node. **The server does not trust this
  * derivation** — `unlinkAtprotoFromUser` asks `hosted_accounts` directly — so the worst a
  * wrong answer here can do is show a button that then refuses.
+ *
+ * ⚠️ **One state is deliberately left showing an offer that will be refused**: an account with a
+ * credential row and no DID, which is what a provisioning that half-failed leaves behind. The
+ * browser cannot see that row and the refusal names the handle it already holds, so the person
+ * learns the useful thing either way — and inventing a field to describe a state the docblock on
+ * `provisionHostedIdentity` calls unreachable in practice would be paying for it every render.
  */
 function IdentitySection() {
 	const { user } = useAuth();
@@ -579,7 +585,11 @@ function IdentitySection() {
 	return (
 		<>
 			{hosted && <AnthersHandleCard handle={handle} justIssued={justIssued} />}
-			{!hosted && !user?.atprotoDid && hostingOpen && (
+			{/* ⚠️ **`user &&` rather than `!user?.atprotoDid`**, which is also true while the account
+			    is still loading. The config answer and the account arrive independently, so without
+			    it an account that already holds an identity can be offered another one for the
+			    frame between them. */}
+			{user && !user.atprotoDid && !hosted && hostingOpen && (
 				<AnthersHandleOffer suffix={suffix} onIssued={setJustIssued} />
 			)}
 			{!hosted && <BlueskySection />}
