@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { MATURITY_DISPLAY_CHOICES, type MaturityDisplay } from "@anthers/shared/content-rating";
+import { normalizeHandleName } from "@anthers/shared/handles";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
@@ -10,11 +11,12 @@ import {
 	setDesktopHome,
 } from "@anthers/web-shared/desktop";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
-import { apiFetch } from "@anthers/web-shared/rpc";
+import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
+import { handleStatusLine, handleStatusTone, useHandleAvailability } from "../lib/hosted-handle";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
 import { studioUrl } from "../lib/studio";
@@ -532,6 +534,227 @@ function BlockedSection() {
 }
 
 /**
+ * The account's identity on the AT Protocol network, whichever way it got one.
+ *
+ * 🚨 **Three states, and each one hides the offers that would be wrong in it.** An account can
+ * hold a handle Anthers issued, hold one it brought from somewhere else, or hold neither — and
+ * an account may have exactly one. Showing both doors to somebody who already walked through a
+ * door is how a person ends up with two identities and nothing saying which is theirs, so the
+ * card they see is decided here rather than by four separate components each guessing.
+ *
+ * ⚠️ **Whether an identity is Anthers-issued is derived from the suffix, not from a flag on the
+ * account.** `/api/atproto/config` reports the suffix handles hang under, and only Anthers
+ * issues names beneath it, so a handle ending in it is one of ours. The alternative is a column
+ * that means the same thing and can disagree with the node. **The server does not trust this
+ * derivation** — `unlinkAtprotoFromUser` asks `hosted_accounts` directly — so the worst a
+ * wrong answer here can do is show a button that then refuses.
+ *
+ * ⚠️ **One state is deliberately left showing an offer that will be refused**: an account with a
+ * credential row and no DID, which is what a provisioning that half-failed leaves behind. The
+ * browser cannot see that row and the refusal names the handle it already holds, so the person
+ * learns the useful thing either way — and inventing a field to describe a state the docblock on
+ * `provisionHostedIdentity` calls unreachable in practice would be paying for it every render.
+ */
+function IdentitySection() {
+	const { user } = useAuth();
+	const [hostingOpen, setHostingOpen] = useState(false);
+	const [suffix, setSuffix] = useState("");
+	const [justIssued, setJustIssued] = useState<string | null>(null);
+
+	useEffect(() => {
+		let live = true;
+		client.api.atproto.config
+			.$get()
+			.then((res) => res.json())
+			.then(({ hostedIdentityOffered, hostedHandleSuffix }) => {
+				if (!live) return;
+				setHostingOpen(hostedIdentityOffered);
+				setSuffix(hostedHandleSuffix);
+			})
+			.catch(() => {
+				/* Unreachable API: the offer stays closed, and what is already linked still shows. */
+			});
+		return () => {
+			live = false;
+		};
+	}, []);
+
+	const handle = user?.atprotoHandle ?? "";
+	const hosted = !!suffix && handle.endsWith(`.${suffix}`);
+
+	return (
+		<>
+			{hosted && <AnthersHandleCard handle={handle} justIssued={justIssued} />}
+			{/* ⚠️ **`user &&` rather than `!user?.atprotoDid`**, which is also true while the account
+			    is still loading. The config answer and the account arrive independently, so without
+			    it an account that already holds an identity can be offered another one for the
+			    frame between them. */}
+			{user && !user.atprotoDid && !hosted && hostingOpen && (
+				<AnthersHandleOffer suffix={suffix} onIssued={setJustIssued} />
+			)}
+			{!hosted && <BlueskySection />}
+		</>
+	);
+}
+
+/**
+ * The handle Anthers issued, once somebody has one.
+ *
+ * ⚠️ **It says who holds the keys, because the honest version of this is the one that has to be
+ * said out loud.** The identity is the account holder's and the repository behind it is theirs;
+ * what is Anthers' is the pair of keys that can move it. Somebody reading this card should not
+ * have to infer that from the absence of a button, and a card that described the name without
+ * describing the custody would be selling the good half of the arrangement.
+ *
+ * 🚨 **There is no unlink here and the omission is the feature.** Unlinking is for an identity
+ * that lives somewhere else and carries on without Anthers; this one lives on Anthers' own node
+ * and the hub holds the only password to it, so detaching it would leave a person with a
+ * repository they can no longer reach. The route refuses it too — see
+ * `unlinkAtprotoFromUser` — because a guard that lives only in a component is a guard that
+ * lives nowhere.
+ */
+function AnthersHandleCard({ handle, justIssued }: { handle: string; justIssued: string | null }) {
+	const { user } = useAuth();
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Your Anthers Handle</h3>
+
+				{justIssued && (
+					<div className="alert alert-success text-sm">
+						<span>{justIssued} is yours.</span>
+					</div>
+				)}
+
+				<div className="flex items-center gap-2">
+					<div className="badge badge-success">Issued</div>
+					<span className="text-sm font-medium">@{handle}</span>
+				</div>
+				{user?.atprotoDid && <p className="text-xs text-base-content/50">DID: {user.atprotoDid}</p>}
+				<p className="text-sm text-base-content/60">
+					This is a name on the AT Protocol network, not just a name on Anthers. You can sign in
+					with it, and anything published under it is addressed to you rather than to a row in
+					Anthers' database.
+				</p>
+				<p className="text-sm text-base-content/60">
+					Anthers runs the server it lives on and holds the keys to it. That is what lets Anthers
+					publish on your behalf; it also means Anthers is the one who can move it today.
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Asking Anthers for a handle, for an account that does not have an identity yet.
+ *
+ * 🚨 **This is not a signup door.** It acts on an account that already exists and is signed in,
+ * which is what makes it a different thing from `/subscribe` rather than a second copy of it —
+ * and what enforces that is the session the route requires, not that this is buried in
+ * settings. `/subscribe` remains the one place an account is minted.
+ *
+ * ⚠️ **The field and its verdict line are `lib/hosted-handle.ts`'s**, shared with the signup
+ * card, so that "we could not check" cannot come to mean one thing here and another there.
+ */
+function AnthersHandleOffer({
+	suffix,
+	onIssued,
+}: {
+	suffix: string;
+	onIssued: (handle: string) => void;
+}) {
+	const { refreshUser } = useAuth();
+	const [name, setName] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const status = useHandleAvailability(name, { open: true, suffix });
+
+	const ask = async (e: React.FormEvent) => {
+		e.preventDefault();
+		const asked = normalizeHandleName(name, suffix);
+		if (!asked) return;
+		setError(null);
+		setBusy(true);
+		try {
+			const res = await client.api.atproto.handle.$post({ json: { name: asked } });
+			const body = await res.json();
+			if ("error" in body) {
+				setError(body.error);
+				setBusy(false);
+				return;
+			}
+			// ⚠️ **The account is refreshed rather than this card reporting success itself.** What
+			// replaces this form is the card drawn from the account, so anything shown here on the
+			// strength of the response alone would be a second description of the same fact — and
+			// the one that goes stale is always the one nothing else reads.
+			onIssued(body.handle);
+			await refreshUser();
+		} catch {
+			setError("Couldn't reach Anthers. Please try again.");
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">An Anthers Handle</h3>
+
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
+					</div>
+				)}
+
+				<p className="text-sm text-base-content/60">
+					Anthers can issue you a name on the AT Protocol network — a handle you sign in with, and
+					an identity that is yours rather than a row in Anthers' database. Anthers runs the server
+					it lives on and holds the keys to it.
+				</p>
+				<form onSubmit={ask} className="flex flex-col gap-2">
+					<div className="flex items-center gap-2">
+						<input
+							type="text"
+							className="input input-bordered flex-1"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							placeholder="yourname"
+							aria-label="The handle you'd like"
+							aria-describedby="anthers-handle-status"
+							autoComplete="off"
+							spellCheck={false}
+							autoCapitalize="none"
+						/>
+						<span aria-hidden="true" className="shrink-0 text-sm text-base-content/40">
+							.{suffix || "anthers.social"}
+						</span>
+					</div>
+					<p
+						id="anthers-handle-status"
+						aria-live="polite"
+						className={`text-xs leading-snug ${handleStatusTone(status)}`}
+					>
+						{handleStatusLine(status)}
+					</p>
+					<button
+						type="submit"
+						className="btn btn-primary btn-sm w-fit"
+						// Refused only for what is knowably wrong. A name we could not check still goes
+						// through, because the node is the authority and a browser that could not ask
+						// has learned nothing about the name.
+						disabled={
+							busy || !name.trim() || status.status === "invalid" || status.status === "taken"
+						}
+					>
+						{busy ? "Asking…" : "Get this handle"}
+					</button>
+				</form>
+			</div>
+		</div>
+	);
+}
+
+/**
  * Connecting a Bluesky (ATProto) identity to this account.
  *
  * ⚠️ **The copy here is the whole feature, and it is easy to overclaim.** What linking does
@@ -1004,8 +1227,8 @@ export default function SettingsPage() {
 			{/* The one setting that decides whether a person's name appears in public. */}
 			<SupporterListingSection />
 
-			{/* Bluesky / ATProto */}
-			<BlueskySection />
+			{/* The account's identity on the network — issued here, or brought from elsewhere. */}
+			<IdentitySection />
 
 			{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
 			<DesktopHomeSection />

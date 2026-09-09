@@ -8,6 +8,7 @@
  *   GET  /callback             — OAuth callback (exchanges code, creates session, redirects)
  *   GET  /pending              — What a signup waiting on an address knows about itself
  *   GET  /handle-available     — Is a name Anthers could issue still free?
+ *   POST /handle               — Issue one to the account making the request
  *   POST /unlink               — Unlink ATProto identity from account
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
@@ -52,6 +53,7 @@ import {
 	hostedHandleSuffix,
 	hostedIdentityOffered,
 	normalizeHandleName,
+	requestHostedHandle,
 } from "../services/hosted-accounts.js";
 import {
 	bindIdentityToPending,
@@ -71,6 +73,9 @@ import {
  * explanation instead of a message saying which character is the problem.
  */
 const handleQuerySchema = z.object({ name: z.string().min(1).max(300) });
+
+/** The same bound, for the same reason, on the request that actually issues one. */
+const handleRequestSchema = z.object({ name: z.string().min(1).max(300) });
 
 const authInitSchema = z.object({
 	handle: z.string().min(1),
@@ -388,6 +393,31 @@ const atprotoRoutes = new Hono()
 		const name = normalizeHandleName(c.req.valid("query").name);
 		const result = await checkHandleAvailability(name);
 		return c.json({ ...result, handle: hostedHandleFor(name) });
+	})
+
+	// ── Ask Anthers for a handle ─────────────────────────────────────────────
+	//
+	// 🚨 **The session is the guard, and it is the whole difference between this and a signup
+	// door.** `/subscribe` is the one place an account is minted; this acts on one that already
+	// exists and is signed in, which is a different thing rather than a quieter version of the
+	// same thing. It creates no account here, mints nothing for a visitor, and answers 401 to
+	// anybody who is not already somebody.
+	//
+	// ⚠️ **Three refusals with three status codes, because they are three different problems.**
+	// A name somebody can change is a 400, an account that may not have one is a 409 whatever it
+	// types, and a node that will not answer is a 503 that says to try later. Collapsing them
+	// would leave the page unable to tell somebody whether typing again is worth doing.
+	.post("/handle", requireAuth, zValidator("json", handleRequestSchema), async (c) => {
+		const user = c.get("user");
+		const result = await requestHostedHandle({
+			userId: user.id,
+			handleName: c.req.valid("json").name,
+		});
+		if (result.status === "issued") {
+			return c.json({ did: result.did, handle: result.handle });
+		}
+		const status = result.fault === "name" ? 400 : result.fault === "account" ? 409 : 503;
+		return c.json({ error: result.message }, status);
 	})
 
 	// ── A signup waiting on an address ───────────────────────────────────────

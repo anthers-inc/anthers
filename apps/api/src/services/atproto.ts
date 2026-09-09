@@ -259,6 +259,14 @@ export async function linkAtprotoToUser(
  * old check refused every passwordless account, which is most of them now — a guard aimed
  * at the ATProto-only case that had quietly grown to cover the ordinary one.
  *
+ * 🚨 **An identity Anthers issued is refused outright, and that is a second guard rather than
+ * a version of the first.** Unlinking is for an identity that lives on somebody else's server
+ * and carries on existing without Anthers; a hosted one lives on Anthers' own node, and the
+ * hub holds the only password to it. Detaching it would look like a tidy way to leave and
+ * would leave nothing — an account that can no longer see the identity, and a repository still
+ * being hosted for a person with no way to reach it. Releasing one is what deleting the
+ * account does; swapping it for another is not built and is deliberately not implied here.
+ *
  * The refusal is a sentence rather than a code because it is answered as JSON to a page
  * that displays it; nothing about it survives a redirect. Contrast `linkAtprotoToUser`.
  */
@@ -281,6 +289,16 @@ export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: s
 		return {
 			error:
 				"Unlinking would leave no way to sign in — this account has no password and no email address we can reach.",
+		};
+	}
+
+	// Imported here rather than at the top: `hosted-accounts.ts` reaches back into this module
+	// for `linkAtprotoToUser`, and a static edge in both directions is a cycle.
+	const { isHostedIdentity } = await import("./hosted-accounts.js");
+	if (user.atprotoDid && (await isHostedIdentity(user.atprotoDid))) {
+		return {
+			error:
+				"This is the handle Anthers issued you, on the server Anthers runs — there is nowhere for it to be unlinked to. Deleting your account is what releases it.",
 		};
 	}
 
