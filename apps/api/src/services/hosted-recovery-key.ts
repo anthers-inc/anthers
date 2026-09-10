@@ -332,6 +332,14 @@ export async function seatRecoveryKey(
 		};
 	}
 
+	// The record of what Anthers did, which is what lets settings answer "have I done this?"
+	// without reading custody off the length of a list. See the column's own note for why the
+	// rotation list is the truth and this is only a record.
+	await db
+		.update(hostedAccounts)
+		.set({ recoveryKey: input.didKey, recoveryKeySeatedAt: new Date() })
+		.where(eq(hostedAccounts.did, opened.did));
+
 	// ⭐ **Re-read and store the new head, or the watcher pages somebody about this.**
 	// `watch-identities` alerts on any rotation-key change, which is exactly right for a key
 	// that moved without Anthers doing it — and this one moved BECAUSE Anthers did it, on the
@@ -361,5 +369,39 @@ export async function seatRecoveryKey(
 		status: "seated",
 		didKey: input.didKey,
 		rotationKeys: after?.rotationKeys ?? [input.didKey, ...head.rotationKeys],
+	};
+}
+
+/** What settings needs to know before it offers anything. */
+export interface RecoveryKeyState {
+	/** Whether this account holds an identity Anthers issued at all. */
+	hosted: boolean;
+	/** The key taken through Anthers, if one was. Public, and in the PLC log regardless. */
+	didKey: string | null;
+	seatedAt: string | null;
+}
+
+/**
+ * What Anthers knows about this account's recovery key.
+ *
+ * ⚠️ **`didKey: null` means Anthers did not seat one, not that none exists.** Somebody who
+ * seated a key with their own tooling did exactly what this arrangement promises they can, and
+ * the identity's rotation list is the authority on what it carries. Settings uses this to
+ * decide what to OFFER, which is the one question it can answer honestly.
+ */
+export async function recoveryKeyState(userId: number): Promise<RecoveryKeyState> {
+	const [row] = await db
+		.select({
+			key: hostedAccounts.recoveryKey,
+			seatedAt: hostedAccounts.recoveryKeySeatedAt,
+		})
+		.from(hostedAccounts)
+		.where(eq(hostedAccounts.userId, userId))
+		.limit(1);
+	if (!row) return { hosted: false, didKey: null, seatedAt: null };
+	return {
+		hosted: true,
+		didKey: row.key,
+		seatedAt: row.seatedAt ? row.seatedAt.toISOString() : null,
 	};
 }

@@ -60,6 +60,15 @@ const { seal } = await import("../services/secret-box.js");
 /** The vector both key generators check themselves against. Public half of a discarded pair. */
 const GOOD_KEY = "did:key:zQ3shkEHrW2UqqapTySPVtXC3HpndFZjWWYL3xTHzRBwA2923";
 
+/** The same key's compressed bytes, for building deliberately mis-prefixed variants of it. */
+const GOOD_KEY_COMPRESSED = "03530c4fa8214dc3fc07f011a3b9310d06bbd55dd9b00ff17e121e495c23863c54";
+
+function hexToBytes(hex: string): Uint8Array {
+	const out = new Uint8Array(hex.length / 2);
+	for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+	return out;
+}
+
 describe("what counts as a key worth seating", () => {
 	it("accepts the vector the generators are pinned to", () => {
 		expect(isSecp256k1DidKey(GOOD_KEY)).toBe(true);
@@ -80,10 +89,23 @@ describe("what counts as a key worth seating", () => {
 		expect(isSecp256k1DidKey(bad)).toBe(false);
 	});
 
-	it("refuses a key of the right shape carrying the wrong multicodec", () => {
-		// 0xed 0x01 is Ed25519, which is a real did:key and not a rotation key this seats.
-		const raw = new Uint8Array([0xed, 0x01, ...new Uint8Array(33).fill(1)]);
-		expect(isSecp256k1DidKey(`did:key:z${base58(raw)}`)).toBe(false);
+	// 🚨 **A P-256 key is the input the multicodec check exists for, and nothing else catches
+	// it.** The protocol accepts P-256 rotation keys too, so one is a real thing somebody can
+	// hold — and it is the same 35 bytes, its compressed form starts with the same 0x02/0x03,
+	// and its point is frequently valid on secp256k1 as well. Length, shape and the curve all
+	// pass; only the two prefix bytes say which curve was meant. The Ed25519 case this replaced
+	// was caught by the curve check instead, so removing the multicodec check broke nothing —
+	// found by sabotage on 2026-09-09, which is the entire argument for running one.
+	it("refuses a P-256 key, which every other check here would let through", () => {
+		const p256 = new Uint8Array([0x80, 0x24, ...hexToBytes(GOOD_KEY_COMPRESSED)]);
+		const asDidKey = `did:key:z${base58(p256)}`;
+		// The payload really is a valid point — so the curve check is not what refuses this.
+		expect(
+			isSecp256k1DidKey(
+				`did:key:z${base58(new Uint8Array([0xe7, 0x01, ...hexToBytes(GOOD_KEY_COMPRESSED)]))}`,
+			),
+		).toBe(true);
+		expect(isSecp256k1DidKey(asDidKey)).toBe(false);
 	});
 
 	it("refuses a truncated key", () => {

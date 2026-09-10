@@ -649,5 +649,22 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	handle: text("handle").notNull(),
 	/** The account's password at the node, sealed by `services/secret-box.ts`. */
 	sealedPassword: text("sealed_password").notNull(),
+	/**
+	 * The `did:key:` of the recovery key the account holder took, once they have taken one.
+	 *
+	 * ⚠️ **The PUBLIC half, and it is not a secret** — it is in the public PLC log the moment
+	 * it is seated. What it is for is answering "have I done this?" without guessing, which is
+	 * the alternative: the rotation list is stored beside this row, but nothing in it says
+	 * which entries are Anthers' own, so reading custody off its LENGTH would be a guess that
+	 * breaks the first time the list changes for any other reason.
+	 *
+	 * 🚨 **Null does not mean the holder has no key**, only that they did not take one through
+	 * Anthers. Somebody who seats a key themselves with their own tooling is doing exactly what
+	 * the arrangement promises they can, and Anthers finding out about it is not a prerequisite.
+	 * The rotation list is the truth; this is a record of what Anthers did.
+	 */
+	recoveryKey: text("recovery_key"),
+	/** When it was seated, for the holder to recognize rather than for anything to branch on. */
+	recoveryKeySeatedAt: timestamp("recovery_key_seated_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

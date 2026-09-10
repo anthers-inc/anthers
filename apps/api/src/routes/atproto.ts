@@ -9,6 +9,7 @@
  *   GET  /pending              — What a signup waiting on an address knows about itself
  *   GET  /handle-available     — Is a name Anthers could issue still free?
  *   POST /handle               — Issue one to the account making the request
+ *   GET  /recovery-key         — Has this account taken one, and which key
  *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
  *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
  *   POST /unlink               — Unlink ATProto identity from account
@@ -57,7 +58,11 @@ import {
 	normalizeHandleName,
 	requestHostedHandle,
 } from "../services/hosted-accounts.js";
-import { requestRecoveryKeyToken, seatRecoveryKey } from "../services/hosted-recovery-key.js";
+import {
+	recoveryKeyState,
+	requestRecoveryKeyToken,
+	seatRecoveryKey,
+} from "../services/hosted-recovery-key.js";
 import {
 	bindIdentityToPending,
 	findPendingByDid,
@@ -432,6 +437,17 @@ const atprotoRoutes = new Hono()
 		}
 		const status = result.fault === "name" ? 400 : result.fault === "account" ? 409 : 503;
 		return c.json({ error: result.message }, status);
+	})
+
+	// ── What settings should offer about a recovery key ──────────────────────
+	//
+	// ⚠️ **It answers what ANTHERS did, which is the only question it can answer honestly.**
+	// Somebody who seated a key with their own tooling did what the arrangement promises they
+	// can, and nothing here would know. The identity's rotation list is the authority on what
+	// it carries; this decides what to offer.
+	.get("/recovery-key", requireAuth, async (c) => {
+		const user = c.get("user");
+		return c.json(await recoveryKeyState(user.id));
 	})
 
 	// ── Taking a recovery key ────────────────────────────────────────────────

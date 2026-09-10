@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
 import { handleStatusLine, handleStatusTone, useHandleAvailability } from "../lib/hosted-handle";
+import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
 import { studioUrl } from "../lib/studio";
@@ -560,6 +561,7 @@ function IdentitySection() {
 	const [hostingOpen, setHostingOpen] = useState(false);
 	const [suffix, setSuffix] = useState("");
 	const [justIssued, setJustIssued] = useState<string | null>(null);
+	const [recovery, setRecovery] = useState<RecoveryKeyState | null>(null);
 
 	useEffect(() => {
 		let live = true;
@@ -579,12 +581,42 @@ function IdentitySection() {
 		};
 	}, []);
 
+	// Only asked for once it is known there is an identity to ask about — the endpoint requires
+	// a session and answers `hosted: false` for an account with none, which is a round trip
+	// worth not making on every settings visit.
+	useEffect(() => {
+		if (!user?.atprotoDid) return;
+		let live = true;
+		client.api.atproto["recovery-key"]
+			.$get()
+			.then((res) => (res.ok ? res.json() : null))
+			.then((data) => {
+				if (live && data) setRecovery(data as RecoveryKeyState);
+			})
+			.catch(() => {
+				/* Unreachable API: the card says it could not check rather than offering. */
+			});
+		return () => {
+			live = false;
+		};
+	}, [user?.atprotoDid]);
+
 	const handle = user?.atprotoHandle ?? "";
 	const hosted = !!suffix && handle.endsWith(`.${suffix}`);
 
 	return (
 		<>
-			{hosted && <AnthersHandleCard handle={handle} justIssued={justIssued} />}
+			{hosted && (
+				<AnthersHandleCard
+					handle={handle}
+					justIssued={justIssued}
+					holdsRecoveryKey={!!recovery?.didKey}
+				/>
+			)}
+			{/* ⚠️ Waits for the answer rather than rendering the offer meanwhile. Somebody who
+			    already holds a key would otherwise be offered another one for the frame between
+			    the page loading and the API answering — the same defect as the handle offer above. */}
+			{hosted && recovery && <RecoveryKeyCard state={recovery} onSeated={setRecovery} />}
 			{/* ⚠️ **`user &&` rather than `!user?.atprotoDid`**, which is also true while the account
 			    is still loading. The config answer and the account arrive independently, so without
 			    it an account that already holds an identity can be offered another one for the
@@ -594,6 +626,210 @@ function IdentitySection() {
 			)}
 			{!hosted && <BlueskySection />}
 		</>
+	);
+}
+
+/** What the API says Anthers did about this account's recovery key. */
+interface RecoveryKeyState {
+	hosted: boolean;
+	didKey: string | null;
+	seatedAt: string | null;
+}
+
+/**
+ * Taking the key that outranks Anthers'.
+ *
+ * 🚨 **The weight of this card is the point, not decoration.** A key somebody loses is worse
+ * than one they never had: it sits at the top of the identity's authority list, where nothing
+ * beneath it — including both of Anthers' keys — can remove it or undo what it signs. So this
+ * is written to be read before it is used, and the private half is shown beside the field that
+ * finishes the job rather than on a screen somebody clicks past.
+ *
+ * ⚠️ **Anthers never sees the private half.** It is generated in this tab and the only thing
+ * sent anywhere is the `did:key:` public half — see `lib/recovery-key.ts`.
+ *
+ * ⭐ **An abandoned attempt costs nothing, which is what makes the strong warning safe to
+ * give.** Nothing is seated until the emailed code comes back, so somebody who reads this,
+ * thinks better of it and closes the tab has changed nothing about their identity.
+ */
+function RecoveryKeyCard({
+	state,
+	onSeated,
+}: {
+	state: RecoveryKeyState;
+	onSeated: (next: RecoveryKeyState) => void;
+}) {
+	const [pair, setPair] = useState<RecoveryKeypair | null>(null);
+	const [code, setCode] = useState("");
+	const [saved, setSaved] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	// ⚠️ Generating and asking for the code together, rather than as two presses. The person
+	// needs both in front of them anyway, and a flow that mails the code first leaves somebody
+	// holding a code for a key that does not exist yet.
+	const begin = async () => {
+		setError(null);
+		setBusy(true);
+		try {
+			const res = await client.api.atproto["recovery-key"].request.$post();
+			const body = await res.json();
+			if ("error" in body) {
+				setError(body.error);
+				return;
+			}
+			setPair(generateRecoveryKey());
+		} catch {
+			setError("Couldn't reach Anthers. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const seat = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!pair) return;
+		setError(null);
+		setBusy(true);
+		try {
+			const res = await client.api.atproto["recovery-key"].confirm.$post({
+				json: { token: code.trim(), didKey: pair.didKey },
+			});
+			const body = await res.json();
+			if ("error" in body) {
+				setError(body.error);
+				setBusy(false);
+				return;
+			}
+			// The private half goes out of memory here. It was shown once, which is what was
+			// promised, and keeping it around would only widen where it can be read from.
+			setPair(null);
+			setCode("");
+			onSeated({ hosted: true, didKey: body.didKey, seatedAt: new Date().toISOString() });
+		} catch {
+			setError("Couldn't reach Anthers. Please try again.");
+			setBusy(false);
+		}
+	};
+
+	if (state.didKey) {
+		return (
+			<div className="card bg-base-200">
+				<div className="card-body">
+					<h3 className="card-title text-lg">Your Recovery Key</h3>
+					<div className="flex items-center gap-2">
+						<div className="badge badge-success">Held by you</div>
+						{state.seatedAt && (
+							<span className="text-xs text-base-content/50">
+								Taken {new Date(state.seatedAt).toLocaleDateString()}
+							</span>
+						)}
+					</div>
+					<p className="text-sm text-base-content/60">
+						Your key ranks above both of Anthers'. With it you can move this identity to another
+						server without Anthers' cooperation, and Anthers cannot undo that.
+					</p>
+					<p className="break-all text-xs text-base-content/50">{state.didKey}</p>
+					<p className="text-sm text-base-content/60">
+						That is the public half, which is on the public record anyway. The private half was
+						shown to you once and Anthers has never had a copy — if it is lost, nothing here can
+						replace it and nothing can remove it from your identity.
+					</p>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">A Recovery Key</h3>
+
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
+					</div>
+				)}
+
+				<p className="text-sm text-base-content/60">
+					Anthers holds the keys to the identity it issued you. A recovery key is one of your own
+					that ranks above them: it lets you move your identity to another server without Anthers'
+					cooperation, and against its wishes if it ever came to that.
+				</p>
+				<p className="text-sm text-base-content/60">
+					Anthers never sees it. It is made in this browser, shown to you once, and only its public
+					half is sent anywhere.
+				</p>
+
+				{!pair ? (
+					<>
+						{/* 🚨 The one thing somebody must understand before pressing the button, and the
+						    reason this is a deliberate step rather than something handed out at signup. */}
+						<div className="alert alert-warning text-sm">
+							<span>
+								Keep it somewhere you will still have in years. A recovery key you lose cannot be
+								replaced or removed — it stays at the top of your identity, where neither you nor
+								Anthers can use it.
+							</span>
+						</div>
+						<button
+							type="button"
+							className="btn btn-primary btn-sm w-fit"
+							onClick={() => void begin()}
+							disabled={busy}
+						>
+							{busy ? "Working…" : "Take a recovery key"}
+						</button>
+					</>
+				) : (
+					<form onSubmit={seat} className="flex flex-col gap-3">
+						<div>
+							<p className="text-sm font-medium">Your recovery key</p>
+							<p className="mt-1 break-all rounded-lg bg-base-300 p-3 font-mono text-xs">
+								{pair.privateHex}
+							</p>
+							<p className="mt-1 text-xs text-base-content/50">
+								This is the only time it is shown. Copy it somewhere safe before you go on.
+							</p>
+						</div>
+
+						<label className="label cursor-pointer justify-start gap-3 py-0">
+							<input
+								type="checkbox"
+								className="checkbox checkbox-sm"
+								checked={saved}
+								onChange={(e) => setSaved(e.target.checked)}
+							/>
+							<span className="label-text text-sm">I have saved it somewhere safe.</span>
+						</label>
+
+						<div>
+							<p className="text-sm text-base-content/60">
+								Anthers has emailed you a code. Enter it to put your key in place.
+							</p>
+							<input
+								type="text"
+								className="input input-bordered mt-2 w-full max-w-xs"
+								value={code}
+								onChange={(e) => setCode(e.target.value)}
+								placeholder="ABCDE-FGHIJ"
+								aria-label="The code Anthers emailed you"
+								autoComplete="one-time-code"
+								spellCheck={false}
+							/>
+						</div>
+
+						<button
+							type="submit"
+							className="btn btn-primary btn-sm w-fit"
+							disabled={busy || !saved || !code.trim()}
+						>
+							{busy ? "Working…" : "Put my key in place"}
+						</button>
+					</form>
+				)}
+			</div>
+		</div>
 	);
 }
 
@@ -613,7 +849,15 @@ function IdentitySection() {
  * `unlinkAtprotoFromUser` — because a guard that lives only in a component is a guard that
  * lives nowhere.
  */
-function AnthersHandleCard({ handle, justIssued }: { handle: string; justIssued: string | null }) {
+function AnthersHandleCard({
+	handle,
+	justIssued,
+	holdsRecoveryKey,
+}: {
+	handle: string;
+	justIssued: string | null;
+	holdsRecoveryKey: boolean;
+}) {
 	const { user } = useAuth();
 	return (
 		<div className="card bg-base-200">
@@ -637,8 +881,11 @@ function AnthersHandleCard({ handle, justIssued }: { handle: string; justIssued:
 					Anthers' database.
 				</p>
 				<p className="text-sm text-base-content/60">
-					Anthers runs the server it lives on and holds the keys to it. That is what lets Anthers
-					publish on your behalf; it also means Anthers is the one who can move it today.
+					Anthers runs the server it lives on and holds keys to it. That is what lets Anthers
+					publish on your behalf.{" "}
+					{holdsRecoveryKey
+						? "Your own key ranks above both of them, so moving this identity is yours to do."
+						: "Until you take a recovery key below, Anthers is the one who can move it."}
 				</p>
 			</div>
 		</div>
