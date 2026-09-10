@@ -105,7 +105,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * "[object Object]" — so fall back to the first issue's message (e.g. "Invalid
  * email"), then to a generic fallback if the body isn't shaped as expected.
  */
-async function errorText(res: Response, fallback: string): Promise<string> {
+// ⚠️ **Takes what it uses rather than a `Response`.** The RPC client hands back a
+// `ClientResponse`, whose union widens every time a route gains another status code — so a
+// parameter typed as the whole of `Response` breaks call sites here whenever an unrelated
+// endpoint grows a branch. This function reads a JSON body and nothing else.
+async function errorText(res: { json: () => Promise<unknown> }, fallback: string): Promise<string> {
 	try {
 		const body = (await res.json()) as {
 			error?: string | { issues?: { message?: unknown }[] };

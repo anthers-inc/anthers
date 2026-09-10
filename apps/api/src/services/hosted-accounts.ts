@@ -662,8 +662,13 @@ export type HostedPurgeOutcome =
 	 */
 	| { status: "unusable"; reason: string };
 
-/** One call to the node, with the two failure kinds kept apart. */
-async function nodeCall(
+/**
+ * One call to the node, with the two failure kinds kept apart.
+ *
+ * Exported for `hosted-recovery-key.ts`, which talks to the same server about the same
+ * accounts and should not grow a second opinion about what a retryable failure is.
+ */
+export async function nodeCall(
 	path: string,
 	init: RequestInit & { token?: string },
 	doFetch: typeof fetch,
