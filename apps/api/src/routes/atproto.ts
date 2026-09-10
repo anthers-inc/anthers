@@ -9,6 +9,9 @@
  *   GET  /pending              — What a signup waiting on an address knows about itself
  *   GET  /handle-available     — Is a name Anthers could issue still free?
  *   POST /handle               — Issue one to the account making the request
+ *   GET  /recovery-key         — Has this account taken one, and which key
+ *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
+ *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
  *   POST /unlink               — Unlink ATProto identity from account
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
@@ -56,6 +59,11 @@ import {
 	requestHostedHandle,
 } from "../services/hosted-accounts.js";
 import {
+	recoveryKeyState,
+	requestRecoveryKeyToken,
+	seatRecoveryKey,
+} from "../services/hosted-recovery-key.js";
+import {
 	bindIdentityToPending,
 	findPendingByDid,
 	issueCodeForPending,
@@ -76,6 +84,17 @@ const handleQuerySchema = z.object({ name: z.string().min(1).max(300) });
 
 /** The same bound, for the same reason, on the request that actually issues one. */
 const handleRequestSchema = z.object({ name: z.string().min(1).max(300) });
+
+/**
+ * A recovery key being seated, bounded before it reaches the node.
+ *
+ * The real check is `isSecp256k1DidKey`, which decodes the key and asks the curve whether the
+ * point is on it — a length bound here only keeps a hostile body from reaching that at all.
+ */
+const recoveryKeySchema = z.object({
+	token: z.string().min(1).max(200),
+	didKey: z.string().min(1).max(200),
+});
 
 const authInitSchema = z.object({
 	handle: z.string().min(1),
@@ -417,6 +436,54 @@ const atprotoRoutes = new Hono()
 			return c.json({ did: result.did, handle: result.handle });
 		}
 		const status = result.fault === "name" ? 400 : result.fault === "account" ? 409 : 503;
+		return c.json({ error: result.message }, status);
+	})
+
+	// ── What settings should offer about a recovery key ──────────────────────
+	//
+	// ⚠️ **It answers what ANTHERS did, which is the only question it can answer honestly.**
+	// Somebody who seated a key with their own tooling did what the arrangement promises they
+	// can, and nothing here would know. The identity's rotation list is the authority on what
+	// it carries; this decides what to offer.
+	.get("/recovery-key", requireAuth, async (c) => {
+		const user = c.get("user");
+		return c.json(await recoveryKeyState(user.id));
+	})
+
+	// ── Taking a recovery key ────────────────────────────────────────────────
+	//
+	// 🚨 **Two steps with an emailed token between them, and the token is not friction to
+	// design away.** The node refuses to sign a PLC operation without one, which means the
+	// account holder proves control of their address before a key that outranks Anthers is
+	// seated. The hub holds the account's password, so if it could also read that token there
+	// would be no second party in this at all.
+	//
+	// ⚠️ **Only the public half ever arrives here.** The keypair is generated in the browser and
+	// the private half never leaves the tab — see `apps/web/src/lib/recovery-key.ts` for why a
+	// key Anthers generated would defeat what the key is for.
+	.post("/recovery-key/request", requireAuth, async (c) => {
+		const user = c.get("user");
+		const result = await requestRecoveryKeyToken(user.id);
+		if (result.status === "sent") return c.json({ sent: true });
+		return c.json({ error: result.message }, result.fault === "account" ? 409 : 503);
+	})
+
+	.post("/recovery-key/confirm", requireAuth, zValidator("json", recoveryKeySchema), async (c) => {
+		const user = c.get("user");
+		const { token, didKey } = c.req.valid("json");
+		const result = await seatRecoveryKey(user.id, { token, didKey });
+		if (result.status === "seated" || result.status === "already-held") {
+			return c.json({ didKey: result.didKey, alreadyHeld: result.status === "already-held" });
+		}
+		// A bad key or a spent code are the person's to fix and are 400s; an account that may
+		// not do this at all is a 409; a node that will not answer is a 503. Same three-way
+		// split as the handle route, for the same reason.
+		const status =
+			result.fault === "key" || result.fault === "token"
+				? 400
+				: result.fault === "account"
+					? 409
+					: 503;
 		return c.json({ error: result.message }, status);
 	})
 

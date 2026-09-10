@@ -332,7 +332,11 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	 * show turned all of them into "something went wrong", which is the one thing none of
 	 * them are.
 	 */
-	const failed = async (res: Response, fallback: string) => {
+	// ⚠️ Takes what it uses rather than a whole `Response`. The RPC client returns a
+	// `ClientResponse`, and its structural match against `Response` breaks whenever
+	// `@types/bun` moves — which it does on any `bun add`, since every workspace asks for
+	// `latest`. Reading a JSON body is all this needs to know about.
+	const failed = async (res: { json: () => Promise<unknown> }, fallback: string) => {
 		try {
 			const body = (await res.json()) as { error?: string };
 			setError(body?.error || fallback);
