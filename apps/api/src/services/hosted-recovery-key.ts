@@ -31,7 +31,7 @@ import { db } from "@anthers/db";
 import { hostedAccounts, hostedIdentities } from "@anthers/db/schema";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { eq } from "drizzle-orm";
-import { nodeCall } from "./hosted-accounts.js";
+import { nodeCall, recordRecoveryKey } from "./hosted-accounts.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { open } from "./secret-box.js";
 
@@ -335,10 +335,11 @@ export async function seatRecoveryKey(
 	// The record of what Anthers did, which is what lets settings answer "have I done this?"
 	// without reading custody off the length of a list. See the column's own note for why the
 	// rotation list is the truth and this is only a record.
-	await db
-		.update(hostedAccounts)
-		.set({ recoveryKey: input.didKey, recoveryKeySeatedAt: new Date() })
-		.where(eq(hostedAccounts.did, opened.did));
+	//
+	// ⚠️ Written through `hosted-accounts.ts` rather than here, because that module is the only
+	// writer of `hosted_accounts` — the one-writer rule in the Agents Hub, which this module
+	// broke by updating the column directly when it was first written.
+	await recordRecoveryKey(opened.did, input.didKey);
 
 	// ⭐ **Re-read and store the new head, or the watcher pages somebody about this.**
 	// `watch-identities` alerts on any rotation-key change, which is exactly right for a key

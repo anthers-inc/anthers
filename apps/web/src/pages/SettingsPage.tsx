@@ -617,6 +617,7 @@ function IdentitySection() {
 			    already holds a key would otherwise be offered another one for the frame between
 			    the page loading and the API answering — the same defect as the handle offer above. */}
 			{hosted && recovery && <RecoveryKeyCard state={recovery} onSeated={setRecovery} />}
+			{hosted && user?.atprotoDid && <DomainHandleCard handle={handle} did={user.atprotoDid} />}
 			{/* ⚠️ **`user &&` rather than `!user?.atprotoDid`**, which is also true while the account
 			    is still loading. The config answer and the account arrive independently, so without
 			    it an account that already holds an identity can be offered another one for the
@@ -626,6 +627,138 @@ function IdentitySection() {
 			)}
 			{!hosted && <BlueskySection />}
 		</>
+	);
+}
+
+/**
+ * Pointing an issued identity at a domain the account holder owns.
+ *
+ * ⭐ **The instructions come before the field, because that is the order the work happens in.**
+ * Nothing can succeed until a DNS record or a well-known file is already published, so a card
+ * that led with an input would be asking for something the person cannot yet give. The DID they
+ * need is already in the browser, so it is shown up front rather than fetched.
+ *
+ * ⚠️ **Failing to verify is the ORDINARY outcome and is not an error.** DNS takes time to
+ * propagate, so most first attempts do not resolve and the person has done nothing wrong. That
+ * comes back as its own state with a *check again*, never as a refusal — a flow that apologized
+ * here would be wrong most of the times anybody used it.
+ *
+ * 🚨 **The node does the verifying, not this page and not the hub.** `updateHandle` refuses a
+ * domain that does not already resolve to the DID, which is what makes it impossible for this
+ * to leave somebody's identity claiming a name it cannot prove.
+ */
+function DomainHandleCard({ handle, did }: { handle: string; did: string }) {
+	const { refreshUser } = useAuth();
+	const [domain, setDomain] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [unproven, setUnproven] = useState(false);
+	const [open, setOpen] = useState(false);
+
+	const submit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError(null);
+		setBusy(true);
+		try {
+			const res = await client.api.atproto.handle.domain.$post({ json: { handle: domain } });
+			const body = await res.json();
+			if ("error" in body) {
+				setError(body.error);
+				setUnproven(false);
+				return;
+			}
+			if (body.status === "unproven") {
+				setUnproven(true);
+				return;
+			}
+			setUnproven(false);
+			await refreshUser();
+		} catch {
+			setError("Couldn't reach Anthers. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Use a Domain You Own</h3>
+
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
+					</div>
+				)}
+
+				<p className="text-sm text-base-content/60">
+					Your handle is <span className="font-medium">@{handle}</span>. You can replace it with a
+					domain you own, and your identity, your work and the people following you all come with it
+					— a handle is a label, and none of them are keyed on it.
+				</p>
+
+				{!open ? (
+					<button type="button" className="btn btn-sm w-fit" onClick={() => setOpen(true)}>
+						Use my own domain
+					</button>
+				) : (
+					<>
+						<p className="text-sm text-base-content/60">
+							First, prove the domain is yours by publishing <strong>either</strong> of these. Both
+							say the same thing; use whichever your host makes easier.
+						</p>
+						<ul className="ml-4 list-disc text-sm text-base-content/60">
+							<li>
+								A DNS <code>TXT</code> record at <code>_atproto.yourdomain.com</code> whose value is{" "}
+								<code className="break-all">did={did}</code>
+							</li>
+							<li>
+								A file at{" "}
+								<code className="break-all">https://yourdomain.com/.well-known/atproto-did</code>{" "}
+								containing <code className="break-all">{did}</code> and nothing else
+							</li>
+						</ul>
+
+						{/* ⚠️ Not an error state. A DNS record that has not propagated is the normal first
+						    answer, so this reads as "not yet" and offers the same button again. */}
+						{unproven && (
+							<div className="alert alert-info text-sm">
+								<span>
+									Anthers can't see that yet. DNS changes often take a while to spread — leave it a
+									few minutes and check again. Nothing has changed in the meantime.
+								</span>
+							</div>
+						)}
+
+						<form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+							<input
+								type="text"
+								className="input input-bordered flex-1 min-w-48"
+								value={domain}
+								onChange={(e) => setDomain(e.target.value)}
+								placeholder="yourdomain.com"
+								aria-label="The domain you own"
+								autoComplete="off"
+								spellCheck={false}
+								autoCapitalize="none"
+							/>
+							<button
+								type="submit"
+								className="btn btn-primary btn-sm"
+								disabled={busy || !domain.trim()}
+							>
+								{busy ? "Checking…" : unproven ? "Check again" : "Use this domain"}
+							</button>
+						</form>
+
+						<p className="text-xs text-base-content/50">
+							The {handle.split(".").slice(1).join(".")} name you have now goes back to being
+							available for somebody else, the same as it would if you closed your account.
+						</p>
+					</>
+				)}
+			</div>
+		</div>
 	);
 }
 
