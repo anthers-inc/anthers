@@ -22,7 +22,7 @@ import StudioRedirect from "./components/ui/StudioRedirect";
  * authoring stack (TipTap, recharts) which a reader browsing the site must never
  * download. `React.lazy` keeps them in their own chunks, fetched on first navigation
  * into /studio. (ffmpeg.wasm was the heaviest of them until 2026-08-17, when the
- * browser encoder was removed — see WorkEditor.)
+ * browser encoder was removed — see work-media.tsx.)
  *
  * The origin split existed to give the Studio cross-origin isolation for multi-threaded
  * ffmpeg.wasm. That is DORMANT (`@ffmpeg/core-mt` hangs at pthread spawn in-browser, so
@@ -37,6 +37,7 @@ const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
+const WorkFormPage = lazy(() => import("@anthers/web-shared/WorkFormPage"));
 // ImportPage lazy import kept commented — the route is hidden (see below) but the
 // component remains so re-enabling is a one-line change when the lane ships.
 // const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
@@ -362,13 +363,20 @@ export default function App() {
 					<Route path="/studio" element={<StudioLayout />}>
 						<Route index element={<DashboardPage />} />
 						<Route path="catalog" element={<CatalogPage />} />
-						{/* kept so existing Studio links and bookmarks don't break */}
-						<Route path="library" element={<CatalogPage />} />
+						{/* The pre-2026-08-13 name, kept for bookmarks. A REDIRECT rather than a
+						second mount of the same page: two live URLs for one screen means the
+						address bar can read "library" while the heading reads "Catalog", which is
+						the exact confusion the rename was for. */}
+						<Route path="library" element={<Navigate to="/studio/catalog" replace />} />
 						<Route path="analytics" element={<AnalyticsDashboardPage />} />
 						<Route path="posts/new" element={<PostFormPage />} />
 						<Route path="posts/:slug/edit" element={<PostFormPage />} />
 						<Route path="projects/new" element={<ProjectFormPage />} />
 						<Route path="projects/:slug/edit" element={<ProjectFormPage />} />
+						{/* Keyed on the Work's durable `publicId`, matching how a Work is addressed
+						everywhere else it has a URL. */}
+						<Route path="works/new" element={<WorkFormPage />} />
+						<Route path="works/:publicId/edit" element={<WorkFormPage />} />
 						{/* Import route hidden — the itch.io import endpoints all return
 					    "not yet implemented", so a creator who reaches this page finds a
 					    form that always fails. Restore when the Cross-Publishing lane

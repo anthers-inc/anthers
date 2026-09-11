@@ -45,6 +45,23 @@ export function studioNewProjectUrl(): string {
 	return studioUrl("/projects/new");
 }
 
+/** Path to the Studio's "new Work" page. */
+export function studioNewWorkUrl(): string {
+	return studioUrl("/works/new");
+}
+
+/**
+ * Path to the Studio's edit page for a Work.
+ *
+ * Keyed on the Work's **`publicId`**, the durable address it already carries publicly, and
+ * not on the internal row id — which is also what `GET /works/:id` resolves, so the page
+ * can load straight from the URL. The mutation routes still take the numeric `id`, which
+ * the page reads off the loaded Work rather than out of the path.
+ */
+export function studioEditWorkUrl(publicId: number | string): string {
+	return studioUrl(`/works/${publicId}/edit`);
+}
+
 /** Path to the Studio's edit page for a given project slug. */
 export function studioEditProjectUrl(slug: string): string {
 	return studioUrl(`/projects/${slug}/edit`);
