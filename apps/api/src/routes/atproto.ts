@@ -9,6 +9,7 @@
  *   GET  /pending              — What a signup waiting on an address knows about itself
  *   GET  /handle-available     — Is a name Anthers could issue still free?
  *   POST /handle               — Issue one to the account making the request
+ *   POST /handle/domain        — Point an issued identity at a domain the holder owns
  *   GET  /recovery-key         — Has this account taken one, and which key
  *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
  *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
@@ -57,6 +58,7 @@ import {
 	hostedIdentityOffered,
 	normalizeHandleName,
 	requestHostedHandle,
+	swapHostedHandle,
 } from "../services/hosted-accounts.js";
 import {
 	recoveryKeyState,
@@ -84,6 +86,9 @@ const handleQuerySchema = z.object({ name: z.string().min(1).max(300) });
 
 /** The same bound, for the same reason, on the request that actually issues one. */
 const handleRequestSchema = z.object({ name: z.string().min(1).max(300) });
+
+/** A domain being taken as a handle. The node is the authority; this only bounds the body. */
+const domainSwapSchema = z.object({ handle: z.string().min(1).max(253) });
 
 /**
  * A recovery key being seated, bounded before it reaches the node.
@@ -434,6 +439,27 @@ const atprotoRoutes = new Hono()
 		});
 		if (result.status === "issued") {
 			return c.json({ did: result.did, handle: result.handle });
+		}
+		const status = result.fault === "name" ? 400 : result.fault === "account" ? 409 : 503;
+		return c.json({ error: result.message }, status);
+	})
+
+	// ── Take a domain you own as your handle ─────────────────────────────────
+	//
+	// ⭐ **The node verifies the domain, so there is no DNS code here.** `updateHandle` resolves
+	// any non-service handle and refuses unless it already points at this DID, which is what
+	// makes the `handle.invalid` hazard unreachable through this path.
+	//
+	// ⚠️ **`unproven` is a 200, deliberately.** A DNS record takes time to propagate, so a first
+	// attempt usually does not resolve yet and the person has done nothing wrong. Answering that
+	// with an error status would make the ordinary case look like a failure — and the page needs
+	// to respond by showing instructions and a *check again*, not an apology.
+	.post("/handle/domain", requireAuth, zValidator("json", domainSwapSchema), async (c) => {
+		const user = c.get("user");
+		const result = await swapHostedHandle(user.id, { handle: c.req.valid("json").handle });
+		if (result.status === "swapped") return c.json({ status: "swapped", handle: result.handle });
+		if (result.status === "unproven") {
+			return c.json({ status: "unproven", handle: result.handle, did: result.did });
 		}
 		const status = result.fault === "name" ? 400 : result.fault === "account" ? 409 : 503;
 		return c.json({ error: result.message }, status);

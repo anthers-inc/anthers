@@ -602,6 +602,203 @@ export async function isHostedIdentity(did: string): Promise<boolean> {
 	return !!row;
 }
 
+// ─── Changing the name on one ────────────────────────────────────────────────
+
+/**
+ * Record a recovery key against the identity it was seated on.
+ *
+ * ⚠️ **Here rather than in `hosted-recovery-key.ts`, because this module is the only writer of
+ * `hosted_accounts`.** That module does the protocol work and calls this; the split is the
+ * one-writer rule in the Agents Hub, and it was briefly broken when the recovery-key work wrote
+ * the column directly.
+ */
+export async function recordRecoveryKey(did: string, didKey: string): Promise<void> {
+	await db
+		.update(hostedAccounts)
+		.set({ recoveryKey: didKey, recoveryKeySeatedAt: new Date() })
+		.where(eq(hostedAccounts.did, did));
+}
+
+/** What swapping an issued handle for a domain somebody owns did. */
+export type HandleSwapResult =
+	| { status: "swapped"; handle: string }
+	/** The domain does not point at this identity yet — the ordinary answer, not a refusal. */
+	| { status: "unproven"; handle: string; did: string }
+	| { status: "refused"; message: string; fault: "name" | "account" | "operational" };
+
+/**
+ * Point an identity Anthers issued at a domain the account holder owns.
+ *
+ * ⭐ **The node verifies the domain, and this is the part worth knowing before reading the
+ * rest.** `com.atproto.identity.updateHandle` runs the handle through
+ * `normalizeAndValidateHandle`, which for anything outside `anthers.social` resolves the name
+ * and refuses unless it already points at this DID. So the hub does no DNS work, and the
+ * failure the task feared — an identity left claiming a domain it cannot prove, which resolves
+ * to `handle.invalid` and silently strips somebody's name off every surface — **cannot happen
+ * through this path**, because the node will not set a handle it could not verify.
+ *
+ * ⚠️ **"Not proven yet" is the ordinary answer rather than an error.** A DNS record takes time
+ * to propagate, so most first attempts fail and the person has done nothing wrong. It comes
+ * back as its own status, with the DID they need to publish, rather than as a refusal.
+ *
+ * ⚠️ **The freed `anthers.social` name goes back into the pool**, which is this task's stated
+ * default and matches what deleting an account already does — the deletion copy says the name
+ * is freed for somebody else. Holding it instead would be defensible, and doing it here alone
+ * would leave Anthers holding names in one case and releasing them in an identical one.
+ */
+export async function swapHostedHandle(
+	userId: number,
+	input: { handle: string },
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<HandleSwapResult> {
+	const doFetch = opts.fetchImpl ?? fetch;
+	const wanted = input.handle.trim().toLowerCase().replace(/^@/, "").replace(/\.$/, "");
+
+	// ⚠️ Refused here rather than passed to the node, because the node would accept it and it is
+	// a different feature wearing this one's clothes. Changing which `anthers.social` name you
+	// hold is not the same as leaving the suffix behind, and conflating them would let somebody
+	// take a second issued name through a door built for domains they own.
+	const suffix = hostedHandleSuffix();
+	if (suffix && (wanted === suffix || wanted.endsWith(`.${suffix}`))) {
+		return {
+			status: "refused",
+			fault: "name",
+			message: `That is another ${suffix} name. This is for a domain of your own.`,
+		};
+	}
+	if (!wanted.includes(".") || !/^[a-z0-9.-]+$/.test(wanted)) {
+		return {
+			status: "refused",
+			fault: "name",
+			message: "That doesn't look like a domain name.",
+		};
+	}
+
+	const [row] = await db
+		.select({ did: hostedAccounts.did, sealedPassword: hostedAccounts.sealedPassword })
+		.from(hostedAccounts)
+		.where(eq(hostedAccounts.userId, userId))
+		.limit(1);
+	if (!row) {
+		return {
+			status: "refused",
+			fault: "account",
+			message: "This account doesn't hold an identity Anthers issued.",
+		};
+	}
+
+	let password: string;
+	try {
+		password = open(row.sealedPassword);
+	} catch {
+		console.error(
+			`[hosted-accounts] cannot open the credential for ${row.did} to change its handle`,
+		);
+		return {
+			status: "refused",
+			fault: "operational",
+			message: "Anthers can't reach that identity right now. Nothing has changed.",
+		};
+	}
+
+	const session = await nodeCall(
+		"/xrpc/com.atproto.server.createSession",
+		{ method: "POST", body: JSON.stringify({ identifier: row.did, password }) },
+		doFetch,
+	);
+	if (!session.ok) {
+		return {
+			status: "refused",
+			fault: "operational",
+			message: "Anthers couldn't reach the identity server. Try again in a little while.",
+		};
+	}
+	const token = session.body.accessJwt as string | undefined;
+	if (!token) {
+		return {
+			status: "refused",
+			fault: "operational",
+			message: "The identity server answered without a session.",
+		};
+	}
+
+	const changed = await nodeCall(
+		"/xrpc/com.atproto.identity.updateHandle",
+		{ method: "POST", token, body: JSON.stringify({ handle: wanted }) },
+		doFetch,
+	);
+	if (!changed.ok) {
+		if (changed.retryable) {
+			return {
+				status: "refused",
+				fault: "operational",
+				message: "Anthers couldn't reach the identity server. Try again in a little while.",
+			};
+		}
+		// 🚨 **Branch on the CODE, never on the prose.** The node's wording for an unverified
+		// domain is upstream's and moves between versions, so matching it would fail open on an
+		// upgrade nobody connected to this. Only the two codes that mean "this name is wrong"
+		// are treated as the person's typing; everything else is read as the domain not proving
+		// itself yet, which is what it nearly always is.
+		if (changed.error === "InvalidHandle" || changed.error === "HandleNotAvailable") {
+			return {
+				status: "refused",
+				fault: "name",
+				message: "The identity server won't accept that name.",
+			};
+		}
+		console.warn(
+			`[hosted-accounts] ${row.did} could not take ${wanted}: ${changed.error}` +
+				`${changed.message ? ` — ${changed.message}` : ""}`,
+		);
+		return { status: "unproven", handle: wanted, did: row.did };
+	}
+
+	await recordHandleChange(row.did, userId, wanted, doFetch);
+	return { status: "swapped", handle: wanted };
+}
+
+/**
+ * Write the new handle everywhere the hub keeps one, and move the watcher's baseline.
+ *
+ * ⭐ **The baseline is the part that would page somebody.** Changing a handle writes a PLC
+ * operation, so the identity's head moves — and `watch-identities` alerts on a moved head,
+ * correctly, because a handle changing without Anthers doing it is exactly what it watches for.
+ * This one moved because Anthers did it, on the account holder's instruction. Same reasoning as
+ * seating a recovery key, and the same fix.
+ */
+async function recordHandleChange(
+	did: string,
+	userId: number,
+	handle: string,
+	doFetch: typeof fetch,
+): Promise<void> {
+	await db.update(hostedAccounts).set({ handle }).where(eq(hostedAccounts.did, did));
+	await db.update(users).set({ atprotoHandle: handle }).where(eq(users.id, userId));
+
+	// ⚠️ The injected fetch is threaded here too. Reading the directory with the real one while
+	// the node is faked reaches a live third party from a test without saying so — the same
+	// mistake `hosted-recovery-key.ts` made and fixed.
+	const after = await readIdentityHead(did, { fetchImpl: doFetch });
+	if (after) {
+		await db
+			.update(hostedIdentities)
+			.set({
+				handle: after.handle,
+				headCid: after.headCid,
+				pdsEndpoint: after.pdsEndpoint,
+				rotationKeys: after.rotationKeys,
+				lastCheckedAt: new Date(),
+			})
+			.where(eq(hostedIdentities.did, did));
+	} else {
+		console.warn(
+			`[hosted-accounts] ${did} took a new handle but the directory could not be re-read — ` +
+				`the watcher will report this as a change it did not expect`,
+		);
+	}
+}
+
 // ─── Giving one back ─────────────────────────────────────────────────────────
 
 /**
@@ -673,7 +870,8 @@ export async function nodeCall(
 	init: RequestInit & { token?: string },
 	doFetch: typeof fetch,
 ): Promise<
-	{ ok: true; body: Record<string, unknown> } | { ok: false; retryable: boolean; error: string }
+	| { ok: true; body: Record<string, unknown> }
+	| { ok: false; retryable: boolean; error: string; message?: string }
 > {
 	const { token, ...rest } = init;
 	const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -699,6 +897,11 @@ export async function nodeCall(
 		ok: false,
 		retryable: res.status >= 500 || res.status === 429,
 		error: body.error || body.message || `HTTP ${res.status}`,
+		// ⚠️ **Kept apart from `error`, because `error` is the CODE when the node sends one** and
+		// the prose is the only place some refusals say what actually happened. Callers should
+		// still branch on the code — the prose is upstream's wording and moves between versions
+		// — but a log line with only `InvalidRequest` in it has thrown away the whole clue.
+		message: body.message,
 	};
 }
 
