@@ -242,29 +242,52 @@ export function getBaseUrl(): string {
  */
 export const EMAIL_SCOPE = "transition:email";
 
+/** Anthers' published permission set — the readable name for what the ask amounts to. */
+const PERMISSION_SET = "org.anthers.catalogPermissions";
+
 /**
  * The permission to keep a creator's Work listings in their own repository, and nothing else.
  *
- * ⭐ **It names one collection and three actions, which is the whole of what publishing a
- * listing needs.** `create` puts a listing up, `update` keeps it in step with the Work, and
- * `delete` takes it down — and that last one is the reason the set cannot be trimmed further:
- * a grant that could publish but not withdraw would leave listings advertising Works their
- * creators had taken back, which is the failure the whole listing design is shaped around.
+ * ⭐ **Asked for by naming a published Lexicon rather than by spelling out a scope string, so
+ * that the consent screen has something to render.** `org.anthers.catalogPermissions` carries a
+ * title and a sentence; `repo:org.anthers.work?action=create&action=update&action=delete` is
+ * machine output, and asking somebody to agree to machine output is the opposite of what this
+ * whole design is for. The set names one collection and three actions — `create` puts a listing
+ * up, `update` keeps it in step with the Work, and `delete` takes it down. That last one is why
+ * it cannot be trimmed further: a grant that could publish but not withdraw would leave listings
+ * advertising Works their creators had taken back.
  *
- * ⚠️ **The three actions are spelled out although they are also the default, and that is
- * deliberate.** Proposal 0011 reads an absent `action` parameter as *every* action, so the bare
- * `repo:org.anthers.work` is the wider request of the two and would silently widen again if the
- * vocabulary ever grew. Naming them pins the grant to what Anthers actually does.
+ * 🚨 **Confirmed working end to end on bsky.social on 2026-09-11, and the interesting part is
+ * what the server did.** Asked for `atproto include:org.anthers.catalogPermissions`, it resolved
+ * the Lexicon from `_lexicon.anthers.org`, expanded it, and granted `repo:org.anthers.work` —
+ * so the set is fetched and read rather than merely tolerated, and a real record was then
+ * written with the result.
  *
- * 🚨 **What comes back will not be spelled this way.** The same proposal's formatter drops any
- * parameter equal to its default, so a grant of all three is answered as a bare
- * `repo:org.anthers.work`. Nothing may compare granted against requested as strings —
- * `services/atproto-scope.ts` is what reads one, and it is the only thing that should.
- *
- * Confirmed honored rather than merely accepted on bsky.social on 2026-09-11 by
- * `scripts/atproto-scope-probe.ts`, which wrote a real record with a narrower version of it.
+ * 🚨 **What comes back is the EXPANSION and is spelled its own way**, which is why nothing may
+ * compare a granted scope against this string. The grant above arrived as a bare
+ * `repo:org.anthers.work`, with no `action` parameter at all — which proposal 0011 reads as
+ * *every* action, and therefore as the full grant. `services/atproto-scope.ts` is what reads
+ * one, and it is the only thing that should.
  */
-export const PUBLISH_SCOPE = `repo:${WORK_COLLECTION}?action=create&action=update&action=delete`;
+export const PUBLISH_SCOPE = `include:${PERMISSION_SET}`;
+
+/**
+ * The same permission written out, which is what a server hands back and what to fall back to.
+ *
+ * ⭐ **Not requested, and kept because it is the proven form.** `include:` was confirmed
+ * honored on bsky.social on 2026-09-11 — the authorization server fetched
+ * `org.anthers.catalogPermissions` from `_lexicon.anthers.org`, expanded it, and granted
+ * `repo:org.anthers.work` — so the readable form is what Anthers asks with. If some other
+ * authorization server does not understand a permission-set reference, this string is the
+ * fallback and needs no republished Lexicon to use.
+ *
+ * ⚠️ **Nothing compares a granted scope against either of these.** What comes back is the
+ * expansion, spelled its own way, and `services/atproto-scope.ts` reads it semantically for
+ * exactly that reason.
+ *
+ * Retest either form: `bun run scripts/atproto-scope-probe.ts --handle <a throwaway account>`.
+ */
+export const PUBLISH_SCOPE_EXPANDED = `repo:${WORK_COLLECTION}?action=create&action=update&action=delete`;
 
 /**
  * The records Anthers writes on behalf of **anybody** with an identity.

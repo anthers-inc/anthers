@@ -298,9 +298,12 @@ envs:
   # honored a narrow `repo:` permission on 2026-09-11 and still does not list it in its
   # published metadata, with guidance to hold off on production changes until more is
   # documented. Turning this on is the decision to take that bet in front of real creators.
+  # ⭐ Opened 2026-09-11, once `org.anthers.catalogPermissions` was published and confirmed
+  # resolved and expanded by bsky.social. Until that existed the consent screen would have
+  # shown a raw scope string, which is what the permission set was published to replace.
   - key: ATPROTO_PUBLISH_ENABLED
     scope: RUN_TIME
-    value: "false"
+    value: "true"
 
 ingress:
   rules:

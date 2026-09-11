@@ -31,6 +31,11 @@
  *
  * Usage:
  *   bun run scripts/atproto-scope-probe.ts --handle anthersinc-test.bsky.social
+ *   bun run scripts/atproto-scope-probe.ts --handle … --form repo
+ *
+ * `--form include` (the default) asks via Anthers' published permission set, which is what
+ * the running app should use if it works; `--form repo` asks with the raw scope string,
+ * which is proven and is the fallback.
  */
 
 import { createServer } from "node:http";
@@ -45,14 +50,30 @@ import {
 /** The collection this probe asks to write, and the one Anthers actually cares about. */
 const COLLECTION = "org.anthers.work";
 
+/** Anthers' published permission set, which names that collection in readable language. */
+const PERMISSION_SET = "org.anthers.catalogPermissions";
+
 /**
- * The narrow grant, in the string form proposal 0011 specifies: `resource[:positional][?params]`.
+ * The two ways of asking for the same thing, and the reason this probe has a flag.
  *
- * `create` and `delete` and nothing else — create is the capability being tested, and delete
- * is what lets the probe clean up after itself. Asking for `*` would test a broader
- * permission than Anthers ever wants and would make a success less informative.
+ * `repo` is the raw form proposal 0011 specifies — `resource[:positional][?params]` — and it
+ * is **proven**: granted verbatim and used to write a real record on 2026-09-11.
+ *
+ * ⭐ `include` names a published permission-set Lexicon instead, which is what puts a title and
+ * a sentence on the consent screen rather than `repo:org.anthers.work?action=create&…`. It
+ * expands to the same permission, so a success here is not new capability — it is the
+ * difference between asking somebody to agree to a string and asking them to agree to a
+ * sentence. **Unproven on bsky.social**, exactly as the raw form was before it was tested,
+ * which is why it is a probe rather than an assumption.
+ *
+ * ⚠️ **A failure of `include` is not a failure of the permission.** If the authorization
+ * server does not understand the token it may refuse the whole scope string, and the fallback
+ * is the raw form — uglier, and already known to work.
  */
-const NARROW_SCOPE = `atproto repo:${COLLECTION}?action=create&action=delete`;
+const SCOPES: Record<string, string> = {
+	include: `atproto include:${PERMISSION_SET}`,
+	repo: `atproto repo:${COLLECTION}?action=create&action=delete`,
+};
 
 /** Where the authorization server sends the browser back. Must be a literal loopback IP. */
 const PORT = Number(process.env.PROBE_PORT ?? 7325);
@@ -94,11 +115,11 @@ function memoryStore() {
 	};
 }
 
-function buildClient(): OAuthClient {
+function buildClient(scope: string): OAuthClient {
 	return new OAuthClient({
 		clientMetadata: {
 			...atprotoLoopbackClientMetadata(
-				buildAtprotoLoopbackClientId({ redirect_uris: [REDIRECT_URI], scope: NARROW_SCOPE }),
+				buildAtprotoLoopbackClientId({ redirect_uris: [REDIRECT_URI], scope }),
 			),
 			client_name: "Anthers scope probe",
 		},
@@ -160,11 +181,26 @@ async function main() {
 		process.exit(1);
 	}
 
-	console.log(`\nProbing whether a narrow repo: permission is honored, as ${handle}.`);
-	console.log(`  scope requested: ${NARROW_SCOPE}`);
-	console.log(`  collection:      ${COLLECTION}\n`);
+	const form = arg("form") ?? "include";
+	const scope = SCOPES[form];
+	if (!scope) {
+		console.error(`atproto-scope-probe: --form must be one of ${Object.keys(SCOPES).join(", ")}.`);
+		process.exit(1);
+	}
 
-	const client = buildClient();
+	console.log(`\nProbing whether a narrow permission is honored, as ${handle}.`);
+	console.log(`  form:            ${form}`);
+	console.log(`  scope requested: ${scope}`);
+	console.log(`  collection:      ${COLLECTION}\n`);
+	if (form === "include") {
+		// ⭐ Worth saying at the top, because the interesting part of this run is what the
+		// consent screen looks like — and only the person at the browser can see that.
+		console.log("  ⭐ Read the consent screen before you approve it. The question this run");
+		console.log("     answers is whether it shows Anthers' own sentence rather than a raw");
+		console.log(`     scope string. The set is ${PERMISSION_SET}.\n`);
+	}
+
+	const client = buildClient(scope);
 
 	// ── 1. Authorize ────────────────────────────────────────────────────────
 	//
@@ -172,11 +208,16 @@ async function main() {
 	// string itself was rejected, which is a different finding from a refusal at the write.
 	let authUrl: URL;
 	try {
-		authUrl = await client.authorize(handle, { scope: NARROW_SCOPE });
+		authUrl = await client.authorize(handle, { scope });
 	} catch (err) {
 		console.error("\nRESULT: the authorization request was refused outright.");
 		console.error("  The scope string was not accepted by the authorization server.");
 		console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+		if (form === "include") {
+			console.error("\n  ⚠️ This is the `include:` form. A refusal here means the permission");
+			console.error("     SET is not understood — not that the permission is unavailable.");
+			console.error("     Re-run with `--form repo` to confirm the raw form still works.");
+		}
 		process.exit(2);
 	}
 
