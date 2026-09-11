@@ -140,21 +140,54 @@ async function seedSession(d: string, userId?: number) {
 }
 
 describe("what the client is allowed to ask for", () => {
-	it("declares the publishing permission, narrowly, and still no write-everything scope", () => {
+	it("declares the publishing permission, and still no write-everything scope", () => {
 		const prev = process.env.BASE_URL;
 		process.env.BASE_URL = "https://anthers.org";
 		try {
 			const scope = buildClientMetadata().scope ?? "";
 			expect(scope).toContain(PUBLISH_SCOPE);
-			// 🚨 One collection, named. A `repo:*` here would be a permission over every record
-			// the creator will ever own, which is the thing this whole design exists to avoid.
-			expect(PUBLISH_SCOPE).toContain("org.anthers.work");
+			expect(PUBLISH_SCOPE).toBe("include:org.anthers.catalogPermissions");
 			expect(scope).not.toContain("repo:*");
 			expect(scope).not.toContain("transition:generic");
 		} finally {
 			if (prev === undefined) delete process.env.BASE_URL;
 			else process.env.BASE_URL = prev;
 		}
+	});
+
+	// 🚨 **The narrowness moved into the published Lexicon, so the guard moves with it.** The
+	// scope string no longer says what is being asked for — it names a document that does — and
+	// a test still asserting on the string would pass while that document quietly widened.
+	//
+	// ⚠️ **The document is published and can never be narrowed again**, so this reads the file
+	// that was published rather than describing it: a `*` collection here would be a permission
+	// over every record the creator will ever own, which is what this whole design avoids.
+	it("asks for one collection and three actions, in the Lexicon the consent screen reads", async () => {
+		const set = (await Bun.file("lexicons/org/anthers/catalogPermissions.json").json()) as {
+			id: string;
+			defs: {
+				main: {
+					type: string;
+					title: string;
+					detail: string;
+					permissions: { resource: string; collection: string[]; action: string[] }[];
+				};
+			};
+		};
+
+		expect(set.id).toBe("org.anthers.catalogPermissions");
+		expect(set.defs.main.type).toBe("permission-set");
+		expect(set.defs.main.permissions).toHaveLength(1);
+
+		const [permission] = set.defs.main.permissions;
+		expect(permission.resource).toBe("repo");
+		expect(permission.collection).toEqual(["org.anthers.work"]);
+		expect([...permission.action].sort()).toEqual(["create", "delete", "update"]);
+
+		// ⭐ The title and the detail are the sentence somebody reads deciding whether to trust
+		// us, so they are copy rather than configuration — and they must not go empty.
+		expect(set.defs.main.title.length).toBeGreaterThan(0);
+		expect(set.defs.main.detail.length).toBeGreaterThan(0);
 	});
 });
 
