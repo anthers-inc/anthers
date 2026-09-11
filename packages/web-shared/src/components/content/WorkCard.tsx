@@ -3,12 +3,19 @@
  * One Work in the creator's Catalog as a card: thumbnail (or type icon), title, a type
  * badge, the derived processing and access badges, and Release / Edit / Delete controls.
  *
- * Release is on the card rather than only inside the editor because the common case is
+ * Release is on the card rather than only on the Work's page because the common case is
  * uploading a back catalog — a creator releasing thirty Works should not open thirty
- * modals. The editor still owns the *shape* of a release (access, dates, delivery); this
- * is the switch once that shape is right.
+ * pages. The page still owns the *shape* of a release (access, dates, delivery, rating);
+ * this is the switch once that shape is right.
+ *
+ * ⭐ **The two blocked-release reasons a creator can act on are links, not tooltips.** A
+ * Work is born unrated and the server refuses to release it while it is, so "open Edit and
+ * say whether this is General or Mature" was an instruction that could not be followed by
+ * clicking it while the editor was a modal with no URL. It has one now.
  */
 import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { Link } from "../../lib/router";
+import { studioEditWorkUrl } from "../../lib/studio";
 import type { Work } from "../../lib/types";
 import {
 	AccessBadge,
@@ -22,7 +29,6 @@ import {
 
 interface ContentItemCardProps {
 	item: Work;
-	onEdit: (item: Work) => void;
 	onDelete: (item: Work) => void;
 	/** Flip visibility. Absent → the control is not rendered. */
 	onSetVisibility?: (item: Work, visibility: "private" | "released") => void;
@@ -30,16 +36,11 @@ interface ContentItemCardProps {
 	busy?: boolean;
 }
 
-export default function WorkCard({
-	item,
-	onEdit,
-	onDelete,
-	onSetVisibility,
-	busy,
-}: ContentItemCardProps) {
+export default function WorkCard({ item, onDelete, onSetVisibility, busy }: ContentItemCardProps) {
 	const preview = itemPreviewUrl(item);
 	const released = item.visibility === "released";
 	const state = accessState(item);
+	const editUrl = studioEditWorkUrl(item.publicId ?? item.id);
 
 	// The server refuses to release a Work whose media is still encoding, and refuses one
 	// with no delivery switch on. Disable rather than let the click earn an error.
@@ -54,7 +55,7 @@ export default function WorkCard({
 	const blockedWhy = processing
 		? "Still processing — it can be released once the media is ready"
 		: unrated
-			? "Open Edit and say whether this is General or Mature"
+			? "Say whether this is General or Mature before releasing"
 			: "Turn on streaming or downloads before releasing";
 
 	return (
@@ -68,7 +69,9 @@ export default function WorkCard({
 			</div>
 			<div className="card-body p-4 gap-2">
 				<h3 className="font-semibold text-sm truncate" title={item.title ?? undefined}>
-					{item.title || "Untitled"}
+					<Link to={editUrl} className="link link-hover">
+						{item.title || "Untitled"}
+					</Link>
 				</h3>
 				<div className="flex flex-wrap items-center gap-1">
 					<TypeBadge type={item.type} />
@@ -78,11 +81,20 @@ export default function WorkCard({
 				</div>
 				{state === "locked" && (
 					<p className="text-xs text-error">
-						Released, but no one can open it — set access on this Work.
+						Released, but no one can open it —{" "}
+						<Link to={editUrl} className="link">
+							set access on this Work
+						</Link>
+						.
 					</p>
 				)}
 				{unrated && !released && (
-					<p className="text-xs text-warning">Needs a rating before it can be released.</p>
+					<p className="text-xs text-warning">
+						<Link to={editUrl} className="link">
+							Rate this
+						</Link>{" "}
+						before it can be released.
+					</p>
 				)}
 				<div className="flex justify-end gap-1 mt-1">
 					{onSetVisibility && (
@@ -97,14 +109,9 @@ export default function WorkCard({
 							{released ? "Unrelease" : "Release"}
 						</button>
 					)}
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs"
-						onClick={() => onEdit(item)}
-						title="Edit"
-					>
+					<Link to={editUrl} className="btn btn-ghost btn-xs" title="Edit">
 						<PencilSquareIcon className="w-4 h-4" />
-					</button>
+					</Link>
 					<button
 						type="button"
 						className="btn btn-ghost btn-xs text-error"

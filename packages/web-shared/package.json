@@ -42,6 +42,7 @@
 		"./PostFormPage": "./src/pages/PostFormPage.tsx",
 		"./DashboardPage": "./src/pages/DashboardPage.tsx",
 		"./ProjectFormPage": "./src/pages/ProjectFormPage.tsx",
+		"./WorkFormPage": "./src/pages/WorkFormPage.tsx",
 		"./CatalogPage": "./src/pages/CatalogPage.tsx",
 		"./ImportPage": "./src/pages/ImportPage.tsx",
 		"./AnalyticsDashboardPage": "./src/pages/AnalyticsDashboardPage.tsx",

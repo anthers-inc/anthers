@@ -12,11 +12,12 @@
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import WorkCard from "../components/content/WorkCard";
-import WorkEditor from "../components/content/WorkEditor";
 import { processingState } from "../components/content/works";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
+import { studioNewWorkUrl } from "../lib/studio";
 import type { Work } from "../lib/types";
 
 /** A post referencing a library item, as returned by the 409 `work_in_use` body. */
@@ -30,8 +31,6 @@ export default function CatalogPage() {
 	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
 
-	// Editor: null = closed; { item: null } = create; { item } = edit.
-	const [editor, setEditor] = useState<{ item: Work | null } | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
 	const [deleting, setDeleting] = useState(false);
 	/** Posts blocking an unflagged delete — non-null once the server has named them. */
@@ -212,13 +211,9 @@ export default function CatalogPage() {
 		<div className="max-w-7xl mx-auto px-4 py-8">
 			<div className="flex items-center justify-between mb-8">
 				<h1 className="text-2xl font-bold">Catalog</h1>
-				<button
-					type="button"
-					className="btn btn-primary btn-sm"
-					onClick={() => setEditor({ item: null })}
-				>
-					<PlusIcon className="w-4 h-4" /> Upload content
-				</button>
+				<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
+					<PlusIcon className="w-4 h-4" /> New Work
+				</Link>
 			</div>
 
 			{releaseError && (
@@ -233,13 +228,9 @@ export default function CatalogPage() {
 					title="Your Catalog is empty"
 					description="Upload video, audio, images, games, software, or list physical goods and services. Each one is a Work you can release, gate or sell on its own — with or without ever writing a post about it."
 					action={
-						<button
-							type="button"
-							className="btn btn-primary btn-sm"
-							onClick={() => setEditor({ item: null })}
-						>
-							<PlusIcon className="w-4 h-4" /> Upload content
-						</button>
+						<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
+							<PlusIcon className="w-4 h-4" /> New Work
+						</Link>
 					}
 				/>
 			) : (
@@ -248,24 +239,12 @@ export default function CatalogPage() {
 						<WorkCard
 							key={item.id}
 							item={item}
-							onEdit={(it) => setEditor({ item: it })}
 							onDelete={(it) => openDelete(it)}
 							onSetVisibility={setVisibility}
 							busy={releasing === item.id}
 						/>
 					))}
 				</div>
-			)}
-
-			{editor && (
-				<WorkEditor
-					item={editor.item}
-					onClose={() => setEditor(null)}
-					onSaved={(item) => {
-						upsert(item);
-						setEditor(null);
-					}}
-				/>
 			)}
 
 			{deleteTarget && (

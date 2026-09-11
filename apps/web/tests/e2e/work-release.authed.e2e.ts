@@ -159,50 +159,75 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await sweepReleaseWalkWorks(session);
 
 	// ── Create ──────────────────────────────────────────────────────────────
+	//
+	// ⭐ **A page now, not a modal** (2026-09-11). The Work's authoring surface is
+	// `/studio/works/new` and `/studio/works/:publicId/edit`, which is why this walk asserts
+	// on URLs between the steps: with the editor in a dialog there was no address to check,
+	// so "the form opened" and "the right form opened" were the same assertion. Creating
+	// lands on the edit route because Release lives there — `POST /works` refuses
+	// `visibility: "released"` outright, so it cannot be offered before the Work exists.
 	await page.goto("/studio/catalog");
 	await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
 
 	await page
-		.getByRole("button", { name: /upload content/i })
+		.getByRole("link", { name: /new work/i })
 		.first()
 		.click();
-	const modal = page.locator(".modal-box");
-	await expect(modal).toBeVisible();
+	await expect(page).toHaveURL(/\/studio\/works\/new$/);
 
-	await modal.locator("select").first().selectOption("service");
-	await modal.locator('input[type="text"]').first().fill(TITLE);
+	// ⚠️ Located by position and placeholder, never by label: `FormField` renders its label as
+	// a SIBLING of the input with no `htmlFor`, so `getByLabel` matches nothing on this form
+	// whether or not the field exists — a locator that cannot fail. Same note as
+	// `studio-routes.authed.e2e.ts`. The Release checkbox below is the exception and is
+	// reached by role+name, because that input really is nested inside its `<label>`.
+	await page.locator("select").first().selectOption("service");
+	await page.getByPlaceholder("Work title").fill(TITLE);
 
 	// The Created date, at year precision. Its whole reason for existing is back-dating a
 	// catalog, which is what a creator arriving with years of work actually does.
-	await modal.getByRole("combobox").last().selectOption("year");
-	await modal.locator('input[type="number"][min="1900"]').fill("2015");
+	await page.getByRole("combobox").last().selectOption("year");
+	await page.locator('input[type="number"][min="1900"]').fill("2015");
 
-	await page.getByRole("button", { name: /create content/i }).click();
-	// ⚠️ A longer wait than the 5s default, here and at Save below — both are a modal
-	// closing on the far side of a write, and this suite shares its Postgres with the unit
-	// suites. Headroom only: it is NOT the explanation for the flakiness this spec was
-	// famous for, which was the fixture deletion described above. An earlier pass attributed
-	// the modal timeouts to a loaded machine, which was plausible, unverified and wrong.
-	// Playwright still waits only as long as it needs, and a modal that never closes fails.
-	await expect(modal).toBeHidden({ timeout: 15_000 });
+	// Release cannot be reached on create, and this is the assertion for it — the section is
+	// not rendered at all before the Work has an id.
+	await expect(page.getByRole("heading", { name: "Release" })).toHaveCount(0);
 
-	// Born private. Not a detail — it is why a Release control has to exist at all.
-	await expect(cardFor(page)).toContainText("Private");
+	await page.getByRole("button", { name: /create work/i }).click();
+	// ⚠️ A longer wait than the 5s default, here and at Save below — both are a navigation on
+	// the far side of a write, and this suite shares its Postgres with the unit suites.
+	// Headroom only: it is NOT the explanation for the flakiness this spec was famous for,
+	// which was the fixture deletion described above. An earlier pass attributed the timeouts
+	// to a loaded machine, which was plausible, unverified and wrong.
+	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
+
+	// Release appears on the far side of create, on the same form, at a URL that can be
+	// linked to — which is the whole reason the container changed.
+	await expect(page.getByRole("heading", { name: "Release" })).toBeVisible();
 
 	// ── Unrated, and therefore unreleasable ─────────────────────────────────
 	// A Work is born `unrated` and the server refuses to release one (`maturity_undeclared`),
-	// so the card refuses the click rather than earning the error. Asserted here rather than
-	// only in the API suite because the whole point of the card control is releasing a back
-	// catalog thirty at a time, and thirty identical 409s is the failure this prevents.
-	await expect(cardFor(page)).toContainText("Needs a rating");
+	// so the control refuses the click rather than earning the error.
+	await expect(
+		page.getByRole("checkbox", { name: /released to my public catalog/i }),
+	).toBeDisabled();
+
+	await page.goto("/studio/catalog");
+	// Born private. Not a detail — it is why a Release control has to exist at all.
+	await expect(cardFor(page)).toContainText("Private");
+
+	// The card says the same thing, because the card is how a back catalog gets released
+	// thirty at a time and thirty identical 409s is the failure this prevents.
+	await expect(cardFor(page)).toContainText("Rate this");
 	await expect(cardFor(page).getByRole("button", { name: "Release" })).toBeDisabled();
 
 	// ── Rate it ─────────────────────────────────────────────────────────────
-	await cardFor(page).getByRole("button", { name: "Edit" }).click();
-	await expect(modal).toBeVisible();
-	await modal.getByRole("radio", { name: "General" }).check();
-	await page.getByRole("button", { name: /save & close/i }).click();
-	await expect(modal).toBeHidden({ timeout: 15_000 });
+	// ⭐ The card's blocked-release hint is a LINK now rather than a tooltip. It could not be
+	// one while the editor had no URL, which is the smallest concrete thing the page bought.
+	await cardFor(page).getByRole("link", { name: "Rate this" }).click();
+	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
+	await page.getByRole("radio", { name: "General" }).check();
+	await page.getByRole("button", { name: /save work/i }).click();
+	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
 
 	// ── Release ─────────────────────────────────────────────────────────────
 	await cardFor(page).getByRole("button", { name: "Release" }).click();
@@ -251,16 +276,16 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	expect(published?.authoredPrecision).toBe("year");
 
 	// ── The locked state ────────────────────────────────────────────────────
-	await cardFor(page).getByRole("button", { name: "Edit" }).click();
-	await expect(modal).toBeVisible();
+	await cardFor(page).getByRole("link", { name: "Edit" }).click();
+	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
 
 	// Warning first, while the change is still only in the form — a creator should be told
 	// before they save, not discover it from a reader.
-	await modal.locator("table").getByRole("checkbox").first().uncheck();
-	await expect(modal.getByText(/nobody can open this/i)).toBeVisible();
+	await page.locator("table").getByRole("checkbox").first().uncheck();
+	await expect(page.getByText(/nobody can open this/i)).toBeVisible();
 
-	await page.getByRole("button", { name: /save & close/i }).click();
-	await expect(modal).toBeHidden({ timeout: 15_000 });
+	await page.getByRole("button", { name: /save work/i }).click();
+	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
 	await expect(cardFor(page)).toContainText("Nobody can open");
 
 	// Still released, and now genuinely shut: the server drops it from what a reader sees.
