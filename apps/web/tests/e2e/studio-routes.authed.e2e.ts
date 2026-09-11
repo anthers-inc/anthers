@@ -76,31 +76,89 @@ test("a creator reaches the Studio itself", async ({ page, context }) => {
 	await expect(page.getByRole("navigation").getByText("Dashboard")).toBeVisible();
 });
 
-test("every Dashboard action button lands inside the Studio", async ({ page, context }) => {
+test("every Studio tab lands on its own route", async ({ page, context }) => {
 	await signInAsCreator(context);
+
+	// ⭐ **The nav is places, not actions, as of 2026-09-11.** It read *Dashboard · Catalog ·
+	// New Post · Analytics · Settings* — a verb among locations — while Projects had no entry
+	// at all. Anthers' three objects now each have a home: the Catalog owns Projects and
+	// Works, Posts owns posts, and the Dashboard says what needs attention.
+	//
+	// "Import" is absent because the itch.io import endpoints all return "not yet
+	// implemented", so a creator who reached the page found a form that always failed.
+	// Restore the row when the Cross-Publishing lane ships them.
+	const tabs = [
+		{ name: "Catalog", url: /\/studio\/catalog$/ },
+		{ name: "Posts", url: /\/studio\/posts$/ },
+		{ name: "Analytics", url: /\/studio\/analytics$/ },
+		{ name: "Settings", url: /\/studio\/settings$/ },
+		{ name: "Dashboard", url: /\/studio$/ },
+	];
+
 	await page.goto("/studio");
 	await expect(studioNav(page)).toBeVisible();
 
-	// Header buttons, in the order the Dashboard renders them. Each was root-absolute until
-	// 2026-08-17 and each resolved to a real, wrong page — so the shell assertion below is
-	// doing the actual work.
-	//
-	// "Import" was removed from this list when the itch.io import UI was hidden — the
-	// three import endpoints all return "not yet implemented", so a creator who reached
-	// the page found a form that always failed. Restore this row when the Cross-Publishing
-	// lane ships its import endpoints and the route + nav link are re-enabled.
-	const actions = [
-		{ name: "Analytics", url: /\/studio\/analytics$/ },
-		{ name: "New Project", url: /\/studio\/projects\/new$/ },
-		{ name: "New Post", url: /\/studio\/posts\/new$/ },
+	for (const { name, url } of tabs) {
+		await page.getByRole("navigation").getByRole("link", { name, exact: true }).click();
+		await expect(page, `the "${name}" tab did not land on its route`).toHaveURL(url);
+		await expect(studioNav(page), `the "${name}" tab left the Studio shell`).toBeVisible();
+	}
+});
+
+test("every New button lands inside the Studio", async ({ page, context }) => {
+	await signInAsCreator(context);
+
+	// The New buttons live on each index rather than in the nav. Every one of these was
+	// root-absolute until 2026-08-17 and each resolved to a real, wrong page — `/settings`,
+	// `/library` and `/@somebody` are all real destinations a stale Studio link can reach —
+	// so the shell assertion is doing the actual work, not the URL check.
+	const buttons = [
+		{ from: "/studio/catalog", name: "New Work", url: /\/studio\/works\/new$/ },
+		{ from: "/studio/catalog", name: "New Project", url: /\/studio\/projects\/new$/ },
+		{ from: "/studio/posts", name: "New Post", url: /\/studio\/posts\/new$/ },
 	];
 
-	for (const { name, url } of actions) {
-		await page.goto("/studio");
+	for (const { from, name, url } of buttons) {
+		await page.goto(from);
+		await expect(studioNav(page)).toBeVisible();
 		await page.getByRole("link", { name, exact: true }).first().click();
 		await expect(page, `"${name}" did not land on its Studio route`).toHaveURL(url);
 		await expect(studioNav(page), `"${name}" left the Studio shell`).toBeVisible();
 	}
+});
+
+test("the Dashboard stopped being a copy of everything the creator owns", async ({
+	page,
+	context,
+}) => {
+	await signInAsCreator(context);
+	await page.goto("/studio");
+	await expect(studioNav(page)).toBeVisible();
+
+	// 🚨 **An absence, so it needs a test** — nothing else in the repository can tell that a
+	// section is gone rather than merely empty. The Dashboard listed "Your Projects" and
+	// "Your Posts" in two tables and never mentioned a Work, which is how the object carrying
+	// every gate, price and Time Pool minute came to be the one absent from the front door.
+	// Both moved to the tab that owns them on 2026-09-11.
+	await expect(page.getByRole("heading", { name: "Your Projects" })).toHaveCount(0);
+	await expect(page.getByRole("heading", { name: "Your Posts" })).toHaveCount(0);
+
+	// And they are reachable, at the tab that owns each.
+	await page.goto("/studio/catalog");
+	await expect(page.getByRole("link", { name: "New Project", exact: true })).toBeVisible();
+	await page.goto("/studio/posts");
+	await expect(page.getByRole("heading", { name: "Posts", exact: true })).toBeVisible();
+});
+
+test("the pre-rename Catalog path redirects rather than rendering", async ({ page, context }) => {
+	await signInAsCreator(context);
+
+	// `/studio/library` mounted `CatalogPage` a second time, so the address bar could read
+	// "library" while the heading read "Catalog" — the confusion the 2026-08-13 rename was
+	// for. Kept as a redirect because bookmarks from before it still exist.
+	await page.goto("/studio/library");
+	await expect(page).toHaveURL(/\/studio\/catalog$/);
+	await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
 });
 
 test("a creator can create a Project and lands on its shelf", async ({ page, context }) => {
@@ -110,7 +168,7 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 	const slug = `e2e-project-${Date.now()}`;
 
 	try {
-		await page.goto("/studio");
+		await page.goto("/studio/catalog");
 		await page.getByRole("link", { name: "New Project", exact: true }).first().click();
 		await expect(page).toHaveURL(/\/studio\/projects\/new$/);
 		await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();

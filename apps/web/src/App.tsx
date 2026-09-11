@@ -36,6 +36,7 @@ const DashboardPage = lazy(() => import("@anthers/web-shared/DashboardPage"));
 const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
+const PostsPage = lazy(() => import("@anthers/web-shared/PostsPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
 const WorkFormPage = lazy(() => import("@anthers/web-shared/WorkFormPage"));
 // ImportPage lazy import kept commented — the route is hidden (see below) but the
@@ -369,6 +370,7 @@ export default function App() {
 						the exact confusion the rename was for. */}
 						<Route path="library" element={<Navigate to="/studio/catalog" replace />} />
 						<Route path="analytics" element={<AnalyticsDashboardPage />} />
+						<Route path="posts" element={<PostsPage />} />
 						<Route path="posts/new" element={<PostFormPage />} />
 						<Route path="posts/:slug/edit" element={<PostFormPage />} />
 						<Route path="projects/new" element={<ProjectFormPage />} />
