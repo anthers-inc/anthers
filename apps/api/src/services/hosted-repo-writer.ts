@@ -2,18 +2,18 @@
 /**
  * A {@link RepoWriter} over an identity Anthers hosts.
  *
- * ⭐ **This is the piece that made record-writing possible at all.** A record belongs in the
- * creator's own repository, and hosting the identity was the unblock Anthers controlled: for
- * an account that took a handle here, the credential is in `hosted_accounts`, sealed, and the
- * hub can open it — no permission to ask anybody for.
+ * ⭐ **This is the route that needs nobody's permission.** A record belongs in the creator's
+ * own repository, and for an account that took a handle here the credential is in
+ * `hosted_accounts`, sealed, and the hub can open it — so there is nothing to ask for and
+ * nothing that can be taken back.
  *
- * ⚠️ **It is no longer the ONLY route, and this file being the only writer is now a gap
- * rather than a limit.** A narrow `repo:` OAuth permission naming one collection was
- * confirmed honored on bsky.social on 2026-09-11 (`scripts/atproto-scope-probe.ts`), so a
- * creator whose identity lives elsewhere could grant Anthers exactly the right to publish
- * their listings and nothing else. Until that path is built, `not_hosted` below still means
- * no record gets written — which is a true description of the code and no longer a true
- * description of what the network permits.
+ * ⚠️ **It is one of two routes, and `not_hosted` is no longer the end of the story.**
+ * `oauth-repo-writer.ts` covers a creator whose identity lives elsewhere and who has granted
+ * Anthers a narrow `repo:` permission over the one collection; `repo-writer.ts` is what
+ * chooses between them. So `not_hosted` below means "ask the other route", and the two must
+ * not be confused: a hosted credential that will not open is a fault in Anthers' own hub and
+ * is deliberately NOT routed around, because writing the record by another means would leave
+ * nobody with a reason to look at the hub.
  *
  * 🚨 **Built on `nodeCall` rather than `@atproto/api`, deliberately.** `scripts/atproto-writer.ts`
  * uses that package and its docblock says plainly that it must stay a devDependency — putting a
@@ -21,12 +21,15 @@
  * These are the same three calls the script makes, over the same fetch helper every other
  * conversation with the node already goes through.
  *
- * ⚠️ **`validate: false` is carried over for the reason the script gives.** Server-side
- * validation asks the node to resolve the record's Lexicon, and `org.anthers.work` is not
- * published yet — so asking for it fails on a schema that is correct. The record is validated
- * locally against the generated validator before it ever reaches here, which is the same schema
- * a consumer would use. **Revisit this when the Lexicon is published**, because at that point a
- * disagreement between the two would be worth hearing about.
+ * ⚠️ **`validate: false` is now an open question rather than a settled one, and the two writers
+ * disagree about it.** The flag asks the server to resolve the record's Lexicon, which was
+ * pointless while none was published; `org.anthers.work` has been published since 2026-09-10,
+ * so the reason has expired. `oauth-repo-writer.ts` omits the flag — the spelling the scope
+ * probe's successful write used — and this one still sends `false`. Either way the record is
+ * validated locally against the generated validator, the same schema a consumer would use, so
+ * nothing unchecked goes out. **What turning it on would buy is hearing about a disagreement
+ * between our validator and a server's**, which is worth having and is a deliberate change to
+ * make rather than a flag to flip in passing.
  */
 import { db } from "@anthers/db";
 import { hostedAccounts } from "@anthers/db/schema";

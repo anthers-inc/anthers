@@ -13,18 +13,22 @@
  *   GET  /recovery-key         — Has this account taken one, and which key
  *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
  *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
+ *   GET  /publishing           — How this account's Work listings reach the network, if at all
+ *   POST /publishing/stop      — Take the listings down and hand the permission back
  *   POST /unlink               — Unlink ATProto identity from account
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
  * it is the runtime-agnostic core rather than the Node package. What is left here is the
- * three intents — link an identity to the account you are signed into, sign in with one, or
- * sign up with one — and the ceremony each of them owes.
+ * four intents — link an identity to the account you are signed into, sign in with one, sign
+ * up with one, or let Anthers publish your listings into one — and the ceremony each owes.
  *
- * 🚨 **The intent decides the scope, and that is why there are three rather than two.**
+ * 🚨 **The intent decides the scope, and that is why there are four rather than two.**
  * Signing up needs `transition:email`, because Anthers never creates an account it cannot
- * mail; signing in and linking need identity and nothing else. Folding signup into the
- * login intent would make every returning person consent to us reading their email address
- * to do something that never needs it.
+ * mail; publishing needs a `repo:` permission over one collection; signing in and linking need
+ * identity and nothing else. Folding either of the first two into the login intent would make
+ * every returning person consent to something their sign-in never needs — which is why the
+ * `publish` intent is reached from the Studio by somebody who went looking for it, and never
+ * from a sign-in button.
  */
 
 import { sanitizeNextPath } from "@anthers/shared/next-path";
@@ -35,11 +39,14 @@ import { z } from "zod";
 import { PENDING_SIGNUP_COOKIE, setPendingSignupCookie, setSessionCookie } from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
+	atprotoPublishEnabled,
 	atprotoSignupEnabled,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
 	linkAtprotoToUser,
+	publishingStateFor,
 	readPdsEmail,
+	recordPublishGrant,
 	resolveIdentity,
 	unlinkAtprotoFromUser,
 } from "../services/atproto.js";
@@ -48,6 +55,8 @@ import {
 	buildClientMetadata,
 	EMAIL_SCOPE,
 	getAtprotoClient,
+	PUBLISH_SCOPE,
+	recordGrantedScope,
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";
 import { createSession, validateSession } from "../services/auth.js";
@@ -102,8 +111,13 @@ const recoveryKeySchema = z.object({
 });
 
 const authInitSchema = z.object({
+	/**
+	 * ⚠️ **Ignored entirely by the `publish` intent**, which authorizes against the DID already
+	 * on the account. That flow knows whose repository it means and must not be told, because a
+	 * handle the browser supplied is a handle an attacker could supply.
+	 */
 	handle: z.string().min(1),
-	intent: z.enum(["login", "link", "signup"]).default("login"),
+	intent: z.enum(["login", "link", "signup", "publish"]).default("login"),
 	/**
 	 * Where to land afterwards — the thing the person was trying to do when signing in
 	 * interrupted them. Client-supplied, and therefore sanitized before it is stored rather
@@ -124,7 +138,7 @@ const authInitSchema = z.object({
  * matters is what the browser is finally told to navigate to.
  */
 interface AppState {
-	intent: "login" | "link" | "signup";
+	intent: "login" | "link" | "signup" | "publish";
 	userId?: number;
 	next?: string;
 }
@@ -159,6 +173,42 @@ function getFrontendUrl(c: { req: { url: string } }): string {
  * are not the person's fault, and are worth passing through verbatim, because a generic
  * apology would throw away the only clue anyone has.
  */
+/**
+ * What each intent asks the authorization server for.
+ *
+ * ⭐ **One function so that the three answers sit next to each other and can be read in one
+ * glance.** Which intent asks for what is the security-relevant fact on this route, and it is
+ * the kind of fact that rots when it is spread across three branches.
+ */
+function scopeFor(intent: AppState["intent"]): string {
+	if (intent === "signup") return `atproto ${EMAIL_SCOPE}`;
+	if (intent === "publish") return `atproto ${PUBLISH_SCOPE}`;
+	return "atproto";
+}
+
+/**
+ * Read the scope a fresh session was actually granted.
+ *
+ * ⚠️ **Answers null rather than throwing, and null means "not known".** A token that will not
+ * describe itself must not take a sign-in down with it, and the caller stores the null — which
+ * reads, correctly, as no permission on file.
+ *
+ * ⚠️ **`try`/`catch` rather than a rejection handler, because the throw can be synchronous.**
+ * A session object that lacks the method at all raises a `TypeError` before any promise
+ * exists, which `.then(ok, onRejected)` would sail straight past — and this sits on the path
+ * every sign-in takes, so the difference is whether a surprising session shape costs a scope
+ * reading or costs somebody their sign-in.
+ */
+async function grantedScopeOf(session: {
+	getTokenInfo: () => Promise<{ scope?: string }>;
+}): Promise<string | null> {
+	try {
+		return (await session.getTokenInfo()).scope ?? null;
+	} catch {
+		return null;
+	}
+}
+
 function startFailureMessage(err: unknown): string {
 	const raw = err instanceof Error ? err.message : "";
 	if (/resolve identity|resolve handle|not found/i.test(raw)) {
@@ -178,7 +228,7 @@ const atprotoRoutes = new Hono()
 		const { handle, intent, next } = c.req.valid("json");
 
 		let userId: number | undefined;
-		if (intent === "link") {
+		if (intent === "link" || intent === "publish") {
 			const token = c.req.header("Cookie")?.match(/session=([^;]+)/)?.[1];
 			if (!token) {
 				return c.json({ error: "Authentication required for linking" }, 401);
@@ -196,6 +246,29 @@ const atprotoRoutes = new Hono()
 			return c.json({ error: "Signing up with Bluesky isn't open yet." }, 403);
 		}
 
+		// ⚠️ **The publishing flow authorizes against the DID on the account, never the handle in
+		// the request.** Resolving what the browser sent would let somebody sign in as themselves
+		// and grant over an identity that is not theirs, and the callback's own identity check
+		// would then be the only thing standing between that and a catalog written into a
+		// stranger's repository. One guard is better placed than two are.
+		let subject = handle;
+		if (intent === "publish") {
+			if (!atprotoPublishEnabled()) {
+				return c.json({ error: "Publishing to your own repository isn't open yet." }, 403);
+			}
+			const state = await publishingStateFor(userId as number);
+			if (!state.did) {
+				return c.json({ error: "Link a Bluesky account first, in your settings." }, 409);
+			}
+			if (state.route === "hosted") {
+				return c.json(
+					{ error: "Anthers already publishes your listings — this handle lives on its own node." },
+					409,
+				);
+			}
+			subject = state.did;
+		}
+
 		try {
 			// Opportunistic rather than scheduled: these are the only routes that create rows
 			// in either table, so this is the only place that can be relied on to run.
@@ -206,13 +279,15 @@ const atprotoRoutes = new Hono()
 				userId,
 				next: sanitizeNextPath(next) ?? undefined,
 			};
-			const url = await getAtprotoClient().authorize(handle, {
+			const url = await getAtprotoClient().authorize(subject, {
 				state: JSON.stringify(appState),
-				// ⚠️ Identity only, except when signing up. Writing records needs more still,
-				// and it is asked for at the point a creator opts into publishing — never
-				// bundled into signing in. `transition:email` is narrow enough that the consent
-				// screen reads honestly ("read your email address", not "do anything").
-				scope: intent === "signup" ? `atproto ${EMAIL_SCOPE}` : "atproto",
+				// 🚨 **Identity only, except at the two moments that need more, and the exception
+				// proves the rule rather than eroding it.** Signing up needs `transition:email`
+				// because Anthers never creates an account it cannot mail; publishing needs
+				// {@link PUBLISH_SCOPE}, and it is asked for at the one moment a creator opts into
+				// it. Neither ever reaches the login or link intents, so signing in goes on
+				// showing identity alone — which is the property this line exists to protect.
+				scope: scopeFor(intent),
 			});
 			return c.json({ authorization_url: url.toString() });
 		} catch (err) {
@@ -260,6 +335,34 @@ const atprotoRoutes = new Hono()
 			const next = sanitizeNextPath(appState.next) ?? undefined;
 			const identity = await resolveIdentity(session.did);
 			const profile = await getBlueskyProfile(session.did);
+
+			// 🚨 **What was granted is written down on EVERY intent, including the ones that asked
+			// for nothing.** One session is stored per DID, so each authorization replaces the
+			// last — which means signing in after granting publishing leaves an identity-only
+			// token behind. Recording only on the publishing path would leave the column claiming
+			// a permission the stored token no longer carries, and the first anybody would hear of
+			// it is a listing that had silently stopped updating.
+			const grantedScope = await grantedScopeOf(session);
+			await recordGrantedScope(session.did, grantedScope);
+
+			if (appState.intent === "publish") {
+				if (!appState.userId) return fail("not_authenticated");
+
+				const result = await recordPublishGrant(appState.userId, identity, grantedScope);
+				if (result.status === "refused") return fail(result.reason);
+
+				await attachSessionToUser(identity.did, appState.userId);
+
+				// ⚠️ A decline is an answer rather than a failure, and is reported as one of the
+				// two ordinary outcomes. Somebody who said no is exactly where they were before.
+				if (result.status === "declined") return back({ success: "publish_declined", next });
+
+				console.log(
+					`[atproto/callback] publishing granted for ${identity.did}, ` +
+						`${result.queued} work(s) queued`,
+				);
+				return back({ success: "publishing", next });
+			}
 
 			if (appState.intent === "link") {
 				if (!appState.userId) return fail("not_authenticated");
@@ -520,6 +623,45 @@ const atprotoRoutes = new Hono()
 	// doors write. They are not ATProto endpoints any more: the page that finishes a signup
 	// asks one question — *what am I finishing?* — and the answer must not depend on which
 	// door produced it.
+
+	// ── Publishing a creator's listings into their own repository ────────────
+	//
+	// ⚠️ **`available` is a state, never a prompt.** Most creators have granted nothing and
+	// never will, and publishing on Anthers has never required a network permission — so
+	// whatever renders this owes an offer somebody can take rather than a gap somebody should
+	// close. The route answers for any signed-in account, because whether somebody is a creator
+	// is not this endpoint's question to ask.
+	.get("/publishing", requireAuth, async (c) => {
+		const user = c.get("user");
+		return c.json(await publishingStateFor(user.id));
+	})
+
+	// ── Stop publishing ──────────────────────────────────────────────────────
+	//
+	// 🚨 **It takes the listings down before it hands the permission back**, because deleting a
+	// record needs the permission being handed back — see `stopPublishingFor` for why the
+	// reverse order would strand every listing on the network for good.
+	//
+	// ⚠️ **A partial removal answers 409 and keeps the grant.** Holding a permission somebody
+	// asked to withdraw is the lesser harm: it is the only state a retry can finish from, and
+	// the alternative is listings nobody can ever take down.
+	.post("/publishing/stop", requireAuth, async (c) => {
+		const user = c.get("user");
+		const { stopPublishingFor } = await import("../services/work-listing.js");
+		const result = await stopPublishingFor(user.id);
+		if (!result.revoked) {
+			return c.json(
+				{
+					error:
+						`${result.stranded} listing(s) could not be removed, so the permission is still in ` +
+						"place. Try again — stopping now would leave them on the network for good.",
+					...result,
+				},
+				409,
+			);
+		}
+		return c.json(result);
+	})
 
 	// ── Unlink ───────────────────────────────────────────────────────────────
 	.post("/unlink", requireAuth, async (c) => {

@@ -41,6 +41,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 	did_already_linked: "That Bluesky account is already linked to a different Anthers account.",
 	signup_failed: "We couldn't finish setting up that account.",
 	exchange_failed: "Bluesky didn't complete the sign-in. Please try again.",
+	// 🚨 The publishing grant's own refusals. `wrong_identity` is the one with teeth: it means
+	// the account authorized at Bluesky was not the one linked here, and granting anyway would
+	// have pointed a creator's catalog at somebody else's repository.
+	wrong_identity:
+		"That's a different Bluesky account from the one linked here. Sign in to the linked account and try again.",
+	not_linked: "Link a Bluesky account in your settings before turning publishing on.",
+	hosted:
+		"Anthers already publishes your listings — your handle lives on the server Anthers runs, so there's nothing to grant.",
 };
 
 export default function ATProtoCallbackPage() {
@@ -95,6 +103,19 @@ export default function ATProtoCallbackPage() {
 		// `resume_signup` is the same landing reached from the *sign-in* door by somebody
 		// whose signup was still unfinished — different cause, same destination, because a
 		// page whose only job is finishing can only be about finishing.
+		// ⭐ **Both publishing outcomes land in the same place, because a decline is an answer
+		// rather than a failure.** Somebody who said no at the consent screen is exactly where
+		// they were before, and sending them to an apology page would make an ordinary choice
+		// look like something that went wrong. The Studio's settings say which happened.
+		if (success === "publishing" || success === "publish_declined") {
+			refreshUser().then(() => {
+				navigate(`/studio/settings?publishing=${success === "publishing" ? "on" : "declined"}`, {
+					replace: true,
+				});
+			});
+			return;
+		}
+
 		if (success === "needs_email" || success === "resume_signup") {
 			// The destination rides on the pending signup rather than on this URL, so nothing
 			// is appended here — `/finish` reads it back with everything else the signup was

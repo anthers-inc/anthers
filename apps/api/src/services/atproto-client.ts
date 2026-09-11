@@ -30,6 +30,7 @@ import {
 } from "@atproto/oauth-client";
 import { eq, lt } from "drizzle-orm";
 import { publicOrigin } from "../lib/deployment.js";
+import { WORK_COLLECTION } from "./atproto-repo.js";
 
 /** How long a half-finished authorization stays resumable. */
 const STATE_TTL_MS = 60 * 60 * 1000;
@@ -135,6 +136,50 @@ export async function attachSessionToUser(did: string, userId: number): Promise<
 }
 
 /**
+ * Write down what the authorization server actually granted for this DID.
+ *
+ * 🚨 **Called on EVERY callback, not only the one that asked for something.** The column
+ * describes the session stored beside it, and a session is replaced wholesale by each new
+ * authorization — so a sign-in after a publishing grant leaves an identity-only token, and a
+ * column that was only written by the publishing flow would go on claiming a permission the
+ * token no longer carries. Every caller passing what it was told is what keeps it honest.
+ *
+ * ⚠️ **Best-effort, and a failure is not the caller's problem.** This runs in the middle of
+ * signing somebody in; a column that failed to update is a creator who has to grant publishing
+ * again, which is a far smaller harm than a sign-in that failed over bookkeeping.
+ */
+export async function recordGrantedScope(did: string, scope: string | null): Promise<void> {
+	try {
+		await db
+			.update(atprotoSessions)
+			.set({ scope, updatedAt: new Date() })
+			.where(eq(atprotoSessions.did, did));
+	} catch (err) {
+		console.error(
+			`[atproto] could not record the granted scope for ${did}: ` +
+				`${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
+}
+
+/**
+ * Read what the stored session for this DID was granted, as an unparsed string.
+ *
+ * ⚠️ **Null means nothing is known, never that nothing was granted.** A row written before the
+ * column existed answers the same way as one whose token would not report itself, and both
+ * have to be treated as "no permission on file" — the alternative is a caller that tries a
+ * write it has no reason to believe will work.
+ */
+export async function grantedScopeFor(did: string): Promise<string | null> {
+	const [row] = await db
+		.select({ scope: atprotoSessions.scope })
+		.from(atprotoSessions)
+		.where(eq(atprotoSessions.did, did))
+		.limit(1);
+	return row?.scope ?? null;
+}
+
+/**
  * The API's own public origin, which is what an authorization server will fetch client
  * metadata from and redirect back to.
  *
@@ -198,6 +243,30 @@ export function getBaseUrl(): string {
 export const EMAIL_SCOPE = "transition:email";
 
 /**
+ * The permission to keep a creator's Work listings in their own repository, and nothing else.
+ *
+ * ⭐ **It names one collection and three actions, which is the whole of what publishing a
+ * listing needs.** `create` puts a listing up, `update` keeps it in step with the Work, and
+ * `delete` takes it down — and that last one is the reason the set cannot be trimmed further:
+ * a grant that could publish but not withdraw would leave listings advertising Works their
+ * creators had taken back, which is the failure the whole listing design is shaped around.
+ *
+ * ⚠️ **The three actions are spelled out although they are also the default, and that is
+ * deliberate.** Proposal 0011 reads an absent `action` parameter as *every* action, so the bare
+ * `repo:org.anthers.work` is the wider request of the two and would silently widen again if the
+ * vocabulary ever grew. Naming them pins the grant to what Anthers actually does.
+ *
+ * 🚨 **What comes back will not be spelled this way.** The same proposal's formatter drops any
+ * parameter equal to its default, so a grant of all three is answered as a bare
+ * `repo:org.anthers.work`. Nothing may compare granted against requested as strings —
+ * `services/atproto-scope.ts` is what reads one, and it is the only thing that should.
+ *
+ * Confirmed honored rather than merely accepted on bsky.social on 2026-09-11 by
+ * `scripts/atproto-scope-probe.ts`, which wrote a real record with a narrower version of it.
+ */
+export const PUBLISH_SCOPE = `repo:${WORK_COLLECTION}?action=create&action=update&action=delete`;
+
+/**
  * Every scope this client may EVER request, in one string.
  *
  * 🚨 **Client metadata's `scope` is the SUPERSET a client is allowed to ask for — not what
@@ -214,8 +283,14 @@ export const EMAIL_SCOPE = "transition:email";
  * 🚨 **`transition:generic` must never appear here.** It is App-Password-equivalent access
  * to a creator's whole account, and declaring it would let any future call request it
  * without a second thought. A test asserts its absence.
+ *
+ * ⭐ **{@link PUBLISH_SCOPE} joined it on 2026-09-11, and adding it changed no consent screen.**
+ * Declaring a scope only makes it *askable*; signing in still asks for `atproto` alone and
+ * still shows identity alone. This is the registration that has to happen first, because an
+ * undeclared scope is refused at the authorization server with `invalid_scope` — which is how
+ * `transition:email` failed on 2026-08-22, and the same mistake was available here.
  */
-const DECLARED_SCOPE = `atproto ${EMAIL_SCOPE}`;
+const DECLARED_SCOPE = `atproto ${EMAIL_SCOPE} ${PUBLISH_SCOPE}`;
 
 /**
  * Client metadata, served at `/api/atproto/client-metadata.json` and fetched by every

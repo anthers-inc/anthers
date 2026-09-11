@@ -54,6 +54,29 @@ export interface RepoWriter {
 }
 
 /**
+ * The repository refused the credentials rather than the record.
+ *
+ * 🚨 **Worth its own type because it is the one failure that must not be retried.** Every other
+ * way a write can fail — the server is down, the record is malformed, the network blinked — is
+ * answered by trying again, and this one is answered by asking the creator for permission
+ * again. A retry loop against a revoked grant achieves nothing except hiding the revocation
+ * from the person who could fix it.
+ *
+ * ⚠️ **Only a writer whose credentials somebody can take back should raise this.** The hosted
+ * writer holds a password Anthers itself issued, so a refusal there means the hub is broken
+ * rather than that permission was withdrawn, and it stays an ordinary error that retries.
+ */
+export class RepoAuthError extends Error {
+	constructor(
+		message: string,
+		readonly did: string,
+	) {
+		super(message);
+		this.name = "RepoAuthError";
+	}
+}
+
+/**
  * What should happen to a Work's record, decided without touching the network.
  *
  * `invalid` is a refusal rather than an error: a Catalog sweep meeting one bad row should

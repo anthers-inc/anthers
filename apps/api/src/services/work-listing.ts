@@ -21,23 +21,31 @@
  * `planWorkRecord`'s and is tested without a network; what this adds is making sure the
  * decision is actually reached whenever the Work moves.
  *
- * ⚠️ **A creator with no identity Anthers hosts is the ordinary case.** Nothing is written,
- * nothing is logged as a problem, and nothing about publishing changes for them. Anthers turns
- * nobody away for lacking a handle, and this module is one of the places that could quietly
- * make one a requirement if it treated their absence as a failure.
+ * ⚠️ **A creator with no repository Anthers may write into is the ordinary case.** Nothing is
+ * written, nothing is logged as a problem, and nothing about publishing changes for them.
+ * Anthers turns nobody away for lacking a handle and asks nobody for a network permission in
+ * order to publish, and this module is one of the places that could quietly make either a
+ * requirement if it treated their absence as a failure.
  */
 import { db } from "@anthers/db";
-import { works } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
-import { syncWorkRecord, type WorkRecordPlan } from "./atproto-repo.js";
-import { hostedWriterFor, type NoWriterReason } from "./hosted-repo-writer.js";
+import { users, works } from "@anthers/db/schema";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { recordGrantedScope, revokeAtprotoGrant } from "./atproto-client.js";
+import {
+	RepoAuthError,
+	rkeyFromAtUri,
+	syncWorkRecord,
+	WORK_COLLECTION,
+	type WorkRecordPlan,
+} from "./atproto-repo.js";
+import { type NoCreatorWriterReason, writerForCreator } from "./repo-writer.js";
 
 /** What syncing one Work's listing did. */
 export type ListingSyncResult =
 	/** The record was created, replaced, deleted, or correctly left alone. */
 	| { status: "synced"; plan: WorkRecordPlan; uri: string | null }
 	/** No listing is possible or needed, for a reason that is nobody's fault. */
-	| { status: "skipped"; reason: NoWriterReason | "no_work" | "no_creator" }
+	| { status: "skipped"; reason: NoCreatorWriterReason | "no_work" | "no_creator" }
 	/** Something worth retrying went wrong. The job wrapper decides what to do about it. */
 	| { status: "failed"; error: string };
 
@@ -90,7 +98,7 @@ export async function syncWorkListing(
 	// the creator was still there.
 	if (work.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
-	const opened = await hostedWriterFor(work.creatorId, opts);
+	const opened = await writerForCreator(work.creatorId, opts);
 	if (!opened.writer) return { status: "skipped", reason: opened.reason };
 
 	try {
@@ -108,6 +116,17 @@ export async function syncWorkListing(
 		}
 		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
 	} catch (err) {
+		// 🚨 **A withdrawn permission is not a failure to retry, and the stored URI still stays.**
+		// The creator took the grant back, so trying again cannot succeed until they give it
+		// again — but the record they already have is still on the network, and the column is the
+		// only thing that remembers where. Clearing it would strand that record permanently;
+		// keeping it means the first sync after a re-grant can still take the listing down.
+		if (err instanceof RepoAuthError) {
+			await recordGrantedScope(err.did, null);
+			console.warn(`[work-listing] ${workId}: the creator's grant was refused — ${err.message}`);
+			return { status: "skipped", reason: "grant_lost" };
+		}
+
 		// 🚨 The stored URI is deliberately left as it was. If the write failed we do not know
 		// what landed, and forgetting where a record might be is how a duplicate listing gets
 		// created on the retry.
@@ -141,4 +160,103 @@ export async function queueWorkListingSync(workId: number): Promise<void> {
 				`${err instanceof Error ? err.message : String(err)}`,
 		);
 	}
+}
+
+/**
+ * Ask for every one of a creator's Works to be reconsidered.
+ *
+ * ⭐ **What a creator granting permission should look like is their catalog appearing**, not
+ * their next release appearing and the rest of their work staying invisible until they happen
+ * to edit it. Each Work still decides for itself: the ones that should not be listed are the
+ * ones `planWorkRecord` answers `none` for, and nothing here second-guesses that.
+ *
+ * Returns how many were queued, which is a count of Works rather than of records — most of
+ * them will turn out to need nothing.
+ */
+export async function queueAllListingsFor(creatorId: number): Promise<number> {
+	const rows = await db.select({ id: works.id }).from(works).where(eq(works.creatorId, creatorId));
+	for (const row of rows) await queueWorkListingSync(row.id);
+	return rows.length;
+}
+
+/** What stopping a creator's publishing managed to do. */
+export interface StopPublishingResult {
+	/** Listings taken off the network. */
+	removed: number;
+	/** Listings that could not be removed, and are therefore still out there. */
+	stranded: number;
+	/** Whether the permission was given back. False whenever anything was stranded. */
+	revoked: boolean;
+}
+
+/**
+ * Take a creator's listings off the network and give their permission back.
+ *
+ * 🚨 **The records come down BEFORE the grant goes back, and the order is the whole point.**
+ * Deleting a record requires the permission being handed in, so revoking first would strand
+ * every listing permanently — advertising Works to a network Anthers can no longer reach, with
+ * no way for the creator to correct it short of finding their own tooling. This is the same
+ * shape as the revoke-before-delete rule on local rows, arrived at from the opposite side: do
+ * the thing that needs the credential while the credential is still good.
+ *
+ * ⚠️ **Anything stranded cancels the revocation.** Keeping a permission the creator asked to
+ * withdraw is the lesser harm, because it is the only state from which a retry can finish the
+ * job. The caller is told, and asking again is what fixes it.
+ *
+ * ⚠️ **Only listings Anthers knows about can be removed.** `works.atproto_uri` is the record of
+ * where records went; one written by something else, or one whose column was lost, is not
+ * reachable from here and is not counted.
+ */
+export async function stopPublishingFor(creatorId: number): Promise<StopPublishingResult> {
+	const listed = await db
+		.select({ id: works.id, uri: works.atprotoUri })
+		.from(works)
+		.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri)));
+
+	let removed = 0;
+	let stranded = 0;
+
+	if (listed.length > 0) {
+		const opened = await writerForCreator(creatorId);
+		if (!opened.writer) {
+			// No writer means no way to reach the records. They stay where they are, and saying so
+			// is more useful than a revocation that would make it permanent.
+			console.warn(`[work-listing] cannot stop publishing for ${creatorId}: ${opened.reason}`);
+			return { removed: 0, stranded: listed.length, revoked: false };
+		}
+
+		for (const work of listed) {
+			const rkey = work.uri ? rkeyFromAtUri(work.uri, WORK_COLLECTION) : null;
+			if (!rkey) {
+				// An unreadable URI is counted as stranded rather than skipped: something is on the
+				// network that this column was meant to be able to find.
+				stranded += 1;
+				continue;
+			}
+			try {
+				await opened.writer.deleteRecord(WORK_COLLECTION, rkey);
+				await db.update(works).set({ atprotoUri: null }).where(eq(works.id, work.id));
+				removed += 1;
+			} catch (err) {
+				stranded += 1;
+				console.error(
+					`[work-listing] could not remove the listing for ${work.id}: ` +
+						`${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+	}
+
+	if (stranded > 0) return { removed, stranded, revoked: false };
+
+	const [row] = await db
+		.select({ did: users.atprotoDid })
+		.from(users)
+		.where(eq(users.id, creatorId))
+		.limit(1);
+	if (row?.did) {
+		await revokeAtprotoGrant(row.did);
+		await recordGrantedScope(row.did, null);
+	}
+	return { removed, stranded: 0, revoked: true };
 }
