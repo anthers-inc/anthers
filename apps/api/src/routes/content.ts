@@ -136,6 +136,7 @@ import { sanitizePostHtml } from "../services/sanitize.js";
 import { resolveShareToken, revokeShareLink, shareLinkFor } from "../services/share-links.js";
 import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
+import { queueWorkListingSync } from "../services/work-listing.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -3666,6 +3667,12 @@ const contentRoutes = new Hono()
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 
+		// ⭐ **Fired on every edit rather than only on release**, because the record carries the
+		// title, the description and the access state — so an ordinary edit changes what the
+		// listing says, and working out which edits matter is exactly the reasoning the job was
+		// built to make unnecessary. It re-reads and decides; a no-op costs one read.
+		await queueWorkListingSync(id);
+
 		// A new source means the old transcode is stale — re-process.
 		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
 		if (sourceChanged || thumbnailChanged) await queueScanForWork(updated);
@@ -3871,6 +3878,9 @@ const contentRoutes = new Hono()
 				.set({ visibility: "withdrawn", withdrawnAt, updatedAt: new Date() })
 				.where(eq(works.id, id));
 			await tellBuyersItWasWithdrawn(id, item.title, withdrawnAt);
+			// 🚨 The delete half, and the one this whole design is shaped around: a listing left
+			// up after a withdrawal re-publishes exactly what withdrawing was meant to undo.
+			await queueWorkListingSync(id);
 			return c.json({ withdrawn: true, purchaseCount: soldCount }, 200);
 		}
 

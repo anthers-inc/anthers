@@ -12,6 +12,7 @@
  * `sourceKey`, no signed URLs. That is not a policy applied afterwards — it is why the
  * Lexicon has no field capable of carrying them.
  */
+import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import { type AccessibleWork, buildPreviewContext, resolveAccessSync } from "./access.js";
 
 /** The Work columns a public listing is derived from. Deliberately narrow. */
@@ -43,6 +44,8 @@ export type UnpublishableReason =
 	| "not_released"
 	| "taken_down"
 	| "quarantined"
+	| "adult_rung"
+	| "missing_title"
 	| "missing_release_date";
 
 /**
@@ -55,9 +58,14 @@ export type UnpublishableReason =
  * exactly what withdrawing was meant to undo. A `taken_down` Work is under a DMCA notice,
  * where continuing to advertise it is continuing to point at the infringement.
  *
+ * 🚨 **Adult work is excluded outright**, which is a different kind of exclusion from the
+ * others: the rest are states a Work passes through, and this one is a property of the
+ * material. Anthers withholds an Adult Work's *existence* from anyone who has not opted in
+ * and verified, so a public record naming it would defeat the rung entirely.
+ *
  * ⚠️ Records are public and cached by strangers. An over-permissive answer here cannot be
  * taken back by deleting the record later, which is why this fails closed on any
- * visibility value it does not recognize.
+ * visibility value it does not recognize — and on any maturity rating it does not either.
  */
 export function unpublishableReason(work: PublishableWork): UnpublishableReason | null {
 	// 🚨 First, and stated separately from the visibility check below even though a
@@ -66,6 +74,19 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
 	// reaching the network has to be the material's own state rather than a side effect of
 	// it, which some later change to how quarantine delists could quietly remove.
 	if (work.quarantineStatus === "quarantined") return "quarantined";
+	// 🚨 **Adult work is INVISIBLE to anybody who has not opted in and verified — its
+	// existence, not merely its bytes** — so `/works/:id` answers 404 rather than 403. A
+	// record is the furthest-reaching listing Anthers can publish: it carries the title, the
+	// description and the URL onto a network with no verification of any kind and no way to
+	// un-publish. Putting one there would hand strangers the exact thing the rung withholds,
+	// which is why this sits beside the quarantine check rather than being left to the
+	// visibility test that catches neither.
+	//
+	// ⚠️ **Asked through `requiresAdultVerification` rather than `maturity === "adult"`**, and
+	// the difference is the direction it fails in: that helper answers **true** for null and
+	// for any rating this build has never heard of, so a rung added later is withheld until
+	// somebody decides otherwise rather than published until somebody notices.
+	if (requiresAdultVerification(work.maturity)) return "adult_rung";
 	if (work.takedownStatus !== "active") return "taken_down";
 	if (work.visibility !== "released") return "not_released";
 	// A released Work with no release date is a state no current path produces — the update
@@ -73,6 +94,13 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
 	// therefore better than papering over it: if it ever appears in production it is a bug
 	// worth seeing, and the alternative was writing an approximate date into a record that
 	// other people cache.
+	// 🚨 **An untitled listing is worse than no listing.** `works.title` defaults to the empty
+	// string and the update route treats it as optional, so a Work really can be released
+	// without a name — and the mapper's `title ?? ""` would then publish a record that satisfies
+	// the Lexicon's `required` structurally while naming nothing at all. Same reasoning as the
+	// release date below: a state no sensible path produces is better reported than papered
+	// over, and papering over this one puts an anonymous entry in somebody's public Catalog.
+	if (!work.title?.trim()) return "missing_title";
 	if (!work.releasedAt) return "missing_release_date";
 	return null;
 }

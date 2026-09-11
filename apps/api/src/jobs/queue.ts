@@ -164,6 +164,16 @@ export const QUEUES = {
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
+	// Write, replace or remove a Work's public listing on the AT Protocol network. Carries only
+	// a Work id: the handler re-reads the Work and decides from its current state, so a
+	// duplicate is harmless and a late one still converges. Deliberately not part of the release
+	// request — a record is a call to another server, and a creator's publishing must not fail
+	// because that server is down.
+	SYNC_WORK_LISTING: "sync-work-listing",
+	// The backstop for the queue above. Per-event enqueues are the latency; this is the
+	// guarantee, because an enqueue that failed, a job that exhausted its retries, and a state
+	// changed directly in SQL all leave a listing disagreeing with its Work and nothing noticing.
+	RECONCILE_LISTINGS: "reconcile-listings",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	// Hash a stored object and ask a detection vendor about the hash. Keyed on the storage
 	// key rather than the Work, because that is the only identifier both upload paths share:
@@ -258,6 +268,15 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 120,
 		expireInMinutes: 5,
 	},
+	// ⚠️ **Retried generously and for a long time, because the delete path is the one that
+	// matters.** A create that never lands is a listing nobody has; a delete that never lands
+	// is a listing advertising something its creator withdrew, which is the failure this whole
+	// design is shaped around. The work is one small write, so retrying costs nothing.
+	[QUEUES.SYNC_WORK_LISTING]: {
+		retryLimit: 8,
+		retryDelay: 60,
+		expireInMinutes: 10,
+	},
 	[QUEUES.DISTRIBUTE_POOL]: {
 		retryLimit: 1,
 		expireInMinutes: 30,
@@ -323,6 +342,10 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// See the queue comment for why hourly rather than daily: the remedy it protects expires
 	// in 72 hours.
 	[QUEUES.WATCH_IDENTITIES, "23 * * * *"],
+	// 4:20 AM daily, off the hour and after the night's other sweeps. A disagreement between a
+	// Work and its listing is not urgent by the minute — the per-event enqueue already covers
+	// the ordinary case — but it must not go unnoticed for a week.
+	[QUEUES.RECONCILE_LISTINGS, "20 4 * * *"],
 	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
 	// 3:30 AM daily. Nothing depends on the ordering — an expired session is dead to every
 	// reader the moment it expires, so this only reclaims the row and the IP on it.

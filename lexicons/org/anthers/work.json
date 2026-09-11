@@ -28,6 +28,7 @@
 					},
 					"title": {
 						"type": "string",
+						"description": "The work's name, as its creator wrote it. Plain text for the same reason the description is: every consumer should be able to render it without a sanitizer. Required and never empty — a listing that names nothing is worse than no listing, so a work without a title is not published rather than published anonymously.",
 						"maxGraphemes": 300,
 						"maxLength": 3000
 					},

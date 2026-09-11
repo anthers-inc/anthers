@@ -30,10 +30,12 @@ import { handlePruneAttention, type PruneAttentionData } from "./prune-attention
 import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue } from "./queue.js";
 import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
+import { reconcileListings } from "./reconcile-listings.js";
 import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { watchHostedIdentities } from "./watch-identities.js";
 
@@ -95,7 +97,21 @@ async function start() {
 		},
 	);
 
+	await queue.work<SyncWorkListingData>(
+		QUEUES.SYNC_WORK_LISTING,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				await syncWorkListingJob(job.data);
+			}
+		},
+	);
+
 	// ── Scheduled jobs ────────────────────────────────────────────────
+
+	await queue.work(QUEUES.RECONCILE_LISTINGS, async () => {
+		await reconcileListings();
+	});
 
 	await queue.work<DistributePoolData>(QUEUES.DISTRIBUTE_POOL, async (jobs) => {
 		for (const job of jobs) {

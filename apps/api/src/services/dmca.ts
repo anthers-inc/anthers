@@ -36,6 +36,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle
 import { notify } from "../services/notifications.js";
 import { refundPurchase } from "./refunds.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void";
+import { queueWorkListingSync } from "./work-listing.js";
 
 /**
  * How long a creator has to file a counter-notice before the takedown becomes
@@ -183,6 +184,10 @@ export async function takeDownWork(input: {
 
 	await db.transaction(async (tx) => {
 		await tx.update(works).set({ takedownStatus: "taken_down" }).where(eq(works.id, work.id));
+		// A listing advertising something under a takedown notice is continuing to point at the
+		// infringement. Enqueued inside the transaction deliberately: a spurious job if this
+		// rolls back is harmless, because the job re-reads the Work and decides from its state.
+		void queueWorkListingSync(work.id);
 
 		await tx
 			.update(dmcaNotices)
@@ -357,6 +362,8 @@ export async function restoreWork(input: {
 
 	await db.transaction(async (tx) => {
 		await tx.update(works).set({ takedownStatus: "active" }).where(eq(works.id, work.id));
+		// Restored, so the listing comes back with it.
+		void queueWorkListingSync(work.id);
 
 		await tx
 			.update(dmcaNotices)

@@ -42,6 +42,53 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 	};
 }
 
+describe("a listing that names nothing", () => {
+	// 🚨 `works.title` defaults to the empty string and the update route treats it as optional,
+	// so a Work really can be released without a name — and `title ?? ""` in the mapper would
+	// then satisfy the Lexicon's `required` structurally while publishing an anonymous entry in
+	// somebody's public Catalog. Found while writing the field's own description, which is a
+	// decent argument for writing them.
+	it("refuses a Work with no title", () => {
+		expect(unpublishableReason(openWork({ title: "" }))).toBe("missing_title");
+	});
+
+	it("refuses a Work whose title is only whitespace", () => {
+		expect(unpublishableReason(openWork({ title: "   " }))).toBe("missing_title");
+	});
+
+	it("refuses a Work whose title is null", () => {
+		expect(unpublishableReason(openWork({ title: null }))).toBe("missing_title");
+	});
+});
+
+describe("the Adult rung never reaches the network", () => {
+	// 🚨 Anthers answers 404 for an Adult Work to anybody who has not opted in and verified —
+	// its EXISTENCE is withheld, not merely its bytes. A record carries the title, the
+	// description and the URL onto a network with no verification of any kind and no way to
+	// un-publish, so it would hand strangers exactly what the rung withholds.
+	it("refuses an Adult Work", () => {
+		expect(unpublishableReason(openWork({ maturity: "adult" }))).toBe("adult_rung");
+	});
+
+	// ⚠️ The direction this must fail in. `requiresAdultVerification` answers true for anything
+	// it does not recognize, so a rung added later is withheld until somebody decides
+	// otherwise rather than published until somebody notices.
+	it("refuses a rating this build has never heard of", () => {
+		expect(unpublishableReason(openWork({ maturity: "explicit-something" }))).toBe("adult_rung");
+	});
+
+	it("refuses a Work with no rating at all", () => {
+		expect(unpublishableReason(openWork({ maturity: null as never }))).toBe("adult_rung");
+	});
+
+	// ⭐ Mature is deliberately NOT excluded. It is a warning and a filter input carrying no
+	// access consequence — such a Work stays reachable signed-out, so its title and description
+	// are already public and withholding the record would withhold nothing.
+	it("publishes a Mature Work, which carries no access consequence", () => {
+		expect(unpublishableReason(openWork({ maturity: "mature" }))).toBeNull();
+	});
+});
+
 describe("what may be published at all", () => {
 	it("publishes a released, active Work", () => {
 		expect(unpublishableReason(openWork())).toBeNull();
