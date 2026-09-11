@@ -169,8 +169,8 @@ describe("client construction under Bun", () => {
 		//
 		// ⭐ The old assertion was protecting a real property in the wrong place. Declaring a
 		// scope here does not put it on anybody's consent screen; the screen renders what the
-		// authorization REQUEST asks for. Signing in still asks for identity alone, and
-		// `atproto-login.test.ts` is what pins that.
+		// authorization REQUEST asks for, and what each door requests is decided by the
+		// account going through it — `atproto-publishing.test.ts` is what pins that.
 		const prev = process.env.BASE_URL;
 		process.env.BASE_URL = "https://anthers.org";
 		try {

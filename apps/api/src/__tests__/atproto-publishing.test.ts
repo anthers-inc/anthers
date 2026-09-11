@@ -2,19 +2,18 @@
 /**
  * Asking a creator for permission to publish their listings, and remembering the answer.
  *
- * 🚨 **Three refusals carry the weight here, and all three protect somebody other than the
- * person pressing the button.** The flow must authorize against the DID already on the
- * account rather than a handle the browser supplied; the callback must refuse an identity
- * that is not the one linked; and signing in must go on asking for identity alone however
- * much permission the account has already given. The first two stop a catalog being written
- * into a stranger's repository, and the third is the promise that a write permission is never
- * put in front of somebody who came to sign in.
+ * 🚨 **Two refusals carry the weight, and both protect somebody other than the person pressing
+ * the button.** The flow must authorize against the DID already on the account rather than a
+ * handle the browser supplied, and the callback must refuse an identity that is not the one
+ * linked. Either one missing puts a creator's catalog in a stranger's repository.
  *
- * ⭐ **The fourth is quieter and is the one nothing else would catch.** One OAuth session is
- * stored per DID, so each authorization replaces the last — which means signing in after
- * granting publishing leaves an identity-only token behind. What is recorded has to narrow
- * with it, because a column claiming a permission the token does not carry would turn a
- * revocation nobody intended into a listing that silently stopped updating.
+ * ⭐ **The pair about what a sign-in asks for is the subtler half, and an earlier version of
+ * this file asserted the wrong one of them.** One OAuth session is stored per DID, so each
+ * authorization replaces the last — which means a sign-in that asked for identity alone would
+ * discard a publishing permission the creator had already granted, and the first sign of it
+ * would be a listing that stopped updating. So a creator's sign-in carries their permission
+ * through, *and* a reader's still asks for nothing beyond identity. Asking everybody would
+ * make the first test pass and is why the second one is here.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
