@@ -14,6 +14,9 @@
  *   POST   /me/adult-access         — opt in, verifying adulthood by card funding type
  *   DELETE /me/adult-access         — opt back out (the verification is kept; never locked,
  *                                     because opting out only makes an account stricter)
+ *   GET    /me/studio-panels        — the creator's Studio Dashboard layout (panels only;
+ *                                     the attention worklist is never stored or hideable)
+ *   PATCH  /me/studio-panels        — reorder or show/hide them
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change one or both
@@ -32,13 +35,21 @@
  */
 
 import { db } from "@anthers/db/client";
-import { follows, posts, rightsRequests, users, works } from "@anthers/db/schema";
+import {
+	follows,
+	posts,
+	rightsRequests,
+	studioPreferences,
+	users,
+	works,
+} from "@anthers/db/schema";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
 	RIGHTS_DETAILS_MAX,
 	RIGHTS_RESPONSE_DAYS,
 } from "@anthers/shared/rights";
+import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -884,6 +895,51 @@ const accountRoutes = new Hono()
 	// 🚨 **These change what the READER meets and reach nobody else.** A Work somebody
 	// blurred stays listed for everyone else, stays searchable, stays earning, and is never
 	// demoted. The wiki's *Content Standards* is explicit that this is not platform-side suppression.
+
+	// ── The creator's Studio Dashboard layout ────────────────────────────────
+	//
+	// 🚨 **Only the panels, never the worklist.** The Dashboard's attention items — payout
+	// setup that blocks every release, a released Work nobody can open, a failed encode — are
+	// composed by the client from state it already holds and are not stored, not ordered and
+	// not hideable. A layout that could turn one off would be a warning a creator can remove,
+	// which is a warning that will be removed by exactly the person it was for.
+	.get("/me/studio-panels", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const [row] = await db
+			.select({ panels: studioPreferences.panels })
+			.from(studioPreferences)
+			.where(eq(studioPreferences.userId, sessionUser.id))
+			.limit(1);
+		// No row and a null column mean the same thing — never arranged — and
+		// `resolveStudioPanels` turns both into the defaults.
+		return c.json({ panels: resolveStudioPanels(row?.panels ?? null) });
+	})
+
+	.patch(
+		"/me/studio-panels",
+		requireAuth,
+		zValidator("json", z.object({ panels: z.array(z.string()).max(STUDIO_PANELS.length) })),
+		async (c) => {
+			const sessionUser = c.get("user");
+			const { panels } = c.req.valid("json");
+
+			// ⚠️ Narrowed to the panels that exist rather than stored as sent. The column is
+			// `jsonb` and would hold a typo forever, and the thing reading it back is a
+			// renderer that has never heard of it. Validating here rather than only in the
+			// browser is what keeps a second client from seeding one.
+			const clean = resolveStudioPanels(panels);
+
+			await db
+				.insert(studioPreferences)
+				.values({ userId: sessionUser.id, panels: clean })
+				.onConflictDoUpdate({
+					target: studioPreferences.userId,
+					set: { panels: clean, updatedAt: new Date() },
+				});
+
+			return c.json({ panels: clean });
+		},
+	)
 
 	.get("/me/content-preferences", async (c) => {
 		const viewerId = await getOptionalUserId(c);

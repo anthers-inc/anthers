@@ -668,3 +668,31 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	recoveryKeySeatedAt: timestamp("recovery_key_seated_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// org — how a creator arranges Anthers' OWN product surface. A Studio Dashboard layout is
+// not part of a person's portable identity: it means nothing on another PDS, nothing to
+// another AppView, and it does not travel with the repository. That is the whole reason it
+// is a table here rather than a column on `users`, which is `node` — adding org-only UI
+// state to a node-canonical row would misfile it under the legend at the top of this file.
+// Cascades with the account: a layout without its creator is nothing.
+export const studioPreferences = pgTable("studio_preferences", {
+	userId: integer("user_id")
+		.primaryKey()
+		.references(() => users.id, { onDelete: "cascade" }),
+	/**
+	 * The panels on the Dashboard, in the creator's own order. Visibility and order in one
+	 * value: a panel that is off is simply absent.
+	 *
+	 * ⭐ **Null means "never arranged" and is NOT the same as `[]`.** An empty array is a
+	 * creator who hid everything, which is a thing they may do; null is a creator who has
+	 * never opened the control and should get the defaults. `resolveStudioPanels` in
+	 * `@anthers/shared/studio-panels` owns that distinction and is the only thing that
+	 * should read this column raw.
+	 *
+	 * 🚨 **Nothing that warns is ever stored here.** The Dashboard's worklist is composed by
+	 * the system and cannot be hidden, because payout setup blocks every release and a
+	 * released-but-locked Work is invisible from its creator's own side.
+	 */
+	panels: jsonb("panels").$type<string[]>(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

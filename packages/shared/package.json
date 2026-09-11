@@ -24,7 +24,8 @@
 		"./handles": "./src/handles.ts",
 		"./signup": "./src/signup.ts",
 		"./figures": "./src/figures.generated.ts",
-		"./lexicons": "./src/lexicons.ts"
+		"./lexicons": "./src/lexicons.ts",
+		"./studio-panels": "./src/studio-panels.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
