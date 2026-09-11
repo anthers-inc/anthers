@@ -40,6 +40,7 @@
 		"./post/mediaUpload": "./src/components/post/mediaUpload.ts",
 		"./post/unlock": "./src/components/post/unlock.tsx",
 		"./PostFormPage": "./src/pages/PostFormPage.tsx",
+		"./PostsPage": "./src/pages/PostsPage.tsx",
 		"./DashboardPage": "./src/pages/DashboardPage.tsx",
 		"./ProjectFormPage": "./src/pages/ProjectFormPage.tsx",
 		"./WorkFormPage": "./src/pages/WorkFormPage.tsx",

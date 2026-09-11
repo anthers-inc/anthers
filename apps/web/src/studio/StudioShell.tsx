@@ -17,6 +17,14 @@ import { Link, useLocation } from "react-router-dom";
  * Studio nav. Every path is `/studio`-prefixed because the Studio is a SECTION of the
  * consumer app now, not a separate origin — so these are ordinary in-app routes and the
  * old cross-origin hops are gone.
+ *
+ * 🚨 **These are PLACES, and one of them was an action until 2026-09-11.** The nav read
+ * *Dashboard · Catalog · New Post · Analytics · Settings*: a verb sitting among locations,
+ * belonging to the object that carries the least, while Projects — which has two routes and
+ * its own wiki page — had no entry at all. Anthers has three clean objects and the tabs now
+ * divide along them (Parker): the **Catalog** owns Projects and Works, **Posts** owns posts,
+ * and the **Dashboard** stopped being an overview of everything so it can say what needs
+ * attention. Keep the New buttons on each index rather than bringing one back up here.
  */
 const STUDIO = "/studio";
 const NAV: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
@@ -24,9 +32,9 @@ const NAV: { to: string; label: string; icon: ComponentType<{ className?: string
 	// Catalog, NOT "Library". A creator keeps a Catalog of Works; **Library is the bound
 	// term for the USER's own owned content** and is the sidebar item directly above this
 	// one in `LoggedInLayout`, so the two were the same word for opposite things.
-	// `/studio/library` still resolves — it is kept as an alias for old bookmarks.
+	// `/studio/library` redirects here — kept for bookmarks predating the 2026-08-13 rename.
 	{ to: `${STUDIO}/catalog`, label: "Catalog", icon: RectangleStackIcon },
-	{ to: `${STUDIO}/posts/new`, label: "New Post", icon: PencilSquareIcon },
+	{ to: `${STUDIO}/posts`, label: "Posts", icon: PencilSquareIcon },
 	{ to: `${STUDIO}/analytics`, label: "Analytics", icon: ChartBarIcon },
 	// Import nav hidden — the itch.io import endpoints return "not yet implemented".
 	// Restore this line (and the route + lazy import in App.tsx) when the lane ships.
