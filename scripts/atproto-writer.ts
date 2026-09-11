@@ -5,10 +5,12 @@
  * This is the implementation Anthers uses to write into **its own** repository — publishing
  * a schema, or a listing for a Work that Anthers itself owns. Writing into a *creator's*
  * repository is a different problem with the same three calls: it needs an OAuth session
- * carrying DPoP, and the only scope the network offers for it today is broad enough to act
- * as that person's whole account. That is why this lives in `scripts/` rather than in the
- * API's services — nothing in the running application writes records yet, and the eventual
- * one will be built on `@atproto/oauth-client`, which the app already depends on.
+ * carrying DPoP. ⭐ **The scope for that is narrow and available** — a `repo:` permission
+ * naming one collection was confirmed honored on bsky.social on 2026-09-11 by
+ * `scripts/atproto-scope-probe.ts` — so the eventual implementation is built on
+ * `@atproto/oauth-client`, which the app already depends on, rather than waiting on the
+ * protocol. This stays in `scripts/` because nothing in the running application writes
+ * records yet.
  *
  * ⚠️ **`@atproto/api` is a devDependency and must stay one.** Adding it to the API's
  * dependencies would put a second protocol client in the deployed image for a code path that
@@ -30,14 +32,15 @@ export interface SessionOptions {
 /**
  * Log in and return a writer bound to that account's repository.
  *
- * 🚨 **`validate: false` is deliberate and is not a shortcut.** Server-side validation asks
- * the server to resolve the record's Lexicon, and `org.anthers.work` has never been
- * published — so there is nothing on the network for it to resolve, and asking for
- * validation fails on a schema that is correct. The record is validated locally against the
- * generated validator before it ever gets here, which is a stronger check than the server
- * could perform anyway: it is the same schema a consumer would use. **When the Lexicon is
- * published this should be revisited**, because at that point the server can check it and a
- * disagreement between the two would be worth hearing about.
+ * ⚠️ **`validate: false` is now an open question rather than a settled one.** It was
+ * deliberate while no schema was published: server-side validation asks the server to
+ * resolve the record's Lexicon, and asking for it on an unpublished schema fails on a record
+ * that is perfectly correct. `org.anthers.work` has been published since 2026-09-10, so a
+ * server can resolve it now, and the flag has outlived its reason. The record is still
+ * validated locally against the generated validator — the same schema a consumer would use —
+ * so nothing unchecked goes out either way. **What turning it on would buy is hearing about a
+ * disagreement between our validator and a server's**, which is worth having and is a
+ * deliberate change to make rather than a flag to flip in passing.
  */
 export async function sessionWriter(opts: SessionOptions): Promise<RepoWriter> {
 	const agent = new AtpAgent({ service: opts.service });

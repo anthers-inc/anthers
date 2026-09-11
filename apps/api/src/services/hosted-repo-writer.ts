@@ -3,11 +3,17 @@
  * A {@link RepoWriter} over an identity Anthers hosts.
  *
  * ⭐ **This is the piece that made record-writing possible at all.** A record belongs in the
- * creator's own repository, and the only permission the network offers for a repository
- * Anthers does not host is `transition:generic` — App-Password-equivalent power over somebody's
- * whole account, which is not a thing to ask a creator for. Hosting the identity was the
- * unblock Anthers controlled: for an account that took a handle here, the credential is in
- * `hosted_accounts`, sealed, and the hub can open it.
+ * creator's own repository, and hosting the identity was the unblock Anthers controlled: for
+ * an account that took a handle here, the credential is in `hosted_accounts`, sealed, and the
+ * hub can open it — no permission to ask anybody for.
+ *
+ * ⚠️ **It is no longer the ONLY route, and this file being the only writer is now a gap
+ * rather than a limit.** A narrow `repo:` OAuth permission naming one collection was
+ * confirmed honored on bsky.social on 2026-09-11 (`scripts/atproto-scope-probe.ts`), so a
+ * creator whose identity lives elsewhere could grant Anthers exactly the right to publish
+ * their listings and nothing else. Until that path is built, `not_hosted` below still means
+ * no record gets written — which is a true description of the code and no longer a true
+ * description of what the network permits.
  *
  * 🚨 **Built on `nodeCall` rather than `@atproto/api`, deliberately.** `scripts/atproto-writer.ts`
  * uses that package and its docblock says plainly that it must stay a devDependency — putting a
