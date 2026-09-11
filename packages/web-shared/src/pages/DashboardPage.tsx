@@ -15,28 +15,43 @@
  *
  * 🚨 **Nothing in the worklist may become a hideable panel** (Parker, 2026-09-11). Payout
  * setup blocks every release a creator will ever attempt, and a released-but-locked Work is
- * invisible from their own side of the glass. The customizable panels that arrive below this
- * are for standing content — earnings, counts, recent activity — where preference is the
- * right input and hiding one costs nothing.
+ * invisible from their own side of the glass, so a warning a creator can remove is one that
+ * will be removed by exactly the person it was for. The panels below it are the other half:
+ * standing content, where preference is the right input and hiding one costs nothing. They
+ * are arranged by the creator and stored per account — `@anthers/shared/studio-panels` owns
+ * the list and `StudioPanels.tsx` renders them.
  */
 
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { resolveStudioPanels, type StudioPanel } from "@anthers/shared/studio-panels";
+import { AdjustmentsHorizontalIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
+import { ArrangePanels, StudioPanelBody } from "../components/content/StudioPanels";
 import { buildWorklist, type WorklistItem } from "../components/content/studio-worklist";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioNewPostUrl, studioNewWorkUrl, studioUrl } from "../lib/studio";
-import type { CreatorEarnings, Work } from "../lib/types";
+import type { CreatorEarnings, PostListItem, Project, Work } from "../lib/types";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
 	const [works, setWorks] = useState<Work[]>([]);
+	const [projects, setProjects] = useState<Project[]>([]);
+	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 	/** `null` until the status request answers — see `buildWorklist` for why that matters. */
 	const [payoutsReady, setPayoutsReady] = useState<boolean | null>(null);
 	const [loading, setLoading] = useState(true);
+
+	/**
+	 * The creator's panel layout. Starts at the defaults so the Dashboard renders something
+	 * sensible on the first paint, and is replaced by what the server holds when it answers —
+	 * `resolveStudioPanels` gives the same defaults for a creator who has never arranged
+	 * anything, so the swap is invisible unless they have.
+	 */
+	const [panels, setPanels] = useState<StudioPanel[]>(() => resolveStudioPanels(null));
+	const [arranging, setArranging] = useState(false);
 
 	useEffect(() => {
 		let live = true;
@@ -54,6 +69,50 @@ export default function DashboardPage() {
 			live = false;
 		};
 	}, []);
+
+	// The panels' own data. Fetched whatever the layout says, because a panel turned on while
+	// arranging should fill immediately rather than after a reload — these are two small
+	// listings the Studio fetches on its other tabs anyway.
+	useEffect(() => {
+		if (!user?.isCreator) return;
+		let live = true;
+		client.api.content.projects
+			.$get({ query: { mine: "true" } })
+			.then((res) => res.json())
+			.then((d) => {
+				if (live) setProjects((d as { projects: Project[] }).projects ?? []);
+			})
+			.catch(() => {});
+		client.api.content.posts
+			.$get({ query: { mine: "true" } })
+			.then((res) => res.json())
+			.then((d) => {
+				if (live) setPosts((d as { posts: PostListItem[] }).posts ?? []);
+			})
+			.catch(() => {});
+		client.api.accounts.me["studio-panels"]
+			.$get()
+			.then(async (res) => (res.ok ? ((await res.json()) as { panels: string[] }) : null))
+			.then((d) => {
+				if (live && d) setPanels(resolveStudioPanels(d.panels));
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [user?.isCreator]);
+
+	/**
+	 * Save a layout, optimistically.
+	 *
+	 * ⚠️ Not reverted on failure, deliberately: the cost of a lost arrangement is that the
+	 * creator arranges it again, while a layout that visibly snaps back mid-edit is the same
+	 * information delivered as a glitch. The server narrows what it stores anyway.
+	 */
+	const saveLayout = (next: StudioPanel[]) => {
+		setPanels(next);
+		client.api.accounts.me["studio-panels"].$patch({ json: { panels: next } }).catch(() => {});
+	};
 
 	useEffect(() => {
 		if (!user?.isCreator) return;
@@ -100,7 +159,15 @@ export default function DashboardPage() {
 
 	return (
 		<div className="max-w-4xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+			<div className="mb-6 flex items-center justify-between gap-2">
+				<h1 className="text-2xl font-bold">Dashboard</h1>
+				{user?.isCreator && !arranging && (
+					<button type="button" className="btn btn-ghost btn-sm" onClick={() => setArranging(true)}>
+						<AdjustmentsHorizontalIcon className="h-4 w-4" />
+						Arrange
+					</button>
+				)}
+			</div>
 
 			{worklist.length > 0 ? (
 				<section className="mb-8">
@@ -130,41 +197,37 @@ export default function DashboardPage() {
 				</section>
 			)}
 
-			{/* Earnings. A standing panel rather than an attention item — it is never "wrong",
-			    and it is the first thing that becomes hideable when the panels land. */}
-			{user?.isCreator && earnings && parseFloat(earnings.total) > 0 && (
-				<section className="card bg-base-200">
-					<div className="card-body">
-						<h2 className="card-title text-lg">Earnings</h2>
-						<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-							<div>
-								<div className="text-xs text-base-content/50 uppercase">Pool Income</div>
-								<div className="text-xl font-bold text-success">${earnings.poolTotal}</div>
-							</div>
-							<div>
-								<div className="text-xs text-base-content/50 uppercase">Support Income</div>
-								<div className="text-xl font-bold text-success">${earnings.seedTotal}</div>
-							</div>
-							<div>
-								<div className="text-xs text-base-content/50 uppercase">Total</div>
-								<div className="text-xl font-bold">${earnings.total}</div>
-							</div>
-							<div>
-								<div className="text-xs text-base-content/50 uppercase">Supporters</div>
-								<div className="text-xl font-bold">{earnings.subscriberCount}</div>
-							</div>
+			{/* The standing panels. Every one is optional; nothing that warns is among them. */}
+			{user?.isCreator && (
+				<>
+					{arranging && (
+						<div className="mb-4">
+							<ArrangePanels
+								shown={panels}
+								onChange={saveLayout}
+								onDone={() => setArranging(false)}
+							/>
 						</div>
-						{earnings.cycle && (
-							<p className="text-xs text-base-content/50 mt-2">
-								Cycle:{" "}
-								{new Date(earnings.cycle).toLocaleDateString("en-US", {
-									month: "long",
-									year: "numeric",
-								})}
-							</p>
-						)}
+					)}
+					<div className="flex flex-col gap-4">
+						{panels.map((panel) => (
+							<StudioPanelBody
+								key={panel}
+								panel={panel}
+								data={{ earnings, works, projects, posts }}
+							/>
+						))}
 					</div>
-				</section>
+					{panels.length === 0 && !arranging && (
+						<p className="text-sm text-base-content/50">
+							You have turned every panel off.{" "}
+							<button type="button" className="link" onClick={() => setArranging(true)}>
+								Put one back
+							</button>
+							.
+						</p>
+					)}
+				</>
 			)}
 
 			{!user?.isCreator && (
