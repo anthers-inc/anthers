@@ -16,6 +16,7 @@ import PostWorkLinks from "../components/post/PostWorkLinks";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { postUrl } from "../lib/postUrl";
+import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioEditPostUrl, studioUrl } from "../lib/studio";
 import type { Post, Project, Work } from "../lib/types";
@@ -107,13 +108,28 @@ export default function PostFormPage() {
 		};
 	}, [slug, isEdit]);
 
-	const fetchProjects = () => {
+	/**
+	 * The creator's Projects, for the attach-on-create select.
+	 *
+	 * ⚠️ On mount rather than on focus. It used to fetch from `onFocus` and `onMouseDown`,
+	 * which meant the options existed only if the control was pointed at first — a keyboard
+	 * user tabbing through and a screen reader announcing the list both met "No project" and
+	 * nothing else, with no request in flight to explain it.
+	 */
+	useEffect(() => {
+		if (isEdit) return;
+		let live = true;
 		client.api.content.projects
 			.$get({ query: { mine: "true" } })
 			.then((res) => res.json())
-			.then((data) => setProjects((data as { projects: Project[] }).projects ?? []))
+			.then((data) => {
+				if (live) setProjects((data as { projects: Project[] }).projects ?? []);
+			})
 			.catch(() => {});
-	};
+		return () => {
+			live = false;
+		};
+	}, [isEdit]);
 
 	const handleBodyChange = (html: string) => {
 		setBodyHtml(html);
@@ -218,8 +234,11 @@ export default function PostFormPage() {
 							onChange={handleBodyChange}
 							placeholder="Write your post... (use #tags to categorize)"
 						/>
+						{/* Named the "Content section" until 2026-09-11, and there has not been one
+						    since the post stopped owning its media. What a post is *about* lives in
+						    the Catalog as a Work and is referenced below. */}
 						<p className="text-xs text-base-content/50 mt-1">
-							Shown to anyone who can see the post. The deliverable is the Content section below.
+							Shown to anyone who can see the post. What it is about goes in Linked Works below.
 						</p>
 					</FormField>
 
@@ -233,13 +252,22 @@ export default function PostFormPage() {
 						<span className="label-text">Show on Timeline</span>
 					</label>
 
-					{!isEdit && (
-						<FormField label="Project (optional)">
+					{/*
+					 * 🚨 **Create only, and now it says so instead of just vanishing.** `POST /posts`
+					 * honors `projectId`; `PATCH /posts/:slug` accepts the field in its schema and
+					 * never reads it. So this control could only ever work once, and on edit it
+					 * simply disappeared — which read as "this post is in no Project" rather than
+					 * as "ask somewhere else". Membership is a Project's fact and the Project's
+					 * shelf is where it is managed, so that is what the edit form points at.
+					 */}
+					{!isEdit ? (
+						<FormField
+							label="Project (optional)"
+							hint="Attach this post to one of your Projects. You can move it later from the Project itself."
+						>
 							<select
 								className="select select-bordered w-full"
 								value={projectId}
-								onFocus={fetchProjects}
-								onMouseDown={fetchProjects}
 								onChange={(e) => setProjectId(e.target.value)}
 							>
 								<option value="">No project</option>
@@ -249,10 +277,15 @@ export default function PostFormPage() {
 									</option>
 								))}
 							</select>
-							<p className="text-xs text-base-content/50 mt-1">
-								Attach this post to one of your projects.
-							</p>
 						</FormField>
+					) : (
+						<p className="text-xs text-base-content/50">
+							Which Projects this post belongs to is managed on the Project — open it from your{" "}
+							<Link to={studioUrl("/catalog")} className="link">
+								Catalog
+							</Link>{" "}
+							and use its Posts shelf.
+						</p>
 					)}
 				</section>
 

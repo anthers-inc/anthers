@@ -285,6 +285,30 @@ describe("analytics survive the prune", () => {
 		expect(rows[0].totalDuration).toBe(175);
 	});
 
+	it("calls a Work a Work, and gives it the address a link can be built from", async () => {
+		// 🚨 **These rows said `post` until 2026-09-11 and the Studio believed the label.**
+		// Attention is recorded against `attention_events.work_id` — a post announces and is
+		// never consumed — so every row here is joined to `works`, titled from `works` and
+		// grouped by `works.id`, and the mapper labeling them `post` predated the split.
+		// The Studio then built `/@name/posts/{id}` out of a Work's ROW id, which resolves
+		// to nothing: `findPostRow` reads a bare number as a publicId and those are nine
+		// digits, while a Work id is a small serial. Every row in the creator's analytics
+		// table linked to a 404, and no suite could see it because nothing asserted where a
+		// link went.
+		const content = await (
+			await req("/api/integrations/analytics/content?period=365", { headers: { Cookie: creator } })
+		).json();
+
+		const row = (content.content as { id: number; type: string; publicId: number | null }[]).find(
+			(r) => r.id === workId,
+		);
+		expect(row?.type).toBe("work");
+		// ⚠️ The publicId specifically, not merely "some id". The row id would build a URL
+		// that works on this machine and breaks the moment somebody shares it, which is the
+		// whole reason a Work carries a durable public address.
+		expect(row?.publicId).toBeGreaterThan(0);
+	});
+
 	it("merges the timeseries by date across both sources", async () => {
 		const series = await (
 			await req("/api/integrations/analytics/timeseries?period=365", {

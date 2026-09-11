@@ -1524,6 +1524,17 @@ function DataSection() {
 
 export default function SettingsPage() {
 	const { user, refreshUser } = useAuth();
+	const [settingsParams] = useSearchParams();
+
+	/**
+	 * Somebody the Studio's gate sent here, rather than somebody who came to change a setting.
+	 *
+	 * ⚠️ **The redirect was right and silent.** `StudioAuthGate` bounces a signed-in
+	 * non-creator to this page because creator mode is enabled here — but arriving with no
+	 * explanation reads as a dead end, and this page has a dozen switches, only one of which
+	 * is the one they wanted. Gone as soon as they turn it on, so it never becomes furniture.
+	 */
+	const sentFromStudio = settingsParams.get("creator") === "1" && !user?.isCreator;
 
 	const [isCreator, setIsCreator] = useState(user?.isCreator || false);
 	const [saving, setSaving] = useState(false);
@@ -1573,8 +1584,19 @@ export default function SettingsPage() {
 				</div>
 			)}
 
+			{sentFromStudio && (
+				<div className="alert alert-info mb-4">
+					<span>
+						The Studio is for creators, so we brought you here. Turn on creator mode below and it
+						opens.
+					</span>
+				</div>
+			)}
+
 			{/* Creator mode toggle */}
-			<div className="card bg-base-200 mb-6">
+			<div
+				className={`card mb-6 ${sentFromStudio ? "bg-base-200 ring-2 ring-info" : "bg-base-200"}`}
+			>
 				<div className="card-body">
 					<div className="form-control">
 						<label className="label cursor-pointer justify-start gap-3">

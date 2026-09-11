@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
-import { creatorPostUrl, creatorProjectUrl } from "../lib/profile";
+import { creatorProjectUrl, creatorWorkUrl } from "../lib/profile";
 import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
 import type {
@@ -245,12 +245,24 @@ function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] 
 													>
 														{item.title}
 													</Link>
-												) : /* `item.id` is nullable, and a row without one has no post to link to —
-												       guarded here the way the project branch above guards its slug, so
-												       the fallback renders plain text rather than a link to `/posts/null`. */
-												item.type === "post" && item.id != null ? (
+												) : /*
+												 * 🚨 A Work, addressed by its `publicId` — the durable half of its
+												 * URL. These rows said `post` and were linked with the Work's ROW
+												 * id until 2026-09-11, producing `/@name/posts/{id}`, which
+												 * resolves to nothing: a bare number reads as a post's publicId,
+												 * and those are nine digits while a Work id is a small serial.
+												 * Every row in this table 404'd, and a link that goes somewhere
+												 * wrong is the one kind of defect a green suite never reports.
+												 *
+												 * Guarded on `publicId` rather than on `id`, because the row id
+												 * would work here and break the moment somebody shared the link.
+												 */
+												item.type === "work" && item.publicId != null ? (
 													<Link
-														to={creatorPostUrl(user?.username ?? "", item.id)}
+														to={creatorWorkUrl(
+															user?.username ?? "",
+															`${item.slug ?? ""}-${item.publicId}`,
+														)}
 														className="link link-hover text-sm font-medium"
 													>
 														{item.title}

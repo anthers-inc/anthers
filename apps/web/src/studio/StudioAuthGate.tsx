@@ -30,7 +30,11 @@ export default function StudioAuthGate({ children }: { children: ReactNode }) {
 	// app, not a separate origin, so what used to be a cross-origin `window.location.href`
 	// is a client-side redirect that keeps the session, the history entry and the bundle.
 	if (!desktop && !isLoading && !isAuthenticated) return <Navigate to="/login" replace />;
-	if (!desktop && !isLoading && !isCreator) return <Navigate to="/settings" replace />;
+	// ⚠️ **`?creator=1`, because the bare redirect was a silent one.** The destination is
+	// right — creator mode is enabled on that page — but somebody who clicked into the Studio
+	// arrived at account settings with nothing saying why they were moved or which of the
+	// switches there was the one they wanted. The flag is what `SettingsPage` reads to say so.
+	if (!desktop && !isLoading && !isCreator) return <Navigate to="/settings?creator=1" replace />;
 
 	if (desktop && !isLoading && !isAuthenticated) {
 		return <DesktopSignIn />;
