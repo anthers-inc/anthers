@@ -267,6 +267,44 @@ export const EMAIL_SCOPE = "transition:email";
 export const PUBLISH_SCOPE = `repo:${WORK_COLLECTION}?action=create&action=update&action=delete`;
 
 /**
+ * The records Anthers writes on behalf of **anybody** with an identity.
+ *
+ * 🚨 **Empty today because none of these lexicons exist yet, and that is the only reason.**
+ * Follows, comments, ratings and reactions all belong in the reader's own repository — see
+ * `71.02 User Records in the Atmosphere` — so the moment any of them is published this list
+ * grows, and every door below starts asking for it. **Keeping it empty for any other reason
+ * would be the accessory model creeping back in**: a record in your repository is Anthers
+ * working, not an extra somebody opts into.
+ */
+export const USER_SCOPES: readonly string[] = [];
+
+/** The records Anthers writes on behalf of somebody who publishes. */
+export const CREATOR_SCOPES: readonly string[] = [PUBLISH_SCOPE];
+
+/**
+ * What to ask an account for, as one scope string.
+ *
+ * 🚨 **Every door that establishes an identity asks for the SAME set, and that is the whole
+ * design.** One OAuth session is stored per DID and each authorization replaces the last, so a
+ * sign-in that asked for less would quietly throw away a permission the person had already
+ * given — and the next listing would simply stop updating. An authorization server that already
+ * holds this exact grant redirects straight back through without prompting, so re-asking costs
+ * a returning person nothing; asking for less costs them the feature.
+ *
+ * ⚠️ **The creator tier is the one thing that is asked for separately**, because it is the one
+ * permission most accounts have no use for. Somebody who becomes a creator is asked once, at
+ * that moment, and every sign-in afterwards carries it.
+ */
+export function scopeFor(opts: { creator?: boolean; email?: boolean }): string {
+	return [
+		"atproto",
+		...(opts.email ? [EMAIL_SCOPE] : []),
+		...USER_SCOPES,
+		...(opts.creator ? CREATOR_SCOPES : []),
+	].join(" ");
+}
+
+/**
  * Every scope this client may EVER request, in one string.
  *
  * 🚨 **Client metadata's `scope` is the SUPERSET a client is allowed to ask for — not what
@@ -284,11 +322,10 @@ export const PUBLISH_SCOPE = `repo:${WORK_COLLECTION}?action=create&action=updat
  * to a creator's whole account, and declaring it would let any future call request it
  * without a second thought. A test asserts its absence.
  *
- * ⭐ **{@link PUBLISH_SCOPE} joined it on 2026-09-11, and adding it changed no consent screen.**
- * Declaring a scope only makes it *askable*; signing in still asks for `atproto` alone and
- * still shows identity alone. This is the registration that has to happen first, because an
- * undeclared scope is refused at the authorization server with `invalid_scope` — which is how
- * `transition:email` failed on 2026-08-22, and the same mistake was available here.
+ * ⭐ **{@link PUBLISH_SCOPE} joined it on 2026-09-11.** This is the registration that has to
+ * happen first, because an undeclared scope is refused at the authorization server with
+ * `invalid_scope` — which is how `transition:email` failed on 2026-08-22, and the same mistake
+ * was available here. What each door actually asks for is {@link scopeFor}.
  */
 const DECLARED_SCOPE = `atproto ${EMAIL_SCOPE} ${PUBLISH_SCOPE}`;
 

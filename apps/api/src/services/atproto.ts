@@ -247,6 +247,32 @@ async function countListedWorks(creatorId: number): Promise<number> {
  * existence.
  */
 
+/**
+ * Whether the account behind this handle or DID publishes, and therefore needs the creator
+ * permission asked for again on the way in.
+ *
+ * ⚠️ **Answers false for anything it cannot resolve, and that is safe in the right
+ * direction.** A handle nobody has linked, a typo, or a directory having a bad moment all mean
+ * "ask for the base set" — and the authorization the SDK is about to attempt will fail on its
+ * own terms with a message somebody can act on. The failure this avoids is asking a stranger
+ * for a permission over their repository because their handle did not resolve.
+ */
+export async function isCreatorIdentity(didOrHandle: string): Promise<boolean> {
+	try {
+		const did = didOrHandle.startsWith("did:")
+			? didOrHandle
+			: (await resolveIdentity(didOrHandle)).did;
+		const [row] = await db
+			.select({ isCreator: users.isCreator })
+			.from(users)
+			.where(eq(users.atprotoDid, did))
+			.limit(1);
+		return row?.isCreator === true;
+	} catch {
+		return false;
+	}
+}
+
 /** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */
 export async function findUserByAtprotoDid(
 	identity: AtprotoIdentity,
@@ -434,11 +460,32 @@ export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: s
 		};
 	}
 
+	// 🚨 **The listings come down BEFORE anything is detached, and this is the whole reason
+	// unlinking is more than three column writes.** Deleting a record needs the very permission
+	// that is about to be handed back, so detaching first would leave every listing on the
+	// network advertising Works Anthers can no longer reach — the failure the listing design is
+	// shaped around, reached by the tidiest-looking possible route.
+	//
+	// ⚠️ **Anything that cannot be removed stops the unlink**, rather than proceeding and
+	// stranding it. That is a refusal somebody can act on: try again, and the listings go with
+	// them. The alternative is a button that quietly makes a record permanent.
+	const { stopPublishingFor } = await import("./work-listing.js");
+	const stopped = await stopPublishingFor(userId);
+	if (stopped.stranded > 0) {
+		return {
+			error:
+				`We couldn't take ${stopped.stranded} of your listings off the network, and unlinking now ` +
+				"would leave them there for good. Try again in a moment.",
+		};
+	}
+
 	await db
 		.update(users)
 		.set({ atprotoDid: null, atprotoHandle: "", atprotoPdsUrl: "" })
 		.where(eq(users.id, userId));
 
+	// `stopPublishingFor` already revoked, so this is the belt to its braces: an account whose
+	// listings were all absent never reached a revocation at all.
 	if (user.atprotoDid) {
 		await revokeAtprotoGrant(user.atprotoDid);
 		await db.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));

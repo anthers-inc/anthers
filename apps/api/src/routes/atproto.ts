@@ -22,13 +22,18 @@
  * four intents — link an identity to the account you are signed into, sign in with one, sign
  * up with one, or let Anthers publish your listings into one — and the ceremony each owes.
  *
- * 🚨 **The intent decides the scope, and that is why there are four rather than two.**
- * Signing up needs `transition:email`, because Anthers never creates an account it cannot
- * mail; publishing needs a `repo:` permission over one collection; signing in and linking need
- * identity and nothing else. Folding either of the first two into the login intent would make
- * every returning person consent to something their sign-in never needs — which is why the
- * `publish` intent is reached from the Studio by somebody who went looking for it, and never
- * from a sign-in button.
+ * 🚨 **The ACCOUNT decides the scope, not the intent, and getting that backwards is the bug
+ * this route was rebuilt to remove.** One OAuth session is stored per DID and each
+ * authorization replaces the last, so a sign-in asking only for identity would discard a
+ * publishing permission the creator had already granted — their listings would then stop
+ * updating with nothing anywhere reporting a problem. Every door now asks for what the account
+ * holds, and a returning person sees no consent screen for a grant they have already made.
+ *
+ * ⭐ **A record in somebody's repository is Anthers working, not an accessory they opt into.**
+ * The permission to write one belongs with linking an identity, the way permissions belong with
+ * authorizing any application. `publish` exists as the one separate ask because the creator
+ * tier is the one permission most accounts have no use for — asked once, when somebody starts
+ * publishing, and carried by every sign-in after that.
  */
 
 import { sanitizeNextPath } from "@anthers/shared/next-path";
@@ -43,6 +48,7 @@ import {
 	atprotoSignupEnabled,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
+	isCreatorIdentity,
 	linkAtprotoToUser,
 	publishingStateFor,
 	readPdsEmail,
@@ -53,10 +59,9 @@ import {
 import {
 	attachSessionToUser,
 	buildClientMetadata,
-	EMAIL_SCOPE,
 	getAtprotoClient,
-	PUBLISH_SCOPE,
 	recordGrantedScope,
+	scopeFor,
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";
 import { createSession, validateSession } from "../services/auth.js";
@@ -174,16 +179,26 @@ function getFrontendUrl(c: { req: { url: string } }): string {
  * apology would throw away the only clue anyone has.
  */
 /**
- * What each intent asks the authorization server for.
+ * What this round trip should ask for, given who is going through it.
  *
- * ⭐ **One function so that the three answers sit next to each other and can be read in one
- * glance.** Which intent asks for what is the security-relevant fact on this route, and it is
- * the kind of fact that rots when it is spread across three branches.
+ * 🚨 **A sign-in asks for everything the account already holds, not for the minimum a sign-in
+ * needs.** One OAuth session is stored per DID and each authorization replaces the last, so
+ * asking for less would discard a permission somebody had already granted and their listings
+ * would quietly stop updating. A returning person is not prompted again for a grant they have
+ * already made — the authorization server redirects straight through — so this costs them
+ * nothing and asking for less would cost them the feature.
+ *
+ * ⚠️ **A creator is recognized by their account, which means resolving the handle first.** The
+ * alternative was asking every reader for permission to write Work listings they will never
+ * have, which is the kind of over-ask a platform arguing for minimal permissions cannot make.
+ * The resolution is one the SDK performs anyway a moment later.
  */
-function scopeFor(intent: AppState["intent"]): string {
-	if (intent === "signup") return `atproto ${EMAIL_SCOPE}`;
-	if (intent === "publish") return `atproto ${PUBLISH_SCOPE}`;
-	return "atproto";
+async function scopeForFlow(intent: AppState["intent"], subject: string): Promise<string> {
+	// Signing up has no account to read, so it gets the base set plus the address scope.
+	if (intent === "signup") return scopeFor({ email: true });
+	// An explicit ask, from somebody who went looking for it.
+	if (intent === "publish") return scopeFor({ creator: true });
+	return scopeFor({ creator: await isCreatorIdentity(subject) });
 }
 
 /**
@@ -281,13 +296,7 @@ const atprotoRoutes = new Hono()
 			};
 			const url = await getAtprotoClient().authorize(subject, {
 				state: JSON.stringify(appState),
-				// 🚨 **Identity only, except at the two moments that need more, and the exception
-				// proves the rule rather than eroding it.** Signing up needs `transition:email`
-				// because Anthers never creates an account it cannot mail; publishing needs
-				// {@link PUBLISH_SCOPE}, and it is asked for at the one moment a creator opts into
-				// it. Neither ever reaches the login or link intents, so signing in goes on
-				// showing identity alone — which is the property this line exists to protect.
-				scope: scopeFor(intent),
+				scope: await scopeForFlow(intent, subject),
 			});
 			return c.json({ authorization_url: url.toString() });
 		} catch (err) {

@@ -174,10 +174,25 @@ describe("asking for the permission", () => {
 		expect(lastAuthorize?.options.scope).toBe(`atproto ${PUBLISH_SCOPE}`);
 	});
 
-	it("still asks for identity alone when the same account signs in", async () => {
-		// ⭐ The invariant the whole feature is built around: holding a publishing grant must
-		// not change what a sign-in puts on anybody's consent screen.
-		await startAuth({ handle: "me.bsky.social", intent: "login" });
+	// 🚨 **The one that matters, and the one an earlier version of this got backwards.** One
+	// session is stored per DID and each authorization replaces the last, so a sign-in asking
+	// for identity alone would throw away a permission this creator had already granted — and
+	// the first sign anybody would get is a listing that stopped updating.
+	it("carries the creator permission through a later sign-in", async () => {
+		const user = await makeUser("back", { atprotoDid: did("back"), isCreator: true });
+		await seedSession(did("back"), user.id);
+
+		await startAuth({ handle: did("back"), intent: "login" });
+		expect(lastAuthorize?.options.scope).toContain(PUBLISH_SCOPE);
+	});
+
+	// ⚠️ And the other half: a reader is never asked for permission over a kind of record they
+	// will never write. Asking everybody would be the easy way to make the test above pass.
+	it("does not ask a reader for the creator permission", async () => {
+		const user = await makeUser("read", { atprotoDid: did("read"), isCreator: false });
+		await seedSession(did("read"), user.id);
+
+		await startAuth({ handle: did("read"), intent: "login" });
 		expect(lastAuthorize?.options.scope).toBe("atproto");
 	});
 
