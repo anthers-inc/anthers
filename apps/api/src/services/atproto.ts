@@ -10,10 +10,17 @@
  * PAR, handle resolution and DID resolution. All of that is now the SDK's.
  */
 import { db } from "@anthers/db";
-import { atprotoSessions, users } from "@anthers/db/schema";
+import { atprotoSessions, users, works } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
-import { eq } from "drizzle-orm";
-import { EMAIL_SCOPE, getAtprotoClient, revokeAtprotoGrant } from "./atproto-client.js";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
+import {
+	EMAIL_SCOPE,
+	getAtprotoClient,
+	grantedScopeFor,
+	revokeAtprotoGrant,
+} from "./atproto-client.js";
+import { WORK_COLLECTION } from "./atproto-repo.js";
+import { scopeAllowsWriting } from "./atproto-scope.js";
 
 export interface AtprotoIdentity {
 	did: string;
@@ -102,6 +109,131 @@ export function atprotoSignupEnabled(): boolean {
 	return process.env.ATPROTO_SIGNUP_ENABLED === "true";
 }
 
+/**
+ * Whether Anthers is currently ASKING creators for permission to publish their listings.
+ *
+ * 🚨 **It gates asking, never using.** A permission already granted goes on working with this
+ * off, because the alternative is that turning a switch off strands every record already on the
+ * network — Anthers would be holding a permission it declined to use, on listings it could no
+ * longer withdraw. Closing the door is about who walks through it next.
+ *
+ * ⚠️ **The switch exists because the scope works and is not yet advertised.** bsky.social
+ * honors a `repo:` permission today and does not list it in its published metadata, with
+ * guidance to hold off shipping production changes until more is documented. Building against
+ * it is a bet worth having ready; taking the bet in front of real creators is a separate
+ * decision, and this is where that decision is made.
+ */
+export function atprotoPublishEnabled(): boolean {
+	return process.env.ATPROTO_PUBLISH_ENABLED === "true";
+}
+
+// ─── Publishing a creator's listings into their own repository ───────────────
+
+/** How a creator's Work listings reach the network, if they do. */
+export type PublishingRoute =
+	/** Anthers hosts the identity and holds its credential. Nothing to grant. */
+	| "hosted"
+	/** They hold their identity elsewhere and have granted Anthers permission to publish. */
+	| "granted"
+	/** They hold their identity elsewhere and have granted nothing. Nothing is wrong. */
+	| "available"
+	/** No identity on this account, so there is no repository for a listing to live in. */
+	| "none";
+
+export interface PublishingState {
+	route: PublishingRoute;
+	/** Whether Anthers is asking for the grant at all right now. */
+	offered: boolean;
+	/** The identity a listing would be published into, or null when there is none. */
+	did: string | null;
+	/** The handle a listing would be published under, for saying it out loud. */
+	handle: string;
+	/** How many of this creator's Works currently carry a listing on the network. */
+	listed: number;
+}
+
+/**
+ * What the Studio should say about publishing, for one account.
+ *
+ * ⚠️ **`available` is a state and not a prompt.** Most creators will sit in it for ever and
+ * nothing is wrong with that: publishing on Anthers has never required a network permission and
+ * must not start reading as though it does. Whatever renders this owes the same restraint —
+ * an offer somebody can take, never a gap somebody should close.
+ */
+export async function publishingStateFor(userId: number): Promise<PublishingState> {
+	const [user] = await db
+		.select({ did: users.atprotoDid, handle: users.atprotoHandle })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+
+	const listed = await countListedWorks(userId);
+	const offered = atprotoPublishEnabled();
+	const handle = user?.handle ?? "";
+
+	if (!user?.did) return { route: "none", offered, did: null, handle: "", listed };
+	const did = user.did;
+
+	// Imported here rather than at the top, for the cycle `unlinkAtprotoFromUser` documents.
+	const { isHostedIdentity } = await import("./hosted-accounts.js");
+	if (await isHostedIdentity(did)) return { route: "hosted", offered, did, handle, listed };
+
+	const granted = scopeAllowsWriting(await grantedScopeFor(did), WORK_COLLECTION);
+	return { route: granted ? "granted" : "available", offered, did, handle, listed };
+}
+
+/**
+ * Take in what a creator granted at the consent screen, and act on it.
+ *
+ * 🚨 **The identity that came back is checked against the one on the account.** Nothing stops
+ * somebody starting this flow signed in as themselves and authorizing as a different Bluesky
+ * account, and accepting that would leave Anthers writing one person's catalog into another
+ * person's repository. The DID is the identity; the handle is not.
+ *
+ * ⚠️ **A decline is an answer rather than an error.** Somebody who opens the screen and grants
+ * less than was asked for has done a normal thing, and what they get back is the state they
+ * were already in. Nothing is recorded as broken and nothing nags them.
+ */
+export type PublishGrantResult =
+	| { status: "granted"; queued: number }
+	| { status: "declined" }
+	| { status: "refused"; reason: "not_linked" | "wrong_identity" | "hosted" };
+
+export async function recordPublishGrant(
+	userId: number,
+	identity: AtprotoIdentity,
+	grantedScope: string | null,
+): Promise<PublishGrantResult> {
+	const [user] = await db
+		.select({ did: users.atprotoDid })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+
+	if (!user?.did) return { status: "refused", reason: "not_linked" };
+	if (user.did !== identity.did) return { status: "refused", reason: "wrong_identity" };
+
+	const { isHostedIdentity } = await import("./hosted-accounts.js");
+	if (await isHostedIdentity(user.did)) return { status: "refused", reason: "hosted" };
+
+	if (!scopeAllowsWriting(grantedScope, WORK_COLLECTION)) return { status: "declined" };
+
+	// ⭐ Their catalog, not just whatever they release next. Imported here because
+	// `work-listing.ts` reaches the hosted writer, which reaches `hosted-accounts.ts`, which
+	// reaches back into this module — the same cycle `unlinkAtprotoFromUser` documents.
+	const { queueAllListingsFor } = await import("./work-listing.js");
+	return { status: "granted", queued: await queueAllListingsFor(userId) };
+}
+
+/** How many of this creator's Works are currently listed on the network. */
+async function countListedWorks(creatorId: number): Promise<number> {
+	const [row] = await db
+		.select({ count: sql<number>`count(*)::int` })
+		.from(works)
+		.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri)));
+	return row?.count ?? 0;
+}
+
 /*
  * 🚨 **There is deliberately no `createAccountFromAtproto` here, and putting one back would
  * undo a security decision** (Parker, 2026-08-22). One existed until then: it created an
@@ -114,6 +246,32 @@ export function atprotoSignupEnabled(): boolean {
  * `services/pending-signups.ts`. That is the ONLY place an ATProto account comes into
  * existence.
  */
+
+/**
+ * Whether the account behind this handle or DID publishes, and therefore needs the creator
+ * permission asked for again on the way in.
+ *
+ * ⚠️ **Answers false for anything it cannot resolve, and that is safe in the right
+ * direction.** A handle nobody has linked, a typo, or a directory having a bad moment all mean
+ * "ask for the base set" — and the authorization the SDK is about to attempt will fail on its
+ * own terms with a message somebody can act on. The failure this avoids is asking a stranger
+ * for a permission over their repository because their handle did not resolve.
+ */
+export async function isCreatorIdentity(didOrHandle: string): Promise<boolean> {
+	try {
+		const did = didOrHandle.startsWith("did:")
+			? didOrHandle
+			: (await resolveIdentity(didOrHandle)).did;
+		const [row] = await db
+			.select({ isCreator: users.isCreator })
+			.from(users)
+			.where(eq(users.atprotoDid, did))
+			.limit(1);
+		return row?.isCreator === true;
+	} catch {
+		return false;
+	}
+}
 
 /** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */
 export async function findUserByAtprotoDid(
@@ -302,11 +460,32 @@ export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: s
 		};
 	}
 
+	// 🚨 **The listings come down BEFORE anything is detached, and this is the whole reason
+	// unlinking is more than three column writes.** Deleting a record needs the very permission
+	// that is about to be handed back, so detaching first would leave every listing on the
+	// network advertising Works Anthers can no longer reach — the failure the listing design is
+	// shaped around, reached by the tidiest-looking possible route.
+	//
+	// ⚠️ **Anything that cannot be removed stops the unlink**, rather than proceeding and
+	// stranding it. That is a refusal somebody can act on: try again, and the listings go with
+	// them. The alternative is a button that quietly makes a record permanent.
+	const { stopPublishingFor } = await import("./work-listing.js");
+	const stopped = await stopPublishingFor(userId);
+	if (stopped.stranded > 0) {
+		return {
+			error:
+				`We couldn't take ${stopped.stranded} of your listings off the network, and unlinking now ` +
+				"would leave them there for good. Try again in a moment.",
+		};
+	}
+
 	await db
 		.update(users)
 		.set({ atprotoDid: null, atprotoHandle: "", atprotoPdsUrl: "" })
 		.where(eq(users.id, userId));
 
+	// `stopPublishingFor` already revoked, so this is the belt to its braces: an account whose
+	// listings were all absent never reached a revocation at all.
 	if (user.atprotoDid) {
 		await revokeAtprotoGrant(user.atprotoDid);
 		await db.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));

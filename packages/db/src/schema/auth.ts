@@ -377,6 +377,25 @@ export const atprotoSessions = pgTable("atproto_sessions", {
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
 	session: jsonb("session").notNull(),
+	/**
+	 * What the authorization server last GRANTED for the session beside it, verbatim.
+	 *
+	 * ⭐ **It describes the token in `session`, not anything Anthers asked for or remembers
+	 * wanting.** That is the whole invariant: a request is not a grant, an authorization server
+	 * may narrow one silently, and the only honest record of what is held is what came back. It
+	 * is written on every callback for that reason, including the ones that ask for identity
+	 * alone — a row whose scope said more than its token could do would be worse than no row.
+	 *
+	 * 🚨 **A second authorization for the same DID replaces the first, so signing in narrows
+	 * this.** There is one session per DID because the SDK's store is keyed by token subject, so
+	 * a creator who granted publishing and later signs in with Bluesky ends up holding an
+	 * identity-only token — and this column says so, which is what lets the Studio offer the
+	 * grant again instead of failing quietly at the next write.
+	 *
+	 * Null on a row written before the column existed, and on one whose token would not report
+	 * itself. Both mean the same thing to every reader: nothing is known to be granted.
+	 */
+	scope: text("scope"),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -17,10 +17,17 @@
  * skipped Work — no hosted identity, no creator — is not a failure and must not be retried; it
  * is the ordinary case and returns quietly.
  */
+import { isOrdinary } from "../services/repo-writer.js";
+import type { ListingSyncResult } from "../services/work-listing.js";
 import { syncWorkListing } from "../services/work-listing.js";
 
 export interface SyncWorkListingData {
 	workId: number;
+}
+
+/** The skip reasons nobody needs to read about. `no_work` and `no_creator` are not among them. */
+function isQuiet(reason: Extract<ListingSyncResult, { status: "skipped" }>["reason"]): boolean {
+	return reason !== "no_work" && reason !== "no_creator" && isOrdinary(reason);
 }
 
 export async function syncWorkListingJob(data: SyncWorkListingData): Promise<void> {
@@ -34,9 +41,10 @@ export async function syncWorkListingJob(data: SyncWorkListingData): Promise<voi
 
 	if (result.status === "skipped") {
 		// ⭐ Logged at all only because a sweep reading these is how somebody would notice the
-		// node being unreachable for everybody at once. `not_hosted` is deliberately quiet: it is
-		// the majority case and saying anything about it would train whoever reads these to skim.
-		if (result.reason !== "not_hosted") {
+		// node being unreachable for everybody at once. The ordinary reasons — no identity, no
+		// grant — are deliberately quiet: between them they are the majority of accounts, and
+		// saying anything about them would train whoever reads these to skim.
+		if (!isQuiet(result.reason)) {
 			console.log(`[sync-work-listing] ${data.workId}: skipped (${result.reason})`);
 		}
 		return;

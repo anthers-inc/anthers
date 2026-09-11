@@ -285,6 +285,23 @@ envs:
     scope: RUN_TIME
     value: "true"
 
+  # Whether the Studio ASKS a creator for permission to publish their Work listings into a
+  # repository Anthers does not host. Same literal-"true" reading, and closed by default for
+  # the same reason.
+  #
+  # 🚨 **It gates asking, never using.** A permission already granted goes on working with
+  # this off, because a switch that stopped Anthers using one would strand every listing
+  # already on the network — held under a permission Anthers declined to use, on records it
+  # could no longer withdraw. Closing the door decides who walks through it next.
+  #
+  # ⚠️ **Off because the scope is unadvertised, not because it is unproven.** bsky.social
+  # honored a narrow `repo:` permission on 2026-09-11 and still does not list it in its
+  # published metadata, with guidance to hold off on production changes until more is
+  # documented. Turning this on is the decision to take that bet in front of real creators.
+  - key: ATPROTO_PUBLISH_ENABLED
+    scope: RUN_TIME
+    value: "false"
+
 ingress:
   rules:
     - match:

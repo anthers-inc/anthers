@@ -92,6 +92,7 @@ interface AuthContextValue {
 	 */
 	signUpWithBluesky: (handle: string, next?: string | null) => Promise<void>;
 	linkBluesky: (handle: string) => Promise<void>;
+	grantPublishing: () => Promise<void>;
 	unlinkBluesky: () => Promise<void>;
 	refreshUser: () => Promise<void>;
 }
@@ -180,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	 */
 	const beginAtprotoAuth = useCallback(
 		async (
-			json: { handle: string; intent: "login" | "link" | "signup"; next?: string },
+			json: { handle?: string; intent: "login" | "link" | "signup" | "publish"; next?: string },
 			fallback: string,
 		) => {
 			const res = await client.api.atproto.auth.$post({ json });
@@ -221,6 +222,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		[beginAtprotoAuth],
 	);
 
+	/**
+	 * Ask for permission to keep this creator's Work listings in their own repository.
+	 *
+	 * ⚠️ **No handle, deliberately.** The API authorizes against the DID already on the account,
+	 * so there is nothing for the browser to supply and nothing an attacker could substitute.
+	 */
+	const grantPublishing = useCallback(async () => {
+		await beginAtprotoAuth({ intent: "publish" }, "Couldn't start the Bluesky permission.");
+	}, [beginAtprotoAuth]);
+
 	const unlinkBluesky = useCallback(async () => {
 		const res = await client.api.atproto.unlink.$post();
 		if (!res.ok) {
@@ -240,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				signInWithBluesky,
 				signUpWithBluesky,
 				linkBluesky,
+				grantPublishing,
 				unlinkBluesky,
 				refreshUser,
 			}}

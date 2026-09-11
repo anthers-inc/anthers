@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import BadgeLadderEditor from "../components/post/BadgeLadderEditor";
+import { useAuth } from "../lib/auth";
 import { apiFetch, client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
@@ -362,6 +363,172 @@ function PlatformConnectionsSection() {
 	);
 }
 
+/** What `GET /api/atproto/publishing` answers. Mirrors `PublishingState` in the API. */
+interface PublishingState {
+	route: "hosted" | "granted" | "available" | "none";
+	offered: boolean;
+	did: string | null;
+	handle: string;
+	listed: number;
+}
+
+/**
+ * Publishing a creator's Work listings into the repository behind their own identity.
+ *
+ * 🚨 **`available` is an offer, never a gap, and this component is where that promise is kept
+ * or quietly broken.** Publishing on Anthers has never required a network permission: a creator
+ * who grants nothing releases, gates, gets paid and is found exactly as anybody else does, and
+ * the only difference is that no listing goes out. So there is no warning styling here, no
+ * badge, no count of what they are "missing" — the section says what would happen if they said
+ * yes, and is silent about them not having.
+ *
+ * ⚠️ **It renders nothing at all unless there is something true to say.** An account with no
+ * identity has no repository for a listing to live in, and a section explaining a thing they
+ * cannot do is the nagging this design is trying not to be.
+ */
+function AtmospherePublishingSection() {
+	const { grantPublishing } = useAuth();
+	const [state, setState] = useState<PublishingState | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [searchParams] = useSearchParams();
+
+	const outcome = searchParams.get("publishing");
+
+	const load = () => {
+		apiFetch("/api/atproto/publishing")
+			.then((res) => (res.ok ? (res.json() as Promise<PublishingState>) : null))
+			.then(setState)
+			.catch(() => setState(null))
+			.finally(() => setLoading(false));
+	};
+	// biome-ignore lint/correctness/useExhaustiveDependencies: one read on mount, by design.
+	useEffect(load, []);
+
+	if (loading || !state) return null;
+	// No identity means no repository, and nothing here would be true for them.
+	if (state.route === "none") return null;
+	// Nothing to offer and nothing granted — say nothing rather than advertise a closed door.
+	if (state.route === "available" && !state.offered) return null;
+
+	const handleGrant = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			await grantPublishing();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't start the Bluesky permission.");
+			setBusy(false);
+		}
+	};
+
+	const handleStop = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/atproto/publishing/stop", { method: "POST" });
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(body?.error ?? "Couldn't take your listings down.");
+			}
+			load();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't take your listings down.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Your Catalog on the Network</h3>
+
+				{outcome === "on" && (
+					<div className="alert alert-success text-sm">
+						<span>Your listings are on their way to your repository.</span>
+					</div>
+				)}
+				{outcome === "declined" && (
+					<div className="alert alert-info text-sm">
+						<span>No permission given, so nothing is published. Everything else is unchanged.</span>
+					</div>
+				)}
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
+					</div>
+				)}
+
+				{state.route === "hosted" && (
+					<p className="text-sm text-base-content/70">
+						Anthers publishes a listing for each released Work into the repository behind{" "}
+						<span className="font-medium">@{state.handle}</span>, the handle it issued you. Nothing
+						to set up.
+					</p>
+				)}
+
+				{state.route === "granted" && (
+					<>
+						<p className="text-sm text-base-content/70">
+							Anthers keeps a listing for each released Work in your own repository, under{" "}
+							<span className="font-medium">@{state.handle}</span>. A listing says what a work is
+							and where to reach it — never the work itself, and never who may open it.
+						</p>
+						<p className="text-sm text-base-content/50">
+							{state.listed === 0
+								? "Nothing is listed yet."
+								: `${state.listed} ${state.listed === 1 ? "work is" : "works are"} listed.`}
+						</p>
+						<div className="card-actions justify-end">
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm"
+								onClick={handleStop}
+								disabled={busy}
+							>
+								{busy ? "Taking them down…" : "Stop publishing"}
+							</button>
+						</div>
+						{/* ⚠️ Said before they press it, not after. Stopping removes the records, and a
+						    deletion cannot be undone by us — it is their repository. */}
+						<p className="text-xs text-base-content/50">
+							Stopping removes the listings already on the network and hands the permission back.
+						</p>
+					</>
+				)}
+
+				{state.route === "available" && (
+					<>
+						<p className="text-sm text-base-content/70">
+							Anthers can keep a listing for each of your released Works in your own repository,
+							under <span className="font-medium">@{state.handle}</span>, so your catalog is
+							readable by other software on the network and outlives any one service — including
+							this one.
+						</p>
+						<p className="text-sm text-base-content/50">
+							It asks for permission over that one kind of record and nothing else: not your posts,
+							not your follows, not your messages. A listing carries the title, description and a
+							link — never the work itself, and never who may open it.
+						</p>
+						<div className="card-actions justify-end">
+							<button
+								type="button"
+								className="btn btn-primary btn-sm"
+								onClick={handleGrant}
+								disabled={busy}
+							>
+								{busy ? "Starting…" : "Publish my catalog"}
+							</button>
+						</div>
+					</>
+				)}
+			</div>
+		</div>
+	);
+}
+
 export default function StudioSettingsPage() {
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
@@ -373,6 +540,7 @@ export default function StudioSettingsPage() {
 
 			<div className="flex flex-col gap-6">
 				<StripeOnboardingSection />
+				<AtmospherePublishingSection />
 				{/* Platform Connections hidden — the YouTube OAuth route does not exist
 				    (404s), and the cross-publish job throws for all three targets. The
 				    panel is built but its backend is stubbed, so a creator who reaches it

@@ -160,7 +160,7 @@ describe("client construction under Bun", () => {
 		}
 	});
 
-	it("declares every scope the app can request, and no write scope", () => {
+	it("declares every scope the app can request, and no broad one", () => {
 		// 🚨 **This asserted `scope === "atproto"` and that was WRONG**, found by driving the
 		// live signup flow: the authorization server answered `invalid_scope: Scope
 		// "transition:email" is not declared in the client metadata`. Client metadata's
@@ -169,8 +169,8 @@ describe("client construction under Bun", () => {
 		//
 		// ⭐ The old assertion was protecting a real property in the wrong place. Declaring a
 		// scope here does not put it on anybody's consent screen; the screen renders what the
-		// authorization REQUEST asks for. Signing in still asks for identity alone, and
-		// `atproto-login.test.ts` is what pins that.
+		// authorization REQUEST asks for, and what each door requests is decided by the
+		// account going through it — `atproto-publishing.test.ts` is what pins that.
 		const prev = process.env.BASE_URL;
 		process.env.BASE_URL = "https://anthers.org";
 		try {
@@ -178,6 +178,10 @@ describe("client construction under Bun", () => {
 			expect(scope).toContain("atproto");
 			// Needed by signup, which reads the address from the PDS to save somebody typing.
 			expect(scope).toContain("transition:email");
+			// ⭐ **There IS a write scope now, and its narrowness is the point.** It names one
+			// collection, so the widest thing this client may ever ask for is the right to keep
+			// a creator's Work listings — `atproto-publishing.test.ts` pins the rest of it.
+			expect(scope).toContain("repo:org.anthers.work");
 			// 🚨 The property worth guarding: `transition:generic` is App-Password-equivalent
 			// access to a creator's whole account. Declaring it would let any later call
 			// request it without a second thought.

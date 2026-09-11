@@ -1,0 +1,1 @@
+ALTER TABLE "atproto_sessions" ADD COLUMN "scope" text;
