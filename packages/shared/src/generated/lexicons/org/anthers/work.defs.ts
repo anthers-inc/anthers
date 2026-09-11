@@ -16,7 +16,12 @@ type Main = { $type: "org.anthers.work";
   /**
    * What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. This is an open set: consumers must accept values not listed here, because new mediums are added over time.
    */
-  "kind":"text" | "video" | "audio" | "image" | "ebook" | "game" | "software" | "physical" | "service" | l.UnknownString;"title":string;
+  "kind":"text" | "video" | "audio" | "image" | "ebook" | "game" | "software" | "physical" | "service" | l.UnknownString;
+
+  /**
+   * The work's name, as its creator wrote it. Plain text for the same reason the description is: every consumer should be able to render it without a sanitizer. Required and never empty — a listing that names nothing is worse than no listing, so a work without a title is not published rather than published anonymously.
+   */
+  "title":string;
 
   /**
    * Where this work can be reached. Usually its page on the service hosting it; a creator hosting their own Catalog points at their own. Deliberately not assumed to be an anthers.org address, because a creator's work outliving any one host is the point.

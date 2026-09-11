@@ -42,6 +42,25 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 	};
 }
 
+describe("a listing that names nothing", () => {
+	// 🚨 `works.title` defaults to the empty string and the update route treats it as optional,
+	// so a Work really can be released without a name — and `title ?? ""` in the mapper would
+	// then satisfy the Lexicon's `required` structurally while publishing an anonymous entry in
+	// somebody's public Catalog. Found while writing the field's own description, which is a
+	// decent argument for writing them.
+	it("refuses a Work with no title", () => {
+		expect(unpublishableReason(openWork({ title: "" }))).toBe("missing_title");
+	});
+
+	it("refuses a Work whose title is only whitespace", () => {
+		expect(unpublishableReason(openWork({ title: "   " }))).toBe("missing_title");
+	});
+
+	it("refuses a Work whose title is null", () => {
+		expect(unpublishableReason(openWork({ title: null }))).toBe("missing_title");
+	});
+});
+
 describe("the Adult rung never reaches the network", () => {
 	// 🚨 Anthers answers 404 for an Adult Work to anybody who has not opted in and verified —
 	// its EXISTENCE is withheld, not merely its bytes. A record carries the title, the

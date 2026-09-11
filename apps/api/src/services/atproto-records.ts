@@ -45,6 +45,7 @@ export type UnpublishableReason =
 	| "taken_down"
 	| "quarantined"
 	| "adult_rung"
+	| "missing_title"
 	| "missing_release_date";
 
 /**
@@ -93,6 +94,13 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
 	// therefore better than papering over it: if it ever appears in production it is a bug
 	// worth seeing, and the alternative was writing an approximate date into a record that
 	// other people cache.
+	// 🚨 **An untitled listing is worse than no listing.** `works.title` defaults to the empty
+	// string and the update route treats it as optional, so a Work really can be released
+	// without a name — and the mapper's `title ?? ""` would then publish a record that satisfies
+	// the Lexicon's `required` structurally while naming nothing at all. Same reasoning as the
+	// release date below: a state no sensible path produces is better reported than papered
+	// over, and papering over this one puts an anonymous entry in somebody's public Catalog.
+	if (!work.title?.trim()) return "missing_title";
 	if (!work.releasedAt) return "missing_release_date";
 	return null;
 }
