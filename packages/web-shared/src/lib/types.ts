@@ -837,9 +837,20 @@ export interface AnalyticsOverview {
 	crossPublishCount: number;
 }
 
+/**
+ * A row of the creator's content analytics.
+ *
+ * 🚨 **`work`, not `post`.** Attention is recorded against a Work — a post announces and is
+ * never consumed — so every non-project row here is a Work, and the `post` label this said
+ * until 2026-09-11 was a leftover from before the split that the Studio believed and built a
+ * broken URL out of.
+ */
 export interface ContentAnalyticsItem {
-	type: "post" | "project";
+	type: "work" | "project";
+	/** The row id. Present for ordering and keying; never the thing a link is built from. */
 	id: number | null;
+	/** A Work's durable public address — what its URL is built from. Absent on a project. */
+	publicId?: number | null;
 	title: string | null;
 	slug?: string;
 	eventCount: number;

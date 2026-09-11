@@ -138,14 +138,24 @@ const integrationRoutes = new Hono()
 		const type = c.req.query("type") ?? "all";
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-		// Attention is tracked per-post in the unified model, so content analytics
-		// are post-scoped. (`type` is kept for API compatibility; only posts exist.)
+		// 🚨 **Every row here is a WORK, and it said `post` until 2026-09-11.** Attention is
+		// recorded against `attention_events.work_id` — a post announces and is never consumed
+		// — so these rows were joined to `works`, titled from `works`, grouped by `works.id`,
+		// and then labeled `post` by a mapper that predates the split. The Studio believed the
+		// label and built `/@name/posts/{id}` out of a Work's row id, which resolves to
+		// nothing: `findPostRow` reads a bare number as a **publicId**, and those are nine
+		// digits while a Work id is a small serial. Every row in the creator's analytics table
+		// linked to a 404.
+		//
+		// `publicId` rides along because that is what a durable Work URL is built from; the
+		// row id would work today and break the moment a link is shared.
 		const result: any[] = [];
 
-		if (type === "all" || type === "posts") {
+		if (type === "all" || type === "posts" || type === "works") {
 			const postStats = await db
 				.select({
 					workId: attentionEvents.workId,
+					publicId: works.publicId,
 					postTitle: works.title,
 					postSlug: works.slug,
 					eventCount: sql<number>`COUNT(*)::int`,
@@ -160,7 +170,7 @@ const integrationRoutes = new Hono()
 						sql`${attentionEvents.workId} IS NOT NULL`,
 					),
 				)
-				.groupBy(attentionEvents.workId, works.title, works.slug)
+				.groupBy(attentionEvents.workId, works.publicId, works.title, works.slug)
 				.orderBy(desc(sql`COUNT(*)`))
 				.limit(50);
 
@@ -168,6 +178,7 @@ const integrationRoutes = new Hono()
 			const rolledStats = await db
 				.select({
 					workId: attentionDaily.workId,
+					publicId: works.publicId,
 					postTitle: works.title,
 					postSlug: works.slug,
 					eventCount: sql<number>`COALESCE(SUM(${attentionDaily.eventCount}), 0)::int`,
@@ -181,13 +192,20 @@ const integrationRoutes = new Hono()
 						gte(attentionDaily.day, since.toISOString().slice(0, 10)),
 					),
 				)
-				.groupBy(attentionDaily.workId, works.title, works.slug);
+				.groupBy(attentionDaily.workId, works.publicId, works.title, works.slug);
 
 			// Merge on Work id: a Work whose history straddles the retention boundary has
 			// rows in both tables, and returning it twice would double it in the UI.
 			const byWork = new Map<
 				number,
-				{ id: number; title: string; slug: string; eventCount: number; totalDuration: number }
+				{
+					id: number;
+					publicId: number | null;
+					title: string;
+					slug: string;
+					eventCount: number;
+					totalDuration: number;
+				}
 			>();
 			for (const r of [...postStats, ...rolledStats]) {
 				if (r.workId == null) continue;
@@ -198,6 +216,7 @@ const integrationRoutes = new Hono()
 				} else {
 					byWork.set(r.workId, {
 						id: r.workId,
+						publicId: r.publicId ?? null,
 						title: r.postTitle ?? "",
 						slug: r.postSlug ?? "",
 						eventCount: Number(r.eventCount),
@@ -210,7 +229,7 @@ const integrationRoutes = new Hono()
 				...[...byWork.values()]
 					.sort((a, b) => b.eventCount - a.eventCount)
 					.slice(0, 50)
-					.map((r) => ({ type: "post", ...r })),
+					.map((r) => ({ type: "work", ...r })),
 			);
 		}
 

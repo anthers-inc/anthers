@@ -56,15 +56,21 @@ test("/studio resolves to the Studio and its creator gate", async ({ page }) => 
 	await page.goto("/studio");
 
 	// Signed in but not a creator → the gate sends us to account settings, in-app.
-	await expect(page).toHaveURL(/\/settings$/);
+	//
+	// ⭐ The `?creator=1` is a stronger assertion than the bare path, not noise: only the
+	// Studio's gate adds it, so it distinguishes "the Studio route matched and bounced us"
+	// from "something else happened to land on /settings". It is also what tells the person
+	// why they were moved — the redirect was silent until 2026-09-11.
+	await expect(page).toHaveURL(/\/settings\?creator=1$/);
 	expect(errors).toEqual([]);
 });
 
 test("legacy /dashboard paths redirect into /studio", async ({ page }) => {
 	await page.goto("/dashboard/analytics");
 	// StudioRedirect strips /dashboard → /studio/analytics, then the creator gate applies.
-	// Landing on /settings proves both hops ran; a dead-end would have stayed put.
-	await expect(page).toHaveURL(/\/settings$/);
+	// Landing on the gate's own destination proves both hops ran; a dead-end would have
+	// stayed put.
+	await expect(page).toHaveURL(/\/settings\?creator=1$/);
 });
 
 test("a creator reaches the Studio itself", async ({ page, context }) => {
@@ -181,8 +187,8 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 		await page.getByPlaceholder("my-project", { exact: true }).fill(slug);
 		await page.getByRole("button", { name: "Create Project" }).click();
 
-		// Creating ends on the EDIT page, not the public one — the Works shelf is edit-only,
-		// and it is the whole reason a creator made a Project.
+		// Creating ends on the EDIT page, not the public one — the shelves are edit-only,
+		// and they are the whole reason a creator made a Project.
 		await expect(page).toHaveURL(new RegExp(`/studio/projects/${slug}/edit$`));
 		await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
 		await expect(studioNav(page)).toBeVisible();
@@ -192,7 +198,21 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 		// inner `<main>` rather than the window, so `ScrollToTop`'s `window.scrollTo(0, 0)`
 		// was a no-op for every signed-in page: this one arrived 222px down with its heading
 		// behind the sticky Studio header. Nothing errored and the URL was right.
+		//
+		// ⚠️ **This asserts where the page ARRIVES, so it has to run before anything scrolls
+		// it.** The shelf walk below reaches the bottom of the form; putting it first made
+		// this fail for a reason that had nothing to do with the scroll behavior it guards.
 		await expect(page.getByRole("heading", { name: "Edit Project" })).toBeInViewport();
+
+		// 🚨 **Both shelves, because the second one had no surface at all.** A Project holds
+		// Works AND posts in two ordered lists — the database, the API and the public Project
+		// page all said so — and `POST /projects/:slug/posts`, its delete and its reorder were
+		// implemented, owner-checked and called from nowhere. The only way a post ever joined a
+		// Project was a select on the New Post form that was hidden on edit and ignored by
+		// `PATCH /posts/:slug`, so membership was set at birth or never.
+		await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
+		await page.getByRole("button", { name: "Add a post" }).click();
+		await expect(page.getByRole("heading", { name: "Add a post" })).toBeVisible();
 	} finally {
 		// The dev DB is shared with the unit suites and is not a clean room; don't add to it.
 		await fetch(`${API_URL}/api/content/projects/${slug}`, {
