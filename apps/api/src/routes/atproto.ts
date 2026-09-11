@@ -117,11 +117,14 @@ const recoveryKeySchema = z.object({
 
 const authInitSchema = z.object({
 	/**
-	 * ⚠️ **Ignored entirely by the `publish` intent**, which authorizes against the DID already
-	 * on the account. That flow knows whose repository it means and must not be told, because a
-	 * handle the browser supplied is a handle an attacker could supply.
+	 * ⚠️ **Optional because the `publish` intent has no use for one**, and required for every
+	 * other intent by the check in the handler. That flow authorizes against the DID already on
+	 * the account: it knows whose repository it means and must not be told, because a handle the
+	 * browser supplied is a handle an attacker could supply. Accepting one and ignoring it would
+	 * leave a field that looks load-bearing and is not — which is how somebody later "fixes" the
+	 * flow by using it.
 	 */
-	handle: z.string().min(1),
+	handle: z.string().min(1).optional(),
 	intent: z.enum(["login", "link", "signup", "publish"]).default("login"),
 	/**
 	 * Where to land afterwards — the thing the person was trying to do when signing in
@@ -266,7 +269,13 @@ const atprotoRoutes = new Hono()
 		// and grant over an identity that is not theirs, and the callback's own identity check
 		// would then be the only thing standing between that and a catalog written into a
 		// stranger's repository. One guard is better placed than two are.
-		let subject = handle;
+		let subject = handle ?? "";
+		if (intent !== "publish" && !subject) {
+			return c.json(
+				{ error: "Which Bluesky handle? It usually looks like alice.bsky.social." },
+				400,
+			);
+		}
 		if (intent === "publish") {
 			if (!atprotoPublishEnabled()) {
 				return c.json({ error: "Publishing to your own repository isn't open yet." }, 403);

@@ -207,6 +207,17 @@ describe("asking for the permission", () => {
 		expect(res.status).toBe(401);
 	});
 
+	it("needs no handle at all, and still requires one from every other intent", async () => {
+		const user = await makeUser("nohandle", { atprotoDid: did("nohandle"), isCreator: true });
+		const token = await createSession(user.id, undefined, undefined);
+
+		expect((await startAuth({ intent: "publish" }, token)).status).toBe(200);
+		expect(lastAuthorize?.input).toBe(did("nohandle"));
+		// ⚠️ Optional in the schema, required by the handler — a sign-in with no handle has
+		// nothing to resolve, and answering 400 says so rather than failing deeper in the SDK.
+		expect((await startAuth({ intent: "login" })).status).toBe(400);
+	});
+
 	it("refuses while the door is shut, without sending anybody to Bluesky first", async () => {
 		const user = await makeUser("shut", { atprotoDid: did("shut") });
 		const token = await createSession(user.id, undefined, undefined);

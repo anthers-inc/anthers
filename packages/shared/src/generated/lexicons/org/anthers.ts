@@ -3,3 +3,4 @@
  */
 
 export * as work from "./anthers/work.js";
+export * as catalogPermissions from "./anthers/catalogPermissions.js";
