@@ -226,8 +226,13 @@ pds-up: ## Start a throwaway local PDS for record-writing tests
 	@until curl -sf -m 2 http://localhost:2583/xrpc/_health >/dev/null 2>&1; do sleep 1; done
 	@echo "  -> PDS ready at http://localhost:2583"
 
-pds-test: ## Run the record-writing integration test against the local PDS
-	ATPROTO_TEST_PDS=http://localhost:2583 bun test scripts/atproto-writer.integration.test.ts
+pds-test: ## Run the record-writing integration tests against the local PDS
+	@# Two suites: the writer against Anthers' own account, and a Work's listing written into a
+	@# repository Anthers hosts on a creator's behalf. The second needs the dev database as well
+	@# as the server, which is why it lives with the other database tests.
+	ATPROTO_TEST_PDS=http://localhost:2583 bun test \
+	  scripts/atproto-writer.integration.test.ts \
+	  apps/api/src/__tests__/work-listing.integration.test.ts
 
 pds-down: ## Stop the local PDS and discard everything it held
 	@PDS_JWT_SECRET=x PDS_ADMIN_PASSWORD=x PDS_ROTATION_KEY=x \

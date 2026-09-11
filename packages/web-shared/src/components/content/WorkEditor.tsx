@@ -646,7 +646,19 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 						/>
 					</FormField>
 
-					<FormField label="Description (optional)">
+					{/*
+					 * 🚨 **The hint is the point, not decoration.** A description is shown to
+					 * everyone — including somebody who has not cleared this Work's gate, and, once
+					 * a creator holds an Anthers handle, on the AT Protocol network where it cannot
+					 * be un-published. A creator writing one aimed at buyers would reasonably assume
+					 * it sat behind the gate with everything else, and the label said nothing.
+					 * Saying so is what makes this a field the creator controls rather than one
+					 * they are caught by.
+					 */}
+					<FormField
+						label="Description (optional)"
+						hint="Shown to everyone, including people who haven't unlocked this."
+					>
 						<textarea
 							className="textarea textarea-bordered w-full"
 							value={description}

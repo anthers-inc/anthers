@@ -54,6 +54,7 @@ import { placeHold, preservationExpiry } from "./legal-hold.js";
 import { urlToKey } from "./media-purge.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
 import { storage } from "./storage/index.js";
+import { queueWorkListingSync } from "./work-listing.js";
 
 /** How a finding arrived. A hash match and a classifier hunch may never collapse into one. */
 export type QuarantineSource = "report" | "scan" | "operator";
@@ -271,6 +272,10 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 				visibility: "private",
 			})
 			.where(eq(works.id, input.workId));
+		// 🚨 The most urgent delete there is. A record carries the title and a URL onto a public
+		// network with no way to un-publish; for quarantined material a listing is the finding
+		// itself travelling further.
+		void queueWorkListingSync(input.workId);
 
 		if (moved.length > 0) {
 			await tx.insert(mediaQuarantine).values(
@@ -604,6 +609,9 @@ export async function clearQuarantine(input: {
 			.update(works)
 			.set({ quarantineStatus: "none", visibility: prior })
 			.where(eq(works.id, input.workId));
+
+		// Cleared, so whatever the Work's state now says should be listed, is.
+		void queueWorkListingSync(input.workId);
 
 		await tx
 			.update(mediaQuarantine)

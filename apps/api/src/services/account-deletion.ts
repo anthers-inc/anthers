@@ -76,6 +76,7 @@ import { hostedHandlesFor, releaseHostedIdentities } from "./hosted-accounts.js"
 import { isUnderHold } from "./legal-hold.js";
 import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
+import { queueWorkListingSync } from "./work-listing.js";
 
 /**
  * How long a user has to change their mind.
@@ -376,6 +377,12 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 				.update(works)
 				.set({ visibility: "withdrawn", withdrawnAt: new Date() })
 				.where(inArray(works.id, purchasedWorkIds));
+			// ⚠️ **Enqueued while the credential still exists**, which is the whole reason it is
+			// here rather than left to the sweep. `releaseHostedIdentities` has already run by
+			// the time this transaction commits, so the repository these listings live in is
+			// about to become unreachable — the sync has to happen now or the records stay up
+			// with nothing able to remove them.
+			for (const workId of purchasedWorkIds) void queueWorkListingSync(workId);
 		}
 
 		// Everything nobody bought goes. Its comments are polymorphic with no FK, so

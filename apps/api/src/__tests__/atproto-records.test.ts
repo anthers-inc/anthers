@@ -42,6 +42,34 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 	};
 }
 
+describe("the Adult rung never reaches the network", () => {
+	// 🚨 Anthers answers 404 for an Adult Work to anybody who has not opted in and verified —
+	// its EXISTENCE is withheld, not merely its bytes. A record carries the title, the
+	// description and the URL onto a network with no verification of any kind and no way to
+	// un-publish, so it would hand strangers exactly what the rung withholds.
+	it("refuses an Adult Work", () => {
+		expect(unpublishableReason(openWork({ maturity: "adult" }))).toBe("adult_rung");
+	});
+
+	// ⚠️ The direction this must fail in. `requiresAdultVerification` answers true for anything
+	// it does not recognize, so a rung added later is withheld until somebody decides
+	// otherwise rather than published until somebody notices.
+	it("refuses a rating this build has never heard of", () => {
+		expect(unpublishableReason(openWork({ maturity: "explicit-something" }))).toBe("adult_rung");
+	});
+
+	it("refuses a Work with no rating at all", () => {
+		expect(unpublishableReason(openWork({ maturity: null as never }))).toBe("adult_rung");
+	});
+
+	// ⭐ Mature is deliberately NOT excluded. It is a warning and a filter input carrying no
+	// access consequence — such a Work stays reachable signed-out, so its title and description
+	// are already public and withholding the record would withhold nothing.
+	it("publishes a Mature Work, which carries no access consequence", () => {
+		expect(unpublishableReason(openWork({ maturity: "mature" }))).toBeNull();
+	});
+});
+
 describe("what may be published at all", () => {
 	it("publishes a released, active Work", () => {
 		expect(unpublishableReason(openWork())).toBeNull();

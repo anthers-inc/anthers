@@ -73,6 +73,25 @@ function fakeWriter(): RepoWriter & { calls: string[]; records: object[] } {
 	};
 }
 
+describe("a Work corrected to Adult", () => {
+	// 🚨 **The case that matters, and the one a "skip Adult works" fix would miss.** An operator
+	// may correct a Work into Adult without its creator's agreement, which means a Work that
+	// already has a public record can become one that must not have one. Leaving the record in
+	// place would publish the title of something Anthers now hides the existence of.
+	it("has its existing record DELETED rather than merely skipped", () => {
+		const plan = planWorkRecord(openWork({ maturity: "adult" }), {
+			baseUrl: BASE,
+			existingUri: "at://did:plc:example/org.anthers.work/abc123",
+		});
+		expect(plan).toEqual({ action: "delete", rkey: "abc123", reason: "adult_rung" });
+	});
+
+	it("is simply never published when it never had a record", () => {
+		const plan = planWorkRecord(openWork({ maturity: "adult" }), { baseUrl: BASE });
+		expect(plan).toEqual({ action: "none", reason: "adult_rung" });
+	});
+});
+
 describe("reading a record's address", () => {
 	it("takes the rkey out of a well-formed URI", () => {
 		expect(rkeyFromAtUri(URI, WORK_COLLECTION)).toBe(RKEY);
