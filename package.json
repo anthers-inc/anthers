@@ -49,7 +49,9 @@
 	},
 	"devDependencies": {
 		"@atproto/api": "0.20.42",
+		"@atproto/jwk-jose": "0.2.4",
 		"@atproto/lex": "0.3.6",
+		"@atproto/oauth-client": "0.8.3",
 		"@biomejs/biome": "2.4.16",
 		"@playwright/test": "1.61.1",
 		"@tauri-apps/cli": "2.11.4",
