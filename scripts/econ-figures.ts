@@ -1387,22 +1387,37 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		why: "the allowance, the wallet and the per-GiB rate were all deleted 2026-08-12",
 	},
 	{
-		// A mechanism the code never had, rather than one it lost — but the test the list
-		// applies is the same ("the only correct number of occurrences is zero"), and so is
-		// the fix. ATProto adoption is deferred: what ships is Bluesky identity
-		// LINKING, and the `atproto_uri` columns sit unpopulated as future-proofing. This
-		// framing has drifted back onto marketing pages twice — PR #166 removed it from
-		// /for-creators, #183 from the Ghost comparison — which is what earns it a guard
-		// rather than another sweep.
+		// 🚨 **This guard was enforcing a framing that is no longer true, which is worse than
+		// a stale comment: it FAILED THE BUILD on any page writing the current position.**
+		// It was written when Bluesky identity LINKING was all that shipped, and it kept
+		// matching after that stopped being the case — so the way to get a green build was to
+		// write the accessory framing back in. Narrowed 2026-09-11.
 		//
-		// ⚠️ Deliberately narrow: it matches the CLAIM, not the subject. A page may say
-		// federation is coming, may name Bluesky, may explain what ATProto is. What it may
-		// not say is that Anthers is built on it today.
+		// ⭐ **`portable DID` came out because it is now simply true.** Signup issues an
+		// identity on Anthers' own server and the holder can seat their own recovery key above
+		// Anthers' (`hosted-recovery-key.ts`), which is the whole of what makes a DID portable.
+		// Guarding a true claim is not caution, it is a false negative with a CI job attached.
+		//
+		// ⚠️ **What stays guarded is the claim about CONTENT, and that one is permanent.** A
+		// repository is a synchronized log of small records that every consumer downloads in
+		// full, so a work never goes in one and no schema Anthers publishes can carry it —
+		// see the wiki's *The AT Protocol*, "The Rule That Decides". A listing is a record;
+		// the thing it points at is not, and a page saying otherwise promises something the
+		// design forbids rather than something not built yet.
+		//
+		// ⚠️ `built on the AT ?Protocol` also stays, and it is the one worth revisiting with
+		// Parker rather than by an agent: identity and the catalog listing genuinely are, and
+		// delivery, money and access control never will be. It is a claims question — see the
+		// wiki's *How Anthers Talks About Itself* — not a factual one.
+		//
+		// The framing drifted back onto marketing pages twice before this guard existed —
+		// PR #166 removed it from /for-creators, #183 from the Ghost comparison — which is
+		// what earned it a guard rather than another sweep.
 		pattern: new RegExp(
-			`${NOT_NEGATED}(?:built on the AT ?Protocol|portable DID|stored as ATProto records)`,
+			`${NOT_NEGATED}(?:built on the AT ?Protocol|(?:content|works?|files?) (?:are |is )?stored as ATProto records)`,
 			"gi",
 		),
-		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (wiki: What Anthers Would Put on the Network)",
+		why: "a work itself never becomes a record — a repository is a log every consumer downloads in full, so listings are published and the work is not (wiki: The AT Protocol, 'The Rule That Decides')",
 	},
 	{
 		// The same claim in a wording the rule above could not see, which is the third time

@@ -98,7 +98,9 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 
 **Operations.** An admin console with activity and job-queue telemetry, a moderation queue with the reporting taxonomy behind it, account export and deletion, analytics for creators, cross-publishing, and an itch.io importer.
 
-**Identity.** Sessions are cookie-based, with argon2id password hashing and an emailed-code path for accounts that never set a password. Bluesky identity linking works today over ATProto OAuth (DPoP + PKCE + PAR). Federation itself is a roadmap item, not a shipped one — the `atproto_uri` columns are future-proofing, and the protocol layer is a re-openable choice.
+**Identity.** Sessions are cookie-based, with argon2id password hashing and an emailed-code path for accounts that never set a password. Signing in, signing up and linking all work over ATProto OAuth (DPoP + PKCE + PAR), and signup issues an identity on Anthers' own Personal Data Server whose holder can seat their own recovery key above Anthers'. The `org.anthers.work` Lexicon is published, and releasing a Work writes its public listing into the creator's own repository — over a held credential for an identity Anthers hosts, or over a narrow `repo:` permission the creator grants for one held elsewhere.
+
+Anthers is not *federated*: there is one hub, one database and one treasury, and no creator runs a node. That is a separate axis from the protocol, which is not optional here — a work's listing belongs in its creator's repository, and the parts that stay put (the works themselves, money, access control) stay put for reasons the wiki's *The AT Protocol* sets out rather than for want of building.
 
 ## How it's built
 
