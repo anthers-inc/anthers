@@ -1,0 +1,29 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.post",
+	"defs": {
+		"main": {
+			"type": "record",
+			"key": "tid",
+			"description": "A post by a creator — an announcement, a devlog, a note to an audience. On Anthers a post only announces and never carries access, which is what separates it from a work: anybody who can reach this record can reach the post it points at. This record does NOT carry the post's body; it says a post exists and where to read it. Posts are written by creators, and a reader's contributions are comments, reviews and votes rather than posts of their own.",
+			"record": {
+				"type": "object",
+				"required": ["title", "url"],
+				"properties": {
+					"title": {
+						"type": "string",
+						"description": "The post's title, as its author wrote it. Plain text, so that every consumer can render it without a sanitizer. Required and never empty — a post that names nothing is worse than no record at all.",
+						"maxGraphemes": 300,
+						"maxLength": 3000
+					},
+					"url": {
+						"type": "string",
+						"format": "uri",
+						"description": "Where the post can be read. Deliberately not assumed to be an anthers.org address, because a creator's writing outliving any one host is the point.",
+						"maxLength": 2048
+					}
+				}
+			}
+		}
+	}
+}

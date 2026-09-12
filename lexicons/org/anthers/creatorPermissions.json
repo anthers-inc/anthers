@@ -1,0 +1,23 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.creatorPermissions",
+	"defs": {
+		"main": {
+			"type": "permission-set",
+			"title": "Your Anthers Catalog",
+			"detail": "Keep a listing for each project, work and post you publish in your own repository — its title, description and a link, never the work itself and never who may open it.",
+			"permissions": [
+				{
+					"type": "permission",
+					"resource": "repo",
+					"collection": [
+						"org.anthers.project",
+						"org.anthers.work",
+						"org.anthers.post"
+					],
+					"action": ["create", "update", "delete"]
+				}
+			]
+		}
+	}
+}

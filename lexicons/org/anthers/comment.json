@@ -1,0 +1,39 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.comment",
+	"defs": {
+		"main": {
+			"type": "record",
+			"key": "tid",
+			"description": "A comment somebody wrote about a work, a post, or another comment. It lives in the commenter's own repository, which is the honest answer to who wrote it: the words are theirs, they travel with them, and they go when the commenter goes. A comment whose subject is another comment is a REPLY — the distinction is hierarchy rather than kind, so there is one record type and not two. A service displaying these may decline to show one; it cannot unsay it.",
+			"record": {
+				"type": "object",
+				"required": ["subject", "text"],
+				"properties": {
+					"subject": {
+						"type": "ref",
+						"ref": "#subject"
+					},
+					"text": {
+						"type": "string",
+						"description": "What the commenter wrote. Plain text, never markup, so that every consumer can render it safely without a sanitizer — which is also how Anthers itself stores and renders a comment. Required and never empty: a comment with nothing in it is not a comment.",
+						"maxGraphemes": 10000,
+						"maxLength": 100000
+					}
+				}
+			}
+		},
+		"subject": {
+			"type": "object",
+			"description": "What this record is about, named by the address of a record on the network. An OBJECT rather than a bare string, deliberately: a published field's type can never change, so a bare address would close the door on ever carrying anything beside it — a content identifier pinning the subject to one version being the obvious candidate. What KIND of thing the subject is needs no field of its own, because the collection segment of the address already says it.",
+			"required": ["uri"],
+			"properties": {
+				"uri": {
+					"type": "string",
+					"format": "at-uri",
+					"description": "The address of the record this is about. Version pinning is deliberately absent rather than forgotten: a work's listing is rewritten whenever its creator edits the title or the description, so a subject pinned to the version that existed on the day would come to point at something gone, through no act of the person who wrote this."
+				}
+			}
+		}
+	}
+}
