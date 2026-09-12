@@ -12,6 +12,17 @@
  * against the published Lexicon rather than against a restatement of it.
  */
 
+/**
+ * The slice of a generated schema that record-planning code actually uses.
+ *
+ * ⚠️ Narrow on purpose. A planner needs to ask one question — does this record
+ * satisfy the Lexicon that will publish it — and typing the parameter as the
+ * full generated schema would couple every caller to the codegen's shape.
+ */
+export interface LexiconValidator {
+	safeParse(value: unknown): { success: true } | { success: false; error: unknown };
+}
+
 export type { Main as CommentRecordValue } from "./generated/lexicons/org/anthers/comment.defs.js";
 export { default as commentRecord } from "./generated/lexicons/org/anthers/comment.js";
 export type { Main as FollowRecordValue } from "./generated/lexicons/org/anthers/follow.defs.js";
