@@ -14,14 +14,14 @@ export { $nsid };
 type Main = { $type: "org.anthers.comment";"subject":Subject;
 
   /**
-   * What the commenter wrote. Plain text, never markup, so that every consumer can render it safely without a sanitizer — which is also how Anthers itself stores and renders a comment. Required and never empty: a comment with nothing in it is not a comment.
+   * What the commenter wrote. Plain text, never markup, so that every consumer can render it safely without a sanitizer — which is also how Anthers itself stores and renders a comment. Required and never empty: a comment with nothing in it is not a comment. The limit is deliberately well above what Anthers itself accepts, because a length limit can never be raised once published — new data must stay valid under the old schema — so a limit set to today's product rule would become tomorrow's ceiling.
    */
   "text":string };
 
 export type { Main };
 
 /** A comment somebody wrote about a work, a post, or another comment. It lives in the commenter's own repository, which is the honest answer to who wrote it: the words are theirs, they travel with them, and they go when the commenter goes. A comment whose subject is another comment is a REPLY — the distinction is hierarchy rather than kind, so there is one record type and not two. A service displaying these may decline to show one; it cannot unsay it. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"subject":/*#__PURE__*/ l.ref<Subject>((() => subject) as any),"text":/*#__PURE__*/ l.string({"maxGraphemes":10000,"maxLength":100000})}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"subject":/*#__PURE__*/ l.ref<Subject>((() => subject) as any),"text":/*#__PURE__*/ l.string({"maxGraphemes":25000,"maxLength":250000})}));
 
 export { main };
 

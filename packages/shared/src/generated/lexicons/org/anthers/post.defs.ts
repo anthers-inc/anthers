@@ -10,23 +10,23 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-/** A post by a creator — an announcement, a devlog, a note to an audience. On Anthers a post only announces and never carries access, which is what separates it from a work: anybody who can reach this record can reach the post it points at. This record does NOT carry the post's body; it says a post exists and where to read it. Posts are written by creators, and a reader's contributions are comments, reviews and votes rather than posts of their own. */
+/** A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a reader's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses. */
 type Main = { $type: "org.anthers.post";
 
   /**
-   * The post's title, as its author wrote it. Plain text, so that every consumer can render it without a sanitizer. Required and never empty — a post that names nothing is worse than no record at all.
+   * Where the post can be read. Deliberately not assumed to be an anthers.org address, because a creator's writing outliving any one host is the point. Required, because a post whose content is withheld must still say where to go.
    */
-  "title":string;
+  "url":l.UriString;
 
   /**
-   * Where the post can be read. Deliberately not assumed to be an anthers.org address, because a creator's writing outliving any one host is the point.
+   * When the post went live. This is the post's own date rather than the record's: a post may be drafted long before it is published, and a record written by a later backfill would otherwise claim the backfill's date. Record-creation time is already encoded in the record key, so this field exists only because the two genuinely differ.
    */
-  "url":l.UriString };
+  "publishedAt":l.DatetimeString;"content"?:Content };
 
 export type { Main };
 
-/** A post by a creator — an announcement, a devlog, a note to an audience. On Anthers a post only announces and never carries access, which is what separates it from a work: anybody who can reach this record can reach the post it points at. This record does NOT carry the post's body; it says a post exists and where to read it. Posts are written by creators, and a reader's contributions are comments, reviews and votes rather than posts of their own. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri","maxLength":2048})}));
+/** A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a reader's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses. */
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"url":/*#__PURE__*/ l.string({"format":"uri","maxLength":2048}),"publishedAt":/*#__PURE__*/ l.string({"format":"datetime","maxLength":64}),"content":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Content>((() => content) as any))}));
 
 export { main };
 
@@ -47,3 +47,23 @@ export const $parse = /*#__PURE__*/ main.parse.bind(main);
 export const $safeParse = /*#__PURE__*/ main.safeParse.bind(main);
 export const $validate = /*#__PURE__*/ main.validate.bind(main);
 export const $safeValidate = /*#__PURE__*/ main.safeValidate.bind(main);
+
+/** WHATEVER OF THIS POST ANYBODY MAY READ — which is the whole of an ungated post, and the public part of one that is not. Defined that way rather than as `the post` on purpose: if a post can later be put behind a gate, a field meaning `the post` would quietly come to mean something narrower, and a consumer built on the first meaning would misread the second without anything detecting it. Optional, because a post may be a single image with no words at all, and because a gated post may choose to reveal nothing. */
+type Content = { $type?: "org.anthers.post#content";
+
+  /**
+   * How to read `value`. `markdown` is what Anthers writes. Carried explicitly because a consumer that renders the wrong format shows syntax to a reader and nothing detects it — and because the alternative, changing what a bare string means later, is a break the evolution rules do not catch. An open set, so a plain-text-and-facets rendering or anything else may join without a new schema.
+   */
+  "format":"markdown" | l.UnknownString;
+
+  /**
+   * The content itself. Markdown rather than plain text with facets: facets annotate byte ranges and cannot express a heading, a list, a fenced code block or an image at a position, all of which an Anthers post may contain. Images and other media are referenced by absolute URL rather than carried here. The limits are deliberately far above what Anthers itself accepts, because a length limit can never be raised once published — new data must stay valid under the old schema — so a limit set to today's product rule would become tomorrow's ceiling.
+   */
+  "value":string };
+
+export type { Content };
+
+/** WHATEVER OF THIS POST ANYBODY MAY READ — which is the whole of an ungated post, and the public part of one that is not. Defined that way rather than as `the post` on purpose: if a post can later be put behind a gate, a field meaning `the post` would quietly come to mean something narrower, and a consumer built on the first meaning would misread the second without anything detecting it. Optional, because a post may be a single image with no words at all, and because a gated post may choose to reveal nothing. */
+const content = /*#__PURE__*/ l.typedObject<Content>($nsid, "content", /*#__PURE__*/ l.object({"format":/*#__PURE__*/ l.string<{"knownValues":["markdown"],"maxLength":64}>({"maxLength":64}),"value":/*#__PURE__*/ l.string({"maxGraphemes":100000,"maxLength":1000000})}));
+
+export { content };

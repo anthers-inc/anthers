@@ -16,9 +16,9 @@
 					},
 					"text": {
 						"type": "string",
-						"description": "What the commenter wrote. Plain text, never markup, so that every consumer can render it safely without a sanitizer — which is also how Anthers itself stores and renders a comment. Required and never empty: a comment with nothing in it is not a comment.",
-						"maxGraphemes": 10000,
-						"maxLength": 100000
+						"description": "What the commenter wrote. Plain text, never markup, so that every consumer can render it safely without a sanitizer — which is also how Anthers itself stores and renders a comment. Required and never empty: a comment with nothing in it is not a comment. The limit is deliberately well above what Anthers itself accepts, because a length limit can never be raised once published — new data must stay valid under the old schema — so a limit set to today's product rule would become tomorrow's ceiling.",
+						"maxGraphemes": 25000,
+						"maxLength": 250000
 					}
 				}
 			}

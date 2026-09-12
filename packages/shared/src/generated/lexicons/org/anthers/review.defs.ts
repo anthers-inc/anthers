@@ -21,7 +21,7 @@ type Main = { $type: "org.anthers.review";"subject":Subject;"score":Score;
 export type { Main };
 
 /** A review of a work — a score, and the words that explain it. It is a review rather than a rating because a score without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and scoring one out of five would mean nothing. It lives in the reviewer's own repository. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"subject":/*#__PURE__*/ l.ref<Subject>((() => subject) as any),"score":/*#__PURE__*/ l.ref<Score>((() => score) as any),"text":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":5000,"maxLength":50000}))}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"subject":/*#__PURE__*/ l.ref<Subject>((() => subject) as any),"score":/*#__PURE__*/ l.ref<Score>((() => score) as any),"text":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":25000,"maxLength":250000}))}));
 
 export { main };
 

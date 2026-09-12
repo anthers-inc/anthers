@@ -21,8 +21,8 @@
 					"text": {
 						"type": "string",
 						"description": "Why the reviewer scored it that way. Plain text, so every consumer can render it without a sanitizer. OPTIONAL here although Anthers requires it when somebody writes a review, and the split is deliberate: requiring words is a policy, and a policy can change, while required and optional can never be swapped once a schema is published. Enforcing it where the review is written keeps the rule exactly as strict and leaves the schema able to describe a review written under a later one.",
-						"maxGraphemes": 5000,
-						"maxLength": 50000
+						"maxGraphemes": 25000,
+						"maxLength": 250000
 					}
 				}
 			}
