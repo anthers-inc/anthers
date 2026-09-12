@@ -164,7 +164,8 @@ beforeAll(async () => {
 			201,
 		);
 		expect(
-			(await post(`/api/content/works/${workId}/reviews`, cookie, { score: 4, body })).status,
+			(await post(`/api/content/works/${workId}/reviews`, cookie, { verdict: "recommended", body }))
+				.status,
 		).toBe(201);
 	}
 }, DB_SETUP_TIMEOUT);

@@ -41,7 +41,7 @@ import VoteControl from "../components/post/VoteControl";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
-import ProjectRating from "../components/project/ProjectRating";
+import WorkReviews from "../components/project/WorkReviews";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
@@ -534,7 +534,7 @@ export default function WorkPage() {
 			{/* Reviews — a verdict on the work itself, which is the only thing a review
 			    was ever about. Gated behind access on the server: you can't review what you
 			    haven't been able to see. */}
-			<ProjectRating workId={work.id} />
+			<WorkReviews workId={work.id} />
 
 			<CommentThread subject={{ kind: "work", id: work.id }} canComment={canAccess} />
 

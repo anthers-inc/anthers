@@ -34,6 +34,7 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { ABUSE_EMAIL } from "@anthers/shared/constants";
+import { verdictLabel } from "@anthers/shared/content";
 import {
 	FLOOR_MODERATION_REASONS,
 	isFloorReason,
@@ -484,9 +485,9 @@ export async function dismissReports(input: {
 export interface QueueItem {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	/** The comment text, or a review's score and words — whatever the operator has to judge. */
+	/** The comment text, or a review's verdict and words — whatever the operator has to judge. */
 	excerpt: string;
-	score: number | null;
+	verdict: string | null;
 	moderationStatus: string;
 	createdAt: string;
 	author: { id: number; username: string } | null;
@@ -553,11 +554,9 @@ export const QUEUE_LIMIT = 100;
  *
  * `reported` — the queue proper: anything with an open report, most-reported first.
  * `comments` / `reviews` — recent activity, so an operator can act on something
- *   nobody reported. This mattered more than it looks when a rating was a bare
- *   1–5 score: nothing rendered it, so nobody could *see* one to report it, and
- *   browse was the only way it was reachable at all. Reviews now carry text and
- *   a report control, so the queue is fed properly — browse stays because acting
- *   before anyone complains is still worth being able to do.
+ *   nobody reported. Reviews carry words and a report control, so the queue is fed
+ *   by readers; browse stays because acting before anyone complains is still worth
+ *   being able to do.
  * `people` — reported accounts only. Unlike the two above, this is NOT a browse over
  *   recent rows: "every account, newest first" is a user directory, not a moderation
  *   surface, and reading one under a moderation header invites acting on someone
@@ -645,7 +644,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 
 	// 2. Hydrate each subject type in one query, then stitch. The branches differ only
 	//    in the column carrying the thing an operator has to judge — a comment's text,
-	//    a rating's score, a person's profile — so the row they produce is shared.
+	//    a review's verdict, a person's profile — so the row they produce is shared.
 	const items = new Map<string, QueueItem>();
 	const key = (t: string, id: number) => `${t}:${id}`;
 
@@ -700,7 +699,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			createdAt: Date;
 		},
 		context: QueueContext,
-	): Omit<QueueItem, "excerpt" | "score"> {
+	): Omit<QueueItem, "excerpt" | "verdict"> {
 		return {
 			subjectType,
 			subjectId: r.id,
@@ -741,7 +740,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			items.set(key("comment", r.id), {
 				...base("comment", r, contexts.get(`${r.subjectType}:${r.subjectId}`) ?? null),
 				excerpt: r.body,
-				score: null,
+				verdict: null,
 			});
 		}
 	}
@@ -755,7 +754,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				workId: reviews.workId,
 				moderationStatus: reviews.moderationStatus,
 				createdAt: reviews.createdAt,
-				score: reviews.score,
+				verdict: reviews.verdict,
 				body: reviews.body,
 			})
 			.from(reviews)
@@ -769,11 +768,11 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		for (const r of rows) {
 			items.set(key("review", r.id), {
 				...base("review", r, r.workId != null ? (contexts.get(`work:${r.workId}`) ?? null) : null),
-				// Score first so the operator sees the verdict, then the words that
-				// justify it — the words are the part there's actually a call to make on.
-				// `body` is empty on rows predating the write-time text requirement.
-				excerpt: r.body ? `${r.score}/5 — ${r.body}` : `${r.score}/5`,
-				score: r.score,
+				// Verdict first so the operator sees where the reviewer landed, then the
+				// words that justify it — the words are the part there's actually a call to
+				// make on. `body` is empty on rows predating the write-time text requirement.
+				excerpt: r.body ? `${verdictLabel(r.verdict)} — ${r.body}` : verdictLabel(r.verdict),
+				verdict: r.verdict,
 			});
 		}
 	}
@@ -818,7 +817,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 					{ kind: "profile", slug: r.username ?? "", title: label },
 				),
 				excerpt: r.bio ? `${label} — ${r.bio}` : label,
-				score: null,
+				verdict: null,
 			});
 		}
 	}
@@ -871,7 +870,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				excerpt: r.description
 					? `${r.title ?? "Untitled"} — ${r.description.slice(0, 400)}`
 					: (r.title ?? "Untitled"),
-				score: null,
+				verdict: null,
 				maturity: r.maturity,
 			});
 		}

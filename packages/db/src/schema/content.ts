@@ -807,21 +807,35 @@ export const reviews = pgTable(
 	{
 		id: serial("id").primaryKey(),
 		// Nullable + SET NULL: a deleted account's reviews are ANONYMIZED, not removed.
-		// A bare 1–5 score is the least personal thing in the system, and deleting it
-		// would move a creator's average through no fault of theirs. The score stays and
+		// A bare verdict is the least personal thing in the system, and deleting it would
+		// move a creator's percentage through no fault of theirs. The verdict stays and
 		// counts; the link to a person goes.
 		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
-		score: integer("score").notNull(), // 1-5, validated at application layer
-		// A score cannot be left without words — the API requires `body` on write.
+		// `recommended` or `not-recommended`, validated at the application layer against
+		// `REVIEW_VERDICTS`.
+		//
+		// 🚨 **A verdict, not a score on a scale** (Parker, 2026-09-12). Star ratings come
+		// out J-shaped — people answer yes or no and then pick an extreme to express it —
+		// so the extra resolution measures nothing, and averaging it treats ordinal answers
+		// as though the gap between 3 and 4 equalled the gap between 4 and 5. The aggregate
+		// is a proportion instead: "94% recommended" is an honest statistic where a mean of
+		// stars is arithmetic performed on guesses. It also leaves Anthers with ONE opinion
+		// primitive rather than two, since everything else here aggregates up and down votes.
+		//
+		// ⚠️ **Text and not a boolean, for the same reason `votes.direction` is.** A boolean
+		// could never grow a third value, and the published Lexicon carries these two as an
+		// open set precisely so a middle verdict stays possible.
+		verdict: text("verdict").notNull(),
+		// A verdict cannot be left without words — the API requires `body` on write.
 		// It is nullable here only because rows predating that rule exist and must
-		// keep rendering; treat "" / null as a legacy score-only review, never as a
+		// keep rendering; treat "" / null as a legacy verdict-only review, never as a
 		// shape new writes may produce. Plain text, not HTML: like comments, it is
 		// rendered as a React text node and never passed through a sanitizer,
 		// because nothing here is ever interpreted as markup.
 		body: text("body"),
 		// Same rule as comments: hidden, not deleted. A hidden review is excluded
-		// from every average and count. Note the upsert only ever sets `score` and
+		// from every percentage and count. Note the upsert only ever sets `verdict` and
 		// `body`, so re-reviewing changes them on a hidden row without resurrecting
 		// it — a user can't un-hide their own review by submitting again.
 		moderationStatus: text("moderation_status").notNull().default("visible"), // visible | hidden
@@ -940,6 +954,16 @@ export const votes = pgTable(
 		subjectId: integer("subject_id").notNull(),
 		/** `up` or `down`. Nothing else is a valid value. */
 		direction: text("direction").notNull(),
+		// Where this vote lives on the network, once it has been written there.
+		//
+		// 🚨 **This column is what makes the row an INDEX rather than the vote itself.** The
+		// record in the voter's repository is canonical; this table is a projection kept for
+		// the arithmetic, and the address is the only thing that lets a rebuild find its way
+		// back. ⚠️ **Null is ordinary and is not a failure** — a vote from an account that has
+		// since been deleted has no repository to live in and still counts, which is the one
+		// case where the row legitimately outlives the record. `atproto-reader-records.ts`
+		// carries the full list of reasons a row has none.
+		atprotoUri: text("atproto_uri").unique(),
 		/**
 		 * ⚠️ **Kept because a burst is the only visible signature of brigading.** A single
 		 * account is bounded by the unique index below; many accounts arriving together are

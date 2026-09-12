@@ -52,8 +52,10 @@ import {
 import {
 	COMMENT_MAX,
 	type CommentSubjectType,
+	isReviewVerdict,
 	REVIEW_MAX,
 	REVIEW_MIN,
+	recommendedPercent,
 } from "@anthers/shared/content";
 import {
 	type MaturityRating,
@@ -78,7 +80,6 @@ import { zValidator } from "@hono/zod-validator";
 import {
 	and,
 	asc,
-	avg,
 	count,
 	countDistinct,
 	desc,
@@ -755,14 +756,18 @@ const updateProjectSchema = createProjectSchema.partial();
 
 const createCommentSchema = z.object({ body: z.string().min(1).max(COMMENT_MAX) });
 /**
- * A review: a score AND written text. The minimum is deliberately low — it's a
+ * A review: a verdict AND written text. The minimum is deliberately low — it's a
  * blunt instrument and "lol" clears it either way. The point of requiring text
  * isn't to filter by length, it's that a written verdict gives a reader something
- * to weigh and a moderator something to act on, where a bare score is
+ * to weigh and a moderator something to act on, where a bare verdict is
  * unmoderatable by construction. Plain text, no markup, so no sanitizer.
+ *
+ * ⚠️ The accepted verdicts come from `REVIEW_VERDICTS` rather than being spelled
+ * here, so what the API accepts and what the published record may carry cannot
+ * drift apart.
  */
-const createRatingSchema = z.object({
-	score: z.number().int().min(1).max(5),
+const createReviewSchema = z.object({
+	verdict: z.string().refine(isReviewVerdict, "A review recommends the work or does not"),
 	body: z.string().trim().min(REVIEW_MIN, "Please say a little about why").max(REVIEW_MAX),
 });
 
@@ -2531,8 +2536,19 @@ const contentRoutes = new Hono()
 		// reviewer. The small honest cost is that a blocker can see "4.2 from 10" over
 		// nine listed reviews — which is already true of a hidden review, and is the right
 		// side of the trade.
+		// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
+		// so the public figure is the share who recommended it — "94% recommended" — which
+		// is an honest statistic where a mean of stars was arithmetic performed on guesses.
+		// Every visible review counts once: helpfulness sorts the list below and does not
+		// weight this, because a review somebody found useful is an easier one to read
+		// rather than a stronger recommendation.
 		const [agg] = await db
-			.select({ average: avg(reviews.score), count: count(reviews.id) })
+			.select({
+				recommended: count(sql`case when ${reviews.verdict} = 'recommended' then 1 end`).mapWith(
+					Number,
+				),
+				count: count(reviews.id),
+			})
 			.from(reviews)
 			.where(and(eq(reviews.workId, work.id), visibleReview));
 
@@ -2544,7 +2560,7 @@ const contentRoutes = new Hono()
 			.select({
 				id: reviews.id,
 				userId: reviews.userId,
-				score: reviews.score,
+				verdict: reviews.verdict,
 				body: reviews.body,
 				createdAt: reviews.createdAt,
 				username: users.username,
@@ -2561,33 +2577,34 @@ const contentRoutes = new Hono()
 			)
 			.orderBy(desc(reviews.createdAt));
 
-		let userRating: number | null = null;
+		let userVerdict: string | null = null;
 		let userReview: string | null = null;
 		if (currentUserId) {
-			// Deliberately unfiltered by moderation status: the score and words a
+			// Deliberately unfiltered by moderation status: the verdict and words a
 			// viewer submitted shouldn't silently change under them. Their review
 			// simply stops counting and stops appearing to everyone else.
 			const [row] = await db
-				.select({ score: reviews.score, body: reviews.body })
+				.select({ verdict: reviews.verdict, body: reviews.body })
 				.from(reviews)
 				.where(and(eq(reviews.workId, work.id), eq(reviews.userId, currentUserId)))
 				.limit(1);
-			userRating = row?.score ?? null;
+			userVerdict = row?.verdict ?? null;
 			userReview = row?.body ?? null;
 		}
 
 		return c.json({
-			average: agg.average ? Number(agg.average) : null,
+			recommendedPercent: recommendedPercent(agg.recommended, Number(agg.count)),
+			recommended: agg.recommended,
 			count: Number(agg.count),
-			userRating,
+			userVerdict,
 			userReview,
 			// `body` is null on rows written before reviews required text. They still
-			// render and still count; the client shows the score without a quote.
+			// render and still count; the client shows the verdict without a quote.
 			reviews: reviewRows.map((r) => ({ ...r, body: r.body ?? "" })),
 		});
 	})
 
-	.post("/works/:id/reviews", requireAuth, zValidator("json", createRatingSchema), async (c) => {
+	.post("/works/:id/reviews", requireAuth, zValidator("json", createReviewSchema), async (c) => {
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
@@ -2598,22 +2615,25 @@ const contentRoutes = new Hono()
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 
-		const { score, body } = c.req.valid("json");
-		// The conflict branch sets `score` and `body` and nothing else — notably not
-		// `moderationStatus`. Re-reviewing changes the score and the words on a hidden
+		const { verdict, body } = c.req.valid("json");
+		// The conflict branch sets `verdict` and `body` and nothing else — notably not
+		// `moderationStatus`. Re-reviewing changes the verdict and the words on a hidden
 		// row without resurrecting it, so a user can't un-hide their own review by
 		// submitting again. Adding a field here means adding it to BOTH the insert
 		// and this set clause; forgetting the set clause silently makes edits no-ops.
-		const [rating] = await db
+		//
+		// ⚠️ Editing rewrites the published record at the same address rather than writing
+		// a second one, so a link to a review keeps working.
+		const [review] = await db
 			.insert(reviews)
-			.values({ userId: user.id, workId: work.id, score, body: body.trim() })
+			.values({ userId: user.id, workId: work.id, verdict, body: body.trim() })
 			.onConflictDoUpdate({
 				target: [reviews.userId, reviews.workId],
-				set: { score, body: body.trim() },
+				set: { verdict, body: body.trim() },
 			})
 			.returning();
 
-		return c.json({ rating }, 201);
+		return c.json({ review }, 201);
 	})
 
 	/*
@@ -4114,9 +4134,13 @@ const contentRoutes = new Hono()
 					newest as unknown as SQL,
 				];
 				break;
-			case "top_rated":
+			case "most_recommended":
+				// The share of visible reviews that recommended it, which is what the public
+				// figure on a Work is. ⚠️ Raw SQL, so nothing typechecks the column name here —
+				// a rename that misses this line sorts by nothing and reports no error.
 				orderClause = [
-					sql`(SELECT AVG(rt.score) FROM project_items pi JOIN reviews rt ON rt.work_id = pi.work_id
+					sql`(SELECT AVG(CASE WHEN rt.verdict = 'recommended' THEN 1.0 ELSE 0 END)
+						FROM project_items pi JOIN reviews rt ON rt.work_id = pi.work_id
 						WHERE pi.project_id = ${projects.id} AND rt.moderation_status = 'visible') DESC NULLS LAST`,
 					newest as unknown as SQL,
 				];

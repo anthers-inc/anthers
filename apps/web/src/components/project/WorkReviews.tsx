@@ -1,80 +1,82 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Reviews on a post — the aggregate, the written reviews, and the form.
+ * Reviews on a Work — the aggregate, the written reviews, and the form.
  *
- * A score cannot be left on its own: picking stars opens a required text field,
- * and nothing is submitted until there are words. That's a deliberate trade of
- * volume for substance — most posts will carry no reviews for a long while, and
- * an honest "no reviews yet" beats a five-star average assembled from three
- * drive-by clicks. It also gives moderation something to act on, where a bare
- * 1-star is unmoderatable by construction.
+ * A verdict cannot be left on its own: choosing one opens a required text field, and nothing
+ * is submitted until there are words. That is a deliberate trade of volume for substance —
+ * most Works will carry no reviews for a long while, and an honest "no reviews yet" beats a
+ * percentage assembled from three drive-by clicks. It also gives moderation something to act
+ * on, where a bare thumb is unmoderatable by construction.
  *
- * Bodies render as React text nodes, never as markup — the API stores plain text
- * and nothing here interprets it.
+ * ⭐ **The aggregate is a proportion and not an average**, because a review recommends a Work
+ * or does not. `@anthers/shared/content` carries why, and it is the same reasoning that gives
+ * Anthers one opinion primitive rather than two.
+ *
+ * Bodies render as React text nodes, never as markup — the API stores plain text and nothing
+ * here interprets it.
  */
 
-import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
+import { REVIEW_MAX, REVIEW_MIN, verdictLabel } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
-import type { RatingAggregate } from "@anthers/web-shared/types";
-import { FlagIcon } from "@heroicons/react/24/outline";
+import type { ReviewAggregate } from "@anthers/web-shared/types";
+import { FlagIcon, HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import ReportDialog from "../ui/ReportDialog";
-import StarRating from "../ui/StarRating";
 
 /**
  * Reviews for a **Work**. Keyed on the Work's id rather than a post slug, because a review
  * is a verdict on a work and a work is reachable without any post existing.
  */
-export default function ProjectRating({ workId }: { workId: number }) {
+export default function WorkReviews({ workId }: { workId: number }) {
 	const { isAuthenticated, user } = useAuth();
-	const [rating, setRating] = useState<RatingAggregate | null>(null);
-	const [draftScore, setDraftScore] = useState<number | null>(null);
+	const [agg, setAgg] = useState<ReviewAggregate | null>(null);
+	const [draftVerdict, setDraftVerdict] = useState<string | null>(null);
 	const [draftBody, setDraftBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [reportingReview, setReportingReview] = useState<number | null>(null);
 
-	const fetchRating = useCallback(() => {
+	const fetchReviews = useCallback(() => {
 		client.api.content.works[":id"].reviews
 			.$get({ param: { id: String(workId) } })
 			.then(async (res) => {
 				if (!res.ok) return;
-				setRating((await res.json()) as unknown as RatingAggregate);
+				setAgg((await res.json()) as unknown as ReviewAggregate);
 			})
 			.catch(console.error);
 	}, [workId]);
 
 	useEffect(() => {
-		fetchRating();
-	}, [fetchRating]);
+		fetchReviews();
+	}, [fetchReviews]);
 
-	// Picking stars opens the form; if they've reviewed before, open it on what
-	// they already said so editing is a correction rather than a retype.
-	const startReview = (score: number) => {
+	// Choosing a verdict opens the form; if they have reviewed before, open it on what they
+	// already said so editing is a correction rather than a retype.
+	const startReview = (verdict: string) => {
 		if (!isAuthenticated) return;
-		setDraftScore(score);
-		setDraftBody((current) => current || (rating?.userReview ?? ""));
+		setDraftVerdict(verdict);
+		setDraftBody((current) => current || (agg?.userReview ?? ""));
 		setError(null);
 	};
 
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (draftScore === null || draftBody.trim().length < REVIEW_MIN) return;
+		if (draftVerdict === null || draftBody.trim().length < REVIEW_MIN) return;
 		setSubmitting(true);
 		setError(null);
 		try {
 			const res = await client.api.content.works[":id"].reviews.$post({
 				param: { id: String(workId) },
-				json: { score: draftScore, body: draftBody.trim() },
+				json: { verdict: draftVerdict, body: draftBody.trim() },
 			});
 			if (!res.ok) {
 				setError("That review couldn't be saved. Please try again.");
 				return;
 			}
-			setDraftScore(null);
+			setDraftVerdict(null);
 			setDraftBody("");
-			fetchRating();
+			fetchReviews();
 		} catch {
 			setError("That review couldn't be saved. Please try again.");
 		} finally {
@@ -82,35 +84,63 @@ export default function ProjectRating({ workId }: { workId: number }) {
 		}
 	};
 
-	if (!rating) return null;
+	if (!agg) return null;
 
 	const tooShort = draftBody.trim().length < REVIEW_MIN;
+	const chosen = draftVerdict ?? agg.userVerdict;
 
 	return (
 		<div>
 			<div className="flex items-center gap-4 mb-3">
 				<h2 className="text-xl font-bold">Reviews</h2>
-				<StarRating rating={rating.average} count={rating.count} />
+				{agg.recommendedPercent !== null && (
+					<span className="text-sm text-base-content/70">
+						<span className="font-semibold">{agg.recommendedPercent}% Recommended</span>{" "}
+						<span className="text-base-content/50">
+							({agg.recommended} of {agg.count})
+						</span>
+					</span>
+				)}
 			</div>
 
 			{isAuthenticated && (
 				<div className="mb-6">
-					<div className="flex items-center gap-3">
-						<StarRating rating={draftScore ?? rating.userRating} interactive onRate={startReview} />
+					<div className="flex items-center gap-2">
+						{/* Two buttons and no third: somebody who feels neither is meant to post
+						    nothing, because posting a review is an action and having it mean
+						    something is the point. */}
+						<button
+							type="button"
+							className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"}`}
+							onClick={() => startReview("recommended")}
+							aria-pressed={chosen === "recommended"}
+						>
+							<HandThumbUpIcon className="w-4 h-4" />
+							Recommend
+						</button>
+						<button
+							type="button"
+							className={`btn btn-sm ${chosen === "not-recommended" ? "btn-primary" : "btn-outline"}`}
+							onClick={() => startReview("not-recommended")}
+							aria-pressed={chosen === "not-recommended"}
+						>
+							<HandThumbDownIcon className="w-4 h-4" />
+							Don't Recommend
+						</button>
 						<span className="text-sm text-base-content/60">
-							{rating.userRating !== null
-								? "You've reviewed this — pick a score to edit"
-								: "Pick a score to write a review"}
+							{agg.userVerdict !== null
+								? "You've reviewed this — choose again to edit"
+								: "Choose one to write a review"}
 						</span>
 					</div>
 
-					{draftScore !== null && (
+					{draftVerdict !== null && (
 						<form onSubmit={submit} className="mt-3">
 							<textarea
 								className="textarea textarea-bordered w-full"
 								rows={3}
 								maxLength={REVIEW_MAX}
-								placeholder="What did you think? A score on its own doesn't say much."
+								placeholder="What did you think? A verdict on its own doesn't say much."
 								value={draftBody}
 								onChange={(e) => setDraftBody(e.target.value)}
 							/>
@@ -130,7 +160,7 @@ export default function ProjectRating({ workId }: { workId: number }) {
 								<button
 									type="button"
 									className="btn btn-ghost btn-sm"
-									onClick={() => setDraftScore(null)}
+									onClick={() => setDraftVerdict(null)}
 									disabled={submitting}
 								>
 									Cancel
@@ -141,14 +171,14 @@ export default function ProjectRating({ workId }: { workId: number }) {
 				</div>
 			)}
 
-			{rating.reviews.length === 0 ? (
+			{agg.reviews.length === 0 ? (
 				<p className="text-sm text-base-content/50">
 					No reviews yet.{" "}
 					{isAuthenticated ? "Be the first to say something." : "Log in to write one."}
 				</p>
 			) : (
 				<div className="flex flex-col gap-4">
-					{rating.reviews.map((review) => (
+					{agg.reviews.map((review) => (
 						<div key={review.id} className="flex gap-3">
 							{review.avatar ? (
 								<img
@@ -164,12 +194,19 @@ export default function ProjectRating({ workId }: { workId: number }) {
 							<div className="flex-1">
 								<div className="flex items-center gap-2 text-sm">
 									<span className="font-medium">{review.username}</span>
-									<StarRating rating={review.score} size="sm" />
+									<span
+										className={
+											review.verdict === "recommended"
+												? "text-success text-xs font-medium"
+												: "text-base-content/60 text-xs font-medium"
+										}
+									>
+										{verdictLabel(review.verdict)}
+									</span>
 									<span className="text-base-content/40 text-xs">
 										{new Date(review.createdAt).toLocaleDateString()}
 									</span>
-									{/* Reviews are reportable for the same reason comments are — and
-									    until text existed there was nothing here to report. */}
+									{/* Reviews are reportable for the same reason comments are. */}
 									{isAuthenticated && review.userId !== user?.id && (
 										<button
 											type="button"
@@ -182,7 +219,7 @@ export default function ProjectRating({ workId }: { workId: number }) {
 										</button>
 									)}
 								</div>
-								{/* "" is a score-only review written before text was required. */}
+								{/* "" is a verdict-only review written before text was required. */}
 								{review.body && <p className="text-sm mt-1">{review.body}</p>}
 							</div>
 						</div>

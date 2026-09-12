@@ -173,7 +173,12 @@ beforeAll(async () => {
 	// anonymization assertion would be testing an empty table.
 	const [rating] = await db
 		.insert(reviews)
-		.values({ userId: leaverId, workId: soldWorkId, score: 4, body: `LEAVER-REVIEW-${id}` })
+		.values({
+			userId: leaverId,
+			workId: soldWorkId,
+			verdict: "recommended",
+			body: `LEAVER-REVIEW-${id}`,
+		})
 		.returning();
 	ratingId = rating.id;
 }, DB_SETUP_TIMEOUT);
@@ -315,11 +320,11 @@ describe("what 'deleted' means, table by table", () => {
 		expect(res.status).toBe(200);
 	});
 
-	it("ANONYMIZES the review — score survives, author does not", async () => {
+	it("ANONYMIZES the review — the verdict survives, the author does not", async () => {
 		const [row] = await db.select().from(reviews).where(eq(reviews.id, ratingId));
 		expect(row).toBeDefined();
-		// Deleting it would move a creator's average through no fault of theirs.
-		expect(row.score).toBe(4);
+		// Deleting it would move a creator's percentage through no fault of theirs.
+		expect(row.verdict).toBe("recommended");
 		expect(row.userId).toBeNull();
 	});
 

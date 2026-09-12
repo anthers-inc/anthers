@@ -540,19 +540,28 @@ export interface Comment {
 export interface Review {
 	id: number;
 	userId: number;
-	score: number;
-	/** "" for rows written before reviews required text — render the score alone. */
+	/** `recommended` or `not-recommended`. An open set — render an unknown value as-is. */
+	verdict: string;
+	/** "" for rows written before reviews required text — render the verdict alone. */
 	body: string;
 	createdAt: string;
 	username: string;
 	avatar: string | null;
 }
 
-export interface RatingAggregate {
-	average: number | null;
+export interface ReviewAggregate {
+	/**
+	 * The share who recommended it, 0–100, or null when nobody has reviewed.
+	 *
+	 * ⚠️ A proportion rather than an average, because reviews carry a verdict rather
+	 * than a score. Every visible review counts once.
+	 */
+	recommendedPercent: number | null;
+	/** How many of `count` recommended it — the numerator, for "18 of 20". */
+	recommended: number;
 	count: number;
-	/** The viewer's own score, shown even if their review is hidden. */
-	userRating: number | null;
+	/** The viewer's own verdict, shown even if their review is hidden. */
+	userVerdict: string | null;
 	/** The viewer's own review text, so the form can open pre-filled for an edit. */
 	userReview: string | null;
 	reviews: Review[];

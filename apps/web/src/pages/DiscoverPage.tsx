@@ -52,7 +52,7 @@ const EXPLORE_MODES = [
 const SORT_OPTIONS = [
 	{ value: "newest", label: "Newest" },
 	{ value: "popular", label: "Popular" },
-	{ value: "top_rated", label: "Top Rated" },
+	{ value: "most_recommended", label: "Most Recommended" },
 ] as const;
 
 function DiscoverSidebarContent({

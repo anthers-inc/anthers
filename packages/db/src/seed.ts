@@ -1032,12 +1032,13 @@ async function seed() {
 		);
 
 		for (const [i, reviewerId] of reviewers.entries()) {
-			const score = randomInt(3, 5); // seed data skews positive
+			// Seed data skews positive, the way a real catalog does.
+			const verdict = randomInt(1, 10) > 2 ? "recommended" : "not-recommended";
 			try {
 				await db.insert(reviews).values({
 					userId: reviewerId,
 					workId,
-					score,
+					verdict,
 					body: reviewBodies[(workId + i) % reviewBodies.length],
 					createdAt: daysAgo(randomInt(1, 90)),
 				});
