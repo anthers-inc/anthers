@@ -18,7 +18,7 @@ import {
 	REVIEW_KIND,
 	syncRecord,
 	VOTE_KIND,
-} from "../services/atproto-interactions.js";
+} from "../services/atproto-record-plan.js";
 import type { RecordRef, RepoWriter } from "../services/atproto-repo.js";
 
 const DID = "did:plc:z72i7hdynmk6r22z27h6tvur";
