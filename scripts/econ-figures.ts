@@ -1405,24 +1405,22 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// the thing it points at is not, and a page saying otherwise promises something the
 		// design forbids rather than something not built yet.
 		//
-		// 🚨 **`built on the AT Protocol` stays guarded UNQUALIFIED and is allowed QUALIFIED**
-		// (Parker, 2026-09-11). The bare phrase names a foundation, and Anthers has two — the
-		// protocol for identity, Postgres for everything else — so it cannot say which it
-		// means and a reader resolves it generously, to federation Anthers does not have.
-		// Naming the parts is what makes it true, and `built on the AT Protocol for identity
-		// and the public catalog` is barely longer.
-		//
-		// ⚠️ **The lookahead is why the qualified form gets through, and it is coarse on
-		// purpose.** The qualified phrase *contains* the bare one, so without `(?! for )` this
-		// rule would forbid the sentence it is meant to permit. Requiring "for" is a proxy for
-		// "names which parts" rather than a check that it does — a guard covers a phrasing and
-		// never a claim, which this file has now paid for three times.
+		// ⭐ **`built on the AT Protocol` is NOT guarded, deliberately** (Parker, 2026-09-11).
+		// Naming which parts is better — the protocol is the foundation of identity and the
+		// public catalog, and an ordinary database is the foundation of everything else — but
+		// that is a preference and lives in the wiki's *How Anthers Talks About Itself* rather
+		// than here. 🚨 **A regex cannot tell a page that already gave the context from one
+		// that did not**, and the attempt showed why: the qualified sentence *contains* the
+		// bare one, so guarding the bare phrase forbade the sentence it was meant to permit,
+		// and rescuing it took a `(?! for )` lookahead that would have passed "built on the AT
+		// Protocol for now". A guard covers a phrasing and never a claim — this file has paid
+		// for that three times, and the fourth answer is to not guard this one.
 		//
 		// The framing drifted back onto marketing pages twice before this guard existed —
 		// PR #166 removed it from /for-creators, #183 from the Ghost comparison — which is
 		// what earned it a guard rather than another sweep.
 		pattern: new RegExp(
-			`${NOT_NEGATED}(?:built on the AT ?Protocol(?! for )|(?:content|works?|files?) (?:are |is )?stored as ATProto records)`,
+			`${NOT_NEGATED}(?:content|works?|files?) (?:are |is )?stored as ATProto records`,
 			"gi",
 		),
 		why: "a work itself never becomes a record — a repository is a log every consumer downloads in full, so listings are published and the work is not (wiki: The AT Protocol, 'The Rule That Decides')",
