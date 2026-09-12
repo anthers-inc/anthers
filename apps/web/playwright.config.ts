@@ -64,6 +64,9 @@ export default defineConfig({
 		// signed in as the fixture viewer. Separate from `gauntlet` on purpose — that one is
 		// a single stateful staircase where order is the point, and dropping unrelated tests
 		// into it would make its ratchet assertions depend on what else ran.
+		//
+		// ⚠️ **These run on the fixture as `setup` left it, which is why `gauntlet` waits for
+		// them rather than the other way round.** See the note on that project.
 		{
 			name: "authed",
 			use: {
@@ -76,6 +79,27 @@ export default defineConfig({
 		},
 		// The User Gauntlet walk: authenticated (storageState from setup), strictly serial —
 		// it is one stateful staircase, not a bag of independent tests.
+		//
+		// 🚨 **It runs AFTER `authed`, and the ordering is load-bearing in both directions.**
+		// Its `beforeAll` RESETS the shared fixture — `db:gauntlet` deletes the fixture
+		// creator's posts and Works and rebuilds them — so running beside `authed` pulls rows
+		// out from under any spec holding one. `votes.authed.e2e.ts` is the one that holds
+		// them, and its symptom is a thread that existed in `beforeAll` and reads "No comments
+		// yet" by the assertion. ⚠️ The race is scheduling-dependent rather than reliable: it
+		// surfaced when that spec was renamed and its alphabetical position moved, so it was
+		// latent and winning by luck before that.
+		//
+		// ⚠️ **The dependency points this way and not the other, which was tried first.**
+		// Making `authed` wait for `gauntlet` also removes the race and is wrong, because the
+		// walk deliberately ratchets the viewer's state upward — it leaves them supporting,
+		// purchased and following. The authed specs assume the floor `setup` established, and
+		// the basket spec fails immediately on the leftovers. So: reset, then the specs that
+		// need the floor, then the staircase that climbs away from it.
+		//
+		// ⚠️ **The cost is real and it is the right trade.** Serializing adds the two projects'
+		// wall clocks instead of overlapping them. A suite that is fast and sometimes wrong
+		// teaches people to re-run it until it is green, and that habit is what makes every
+		// later failure ambiguous.
 		{
 			name: "gauntlet",
 			use: {
@@ -83,7 +107,7 @@ export default defineConfig({
 				storageState: "tests/e2e/.auth/gauntlet-viewer.json",
 			},
 			testMatch: "**/user-gauntlet.e2e.ts",
-			dependencies: ["setup"],
+			dependencies: ["setup", "authed"],
 			fullyParallel: false,
 			metadata: { needsMedia: true },
 		},
