@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Reviews — a score cannot be left without words.
+ * Reviews — a verdict cannot be left without words.
  *
  * The rule is enforced at the write boundary, so the assertions that matter are
- * that a score-only submission is REJECTED and that the text survives the round
+ * that a verdict-only submission is REJECTED and that the text survives the round
  * trip into the public list. Everything else here guards the edges that were
  * easy to get wrong when `body` was bolted onto an existing upsert:
  *
- *   - The conflict branch has to set BOTH columns. Setting only `score` on an
+ *   - The conflict branch has to set BOTH columns. Setting only `verdict` on an
  *     edit would silently keep the old text against a new verdict, which is
  *     worse than either failing or being ignored.
  *   - It must still NOT set `moderationStatus`, or re-reviewing becomes a way to
@@ -60,11 +60,12 @@ async function signUp(username: string): Promise<string> {
 }
 
 interface ReviewList {
-	average: number | null;
+	recommendedPercent: number | null;
+	recommended: number;
 	count: number;
-	userRating: number | null;
+	userVerdict: string | null;
 	userReview: string | null;
-	reviews: { id: number; score: number; body: string; username: string }[];
+	reviews: { id: number; verdict: string; body: string; username: string }[];
 }
 
 const readReviews = async (cookie?: string): Promise<ReviewList> => {
@@ -120,15 +121,17 @@ beforeAll(async () => {
 	expect(release.status).toBe(200);
 }, DB_SETUP_TIMEOUT);
 
-describe("A score cannot be left without words", () => {
-	it("rejects a score with no body at all", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, { score: 5 });
+describe("A verdict cannot be left without words", () => {
+	it("rejects a verdict with no body at all", async () => {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+			verdict: "recommended",
+		});
 		expect(res.status).toBe(400);
 	});
 
 	it("rejects a body that is only whitespace", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 5,
+			verdict: "recommended",
 			body: "        ",
 		});
 		expect(res.status).toBe(400);
@@ -136,7 +139,7 @@ describe("A score cannot be left without words", () => {
 
 	it("rejects a body under the minimum", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 5,
+			verdict: "recommended",
 			body: "x".repeat(REVIEW_MIN - 1),
 		});
 		expect(res.status).toBe(400);
@@ -144,23 +147,23 @@ describe("A score cannot be left without words", () => {
 
 	it("rejects a body over the maximum", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 5,
+			verdict: "recommended",
 			body: "x".repeat(REVIEW_MAX + 1),
 		});
 		expect(res.status).toBe(400);
 	});
 
-	it("still rejects an out-of-range score", async () => {
+	it("still rejects a verdict that is not one of ours", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 6,
+			verdict: "meh",
 			body: "a perfectly reasonable body",
 		});
 		expect(res.status).toBe(400);
 	});
 
-	it("accepts a score with words, and publishes both", async () => {
+	it("accepts a verdict with words, and publishes both", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 4,
+			verdict: "recommended",
 			body: "  the pacing is the thing — nothing overstays  ",
 		});
 		expect(res.status).toBe(201);
@@ -170,15 +173,15 @@ describe("A score cannot be left without words", () => {
 		expect(list.reviews).toHaveLength(1);
 		// Trimmed on the way in, so leading/trailing space never reaches a reader.
 		expect(list.reviews[0].body).toBe("the pacing is the thing — nothing overstays");
-		expect(list.reviews[0].score).toBe(4);
+		expect(list.reviews[0].verdict).toBe("recommended");
 		expect(list.reviews[0].username).toBe(viewerAName);
 	});
 });
 
 describe("Editing a review", () => {
-	it("updates the score AND the text, not just the score", async () => {
+	it("updates the verdict AND the text, not just the verdict", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 2,
+			verdict: "not-recommended",
 			body: "came back to it and it did not hold up",
 		});
 		expect(res.status).toBe(201);
@@ -186,13 +189,13 @@ describe("Editing a review", () => {
 		const list = await readReviews();
 		// Still one review — an edit, not a second row.
 		expect(list.count).toBe(1);
-		expect(list.reviews[0].score).toBe(2);
+		expect(list.reviews[0].verdict).toBe("not-recommended");
 		expect(list.reviews[0].body).toBe("came back to it and it did not hold up");
 	});
 
-	it("shows the author their own score and words so the form can pre-fill", async () => {
+	it("shows the author their own verdict and words so the form can pre-fill", async () => {
 		const list = await readReviews(viewerA);
-		expect(list.userRating).toBe(2);
+		expect(list.userVerdict).toBe("not-recommended");
 		expect(list.userReview).toBe("came back to it and it did not hold up");
 	});
 
@@ -210,13 +213,13 @@ describe("Editing a review", () => {
 		await db.update(reviews).set({ moderationStatus: "hidden" }).where(eq(reviews.id, row.id));
 
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 5,
+			verdict: "recommended",
 			body: "actually I have changed my mind again",
 		});
 		expect(res.status).toBe(201);
 
 		const [after] = await db.select().from(reviews).where(eq(reviews.id, row.id));
-		expect(after.score).toBe(5);
+		expect(after.verdict).toBe("recommended");
 		expect(after.body).toBe("actually I have changed my mind again");
 		// The whole point: the edit landed, the row stayed hidden.
 		expect(after.moderationStatus).toBe("hidden");
@@ -233,15 +236,15 @@ describe("Reviews written before text was required", () => {
 		const [viewer] = (await db.execute(
 			sql`SELECT id FROM users WHERE username = ${viewerBName}`,
 		)) as unknown as { id: number }[];
-		await db.insert(reviews).values({ userId: viewer.id, workId, score: 3 });
+		await db.insert(reviews).values({ userId: viewer.id, workId, verdict: "recommended" });
 
 		const list = await readReviews();
 		expect(list.count).toBe(1);
-		expect(list.average).toBe(3);
+		expect(list.recommendedPercent).toBe(100);
 		expect(list.reviews).toHaveLength(1);
-		// Null in the column, "" over the wire — the client renders the score alone
+		// Null in the column, "" over the wire — the client renders the verdict alone
 		// rather than an empty quote.
 		expect(list.reviews[0].body).toBe("");
-		expect(list.reviews[0].score).toBe(3);
+		expect(list.reviews[0].verdict).toBe("recommended");
 	});
 });

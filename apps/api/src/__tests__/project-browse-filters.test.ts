@@ -183,7 +183,7 @@ describe("project browse filters", () => {
 		// database holds hundreds of projects with real view counts, so an unscoped
 		// `popular` sorts these zero-view fixtures off the end — a true result that
 		// would read as a broken filter.
-		for (const sort of ["newest", "popular", "top_rated"]) {
+		for (const sort of ["newest", "popular", "most_recommended"]) {
 			const slugs = await listSlugs(`creator=${creatorName}&sort=${sort}`);
 			expect(slugs.sort()).toEqual([...mine.values()].sort());
 		}

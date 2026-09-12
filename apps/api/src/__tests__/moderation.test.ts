@@ -158,15 +158,15 @@ beforeAll(async () => {
 
 	// Two reviews: 1 star from A (the one we'll hide), 5 stars from B.
 	const r1 = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-		score: 1,
+		verdict: "not-recommended",
 		body: "did not work for me at all",
 	});
 	expect(r1.status).toBe(201);
-	ratingId = (await r1.json()).rating.id;
+	ratingId = (await r1.json()).review.id;
 	expect(
 		(
 			await post(`/api/content/works/${workId}/reviews`, viewerB, {
-				score: 5,
+				verdict: "recommended",
 				body: "one of the best things I have played this year",
 			})
 		).status,
@@ -348,7 +348,7 @@ describe("The operator queue", () => {
 		const { items } = await queue(admin, "reviews");
 		const entry = items.find((i) => i.subjectId === ratingId && i.subjectType === "review");
 		expect(entry).toBeDefined();
-		expect(entry?.excerpt).toBe("1/5 — did not work for me at all");
+		expect(entry?.excerpt).toBe("Not Recommended — did not work for me at all");
 		expect(entry?.openReports).toBe(0);
 	});
 });
@@ -436,11 +436,11 @@ describe("Hiding a comment", () => {
 	});
 });
 
-describe("Hiding a rating", () => {
+describe("Hiding a review", () => {
 	it("drops it out of the aggregate on the reviews endpoint", async () => {
 		const before = await (await req(`/api/content/works/${workId}/reviews`)).json();
 		expect(before.count).toBe(2);
-		expect(before.average).toBe(3); // (1 + 5) / 2
+		expect(before.recommendedPercent).toBe(50); // one of the two recommended it
 
 		const res = await post("/api/admin/moderation/hide", admin, {
 			subjectType: "review",
@@ -451,7 +451,7 @@ describe("Hiding a rating", () => {
 
 		const after = await (await req(`/api/content/works/${workId}/reviews`)).json();
 		expect(after.count).toBe(1);
-		expect(after.average).toBe(5);
+		expect(after.recommendedPercent).toBe(100);
 	});
 
 	it("has no second aggregate to leak through — post detail carries none", async () => {
@@ -467,25 +467,25 @@ describe("Hiding a rating", () => {
 		expect(body.post.ratingAverage).toBeUndefined();
 	});
 
-	it("still shows the author their own score rather than lying about it", async () => {
+	it("still shows the author their own verdict rather than lying about it", async () => {
 		const res = await req(`/api/content/works/${workId}/reviews`, { headers: { Cookie: viewerA } });
-		expect((await res.json()).userRating).toBe(1);
+		expect((await res.json()).userVerdict).toBe("not-recommended");
 	});
 
-	it("cannot be resurrected by re-rating — the upsert only touches the score", async () => {
+	it("cannot be resurrected by re-reviewing — the upsert only touches the verdict", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
-			score: 4,
+			verdict: "recommended",
 			body: "came back to it and warmed up considerably",
 		});
 		expect(res.status).toBe(201);
 
 		const [row] = await db.select().from(reviews).where(eq(reviews.id, ratingId));
-		expect(row.score).toBe(4);
+		expect(row.verdict).toBe("recommended");
 		expect(row.moderationStatus).toBe("hidden");
 
 		const agg = await (await req(`/api/content/works/${workId}/reviews`)).json();
 		expect(agg.count).toBe(1);
-		expect(agg.average).toBe(5);
+		expect(agg.recommendedPercent).toBe(100);
 	});
 });
 

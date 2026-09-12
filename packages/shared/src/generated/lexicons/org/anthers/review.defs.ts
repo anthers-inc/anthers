@@ -10,18 +10,23 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-/** A review of a work — a score, and the words that explain it. It is a review rather than a rating because a score without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and scoring one out of five would mean nothing. It lives in the reviewer's own repository. */
-type Main = { $type: "org.anthers.review";"subject":Subject;"score":Score;
+/** A review of a work — whether the reviewer recommends it, and the words that explain why. It is a review rather than a rating because a verdict without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and recommending one means nothing. It lives in the reviewer's own repository. Editing a review rewrites this record in place rather than writing a new one, so a link to it keeps working — which also means a reference to one exact version of a review is not something a consumer can rely on. */
+type Main = { $type: "org.anthers.review";"subject":Subject;
 
   /**
-   * Why the reviewer scored it that way. Plain text, so every consumer can render it without a sanitizer. OPTIONAL here although Anthers requires it when somebody writes a review, and the split is deliberate: requiring words is a policy, and a policy can change, while required and optional can never be swapped once a schema is published. Enforcing it where the review is written keeps the rule exactly as strict and leaves the schema able to describe a review written under a later one.
+   * Whether the reviewer recommends this work. Deliberately a verdict rather than a score on a scale: a star rating asks each person to convert a feeling into a number, which they do inconsistently and mostly by picking an extreme, and averaging the results treats ordinal answers as if the distance between them were equal. A yes-or-no leaves the nuance to the aggregate, where a proportion of readers recommending something is an honest statistic rather than an arithmetic mean of guesses. An OPEN SET, and a string rather than a boolean for exactly that reason: a boolean's type could never grow, while a middle verdict can be added here later if one is ever wanted. Anthers writes only the two listed today, and somebody who feels neither simply does not post a review.
+   */
+  "verdict":"recommended" | "not-recommended" | l.UnknownString;
+
+  /**
+   * Why the reviewer reached that verdict. Plain text, so every consumer can render it without a sanitizer. OPTIONAL here although Anthers requires it when somebody writes a review, and the split is deliberate: requiring words is a policy, and a policy can change, while required and optional can never be swapped once a schema is published. Enforcing it where the review is written keeps the rule exactly as strict and leaves the schema able to describe a review written under a later one. The limits sit far above what Anthers accepts, because a length limit can never be raised — new data must stay valid under the old schema — so a limit set to today's product rule would become tomorrow's ceiling.
    */
   "text"?:string };
 
 export type { Main };
 
-/** A review of a work — a score, and the words that explain it. It is a review rather than a rating because a score without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and scoring one out of five would mean nothing. It lives in the reviewer's own repository. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"subject":/*#__PURE__*/ l.ref<Subject>((() => subject) as any),"score":/*#__PURE__*/ l.ref<Score>((() => score) as any),"text":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":25000,"maxLength":250000}))}));
+/** A review of a work — whether the reviewer recommends it, and the words that explain why. It is a review rather than a rating because a verdict without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and recommending one means nothing. It lives in the reviewer's own repository. Editing a review rewrites this record in place rather than writing a new one, so a link to it keeps working — which also means a reference to one exact version of a review is not something a consumer can rely on. */
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"subject":/*#__PURE__*/ l.ref<Subject>((() => subject) as any),"verdict":/*#__PURE__*/ l.string<{"knownValues":["recommended","not-recommended"],"maxLength":64}>({"maxLength":64}),"text":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":25000,"maxLength":250000}))}));
 
 export { main };
 
@@ -42,26 +47,6 @@ export const $parse = /*#__PURE__*/ main.parse.bind(main);
 export const $safeParse = /*#__PURE__*/ main.safeParse.bind(main);
 export const $validate = /*#__PURE__*/ main.validate.bind(main);
 export const $safeValidate = /*#__PURE__*/ main.safeValidate.bind(main);
-
-/** The score, and the scale it sits on. An object rather than a bare number for the same reason the subject is one: a published field's type can never change, so a bare `4` would leave a stranger's software guessing the scale AND lock in whatever scale happened to be current. Carrying the scale also means a finer one can be adopted later without changing a type — half points become `{ value: 7, outOf: 10 }`, which is why no fractional number type is needed or wanted here. */
-type Score = { $type?: "org.anthers.review#score";
-
-  /**
-   * The score given, on the scale named by `outOf`. Never meaningful on its own — a consumer reading this without the scale beside it is guessing.
-   */
-  "value":number;
-
-  /**
-   * The top of the scale this score is on. Anthers writes 5 today; a consumer must read it rather than assume it, because the whole point of carrying it is that it can change.
-   */
-  "outOf":number };
-
-export type { Score };
-
-/** The score, and the scale it sits on. An object rather than a bare number for the same reason the subject is one: a published field's type can never change, so a bare `4` would leave a stranger's software guessing the scale AND lock in whatever scale happened to be current. Carrying the scale also means a finer one can be adopted later without changing a type — half points become `{ value: 7, outOf: 10 }`, which is why no fractional number type is needed or wanted here. */
-const score = /*#__PURE__*/ l.typedObject<Score>($nsid, "score", /*#__PURE__*/ l.object({"value":/*#__PURE__*/ l.integer({"minimum":0}),"outOf":/*#__PURE__*/ l.integer({"minimum":1})}));
-
-export { score };
 
 /** What this record is about, named by the address of a record on the network. An OBJECT rather than a bare string, deliberately: a published field's type can never change, so a bare address would close the door on ever carrying anything beside it — a content identifier pinning the subject to one version being the obvious candidate. What KIND of thing the subject is needs no field of its own, because the collection segment of the address already says it. */
 type Subject = { $type?: "org.anthers.review#subject";
