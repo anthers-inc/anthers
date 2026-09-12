@@ -152,7 +152,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<LockOpenIcon className="h-6 w-6" />}
 							title="Open, and yours to leave"
-							description="The whole platform is open source under the AGPL, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You can link your Bluesky identity today; federation is a direction we're committed to, not something we've shipped."
+							description="The whole platform is open source under the AGPL, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You sign up with an identity on the AT Protocol — one Anthers issues you, or one you already have — and each work you release gets a public listing in a repository you own, readable by anyone's software whether or not Anthers is still here."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
@@ -310,10 +310,11 @@ export default function CompareItchPage() {
 								<CompRow feature="Adjustable revenue share" patreon />
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="Subscription pool model" anthers />
-								{/* Identity LINKING is what ships — OAuth against a Bluesky PDS. Record sync,
-								    lexicons and federation are deferred, so the row names the live
-								    thing rather than the protocol it might one day sit on. */}
-								<CompRow feature="Bluesky identity linking" anthers />
+								{/* ⚠️ Names the identity rather than the linking, because issuing one is the
+								    bigger claim and the one that is true: signup puts an AT Protocol identity
+								    on Anthers' own server, and its holder can take it. Linking an existing
+								    Bluesky account works too and is the smaller half. */}
+								<CompRow feature="An AT Protocol identity you own" anthers />
 								<CompRow feature="Desktop client" patreon />
 								{/* 🚨 Ours was checked here until 2026-08-16 and **we have never had it**.
 								    `resolvePurchase` charges the stored `access.price` and the checkout call
@@ -351,11 +352,18 @@ export default function CompareItchPage() {
 				</Reveal>
 				<div className="mx-auto mt-14 grid max-w-4xl gap-8 text-left sm:grid-cols-3">
 					{/*
-					 * 🚨 This section claimed content was "stored as ATProto records" and identity
-					 * was "a portable DID you truly own". Neither ships: `atproto_uri` columns are
-					 * future-proofing and sit unpopulated, and what exists is Bluesky identity
-					 * LINKING. The replacement is not weaker — it is two things that are
-					 * actually true and testable today, plus a promise kept in the future tense.
+					 * ⚠️ **This section has been wrong in both directions, which is why it carries a
+					 * note.** It once claimed content was "stored as ATProto records" and identity was
+					 * "a portable DID you truly own" when neither shipped; it was corrected to a
+					 * federation-is-coming framing, and that correction then outlived its own truth —
+					 * signup issues a DID whose holder can take it, and releasing a work publishes a
+					 * listing into their repository.
+					 *
+					 * 🚨 **The line that must never come back is the one about CONTENT.** A work
+					 * itself never becomes a record and no schema Anthers publishes can carry one — a
+					 * repository is a log every consumer downloads in full. The listing is a record;
+					 * the work it points at is not, and `econ-figures.ts` fails the build on the
+					 * conflation.
 					 */}
 					<Reveal delay={0}>
 						<PortabilityPoint
@@ -373,10 +381,11 @@ export default function CompareItchPage() {
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={220}>
-						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="Federation, later">
-							Linking your Bluesky identity works today. Running your own node, and federating
-							between them, is a direction we're committed to — we haven't built it yet, and we'd
-							rather say so.
+						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="On the network">
+							Your identity is an AT Protocol one, and each work you release gets a public listing
+							in a repository you own — so other people's software can read your catalog without
+							asking us. Running your own server is the part we haven't built yet, and we'd rather
+							say so.
 						</PortabilityPoint>
 					</Reveal>
 				</div>

@@ -347,7 +347,7 @@ export const FAQ_ITEMS = {
 		category: "Platform & Identity",
 		question: "What is the Bluesky integration?",
 		answer:
-			"Bluesky runs on the AT Protocol, and so does Anthers. You can link a Bluesky account you already have, or sign in and sign up through it. Anthers also runs an identity server of its own, so if you'd rather start fresh we can issue you a handle on anthers.social -- which is a name on that same network, not a row in our database, and one you can move elsewhere later. What is not built yet is your content living out there as records you own. That's a direction we're committed to, and we'd rather say so plainly than describe it as though it already works.",
+			"Bluesky runs on the AT Protocol, and so does Anthers. You can link a Bluesky account you already have, or sign in and sign up through it. Anthers also runs an identity server of its own, so if you'd rather start fresh we can issue you a handle on anthers.social -- which is a name on that same network, not a row in our database, and one you can move elsewhere later. Each work you release gets a public listing in the repository behind that identity: what the work is, and where to reach it, readable by anyone's software without going through us. The work itself never goes there -- a repository is a shared log everyone downloads in full, so it is the wrong place for a video or a game build, and it is readable by anybody, which is the wrong place for anything behind a gate. The listing says where your work is; the service hosting it still decides who may open it.",
 	},
 	"open-source": {
 		category: "Platform & Identity",

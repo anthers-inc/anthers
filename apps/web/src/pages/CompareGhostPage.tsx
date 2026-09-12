@@ -304,10 +304,11 @@ export default function CompareGhostPage() {
 								{/* Anthers is AGPL-3.0 — this row marked only Ghost, which understated us on the
 								    one axis where the honest differentiator actually lives. */}
 								<CompRow feature="Open-source codebase" anthers ghost />
-								{/* What actually ships is identity LINKING — OAuth against a Bluesky PDS, the DID
-								    stored on the account. Federation, record sync and portable content are
-								    deferred, so the row names the thing that exists. */}
-								<CompRow feature="Bluesky identity linking" anthers />
+								{/* ⚠️ Names the identity rather than the linking, matching /compare/itch: signup
+								    issues an AT Protocol identity on Anthers' own server whose holder can take
+								    it, and each released work gets a public listing in their repository.
+								    Running your own node is the part still unbuilt. */}
+								<CompRow feature="An AT Protocol identity you own" anthers />
 								<CompRow feature="Headless CMS / API" ghost />
 								<CompRow feature="Import from other platforms" anthers ghost />
 							</tbody>

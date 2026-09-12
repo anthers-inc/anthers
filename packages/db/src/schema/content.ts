@@ -267,10 +267,18 @@ export const works = pgTable(
 		scanQueuedAt: timestamp("scan_queued_at", { withTimezone: true }),
 
 		// ── ATProto ──
-		// A Work wants its own lexicon rather than riding a post record, which is what
-		// `org.anthers.work` is. Unpopulated on every row: the schema is unpublished and
-		// nothing anywhere writes a record, because doing so means writing into a repository
-		// Anthers does not host. Wiki: *Federation → Records beyond the Catalog*.
+		// Where this Work's public listing lives in its creator's own repository, as an
+		// `at://` URI. `org.anthers.work` is the schema — a Work wants its own lexicon rather
+		// than riding a post record — and it has been published since 2026-09-10.
+		//
+		// 🚨 **This column is the only thing that remembers where a record went, which is why
+		// nothing clears it speculatively.** A listing that outlives the Work it advertises is
+		// the failure the whole design is shaped around, and a forgotten URI is a record
+		// nobody can ever take down. `services/work-listing.ts` is its only writer.
+		//
+		// Null means no listing, which is the ordinary case for most rows and says nothing
+		// about the Work: it is unreleased, or its creator holds no identity, or they have not
+		// granted the permission. Wiki: *Federation → The AT Protocol*.
 		atprotoUri: text("atproto_uri").unique(),
 
 		/** The UPLOAD date — when the Work entered the Catalog. Creator-visible only. */

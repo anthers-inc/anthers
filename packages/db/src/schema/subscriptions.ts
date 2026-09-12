@@ -351,8 +351,11 @@ export const attentionDaily = pgTable(
 // meaning did not change, per the copy-rules-not-schema-rules norm.)
 // org — a user's directed support to a creator, this cycle. The billing contract is
 // org-side (boundary table: "Subscriber relationships: Both; Billing contract org-side"). The
-// `atprotoUri` column anticipates a future where the canonical assertion moves to the
-// user's repo, but today the row is the org's billing record.
+// `atprotoUri` column is for the day `org.anthers.support` exists — the fact that somebody
+// supports a creator is theirs to assert, and belongs in their repository. ⚠️ **The money
+// never follows it.** A treasury cannot be spread across machines other people run, so the
+// amount, the ledger and the billing contract stay here permanently — the record would say
+// that support happened, not what it was worth. Wiki: *Federation → User Records*.
 export const seedAllocations = pgTable(
 	"seed_allocations",
 	{
