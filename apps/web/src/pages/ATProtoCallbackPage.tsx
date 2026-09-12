@@ -46,7 +46,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 	// have pointed a creator's catalog at somebody else's repository.
 	wrong_identity:
 		"That's a different Bluesky account from the one linked here. Sign in to the linked account and try again.",
-	not_linked: "Link a Bluesky account in your settings before turning publishing on.",
+	not_linked:
+		"Connect a Bluesky account in your settings first — your listings go in its repository.",
 	hosted:
 		"Anthers already publishes your listings — your handle lives on the server Anthers runs, so there's nothing to grant.",
 };

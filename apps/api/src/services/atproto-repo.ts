@@ -14,11 +14,11 @@
  * checkable without a server, and it has to fail closed.
  *
  * ⚠️ **The writer is an interface rather than a client, and that seam is load-bearing.**
- * Anthers writes into its own repository with an ordinary session today, and would one day
- * write into a creator's repository with an OAuth session carrying DPoP: different
- * credentials, different library, the same three calls. Keeping the seam here means the
- * record logic never learns which one it is talking to, and it is why this module imports no
- * network client at all.
+ * There are two implementations and they hold different credentials: `hosted-repo-writer.ts`
+ * opens a session on an identity Anthers hosts, and `oauth-repo-writer.ts` carries a DPoP
+ * OAuth grant a creator made over one held elsewhere. Same three calls either way, and
+ * `repo-writer.ts` chooses. Keeping the seam here means the record logic never learns which
+ * one it is talking to, and it is why this module imports no network client at all.
  */
 import { workRecord } from "@anthers/shared/lexicons";
 import {
@@ -42,7 +42,7 @@ export interface RecordRef {
  * The three operations writing a listing needs, and nothing else.
  *
  * Deliberately not an `AtpAgent`: this is the whole surface the record logic is allowed to
- * reach, so a future implementation over an OAuth session satisfies it without anything
+ * reach, which is what lets an implementation over an OAuth session satisfy it without anything
  * here changing.
  */
 export interface RepoWriter {

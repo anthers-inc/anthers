@@ -896,8 +896,9 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "Your Catalog as Records You Own",
 						blurb:
 							"A listing of your work in a repository you control, so it outlives any one host. The listing only, never the work.",
-						bucket: "planned",
-						note: "The write path works. Hosting gives it somewhere to write; the two are not wired up.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						note: "Releasing writes the listing, editing replaces it, and withdrawing takes it down.",
 						doc: { id: "71.00", title: "The AT Protocol" },
 					},
 					{
