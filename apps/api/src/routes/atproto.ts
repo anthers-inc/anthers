@@ -48,6 +48,7 @@ import {
 	atprotoSignupEnabled,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
+	isCreatorAccount,
 	isCreatorIdentity,
 	linkAtprotoToUser,
 	publishingStateFor,
@@ -195,12 +196,25 @@ function getFrontendUrl(c: { req: { url: string } }): string {
  * alternative was asking every reader for permission to write Work listings they will never
  * have, which is the kind of over-ask a platform arguing for minimal permissions cannot make.
  * The resolution is one the SDK performs anyway a moment later.
+ *
+ * 🚨 **Linking is the exception, and getting it wrong would have been invisible.** A creator
+ * attaching a Bluesky account has no DID on their account *yet* — that is what linking is for —
+ * so resolving the handle and looking it up finds nobody and answers "reader". They would have
+ * connected an identity and been asked for nothing, then had to go and grant publishing as a
+ * second errand. The signed-in account is the one to ask about here, and it is already known.
  */
-async function scopeForFlow(intent: AppState["intent"], subject: string): Promise<string> {
+async function scopeForFlow(
+	intent: AppState["intent"],
+	subject: string,
+	signedInUserId?: number,
+): Promise<string> {
 	// Signing up has no account to read, so it gets the base set plus the address scope.
 	if (intent === "signup") return scopeFor({ email: true });
 	// An explicit ask, from somebody who went looking for it.
 	if (intent === "publish") return scopeFor({ creator: true });
+	if (intent === "link" && signedInUserId !== undefined) {
+		return scopeFor({ creator: await isCreatorAccount(signedInUserId) });
+	}
 	return scopeFor({ creator: await isCreatorIdentity(subject) });
 }
 
@@ -305,7 +319,7 @@ const atprotoRoutes = new Hono()
 			};
 			const url = await getAtprotoClient().authorize(subject, {
 				state: JSON.stringify(appState),
-				scope: await scopeForFlow(intent, subject),
+				scope: await scopeForFlow(intent, subject, userId),
 			});
 			return c.json({ authorization_url: url.toString() });
 		} catch (err) {

@@ -257,6 +257,22 @@ async function countListedWorks(creatorId: number): Promise<number> {
  * own terms with a message somebody can act on. The failure this avoids is asking a stranger
  * for a permission over their repository because their handle did not resolve.
  */
+/**
+ * Whether this Anthers account publishes.
+ *
+ * ⚠️ **Asked by id rather than by identity, which is the whole point of it existing.** Linking
+ * happens *before* there is a DID on the account, so the identity-shaped question has no answer
+ * yet and the account-shaped one already does.
+ */
+export async function isCreatorAccount(userId: number): Promise<boolean> {
+	const [row] = await db
+		.select({ isCreator: users.isCreator })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	return row?.isCreator === true;
+}
+
 export async function isCreatorIdentity(didOrHandle: string): Promise<boolean> {
 	try {
 		const did = didOrHandle.startsWith("did:")

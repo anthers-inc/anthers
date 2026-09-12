@@ -220,6 +220,19 @@ describe("asking for the permission", () => {
 
 	// ⚠️ And the other half: a reader is never asked for permission over a kind of record they
 	// will never write. Asking everybody would be the easy way to make the test above pass.
+	// 🚨 **Linking is where the account-shaped question has an answer and the identity-shaped
+	// one does not.** A creator attaching a Bluesky account has no DID on their account yet —
+	// that is what linking is for — so resolving the handle finds nobody and would answer
+	// "reader". They would connect an identity, be asked for nothing, and have to come back and
+	// grant publishing as a second errand, which is the opt-in step this design does not have.
+	it("asks a creator linking an identity for the publishing permission too", async () => {
+		const user = await makeUser("linkcr", { isCreator: true });
+		const token = await createSession(user.id, undefined, undefined);
+
+		await startAuth({ handle: "fresh.bsky.social", intent: "link" }, token);
+		expect(lastAuthorize?.options.scope).toContain(PUBLISH_SCOPE);
+	});
+
 	it("does not ask a reader for the creator permission", async () => {
 		const user = await makeUser("read", { atprotoDid: did("read"), isCreator: false });
 		await seedSession(did("read"), user.id);

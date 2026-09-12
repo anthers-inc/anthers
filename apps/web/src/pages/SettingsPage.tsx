@@ -1523,7 +1523,7 @@ function DataSection() {
 }
 
 export default function SettingsPage() {
-	const { user, refreshUser } = useAuth();
+	const { user, refreshUser, grantPublishing } = useAuth();
 	const [settingsParams] = useSearchParams();
 
 	/**
@@ -1540,6 +1540,8 @@ export default function SettingsPage() {
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState(false);
+	/** The browser is on its way to Bluesky, so say why rather than appearing to hang. */
+	const [redirecting, setRedirecting] = useState(false);
 
 	const handleCreatorToggle = async (checked: boolean) => {
 		setIsCreator(checked);
@@ -1560,12 +1562,50 @@ export default function SettingsPage() {
 			}
 
 			await refreshUser();
+
+			// ⭐ **Setting up to publish is the moment to ask for the one permission publishing
+			// needs**, rather than leaving it as a switch to discover in the Studio later. This is
+			// how permissions work everywhere else: you authorize an application for what it does
+			// when you connect it, and then stop thinking about it.
+			if (checked && (await handOverToPublishingGrant())) return;
+
 			setSuccess(true);
 		} catch (err) {
 			setIsCreator(!checked); // revert on failure
 			setError(err instanceof Error ? err.message : "Failed to save settings.");
 		} finally {
 			setSaving(false);
+		}
+	};
+
+	/**
+	 * Send somebody who has just become a creator to grant the publishing permission.
+	 *
+	 * Answers whether the browser is leaving, so the caller can stop rather than flash a
+	 * "settings saved" they will never read.
+	 *
+	 * ⚠️ **Only when there is actually something to ask for.** An account whose identity Anthers
+	 * hosts needs no permission — the credential is already held — and one that has granted it
+	 * already is not asked twice. Both are silent, because the honest answer in each case is
+	 * that publishing already works.
+	 *
+	 * ⚠️ **Every failure here is swallowed on purpose.** Becoming a creator succeeded; a
+	 * permission we could not ask for is a thing to offer again from Studio settings, never a
+	 * reason to tell somebody their setting did not save.
+	 */
+	const handOverToPublishingGrant = async (): Promise<boolean> => {
+		try {
+			const res = await apiFetch("/api/atproto/publishing");
+			if (!res.ok) return false;
+			const state = (await res.json()) as { route: string; offered: boolean };
+			if (state.route !== "available" || !state.offered) return false;
+
+			setRedirecting(true);
+			await grantPublishing();
+			return true;
+		} catch {
+			setRedirecting(false);
+			return false;
 		}
 	};
 
@@ -1581,6 +1621,14 @@ export default function SettingsPage() {
 			{success && (
 				<div className="alert alert-success mb-4">
 					<span>Settings saved.</span>
+				</div>
+			)}
+			{redirecting && (
+				<div className="alert alert-info mb-4">
+					<span>
+						You're a creator now. Taking you to Bluesky to allow Anthers to publish your catalog
+						listings — it's the one permission publishing needs.
+					</span>
 				</div>
 			)}
 
