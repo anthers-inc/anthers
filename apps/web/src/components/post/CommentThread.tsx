@@ -16,7 +16,7 @@ import type { Comment } from "@anthers/web-shared/types";
 import { FlagIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import ReportDialog from "../ui/ReportDialog";
-import ReactionControl from "./ReactionControl";
+import VoteControl from "./VoteControl";
 
 interface CommentThreadProps {
 	subject: { kind: "post"; slug: string } | { kind: "work"; id: number };
@@ -168,7 +168,7 @@ function CommentRow({
 				</button>
 				{/* Says who did it. "Heavily disliked" is the crowd; a moderator would not be
 				    mentioned here at all, because a removed comment never arrives. */}
-				<span className="text-xs">collapsed — heavily disliked ({author})</span>
+				<span className="text-xs">collapsed — heavily downvoted ({author})</span>
 			</div>
 		);
 	}
@@ -209,13 +209,13 @@ function CommentRow({
 				</div>
 				<p className="text-sm mt-1">{comment.body}</p>
 				<div className="mt-1.5">
-					<ReactionControl
+					<VoteControl
 						subjectType="comment"
 						subjectId={comment.id}
 						score={comment.score}
-						viewerReaction={comment.viewerReaction}
-						likes={comment.likes}
-						dislikes={comment.dislikes}
+						viewerVote={comment.viewerVote}
+						up={comment.up}
+						down={comment.down}
 						label={`${author}'s comment`}
 					/>
 				</div>

@@ -625,7 +625,7 @@ export const stickers = pgTable(
 		giverId: integer("giver_id").references(() => users.id, { onDelete: "set null" }),
 		/** Who was paid. SET NULL for the same reason, from the other side. */
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
-		/** Where it sits — the same `(subject_type, subject_id)` shape `reactions` uses. */
+		/** Where it sits — the same `(subject_type, subject_id)` shape `votes` uses. */
 		subjectType: text("subject_type").notNull(), // work | post | comment
 		subjectId: integer("subject_id").notNull(),
 		/** `YYYY-MM-01`, matching `account_cycles.billing_cycle` — the cycle this is drawn from. */

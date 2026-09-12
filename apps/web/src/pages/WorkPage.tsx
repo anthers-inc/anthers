@@ -36,8 +36,8 @@ import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
 import CommentThread from "../components/post/CommentThread";
 import InlineUnlock from "../components/post/InlineUnlock";
-import ReactionControl from "../components/post/ReactionControl";
 import StickerBar from "../components/post/StickerBar";
+import VoteControl from "../components/post/VoteControl";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
@@ -522,7 +522,7 @@ export default function WorkPage() {
 			    because it is a gift to the creator rather than payment for the Work — so
 			    gating this control would make that rule unbuildable. */}
 			<div className="flex items-center justify-between">
-				<ReactionControl subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
+				<VoteControl subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
 				{isAuthenticated && !shareToken && <ShareLinkButton workId={work.id} />}
 			</div>
 

@@ -13,13 +13,13 @@ import {
 	COLLAPSE_NET_THRESHOLD,
 	commentScore,
 	isCollapsed,
-	isReactionValue,
+	isVoteDirection,
 	netScore,
-} from "./reactions";
+} from "./votes";
 
-const tally = (likes: number, dislikes: number) => ({ likes, dislikes });
+const tally = (up: number, down: number) => ({ up, down });
 
-describe("what a reaction adds up to", () => {
+describe("what a vote adds up to", () => {
 	it("publishes the net, and floors it at zero", () => {
 		expect(commentScore(tally(0, 0))).toBe(0);
 		expect(commentScore(tally(7, 2))).toBe(5);
@@ -50,7 +50,7 @@ describe("what a reaction adds up to", () => {
 	});
 
 	it("collapses only past the threshold, and the threshold is below zero", () => {
-		// A comment at zero is ordinary — most comments never get a reaction at all — so
+		// A comment at zero is ordinary — most comments never get a vote at all — so
 		// collapsing at zero would fold away the entire quiet middle of every thread.
 		expect(COLLAPSE_NET_THRESHOLD).toBeLessThan(0);
 		expect(isCollapsed(tally(0, 0))).toBe(false);
@@ -67,12 +67,12 @@ describe("what a reaction adds up to", () => {
 		expect(-COLLAPSE_NET_THRESHOLD).toBeGreaterThanOrEqual(5);
 	});
 
-	it("takes only +1 and -1 as a reaction", () => {
-		for (const good of [1, -1]) expect(isReactionValue(good)).toBe(true);
-		// 0 is the interesting one: it reads as "no reaction" and would sit in the table as
-		// a row that counts for nothing while occupying the unique index.
-		for (const bad of [0, 2, -2, 1.5, "1", null, undefined, true]) {
-			expect(isReactionValue(bad), String(bad)).toBe(false);
+	it("takes only up and down as a direction", () => {
+		for (const good of ["up", "down"]) expect(isVoteDirection(good)).toBe(true);
+		// The numbers are the interesting ones: the column carried +1/-1 before the record
+		// did, so a caller still passing them must be refused rather than quietly stored.
+		for (const bad of [1, -1, 0, "UP", "", null, undefined, true]) {
+			expect(isVoteDirection(bad), String(bad)).toBe(false);
 		}
 	});
 });

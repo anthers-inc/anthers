@@ -69,7 +69,7 @@ import {
 const QUEUE_FILTERS: readonly QueueFilter[] = [
 	"reported",
 	"comments",
-	"ratings",
+	"reviews",
 	"people",
 	"hidden",
 ];

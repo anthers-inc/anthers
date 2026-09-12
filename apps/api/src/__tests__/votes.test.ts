@@ -13,8 +13,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, reactions, users } from "@anthers/db/schema";
-import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/reactions";
+import { comments, users, votes } from "@anthers/db/schema";
+import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -45,16 +45,16 @@ async function signUp(username: string) {
 	return res.headers.get("Set-Cookie")!.split(";")[0];
 }
 
-function react(cookie: string, subjectId: number, value: 1 | -1) {
-	return req("/api/content/reactions", {
+function vote(cookie: string, subjectId: number, direction: "up" | "down") {
+	return req("/api/content/votes", {
 		method: "PUT",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ subjectType: "comment", subjectId, value }),
+		body: JSON.stringify({ subjectType: "comment", subjectId, direction }),
 	});
 }
 
-function unreact(cookie: string, subjectId: number) {
-	return req("/api/content/reactions", {
+function unvote(cookie: string, subjectId: number) {
+	return req("/api/content/votes", {
 		method: "DELETE",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 		body: JSON.stringify({ subjectType: "comment", subjectId }),
@@ -69,7 +69,7 @@ const voterNames = Array.from(
 	(_, i) => `react_v${i}_${id}`,
 );
 
-describe("reactions", () => {
+describe("votes", () => {
 	let creatorCookie: string;
 	let voterCookies: string[];
 	let workId: number;
@@ -93,8 +93,7 @@ describe("reactions", () => {
 			.select({ id: users.id })
 			.from(users)
 			.where(eq(users.username, creatorName));
-		workId = (await insertWork({ creatorId: creator.id, type: "text", title: `Reactions ${id}` }))
-			.id;
+		workId = (await insertWork({ creatorId: creator.id, type: "text", title: `Votes ${id}` })).id;
 
 		const made = await db
 			.insert(comments)
@@ -113,7 +112,7 @@ describe("reactions", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
-		await db.delete(reactions).where(inArray(reactions.subjectId, [likedId, quietId, buriedId]));
+		await db.delete(votes).where(inArray(votes.subjectId, [likedId, quietId, buriedId]));
 	});
 
 	async function thread(cookie?: string) {
@@ -125,12 +124,12 @@ describe("reactions", () => {
 			id: number;
 			score: number;
 			collapsed: boolean;
-			viewerReaction: 1 | -1 | null;
+			viewerVote: "up" | "down" | null;
 		}[];
 	}
 
 	it("requires a session — there is nobody to hold to one-per-person otherwise", async () => {
-		const res = await req("/api/content/reactions", {
+		const res = await req("/api/content/votes", {
 			method: "PUT",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
 			body: JSON.stringify({ subjectType: "comment", subjectId: likedId, value: 1 }),
@@ -138,41 +137,38 @@ describe("reactions", () => {
 		expect(res.status).toBe(401);
 	});
 
-	it("refuses anything that is not +1 or -1", async () => {
-		for (const value of [0, 2, -5]) {
-			const res = await react(creatorCookie, likedId, value as 1);
+	it("refuses anything that is not up or down", async () => {
+		for (const value of ["like", "", "UP"]) {
+			const res = await vote(creatorCookie, likedId, value as "up");
 			expect(res.status, `value ${value}`).toBe(400);
 		}
 	});
 
-	it("🚨 counts one reaction per person, and changing it replaces rather than adds", async () => {
-		await react(voterCookies[0], likedId, 1);
-		await react(voterCookies[0], likedId, 1);
-		await react(voterCookies[0], likedId, -1);
+	it("🚨 counts one vote per person, and changing it replaces rather than adds", async () => {
+		await vote(voterCookies[0], likedId, "up");
+		await vote(voterCookies[0], likedId, "up");
+		await vote(voterCookies[0], likedId, "down");
 		const rows = await db
-			.select({ value: reactions.value })
-			.from(reactions)
-			.where(eq(reactions.subjectId, likedId));
+			.select({ direction: votes.direction })
+			.from(votes)
+			.where(eq(votes.subjectId, likedId));
 		expect(rows).toHaveLength(1);
-		expect(rows[0].value).toBe(-1);
-		// Back to a like, so the rest of the suite starts from a known state.
-		await react(voterCookies[0], likedId, 1);
+		expect(rows[0].direction).toBe("down");
+		// Back to an upvote, so the rest of the suite starts from a known state.
+		await vote(voterCookies[0], likedId, "up");
 	});
 
-	it("takes a reaction back, which is not the same as saying the opposite", async () => {
-		await react(voterCookies[1], quietId, -1);
-		const removed = await unreact(voterCookies[1], quietId);
+	it("takes a vote back, which is not the same as saying the opposite", async () => {
+		await vote(voterCookies[1], quietId, "down");
+		const removed = await unvote(voterCookies[1], quietId);
 		expect(removed.status).toBe(200);
-		expect((await removed.json()).viewerReaction).toBeNull();
-		const [row] = await db
-			.select({ id: reactions.id })
-			.from(reactions)
-			.where(eq(reactions.subjectId, quietId));
+		expect((await removed.json()).viewerVote).toBeNull();
+		const [row] = await db.select({ id: votes.id }).from(votes).where(eq(votes.subjectId, quietId));
 		expect(row).toBeUndefined();
 	});
 
 	it("404s on a comment that is not there rather than storing a dangling vote", async () => {
-		const res = await react(creatorCookie, 2_000_000_000, 1);
+		const res = await vote(creatorCookie, 2_000_000_000, "up");
 		expect(res.status).toBe(404);
 	});
 
@@ -182,8 +178,8 @@ describe("reactions", () => {
 		for (const rows of [await thread(), await thread(voterCookies[0])]) {
 			const first = rows[0];
 			expect(first).toHaveProperty("score");
-			expect(first).not.toHaveProperty("likes");
-			expect(first).not.toHaveProperty("dislikes");
+			expect(first).not.toHaveProperty("up");
+			expect(first).not.toHaveProperty("down");
 		}
 	});
 
@@ -191,39 +187,39 @@ describe("reactions", () => {
 		// Parker, 2026-09-04: "the creator should have full visibility into exact like
 		// values and dislike values, not just the net". The comments here are the creator's.
 		const own = (await thread(creatorCookie)).find((c) => c.id === likedId) as unknown as {
-			likes: number;
-			dislikes: number;
+			up: number;
+			down: number;
 			score: number;
 		};
-		expect(own.likes).toBeGreaterThan(0);
-		expect(own.dislikes).toBe(0);
-		expect(own.score).toBe(own.likes - own.dislikes);
+		expect(own.up).toBeGreaterThan(0);
+		expect(own.down).toBe(0);
+		expect(own.score).toBe(own.up - own.down);
 	});
 
 	it("🚨 gives the counts to the author through the single-subject read, and to nobody else", async () => {
 		const read = async (cookie?: string) => {
 			const res = await req(
-				`/api/content/reactions?subjectType=comment&subjectId=${likedId}`,
+				`/api/content/votes?subjectType=comment&subjectId=${likedId}`,
 				cookie ? { headers: { Cookie: cookie } } : {},
 			);
 			expect(res.status).toBe(200);
-			return (await res.json()) as { score: number; likes?: number; dislikes?: number };
+			return (await res.json()) as { score: number; up?: number; down?: number };
 		};
-		expect(await read(creatorCookie)).toHaveProperty("likes");
+		expect(await read(creatorCookie)).toHaveProperty("up");
 		// The voter has reacted to it, which is the closest anybody gets to a claim on it.
-		expect(await read(voterCookies[0])).not.toHaveProperty("likes");
-		expect(await read()).not.toHaveProperty("likes");
+		expect(await read(voterCookies[0])).not.toHaveProperty("up");
+		expect(await read()).not.toHaveProperty("up");
 	});
 
-	it("shows a viewer their own reaction, and shows nobody else's", async () => {
+	it("shows a viewer their own vote, and shows nobody else's", async () => {
 		const asVoter = await thread(voterCookies[0]);
-		expect(asVoter.find((c) => c.id === likedId)!.viewerReaction).toBe(1);
+		expect(asVoter.find((c) => c.id === likedId)!.viewerVote).toBe("up");
 		const anonymous = await thread();
-		expect(anonymous.find((c) => c.id === likedId)!.viewerReaction).toBeNull();
+		expect(anonymous.find((c) => c.id === likedId)!.viewerVote).toBeNull();
 	});
 
 	it("🚨 floors the published score at zero, so a pile-on has no counter to run up", async () => {
-		for (const cookie of voterCookies) await react(cookie, buriedId, -1);
+		for (const cookie of voterCookies) await vote(cookie, buriedId, "down");
 		const rows = await thread();
 		const buried = rows.find((c) => c.id === buriedId)!;
 		expect(buried.score).toBe(0);
@@ -250,8 +246,8 @@ describe("reactions", () => {
 		expect(buried).toHaveProperty("body", "buried");
 	});
 
-	it("uncollapses when the likes come back — collapse is a position, not a strike", async () => {
-		for (const cookie of voterCookies) await react(cookie, buriedId, 1);
+	it("uncollapses when the upvotes come back — collapse is a position, not a strike", async () => {
+		for (const cookie of voterCookies) await vote(cookie, buriedId, "up");
 		const buried = (await thread()).find((c) => c.id === buriedId)!;
 		expect(buried.collapsed).toBe(false);
 		expect(buried.score).toBe(voterCookies.length);

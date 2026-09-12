@@ -1524,7 +1524,7 @@ function GoFurtherCard({
  *
  * 🚨 **Signing up starts with a handle, not with an address** (Parker, 2026-09-08). The AT
  * Protocol work is first-class rather than optional, and the records a *reader* writes —
- * follows, comments, ratings, reactions — belong in that reader's own repository. An account
+ * follows, comments, reviews, votes — belong in that reader’s own repository. An account
  * with no identity could never write any of them, which makes it permanently second-class
  * rather than merely plainer. So everybody gets one: either Anthers issues it or you bring the
  * one you have. The address is asked for afterwards, at `/finish`, once we know whether a

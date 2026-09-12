@@ -128,7 +128,7 @@ describe("Moderation states", () => {
 
 describe("Subject types", () => {
 	it("covers the two user-generated row types plus a person and a Work, and validates membership", () => {
-		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "rating", "user", "work"]);
+		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "review", "user", "work"]);
 		expect(isModerationSubjectType("comment")).toBe(true);
 		expect(isModerationSubjectType("user")).toBe(true);
 		expect(isModerationSubjectType("work")).toBe(true);
@@ -149,7 +149,7 @@ describe("Subject types", () => {
 		// separate intake; `isModeratableContent` keeps the moderation hide/restore path
 		// from accepting a Work it can't handle.
 		expect(isModeratableContent("comment")).toBe(true);
-		expect(isModeratableContent("rating")).toBe(true);
+		expect(isModeratableContent("review")).toBe(true);
 		expect(isModeratableContent("user")).toBe(false);
 		expect(isModeratableContent("work")).toBe(false);
 	});
@@ -161,7 +161,7 @@ describe("Subject types", () => {
 		// the way a comment is — the operator opens it and sees what the reporter saw.
 		expect(reportRequiresDetails("user")).toBe(true);
 		expect(reportRequiresDetails("comment")).toBe(false);
-		expect(reportRequiresDetails("rating")).toBe(false);
+		expect(reportRequiresDetails("review")).toBe(false);
 		expect(reportRequiresDetails("work")).toBe(false);
 		// Adding a person and a Work did not touch the taxonomy — pinned here because
 		// "the reasons don't fit a person" is the reasonable-sounding change that would

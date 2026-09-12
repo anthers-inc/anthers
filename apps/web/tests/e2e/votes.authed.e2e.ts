@@ -2,7 +2,7 @@
 /**
  * A like, a dislike, and a collapsed comment, in a real browser.
  *
- * 🚨 **The failure this exists for renders NOTHING and reports nothing.** `ReactionControl`
+ * 🚨 **The failure this exists for renders NOTHING and reports nothing.** `VoteControl`
  * returns `null` until it has a score, so a broken fetch, a wrong query shape or a bad
  * import gives a Work page with no control on it at all — no error, no empty box, nothing to
  * notice. The API tests cannot see that, because the API is fine in exactly that case.
@@ -15,8 +15,8 @@
  */
 import { db } from "@anthers/db/client";
 import { GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "@anthers/db/gauntlet";
-import { comments, posts, reactions, users } from "@anthers/db/schema";
-import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/reactions";
+import { comments, posts, users, votes } from "@anthers/db/schema";
+import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, like } from "drizzle-orm";
 import { expect, signInAsCreator, test } from "./fixtures";
 
@@ -60,7 +60,7 @@ test.beforeAll(async () => {
 		.where(like(comments.body, "E2E %"));
 	if (stale.length > 0) {
 		const ids = stale.map((s) => s.id);
-		await db.delete(reactions).where(inArray(reactions.subjectId, ids));
+		await db.delete(votes).where(inArray(votes.subjectId, ids));
 		await db.delete(comments).where(inArray(comments.id, ids));
 	}
 
@@ -86,63 +86,60 @@ test.beforeAll(async () => {
 	ordinaryId = made.find((m) => m.body === ORDINARY)!.id;
 
 	/**
-	 * Enough dislikes to bury it, all from departed accounts.
+	 * Enough downvotes to bury it, all from departed accounts.
 	 *
 	 * ⭐ **`userId: null` is the real shape of a vote whose account was deleted**, not a
-	 * shortcut around making six fixtures. `reactions.user_id` is `set null` so a departing
+	 * shortcut around making six fixtures. `votes.user_id` is `set null` so a departing
 	 * account does not move every score it ever touched, and Postgres treats NULLs as
 	 * distinct — so this is simultaneously the cheapest way to reach the threshold and a
 	 * check that those votes still count.
 	 */
-	await db.insert(reactions).values(
+	await db.insert(votes).values(
 		Array.from({ length: -COLLAPSE_NET_THRESHOLD + 1 }, () => ({
 			userId: null,
 			subjectType: "comment" as const,
 			subjectId: buriedId,
-			value: -1,
+			direction: "down" as const,
 		})),
 	);
 });
 
 test.afterAll(async () => {
-	await db.delete(reactions).where(inArray(reactions.subjectId, [buriedId, ordinaryId]));
+	await db.delete(votes).where(inArray(votes.subjectId, [buriedId, ordinaryId]));
 	await db.delete(comments).where(inArray(comments.id, [buriedId, ordinaryId]));
 });
 
-test("🚨 the post carries a reaction control at all, with a score on it", async ({
-	page,
-	context,
-}) => {
+test("🚨 the post carries a vote control at all, with a score on it", async ({ page, context }) => {
 	await signInAsCreator(context);
 	await page.goto(`/posts/${POST_SLUG}`);
 	// Named for the post, so this cannot pass by finding a comment's control instead — the
 	// thread below is full of them and they are the same component.
-	const control = page.getByRole("button", { name: /^Like Anyone can read this$/ });
+	const control = page.getByRole("button", { name: /^Upvote Anyone can read this$/ });
 	await expect(control).toBeVisible();
 
 	// ⭐ This post is the signed-in creator's own, so they are owed the figures behind the
 	// net. Everybody else gets one number, and the server does not send the keys at all.
-	await expect(page.getByText(/\d+ liked, \d+ disliked/).first()).toBeVisible();
+	await expect(page.getByText(/\d+ up, \d+ down/).first()).toBeVisible();
 });
 
-test("⭐ a like moves the number the reader can see", async ({ page, context }) => {
+test("⭐ an upvote moves the number the reader can see", async ({ page, context }) => {
 	await signInAsCreator(context);
 	await page.goto(`/posts/${POST_SLUG}`);
 
 	const row = page.locator("div").filter({ hasText: ORDINARY }).last();
 	const score = row.getByText(/^\d+$/).first();
 	await expect(score).toHaveText("0");
-	await row.getByRole("button", { name: /^Like/ }).click();
+	await row.getByRole("button", { name: /^Upvote/ }).click();
 	// Reconciled against the server rather than left on the optimistic guess, so this is
 	// also the assertion that the write landed.
 	await expect(score).toHaveText("1");
 
 	// The author's own breakdown moves with it, or the two numbers on screen disagree
 	// until a reload.
-	await expect(row.getByText(/1 liked, 0 disliked/)).toBeVisible();
+	await expect(row.getByText(/1 up, 0 down/)).toBeVisible();
 
-	// Pressing it again takes the reaction back, which is not the same as disliking.
-	await row.getByRole("button", { name: /^Like/ }).click();
+	// Pressing it again takes the vote back, which is not the same as downvoting.
+	await row.getByRole("button", { name: /^Upvote/ }).click();
 	await expect(score).toHaveText("0");
 });
 
@@ -157,7 +154,7 @@ test("🚨 a buried comment arrives collapsed, says who did it, and opens", asyn
 	await expect(page.getByText(BURIED)).toHaveCount(0);
 	// And it says the crowd did it. A moderation removal would never have reached the
 	// browser, so naming a moderator here would be telling the reader something false.
-	const collapsed = page.getByText(/collapsed — heavily disliked/).first();
+	const collapsed = page.getByText(/collapsed — heavily downvoted/).first();
 	await expect(collapsed).toBeVisible();
 
 	await page.getByRole("button", { name: "Show comment" }).first().click();

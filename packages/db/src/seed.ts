@@ -30,7 +30,7 @@ import {
 	projectPosts,
 	projects,
 	purchases,
-	ratings,
+	reviews,
 	seedAllocations,
 	users,
 	works,
@@ -686,7 +686,7 @@ async function seedAccountAndCycle(params: {
 async function cleanSeedData() {
 	console.log("Cleaning existing seed data...");
 
-	// Delete in reverse FK order: comments/ratings -> posts -> projects -> users
+	// Delete in reverse FK order: comments/reviews -> posts -> projects -> users
 	// CASCADE handles most of this, but we delete users which cascades everything
 	const seedUsers = await db
 		.select({ id: users.id })
@@ -711,7 +711,7 @@ async function seed() {
 	});
 
 	const createdUserIds: Record<string, number> = {};
-	// Posts (announcements) and Works (the Catalog) are tracked separately now — ratings,
+	// Posts (announcements) and Works (the Catalog) are tracked separately now — reviews,
 	// comments and Project membership hang off posts; purchases and gates off Works.
 	const createdPosts: { postId: number; creatorUsername: string }[] = [];
 	const postIdBySlug: Record<string, number> = {};
@@ -1034,7 +1034,7 @@ async function seed() {
 		for (const [i, reviewerId] of reviewers.entries()) {
 			const score = randomInt(3, 5); // seed data skews positive
 			try {
-				await db.insert(ratings).values({
+				await db.insert(reviews).values({
 					userId: reviewerId,
 					workId,
 					score,

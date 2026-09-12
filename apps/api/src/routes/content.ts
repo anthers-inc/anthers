@@ -36,11 +36,11 @@ import {
 	projectPosts,
 	projects,
 	purchases,
-	ratings,
-	reactions,
+	reviews,
 	stripeAccounts,
 	transcodingJobs,
 	users,
+	votes,
 	workPages,
 	works,
 } from "@anthers/db/schema";
@@ -68,12 +68,12 @@ import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import {
 	commentScore,
 	isCollapsed,
-	isReactionValue,
-	REACTION_MAX_PER_WINDOW,
-	REACTION_WINDOW_MS,
-	type ReactionTally,
-	type ReactionValue,
-} from "@anthers/shared/reactions";
+	isVoteDirection,
+	VOTE_MAX_PER_WINDOW,
+	VOTE_WINDOW_MS,
+	type VoteDirection,
+	type VoteTally,
+} from "@anthers/shared/votes";
 import { zValidator } from "@hono/zod-validator";
 import {
 	and,
@@ -150,17 +150,17 @@ import { queueWorkListingSync } from "../services/work-listing.js";
  * copied into each new query; a read site that forgets one is a moderation leak,
  * not a cosmetic bug.
  *
- * Applied to: the comment list, the rating aggregate on the ratings endpoint, and
+ * Applied to: the comment list, the rating aggregate on the reviews endpoint, and
  * the rating aggregate embedded in post detail. Every public count of either is
  * derived from those. Deliberately NOT applied to a viewer's own `userRating` —
  * the star they see should be the star they actually submitted, and re-rating
  * only overwrites the score, so a hidden rating stays hidden.
  */
 const visibleComment = eq(comments.moderationStatus, "visible");
-const visibleRating = eq(ratings.moderationStatus, "visible");
+const visibleReview = eq(reviews.moderationStatus, "visible");
 
 /**
- * A per-account cap on how fast reactions can be cast.
+ * A per-account cap on how fast votes can be cast.
  *
  * ⚠️ **Best-effort, in-memory and per-instance, exactly as the abuse-report cap is.** What
  * it buys is that one scripted account cannot walk a whole thread in a second. 🚨 **It does
@@ -174,10 +174,10 @@ const visibleRating = eq(ratings.moderationStatus, "visible");
  */
 const REACTION_CAPS = new Map<number, number[]>();
 
-function tooManyReactionsFrom(userId: number): boolean {
+function tooManyVotesFrom(userId: number): boolean {
 	const now = Date.now();
-	const recent = (REACTION_CAPS.get(userId) ?? []).filter((at) => now - at < REACTION_WINDOW_MS);
-	if (recent.length >= REACTION_MAX_PER_WINDOW) {
+	const recent = (REACTION_CAPS.get(userId) ?? []).filter((at) => now - at < VOTE_WINDOW_MS);
+	if (recent.length >= VOTE_MAX_PER_WINDOW) {
 		REACTION_CAPS.set(userId, recent);
 		return true;
 	}
@@ -187,8 +187,7 @@ function tooManyReactionsFrom(userId: number): boolean {
 	// the map only ever forgives.
 	if (REACTION_CAPS.size > 5000) {
 		for (const [key, at] of REACTION_CAPS) {
-			if (at.length === 0 || now - at[at.length - 1] > REACTION_WINDOW_MS)
-				REACTION_CAPS.delete(key);
+			if (at.length === 0 || now - at[at.length - 1] > VOTE_WINDOW_MS) REACTION_CAPS.delete(key);
 		}
 	}
 	return false;
@@ -198,7 +197,7 @@ function tooManyReactionsFrom(userId: number): boolean {
  * Whether there is something there to react to.
  *
  * ⚠️ **A hidden comment is not reactable**, because a reader cannot see it — accepting a
- * reaction on one would let a caller both discover that it exists and move a score nobody
+ * vote on one would let a caller both discover that it exists and move a score nobody
  * can read. Moderation state is checked here for the same reason every public read checks
  * it, and forgetting it is the quiet version of the same bug.
  */
@@ -211,12 +210,12 @@ function tooManyReactionsFrom(userId: number): boolean {
  * every comment under their Work would be showing them a dislike count on somebody else's
  * words, which is a different thing and was not asked for.
  *
- * 🚨 **This is the only gate on the raw counts.** Everything else in the reaction path
+ * 🚨 **This is the only gate on the raw counts.** Everything else in the vote path
  * publishes one number precisely so a pile-on has no counter to run up; getting this
  * predicate wrong hands that counter to everybody.
  */
 async function ownsSubject(
-	subjectType: ReactionSubject,
+	subjectType: VoteSubject,
 	subjectId: number,
 	viewerId: number | null,
 ): Promise<boolean> {
@@ -245,7 +244,7 @@ async function ownsSubject(
 	return row?.creatorId === viewerId;
 }
 
-async function reactableExists(subjectType: ReactionSubject, subjectId: number): Promise<boolean> {
+async function votableExists(subjectType: VoteSubject, subjectId: number): Promise<boolean> {
 	if (subjectType === "comment") {
 		const [row] = await db
 			.select({ id: comments.id })
@@ -270,27 +269,27 @@ async function reactableExists(subjectType: ReactionSubject, subjectId: number):
 	return Boolean(row);
 }
 
-/** What a reaction may be attached to. Mirrors `comments`, plus comments themselves. */
-const REACTION_SUBJECTS = ["work", "post", "comment"] as const;
-type ReactionSubject = (typeof REACTION_SUBJECTS)[number];
+/** What a vote may be attached to. Mirrors `comments`, plus comments themselves. */
+const VOTE_SUBJECTS = ["work", "post", "comment"] as const;
+type VoteSubject = (typeof VOTE_SUBJECTS)[number];
 
-const NO_REACTIONS: ReactionTally = { likes: 0, dislikes: 0 };
+const NO_VOTES: VoteTally = { up: 0, down: 0 };
 
-const reactionTargetSchema = z.object({
-	subjectType: z.enum(REACTION_SUBJECTS),
+const voteTargetSchema = z.object({
+	subjectType: z.enum(VOTE_SUBJECTS),
 	subjectId: z.number().int().positive(),
 });
 /** Query params arrive as strings, so the id is coerced rather than rejected. */
-const reactionQuerySchema = z.object({
-	subjectType: z.enum(REACTION_SUBJECTS),
+const voteQuerySchema = z.object({
+	subjectType: z.enum(VOTE_SUBJECTS),
 	subjectId: z.coerce.number().int().positive(),
 });
-const reactionSchema = reactionTargetSchema.extend({
-	value: z.number().refine(isReactionValue, "A reaction is +1 or -1"),
+const voteSchema = voteTargetSchema.extend({
+	direction: z.string().refine(isVoteDirection, "A vote is up or down"),
 });
 
 /**
- * The like and dislike totals for a set of subjects, plus the viewer's own reaction.
+ * The upvote and downvote totals for a set of subjects, plus the viewer’s own vote.
  *
  * ⭐ **Aggregated on read rather than kept in a counter column.** A denormalized count is
  * two writes that can disagree, and the disagreement is invisible — a score drifting from
@@ -298,44 +297,41 @@ const reactionSchema = reactionTargetSchema.extend({
  * an indexed table, and the moment that stops being true is the moment to add a counter
  * *and* something that checks it.
  *
- * ⚠️ **A tally is absent, not zero, when nobody has reacted.** Callers use `NO_REACTIONS`,
- * so a subject nobody touched and a subject whose reactions all canceled read the same —
+ * ⚠️ **A tally is absent, not zero, when nobody has reacted.** Callers use `NO_VOTES`,
+ * so a subject nobody touched and a subject whose votes all canceled read the same —
  * which is correct, because the published score of both is 0.
  */
-async function reactionTallies(
-	subjectType: ReactionSubject,
+async function voteTallies(
+	subjectType: VoteSubject,
 	subjectIds: number[],
 	viewerId: number | null,
-): Promise<{ tallies: Map<number, ReactionTally>; mine: Map<number, ReactionValue> }> {
-	const tallies = new Map<number, ReactionTally>();
-	const mine = new Map<number, ReactionValue>();
+): Promise<{ tallies: Map<number, VoteTally>; mine: Map<number, VoteDirection> }> {
+	const tallies = new Map<number, VoteTally>();
+	const mine = new Map<number, VoteDirection>();
 	if (subjectIds.length === 0) return { tallies, mine };
 
-	const scope = and(
-		eq(reactions.subjectType, subjectType),
-		inArray(reactions.subjectId, subjectIds),
-	);
+	const scope = and(eq(votes.subjectType, subjectType), inArray(votes.subjectId, subjectIds));
 
 	const rows = await db
 		.select({
-			subjectId: reactions.subjectId,
-			likes: sql<number>`count(*) filter (where ${reactions.value} = 1)`.mapWith(Number),
-			dislikes: sql<number>`count(*) filter (where ${reactions.value} = -1)`.mapWith(Number),
+			subjectId: votes.subjectId,
+			up: sql<number>`count(*) filter (where ${votes.direction} = 'up')`.mapWith(Number),
+			down: sql<number>`count(*) filter (where ${votes.direction} = 'down')`.mapWith(Number),
 		})
-		.from(reactions)
+		.from(votes)
 		.where(scope)
-		.groupBy(reactions.subjectId);
-	for (const r of rows) tallies.set(r.subjectId, { likes: r.likes, dislikes: r.dislikes });
+		.groupBy(votes.subjectId);
+	for (const r of rows) tallies.set(r.subjectId, { up: r.up, down: r.down });
 
-	// A signed-out reader has no reaction to show, and asking for one costs a query that
+	// A signed-out reader has no vote to show, and asking for one costs a query that
 	// can only come back empty.
 	if (viewerId !== null) {
 		const own = await db
-			.select({ subjectId: reactions.subjectId, value: reactions.value })
-			.from(reactions)
-			.where(and(scope, eq(reactions.userId, viewerId)));
+			.select({ subjectId: votes.subjectId, direction: votes.direction })
+			.from(votes)
+			.where(and(scope, eq(votes.userId, viewerId)));
 		for (const r of own) {
-			if (isReactionValue(r.value)) mine.set(r.subjectId, r.value);
+			if (isVoteDirection(r.direction)) mine.set(r.subjectId, r.direction);
 		}
 	}
 	return { tallies, mine };
@@ -375,14 +371,14 @@ async function listComments(
 		)
 		.orderBy(desc(comments.createdAt));
 
-	const { tallies, mine } = await reactionTallies(
+	const { tallies, mine } = await voteTallies(
 		"comment",
 		rows.map((r) => r.comment.id),
 		viewerId,
 	);
 
 	const scored = rows.map((r) => {
-		const tally = tallies.get(r.comment.id) ?? NO_REACTIONS;
+		const tally = tallies.get(r.comment.id) ?? NO_VOTES;
 		return {
 			...r.comment,
 			username: r.username,
@@ -410,7 +406,7 @@ async function listComments(
 			 * not there.
 			 */
 			...(viewerId !== null && r.comment.userId === viewerId
-				? { likes: tally.likes, dislikes: tally.dislikes }
+				? { up: tally.up, down: tally.down }
 				: {}),
 			/**
 			 * ⚠️ A THIRD state, and it is neither of the other two. Moderation-hidden
@@ -419,7 +415,7 @@ async function listComments(
 			 */
 			collapsed: isCollapsed(tally),
 			/** What this viewer did, so the control can show itself as pressed. */
-			viewerReaction: mine.get(r.comment.id) ?? null,
+			viewerVote: mine.get(r.comment.id) ?? null,
 		};
 	});
 
@@ -2410,10 +2406,10 @@ const contentRoutes = new Hono()
 		return c.json({ comment: { ...comment, username: user.username } }, 201);
 	})
 
-	// ── Reactions (Works, posts and comments) ──────────────────────────────────
+	// ── Votes (Works, posts and comments) ──────────────────────────────────
 	//
 	// One like or one dislike per person per thing. The published score is the net floored
-	// at zero and it is also the ranking key — see `@anthers/shared/reactions` for why those
+	// at zero and it is also the ranking key — see `@anthers/shared/votes` for why those
 	// have to be the same number.
 	//
 	// 🚨 **Access is deliberately NOT required.** A Sticker rides a like and may be given on
@@ -2423,7 +2419,7 @@ const contentRoutes = new Hono()
 	// is that a comment is a claim about content you have seen.
 
 	/**
-	 * The reaction state of one subject.
+	 * The vote state of one subject.
 	 *
 	 * ⭐ **A separate read rather than a field on the Work and post payloads.** Those
 	 * responses come back through `serializeWork` down several branches — owner, preview,
@@ -2432,51 +2428,51 @@ const contentRoutes = new Hono()
 	 * still gets its scores inline, because the list already fetches them in one grouped
 	 * query and a request per comment would not be a trade at all.
 	 */
-	.get("/reactions", zValidator("query", reactionQuerySchema), async (c) => {
+	.get("/votes", zValidator("query", voteQuerySchema), async (c) => {
 		const { subjectType, subjectId } = c.req.valid("query");
 		const viewerId = await getOptionalUserId(c);
-		const { tallies, mine } = await reactionTallies(subjectType, [subjectId], viewerId);
-		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		const { tallies, mine } = await voteTallies(subjectType, [subjectId], viewerId);
+		const tally = tallies.get(subjectId) ?? NO_VOTES;
 		// The author sees what it is made of; everybody else sees the one number.
 		const owner = await ownsSubject(subjectType, subjectId, viewerId);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerReaction: mine.get(subjectId) ?? null,
-			...(owner ? { likes: tally.likes, dislikes: tally.dislikes } : {}),
+			viewerVote: mine.get(subjectId) ?? null,
+			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
 
-	.put("/reactions", requireAuth, zValidator("json", reactionSchema), async (c) => {
+	.put("/votes", requireAuth, zValidator("json", voteSchema), async (c) => {
 		const user = c.get("user");
-		if (tooManyReactionsFrom(user.id)) {
+		if (tooManyVotesFrom(user.id)) {
 			return c.json(
 				{
-					error: "That is a lot of reactions very quickly. Try again shortly.",
+					error: "That is a lot of votes very quickly. Try again shortly.",
 					code: "rate_limited",
 				},
 				429,
 			);
 		}
 
-		const { subjectType, subjectId, value } = c.req.valid("json");
-		if (!(await reactableExists(subjectType, subjectId))) {
-			return c.json({ error: "Nothing to react to" }, 404);
+		const { subjectType, subjectId, direction } = c.req.valid("json");
+		if (!(await votableExists(subjectType, subjectId))) {
+			return c.json({ error: "Nothing to vote on" }, 404);
 		}
 
-		// Changing a like to a dislike UPDATES the one row. Inserting a second would let
+		// Changing an upvote to a downvote UPDATES the one row. Inserting a second would let
 		// both count, which is the unique index's whole job and is worth doing in one
 		// statement so there is no window where neither or both exist.
 		await db
-			.insert(reactions)
-			.values({ userId: user.id, subjectType, subjectId, value })
+			.insert(votes)
+			.values({ userId: user.id, subjectType, subjectId, direction })
 			.onConflictDoUpdate({
-				target: [reactions.userId, reactions.subjectType, reactions.subjectId],
-				set: { value },
+				target: [votes.userId, votes.subjectType, votes.subjectId],
+				set: { direction },
 			});
 
-		const { tallies } = await reactionTallies(subjectType, [subjectId], null);
-		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		const { tallies } = await voteTallies(subjectType, [subjectId], null);
+		const tally = tallies.get(subjectId) ?? NO_VOTES;
 		// ⚠️ The breakdown comes back from a WRITE too, not only from the read. An author
 		// reacting to their own thing would otherwise watch the score move while the figures
 		// behind it sat still until a reload — two numbers on screen disagreeing, which is
@@ -2485,31 +2481,31 @@ const contentRoutes = new Hono()
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerReaction: value,
-			...(owner ? { likes: tally.likes, dislikes: tally.dislikes } : {}),
+			viewerVote: direction,
+			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
 
-	.delete("/reactions", requireAuth, zValidator("json", reactionTargetSchema), async (c) => {
+	.delete("/votes", requireAuth, zValidator("json", voteTargetSchema), async (c) => {
 		const user = c.get("user");
 		const { subjectType, subjectId } = c.req.valid("json");
 		await db
-			.delete(reactions)
+			.delete(votes)
 			.where(
 				and(
-					eq(reactions.userId, user.id),
-					eq(reactions.subjectType, subjectType),
-					eq(reactions.subjectId, subjectId),
+					eq(votes.userId, user.id),
+					eq(votes.subjectType, subjectType),
+					eq(votes.subjectId, subjectId),
 				),
 			);
-		const { tallies } = await reactionTallies(subjectType, [subjectId], null);
-		const tally = tallies.get(subjectId) ?? NO_REACTIONS;
+		const { tallies } = await voteTallies(subjectType, [subjectId], null);
+		const tally = tallies.get(subjectId) ?? NO_VOTES;
 		const owner = await ownsSubject(subjectType, subjectId, user.id);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerReaction: null,
-			...(owner ? { likes: tally.likes, dislikes: tally.dislikes } : {}),
+			viewerVote: null,
+			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
 
@@ -2520,9 +2516,9 @@ const contentRoutes = new Hono()
 	// reviews exist to avoid" (the wiki's *Moderation & Reporting*). Both are about works, so unlike comments this is
 	// NOT polymorphic — reviewing an announcement is a category error.
 	//
-	// The route path stays `/ratings` (and the table stays `ratings`): "review" is a copy
+	// The route path stays `/reviews` (and the table stays `reviews`): "review" is a copy
 	// rule, not a schema rule, exactly like the Seed vocabulary changes.
-	.get("/works/:id/ratings", async (c) => {
+	.get("/works/:id/reviews", async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2530,15 +2526,15 @@ const contentRoutes = new Hono()
 
 		// The aggregate is deliberately NOT filtered by blocks, unlike the review list
 		// below. A score is a fact about the Work, not about who is reading it: making it
-		// viewer-dependent would mean two people see different ratings for the same thing,
+		// viewer-dependent would mean two people see different reviews for the same thing,
 		// and it would let one user move a creator's public average by blocking a
 		// reviewer. The small honest cost is that a blocker can see "4.2 from 10" over
 		// nine listed reviews — which is already true of a hidden review, and is the right
 		// side of the trade.
 		const [agg] = await db
-			.select({ average: avg(ratings.score), count: count(ratings.id) })
-			.from(ratings)
-			.where(and(eq(ratings.workId, work.id), visibleRating));
+			.select({ average: avg(reviews.score), count: count(reviews.id) })
+			.from(reviews)
+			.where(and(eq(reviews.workId, work.id), visibleReview));
 
 		// The written reviews themselves. Hidden ones are withheld here for the same
 		// reason they're excluded from the aggregate — this is a public read. Blocked
@@ -2546,24 +2542,24 @@ const contentRoutes = new Hono()
 		// so it is a place two people meet.
 		const reviewRows = await db
 			.select({
-				id: ratings.id,
-				userId: ratings.userId,
-				score: ratings.score,
-				body: ratings.body,
-				createdAt: ratings.createdAt,
+				id: reviews.id,
+				userId: reviews.userId,
+				score: reviews.score,
+				body: reviews.body,
+				createdAt: reviews.createdAt,
 				username: users.username,
 				avatar: users.avatar,
 			})
-			.from(ratings)
-			.innerJoin(users, eq(ratings.userId, users.id))
+			.from(reviews)
+			.innerJoin(users, eq(reviews.userId, users.id))
 			.where(
 				and(
-					eq(ratings.workId, work.id),
-					visibleRating,
-					notBlockedBy(currentUserId, ratings.userId),
+					eq(reviews.workId, work.id),
+					visibleReview,
+					notBlockedBy(currentUserId, reviews.userId),
 				),
 			)
-			.orderBy(desc(ratings.createdAt));
+			.orderBy(desc(reviews.createdAt));
 
 		let userRating: number | null = null;
 		let userReview: string | null = null;
@@ -2572,9 +2568,9 @@ const contentRoutes = new Hono()
 			// viewer submitted shouldn't silently change under them. Their review
 			// simply stops counting and stops appearing to everyone else.
 			const [row] = await db
-				.select({ score: ratings.score, body: ratings.body })
-				.from(ratings)
-				.where(and(eq(ratings.workId, work.id), eq(ratings.userId, currentUserId)))
+				.select({ score: reviews.score, body: reviews.body })
+				.from(reviews)
+				.where(and(eq(reviews.workId, work.id), eq(reviews.userId, currentUserId)))
 				.limit(1);
 			userRating = row?.score ?? null;
 			userReview = row?.body ?? null;
@@ -2591,7 +2587,7 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	.post("/works/:id/ratings", requireAuth, zValidator("json", createRatingSchema), async (c) => {
+	.post("/works/:id/reviews", requireAuth, zValidator("json", createRatingSchema), async (c) => {
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
@@ -2609,10 +2605,10 @@ const contentRoutes = new Hono()
 		// submitting again. Adding a field here means adding it to BOTH the insert
 		// and this set clause; forgetting the set clause silently makes edits no-ops.
 		const [rating] = await db
-			.insert(ratings)
+			.insert(reviews)
 			.values({ userId: user.id, workId: work.id, score, body: body.trim() })
 			.onConflictDoUpdate({
-				target: [ratings.userId, ratings.workId],
+				target: [reviews.userId, reviews.workId],
 				set: { score, body: body.trim() },
 			})
 			.returning();
@@ -4120,7 +4116,7 @@ const contentRoutes = new Hono()
 				break;
 			case "top_rated":
 				orderClause = [
-					sql`(SELECT AVG(rt.score) FROM project_items pi JOIN ratings rt ON rt.work_id = pi.work_id
+					sql`(SELECT AVG(rt.score) FROM project_items pi JOIN reviews rt ON rt.work_id = pi.work_id
 						WHERE pi.project_id = ${projects.id} AND rt.moderation_status = 'visible') DESC NULLS LAST`,
 					newest as unknown as SQL,
 				];

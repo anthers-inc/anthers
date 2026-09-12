@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * What a like and a dislike add up to, and when a comment folds away.
+ * What an upvote and a downvote add up to, and when a comment folds away.
  *
  * ⭐ **One number is published, and it is the net** (Parker, 2026-09-04). Neither count is
- * shown on its own: a dislike does visible work by pulling the score down, and a pile-on
- * gets no dislike counter to run up. Parker rejected hiding the dislike outright —
+ * shown on its own: a downvote does visible work by pulling the score down, and a pile-on
+ * gets no downvote counter to run up. Parker rejected hiding the downvote outright —
  * *"YouTube's decision to not show dislikes is pretty universally disdained by audiences…
  * Having a dislike that has no visible impact on a value the user can see is the worst case
  * scenario."*
+ *
+ * ⭐ **A vote is named for its effect rather than for a feeling** (Parker, 2026-09-12). It is
+ * the input to ranking — *more people should see this*, or *fewer should* — and calling it
+ * approval invites the bind where somebody withholds a vote from work they think is important
+ * but did not enjoy. Both directions are published as records; what Anthers shows is the net
+ * below, and a creator sees the raw counts.
  *
  * 🚨 **Everything that decides an order is a number the reader can see** (Parker,
  * 2026-09-04: *"there's nothing ranking stuff that the users can't see"*). That is why
@@ -20,19 +26,25 @@
  * the collapse threshold and moderation read, and it goes negative. Storing or sorting the
  * floored value would throw away the only signal that separates a mildly unpopular comment
  * from a buried one.
+ *
+ * ⚠️ **Nothing weights a vote** (Parker, 2026-09-12). Every vote is one unit, a Sticker is
+ * chrome that may highlight something and never moves it up the ranking, and there is no plan
+ * to weight one by Badge or by anything else. A weighted vote would be rival — it would take
+ * ranking position from other people's votes, on content the payer did not make — so
+ * re-opening it is a values decision rather than a tuning one.
  */
 
-/** A person's reaction to one thing. `+1` likes it, `-1` dislikes it. */
-export type ReactionValue = 1 | -1;
+/** Which way a person wants one thing to move. */
+export type VoteDirection = "up" | "down";
 
-export function isReactionValue(v: unknown): v is ReactionValue {
-	return v === 1 || v === -1;
+export function isVoteDirection(v: unknown): v is VoteDirection {
+	return v === "up" || v === "down";
 }
 
-/** The like and dislike totals for one subject. */
-export interface ReactionTally {
-	likes: number;
-	dislikes: number;
+/** The upvote and downvote totals for one subject. */
+export interface VoteTally {
+	up: number;
+	down: number;
 }
 
 /**
@@ -43,8 +55,8 @@ export interface ReactionTally {
  * withhold. The one place a reader meets it is on a comment that has already collapsed,
  * where it is the stated reason rather than a running tally.
  */
-export function netScore(t: ReactionTally): number {
-	return t.likes - t.dislikes;
+export function netScore(t: VoteTally): number {
+	return t.up - t.down;
 }
 
 /**
@@ -55,7 +67,7 @@ export function netScore(t: ReactionTally): number {
  * every comment is equally "at zero" and falls back to recency, and the ones that have gone
  * far enough are collapsed — which is a visible state rather than a hidden position.
  */
-export function commentScore(t: ReactionTally): number {
+export function commentScore(t: VoteTally): number {
 	return Math.max(0, netScore(t));
 }
 
@@ -64,10 +76,10 @@ export function commentScore(t: ReactionTally): number {
  *
  * ⚠️ **A dial, and today it is a guess.** Anthers has no traffic yet, so there is no
  * distribution to set this against; -5 is chosen because it cannot be reached without at
- * least five separate accounts disliking and nobody liking. 🚨 **Five accounts is not many**,
- * and collapsing is the one reaction behavior that removes something from view, so this
- * number wants revisiting against real threads rather than being left where a pre-launch
- * guess put it.
+ * least five separate accounts downvoting and nobody upvoting. 🚨 **Five accounts is not
+ * many**, and collapsing is the one way a vote removes something from view, so this number
+ * wants revisiting against real threads rather than being left where a pre-launch guess put
+ * it — possibly as a proportional rule, or one weighted by account age (Parker, 2026-09-12).
  */
 export const COLLAPSE_NET_THRESHOLD = -5;
 
@@ -80,12 +92,12 @@ export const COLLAPSE_NET_THRESHOLD = -5;
  * it says why, and anyone can open it. Conflating it with either of the others would have
  * Anthers telling people a moderator acted when the crowd did.
  */
-export function isCollapsed(t: ReactionTally): boolean {
+export function isCollapsed(t: VoteTally): boolean {
 	return netScore(t) <= COLLAPSE_NET_THRESHOLD;
 }
 
 /**
- * How many reactions one account may cast in `REACTION_WINDOW_MS`.
+ * How many votes one account may cast in `VOTE_WINDOW_MS`.
  *
  * ⚠️ **This bounds one account spraying a thread and nothing more.** The unique index makes
  * a single person's vote on a single item structural, and this stops that person walking a
@@ -93,5 +105,5 @@ export function isCollapsed(t: ReactionTally): boolean {
  * accounts arriving together — that is a moderation and account-provenance problem, and
  * saying so here is better than a cap that implies it was solved.
  */
-export const REACTION_WINDOW_MS = 60 * 1000;
-export const REACTION_MAX_PER_WINDOW = 30;
+export const VOTE_WINDOW_MS = 60 * 1000;
+export const VOTE_MAX_PER_WINDOW = 30;

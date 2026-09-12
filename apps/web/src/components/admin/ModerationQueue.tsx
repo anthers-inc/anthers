@@ -86,14 +86,14 @@ interface QueueResponse {
 		reportedSubjects: number;
 		reportedPeople: number;
 		hiddenComments: number;
-		hiddenRatings: number;
+		hiddenReviews: number;
 	};
 }
 
 const FILTERS = [
 	{ value: "reported", label: "Reported" },
 	{ value: "comments", label: "Comments" },
-	{ value: "ratings", label: "Reviews" },
+	{ value: "reviews", label: "Reviews" },
 	{ value: "people", label: "People" },
 	{ value: "hidden", label: "Hidden" },
 ] as const;
@@ -256,7 +256,7 @@ export default function ModerationQueue() {
 					<SummaryChip label="Items reported" value={data.summary.reportedSubjects} alert />
 					<SummaryChip label="People reported" value={data.summary.reportedPeople} alert />
 					<SummaryChip label="Hidden comments" value={data.summary.hiddenComments} />
-					<SummaryChip label="Hidden ratings" value={data.summary.hiddenRatings} />
+					<SummaryChip label="Hidden reviews" value={data.summary.hiddenReviews} />
 				</div>
 			)}
 

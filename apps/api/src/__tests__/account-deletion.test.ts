@@ -26,7 +26,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, posts, purchases, ratings, users, works } from "@anthers/db/schema";
+import { comments, posts, purchases, reviews, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import {
@@ -168,11 +168,11 @@ beforeAll(async () => {
 	// A review by the leaver, inserted directly — reviewing requires access, and the
 	// point under test is the anonymization rather than the access path.
 	//
-	// It hangs off the SOLD Work deliberately. `ratings.work_id` cascades, so a review
+	// It hangs off the SOLD Work deliberately. `reviews.work_id` cascades, so a review
 	// attached to the unsold Work would be destroyed along with it and the
 	// anonymization assertion would be testing an empty table.
 	const [rating] = await db
-		.insert(ratings)
+		.insert(reviews)
 		.values({ userId: leaverId, workId: soldWorkId, score: 4, body: `LEAVER-REVIEW-${id}` })
 		.returning();
 	ratingId = rating.id;
@@ -316,7 +316,7 @@ describe("what 'deleted' means, table by table", () => {
 	});
 
 	it("ANONYMIZES the review — score survives, author does not", async () => {
-		const [row] = await db.select().from(ratings).where(eq(ratings.id, ratingId));
+		const [row] = await db.select().from(reviews).where(eq(reviews.id, ratingId));
 		expect(row).toBeDefined();
 		// Deleting it would move a creator's average through no fault of theirs.
 		expect(row.score).toBe(4);

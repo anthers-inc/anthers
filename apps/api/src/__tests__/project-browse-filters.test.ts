@@ -177,7 +177,7 @@ describe("project browse filters", () => {
 	it("accepts every sort the sidebar can send, and ignores one it cannot", async () => {
 		// The guarantee is narrow and deliberate: each sort must RUN and return this
 		// creator's projects. Asserting an ORDER here would pin nothing real — views and
-		// ratings are zero across the fixture, so every ordering is a legitimate tie.
+		// review scores are zero across the fixture, so every ordering is a legitimate tie.
 		//
 		// Scoped by creator on purpose. The handler takes 100 rows, and a shared dev
 		// database holds hundreds of projects with real view counts, so an unscoped

@@ -41,11 +41,11 @@
  * The three are not interchangeable in what an operator may *do* with them — see
  * `isModeratableContent`.
  */
-export type ModerationSubjectType = "comment" | "rating" | "user" | "work";
+export type ModerationSubjectType = "comment" | "review" | "user" | "work";
 
 export const MODERATION_SUBJECT_TYPES: readonly ModerationSubjectType[] = [
 	"comment",
-	"rating",
+	"review",
 	"user",
 	"work",
 ];
@@ -66,7 +66,7 @@ export function isModerationSubjectType(value: string): value is ModerationSubje
  * column is what keeps the refusal legible — a 400 that says why, instead of a 500.
  */
 export function isModeratableContent(value: ModerationSubjectType): boolean {
-	return value === "comment" || value === "rating";
+	return value === "comment" || value === "review";
 }
 
 /**
