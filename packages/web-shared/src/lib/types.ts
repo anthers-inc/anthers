@@ -505,7 +505,7 @@ export interface Comment {
 	/** True exactly when `username` is null. Says WHO left, never why. */
 	deletedByAuthor?: boolean;
 	/**
-	 * The published score: likes minus dislikes, floored at zero.
+	 * The published score: upvotes minus downvotes, floored at zero.
 	 *
 	 * 🚨 **The raw counts are not sent and must not be reconstructed here.** One number is
 	 * the whole contract — a dislike does visible work by pulling this down, and a pile-on
@@ -519,10 +519,10 @@ export interface Comment {
 	 * ⭐ An author gets the exact figures on their own words; everybody else gets the net.
 	 * ⚠️ **Absent rather than null for everyone else**, which is why these are optional: the
 	 * server does not send the keys at all, so a renderer that forgets to check gets
-	 * `undefined` and draws nothing, rather than a confident `0 likes, 0 dislikes`.
+	 * `undefined` and draws nothing, rather than a confident `0 up, 0 down`.
 	 */
-	likes?: number;
-	dislikes?: number;
+	up?: number;
+	down?: number;
 	/**
 	 * Pushed below the collapse threshold by readers.
 	 *
@@ -532,8 +532,8 @@ export interface Comment {
 	 * moderator, and the UI has to say so.
 	 */
 	collapsed: boolean;
-	/** What this viewer did: `1`, `-1`, or nothing yet. */
-	viewerReaction: 1 | -1 | null;
+	/** What this viewer did: `up`, `down`, or nothing yet. */
+	viewerVote: "up" | "down" | null;
 }
 
 /** One written review: a score plus the words that justify it. */

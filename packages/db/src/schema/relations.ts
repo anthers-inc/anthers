@@ -18,7 +18,7 @@ import {
 	projectItems,
 	projectPosts,
 	projects,
-	ratings,
+	reviews,
 	transcodingJobs,
 	works,
 } from "./content.js";
@@ -60,7 +60,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	projects: many(projects), // Projects the creator owns
 	inlineImages: many(inlineImages),
 	comments: many(comments),
-	ratings: many(ratings),
+	reviews: many(reviews),
 	bookmarks: many(bookmarks, { relationName: "bookmarkOwner" }),
 	bookmarkedBy: many(bookmarks, { relationName: "bookmarkCreator" }),
 
@@ -163,7 +163,7 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	projectItems: many(projectItems), // Projects this Work belongs to
 	purchases: many(purchases),
 	bookmarks: many(bookmarks),
-	ratings: many(ratings),
+	reviews: many(reviews),
 }));
 
 export const postWorkRefsRelations = relations(postWorkRefs, ({ one }) => ({
@@ -189,9 +189,9 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 	user: one(users, { fields: [comments.userId], references: [users.id] }),
 }));
 
-export const ratingsRelations = relations(ratings, ({ one }) => ({
-	user: one(users, { fields: [ratings.userId], references: [users.id] }),
-	work: one(works, { fields: [ratings.workId], references: [works.id] }),
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+	user: one(users, { fields: [reviews.userId], references: [users.id] }),
+	work: one(works, { fields: [reviews.workId], references: [works.id] }),
 }));
 
 export const bookmarksRelations = relations(bookmarks, ({ one }) => ({

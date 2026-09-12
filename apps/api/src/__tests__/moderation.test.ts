@@ -11,13 +11,13 @@
  *
  * Also covered: the gate (a non-admin gets 404, not 403, same as the rest of the
  * console), that hiding reaches every public read of the content — the comment
- * list, the ratings endpoint's aggregate, and the aggregate embedded in post
+ * list, the reviews endpoint's aggregate, and the aggregate embedded in post
  * detail — that re-rating can't resurrect a hidden rating, and that a restore is
  * a NEW log row rather than an edit to the hide it reverses.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, moderationActions, moderationReports, ratings, users } from "@anthers/db/schema";
+import { comments, moderationActions, moderationReports, reviews, users } from "@anthers/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -78,7 +78,7 @@ async function queue(cookie: string, filter: string) {
 	return (await res.json()) as {
 		filter: string;
 		items: QueueItem[];
-		summary: { openReports: number; hiddenComments: number; hiddenRatings: number };
+		summary: { openReports: number; hiddenComments: number; hiddenReviews: number };
 	};
 }
 
@@ -156,8 +156,8 @@ beforeAll(async () => {
 	expect(c2.status).toBe(201);
 	otherCommentId = (await c2.json()).comment.id;
 
-	// Two ratings: 1 star from A (the one we'll hide), 5 stars from B.
-	const r1 = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+	// Two reviews: 1 star from A (the one we'll hide), 5 stars from B.
+	const r1 = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 		score: 1,
 		body: "did not work for me at all",
 	});
@@ -165,7 +165,7 @@ beforeAll(async () => {
 	ratingId = (await r1.json()).rating.id;
 	expect(
 		(
-			await post(`/api/content/works/${workId}/ratings`, viewerB, {
+			await post(`/api/content/works/${workId}/reviews`, viewerB, {
 				score: 5,
 				body: "one of the best things I have played this year",
 			})
@@ -345,8 +345,8 @@ describe("The operator queue", () => {
 	});
 
 	it("lists reviews nobody reported, so an operator can act before anyone complains", async () => {
-		const { items } = await queue(admin, "ratings");
-		const entry = items.find((i) => i.subjectId === ratingId && i.subjectType === "rating");
+		const { items } = await queue(admin, "reviews");
+		const entry = items.find((i) => i.subjectId === ratingId && i.subjectType === "review");
 		expect(entry).toBeDefined();
 		expect(entry?.excerpt).toBe("1/5 — did not work for me at all");
 		expect(entry?.openReports).toBe(0);
@@ -437,25 +437,25 @@ describe("Hiding a comment", () => {
 });
 
 describe("Hiding a rating", () => {
-	it("drops it out of the aggregate on the ratings endpoint", async () => {
-		const before = await (await req(`/api/content/works/${workId}/ratings`)).json();
+	it("drops it out of the aggregate on the reviews endpoint", async () => {
+		const before = await (await req(`/api/content/works/${workId}/reviews`)).json();
 		expect(before.count).toBe(2);
 		expect(before.average).toBe(3); // (1 + 5) / 2
 
 		const res = await post("/api/admin/moderation/hide", admin, {
-			subjectType: "rating",
+			subjectType: "review",
 			subjectId: ratingId,
 			reason: "spam",
 		});
 		expect(res.status).toBe(200);
 
-		const after = await (await req(`/api/content/works/${workId}/ratings`)).json();
+		const after = await (await req(`/api/content/works/${workId}/reviews`)).json();
 		expect(after.count).toBe(1);
 		expect(after.average).toBe(5);
 	});
 
 	it("has no second aggregate to leak through — post detail carries none", async () => {
-		// There used to be TWO places computing this: the ratings endpoint and an aggregate
+		// There used to be TWO places computing this: the reviews endpoint and an aggregate
 		// embedded in post detail, and forgetting the moderation filter at either one was a
 		// live hazard the Agents Hub called out by name. A review is a verdict on a WORK, so
 		// post detail carries no aggregate at all now and the second site is gone rather
@@ -468,22 +468,22 @@ describe("Hiding a rating", () => {
 	});
 
 	it("still shows the author their own score rather than lying about it", async () => {
-		const res = await req(`/api/content/works/${workId}/ratings`, { headers: { Cookie: viewerA } });
+		const res = await req(`/api/content/works/${workId}/reviews`, { headers: { Cookie: viewerA } });
 		expect((await res.json()).userRating).toBe(1);
 	});
 
 	it("cannot be resurrected by re-rating — the upsert only touches the score", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 4,
 			body: "came back to it and warmed up considerably",
 		});
 		expect(res.status).toBe(201);
 
-		const [row] = await db.select().from(ratings).where(eq(ratings.id, ratingId));
+		const [row] = await db.select().from(reviews).where(eq(reviews.id, ratingId));
 		expect(row.score).toBe(4);
 		expect(row.moderationStatus).toBe("hidden");
 
-		const agg = await (await req(`/api/content/works/${workId}/ratings`)).json();
+		const agg = await (await req(`/api/content/works/${workId}/reviews`)).json();
 		expect(agg.count).toBe(1);
 		expect(agg.average).toBe(5);
 	});

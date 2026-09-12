@@ -10,7 +10,7 @@
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
 		"./badge-art": "./src/badge-art.ts",
-		"./reactions": "./src/reactions.ts",
+		"./votes": "./src/votes.ts",
 		"./stickers": "./src/stickers.ts",
 		"./supporters": "./src/supporters.ts",
 		"./parental-controls": "./src/parental-controls.ts",

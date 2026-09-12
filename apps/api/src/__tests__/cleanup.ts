@@ -45,10 +45,10 @@ import {
 	poolDistributions,
 	posts,
 	purchases,
-	ratings,
-	reactions,
+	reviews,
 	rightsRequests,
 	users,
+	votes,
 	workRatingAppeals,
 	works,
 } from "@anthers/db/schema";
@@ -63,7 +63,7 @@ import { and, desc, eq, gt, inArray, or } from "drizzle-orm";
  * exactly why the litter was invisible for the weeks it accumulated.
  *
  * Works go before the account and after the rows that point *at* Works, because deleting a Work
- * cascades its assets, ratings, pages, scans, transcode jobs and share links, but `set null`s
+ * cascades its assets, reviews, pages, scans, transcode jobs and share links, but `set null`s
  * the purchases and quarantine findings that have to outlive it.
  */
 export async function purgeFixtureAccounts(usernames: string[]): Promise<void> {
@@ -125,15 +125,15 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 				),
 			);
 
-		// What they wrote about somebody else's content. Ratings and comments on their OWN Works
+		// What they wrote about somebody else's content. Reviews and comments on their OWN Works
 		// cascade when the Work goes, but these are the ones left on other people's.
 		await db.delete(comments).where(inArray(comments.userId, ids));
-		await db.delete(ratings).where(inArray(ratings.userId, ids));
-		// `reactions.user_id` is `set null` too, for the same reason ratings is: a departing
+		await db.delete(reviews).where(inArray(reviews.userId, ids));
+		// `votes.user_id` is `set null` too, for the same reason reviews is: a departing
 		// account must not move everyone else's scores. So a fixture's votes outlive the
 		// fixture unless they are taken explicitly, which is the shape of every leak this
 		// file exists to stop.
-		await db.delete(reactions).where(inArray(reactions.userId, ids));
+		await db.delete(votes).where(inArray(votes.userId, ids));
 		await db.delete(rightsRequests).where(inArray(rightsRequests.userId, ids));
 		await db
 			.delete(workRatingAppeals)
@@ -202,14 +202,14 @@ export function purgeAccountsCreatedHere(): void {
 }
 
 /**
- * Remove reports filed against particular subjects — comments, Works, ratings.
+ * Remove reports filed against particular subjects — comments, Works, reviews.
  *
  * For the case `purgeFixtureAccounts` cannot reach: a report filed by an account the suite does
  * not own, or one whose reporter is already gone. The subject columns are polymorphic and carry
  * no foreign key, so deleting the comment or the Work leaves the report behind.
  */
 export async function purgeReportsAbout(
-	subjectType: "comment" | "rating" | "work" | "post" | "person",
+	subjectType: "comment" | "review" | "work" | "post" | "person",
 	subjectIds: number[],
 ): Promise<void> {
 	const ids = subjectIds.filter((id) => Number.isInteger(id));

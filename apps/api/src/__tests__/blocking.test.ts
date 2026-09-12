@@ -24,7 +24,7 @@ import {
 	comments,
 	follows,
 	moderationActions,
-	ratings,
+	reviews,
 	userBlocks,
 	users,
 } from "@anthers/db/schema";
@@ -164,7 +164,7 @@ beforeAll(async () => {
 			201,
 		);
 		expect(
-			(await post(`/api/content/works/${workId}/ratings`, cookie, { score: 4, body })).status,
+			(await post(`/api/content/works/${workId}/reviews`, cookie, { score: 4, body })).status,
 		).toBe(201);
 	}
 }, DB_SETUP_TIMEOUT);
@@ -240,7 +240,7 @@ describe("blocking is symmetric", () => {
 		for (const path of [
 			`/api/content/posts/${postSlug}/comments`,
 			`/api/content/works/${workId}/comments`,
-			`/api/content/works/${workId}/ratings`,
+			`/api/content/works/${workId}/reviews`,
 		]) {
 			expect(await authors(path, abe)).not.toContain(beeName);
 			expect(await authors(path, bee)).not.toContain(abeName);
@@ -253,18 +253,18 @@ describe("blocking is symmetric", () => {
 
 	it("leaves the review AGGREGATE global — a block must not move a creator's score", async () => {
 		await clearBlocks();
-		const before = await (await get(`/api/content/works/${workId}/ratings`, cam)).json();
+		const before = await (await get(`/api/content/works/${workId}/reviews`, cam)).json();
 
 		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
 
-		const after = (await (await get(`/api/content/works/${workId}/ratings`, abe)).json()) as {
+		const after = (await (await get(`/api/content/works/${workId}/reviews`, abe)).json()) as {
 			average: number;
 			count: number;
 			reviews: { username: string }[];
 		};
 
 		// The list shrank; the aggregate did not. A per-viewer average would mean two
-		// people see different ratings for the same Work, and would hand one user a way
+		// people see different reviews for the same Work, and would hand one user a way
 		// to move a creator's public score by blocking a reviewer.
 		expect(after.reviews.map((r) => r.username)).not.toContain(beeName);
 		expect(after.count).toBe((before as { count: number }).count);
@@ -447,9 +447,9 @@ describe("the rows survive, because a block is not a delete", () => {
 		expect(beeComments.every((c) => c.body.includes("bee was here"))).toBe(true);
 
 		const beeReviews = await db
-			.select({ id: ratings.id })
-			.from(ratings)
-			.where(eq(ratings.userId, beeId));
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(eq(reviews.userId, beeId));
 		expect(beeReviews.length).toBeGreaterThan(0);
 	});
 });

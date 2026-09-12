@@ -65,7 +65,7 @@ import {
 	comments,
 	posts,
 	purchases,
-	ratings,
+	reviews,
 	sessions,
 	users,
 	works,
@@ -156,7 +156,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		countRows("attention_events", "user_id"),
 		countRows("sessions", "user_id"),
 		countRows("comments", "user_id"),
-		countRows("ratings", "user_id"),
+		countRows("reviews", "user_id"),
 		countRows("posts", "creator_id"),
 		countRows("purchases", "buyer_id"),
 		hostedHandlesFor(userId),
@@ -401,7 +401,7 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 		// spread across four schema files.
 		await tx.update(posts).set({ creatorId: null }).where(eq(posts.creatorId, userId));
 		await tx.update(comments).set({ userId: null }).where(eq(comments.userId, userId));
-		await tx.update(ratings).set({ userId: null }).where(eq(ratings.userId, userId));
+		await tx.update(reviews).set({ userId: null }).where(eq(reviews.userId, userId));
 
 		// The buyer comes off the financial record; the record itself stays.
 		await tx.update(purchases).set({ buyerId: null }).where(eq(purchases.buyerId, userId));

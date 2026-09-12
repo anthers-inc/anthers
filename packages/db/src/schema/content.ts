@@ -802,8 +802,8 @@ export const bookmarks = pgTable(
 // node); the Work is node-owned. The `moderation_status` is org-imposed. Same
 // three-roles-on-one-row shape as `comments`: the author owns it, the subject's
 // creator hosts it, the org moderates it.
-export const ratings = pgTable(
-	"ratings",
+export const reviews = pgTable(
+	"reviews",
 	{
 		id: serial("id").primaryKey(),
 		// Nullable + SET NULL: a deleted account's reviews are ANONYMIZED, not removed.
@@ -831,8 +831,8 @@ export const ratings = pgTable(
 	(table) => [
 		// One review per person per Work. NULL workIds are the migration orphans above;
 		// Postgres treats NULLs as distinct, so they don't collide with each other.
-		uniqueIndex("uq_ratings_user_work").on(table.userId, table.workId),
-		index("idx_ratings_work_visible").on(table.workId, table.moderationStatus),
+		uniqueIndex("uq_reviews_user_work").on(table.userId, table.workId),
+		index("idx_reviews_work_visible").on(table.workId, table.moderationStatus),
 	],
 );
 
@@ -898,40 +898,48 @@ export const shareLinks = pgTable(
 );
 
 /**
- * A **reaction** — one person's like or dislike of one thing.
+ * A **vote** — one person’s upvote or downvote of one thing.
  *
  * ⭐ **One table for Works, posts and comments**, on the same `(subject_type, subject_id)`
- * shape `comments` already uses. A Sticker rides a like and a Sticker may be given on any
- * Work or post, so a like has to exist everywhere a Sticker may land; splitting that across
- * three tables would give the score three implementations to drift apart.
+ * shape `comments` already uses. A Sticker rides an upvote and a Sticker may be given on any
+ * Work or post, so an upvote has to exist everywhere a Sticker may land; splitting that
+ * across three tables would give the score three implementations to drift apart.
  *
- * ⭐ **`value` is +1 or -1 rather than a `kind` string**, so the net score is `SUM(value)`
- * and the counts are filtered sums of the same column. A text column would need a CASE in
- * every aggregate, which is three places to get a sign backwards.
+ * ⭐ **`direction` is `up` or `down` rather than a signed integer, and that reverses an
+ * earlier call for a reason specific to this table becoming an INDEX.** A vote is canonical
+ * as an `org.anthers.vote` record carrying a direction; this row is a projection of it, and
+ * "drop the table and rebuild it from the network" is a design goal rather than a boast. A
+ * signed column would make the row a *transformation* of the record instead, which is one
+ * more step a rebuild can get backwards, in the one place nothing else would notice.
+ *
+ * ⚠️ **The cost is real and it is the reason the column used to be signed**: a signed column
+ * makes the net `SUM(value)` and the counts filtered sums of it, where text needs a CASE in
+ * every aggregate. That cost is paid once rather than three times, because `commentScore()`
+ * in `@anthers/shared/votes` already owns both the true net and the floored display.
  *
  * 🚨 **The stored net goes negative and the DISPLAYED score is floored at zero** (Parker,
  * 2026-09-04). Never write the floored value here or sort on it: the floor exists so a
  * pile-on has no counter to run up, while the true net is what the collapse threshold and
- * moderation read. `commentScore()` in `@anthers/shared/reactions` owns both.
+ * moderation read. `commentScore()` in `@anthers/shared/votes` owns both.
  *
- * ⚠️ **`user_id` is nullable + SET NULL, exactly as `ratings` is.** A deleted account's
+ * ⚠️ **`user_id` is nullable + SET NULL, exactly as `reviews` is.** A deleted account's
  * votes stay counted, because removing them would move every score that person ever touched
  * through no fault of the people who wrote those comments. The link to a person goes; the
  * vote stays. Postgres treats NULLs as distinct, so the unique index below still holds for
  * live accounts and does not collide across departed ones.
  */
-// both — a reaction is a viewer's verdict on a creator's thing, so it splits the same way
-// `ratings` does: the vote is org-side (a viewer has no node), the thing voted on is a
+// both — a vote is a viewer's verdict on a creator's thing, so it splits the same way
+// `reviews` does: the vote is org-side (a viewer has no node), the thing voted on is a
 // creator's. It is polymorphic over (work|post|comment), and a comment is itself `both`.
-export const reactions = pgTable(
-	"reactions",
+export const votes = pgTable(
+	"votes",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 		subjectType: text("subject_type").notNull(), // work | post | comment
 		subjectId: integer("subject_id").notNull(),
-		/** +1 like, -1 dislike. Nothing else is a valid value. */
-		value: integer("value").notNull(),
+		/** `up` or `down`. Nothing else is a valid value. */
+		direction: text("direction").notNull(),
 		/**
 		 * ⚠️ **Kept because a burst is the only visible signature of brigading.** A single
 		 * account is bounded by the unique index below; many accounts arriving together are
@@ -940,10 +948,10 @@ export const reactions = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// One reaction per person per thing. Changing a like to a dislike UPDATES this row
+		// One vote per person per thing. Changing an upvote to a downvote UPDATES this row
 		// rather than adding a second, so the two can never both count.
-		uniqueIndex("uq_reactions_user_subject").on(table.userId, table.subjectType, table.subjectId),
+		uniqueIndex("uq_votes_user_subject").on(table.userId, table.subjectType, table.subjectId),
 		// Every read is "the score of this subject", so this is the whole access pattern.
-		index("idx_reactions_subject").on(table.subjectType, table.subjectId),
+		index("idx_votes_subject").on(table.subjectType, table.subjectId),
 	],
 );

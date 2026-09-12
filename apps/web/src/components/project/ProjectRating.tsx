@@ -36,7 +36,7 @@ export default function ProjectRating({ workId }: { workId: number }) {
 	const [reportingReview, setReportingReview] = useState<number | null>(null);
 
 	const fetchRating = useCallback(() => {
-		client.api.content.works[":id"].ratings
+		client.api.content.works[":id"].reviews
 			.$get({ param: { id: String(workId) } })
 			.then(async (res) => {
 				if (!res.ok) return;
@@ -64,7 +64,7 @@ export default function ProjectRating({ workId }: { workId: number }) {
 		setSubmitting(true);
 		setError(null);
 		try {
-			const res = await client.api.content.works[":id"].ratings.$post({
+			const res = await client.api.content.works[":id"].reviews.$post({
 				param: { id: String(workId) },
 				json: { score: draftScore, body: draftBody.trim() },
 			});
@@ -192,7 +192,7 @@ export default function ProjectRating({ workId }: { workId: number }) {
 
 			{reportingReview !== null && (
 				<ReportDialog
-					subjectType="rating"
+					subjectType="review"
 					subjectId={reportingReview}
 					label="this review"
 					onClose={() => setReportingReview(null)}

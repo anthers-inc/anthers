@@ -299,7 +299,7 @@ export default function CompareItchPage() {
 								<CompRow feature="Game hosting & downloads" anthers patreon />
 								<CompRow feature="HTML5 web games" anthers patreon />
 								<CompRow feature="Customizable project pages" anthers patreon />
-								<CompRow feature="Ratings & comments" anthers patreon />
+								<CompRow feature="Reviews & comments" anthers patreon />
 								<CompRow feature="Devlogs & posts" anthers patreon />
 								<CompRow feature="Video hosting" anthers />
 								<CompRow feature="Audio & music hosting" anthers />

@@ -147,7 +147,7 @@ export default function CompareGhostPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
-									Ratings, comments, and community features
+									Reviews, comments, and community features
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
@@ -249,7 +249,7 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<TrophyIcon className="h-6 w-6" />}
 							title="Community features"
-							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics like project ratings, comments, and follow/feed—built for the kind of interactive, collaborative community that forms around indie games and creative projects."
+							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics like project reviews, comments, and follow/feed—built for the kind of interactive, collaborative community that forms around indie games and creative projects."
 						/>
 					</Reveal>
 					<Reveal delay={500}>
@@ -294,7 +294,7 @@ export default function CompareGhostPage() {
 								<CompRow feature="HTML5 web games" anthers />
 								<CompRow feature="Video hosting" anthers />
 								<CompRow feature="Audio / music hosting" anthers />
-								<CompRow feature="Ratings & comments" anthers />
+								<CompRow feature="Reviews & comments" anthers />
 								<CompRow feature="Follow & feed system" anthers />
 								<CompRow feature="Creator profiles" anthers />
 								<CompRow feature="Subscription pool model" anthers />

@@ -18,7 +18,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { ratings } from "@anthers/db/schema";
+import { reviews } from "@anthers/db/schema";
 import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -68,7 +68,7 @@ interface ReviewList {
 }
 
 const readReviews = async (cookie?: string): Promise<ReviewList> => {
-	const res = await req(`/api/content/works/${workId}/ratings`, {
+	const res = await req(`/api/content/works/${workId}/reviews`, {
 		headers: cookie ? { Cookie: cookie } : undefined,
 	});
 	expect(res.status).toBe(200);
@@ -122,12 +122,12 @@ beforeAll(async () => {
 
 describe("A score cannot be left without words", () => {
 	it("rejects a score with no body at all", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, { score: 5 });
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, { score: 5 });
 		expect(res.status).toBe(400);
 	});
 
 	it("rejects a body that is only whitespace", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 5,
 			body: "        ",
 		});
@@ -135,7 +135,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("rejects a body under the minimum", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 5,
 			body: "x".repeat(REVIEW_MIN - 1),
 		});
@@ -143,7 +143,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("rejects a body over the maximum", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 5,
 			body: "x".repeat(REVIEW_MAX + 1),
 		});
@@ -151,7 +151,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("still rejects an out-of-range score", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 6,
 			body: "a perfectly reasonable body",
 		});
@@ -159,7 +159,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("accepts a score with words, and publishes both", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 4,
 			body: "  the pacing is the thing — nothing overstays  ",
 		});
@@ -177,7 +177,7 @@ describe("A score cannot be left without words", () => {
 
 describe("Editing a review", () => {
 	it("updates the score AND the text, not just the score", async () => {
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 2,
 			body: "came back to it and it did not hold up",
 		});
@@ -198,24 +198,24 @@ describe("Editing a review", () => {
 
 	it("still cannot resurrect a hidden review", async () => {
 		const [row] = await db
-			.select({ id: ratings.id })
-			.from(ratings)
+			.select({ id: reviews.id })
+			.from(reviews)
 			.where(
 				and(
-					eq(ratings.workId, workId),
-					eq(ratings.userId, sql`(SELECT id FROM users WHERE username = ${viewerAName})`),
+					eq(reviews.workId, workId),
+					eq(reviews.userId, sql`(SELECT id FROM users WHERE username = ${viewerAName})`),
 				),
 			)
 			.limit(1);
-		await db.update(ratings).set({ moderationStatus: "hidden" }).where(eq(ratings.id, row.id));
+		await db.update(reviews).set({ moderationStatus: "hidden" }).where(eq(reviews.id, row.id));
 
-		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
 			score: 5,
 			body: "actually I have changed my mind again",
 		});
 		expect(res.status).toBe(201);
 
-		const [after] = await db.select().from(ratings).where(eq(ratings.id, row.id));
+		const [after] = await db.select().from(reviews).where(eq(reviews.id, row.id));
 		expect(after.score).toBe(5);
 		expect(after.body).toBe("actually I have changed my mind again");
 		// The whole point: the edit landed, the row stayed hidden.
@@ -233,7 +233,7 @@ describe("Reviews written before text was required", () => {
 		const [viewer] = (await db.execute(
 			sql`SELECT id FROM users WHERE username = ${viewerBName}`,
 		)) as unknown as { id: number }[];
-		await db.insert(ratings).values({ userId: viewer.id, workId, score: 3 });
+		await db.insert(reviews).values({ userId: viewer.id, workId, score: 3 });
 
 		const list = await readReviews();
 		expect(list.count).toBe(1);

@@ -29,7 +29,7 @@ import {
 	moderationActions,
 	moderationReports,
 	posts,
-	ratings,
+	reviews,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -61,7 +61,7 @@ import { notify } from "./notifications.js";
  */
 const CONTENT_SUBJECTS = {
 	comment: comments,
-	rating: ratings,
+	review: reviews,
 } as const;
 
 type ContentSubjectType = keyof typeof CONTENT_SUBJECTS;
@@ -544,7 +544,7 @@ export interface QueueItem {
 	} | null;
 }
 
-export type QueueFilter = "reported" | "comments" | "ratings" | "people" | "hidden";
+export type QueueFilter = "reported" | "comments" | "reviews" | "people" | "hidden";
 
 export const QUEUE_LIMIT = 100;
 
@@ -552,7 +552,7 @@ export const QUEUE_LIMIT = 100;
  * Assemble the operator's list.
  *
  * `reported` — the queue proper: anything with an open report, most-reported first.
- * `comments` / `ratings` — recent activity, so an operator can act on something
+ * `comments` / `reviews` — recent activity, so an operator can act on something
  *   nobody reported. This mattered more than it looks when a rating was a bare
  *   1–5 score: nothing rendered it, so nobody could *see* one to report it, and
  *   browse was the only way it was reachable at all. Reviews now carry text and
@@ -567,7 +567,7 @@ export const QUEUE_LIMIT = 100;
  */
 export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	const subjectTypes: ModerationSubjectType[] =
-		filter === "comments" ? ["comment"] : filter === "ratings" ? ["rating"] : ["comment", "rating"];
+		filter === "comments" ? ["comment"] : filter === "reviews" ? ["review"] : ["comment", "review"];
 
 	// 1. Pick the (type, id) pairs this filter is about.
 	let keys: { subjectType: ModerationSubjectType; subjectId: number }[];
@@ -650,7 +650,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	const key = (t: string, id: number) => `${t}:${id}`;
 
 	const commentIds = keys.filter((k) => k.subjectType === "comment").map((k) => k.subjectId);
-	const ratingIds = keys.filter((k) => k.subjectType === "rating").map((k) => k.subjectId);
+	const reviewIds = keys.filter((k) => k.subjectType === "review").map((k) => k.subjectId);
 	const userIds = keys.filter((k) => k.subjectType === "user").map((k) => k.subjectId);
 	const workIdKeys = keys.filter((k) => k.subjectType === "work").map((k) => k.subjectId);
 
@@ -746,29 +746,29 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		}
 	}
 
-	if (ratingIds.length > 0) {
+	if (reviewIds.length > 0) {
 		const rows = await db
 			.select({
-				id: ratings.id,
-				userId: ratings.userId,
+				id: reviews.id,
+				userId: reviews.userId,
 				username: users.username,
-				workId: ratings.workId,
-				moderationStatus: ratings.moderationStatus,
-				createdAt: ratings.createdAt,
-				score: ratings.score,
-				body: ratings.body,
+				workId: reviews.workId,
+				moderationStatus: reviews.moderationStatus,
+				createdAt: reviews.createdAt,
+				score: reviews.score,
+				body: reviews.body,
 			})
-			.from(ratings)
-			.leftJoin(users, eq(ratings.userId, users.id))
-			.where(inArray(ratings.id, ratingIds));
+			.from(reviews)
+			.leftJoin(users, eq(reviews.userId, users.id))
+			.where(inArray(reviews.id, reviewIds));
 		const contexts = await loadContexts(
 			rows
 				.filter((r) => r.workId != null)
 				.map((r) => ({ kind: "work" as const, id: r.workId as number })),
 		);
 		for (const r of rows) {
-			items.set(key("rating", r.id), {
-				...base("rating", r, r.workId != null ? (contexts.get(`work:${r.workId}`) ?? null) : null),
+			items.set(key("review", r.id), {
+				...base("review", r, r.workId != null ? (contexts.get(`work:${r.workId}`) ?? null) : null),
 				// Score first so the operator sees the verdict, then the words that
 				// justify it — the words are the part there's actually a call to make on.
 				// `body` is empty on rows predating the write-time text requirement.
@@ -976,7 +976,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
  *
  * Reports are polymorphic, so there is no foreign key holding them to their
  * subject, and every path that removes content leaves reports behind: deleting a
- * post cascades its comments and ratings away, deleting an account cascades that
+ * post cascades its comments and reviews away, deleting an account cascades that
  * user's, and the gauntlet fixture clears comments between runs. Those orphans
  * can never appear in the queue — `loadQueue` hydrates from the content tables,
  * so a report naming a row that isn't there finds nothing to render and is
@@ -1003,9 +1003,9 @@ const subjectStillExists = or(
 		),
 	),
 	and(
-		eq(moderationReports.subjectType, "rating"),
+		eq(moderationReports.subjectType, "review"),
 		exists(
-			db.select({ one: sql`1` }).from(ratings).where(eq(ratings.id, moderationReports.subjectId)),
+			db.select({ one: sql`1` }).from(reviews).where(eq(reviews.id, moderationReports.subjectId)),
 		),
 	),
 	and(
@@ -1031,7 +1031,7 @@ export async function moderationSummary(): Promise<{
 	reportedSubjects: number;
 	reportedPeople: number;
 	hiddenComments: number;
-	hiddenRatings: number;
+	hiddenReviews: number;
 }> {
 	const [open] = await db
 		.select({
@@ -1047,15 +1047,15 @@ export async function moderationSummary(): Promise<{
 		.from(comments)
 		.where(eq(comments.moderationStatus, "hidden"));
 	const [hiddenR] = await db
-		.select({ n: count(ratings.id) })
-		.from(ratings)
-		.where(eq(ratings.moderationStatus, "hidden"));
+		.select({ n: count(reviews.id) })
+		.from(reviews)
+		.where(eq(reviews.moderationStatus, "hidden"));
 
 	return {
 		openReports: Number(open?.reports ?? 0),
 		reportedSubjects: Number(open?.subjects ?? 0),
 		reportedPeople: Number(open?.people ?? 0),
 		hiddenComments: Number(hiddenC?.n ?? 0),
-		hiddenRatings: Number(hiddenR?.n ?? 0),
+		hiddenReviews: Number(hiddenR?.n ?? 0),
 	};
 }

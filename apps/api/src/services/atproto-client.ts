@@ -293,7 +293,7 @@ export const PUBLISH_SCOPE_EXPANDED = `repo:${WORK_COLLECTION}?action=create&act
  * The records Anthers writes on behalf of **anybody** with an identity.
  *
  * 🚨 **Empty today because none of these lexicons exist yet, and that is the only reason.**
- * Follows, comments, ratings and reactions all belong in the reader's own repository — see
+ * Follows, comments, reviews and votes all belong in the reader's own repository — see
  * `71.02 User Records in the Atmosphere` — so the moment any of them is published this list
  * grows, and every door below starts asking for it. **Keeping it empty for any other reason
  * would be the accessory model creeping back in**: a record in your repository is Anthers
