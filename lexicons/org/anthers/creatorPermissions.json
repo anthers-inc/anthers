@@ -10,11 +10,7 @@
 				{
 					"type": "permission",
 					"resource": "repo",
-					"collection": [
-						"org.anthers.project",
-						"org.anthers.work",
-						"org.anthers.post"
-					],
+					"collection": ["org.anthers.project", "org.anthers.work", "org.anthers.post"],
 					"action": ["create", "update", "delete"]
 				}
 			]
