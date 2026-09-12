@@ -50,6 +50,38 @@ async function generate(outDir: string) {
 		console.error(err || "lex build failed");
 		process.exit(1);
 	}
+	await sortBarrels(outDir);
+}
+
+/**
+ * Put every generated namespace barrel into a stable order.
+ *
+ * 🚨 **The generator emits `export * as` lines in DIRECTORY-READ order, which differs between
+ * filesystems.** With two schemas that was stable enough never to bite; with ten it means the
+ * same `lexicons/` produces different bytes on a developer's machine and on a CI runner, and
+ * `--check` then reports the committed tree stale against output nobody changed. It cost a red
+ * build on a branch whose only sin was adding enough schemas to make the ordering visible.
+ *
+ * ⚠️ **This is the one post-process the output gets, and it is safe because reordering
+ * `export * as` statements cannot change what a module exports.** It runs on BOTH the build and
+ * the check, so the two still compare byte-for-byte and a real difference is still a real
+ * difference — which is the property the note above is protecting. Anything that reformatted
+ * rather than reordered would break it.
+ */
+async function sortBarrels(outDir: string) {
+	const glob = new Bun.Glob("**/*.ts");
+	for await (const rel of glob.scan({ cwd: outDir })) {
+		const path = join(outDir, rel);
+		const body = await Bun.file(path).text();
+		const lines = body.split("\n");
+		const first = lines.findIndex((l) => l.startsWith("export * as "));
+		if (first === -1) continue;
+		const exports = lines.filter((l) => l.startsWith("export * as "));
+		const rest = lines.filter((l) => !l.startsWith("export * as "));
+		exports.sort();
+		rest.splice(first, 0, ...exports);
+		await Bun.write(path, rest.join("\n"));
+	}
 }
 
 /** Every generated file, as path → contents, so two trees can be compared directly. */

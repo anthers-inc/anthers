@@ -1,0 +1,35 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.project",
+	"defs": {
+		"main": {
+			"type": "record",
+			"key": "tid",
+			"description": "A project — a container a creator groups related works and posts under. It deliberately carries NO list of what is in it: a record naming its own contents has to be rewritten every time a work is added or removed, which broadcasts a new version on every change and makes the record a worse copy of a query. Membership belongs on the other end, as an optional field on the work, which may be added later at no cost.",
+			"record": {
+				"type": "object",
+				"required": ["title", "url"],
+				"properties": {
+					"title": {
+						"type": "string",
+						"description": "The project's name, as its creator wrote it. Plain text, for the same reason every other name in these schemas is: a consumer should be able to render it without a sanitizer.",
+						"maxGraphemes": 300,
+						"maxLength": 3000
+					},
+					"url": {
+						"type": "string",
+						"format": "uri",
+						"description": "Where the project can be reached. Not assumed to be an anthers.org address, because a creator hosting their own catalog points at their own.",
+						"maxLength": 2048
+					},
+					"description": {
+						"type": "string",
+						"description": "The creator's own summary of what the project is. Plain text, so that every consumer can render it safely without a sanitizer.",
+						"maxGraphemes": 3000,
+						"maxLength": 30000
+					}
+				}
+			}
+		}
+	}
+}
