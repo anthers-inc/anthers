@@ -237,9 +237,13 @@ describe("a collection whose Lexicon is not published", () => {
 	beforeAll(() => setPublishedLexiconsForTesting(undefined));
 	afterAll(() => setPublishedLexiconsForTesting(EVERY_COLLECTION));
 
-	it("starts from exactly the two schemas that resolve on the network", async () => {
+	it("writes under exactly the published schemas it has chosen to", async () => {
 		expect([...PUBLISHED_LEXICONS].sort()).toEqual([
 			"org.anthers.catalogPermissions",
+			"org.anthers.creatorPermissions",
+			"org.anthers.post",
+			"org.anthers.project",
+			"org.anthers.userPermissions",
 			"org.anthers.work",
 		]);
 		// And each names a schema this repository actually holds, so a typo cannot open the gate

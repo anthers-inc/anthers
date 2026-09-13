@@ -196,13 +196,14 @@ describe("the scope a signup asks for", () => {
 			});
 
 		await start("signup");
-		expect(lastScope).toBe("atproto transition:email");
+		expect(lastScope).toBe("atproto transition:email include:org.anthers.userPermissions");
 
 		// 🚨 Signing in must not ask. Bundling the email scope into the login intent would
 		// make every returning person consent to us reading their address to do something
 		// that never needs it.
 		await start("login");
-		expect(lastScope).toBe("atproto");
+		expect(lastScope).toBe("atproto include:org.anthers.userPermissions");
+		expect(lastScope).not.toContain("transition:email");
 	});
 
 	it("tells the browser whether the door is open, so a closed one is not advertised", async () => {

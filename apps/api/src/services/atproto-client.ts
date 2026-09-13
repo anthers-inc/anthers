@@ -242,67 +242,82 @@ export function getBaseUrl(): string {
  */
 export const EMAIL_SCOPE = "transition:email";
 
-/** Anthers' published permission set — the readable name for what the ask amounts to. */
-const PERMISSION_SET = "org.anthers.catalogPermissions";
+/**
+ * The permission set a reader's own records are asked for under: comments, reviews, votes and
+ * follows, in their own repository.
+ */
+export const USER_PERMISSION_SET = "org.anthers.userPermissions";
+
+/** The permission set a creator's catalog is asked for under: projects, Works and posts. */
+export const CREATOR_PERMISSION_SET = "org.anthers.creatorPermissions";
 
 /**
- * The permission to keep a creator's Work listings in their own repository, and nothing else.
+ * The first permission set, which named Work listings alone.
  *
- * ⭐ **Asked for by naming a published Lexicon rather than by spelling out a scope string, so
- * that the consent screen has something to render.** `org.anthers.catalogPermissions` carries a
- * title and a sentence; `repo:org.anthers.work?action=create&action=update&action=delete` is
- * machine output, and asking somebody to agree to machine output is the opposite of what this
- * whole design is for. The set names one collection and three actions — `create` puts a listing
- * up, `update` keeps it in step with the Work, and `delete` takes it down. That last one is why
- * it cannot be trimmed further: a grant that could publish but not withdraw would leave listings
- * advertising Works their creators had taken back.
- *
- * 🚨 **Confirmed working end to end on bsky.social on 2026-09-11, and the interesting part is
- * what the server did.** Asked for `atproto include:org.anthers.catalogPermissions`, it resolved
- * the Lexicon from `_lexicon.anthers.org`, expanded it, and granted `repo:org.anthers.work` —
- * so the set is fetched and read rather than merely tolerated, and a real record was then
- * written with the result.
- *
- * 🚨 **What comes back is the EXPANSION and is spelled its own way**, which is why nothing may
- * compare a granted scope against this string. The grant above arrived as a bare
- * `repo:org.anthers.work`, with no `action` parameter at all — which proposal 0011 reads as
- * *every* action, and therefore as the full grant. `services/atproto-scope.ts` is what reads
- * one, and it is the only thing that should.
+ * ⚠️ **Asked for by nothing, and still declared, for one reason.** It is being retired now that
+ * the two sets above replace it, and a grant somebody already holds under it has to survive the
+ * switch — so it stays in the client's declared scope until the set is retired, and is removed
+ * from there in the same change that retires it.
  */
-export const PUBLISH_SCOPE = `include:${PERMISSION_SET}`;
+export const CATALOG_PERMISSION_SET = "org.anthers.catalogPermissions";
 
 /**
- * The same permission written out, which is what a server hands back and what to fall back to.
+ * The collections each set names, which is what a granted scope is actually judged against.
  *
- * ⭐ **Not requested, and kept because it is the proven form.** `include:` was confirmed
- * honored on bsky.social on 2026-09-11 — the authorization server fetched
- * `org.anthers.catalogPermissions` from `_lexicon.anthers.org`, expanded it, and granted
- * `repo:org.anthers.work` — so the readable form is what Anthers asks with. If some other
- * authorization server does not understand a permission-set reference, this string is the
- * fallback and needs no republished Lexicon to use.
- *
- * ⚠️ **Nothing compares a granted scope against either of these.** What comes back is the
- * expansion, spelled its own way, and `services/atproto-scope.ts` reads it semantically for
- * exactly that reason.
- *
- * Retest either form: `bun run scripts/atproto-scope-probe.ts --handle <a throwaway account>`.
+ * 🚨 **A granted scope comes back as its EXPANSION, never as the set's name**, so nothing may
+ * compare what was granted against the `include:` string. `services/atproto-scope.ts` reads the
+ * expansion semantically, and these lists are what it is asked about. A test holds each list to
+ * the collections its published Lexicon names, so the two cannot drift.
  */
-export const PUBLISH_SCOPE_EXPANDED = `repo:${WORK_COLLECTION}?action=create&action=update&action=delete`;
+export const USER_COLLECTIONS: readonly string[] = [
+	"org.anthers.comment",
+	"org.anthers.review",
+	"org.anthers.vote",
+	"org.anthers.follow",
+];
+export const CREATOR_COLLECTIONS: readonly string[] = [
+	"org.anthers.project",
+	WORK_COLLECTION,
+	"org.anthers.post",
+];
 
 /**
  * The records Anthers writes on behalf of **anybody** with an identity.
  *
- * 🚨 **Empty today because none of these lexicons exist yet, and that is the only reason.**
- * Follows, comments, reviews and votes all belong in the reader's own repository — see
- * `71.02 User Records in the Atmosphere` — so the moment any of them is published this list
- * grows, and every door below starts asking for it. **Keeping it empty for any other reason
- * would be the accessory model creeping back in**: a record in your repository is Anthers
- * working, not an extra somebody opts into.
+ * ⭐ **Asked for by naming a published Lexicon rather than by spelling out a scope string, so
+ * that the consent screen has something to render**: a title and a sentence rather than
+ * `repo?collection=…&action=…`, which is machine output nobody should be asked to agree to.
+ * `include:` was confirmed resolved and expanded by bsky.social on 2026-09-11, for the set this
+ * one replaces.
+ *
+ * 🚨 **Asked for at every door that establishes an identity, and never kept back.** Follows,
+ * comments, reviews and votes belong in the reader's own repository — see `71.02 User Records in
+ * the Atmosphere` — and a record in your repository is Anthers working, not an extra somebody
+ * opts into.
  */
-export const USER_SCOPES: readonly string[] = [];
+export const USER_SCOPES: readonly string[] = [`include:${USER_PERMISSION_SET}`];
 
-/** The records Anthers writes on behalf of somebody who publishes. */
-export const CREATOR_SCOPES: readonly string[] = [PUBLISH_SCOPE];
+/**
+ * The records Anthers writes on behalf of somebody who publishes.
+ *
+ * ⚠️ **Asked for alongside {@link USER_SCOPES}, never instead of them.** One OAuth session is
+ * stored per DID and each authorization replaces the last, so a creator request naming only
+ * this set would destroy the reader grant and leave somebody unable to comment as a consequence
+ * of becoming a creator. {@link scopeFor} spreads both, so the creator ask is a superset by
+ * construction.
+ */
+export const CREATOR_SCOPES: readonly string[] = [`include:${CREATOR_PERMISSION_SET}`];
+
+/**
+ * The same two permissions written out — what a server hands back, and the fallback for an
+ * authorization server that does not understand a permission-set reference.
+ *
+ * ⚠️ **Not requested.** Every action is granted by default, which is why no `action` parameter
+ * appears: proposal 0011 reads its absence as all three, and a grant that could publish but not
+ * withdraw would leave records up that their owners had taken back.
+ */
+export const USER_SCOPE_EXPANDED = `repo?${USER_COLLECTIONS.map((c) => `collection=${c}`).join("&")}`;
+export const CREATOR_SCOPE_EXPANDED = `repo?${CREATOR_COLLECTIONS.map((c) => `collection=${c}`).join("&")}`;
 
 /**
  * What to ask an account for, as one scope string.
@@ -345,12 +360,19 @@ export function scopeFor(opts: { creator?: boolean; email?: boolean }): string {
  * to a creator's whole account, and declaring it would let any future call request it
  * without a second thought. A test asserts its absence.
  *
- * ⭐ **{@link PUBLISH_SCOPE} joined it on 2026-09-11.** This is the registration that has to
- * happen first, because an undeclared scope is refused at the authorization server with
- * `invalid_scope` — which is how `transition:email` failed on 2026-08-22, and the same mistake
- * was available here. What each door actually asks for is {@link scopeFor}.
+ * ⭐ **Every permission set a door may ask for is declared here first**, because an undeclared
+ * scope is refused at the authorization server with `invalid_scope` — which is how
+ * `transition:email` failed on 2026-08-22. The retiring catalog set stays declared until it is
+ * retired, so a grant made under it is not orphaned by the switch. What each door actually asks
+ * for is {@link scopeFor}.
  */
-const DECLARED_SCOPE = `atproto ${EMAIL_SCOPE} ${PUBLISH_SCOPE}`;
+const DECLARED_SCOPE = [
+	"atproto",
+	EMAIL_SCOPE,
+	...USER_SCOPES,
+	...CREATOR_SCOPES,
+	`include:${CATALOG_PERMISSION_SET}`,
+].join(" ");
 
 /**
  * Client metadata, served at `/api/atproto/client-metadata.json` and fetched by every

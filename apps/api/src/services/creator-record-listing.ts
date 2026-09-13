@@ -27,7 +27,7 @@ import {
 	PROJECT_KIND,
 } from "./atproto-record-plan.js";
 import { type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
-import { type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
+import { queueRecordSync, type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
 
 /** What syncing one creator record did. */
 export type CreatorRecordSyncResult<R> = RecordSyncResult<R, UnpublishableCreatorReason>;
@@ -98,6 +98,23 @@ export async function syncProjectRecord(
 		},
 		fetchImpl: opts.fetchImpl,
 	});
+}
+
+/**
+ * Ask for every one of a creator's posts and projects to be reconsidered.
+ *
+ * ⭐ **What granting permission should look like is the whole catalog appearing**, the same
+ * reasoning `queueAllListingsFor` gives for Works. Each row still decides for itself, so drafts
+ * cost a read and nothing else. Returns how many rows were queued, not how many records result.
+ */
+export async function queueAllCreatorRecordsFor(creatorId: number): Promise<number> {
+	const [postRows, projectRows] = await Promise.all([
+		db.select({ id: posts.id }).from(posts).where(eq(posts.creatorId, creatorId)),
+		db.select({ id: projects.id }).from(projects).where(eq(projects.creatorId, creatorId)),
+	]);
+	for (const row of postRows) await queueRecordSync("post", row.id);
+	for (const row of projectRows) await queueRecordSync("project", row.id);
+	return postRows.length + projectRows.length;
 }
 
 /** Which of a creator's two record types a sync is for. */

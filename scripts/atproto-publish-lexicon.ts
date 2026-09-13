@@ -22,6 +22,14 @@
  *   bun run scripts/atproto-publish-lexicon.ts                    # show the plan, write nothing
  *   bun run scripts/atproto-publish-lexicon.ts --write \
  *     --service https://bsky.social --identifier anthers.org      # asks, then publishes
+ *   bun run scripts/atproto-publish-lexicon.ts --write --retire <nsid> \
+ *     --service https://bsky.social --identifier anthers.org      # asks, then removes one
+ *
+ * ⚠️ **Retiring removes a schema from the network, and is refused for anything the repository
+ * still carries.** The file has to be gone from `lexicons/` — and so has everything that asks for
+ * the set or writes under it — before its schema record is deleted, so a retirement can never
+ * strand code that still depends on the name resolving. 🚨 **A retired NSID is never reused for
+ * a different shape**: software that read the old schema may still hold records claiming it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -162,6 +170,26 @@ export async function resolveAuthorityTxt(domain: string): Promise<string[]> {
 	}
 }
 
+/**
+ * Why an NSID may not be retired from the network, or null when it may.
+ *
+ * 🚨 **Refused while the schema is still in `lexicons/`**, which is the one check a person cannot
+ * be relied on to make by eye. A schema still in the repository is one something may still ask
+ * for or write under, and deleting it from the network first would make that ask fail to resolve
+ * — for a permission set, that is every sign-in that names it.
+ */
+export function retireRefusal(nsid: string | undefined, plans: PublishPlan[]): string | null {
+	if (!nsid || nsid.startsWith("--")) return "--retire needs the NSID to retire";
+	if (!nsid.startsWith("org.anthers.")) return "only an org.anthers.* schema is retired from here";
+	if (plans.some((plan) => plan.nsid === nsid)) {
+		return (
+			`${nsid} is still in lexicons/. Remove it from the repository, and from everything that ` +
+			"asks for it or writes under it, before retiring it from the network"
+		);
+	}
+	return null;
+}
+
 /** Render a plan for a person deciding whether to go ahead. */
 export function describePlan(plan: PublishPlan): string {
 	return [
@@ -182,6 +210,52 @@ if (import.meta.main) {
 	if (isRefusal(decision)) {
 		console.error(`\nrefused: ${decision.refuse}\n`);
 		process.exit(1);
+	}
+
+	const argvAll = Bun.argv.slice(2);
+	const retiring = argvAll.includes("--retire") ? argvAll[argvAll.indexOf("--retire") + 1] : null;
+	if (retiring !== null) {
+		const refusal = retireRefusal(retiring, decision.plans);
+		if (refusal) {
+			console.error(`\nrefused: ${refusal}\n`);
+			process.exit(1);
+		}
+		console.log(
+			`\nWould retire ${retiring}, which resolves via ${lexiconAuthorityDomain(retiring)}.\n`,
+		);
+		if (!decision.write) {
+			console.log("Nothing was removed. Pass --write, --service and --identifier to retire it.\n");
+			process.exit(0);
+		}
+		const { sessionWriter } = await import("./atproto-writer.js");
+		const flagOf = (n: string) => argvAll[argvAll.indexOf(`--${n}`) + 1];
+		if (
+			prompt(`Type the NSID to retire it, or anything else to stop:\n  ${retiring}\n> `) !==
+			retiring
+		) {
+			console.log("  stopped; nothing was removed");
+			process.exit(0);
+		}
+		const password = prompt("  password: ");
+		if (!password) {
+			console.log("  stopped (no password given)");
+			process.exit(0);
+		}
+		const writer = await sessionWriter({
+			service: flagOf("service"),
+			identifier: flagOf("identifier"),
+			password,
+		});
+		const domain = lexiconAuthorityDomain(retiring);
+		const txt = await resolveAuthorityTxt(domain);
+		if (!authorityNamesAccount(txt, writer.did)) {
+			console.error(`  refused: ${domain} does not name ${writer.did}`);
+			process.exit(1);
+		}
+		await writer.deleteRecord("com.atproto.lexicon.schema", retiring);
+		console.log(`  retired ${retiring} from ${writer.did}`);
+		console.log("  🚨 Never publish a different shape under this NSID again.");
+		process.exit(0);
 	}
 
 	console.log(`\nLexicons found (${decision.plans.length}):\n`);

@@ -14,6 +14,7 @@ import {
 	isRefusal,
 	lexiconAuthorityDomain,
 	type PublishPlan,
+	retireRefusal,
 } from "./atproto-publish-lexicon.js";
 
 const plans: PublishPlan[] = [
@@ -133,5 +134,25 @@ describe("the gates in front of an irreversible write", () => {
 
 	it("refuses when there is nothing to publish", () => {
 		expect(isRefusal(decide([], {}, { hasTty: true, plans: [] }))).toBe(true);
+	});
+});
+
+describe("retiring a schema from the network", () => {
+	const plans = collectPlans();
+
+	// 🚨 The guard a person cannot apply by eye: a schema still in the repository may still be
+	// asked for, and a permission set that stops resolving fails every sign-in that names it.
+	it("refuses a schema the repository still carries", () => {
+		expect(retireRefusal("org.anthers.work", plans)).toContain("still in lexicons/");
+	});
+
+	it("refuses anything outside Anthers' own namespace, and a missing NSID", () => {
+		expect(retireRefusal("com.example.record", plans)).toContain("org.anthers.*");
+		expect(retireRefusal(undefined, plans)).toContain("needs the NSID");
+		expect(retireRefusal("--service", plans)).toContain("needs the NSID");
+	});
+
+	it("allows one that has already left the repository", () => {
+		expect(retireRefusal("org.anthers.somethingRetired", plans)).toBeNull();
 	});
 });
