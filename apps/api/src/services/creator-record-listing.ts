@@ -23,14 +23,21 @@
  */
 import { db } from "@anthers/db";
 import { posts, projects } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import type {
 	PostRecord,
 	ProjectRecord,
 	UnpublishableCreatorReason,
 } from "./atproto-creator-records.js";
-import { POST_KIND, PROJECT_KIND, type RecordPlan, syncRecord } from "./atproto-record-plan.js";
-import { RepoAuthError } from "./atproto-repo.js";
+import {
+	POST_COLLECTION,
+	POST_KIND,
+	PROJECT_COLLECTION,
+	PROJECT_KIND,
+	type RecordPlan,
+	syncRecord,
+} from "./atproto-record-plan.js";
+import { RepoAuthError, type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
 import { type NoCreatorWriterReason, writerForCreator } from "./repo-writer.js";
 
 /** What syncing one creator record did. */
@@ -57,6 +64,8 @@ export async function syncPostRecord(
 			creatorId: posts.creatorId,
 			slug: posts.slug,
 			publicId: posts.publicId,
+			// Both, and the mapper needs both: a retracted post keeps its `published_at`.
+			isPublished: posts.isPublished,
 			publishedAt: posts.publishedAt,
 			atprotoUri: posts.atprotoUri,
 		})
@@ -91,6 +100,7 @@ export async function syncProjectRecord(
 			slug: projects.slug,
 			title: projects.title,
 			description: projects.description,
+			isPublished: projects.isPublished,
 			atprotoUri: projects.atprotoUri,
 		})
 		.from(projects)
@@ -110,6 +120,105 @@ export async function syncProjectRecord(
 		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
 	} catch (error) {
 		return { status: "failed", error: describe(error) };
+	}
+}
+
+/** Which of a creator's two record types a sync is for. */
+export type CreatorRecordKind = "post" | "project";
+
+/** A record Anthers has written and still knows the address of. */
+export interface PublishedCreatorRecord {
+	kind: CreatorRecordKind;
+	id: number;
+	uri: string;
+}
+
+/**
+ * Every post and project record Anthers knows the address of, for one creator.
+ *
+ * ⚠️ **Only what the columns remember.** A record written by something else, or one whose column
+ * was lost, is not reachable from here — the same limit `stopPublishingFor` states about Works,
+ * and for the same reason: `atproto_uri` is the entire memory of where records went.
+ */
+export async function publishedCreatorRecords(
+	creatorId: number,
+): Promise<PublishedCreatorRecord[]> {
+	const [postRows, projectRows] = await Promise.all([
+		db
+			.select({ id: posts.id, uri: posts.atprotoUri })
+			.from(posts)
+			.where(and(eq(posts.creatorId, creatorId), isNotNull(posts.atprotoUri))),
+		db
+			.select({ id: projects.id, uri: projects.atprotoUri })
+			.from(projects)
+			.where(and(eq(projects.creatorId, creatorId), isNotNull(projects.atprotoUri))),
+	]);
+	return [
+		...postRows.map((r) => ({ kind: "post" as const, id: r.id, uri: r.uri as string })),
+		...projectRows.map((r) => ({ kind: "project" as const, id: r.id, uri: r.uri as string })),
+	];
+}
+
+/**
+ * Take one known record down and forget where it was. False when it is still up there.
+ *
+ * ⚠️ **The column is cleared only after the delete lands**, so a failure leaves the address
+ * behind. Forgetting it would strand the record permanently; keeping it means a retry, or a
+ * later sync, can still reach the thing.
+ */
+export async function removePublishedCreatorRecord(
+	writer: RepoWriter,
+	record: PublishedCreatorRecord,
+): Promise<boolean> {
+	const collection = record.kind === "post" ? POST_COLLECTION : PROJECT_COLLECTION;
+	const rkey = rkeyFromAtUri(record.uri, collection);
+	// An unreadable URI counts as still-up rather than as nothing to do: something is on the
+	// network that this column was meant to be able to find.
+	if (!rkey) return false;
+
+	try {
+		await writer.deleteRecord(collection, rkey);
+	} catch (error) {
+		console.error(
+			`[creator-record] could not remove the record for ${record.kind} ${record.id}: ` +
+				`${describe(error)}`,
+		);
+		return false;
+	}
+
+	if (record.kind === "post") {
+		await db.update(posts).set({ atprotoUri: null }).where(eq(posts.id, record.id));
+	} else {
+		await db.update(projects).set({ atprotoUri: null }).where(eq(projects.id, record.id));
+	}
+	return true;
+}
+
+/**
+ * Ask for a post's or a project's record to be brought back into line, soon.
+ *
+ * ⭐ **Call this whenever publishability MIGHT have moved, without working out whether it did.**
+ * The job re-reads and decides, so a spurious enqueue costs one database read and a duplicate
+ * costs nothing. Under-calling is the expensive mistake here, not over-calling — the same trade
+ * `queueWorkListingSync` makes, for the same reason.
+ *
+ * ⚠️ **Never throws.** Every caller is in the middle of something a creator asked for, and
+ * publishing a post must not fail because a queue was briefly unavailable. A missed enqueue is
+ * caught by the reconciling sweep; a publish that failed because of one is a creator's afternoon.
+ */
+export async function queueCreatorRecordSync(kind: CreatorRecordKind, id: number): Promise<void> {
+	try {
+		const { queue, QUEUES, JOB_OPTIONS } = await import("../jobs/queue.js");
+		await queue.send(
+			QUEUES.SYNC_CREATOR_RECORD,
+			{ kind, id },
+			JOB_OPTIONS[QUEUES.SYNC_CREATOR_RECORD],
+		);
+	} catch (error) {
+		console.error(
+			`[creator-record] could not enqueue a sync for ${kind} ${id}: ` +
+				`${error instanceof Error ? error.message : String(error)}`,
+		);
 	}
 }
 

@@ -38,6 +38,7 @@ import {
 	WORK_COLLECTION,
 	type WorkRecordPlan,
 } from "./atproto-repo.js";
+import { publishedCreatorRecords, removePublishedCreatorRecord } from "./creator-record-listing.js";
 import { type NoCreatorWriterReason, writerForCreator } from "./repo-writer.js";
 
 /** What syncing one Work's listing did. */
@@ -181,48 +182,59 @@ export async function queueAllListingsFor(creatorId: number): Promise<number> {
 
 /** What stopping a creator's publishing managed to do. */
 export interface StopPublishingResult {
-	/** Listings taken off the network. */
+	/** Records taken off the network — Work listings, posts and projects together. */
 	removed: number;
-	/** Listings that could not be removed, and are therefore still out there. */
+	/** Records that could not be removed, and are therefore still out there. */
 	stranded: number;
 	/** Whether the permission was given back. False whenever anything was stranded. */
 	revoked: boolean;
 }
 
 /**
- * Take a creator's listings off the network and give their permission back.
+ * Take everything Anthers has published for a creator off the network and give their permission
+ * back.
  *
  * 🚨 **The records come down BEFORE the grant goes back, and the order is the whole point.**
  * Deleting a record requires the permission being handed in, so revoking first would strand
- * every listing permanently — advertising Works to a network Anthers can no longer reach, with
+ * every record permanently — advertising Works to a network Anthers can no longer reach, with
  * no way for the creator to correct it short of finding their own tooling. This is the same
  * shape as the revoke-before-delete rule on local rows, arrived at from the opposite side: do
  * the thing that needs the credential while the credential is still good.
+ *
+ * 🚨 **ALL THREE record types, not just Works.** Withdrawing the permission is a creator saying
+ * "stop writing on my behalf", and answering it by taking their Work listings down while their
+ * posts and projects stay up would honor the letter of the request and none of its point. This
+ * is the one place that has to know the full set, which is why it is worth the extra query even
+ * for the majority of creators who have none.
  *
  * ⚠️ **Anything stranded cancels the revocation.** Keeping a permission the creator asked to
  * withdraw is the lesser harm, because it is the only state from which a retry can finish the
  * job. The caller is told, and asking again is what fixes it.
  *
- * ⚠️ **Only listings Anthers knows about can be removed.** `works.atproto_uri` is the record of
- * where records went; one written by something else, or one whose column was lost, is not
- * reachable from here and is not counted.
+ * ⚠️ **Only records Anthers knows about can be removed.** The `atproto_uri` columns are the
+ * entire memory of where records went; one written by something else, or one whose column was
+ * lost, is not reachable from here and is not counted.
  */
 export async function stopPublishingFor(creatorId: number): Promise<StopPublishingResult> {
-	const listed = await db
-		.select({ id: works.id, uri: works.atprotoUri })
-		.from(works)
-		.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri)));
+	const [listed, creatorRecords] = await Promise.all([
+		db
+			.select({ id: works.id, uri: works.atprotoUri })
+			.from(works)
+			.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri))),
+		publishedCreatorRecords(creatorId),
+	]);
 
 	let removed = 0;
 	let stranded = 0;
+	const total = listed.length + creatorRecords.length;
 
-	if (listed.length > 0) {
+	if (total > 0) {
 		const opened = await writerForCreator(creatorId);
 		if (!opened.writer) {
 			// No writer means no way to reach the records. They stay where they are, and saying so
 			// is more useful than a revocation that would make it permanent.
 			console.warn(`[work-listing] cannot stop publishing for ${creatorId}: ${opened.reason}`);
-			return { removed: 0, stranded: listed.length, revoked: false };
+			return { removed: 0, stranded: total, revoked: false };
 		}
 
 		for (const work of listed) {
@@ -244,6 +256,13 @@ export async function stopPublishingFor(creatorId: number): Promise<StopPublishi
 						`${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
+		}
+
+		// The same writer, deliberately: these records live in the same repository, and opening a
+		// second one would double the work for no gain and give the two halves separate ways to fail.
+		for (const record of creatorRecords) {
+			if (await removePublishedCreatorRecord(opened.writer, record)) removed += 1;
+			else stranded += 1;
 		}
 	}
 

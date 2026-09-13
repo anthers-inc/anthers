@@ -106,10 +106,13 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { POST_COLLECTION, PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
+import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
 import { adultVisibility } from "../services/content-preferences.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
+import { queueCreatorRecordSync } from "../services/creator-record-listing.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -2154,6 +2157,11 @@ const contentRoutes = new Hono()
 			}
 		}
 
+		// Asked for unconditionally rather than only when `isPublished` — the job re-reads and
+		// decides, and a draft costs one read to skip. Working out here whether it would publish
+		// would put the publishability rule in two places, and they would drift.
+		void queueCreatorRecordSync("post", post.id);
+
 		const linkedWorks = await loadPostWorks(post.id, user.id, deliveryCtx());
 		return c.json({ post: { ...post, linkedWorks } }, 201);
 	})
@@ -2298,6 +2306,11 @@ const contentRoutes = new Hono()
 			});
 		}
 
+		// Every edit, not only a publish or a retract: the record carries the post's URL, and a
+		// slug change moves it. ⚠️ Unpublishing reaches here too, which is the half that matters —
+		// it is what takes the record back down.
+		void queueCreatorRecordSync("post", updated.id);
+
 		const linkedWorks = await loadPostWorks(updated.id, user.id, deliveryCtx());
 		return c.json({ post: { ...updated, linkedWorks } });
 	})
@@ -2348,6 +2361,17 @@ const contentRoutes = new Hono()
 		await db
 			.delete(comments)
 			.where(and(eq(comments.subjectType, "post"), eq(comments.subjectId, existing.id)));
+
+		// 🚨 **The one enqueue in this file that cannot be a hint**, because there will be nothing
+		// left to re-read: the address and the account travel with the job. `existing` was read
+		// before any of this, which is what makes them available at all — see `queueRecordRemoval`.
+		if (existing.atprotoUri && existing.creatorId !== null) {
+			await queueRecordRemoval({
+				creatorId: existing.creatorId,
+				collection: POST_COLLECTION,
+				uri: existing.atprotoUri,
+			});
+		}
 
 		await db.delete(posts).where(eq(posts.id, existing.id));
 		return c.body(null, 204);
@@ -4201,6 +4225,8 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
+		void queueCreatorRecordSync("project", project.id);
+
 		return c.json({ project }, 201);
 	})
 
@@ -4347,6 +4373,10 @@ const contentRoutes = new Hono()
 			.where(eq(projects.id, existing.id))
 			.returning();
 
+		// The record carries the title, the description and the URL, so any of the three moving
+		// is a reason to rewrite it — and unpublishing is what takes it down.
+		void queueCreatorRecordSync("project", updated.id);
+
 		return c.json({ project: updated });
 	})
 
@@ -4354,12 +4384,24 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
+		// ⚠️ **Returned rather than looked up first, and it has to carry the URI.** A record whose
+		// row is gone can never be found again — see `queueRecordRemoval` — so the address is read
+		// out of the delete itself, which is the last moment it exists.
 		const deleted = await db
 			.delete(projects)
 			.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
-			.returning({ id: projects.id });
+			.returning({ id: projects.id, atprotoUri: projects.atprotoUri });
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+
+		if (deleted[0].atprotoUri) {
+			await queueRecordRemoval({
+				creatorId: user.id,
+				collection: PROJECT_COLLECTION,
+				uri: deleted[0].atprotoUri,
+			});
+		}
+
 		return c.body(null, 204);
 	})
 

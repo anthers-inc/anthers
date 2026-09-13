@@ -25,6 +25,7 @@ const post = (o: Partial<PublishablePost> = {}): PublishablePost => ({
 	creatorId: 42,
 	slug: "what-i-learned",
 	publicId: 1204,
+	isPublished: true,
 	publishedAt: PUBLISHED,
 	...o,
 });
@@ -34,6 +35,7 @@ const project = (o: Partial<PublishableProject> = {}): PublishableProject => ({
 	slug: "the-lanterns-trilogy",
 	title: "The Lanterns Trilogy",
 	description: "Three games about light.",
+	isPublished: true,
 	...o,
 });
 
@@ -70,8 +72,24 @@ describe("a post", () => {
 	});
 
 	it("gets no record while it is a draft", () => {
-		expect(unpublishablePostReason(post({ publishedAt: null }))).toBe("not_published");
-		expect(postToRecord(post({ publishedAt: null }), { baseUrl: BASE })).toBeNull();
+		expect(unpublishablePostReason(post({ isPublished: false, publishedAt: null }))).toBe(
+			"not_published",
+		);
+		expect(
+			postToRecord(post({ isPublished: false, publishedAt: null }), { baseUrl: BASE }),
+		).toBeNull();
+	});
+
+	// 🚨 The case the first implementation got wrong, and the one that matters most. `published_at`
+	// is stamped on the transition into published and is NEVER cleared, so a retracted post is a
+	// row reading `is_published = false` beside a live-looking date. A mapper testing the date
+	// alone calls this publishable — and because a record already exists by then, the plan comes
+	// out `replace` rather than `delete`, which is a creator taking something down and Anthers
+	// rewriting it on the network instead.
+	it("gets no record once its creator takes it down, date still stamped", () => {
+		const retracted = post({ isPublished: false, publishedAt: PUBLISHED });
+		expect(unpublishablePostReason(retracted)).toBe("not_published");
+		expect(postToRecord(retracted, { baseUrl: BASE })).toBeNull();
 	});
 
 	// A departed creator's posts are tombstoned so the threads under them survive. There is no
@@ -111,5 +129,13 @@ describe("a project", () => {
 	it("gets no record when it names nothing", () => {
 		expect(unpublishableProjectReason(project({ title: "   " }))).toBe("missing_title");
 		expect(projectToRecord(project({ title: "" }), { baseUrl: BASE })).toBeNull();
+	});
+
+	// 🚨 A draft project is one its creator has kept out of the public browse listing, which
+	// filters on exactly this column. Broadcasting a record for it would publish the thing more
+	// loudly than the listing it was withheld from.
+	it("gets no record while it is a draft", () => {
+		expect(unpublishableProjectReason(project({ isPublished: false }))).toBe("not_published");
+		expect(projectToRecord(project({ isPublished: false }), { baseUrl: BASE })).toBeNull();
 	});
 });
