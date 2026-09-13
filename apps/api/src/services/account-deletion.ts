@@ -32,7 +32,7 @@
  * |:--|:--|:--|
  * | profile, sessions, ATProto link, follows, bookmarks, blocks, attention rows | **destroyed** (FK cascade) | purely this person's |
  * | comments, posts | **tombstoned** — author nulled, content stays | a thread full of holes is worse for everyone still in it, and deleting a post takes third parties' comments with it |
- * | reviews | **anonymized** — score stays, author nulled | a bare 1–5 is the least personal thing here, and removing it moves a creator's average through no fault of theirs |
+ * | reviews | **destroyed** — verdict and text | a review is this person's written opinion, and an anonymous one nobody wrote any more is not honest to keep counting (Parker, 2026-09-13) |
  * | Works nobody bought | **destroyed** | nothing depends on them |
  * | Works someone bought | **withdrawn** | a purchase outlives the Work — buyers keep what they paid for |
  * | purchases | **buyer detached, row kept** | sales-tax remittance records; settled 2026-08-10 |
@@ -434,13 +434,12 @@ export async function eraseAccount(
 			await tx.delete(works).where(inArray(works.id, unpurchased));
 		}
 
-		// Tombstone the posts and comments, anonymize the reviews. Done explicitly rather
-		// than left to the FK: `SET NULL` would produce the same rows, but stating it
-		// here is what makes the three different outcomes visible in one place instead of
-		// spread across four schema files.
+		// Tombstone the posts and comments, delete the reviews. Done explicitly rather than
+		// left to the FKs, which would produce the same rows: stating it here is what makes the
+		// different outcomes visible in one place instead of spread across four schema files.
 		await tx.update(posts).set({ creatorId: null }).where(eq(posts.creatorId, userId));
 		await tx.update(comments).set({ userId: null }).where(eq(comments.userId, userId));
-		await tx.update(reviews).set({ userId: null }).where(eq(reviews.userId, userId));
+		await tx.delete(reviews).where(eq(reviews.userId, userId));
 
 		// The buyer comes off the financial record; the record itself stays.
 		await tx.update(purchases).set({ buyerId: null }).where(eq(purchases.buyerId, userId));

@@ -806,11 +806,12 @@ export const reviews = pgTable(
 	"reviews",
 	{
 		id: serial("id").primaryKey(),
-		// Nullable + SET NULL: a deleted account's reviews are ANONYMIZED, not removed.
-		// A bare verdict is the least personal thing in the system, and deleting it would
-		// move a creator's percentage through no fault of theirs. The verdict stays and
-		// counts; the link to a person goes.
-		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+		// CASCADE: a deleted account's reviews go with it, verdict and text alike (Parker,
+		// 2026-09-13). A review is somebody's written opinion, and an anonymous one nobody
+		// wrote any more is neither theirs nor honest to keep counting. The cost is that a
+		// Work's recommended share moves when a reviewer leaves. Nullable only because rows
+		// from before this rule were anonymized rather than removed.
+		userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		// `recommended` or `not-recommended`, validated at the application layer against
 		// `REVIEW_VERDICTS`.
