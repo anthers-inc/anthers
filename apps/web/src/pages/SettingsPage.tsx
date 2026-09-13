@@ -1446,7 +1446,8 @@ function DataSection() {
 										<li>
 											<strong>Deleted:</strong> your profile, {p.follows} follow
 											{p.follows === 1 ? "" : "s"}, {p.bookmarks} bookmark
-											{p.bookmarks === 1 ? "" : "s"}, {p.sessions} session
+											{p.bookmarks === 1 ? "" : "s"}, {p.reviews} review
+											{p.reviews === 1 ? "" : "s"}, {p.sessions} session
 											{p.sessions === 1 ? "" : "s"}, and {p.viewingEvents} viewing record
 											{p.viewingEvents === 1 ? "" : "s"}.
 										</li>
@@ -1454,8 +1455,7 @@ function DataSection() {
 											<strong>Kept, with your name removed:</strong> {p.posts} post
 											{p.posts === 1 ? "" : "s"} and {p.comments} comment
 											{p.comments === 1 ? "" : "s"} — so conversations other people took part in
-											stay readable — and {p.reviews} review
-											{p.reviews === 1 ? "" : "s"}, whose scores stay in creators' averages.
+											stay readable.
 										</li>
 										<li>
 											<strong>Your Works:</strong> {p.worksDeleted} deleted

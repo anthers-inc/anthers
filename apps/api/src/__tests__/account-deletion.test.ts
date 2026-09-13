@@ -7,8 +7,8 @@
  * *plausible* as its opposite and none of them fails loudly when it's wrong:
  *
  * - tombstoning that hard-deletes instead takes **third parties' comments** with it;
- * - anonymizing a review by deleting it moves a creator's average through no fault of
- *   theirs;
+ * - a review kept anonymously instead of deleted leaves somebody's written opinion counting
+ *   after they asked to leave;
  * - a purchased Work destroyed instead of withdrawn breaks the promise a buyer paid
  *   for;
  * - and `purchases` cascading instead of detaching destroys sales-tax records Anthers
@@ -311,12 +311,12 @@ describe("what 'deleted' means, table by table", () => {
 		expect(res.status).toBe(200);
 	});
 
-	it("ANONYMIZES the review — the verdict survives, the author does not", async () => {
-		const [row] = await db.select().from(reviews).where(eq(reviews.id, ratingId));
-		expect(row).toBeDefined();
-		// Deleting it would move a creator's percentage through no fault of theirs.
-		expect(row.verdict).toBe("recommended");
-		expect(row.userId).toBeNull();
+	it("DESTROYS the review — the verdict and the text go with the account", async () => {
+		const rows = await db.select().from(reviews).where(eq(reviews.id, ratingId));
+		expect(rows).toEqual([]);
+		// The Work it was on is still there; only the review went.
+		const [work] = await db.select({ id: works.id }).from(works).where(eq(works.id, soldWorkId));
+		expect(work).toBeDefined();
 	});
 
 	it("DESTROYS a Work nobody bought", async () => {
