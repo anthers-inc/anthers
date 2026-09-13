@@ -18,6 +18,7 @@ import { accounts, comments, posts, stickers, stripeAccounts, users } from "@ant
 import { stickerBudgetFor } from "@anthers/shared/constants";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -33,18 +34,7 @@ const RUN = crypto.randomUUID().slice(0, 8);
 const SUPPORT = 12; // Blossom — an allowance of $2.00.
 
 async function signUp(username: string) {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 function give(cookie: string, body: Record<string, unknown>) {

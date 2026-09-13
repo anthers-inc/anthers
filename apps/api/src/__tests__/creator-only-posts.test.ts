@@ -25,6 +25,7 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
 import { QUEUES, queue } from "../jobs/queue";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -51,21 +52,9 @@ function call(method: string, path: string, cookie: string, body?: unknown) {
 }
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const res = await app.fetch(
-		new Request("http://localhost/api/auth/sign-up", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				username,
-				email: `${username}@example.com`,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		}),
-	);
-	expect(res.status).toBe(201);
+	const account = await createAccount(username);
 	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
-	return { cookie: res.headers.get("Set-Cookie")!.split(";")[0], id: row.id };
+	return { cookie: account.cookie, id: row.id };
 }
 
 async function setCreator(userId: number, isCreator: boolean) {

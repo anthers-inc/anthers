@@ -37,6 +37,7 @@ import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { markPurchaseDownloaded, refundsAfterDownloadInWindow } from "../services/refunds";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -158,18 +159,8 @@ let buyerId: number;
 let otherId: number;
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	const cookie = res.headers.get("Set-Cookie")?.split(";")[0] as string;
+	const account = await createAccount(username);
+	const cookie = account.cookie;
 	const [row] = await db
 		.update(users)
 		.set({ emailVerified: true })

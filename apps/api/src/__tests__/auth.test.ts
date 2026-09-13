@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { users, verificationTokens } from "@anthers/db/schema";
+import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { createEmailVerificationToken } from "../services/auth";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -35,67 +37,30 @@ describe("Auth System", () => {
 	const email = `authtest_${testId}@example.com`;
 	const password = "securepass123";
 
-	// ── Sign Up ──────────────────────────────────────────────────────────────
+	// ── Accounts are made by the ceremony, never by a password form ─────────────
 
 	describe("sign-up", () => {
-		it("creates user with valid input", async () => {
+		it("has no password sign-up route", async () => {
+			// Signing up is the emailed-code ceremony (`/signup/*`). A route that made an account
+			// and a session from a password skipped the code, so it is gone rather than hidden.
 			const res = await jsonPost("/api/auth/sign-up", {
-				username,
-				email,
+				username: `nosignup_${testId}`,
+				email: `nosignup_${testId}@example.com`,
 				password,
 				acceptTerms: true,
 			});
-			expect(res.status).toBe(201);
-			const data = await res.json();
-			expect(data.user.username).toBe(username);
-			expect(data.user.email).toBe(email);
-			expect(data.user.emailVerified).toBe(false);
-
-			sessionCookie = res.headers.get("Set-Cookie")!.split(";")[0];
+			expect(res.status).toBe(404);
+			const rows = await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.username, `nosignup_${testId}`));
+			expect(rows).toEqual([]);
 		});
 
-		it("rejects duplicate username", async () => {
-			const res = await jsonPost("/api/auth/sign-up", {
-				username,
-				email: `other_${testId}@example.com`,
-				password,
-				acceptTerms: true,
-			});
-			expect(res.status).toBe(409);
-			const data = await res.json();
-			expect(data.error).toContain("Username");
-		});
-
-		it("rejects duplicate email", async () => {
-			const res = await jsonPost("/api/auth/sign-up", {
-				username: `other_${testId}`,
-				email,
-				password,
-				acceptTerms: true,
-			});
-			expect(res.status).toBe(409);
-			const data = await res.json();
-			expect(data.error).toContain("Email");
-		});
-
-		it("validates username format", async () => {
-			const res = await jsonPost("/api/auth/sign-up", {
-				username: "bad user name!",
-				email: "valid@email.com",
-				password,
-				acceptTerms: true,
-			});
-			expect(res.status).toBe(400);
-		});
-
-		it("validates password length", async () => {
-			const res = await jsonPost("/api/auth/sign-up", {
-				username: "validname",
-				email: "valid@email.com",
-				password: "short",
-				acceptTerms: true,
-			});
-			expect(res.status).toBe(400);
+		it("gives the fixture account a session", async () => {
+			sessionCookie = (await createAccount(username, { email, password })).cookie;
+			const me = await makeRequest("/api/auth/me", { headers: { Cookie: sessionCookie } });
+			expect((await me.json()).user.emailVerified).toBe(false);
 		});
 	});
 
@@ -175,16 +140,10 @@ describe("Auth System", () => {
 				.where(eq(users.username, username))
 				.limit(1);
 
-			// Get the verification token from the database (created during sign-up)
-			const tokens = await db
-				.select()
-				.from(verificationTokens)
-				.where(eq(verificationTokens.userId, userRow.id));
+			// The token a verification email would carry, minted the way the resend route mints it.
+			const token = await createEmailVerificationToken(userRow.id);
 
-			const tokenRow = tokens.find((t) => t.type === "email_verify");
-			expect(tokenRow).toBeTruthy();
-
-			const res = await jsonPost("/api/auth/verify-email", { token: tokenRow!.token });
+			const res = await jsonPost("/api/auth/verify-email", { token });
 			expect(res.status).toBe(200);
 			const data = await res.json();
 			expect(data.success).toBe(true);
@@ -226,59 +185,12 @@ describe("Auth System", () => {
 	// ── Password Reset ───────────────────────────────────────────────────────
 
 	describe("password reset", () => {
-		const newPassword = "newSecurePass456";
-
-		it("request-password-reset always returns success (prevents enumeration)", async () => {
-			// Real email
-			const res1 = await jsonPost("/api/auth/request-password-reset", { email });
-			expect(res1.status).toBe(200);
-
-			// Fake email
-			const res2 = await jsonPost("/api/auth/request-password-reset", {
-				email: "fake@fake.com",
-			});
-			expect(res2.status).toBe(200);
-		});
-
-		it("resets password with valid token", async () => {
-			// Get the reset token from DB
-			const [tokenRow] = await db
-				.select()
-				.from(verificationTokens)
-				.where(eq(verificationTokens.type, "password_reset"))
-				.limit(1);
-
-			expect(tokenRow).toBeTruthy();
-
-			const res = await jsonPost("/api/auth/reset-password", {
-				token: tokenRow.token,
-				password: newPassword,
-			});
-			expect(res.status).toBe(200);
-
-			// Old session should be invalidated
-			const meRes = await makeRequest("/api/auth/me", {
-				headers: { Cookie: sessionCookie },
-			});
-			const meData = await meRes.json();
-			expect(meData.user).toBeNull();
-		});
-
-		it("can sign in with new password", async () => {
-			const res = await jsonPost("/api/auth/sign-in", {
-				login: username,
-				password: newPassword,
-			});
-			expect(res.status).toBe(200);
-			sessionCookie = res.headers.get("Set-Cookie")!.split(";")[0];
-		});
-
-		it("rejects invalid reset token", async () => {
-			const res = await jsonPost("/api/auth/reset-password", {
-				token: "invalidtoken",
-				password: "newpass123",
-			});
-			expect(res.status).toBe(400);
+		it("has no reset routes, because a forgotten password is recovered by signing in with a code", async () => {
+			expect((await jsonPost("/api/auth/request-password-reset", { email })).status).toBe(404);
+			expect(
+				(await jsonPost("/api/auth/reset-password", { token: "anything", password: "newpass123" }))
+					.status,
+			).toBe(404);
 		});
 	});
 
@@ -287,7 +199,7 @@ describe("Auth System", () => {
 	describe("change password", () => {
 		it("requires authentication", async () => {
 			const res = await jsonPost("/api/auth/change-password", {
-				currentPassword: "newSecurePass456",
+				currentPassword: password,
 				newPassword: "anotherpass789",
 			});
 			expect(res.status).toBe(401);
@@ -318,7 +230,7 @@ describe("Auth System", () => {
 					Cookie: sessionCookie,
 				},
 				body: JSON.stringify({
-					currentPassword: "newSecurePass456",
+					currentPassword: password,
 					newPassword: "finalpass000",
 				}),
 			});

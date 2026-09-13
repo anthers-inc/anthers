@@ -34,6 +34,7 @@ import {
 import { scanInlineUpload, scanStoredImage } from "../services/safety-scan.js";
 import { QUARANTINE_PREFIX, scannedObjectKind } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { artworkBytes, stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -54,18 +55,7 @@ function req(path: string, options?: RequestInit) {
 }
 
 async function signUp(username: string): Promise<string> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 /** A real object on disk at a chrome key, so a move that moves nothing cannot pass. */

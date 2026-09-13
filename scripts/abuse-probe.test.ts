@@ -98,8 +98,17 @@ describe("one report per run", () => {
 		// two reports, because `path` is one value rather than two booleans — two alerts prove
 		// nothing the first did not, and each extra one teaches whoever reads that mailbox to
 		// skim it.
-		const result = plan([...ATTENDED.argv, "--path", "in-app"]);
+		const result = plan([...ATTENDED.argv, "--path", "in-app", "--admin-login", "op"]);
+		expect(isRefusal(result)).toBe(false);
 		if (!isRefusal(result)) expect(result.path).toBe("in-app");
+	});
+
+	it("refuses the in-app path without an operator to file it from", () => {
+		// There is no probe account to mint any more, so the report comes from the operator's
+		// own session; without one the run could only fail halfway, after asking for nothing.
+		const result = plan([...ATTENDED.argv, "--path", "in-app"]);
+		expect(isRefusal(result)).toBe(true);
+		if (isRefusal(result)) expect(result.refuse).toContain("--admin-login");
 	});
 
 	it("refuses a path it does not recognize rather than falling back to one", () => {

@@ -174,24 +174,6 @@ function greet(username: string | null): string {
 	return username ? `, ${escapeHtml(username)}` : "";
 }
 
-/** Welcome + email verification, sent on sign-up. Logs the link when send is skipped (dev). */
-export async function sendWelcomeEmail(
-	to: string,
-	username: string | null,
-	token: string,
-): Promise<void> {
-	const url = verifyEmailUrl(token);
-	const html = shell(
-		`Welcome to Anthers${greet(username)} 🌱`,
-		verifyBody(
-			"We're glad you're here. Confirm your email address to unlock purchases, funding, and creator mode.",
-			url,
-		),
-	);
-	const sent = await sendEmail({ to, subject: "Welcome to Anthers — verify your email", html });
-	if (!sent) console.info(`[email] verify link for ${to}: ${url}`);
-}
-
 /**
  * The signup ceremony's code, to an address with no account yet.
  *

@@ -6,7 +6,6 @@ import { allHeldSubjectIds } from "./legal-hold.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
-const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 /** How stale `sessions.last_used_at` may get before a request refreshes it. */
 const LAST_USED_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 /** Enrollment window — long enough to read the authorize page, short enough to matter. */
@@ -82,11 +81,6 @@ export async function validateSession(token: string) {
 /** Delete a session (sign out) */
 export async function deleteSession(token: string): Promise<void> {
 	await db.delete(sessions).where(eq(sessions.token, token));
-}
-
-/** Delete all sessions for a user (e.g. after password change) */
-export async function deleteAllUserSessions(userId: number): Promise<void> {
-	await db.delete(sessions).where(eq(sessions.userId, userId));
 }
 
 /**
@@ -321,64 +315,6 @@ export async function verifyEmailToken(token: string): Promise<number | null> {
 	await db.delete(verificationTokens).where(eq(verificationTokens.id, result.id));
 
 	return result.userId;
-}
-
-// ─── Password Reset ──────────────────────────────────────────────────────────
-
-/** Create a password reset token. Returns the token string. */
-export async function createPasswordResetToken(userId: number): Promise<string> {
-	// Delete any existing password reset tokens for this user
-	await db
-		.delete(verificationTokens)
-		.where(
-			and(eq(verificationTokens.userId, userId), eq(verificationTokens.type, "password_reset")),
-		);
-
-	const token = generateToken();
-	await db.insert(verificationTokens).values({
-		userId,
-		token,
-		type: "password_reset",
-		expiresAt: new Date(Date.now() + PASSWORD_RESET_EXPIRY_MS),
-	});
-
-	return token;
-}
-
-/** Validate a password reset token. Returns the userId if valid, null otherwise. */
-export async function validatePasswordResetToken(token: string): Promise<number | null> {
-	const [result] = await db
-		.select()
-		.from(verificationTokens)
-		.where(
-			and(
-				eq(verificationTokens.token, token),
-				eq(verificationTokens.type, "password_reset"),
-				gt(verificationTokens.expiresAt, new Date()),
-			),
-		)
-		.limit(1);
-
-	return result?.userId ?? null;
-}
-
-/** Reset password using a valid token. Invalidates all sessions. */
-export async function resetPassword(token: string, newPassword: string): Promise<boolean> {
-	const userId = await validatePasswordResetToken(token);
-	if (!userId) return false;
-
-	const passwordHash = await hashPassword(newPassword);
-	await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
-
-	// Delete the used token
-	await db
-		.delete(verificationTokens)
-		.where(and(eq(verificationTokens.token, token), eq(verificationTokens.type, "password_reset")));
-
-	// Invalidate all existing sessions for security
-	await deleteAllUserSessions(userId);
-
-	return true;
 }
 
 /**

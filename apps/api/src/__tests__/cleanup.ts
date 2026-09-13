@@ -173,7 +173,7 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
  *
  * Call it once at the top level of a test file. It takes the highest `users.id` before the
  * suite runs and purges everything above that line afterward, so it does not care whether the
- * accounts arrived through `POST /auth/sign-up`, a direct `db.insert(users)`, or a helper three
+ * accounts arrived through `createAccount`, a direct `db.insert(users)`, or a helper three
  * files away — which is the whole point, because the 42 suites this was written for used all
  * three and no two of them named their fixtures alike.
  *

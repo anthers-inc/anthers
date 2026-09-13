@@ -22,6 +22,7 @@ import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
 import { hideSubject, restoreSubject } from "../services/moderation.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 
@@ -53,19 +54,9 @@ function call(method: string, path: string, cookie: string, body?: unknown) {
 }
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
+	const account = await createAccount(username);
 	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
-	return { cookie: res.headers.get("Set-Cookie")!.split(";")[0], id: row.id };
+	return { cookie: account.cookie, id: row.id };
 }
 
 /** What reached one queue since the last reset. */

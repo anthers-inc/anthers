@@ -44,6 +44,7 @@ import {
 	noticesReadyForFinality,
 	noticesReadyForRestore,
 } from "../services/dmca";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -179,18 +180,8 @@ let buyerCookie: string;
 let adminCookie: string;
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	const cookie = res.headers.get("Set-Cookie")?.split(";")[0] as string;
+	const account = await createAccount(username);
+	const cookie = account.cookie;
 	const [row] = await db
 		.update(users)
 		.set({ emailVerified: true })

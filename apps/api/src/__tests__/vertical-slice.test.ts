@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -37,29 +38,11 @@ describe("Vertical Slice", () => {
 		expect(data.status).toBe("ok");
 	});
 
-	it("sign-up creates a user and returns session cookie", async () => {
-		const res = await makeRequest("/api/auth/sign-up", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Origin: "http://localhost:3000",
-			},
-			body: JSON.stringify({
-				username: testUsername,
-				email: testEmail,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		});
-		expect(res.status).toBe(201);
-		const data = await res.json();
-		expect(data.user.username).toBe(testUsername);
-		expect(data.user.email).toBe(testEmail);
-
-		// Extract session cookie
-		const setCookieHeader = res.headers.get("Set-Cookie");
-		expect(setCookieHeader).toBeTruthy();
-		sessionCookie = setCookieHeader!.split(";")[0];
+	it("a fixture account gets a working session", async () => {
+		// Signing up is the emailed-code ceremony, which a test cannot read, so the account is
+		// written directly; what this slice checks is that the session it gets is a real one.
+		sessionCookie = (await createAccount(testUsername, { email: testEmail })).cookie;
+		expect(sessionCookie).toStartWith("session=");
 	});
 
 	it("get /me returns authenticated user with full profile", async () => {

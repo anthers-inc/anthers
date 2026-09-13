@@ -20,9 +20,9 @@
  * an account. The signup ceremony makes a
  * password *optional*, and an account with no password and no emailed sign-in would be
  * one nobody could ever return to — the option would be a trap door rather than a
- * choice. It is also not a new grant of power: `POST /auth/request-password-reset` has
- * always let whoever reads the mailbox take the account over, and this is the same
- * authority with a shorter fuse and an attempt cap.
+ * choice. It is also not a new grant of power: whoever reads an account's mailbox can
+ * already take it over through any emailed recovery, and this is that authority with a
+ * short fuse and an attempt cap.
  *
  * The hardening is all here rather than at the route, so that the rules are testable
  * without a browser and cannot be half-applied by a second caller:
@@ -193,9 +193,8 @@ export async function issueSignupCode(rawEmail: string, now = new Date()): Promi
  *     route answers `{success:true}` either way); without this the timing would answer the
  *     question the body refuses to. ⚠️ It is a *close* match, not a constant-time one —
  *     argon2id dominates both sides and the mail send is deliberately off the response path,
- *     but this is a mitigation rather than a proof. (`POST /auth/sign-in` and
- *     `/request-password-reset` both carry the same asymmetry, unmitigated; closing all
- *     three properly is its own piece of work.)
+ *     but this is a mitigation rather than a proof. (`POST /auth/sign-in` carries the
+ *     same asymmetry, unmitigated; closing both properly is its own piece of work.)
  */
 export async function issueSignInCode(rawEmail: string, now = new Date()): Promise<IssuedCode> {
 	const email = normalizeEmail(rawEmail);

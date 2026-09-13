@@ -13,37 +13,29 @@
  * `is_admin` inside a test would leave the flag set for every suite that follows.
  */
 import { db } from "@anthers/db/client";
-import { legalHolds, users } from "@anthers/db/schema";
+import { legalHolds, sessions, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { API_URL, expect, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
+import { expect, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 const RUN = Date.now().toString(36);
 const OPERATOR = `e2e_op_${RUN}`;
-const PASSWORD = "testpass123";
 
 let operatorId = 0;
+/** The operator's session, written beside the account because there is no sign-up to issue one. */
+const TOKEN = `e2e-op-${RUN}-${crypto.randomUUID()}`;
 
 test.beforeAll(async () => {
-	const res = await fetch(`${API_URL}/api/auth/sign-up`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({
-			username: OPERATOR,
-			email: `${OPERATOR}@example.com`,
-			password: PASSWORD,
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status, "operator sign-up failed").toBe(201);
-	// Admin is an out-of-band flag, never self-serve — so it is set the way it is set in
+	// Accounts are made by an emailed-code ceremony a browser test cannot read, so the operator
+	// and a live session for it are written directly. Admin is set the same way it is set in
 	// production, by a write nobody can reach through the app.
-	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${OPERATOR}`);
 	const [row] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.username, OPERATOR))
-		.limit(1);
+		.insert(users)
+		.values({ username: OPERATOR, email: `${OPERATOR}@example.com`, isAdmin: true })
+		.returning({ id: users.id });
 	operatorId = row.id;
+	await db
+		.insert(sessions)
+		.values({ token: TOKEN, userId: operatorId, expiresAt: new Date(Date.now() + 3_600_000) });
 });
 
 test.afterAll(async () => {
@@ -57,18 +49,10 @@ test("an operator can place a hold and lift it, and the lifted one stays on the 
 }) => {
 	const errors = trackErrorsStrict(page);
 
-	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ login: OPERATOR, password: PASSWORD }),
-	});
-	expect(res.ok, `operator sign-in failed: ${res.status}`).toBe(true);
-	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
-	expect(token, "no session cookie returned").toBeTruthy();
 	await context.addCookies([
 		{
 			name: "session",
-			value: token as string,
+			value: TOKEN,
 			domain: "localhost",
 			path: "/",
 			expires: Math.floor(Date.now() / 1000) + 3600,

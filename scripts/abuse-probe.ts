@@ -44,8 +44,8 @@
  * left to a person.
  *
  * ⭐ **It drives HTTP and nothing else.** No `DATABASE_URL`, no direct writes, no fixture
- * tables — the account, the Work and the comment are all created the way a real creator
- * would, so running it against production is an ordinary use of the product rather than an
+ * tables — the Work and the comment are created the way a real creator would, from the
+ * operator's own session, so running it against production is an ordinary use of the product rather than an
  * exception to the rule that fixture scripts never touch it. That also means it exercises
  * the real path: CSRF, sessions, validation, and the ingress in front of all of it.
  *
@@ -59,8 +59,9 @@
  *   bun run scripts/abuse-probe.ts --base https://anthers.org --admin-login you@example.com
  *
  *   --path      which single report to file: `public` (the no-account form, the default) or
- *               `in-app` (the authenticated route, which creates a Work and a comment to
- *               report and removes them afterwards).
+ *               `in-app` (the authenticated route, which needs --admin-login and creates a
+ *               private Work and a comment from that account to report, removing them
+ *               afterwards).
  *   --wait      seconds to wait for the retry sweep before giving up (default 360; the
  *               cron runs every five minutes, so anything under 300 can report a false
  *               "never escalated").
@@ -152,11 +153,23 @@ export function probePlan(
 		return { refuse: `Unknown --path "${rawPath}". It is either "public" or "in-app".` };
 	}
 
+	// The in-app report is filed from a signed-in account, and the only account the probe can
+	// sign in is the operator's: accounts are made by an emailed-code ceremony nobody can
+	// script, so there is no probe account to mint.
+	const adminLogin = get("admin-login") ?? get("admin-email");
+	if (rawPath === "in-app" && !adminLogin) {
+		return {
+			refuse:
+				"--path in-app needs --admin-login. The report is filed from your own signed-in account, " +
+				"because the probe cannot create one of its own.",
+		};
+	}
+
 	return {
 		base: (get("base") ?? "http://localhost:8000").replace(/\/+$/, ""),
 		path: rawPath,
 		// `--admin-email` stays accepted because it is the obvious thing to type.
-		adminLogin: get("admin-login") ?? get("admin-email"),
+		adminLogin,
 		waitSeconds: Number(get("wait") ?? 360),
 	};
 }
@@ -272,40 +285,18 @@ async function signInAdmin(login: string, password: string): Promise<string | nu
 }
 
 /**
- * A creator account, a Work, and a comment on it — the minimum an in-app report needs.
+ * A private Work and a comment on it, made by the operator — the minimum an in-app report needs.
  *
- * The comment is reported by the same account that wrote it, which the moderation service
- * allows on purpose for content: a report is currently the only way an author can ask for
- * their own words to come down. That keeps this to one new account rather than two.
+ * Made from the operator's own session, because no other account can be signed in from here:
+ * accounts come from an emailed-code ceremony. The comment is reported by the same account that
+ * wrote it, which the moderation service allows on purpose for content, so nothing else is
+ * needed. The Work stays private, so nobody else ever sees the fixture.
  */
-async function createFixture(): Promise<{
+async function createFixture(cookie: string): Promise<{
 	cookie: string;
-	username: string;
 	workId: number;
 	commentId: number;
 } | null> {
-	const username = `probe_${RUN}`.slice(0, 30);
-	const signUp = await call("/api/auth/sign-up", {
-		method: "POST",
-		body: JSON.stringify({
-			username,
-			email: `${username}@anthers.org`,
-			password: `Probe-${RUN}-pw`,
-			acceptTerms: true,
-		}),
-	});
-	if (signUp.status !== 201) {
-		log(
-			`  ! could not create the probe account (${signUp.status}): ${JSON.stringify(signUp.body)}`,
-		);
-		return null;
-	}
-	const cookie = sessionCookie(signUp.setCookie);
-	if (!cookie) {
-		log("  ! sign-up returned no session cookie");
-		return null;
-	}
-
 	const work = await call("/api/content/works", {
 		method: "POST",
 		cookie,
@@ -331,8 +322,8 @@ async function createFixture(): Promise<{
 		return null;
 	}
 
-	log(`  · fixture: @${username}, Work ${workId}, comment ${comment.body.comment.id}`);
-	return { cookie, username, workId, commentId: comment.body.comment.id as number };
+	log(`  · fixture: Work ${workId}, comment ${comment.body.comment.id}`);
+	return { cookie, workId, commentId: comment.body.comment.id as number };
 }
 
 interface Probe {
@@ -417,7 +408,10 @@ async function main() {
 	// ── The in-app, authenticated report ─────────────────────────────────────
 	if (args.path === "in-app") {
 		log("\nCreating the fixture content…");
-		fixture = await createFixture();
+		// `probePlan` refuses in-app without an admin login, so a missing session here is a
+		// sign-in that failed rather than one nobody asked for.
+		fixture = adminCookie ? await createFixture(adminCookie) : null;
+		if (!adminCookie) log("  ! the admin sign-in failed, so there is no account to report from");
 		state.fixture = fixture;
 		if (fixture) {
 			log("Filing the in-app report…");
@@ -560,8 +554,7 @@ async function readEscalated(
  * an operator would reach for a report that turned out to need nothing. The Work and its
  * comment do go, because those are fixture content rather than a record of anything.
  *
- * The probe account is left in place: deletion is scheduled rather than immediate here,
- * and an account with no content is a smaller footprint than a half-run deletion.
+ * No account is created, so none is left behind.
  */
 async function cleanup(
 	adminCookie: string | null,
@@ -582,7 +575,6 @@ async function cleanup(
 				? `  · removed Work ${fixture.workId} and its comment`
 				: `  ! could not remove Work ${fixture.workId} (${del.status})`,
 		);
-		log(`  · left the probe account @${fixture.username} in place`);
 	}
 	if (!adminCookie) {
 		log("  ! no admin session — the reports were left open");

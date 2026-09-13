@@ -30,13 +30,13 @@ const HERE = import.meta.dir;
 /**
  * How a suite makes an account, in all three spellings that exist here.
  *
- * `POST /auth/sign-up` is the common one; a direct `db.insert(users)` shows up as a `username:`
- * field in an object literal; and several suites reach for a local helper that does one or the
- * other. Matching the *field* rather than the call is what catches the third case — it was
- * `distribute-pool.test.ts`, the single biggest leak at 38 accounts a run, and a scan looking
- * only for `sign-up` and `createUser` missed it completely.
+ * `createAccount` from `account-fixture.ts` is the common one; a direct `db.insert(users)` shows up
+ * as a `username:` field in an object literal; and several suites reach for a local helper that
+ * does one or the other. Matching the *field* rather than only the call is what catches the third
+ * case — it was `distribute-pool.test.ts`, the single biggest leak at 38 accounts a run, and a
+ * scan looking only for named helpers missed it completely.
  */
-const CREATES_ACCOUNTS = /username:|sign-up/;
+const CREATES_ACCOUNTS = /username:|createAccount\(/;
 
 /** Either form of taking them back: the registrar, or an explicit named purge. */
 const CLEANS_UP = /purgeAccountsCreatedHere|purgeFixtureAccounts|purgeAccountIds/;

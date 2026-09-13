@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -40,18 +41,7 @@ let cookie: string;
 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username = ${username}`);
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	cookie = res.headers.get("Set-Cookie")?.split(";")[0] ?? "";
+	cookie = (await createAccount(username)).cookie;
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {

@@ -28,6 +28,7 @@ import { moderationActions, moderationReports, users } from "@anthers/db/schema"
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUE_LIMIT } from "../services/moderation.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -52,18 +53,7 @@ function post(path: string, cookie: string, body: unknown) {
 }
 
 async function signUp(username: string): Promise<string> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 interface QueueItem {

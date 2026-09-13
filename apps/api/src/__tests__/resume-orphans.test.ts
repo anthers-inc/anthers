@@ -39,6 +39,7 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES } from "../jobs/queue";
 import { resumeOrphanedTranscodes, type SendJob } from "../jobs/resume-orphans";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -57,18 +58,7 @@ const ownerName = `ro_${id}`;
 let owner: string;
 
 async function signUp(username: string): Promise<string> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 /**

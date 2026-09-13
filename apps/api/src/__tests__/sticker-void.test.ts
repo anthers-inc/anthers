@@ -17,36 +17,21 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, poolDistributions, stickers, users } from "@anthers/db/schema";
+import { accounts, poolDistributions, stickers } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "../services/sticker-void";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
-const ORIGIN = "http://localhost:3000";
 const RUN = crypto.randomUUID().slice(0, 8);
 const CYCLE = "2032-04-01";
 
 async function signUp(username: string) {
-	const { default: app } = await import("../index");
-	const res = await app.fetch(
-		new Request("http://localhost/api/auth/sign-up", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				username,
-				email: `${username}@example.com`,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		}),
-	);
-	expect(res.status).toBe(201);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
-	return row.id as number;
+	return (await createAccount(username)).userId;
 }
 
 describe("reverting a Sticker when Anthers removes what it sits on", () => {

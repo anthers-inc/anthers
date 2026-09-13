@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -55,18 +56,7 @@ describe("project browse filters", () => {
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
 
-		const signUp = await req("/api/auth/sign-up", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				username: creatorName,
-				email: `${creatorName}@example.com`,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		});
-		expect(signUp.status).toBe(201);
-		cookie = signUp.headers.get("Set-Cookie")!.split(";")[0];
+		cookie = (await createAccount(creatorName)).cookie;
 		await enablePayouts(creatorName);
 
 		const auth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie };
@@ -229,18 +219,7 @@ describe("project browse filters", () => {
 	});
 
 	it("hides gated Works a signed-in viewer cannot open, unless show_locked says otherwise", async () => {
-		const viewer = await req("/api/auth/sign-up", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				username: viewerName,
-				email: `${viewerName}@example.com`,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		});
-		expect(viewer.status).toBe(201);
-		const cookie = viewer.headers.get("Set-Cookie")!.split(";")[0];
+		const cookie = (await createAccount(viewerName)).cookie;
 
 		const asViewer = async (query: string) => {
 			const res = await req(`/api/content/projects?${query}`, { headers: { Cookie: cookie } });

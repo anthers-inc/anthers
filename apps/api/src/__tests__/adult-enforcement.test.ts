@@ -38,6 +38,7 @@ import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../services/access";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -74,18 +75,8 @@ let grownId: number;
 const madeWorkIds: number[] = [];
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	const cookie = res.headers.get("Set-Cookie")!.split(";")[0];
+	const account = await createAccount(username);
+	const cookie = account.cookie;
 	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
 	return { cookie, id: row!.id };
 }

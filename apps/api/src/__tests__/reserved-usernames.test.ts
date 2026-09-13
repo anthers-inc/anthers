@@ -3,6 +3,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import app from "../index";
 import { isReservedUsername } from "../reserved-usernames";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere, purgeFixtureAccounts } from "./cleanup";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -11,25 +12,25 @@ purgeAccountsCreatedHere();
 const testFetch = app.fetch;
 
 // csrfProtection turns away any mutation without an allowed Origin before the
-// route ever runs, so sign-up is only reachable from one — as it is from a real
+// route ever runs, so the claim is only reachable from one — as it is from a real
 // browser.
 const ORIGIN = "http://localhost:3000";
 
-/** Every account this suite mints, so `afterAll` can take them all back. */
+/** Every handle this suite claims, so `afterAll` can take the accounts back. */
 const created: string[] = [];
 
-function signUp(username: string) {
+/**
+ * Claim a handle as a fresh account that has none, through the route every signup door ends on.
+ * The fixture account is taken back by `purgeAccountsCreatedHere` whether or not the claim worked.
+ */
+async function claim(username: string) {
 	created.push(username);
+	const { cookie } = await createAccount(null);
 	return testFetch(
-		new Request("http://localhost/api/auth/sign-up", {
+		new Request("http://localhost/api/auth/onboarding/claim", {
 			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				acceptTerms: true,
-				username,
-				email: `${crypto.randomUUID().slice(0, 8)}@example.com`,
-				password: "securepass123",
-			}),
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ username, acceptTerms: true }),
 		}),
 	);
 }
@@ -121,26 +122,26 @@ describe("the official-account prefix", () => {
 	});
 });
 
-describe("POST /api/auth/sign-up — reserved usernames", () => {
+describe("POST /api/auth/onboarding/claim — reserved usernames", () => {
 	it("rejects a name that invites impersonation, with a readable message", async () => {
-		const res = await signUp("admin");
+		const res = await claim("admin");
 		expect(res.status).toBe(400);
 		expect(await res.json()).toEqual({ error: "That username is reserved" });
 	});
 
 	it("rejects a reserved name regardless of case", async () => {
-		expect((await signUp("Admin")).status).toBe(400);
+		expect((await claim("Admin")).status).toBe(400);
 	});
 
 	it("🚨 accepts a name that is also a page, which the route prefix is what makes safe", async () => {
 		// End to end rather than only against `isReservedUsername`: this is the behavior the
 		// whole change exists to produce, and a schema-level `refine` could refuse it while
 		// the helper says otherwise.
-		expect((await signUp("about")).status).toBe(201);
+		expect((await claim("about")).status).toBe(200);
 	});
 
 	it("still accepts an ordinary username", async () => {
-		const res = await signUp(`reserved_test_${crypto.randomUUID().slice(0, 8)}`);
-		expect(res.status).toBe(201);
+		const res = await claim(`reserved_test_${crypto.randomUUID().slice(0, 8)}`);
+		expect(res.status).toBe(200);
 	});
 });

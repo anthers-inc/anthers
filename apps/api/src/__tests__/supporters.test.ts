@@ -16,6 +16,7 @@ import { db } from "@anthers/db/client";
 import { accountCycles, accounts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -28,18 +29,7 @@ const req = (path: string, options?: RequestInit) =>
 const RUN = crypto.randomUUID().slice(0, 8);
 
 async function signUp(username: string) {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 async function idOf(username: string): Promise<number> {

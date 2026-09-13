@@ -33,6 +33,7 @@ import {
 	scanReleaseGate,
 	worksOwedScans,
 } from "../services/safety-scan.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -55,19 +56,8 @@ const creatorName = `scangate_${id}`;
 const KEY = (name: string) => `media/scangate-${id}-${name}.png`;
 
 async function signUp(username: string): Promise<{ cookie: string; userId: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	const body = await res.json();
-	return { cookie: res.headers.get("Set-Cookie")!.split(";")[0], userId: body.user.id };
+	const account = await createAccount(username);
+	return { cookie: account.cookie, userId: account.userId };
 }
 
 /** Record an answer for a key without going near a vendor. */

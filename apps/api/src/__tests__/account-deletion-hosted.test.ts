@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { hostedAccounts, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
-import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -56,27 +56,12 @@ function restore(key: string, value: string | undefined) {
 const { eraseAccount, deletionPreview } = await import("../services/account-deletion.js");
 const { seal } = await import("../services/secret-box.js");
 
-const ORIGIN = "http://localhost:3000";
 const suffix = crypto.randomUUID().slice(0, 8);
 const unreachableName = `hd_defer_${suffix}`;
 const strandedName = `hd_strand_${suffix}`;
 
 async function signUp(username: string): Promise<number> {
-	const res = await app.fetch(
-		new Request("http://localhost/api/auth/sign-up", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				username,
-				email: `${username}@example.com`,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		}),
-	);
-	expect(res.status).toBe(201);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
-	return row.id;
+	return (await createAccount(username)).userId;
 }
 
 let deferId: number;
