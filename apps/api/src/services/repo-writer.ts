@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Choosing which repository writer a creator's listings go through.
+ * Choosing which repository writer an account's records go through.
  *
  * There are two, because there are two ways Anthers can come to hold the right to write into
  * somebody's repository. It can host the identity, in which case it issued the credential
@@ -23,12 +23,12 @@ import type { RepoWriter } from "./atproto-repo.js";
 import { hostedWriterFor, type NoWriterReason } from "./hosted-repo-writer.js";
 import { type NoOauthWriterReason, oauthWriterFor } from "./oauth-repo-writer.js";
 
-/** Why a creator's listings cannot be written right now, from either route. */
-export type NoCreatorWriterReason = Exclude<NoWriterReason, "not_hosted"> | NoOauthWriterReason;
+/** Why an account's records cannot be written right now, from either route. */
+export type NoAccountWriterReason = Exclude<NoWriterReason, "not_hosted"> | NoOauthWriterReason;
 
-export type CreatorWriterResult =
+export type AccountWriterResult =
 	| { writer: RepoWriter }
-	| { writer: null; reason: NoCreatorWriterReason };
+	| { writer: null; reason: NoAccountWriterReason };
 
 /**
  * Whether a missing writer is the ordinary state of affairs rather than something wrong.
@@ -37,24 +37,32 @@ export type CreatorWriterResult =
  * these reasons describe the majority of accounts, and a sweep that reported them would train
  * whoever reads its output to skim — at which point the two that matter go past unread as well.
  */
-export function isOrdinary(reason: NoCreatorWriterReason): boolean {
+export function isOrdinary(reason: NoAccountWriterReason): boolean {
 	return reason === "no_identity" || reason === "not_granted";
 }
 
 /**
- * Open a writer onto the repository this creator's listings belong in, whichever it is.
+ * Open a writer onto the repository this account's records belong in, whichever it is.
+ *
+ * An account rather than a creator, because a reader's comments, reviews, votes and follows go
+ * into the reader's own repository exactly as a creator's listings go into theirs.
+ *
+ * 🚨 **`collections` is required and names everything the caller is about to write.** A hosted
+ * identity can write any of them, but a permission granted over an identity held elsewhere is
+ * per collection — so a writer opened without saying what it is for would be judged against the
+ * wrong grant. See `oauthWriterFor`.
  *
  * ⚠️ **A hosted account never reaches the OAuth route**, and the two can never disagree about
  * which repository is meant: an account holds at most one `atproto_did`, so a hosted identity
  * and a linked one are the same identity when both are present.
  */
-export async function writerForCreator(
+export async function writerForAccount(
 	userId: number,
-	opts: { fetchImpl?: typeof fetch } = {},
-): Promise<CreatorWriterResult> {
-	const hosted = await hostedWriterFor(userId, opts);
+	opts: { collections: readonly string[]; fetchImpl?: typeof fetch },
+): Promise<AccountWriterResult> {
+	const hosted = await hostedWriterFor(userId, { fetchImpl: opts.fetchImpl });
 	if (hosted.writer) return hosted;
 	if (hosted.reason !== "not_hosted") return { writer: null, reason: hosted.reason };
 
-	return oauthWriterFor(userId);
+	return oauthWriterFor(userId, opts.collections);
 }

@@ -38,14 +38,14 @@ import {
 	syncRecord,
 } from "./atproto-record-plan.js";
 import { RepoAuthError, type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
-import { type NoCreatorWriterReason, writerForCreator } from "./repo-writer.js";
+import { type NoAccountWriterReason, writerForAccount } from "./repo-writer.js";
 
 /** What syncing one creator record did. */
 export type CreatorRecordSyncResult<R> =
 	/** The record was created, replaced, deleted, or correctly left alone. */
 	| { status: "synced"; plan: RecordPlan<R, UnpublishableCreatorReason>; uri: string | null }
 	/** No record is possible or needed, for a reason that is nobody's fault. */
-	| { status: "skipped"; reason: NoCreatorWriterReason | "no_row" | "no_creator" }
+	| { status: "skipped"; reason: NoAccountWriterReason | "no_row" | "no_creator" }
 	/** Something worth retrying went wrong. The job wrapper decides what to do about it. */
 	| { status: "failed"; error: string };
 
@@ -75,7 +75,10 @@ export async function syncPostRecord(
 	if (!post) return { status: "skipped", reason: "no_row" };
 	if (post.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
-	const writer = await writerForCreator(post.creatorId, opts);
+	const writer = await writerForAccount(post.creatorId, {
+		collections: [POST_COLLECTION],
+		fetchImpl: opts.fetchImpl,
+	});
 	if (!writer.writer) return { status: "skipped", reason: writer.reason };
 
 	try {
@@ -85,7 +88,7 @@ export async function syncPostRecord(
 		}
 		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
 	} catch (error) {
-		return { status: "failed", error: describe(error) };
+		return failure(error);
 	}
 }
 
@@ -109,7 +112,10 @@ export async function syncProjectRecord(
 	if (!project) return { status: "skipped", reason: "no_row" };
 	if (project.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
-	const writer = await writerForCreator(project.creatorId, opts);
+	const writer = await writerForAccount(project.creatorId, {
+		collections: [PROJECT_COLLECTION],
+		fetchImpl: opts.fetchImpl,
+	});
 	if (!writer.writer) return { status: "skipped", reason: writer.reason };
 
 	try {
@@ -119,12 +125,17 @@ export async function syncProjectRecord(
 		}
 		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
 	} catch (error) {
-		return { status: "failed", error: describe(error) };
+		return failure(error);
 	}
 }
 
 /** Which of a creator's two record types a sync is for. */
 export type CreatorRecordKind = "post" | "project";
+
+/** The collection a creator record of this kind lives in. */
+export function creatorRecordCollection(kind: CreatorRecordKind): string {
+	return kind === "post" ? POST_COLLECTION : PROJECT_COLLECTION;
+}
 
 /** A record Anthers has written and still knows the address of. */
 export interface PublishedCreatorRecord {
@@ -170,7 +181,7 @@ export async function removePublishedCreatorRecord(
 	writer: RepoWriter,
 	record: PublishedCreatorRecord,
 ): Promise<boolean> {
-	const collection = record.kind === "post" ? POST_COLLECTION : PROJECT_COLLECTION;
+	const collection = creatorRecordCollection(record.kind);
 	const rkey = rkeyFromAtUri(record.uri, collection);
 	// An unreadable URI counts as still-up rather than as nothing to do: something is on the
 	// network that this column was meant to be able to find.
@@ -223,14 +234,28 @@ export async function queueCreatorRecordSync(kind: CreatorRecordKind, id: number
 }
 
 /**
- * Turn a thrown thing into something a job log can carry.
+ * What a thrown sync amounts to.
  *
- * 🚨 **A withdrawn permission is named rather than blurred into "it failed".** Every other way
- * a write can go wrong is answered by trying again; this one is answered by asking the creator
- * again, and a retry loop against a revoked grant achieves nothing except hiding the
- * revocation from the person who could fix it.
+ * 🚨 **A refused credential is a skip, never a failure, because a failure is retried.** Every
+ * other way a write can go wrong is answered by trying again; this one is answered by asking the
+ * creator again, and eight retries against a revoked grant achieve nothing except hiding the
+ * revocation from the person who could fix it. The stored URI is left alone either way — a
+ * record already out there is still one Anthers must be able to find after a re-grant.
+ *
+ * ⚠️ **The grant column is deliberately NOT cleared here**, unlike `syncWorkListing`. A grant is
+ * per collection, so a refusal writing a post says nothing about whether the same creator's Work
+ * listings still may be written; the next writer to open reads the token itself and records
+ * what it actually covers.
  */
+function failure(error: unknown): CreatorRecordSyncResult<never> {
+	if (error instanceof RepoAuthError) {
+		console.warn(`[creator-record] the grant for ${error.did} was refused — ${error.message}`);
+		return { status: "skipped", reason: "grant_lost" };
+	}
+	return { status: "failed", error: describe(error) };
+}
+
+/** Turn a thrown thing into something a job log can carry. */
 function describe(error: unknown): string {
-	if (error instanceof RepoAuthError) return `permission withdrawn for ${error.did}`;
 	return error instanceof Error ? error.message : String(error);
 }

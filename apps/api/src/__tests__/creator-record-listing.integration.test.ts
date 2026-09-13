@@ -30,6 +30,7 @@ import { eq, like } from "drizzle-orm";
 import { POST_COLLECTION, PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
 import { removeAtprotoRecord } from "../services/atproto-record-removal.js";
 import { syncPostRecord, syncProjectRecord } from "../services/creator-record-listing.js";
+import { setPublishedLexiconsForTesting } from "../services/published-lexicons.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 const SERVICE = process.env.ATPROTO_TEST_PDS;
@@ -52,6 +53,10 @@ function restore(key: string, value: string | undefined) {
 beforeAll(() => {
 	if (!SERVICE) return;
 	process.env.HOSTED_PDS_URL = SERVICE;
+	// ⚠️ Neither schema is published, so the gate would rightly write nothing. A throwaway server
+	// is the one place a draft schema's records may land, and opening the gate here is what lets
+	// this suite exercise the rest of the production path.
+	setPublishedLexiconsForTesting(["org.anthers.work", "org.anthers.post", "org.anthers.project"]);
 	process.env.HOSTED_ACCOUNT_KEY = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
 		"hex",
 	);
@@ -59,6 +64,7 @@ beforeAll(() => {
 
 afterAll(async () => {
 	restore("HOSTED_PDS_URL", before.url);
+	setPublishedLexiconsForTesting(undefined);
 	restore("HOSTED_ACCOUNT_KEY", before.key);
 	await db.delete(posts).where(like(posts.slug, `${RUN}%`));
 	await db.delete(projects).where(like(projects.slug, `${RUN}%`));
