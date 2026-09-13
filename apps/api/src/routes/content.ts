@@ -215,10 +215,10 @@ function tooManyVotesFrom(userId: number): boolean {
 /**
  * Whether this viewer authored the thing being reacted to.
  *
- * ⭐ **Authorship, not the Work's creator.** A creator seeing the breakdown on *their own*
- * Work or post is what Parker asked for (2026-09-04: *"the creator should have full
+ * ⭐ **Authorship, not the post's creator.** A creator seeing the breakdown on *their own*
+ * post is what Parker asked for (2026-09-04: *"the creator should have full
  * visibility into exact like values and dislike values, not just the net"*). Extending it to
- * every comment under their Work would be showing them a dislike count on somebody else's
+ * every comment under their post would be showing them a dislike count on somebody else's
  * words, which is a different thing and was not asked for.
  *
  * 🚨 **This is the only gate on the raw counts.** Everything else in the vote path
@@ -239,18 +239,10 @@ async function ownsSubject(
 			.limit(1);
 		return row?.userId === viewerId;
 	}
-	if (subjectType === "post") {
-		const [row] = await db
-			.select({ creatorId: posts.creatorId })
-			.from(posts)
-			.where(eq(posts.id, subjectId))
-			.limit(1);
-		return row?.creatorId === viewerId;
-	}
 	const [row] = await db
-		.select({ creatorId: works.creatorId })
-		.from(works)
-		.where(eq(works.id, subjectId))
+		.select({ creatorId: posts.creatorId })
+		.from(posts)
+		.where(eq(posts.id, subjectId))
 		.limit(1);
 	return row?.creatorId === viewerId;
 }
@@ -264,24 +256,16 @@ async function votableExists(subjectType: VoteSubject, subjectId: number): Promi
 			.limit(1);
 		return Boolean(row);
 	}
-	if (subjectType === "post") {
-		const [row] = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(eq(posts.id, subjectId))
-			.limit(1);
-		return Boolean(row);
-	}
 	const [row] = await db
-		.select({ id: works.id })
-		.from(works)
-		.where(eq(works.id, subjectId))
+		.select({ id: posts.id })
+		.from(posts)
+		.where(eq(posts.id, subjectId))
 		.limit(1);
 	return Boolean(row);
 }
 
-/** What a vote may be attached to. Mirrors `comments`, plus comments themselves. */
-const VOTE_SUBJECTS = ["work", "post", "comment"] as const;
+/** What a vote may be attached to: a post, or a comment. A Work is reviewed, never voted on. */
+const VOTE_SUBJECTS = ["post", "comment"] as const;
 type VoteSubject = (typeof VOTE_SUBJECTS)[number];
 
 const NO_VOTES: VoteTally = { up: 0, down: 0 };
@@ -2404,12 +2388,13 @@ const contentRoutes = new Hono()
 		return c.body(null, 204);
 	})
 
-	// ── Comments (polymorphic: a Post or a Work) ───────────────────────────────
+	// ── Comments (on posts) ─────────────────────────────────────────────────────
 	//
-	// Both surfaces are the same three queries over `(subject_type, subject_id)`, so they
-	// share them. A Work needed its own thread because it can be released, consumed and
-	// paid for with no post in sight — under the old model there was nowhere to say
-	// anything about it.
+	// 🚨 **A Work takes no comments and no votes; a review is the only feedback it accepts**
+	// (Parker, 2026-09-13), so that Anthers has one coherent feedback model: posts and the
+	// comments on them are voted on, Works are reviewed. `comments.subject_type` still
+	// accepts `work` because rows written before that rule exist, and the readers that
+	// moderate or delete comments still handle them.
 
 	.get("/posts/:slug/comments", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
@@ -2440,45 +2425,11 @@ const contentRoutes = new Hono()
 		},
 	)
 
-	.get("/works/:id/comments", async (c) => {
-		const work = await findWorkRow(c.req.param("id"));
-		if (!work) return c.json({ error: "Work not found" }, 404);
-		return c.json({ comments: await listComments("work", work.id, await getOptionalUserId(c)) });
-	})
-
-	.post("/works/:id/comments", requireAuth, zValidator("json", createCommentSchema), async (c) => {
-		const user = c.get("user");
-		const work = await findWorkRow(c.req.param("id"));
-		if (!work) return c.json({ error: "Work not found" }, 404);
-
-		// Discussion follows access. Commenting on a Work you cannot open would be talking
-		// about something you have not seen, and it would leak the existence of a thread
-		// to people the gate is keeping out.
-		const access = await workAccessFor(c, work);
-		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
-
-		const { body } = c.req.valid("json");
-		const [comment] = await db
-			.insert(comments)
-			.values({ userId: user.id, subjectType: "work", subjectId: work.id, body })
-			.returning();
-
-		void queueRecordSync("comment", comment.id);
-
-		return c.json({ comment: { ...comment, username: user.username } }, 201);
-	})
-
-	// ── Votes (Works, posts and comments) ──────────────────────────────────
+	// ── Votes (posts and comments) ─────────────────────────────────────────
 	//
 	// One like or one dislike per person per thing. The published score is the net floored
 	// at zero and it is also the ranking key — see `@anthers/shared/votes` for why those
-	// have to be the same number.
-	//
-	// 🚨 **Access is deliberately NOT required.** A Sticker rides a like and may be given on
-	// any Work "gated or not, purchased or not", because it is a gift to the creator rather
-	// than payment for the Work — so requiring access to like would make the Sticker rule
-	// unbuildable. This differs from commenting, which does require access, and the reason
-	// is that a comment is a claim about content you have seen.
+	// have to be the same number. A Work is never voted on; it is reviewed.
 
 	/**
 	 * The vote state of one subject.

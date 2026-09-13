@@ -13,14 +13,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, users, votes } from "@anthers/db/schema";
+import { comments, posts, users, votes } from "@anthers/db/schema";
 import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { insertWork } from "./work-fixtures.js";
+import { insertWork, testPublicId } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -62,8 +62,9 @@ const voterNames = Array.from(
 describe("votes", () => {
 	let creatorCookie: string;
 	let voterCookies: string[];
-	let workId: number;
-	/** Three comments on one Work: one liked, one untouched, one to be buried. */
+	let postId: number;
+	let postSlug: string;
+	/** Three comments on one post: one liked, one untouched, one to be buried. */
 	let likedId: number;
 	let quietId: number;
 	let buriedId: number;
@@ -83,15 +84,27 @@ describe("votes", () => {
 			.select({ id: users.id })
 			.from(users)
 			.where(eq(users.username, creatorName));
-		workId = (await insertWork({ creatorId: creator.id, type: "text", title: `Votes ${id}` })).id;
+		// Written directly: a comment thread needs a post to hang off, not a published one, and
+		// publishing would drag payout setup into a suite about votes.
+		postSlug = `votes-${id}`;
+		const [madePost] = await db
+			.insert(posts)
+			.values({
+				creatorId: creator.id,
+				publicId: testPublicId(),
+				slug: postSlug,
+				title: `Votes ${id}`,
+			})
+			.returning({ id: posts.id });
+		postId = madePost.id;
 
 		const made = await db
 			.insert(comments)
 			.values(
 				["liked", "quiet", "buried"].map((body) => ({
 					userId: creator.id,
-					subjectType: "work" as const,
-					subjectId: workId,
+					subjectType: "post" as const,
+					subjectId: postId,
 					body,
 				})),
 			)
@@ -103,10 +116,12 @@ describe("votes", () => {
 
 	afterAll(async () => {
 		await db.delete(votes).where(inArray(votes.subjectId, [likedId, quietId, buriedId]));
+		await db.delete(comments).where(inArray(comments.id, [likedId, quietId, buriedId]));
+		await db.delete(posts).where(eq(posts.id, postId));
 	});
 
 	async function thread(cookie?: string) {
-		const res = await req(`/api/content/works/${workId}/comments`, {
+		const res = await req(`/api/content/posts/${postSlug}/comments`, {
 			headers: cookie ? { Cookie: cookie } : {},
 		});
 		expect(res.status).toBe(200);
@@ -241,5 +256,34 @@ describe("votes", () => {
 		const buried = (await thread()).find((c) => c.id === buriedId)!;
 		expect(buried.collapsed).toBe(false);
 		expect(buried.score).toBe(voterCookies.length);
+	});
+});
+
+describe("a Work is reviewed, never voted on or commented on", () => {
+	// A review is the only feedback a Work accepts (Parker, 2026-09-13). These are the doors
+	// that used to accept a vote or a comment on a Work, asserted closed so reopening one is
+	// a deliberate change here rather than a route quietly added back.
+	it("refuses a vote on a Work, and has no comment thread for one", async () => {
+		const cookie = await signUp(`votes_work_${id}`);
+		const [voter] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, `votes_work_${id}`));
+		const work = await insertWork({ creatorId: voter.id, type: "text", title: `No votes ${id}` });
+
+		const vote = await req("/api/content/votes", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ subjectType: "work", subjectId: work.id, direction: "up" }),
+		});
+		expect(vote.status).toBe(400);
+
+		expect((await req(`/api/content/works/${work.id}/comments`)).status).toBe(404);
+		const comment = await req(`/api/content/works/${work.id}/comments`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ body: "hello" }),
+		});
+		expect(comment.status).toBe(404);
 	});
 });

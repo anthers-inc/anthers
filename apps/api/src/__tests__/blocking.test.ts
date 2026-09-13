@@ -150,9 +150,6 @@ beforeAll(async () => {
 		expect((await post(`/api/content/posts/${postSlug}/comments`, cookie, { body })).status).toBe(
 			201,
 		);
-		expect((await post(`/api/content/works/${workId}/comments`, cookie, { body })).status).toBe(
-			201,
-		);
 		expect(
 			(await post(`/api/content/works/${workId}/reviews`, cookie, { verdict: "recommended", body }))
 				.status,
@@ -230,7 +227,6 @@ describe("blocking is symmetric", () => {
 
 		for (const path of [
 			`/api/content/posts/${postSlug}/comments`,
-			`/api/content/works/${workId}/comments`,
 			`/api/content/works/${workId}/reviews`,
 		]) {
 			expect(await authors(path, abe)).not.toContain(beeName);

@@ -27,7 +27,8 @@ import {
 } from "@heroicons/react/24/solid";
 import { useEffect, useState } from "react";
 
-export type VoteSubject = "work" | "post" | "comment";
+/** What can be voted on. A Work is reviewed, never voted on. */
+export type VoteSubject = "post" | "comment";
 
 /** A direction as the number it contributes to a net score. Null contributes nothing. */
 function weight(d: VoteDirection | null): number {
