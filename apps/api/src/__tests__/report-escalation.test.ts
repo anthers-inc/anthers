@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Floor-level reports reach a human out of band, rather than resting in a queue
  * nobody watches.

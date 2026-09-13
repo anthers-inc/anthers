@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The Public Access meter's policy. Pure, so the whole rule is exercised here without a
 // database — the DB half (`apps/api/src/services/public-access.ts`) only feeds it, and

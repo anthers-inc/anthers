@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Resource: "How our pay compares" — a dense, information-first head-to-head of
 // what reaches a creator on Anthers versus each platform they already know. One

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Quarantine — the one place material is taken out of reach of everybody, including
  * the people who paid for it.

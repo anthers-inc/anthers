@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The User Gauntlet spec pass — one viewer's whole arc with one creator, walked in order,
  * asserting every cell of the expected-access staircase after every transition.

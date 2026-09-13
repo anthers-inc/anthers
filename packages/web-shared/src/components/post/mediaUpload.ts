@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Image-upload helpers for the post form. Display images (thumbnails, image-element
  * images) go through the direct multipart endpoint, which returns both a storage

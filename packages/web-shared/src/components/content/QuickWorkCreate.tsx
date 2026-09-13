@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Make a Work without leaving the post or Project you are in the middle of — a type, a
  * file, a title, and nothing else.

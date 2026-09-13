@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The ATProto OAuth client, built on `@atproto/oauth-client` — the runtime-agnostic core
  * of the official SDK — with Bun-native crypto and Postgres-backed stores.

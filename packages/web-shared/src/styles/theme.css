@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: Apache-2.0 */
 /* Shared Anthers theme — the "Meadow" palette + base surface used by every app that
    renders the shared client layer (the consumer site and the Studio). Imported by each
    app's globals.css AFTER `@plugin "daisyui"` so these :root overrides win over the

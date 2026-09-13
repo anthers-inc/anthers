@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The Access section's table — the creator's own Badge ladder. It defaults to "free but
  * fully locked" (every row allow=false, price "0"). A price of $0 with Allow checked =

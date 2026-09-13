@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Everything Anthers holds about one person, assembled in one place — the engine
  * behind the **export** half of the Privacy Policy's rights section.

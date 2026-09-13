@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 // Side-effect import, and it must stay FIRST: it fills non-secret config from the
 // committed .do/app.yaml before any route module reads process.env. No-ops in
 // production, where that file is not in the image. See dev-spec-env.ts.

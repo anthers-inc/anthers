@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Low-level icon composition — turn a curated brand asset into standalone SVG
 // markup, a data URI, or a `<g>` fragment for splicing into a larger SVG. Kept

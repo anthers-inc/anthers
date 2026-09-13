@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Generate the attribution of record in `packages/brand/THIRD-PARTY.md`, and assert
  * that every icon this repository redistributes may actually be redistributed.

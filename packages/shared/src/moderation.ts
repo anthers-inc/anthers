@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Moderation vocabulary — the report taxonomy, the subject types, and the states
  * a moderated row can hold. Pure (no clock, no DOM, no I/O), like `attention.ts`

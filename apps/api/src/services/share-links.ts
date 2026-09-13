@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Share links — the single exception to "consuming a Work requires an account", and the
  * sole writer of `share_links`.

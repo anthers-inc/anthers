@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 import { useAuth } from "@anthers/web-shared/auth";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";

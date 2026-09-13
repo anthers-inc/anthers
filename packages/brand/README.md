@@ -95,4 +95,4 @@ The desktop app's packaging icons live in [anthers-desktop](https://github.com/a
 
 # Licensing
 
-The package's own code is AGPL-3.0-or-later. `logo/` is Anthers' own brand art, owned by Anthers, Inc.; it is not covered by that license and may be used only in association with Anthers itself. The icon artwork is third-party and lives in the source repo with its attribution — see [`THIRD-PARTY.md`](./THIRD-PARTY.md) for the summary and the terms it rests on.
+The package's own code is Apache-2.0. `logo/` is Anthers' own brand art, owned by Anthers, Inc.; it is not covered by that license and may be used only in association with Anthers itself. The icon artwork is third-party and lives in the source repo with its attribution — see [`THIRD-PARTY.md`](./THIRD-PARTY.md) for the summary and the terms it rests on.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Settings card: the creator's **Badge ladder** — the rungs that populate every Work's
  * access table. Each rung is a Badge (label + monthly amount + description).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Creator Badge art — the upload, the scan that gates it, and the key that must not escape.
  *

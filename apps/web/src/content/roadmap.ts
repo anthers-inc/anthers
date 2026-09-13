@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The public roadmap — every high-level goal Anthers is working toward, sorted into
 // three buckets and four groups.
@@ -848,7 +848,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "open-source",
 						title: "The Source Is Public",
 						blurb:
-							"Everything that runs Anthers, on GitHub under the AGPL. Not a mirror and not a subset.",
+							"Everything that runs Anthers, on GitHub under the Apache-2.0 license. Not a mirror and not a subset.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "80.00", title: "The Codebase" },

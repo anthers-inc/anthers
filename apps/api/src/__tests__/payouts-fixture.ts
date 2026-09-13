@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Make a fixture creator payout-ready, so a test can get as far as releasing a Work.
  *

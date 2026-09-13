@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Coverage for the Badge model — the rule that a Badge is identified by its **amount**
 // and never by its position in a list.

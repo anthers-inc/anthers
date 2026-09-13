@@ -1,6 +1,6 @@
 # Third-party fonts
 
-The four Meadow web families, self-hosted. These files are **not** covered by the repository's AGPL-3.0 license or its SPDX-header convention — all four are under the **SIL Open Font License 1.1**, whose text is in `OFL-1.1.txt` beside them.
+The four Meadow web families, self-hosted. These files are **not** covered by the repository's Apache-2.0 license or its SPDX-header convention — all four are under the **SIL Open Font License 1.1**, whose text is in `OFL-1.1.txt` beside them.
 
 | Family | Copyright | Upstream |
 |---|---|---|

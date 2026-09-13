@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * One Work in the creator's Catalog as a card: thumbnail (or type icon), title, a type
  * badge, the derived processing and access badges, and Release / Edit / Delete controls.

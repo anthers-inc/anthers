@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Moderation — the user-facing half. One endpoint: report a comment, a review, or a
  * **person**.

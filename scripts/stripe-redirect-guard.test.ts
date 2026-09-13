@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Every URL the server hands Stripe comes from `STRIPE_RETURN_PATHS`, never from a string
  * typed at the call site.

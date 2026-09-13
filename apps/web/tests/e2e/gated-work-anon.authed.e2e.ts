@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * A **logged-out** viewer at a Work — the surface where the app has to hand someone to an
  * auth flow and get them back afterwards.

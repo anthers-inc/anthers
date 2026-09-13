@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";

@@ -15,13 +15,13 @@ No ads, ever. No shareholders, ever. Just freedom to see and be seen, to listen 
 
 `Anthers, Inc.` is a Colorado nonprofit corporation. There are no investors and no profit-taking: it cannot be acquired, and it cannot take corrupting investment. Our commitment to earnestly and unequivocally serving the interests of creators and their audiences is not just a promise, it's a structural commitment that can never be unwound.
 
-This repository is the whole platform: the API, the web app, the creator Studio, the desktop shell, and the shared packages underneath them. It is licensed [AGPL-3.0-or-later](./LICENSE.md).
+This repository is the whole platform: the API, the web app, the creator Studio, the desktop shell, and the shared packages underneath them. It is licensed [Apache-2.0](./LICENSE.md), with the exceptions listed in [`NOTICE`](./NOTICE).
 
 ## Status
 
 **Pre-launch.** [anthers.org](https://anthers.org) is live but sits behind an invite wall while the platform grows through a deliberate ladder of admission phases — each with a ceiling on accounts and creators, and each opening on a readiness checklist rather than a date. It is run by one person right now, and the ceiling exists so that the things one person must keep safe are never outrun by signups.
 
-**The source is public; contributions are closed for the moment.** That is a temporary posture, not a philosophy. The model, the schema and the product surface are all still moving fast enough that an outside pull request would be an unkind thing to accept — we would be asking someone to build against a foundation we are still pouring. This repository is public because an AGPL platform that handles other people's money and other people's work should be readable by the people it affects, and because building in the open is on the roadmap as a goal in its own right. When the platform reaches general availability and the ground stops shifting, this section is where the invitation will go.
+**The source is public; contributions are closed for the moment.** That is a temporary posture, not a philosophy. The model, the schema and the product surface are all still moving fast enough that an outside pull request would be an unkind thing to accept — we would be asking someone to build against a foundation we are still pouring. This repository is public because an open-source platform that handles other people's money and other people's work should be readable by the people it affects, and because building in the open is on the roadmap as a goal in its own right. When the platform reaches general availability and the ground stops shifting, this section is where the invitation will go.
 
 In the meantime:
 
@@ -148,8 +148,8 @@ make dev
 
 ## License
 
-Anthers is free software under the **GNU Affero General Public License v3.0 or later**. See [`LICENSE.md`](./LICENSE.md).
+Anthers' code is licensed under the **Apache License, Version 2.0**. See [`LICENSE.md`](./LICENSE.md). [`NOTICE`](./NOTICE) lists what the license does not cover: the Anthers logo, the text of the legal instruments (which is CC BY 4.0), and third-party files under their own licenses. The license grants no rights to the Anthers name or logo.
 
-The AGPL is a deliberate choice and not an incidental one: a platform that asks creators to trust it with their work and their livelihood should be one they can walk away with. If Anthers ever stops being worth trusting, this repository is the escape hatch.
+A platform that asks creators to trust it with their work and their livelihood should be one they can walk away with, and a permissive license means anybody may take this code and run it. Every version published here stays available under the license it went out with, so if Anthers ever stops being worth trusting, the last good version is the escape hatch.
 
 Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md).

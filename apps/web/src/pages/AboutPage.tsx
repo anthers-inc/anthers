@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The About marketing page, in the Meadow design (matching /for-creators and
 // /for-users). The route wraps this page in the shared <MeadowDecor> and

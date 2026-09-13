@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { MATURITY_DISPLAY_CHOICES, type MaturityDisplay } from "@anthers/shared/content-rating";
 import { normalizeHandleName } from "@anthers/shared/handles";

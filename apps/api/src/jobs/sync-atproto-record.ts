@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Bring the record for one row into line with the row — a creator's post or project, or a
  * reader's comment, review, vote or follow.

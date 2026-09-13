@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Seed the **media fixture**: a creator, a video Work, and an album of four audio tracks
  * (one of them gated), all carrying media produced by the real transcode jobs.

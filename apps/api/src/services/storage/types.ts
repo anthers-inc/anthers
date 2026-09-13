@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * StorageService interface — abstracts file storage for local dev and S3-compatible
  * production, which is **Cloudflare R2** (`anthers-media-public` + `anthers-media-private`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The Resources marketing page — the Meadow-styled hub for everything that shows
 // our work: calculators (run it yourself) and comparisons (how we stack up). The

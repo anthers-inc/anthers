@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { STORAGE_PER_GIB_MONTH } from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";

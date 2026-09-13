@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";

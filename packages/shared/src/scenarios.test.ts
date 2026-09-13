@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The published scenarios have to add up. These are the assertions that a hand-typed
 // figure never gets: every row conserves, and every generated figure is reachable

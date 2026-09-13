@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Assert that Stripe can actually reach this app's webhook, and that the secrets production
  * holds are the ones that work.

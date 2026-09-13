@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Asking whether a handle Anthers could issue is still free, from a field somebody is typing
  * into.

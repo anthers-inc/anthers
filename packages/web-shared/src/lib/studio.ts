@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Paths into the Creator Studio — the ONE place the `/studio` prefix is written.
  *

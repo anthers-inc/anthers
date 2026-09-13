@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Provenance for the icons this repository redistributes: who drew each one, under
 // what license, and where the original lives.

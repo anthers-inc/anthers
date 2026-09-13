@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Coverage for the attention-credit policy — the rules deciding which seconds
 // become Time Pool minutes. The invariants worth defending here:

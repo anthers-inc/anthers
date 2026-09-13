@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Data-rights vocabulary — the kinds of request a person can make, and the window we
  * promised to answer in.

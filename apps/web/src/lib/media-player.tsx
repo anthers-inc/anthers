@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The listening session: one `<audio>` element that survives navigation, driven by the
  * pure queue model in `./music-queue`.

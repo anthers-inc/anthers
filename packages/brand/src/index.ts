@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // @anthers/brand — shared, recolor-ready icon/illustration assets for every
 // Anthers deployment. Framework-agnostic on purpose: it exports the raw icon

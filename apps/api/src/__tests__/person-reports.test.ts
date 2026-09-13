@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Reporting a person — the third `subject_type`, and the shape the wiki's *Moderation & Reporting* built for.
  *

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Produce the web-sized logo files the app ships from the logo's own exports, and record
  * what each was made from.

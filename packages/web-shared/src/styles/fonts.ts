@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The Meadow web families. Reference by inline `fontFamily` (e.g. the Fraunces
 // display serif over the Nunito Sans body). Kept here so the shared

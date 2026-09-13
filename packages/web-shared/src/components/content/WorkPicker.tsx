@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Work picker: a modal grid of the creator's Catalog (filterable by type), plus a quiet
  * second action that makes a new one without leaving.

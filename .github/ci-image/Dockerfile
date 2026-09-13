@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 #
 # The CI image for the browser suite's media half — an Ubuntu with the packages that are
 # slow and unreliable to fetch on a runner, and nothing else.

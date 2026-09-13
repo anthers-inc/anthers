@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Quarantine for material that belongs to no Work — badge art, avatars, headers, covers,
  * gallery shots and inline post images.

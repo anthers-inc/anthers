@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // <MeadowFloor> — the grassy/flowery floor band with a few bees drifting above it.
 // A `h-56` strip meant to sit at the very bottom of a page: inside <MeadowDecor>

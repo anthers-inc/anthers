@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The panels a creator can arrange on their Studio Dashboard, and which ones a creator who
  * has never touched it sees.

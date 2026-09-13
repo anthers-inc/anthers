@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Finishing a signup (route: `/finish`) — the page whose whole job is finishing.
  *

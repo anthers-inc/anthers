@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 # Keep the build context clean — dependencies and build artifacts are (re)generated
 # inside the image (bun install, vendor:ffmpeg, bun run build). Mirrors what DO App
 # Platform builds from a fresh git checkout.

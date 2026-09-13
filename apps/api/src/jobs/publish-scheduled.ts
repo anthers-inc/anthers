@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Publish-scheduled sweep — auto-publishes drafts whose scheduled publish time has arrived.
  *

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Seating a recovery key: what is accepted as a key, and what each of the node's answers means.
  *

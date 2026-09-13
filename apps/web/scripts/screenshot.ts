@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 // Screenshot / smoke helper for the web app (Tier 0 browser verification).
 // Boots the production preview (serve.ts against ./dist), seeds the SiteGate

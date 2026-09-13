@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The basket is reachable from the header — the one conversion surface that was only
  * reachable from a Work page.

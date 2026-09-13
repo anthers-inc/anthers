@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `sanitizeNextPath` is the only thing standing between a URL parameter and a redirect,
  * so it is tested the way an access rule is: the refusals matter more than the passes.

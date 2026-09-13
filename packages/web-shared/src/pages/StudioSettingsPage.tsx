@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
  * the boundary (E50 Phase 4): Stripe payout onboarding, external platform connections

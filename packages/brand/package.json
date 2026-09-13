@@ -2,7 +2,7 @@
 	"name": "@anthers/brand",
 	"private": true,
 	"version": "0.1.0",
-	"license": "AGPL-3.0-or-later",
+	"license": "Apache-2.0",
 	"description": "Anthers brand assets that ship — the official logo, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library.",
 	"type": "module",
 	"exports": {

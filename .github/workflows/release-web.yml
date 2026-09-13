@@ -9,7 +9,7 @@
 # install, and delete private, internal, and public packages." Authentication is required
 # even for PUBLIC packages, so publishing this as a package would mean every contributor
 # and every desktop CI run needed a token to install a public dependency of a public,
-# AGPL project. A release asset downloads anonymously. Verified both ways before choosing.
+# open-source project. A release asset downloads anonymously. Verified both ways before choosing.
 #
 # Triggered by a `web-v*` tag, deliberately separate from `desktop-v*` (which lives in the
 # desktop repo and versions the shell) and from anything the platform deploys. Tagging

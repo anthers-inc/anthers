@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Attention measurement — the model rules deciding which seconds become Time Pool
  * minutes. This module is the single source of truth for those rules and is pure

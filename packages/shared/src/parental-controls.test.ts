@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The parental-controls policy — exhaustively, without a database or a browser, which is the
  * point of it being pure.

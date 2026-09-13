@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Access & entitlement resolution — the one place that answers
  * "may this user consume this Work, and if not, what does it cost?"

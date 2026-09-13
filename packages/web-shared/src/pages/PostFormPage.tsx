@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * New / Edit Post builder. Three sections: Basics (title + body + timeline + project),
  * Linked Works, and Publish (pin + schedule + draft/publish).

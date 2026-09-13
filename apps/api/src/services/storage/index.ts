@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Storage factory — returns the singleton StorageService based on STORAGE_BACKEND env var.
  *

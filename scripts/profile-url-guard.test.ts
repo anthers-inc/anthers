@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Every profile URL comes from `@anthers/web-shared/profile`, never from a string built at the
  * call site.

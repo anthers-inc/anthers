@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The FAQ pool — every question the site answers, in one place, plus which page each
 // one is surfaced on.
@@ -353,7 +353,7 @@ export const FAQ_ITEMS = {
 		category: "Platform & Identity",
 		question: "Is Anthers open source?",
 		answer:
-			"Yes -- the whole platform is licensed under the AGPL-3.0. You can also download everything you've made from Settings, in one click. Running your own node, and federating between them, is a direction we're committed to rather than something that ships today. The goal is that no single entity -- including Anthers itself -- can become a gatekeeper.",
+			"Yes -- the whole platform is open source under the Apache-2.0 license. You can also download everything you've made from Settings, in one click. Running your own node, and federating between them, is a direction we're committed to rather than something that ships today. The goal is that no single entity -- including Anthers itself -- can become a gatekeeper.",
 	},
 } satisfies Record<string, FAQItem>;
 

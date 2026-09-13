@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Diff the **committed** App Platform spec against the **live** one. There is exactly one
  * app — `anthers`, the hub — and `SPECS` holds the single entry to match.

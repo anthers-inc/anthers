@@ -1,0 +1,22 @@
+Anthers
+Copyright 2026 Anthers, Inc.
+
+This repository is licensed under the Apache License, Version 2.0, which is in
+LICENSE.md, with the following exceptions.
+
+- packages/brand/logo/ is the Anthers logo, Anthers' own brand art owned by
+  Anthers, Inc. It is not licensed under Apache-2.0 and may be used only in
+  association with Anthers itself.
+
+- apps/web/src/content/legal/index.ts is the text of the Anthers Privacy Policy,
+  Terms and Creator Terms, licensed under the Creative Commons Attribution 4.0
+  International license (https://creativecommons.org/licenses/by/4.0/).
+
+- Third-party files keep their own licenses. The icon markup in
+  packages/brand/src/generated/icons.ts is derived from artwork on The Noun
+  Project under the Creative Commons Attribution 3.0 license, and its creators are
+  credited in packages/brand/THIRD-PARTY.md. The web fonts in
+  apps/web/public/fonts/ are under the SIL Open Font License 1.1, described in
+  apps/web/public/fonts/THIRD-PARTY.md.
+
+The Apache License grants no rights to the Anthers name or logo.

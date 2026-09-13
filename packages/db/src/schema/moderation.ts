@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Moderation — see auth.ts for the role-classification legend. **Every table in this file
  * is `org`, with no exceptions**, by the separation the federation topology mandates:

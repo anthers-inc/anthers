@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
 import { desktopAuthRequests, sessions, users, verificationTokens } from "@anthers/db/schema";
 import { and, desc, eq, gt, lt, notInArray } from "drizzle-orm";

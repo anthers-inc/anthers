@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The buyer-facing receipt. Since 2026-08-03 the listed price IS the advertised
 // price: card processing comes OUT of it, Anthers keeps $0, and sales tax is the

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // <MeadowDecor> — the pollen-textured base surface for Meadow-themed page content.
 // Wraps its children on the pollen-over-base-100 surface, in their own z-10 layer,

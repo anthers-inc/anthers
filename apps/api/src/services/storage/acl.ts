@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Which uploaded media is world-readable — a pure allowlist, so the decision is
  * testable without S3, a bucket, or a network. Same shape as `services/access.ts`

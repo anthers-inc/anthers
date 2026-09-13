@@ -1,6 +1,6 @@
 # Third-party assets
 
-Provenance and licensing for artwork this package carries. Third-party files are **not** covered by the repository's AGPL-3.0 license or its SPDX-header convention; each retains the license of its source.
+Provenance and licensing for artwork this package carries. Third-party files are **not** covered by the repository's Apache-2.0 license or its SPDX-header convention; each retains the license of its source.
 
 ## The Noun Project — icon artwork
 
@@ -55,12 +55,12 @@ Researched 2026-08-14, resolving a question this file had carried open since the
 
 That distinction is the whole answer for a public repository:
 
-- **The attribution waiver is ours, not our readers'.** It is a contract between Noun Project and the subscriber. Someone who forks this AGPL repository is not a party to it and inherits nothing from it.
+- **The attribution waiver is ours, not our readers'.** It is a contract between Noun Project and the subscriber. Someone who forks this repository is not a party to it and inherits nothing from it.
 - **CC BY 3.0, however, travels.** It grants everyone — irrevocably, worldwide, commercially — the right "to Reproduce the Work, to incorporate the Work into one or more Collections" and "to Distribute and Publicly Perform the Work including as incorporated in Collections", on the single condition of naming the original author (§ 3, § 4(b)).
 
 So attributing costs nothing, and it is what makes this art usable **by the people we hand it to** rather than only by us. The subscription is what lets the icons appear in the product UI without a credit line on every page; the attribution is what makes the repository forkable.
 
-**Do not remove the credit on the grounds that we hold a royalty-free license.** That reasoning is true of Anthers and false of everyone downstream, which is the population a public AGPL repo exists to serve.
+**Do not remove the credit on the grounds that we hold a royalty-free license.** That reasoning is true of Anthers and false of everyone downstream, which is the population a public repo exists to serve.
 
 Two scoping notes, because both are easy to get backwards:
 
@@ -75,7 +75,7 @@ The reasoning is the same one this file already rests on. The attribution belong
 
 ## The Anthers logo (`logo/`)
 
-Anthers' own brand art, owned by Anthers, Inc.: the layered PSDs, the PNGs exported from them, and the web cuts generated from those exports. It is not third-party art and it is not licensed under the repository's AGPL. The Anthers name and logo may be used only in association with Anthers itself, to refer to Anthers, and never to suggest that something is Anthers, or is endorsed by it, when it is not.
+Anthers' own brand art, owned by Anthers, Inc.: the layered PSDs, the PNGs exported from them, and the web cuts generated from those exports. It is not third-party art and it is not licensed under the repository's Apache-2.0. The Anthers name and logo may be used only in association with Anthers itself, to refer to Anthers, and never to suggest that something is Anthers, or is endorsed by it, when it is not.
 
 ## Desktop packaging
 

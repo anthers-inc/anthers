@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * A record, rendered as a record: cover, title, Play and Shuffle, and the tracks in order.
  *

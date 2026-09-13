@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The For Creators marketing page — restyled into the Meadow design (matching
 // /for-users). Airy editorial forest-green, Fraunces display serif over Nunito

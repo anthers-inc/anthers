@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 // Mobile horizontal-overflow DIAGNOSTIC. Boots the production preview (serve.ts
 // against ./dist), seeds the SiteGate flag, then for each route loads the page at

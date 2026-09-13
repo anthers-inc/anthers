@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Content schema — see auth.ts for the role-classification legend (node/org/both).
  * Most of this file is node: a creator's own content records, media, and the

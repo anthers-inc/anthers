@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The media half of authoring a Work — the per-type upload state, the control that renders
  * it, and the type-specific fields that go into a create or edit payload.

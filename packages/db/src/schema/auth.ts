@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Schema role classification. The public statement of the topology this serves is the
  * wiki's *How Anthers Is Built -> Federation and Creator Nodes*:

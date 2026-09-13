@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pins the rules in `dev-spec-env.ts`. Each one is a decision about which production
  * configuration values a developer machine is allowed to adopt, so each gets a fixture

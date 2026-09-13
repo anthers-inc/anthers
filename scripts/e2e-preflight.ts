@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Two checks before the browser suite runs, both for failures that look identical and
  * have nothing to do with the code.

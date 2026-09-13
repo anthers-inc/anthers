@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Content preferences — the only writer of what a reader has asked to meet: the Adult opt-in,
  * the adulthood verification behind it, and the per-rung display setting for each of them.

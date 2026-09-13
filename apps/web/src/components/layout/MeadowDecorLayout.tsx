@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // A nested layout route that wraps its pages in the shared <MeadowDecor> — the
 // pollen surface + woven climbing side vines — so the secondary marketing pages

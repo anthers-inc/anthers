@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The "Anthers vs itch.io" comparison page — restyled into the Meadow design.
 // Airy editorial forest-green, Fraunces display serif over Nunito Sans. The route
@@ -152,7 +152,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<LockOpenIcon className="h-6 w-6" />}
 							title="Open, and yours to leave"
-							description="The whole platform is open source under the AGPL, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You sign up with an identity on the AT Protocol — one Anthers issues you, or one you already have — and each work you release gets a public listing in a repository you own, readable by anyone's software whether or not Anthers is still here."
+							description="The whole platform is open source under the Apache-2.0 license, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You sign up with an identity on the AT Protocol — one Anthers issues you, or one you already have — and each work you release gets a public listing in a repository you own, readable by anyone's software whether or not Anthers is still here."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
@@ -346,8 +346,8 @@ export default function CompareItchPage() {
 					<H2>Your identity, your data, your choice</H2>
 					<Lede>
 						itch.io is a great place to publish, but leaving a platform usually means leaving your
-						work behind. Anthers is open source under the AGPL, and everything you make is one click
-						from a file on your own machine.
+						work behind. Anthers is open source, and everything you make is one click from a file on
+						your own machine.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-14 grid max-w-4xl gap-8 text-left sm:grid-cols-3">
@@ -376,8 +376,9 @@ export default function CompareItchPage() {
 					</Reveal>
 					<Reveal delay={110}>
 						<PortabilityPoint icon={<LockOpenIcon className="h-6 w-6" />} title="Open source">
-							The whole platform is AGPL-3.0. Hosting with us is meant to be a convenience rather
-							than a requirement — and a license is a harder promise to walk back than a policy.
+							The whole platform is open source under the Apache-2.0 license, and every version
+							published stays available to anybody who wants to run it. Hosting with us is meant to
+							be a convenience rather than a requirement.
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={220}>

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Botanical line-art flourishes — inline SVG (no external assets), stroke =
 // `currentColor` so a wrapping `text-primary/60` etc. tints them and they adapt
