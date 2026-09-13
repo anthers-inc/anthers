@@ -187,6 +187,9 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 export default function LibraryPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [items, setItems] = useState<ShelfItem[]>([]);
+	// How many entries the shelf was cut to, when it was cut at all. The server leaves out the
+	// oldest past its limit, and a shelf that silently ends reads as lost saves.
+	const [cutTo, setCutTo] = useState<number | null>(null);
 	const [loading, setLoading] = useState(true);
 
 	const activeTab = searchParams.get("type") ?? "";
@@ -215,7 +218,15 @@ export default function LibraryPage() {
 		client.api.content.library
 			.$get({ query: { hidden: "1" } })
 			.then((res) => res.json())
-			.then((data) => setItems((data as unknown as { items: ShelfItem[] }).items))
+			.then((data) => {
+				const shelf = data as unknown as {
+					items: ShelfItem[];
+					truncated?: boolean;
+					limit?: number;
+				};
+				setItems(shelf.items);
+				setCutTo(shelf.truncated && shelf.limit ? shelf.limit : null);
+			})
 			.catch(() => {})
 			.finally(() => setLoading(false));
 	}, []);
@@ -253,6 +264,12 @@ export default function LibraryPage() {
 			<p className="mb-6 text-sm text-base-content/60">
 				Everything you've kept — what you've bought, and anything free you saved.
 			</p>
+			{cutTo != null && (
+				<p className="-mt-4 mb-6 text-sm text-base-content/60">
+					Your Library holds more than {cutTo.toLocaleString()} things, and this page shows the{" "}
+					{cutTo.toLocaleString()} you saved most recently. Everything older is still saved.
+				</p>
+			)}
 
 			{/*
 			 * The lens switcher.

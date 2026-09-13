@@ -125,6 +125,7 @@ import { appealsForWork, declareRating, fileRatingAppeal } from "../services/con
 import {
 	permanentWorkIds,
 	removeItem,
+	SHELF_LIMIT,
 	saveProject,
 	saveWork,
 	setHidden,
@@ -5032,6 +5033,9 @@ const contentRoutes = new Hono()
 	 *
 	 * `?hidden=1` includes tidied-away entries — the "show hidden" toggle. They are
 	 * excluded by default and never deleted.
+	 *
+	 * At most `SHELF_LIMIT` entries come back, the newest ones, still in saved order; `truncated`
+	 * says whether older entries were left out.
 	 */
 	.get("/library", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -5040,12 +5044,16 @@ const contentRoutes = new Hono()
 		const conditions: SQL[] = [eq(libraryItems.userId, user.id)];
 		if (!includeHidden) conditions.push(eq(libraryItems.hidden, false));
 
-		const rows = await db
+		// Newest first to choose which entries fit, one extra to learn whether any did not, then
+		// back into saved order for the shelf.
+		const newest = await db
 			.select()
 			.from(libraryItems)
 			.where(and(...conditions))
-			.orderBy(asc(libraryItems.sortOrder))
-			.limit(500);
+			.orderBy(desc(libraryItems.sortOrder))
+			.limit(SHELF_LIMIT + 1);
+		const truncated = newest.length > SHELF_LIMIT;
+		const rows = newest.slice(0, SHELF_LIMIT).reverse();
 
 		const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
 		const projectIds = rows.map((r) => r.projectId).filter((id): id is number => id != null);
@@ -5175,6 +5183,8 @@ const contentRoutes = new Hono()
 					};
 				})
 				.filter((x) => x != null),
+			truncated,
+			limit: SHELF_LIMIT,
 		});
 	})
 
