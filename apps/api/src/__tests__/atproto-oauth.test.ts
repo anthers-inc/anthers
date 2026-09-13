@@ -19,6 +19,7 @@ import {
 	attachSessionToUser,
 	buildClientMetadata,
 	getAtprotoClient,
+	getBaseUrl,
 	oauthSessionStore,
 	oauthStateStore,
 	setAtprotoClient,
@@ -127,37 +128,22 @@ describe("client construction under Bun", () => {
 		}
 	});
 
-	it("refuses to build a production client identity from a non-https origin", () => {
-		// 🚨 Production has no BASE_URL, and the old code fell back to localhost — so the
-		// metadata document advertised a client_id no authorization server would accept.
-		// Failing loudly is the point: a missing value must not degrade a protocol identity.
-		const prevBase = process.env.BASE_URL;
-		const prevFront = process.env.FRONTEND_URL;
-		const prevNode = process.env.NODE_ENV;
-		try {
-			delete process.env.BASE_URL;
-			process.env.NODE_ENV = "production";
+	it("refuses to build a deployed client identity from a non-https origin", () => {
+		// 🚨 Production has no BASE_URL, and a fallback to localhost advertises a client_id no
+		// authorization server would accept. Failing loudly is the point: a missing value must
+		// not degrade a protocol identity. The deployment is named by its shape, never by
+		// NODE_ENV, which production does not set — so this passes `deployed` rather than
+		// setting a label the real deployment never carries.
+		expect(() => getBaseUrl({}, true)).toThrow(/https origin/);
+		expect(() => getBaseUrl({ FRONTEND_URL: "http://anthers.org" }, true)).toThrow(/https origin/);
+		expect(getBaseUrl({ FRONTEND_URL: "https://anthers.org" }, true)).toBe("https://anthers.org");
+	});
 
-			delete process.env.FRONTEND_URL;
-			expect(() => buildClientMetadata()).toThrow(/https origin/);
-
-			process.env.FRONTEND_URL = "http://anthers.org";
-			expect(() => buildClientMetadata()).toThrow(/https origin/);
-
-			process.env.FRONTEND_URL = "https://anthers.org";
-			expect(buildClientMetadata().client_id).toBe(
-				"https://anthers.org/api/atproto/client-metadata.json",
-			);
-		} finally {
-			for (const [k, v] of [
-				["BASE_URL", prevBase],
-				["FRONTEND_URL", prevFront],
-				["NODE_ENV", prevNode],
-			] as const) {
-				if (v === undefined) delete process.env[k];
-				else process.env[k] = v;
-			}
-		}
+	it("falls back to the API's own port only in a checkout, whatever NODE_ENV says", () => {
+		expect(getBaseUrl({}, false)).toBe("http://localhost:8000");
+		// This suite runs from a checkout, so the default shape must read as not deployed —
+		// and a production label must not change that in either direction.
+		expect(getBaseUrl({ NODE_ENV: "production" })).toBe("http://localhost:8000");
 	});
 
 	it("declares every scope the app can request, and no broad one", () => {
