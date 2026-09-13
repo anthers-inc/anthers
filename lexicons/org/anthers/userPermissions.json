@@ -5,7 +5,7 @@
 		"main": {
 			"type": "permission-set",
 			"title": "Your Anthers Activity",
-			"detail": "Keep your comments, reviews, votes and follows in your own repository, so they stay yours and travel with you if you ever leave.",
+			"detail": "Keep your comments, reviews, votes and follows public in your own repository, so they stay yours and travel with you if you ever leave.",
 			"permissions": [
 				{
 					"type": "permission",
