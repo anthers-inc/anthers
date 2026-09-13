@@ -4,21 +4,11 @@
 // `src/generated/icons.ts` — recolor-ready markup that `iconSvg`/`iconGroup`/
 // `iconDataUri` read. Run `bun run build`.
 //
-// 🚨 THE SOURCE ART IS NOT IN THIS REPOSITORY, and that is deliberate. The icon
-// library is ~650 Noun Project SVGs — 14 MiB, of which this file promotes 18 —
-// and it lived here until 2026-08-14, when it was 91% of everything tracked. A
-// platform's repository should not be, by weight, an icon mirror. It moved to a
-// sibling PRIVATE repo alongside the layered design working files — private because
-// most of it is licensed third-party art rather than Anthers'.
-//
-// **This costs the app nothing**, which is the whole reason the split is cheap:
-// `icons.ts` inlines each icon's viewBox and path markup, `src/` never reads the
-// source tree, and nothing imports the raw SVGs. The app builds identically with
-// the library absent. What you lose without it is only the ability to RE-RUN this
-// codegen — so it degrades with a pointer rather than failing, the same way
-// `econ:figures` skips its wiki blocks when the vault isn't present.
-//
-// Point it elsewhere with `BRAND_SOURCE=/path/to/checkout bun run build`.
+// The source art is `svg/` beside this script's package, and `icons.ts` is committed
+// too, so the app builds without running this at all and a fork can re-run it with no
+// access to anything. `--check` regenerates in memory and fails if the committed
+// `icons.ts` no longer matches what `svg/` produces, which is how
+// `scripts/noun/authoring-time.test.ts` keeps the two in step.
 //
 // Assets are single-color FILLED art (the Noun Project "SVG, black" default);
 // normalize() strips baked fills so one injected color controls each icon.
@@ -27,28 +17,23 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const REPO = join(ROOT, "..", "..");
 const OUT_DIR = join(ROOT, "src", "generated");
 
 /** One entry of the curated set, as `icons.json` carries it. */
 export interface CuratedIcon {
 	/** The friendly name code renders by. */
 	id: string;
-	/** The Noun Project icon id, which is what makes provenance and attribution findable. */
+	/** The Noun Project icon id, which is what provenance is keyed on. */
 	nounId: number;
-	/** Path within the private library's `svg/`, whose filename also carries the id. */
+	/** Path within `svg/`, whose filename also carries the id. */
 	path: string;
 	/** Why this particular asset, in Anthers' terms rather than the vendor's. */
 	why?: string;
 }
 
-// The icon library is a PRIVATE repository — it mixes Anthers' own working files with
-// ~650 licensed Noun Project SVGs, which is not ours to publish wholesale. So this hint
-// names a path rather than a URL: an outside reader cannot fetch it and does not need to,
-// since `icons.ts` is committed and the app builds identically without the source.
-const SOURCE_HINT = "the Anthers icon library (private; set BRAND_SOURCE to a checkout)";
-/** Where the icon library lives. A sibling checkout by default, per the repo naming convention. */
-const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
+/** The source art for every curated icon. */
+const SVG_ROOT = join(ROOT, "svg");
+const check = process.argv.includes("--check");
 
 // ── Curated set: assets promoted for use in code, with friendly ids. The list is
 // `icons.json` beside this package, so `brand:add` can append to it and the reason
@@ -86,21 +71,8 @@ function normalize(raw: string, file: string): { viewBox: string; inner: string 
 	return { viewBox, inner };
 }
 
-// The generated file is committed, so a checkout without the source art is a
-// perfectly working state — say so plainly rather than failing a build over it.
-if (!existsSync(SVG_ROOT)) {
-	console.log(
-		`[brand] icon source not found at ${SVG_ROOT}\n` +
-			`        Nothing to regenerate — src/generated/icons.ts is committed and complete,\n` +
-			`        and the app builds without the source library.\n` +
-			`        To curate a new icon, clone ${SOURCE_HINT} beside this repo\n` +
-			`        (or set BRAND_SOURCE=/path/to/checkout) and run this again.`,
-	);
-	process.exit(0);
-}
-
 // 🚨 The id in the filename is what ties an asset to its artist, so a mismatch here
-// would attribute an icon to the wrong person in THIRD-PARTY.md while everything
+// would record the wrong creator and license in provenance.json while everything
 // still rendered. Both numbers are written down precisely so they can disagree out
 // loud: `nounId` is what provenance is keyed on, and the filename is what a person
 // reads. Nothing downstream can catch this, because both values are plausible.
@@ -130,9 +102,7 @@ if (duplicates.length > 0) {
 
 const missing = CURATED.filter((c) => !existsSync(join(SVG_ROOT, c.path)));
 if (missing.length > 0) {
-	// A source tree that exists but lacks a curated file is a real error, unlike an
-	// absent one: it means the library and this list have diverged, and carrying on
-	// would silently drop an icon the app renders by id.
+	// Carrying on would silently drop an icon the app renders by id.
 	console.error(`[brand] ${missing.length} curated asset(s) missing from ${SVG_ROOT}:`);
 	for (const m of missing) console.error(`          ${m.id} → ${m.path}`);
 	process.exit(1);
@@ -144,22 +114,29 @@ const iconRows = CURATED.map((c) => {
 	const { viewBox, inner } = normalize(readFileSync(join(SVG_ROOT, c.path), "utf8"), c.path);
 	return `\t${JSON.stringify(c.id)}: { viewBox: ${JSON.stringify(viewBox)}, inner: ${JSON.stringify(inner)} },`;
 }).join("\n");
-// The generated file is stamped CC-BY-3.0 rather than with the repository's Apache-2.0,
-// because every geometry in it is derived from Noun Project art under CC BY 3.0 and
-// Anthers cannot relicense somebody else's work. THIRD-PARTY.md carries the credit.
-writeFileSync(
-	join(OUT_DIR, "icons.ts"),
-	`// SPDX-License-Identifier: CC-BY-3.0
+// Stamped CC-BY-3.0 rather than with the repository's Apache-2.0, because every geometry
+// in it is Noun Project art that Anthers uses under its own license and cannot relicense.
+const generated = `// SPDX-License-Identifier: CC-BY-3.0
 // AUTO-GENERATED by scripts/build-icons.ts — do not edit by hand.
-// Curated, recolor-ready icon markup. Add entries to CURATED in the codegen, then
-// \`bun run build\` with the icon source checked out. (Artwork is third-party and
-// attributed — see THIRD-PARTY.md.)
+// Curated, recolor-ready icon markup from The Noun Project; provenance.json records
+// each icon's creator and license. Add an icon with \`bun run brand:add\`.
 export type BrandIcon = { readonly viewBox: string; readonly inner: string };
 export const icons = {
 ${iconRows}
 } as const satisfies Record<string, BrandIcon>;
 export type BrandIconName = keyof typeof icons;
-`,
-);
+`;
 
-console.log(`[brand] ${CURATED.length} curated icons written to src/generated/icons.ts`);
+const target = join(OUT_DIR, "icons.ts");
+if (check) {
+	if (!existsSync(target) || readFileSync(target, "utf8") !== generated) {
+		console.error(
+			"[brand] src/generated/icons.ts is out of date with svg/ — run `bun run brand:build`",
+		);
+		process.exit(1);
+	}
+	console.log(`[brand] ${CURATED.length} curated icons, src/generated/icons.ts is up to date`);
+} else {
+	writeFileSync(target, generated);
+	console.log(`[brand] ${CURATED.length} curated icons written to src/generated/icons.ts`);
+}

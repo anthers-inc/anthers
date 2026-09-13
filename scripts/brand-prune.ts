@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Remove art from the private library that nothing in the product uses.
+ * Remove art from `packages/brand/svg` that nothing in the product uses.
  *
  *     bun run brand:prune            # dry run — lists what would go
  *     bun run brand:prune --apply    # delete it
  *
  * ⭐ **A local pool of maybes earned its keep when picking an icon meant browsing a
  * folder.** It does not now: `brand:search` chooses against nearly ten million icons and
- * `brand:wanted` plus `brand:collect` make pulling one more a link and a command. What is
- * left is a repository that is mostly third-party art nobody renders, which is exactly
- * what the library was moved out of the platform repo to stop being.
+ * `brand:wanted` plus `brand:collect` make pulling one more a link and a command, so an
+ * SVG nothing in the register names is third-party art the repository carries for nothing.
  *
  * 🚨 **Refuses to delete from a dirty checkout**, because the whole safety of this is that
  * git can put it back. A prune run over uncommitted work is not revertible in the way the
- * word suggests, and 600 files is not a mistake anybody wants to reconstruct by hand.
+ * word suggests.
  *
  * ⚠️ **Keeps everything the register names, including entries whose file has not arrived
  * yet.** A wanted icon has no file to delete, but naming it here means a later prune
@@ -22,16 +21,14 @@
 
 import { existsSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { join, relative } from "node:path";
-import { readRegister } from "./noun/provenance";
+import { readRegister, SVG_ROOT } from "./noun/provenance";
 
 const REPO = join(import.meta.dir, "..");
-const LIBRARY = process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand");
-const SVG_ROOT = join(LIBRARY, "svg");
 
 const apply = Bun.argv.includes("--apply");
 
 if (!existsSync(SVG_ROOT)) {
-	console.error(`brand:prune: the private icon library is not at ${SVG_ROOT}.`);
+	console.error(`brand:prune: nothing at ${SVG_ROOT}.`);
 	process.exit(1);
 }
 
@@ -77,10 +74,10 @@ if (!apply) {
 	process.exit(0);
 }
 
-const dirty = Bun.spawnSync(["git", "-C", LIBRARY, "status", "--porcelain"]);
+const dirty = Bun.spawnSync(["git", "-C", REPO, "status", "--porcelain", "--", SVG_ROOT]);
 if (dirty.stdout.toString().trim().length > 0) {
 	console.error(
-		"\nbrand:prune: the icon library has uncommitted changes, so this is refused.\n" +
+		"\nbrand:prune: packages/brand/svg has uncommitted changes, so this is refused.\n" +
 			"  Commit or stash them first — being able to `git restore` is the whole safety here.",
 	);
 	process.exit(1);
@@ -100,6 +97,5 @@ for (const d of [...dirs].sort((a, b) => b.length - a.length)) {
 
 console.log(
 	`\n  removed ${doomed.length} file(s), kept ${kept}.\n` +
-		"  Next: `bun run catalog` in the library to rebuild manifest.json and ASSETS.md,\n" +
-		"  then `bun run brand:build` here to confirm the generated markup is unchanged.",
+		"  Next: `bun run brand:build` to confirm the generated markup is unchanged.",
 );

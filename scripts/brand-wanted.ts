@@ -17,10 +17,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { absolute, readProvenance, readRegister, SITE } from "./noun/provenance";
-
-const REPO = join(import.meta.dir, "..");
-const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
+import { absolute, readProvenance, readRegister, SITE, SVG_ROOT } from "./noun/provenance";
 
 const linksOnly = Bun.argv.includes("--links");
 const reg = readRegister();
