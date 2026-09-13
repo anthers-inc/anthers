@@ -36,6 +36,12 @@
  * `--form include` (the default) asks via Anthers' published permission set, which is what
  * the running app should use if it works; `--form repo` asks with the raw scope string,
  * which is proven and is the fallback.
+ *
+ * `--set creator` (the default) asks for `org.anthers.creatorPermissions` and writes a Work
+ * listing; `--set user` asks for `org.anthers.userPermissions` and writes a follow of the test
+ * account itself; `--set catalog` asks for the retiring `org.anthers.catalogPermissions`. A set
+ * naming several collections comes back expanded differently from one naming a single
+ * collection, which is the reason each is worth probing on its own.
  */
 
 import { createServer } from "node:http";
@@ -47,11 +53,12 @@ import {
 	OAuthClient,
 } from "@atproto/oauth-client";
 
-/** The collection this probe asks to write, and the one Anthers actually cares about. */
-const COLLECTION = "org.anthers.work";
-
-/** Anthers' published permission set, which names that collection in readable language. */
-const PERMISSION_SET = "org.anthers.catalogPermissions";
+/** What each `--set` asks for, and the one record it writes to prove the grant is honored. */
+const SETS: Record<string, { permissionSet: string; collection: string }> = {
+	creator: { permissionSet: "org.anthers.creatorPermissions", collection: "org.anthers.work" },
+	user: { permissionSet: "org.anthers.userPermissions", collection: "org.anthers.follow" },
+	catalog: { permissionSet: "org.anthers.catalogPermissions", collection: "org.anthers.work" },
+};
 
 /**
  * The two ways of asking for the same thing, and the reason this probe has a flag.
@@ -70,10 +77,11 @@ const PERMISSION_SET = "org.anthers.catalogPermissions";
  * server does not understand the token it may refuse the whole scope string, and the fallback
  * is the raw form — uglier, and already known to work.
  */
-const SCOPES: Record<string, string> = {
-	include: `atproto include:${PERMISSION_SET}`,
-	repo: `atproto repo:${COLLECTION}?action=create&action=delete`,
-};
+function scopeFor(form: string, set: { permissionSet: string; collection: string }): string | null {
+	if (form === "include") return `atproto include:${set.permissionSet}`;
+	if (form === "repo") return `atproto repo:${set.collection}?action=create&action=delete`;
+	return null;
+}
 
 /** Where the authorization server sends the browser back. Must be a literal loopback IP. */
 const PORT = Number(process.env.PROBE_PORT ?? 7325);
@@ -93,9 +101,11 @@ function arg(name: string): string | undefined {
  * Every required field is present and the URL points at a page that will not exist, which is
  * fine: the record says where a work can be reached and asserts nothing about what is there.
  */
-function probeRecord() {
+function probeRecord(collection: string, did: string) {
+	// A follow of the test account itself: valid, harmless, and removed seconds later.
+	if (collection === "org.anthers.follow") return { $type: collection, subject: did };
 	return {
-		$type: COLLECTION,
+		$type: collection,
 		kind: "service",
 		title: `Scope probe ${new Date().toISOString()}`,
 		url: "https://anthers.org/scope-probe",
@@ -182,11 +192,18 @@ async function main() {
 	}
 
 	const form = arg("form") ?? "include";
-	const scope = SCOPES[form];
-	if (!scope) {
-		console.error(`atproto-scope-probe: --form must be one of ${Object.keys(SCOPES).join(", ")}.`);
+	const set = SETS[arg("set") ?? "creator"];
+	if (!set) {
+		console.error(`atproto-scope-probe: --set must be one of ${Object.keys(SETS).join(", ")}.`);
 		process.exit(1);
 	}
+	const scope = scopeFor(form, set);
+	if (!scope) {
+		console.error("atproto-scope-probe: --form must be one of include, repo.");
+		process.exit(1);
+	}
+	const COLLECTION = set.collection;
+	const PERMISSION_SET = set.permissionSet;
 
 	console.log(`\nProbing whether a narrow permission is honored, as ${handle}.`);
 	console.log(`  form:            ${form}`);
@@ -247,7 +264,11 @@ async function main() {
 		const res = await session.fetchHandler("/xrpc/com.atproto.repo.createRecord", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ repo: did, collection: COLLECTION, record: probeRecord() }),
+			body: JSON.stringify({
+				repo: did,
+				collection: COLLECTION,
+				record: probeRecord(COLLECTION, did),
+			}),
 		});
 		const body = (await res.json().catch(() => null)) as {
 			uri?: string;

@@ -176,13 +176,14 @@ describe("where a sign-in lands", () => {
 		expect(url.searchParams.get("next")).toBe("/works/x-1");
 	});
 
-	it("asks a reader for identity and nothing else", async () => {
+	it("asks a reader for their own records and nothing else", async () => {
 		await startAuth({ handle: "someone.bsky.social", intent: "login" });
 		// ⚠️ **This passes because the account is a reader, not because a sign-in never asks
-		// for more.** A sign-in asks for whatever the account already holds, so a creator's
-		// carries their publishing permission through — `atproto-publishing.test.ts` pins that
-		// half, and asking for less there would silently discard a grant they had made.
-		expect(lastAuthorize?.options.scope).toBe("atproto");
+		// for more.** Every account is asked for the reader set, since a reader's comments and
+		// votes are Anthers working; a creator's sign-in also carries the creator set through —
+		// `atproto-publishing.test.ts` pins that half, and asking for less there would silently
+		// discard a grant they had made.
+		expect(lastAuthorize?.options.scope).toBe("atproto include:org.anthers.userPermissions");
 	});
 });
 

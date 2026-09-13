@@ -23,9 +23,14 @@ import app from "../index.js";
 import { publishingStateFor } from "../services/atproto.js";
 import {
 	buildClientMetadata,
+	CREATOR_COLLECTIONS,
+	CREATOR_SCOPE_EXPANDED,
+	CREATOR_SCOPES,
 	grantedScopeFor,
-	PUBLISH_SCOPE,
 	setAtprotoClient,
+	USER_COLLECTIONS,
+	USER_SCOPE_EXPANDED,
+	USER_SCOPES,
 } from "../services/atproto-client.js";
 import { POST_COLLECTION } from "../services/atproto-record-plan.js";
 import { WORK_COLLECTION } from "../services/atproto-repo.js";
@@ -41,7 +46,12 @@ const RUN = `pb${Date.now().toString(36)}`;
 const did = (tag: string) => `did:plc:${RUN}${tag}`;
 
 /** The full grant, spelled the way an authorization server answers it — see `atproto-scope`. */
-const GRANTED = "atproto repo:org.anthers.work";
+const GRANTED = `atproto ${USER_SCOPE_EXPANDED} ${CREATOR_SCOPE_EXPANDED}`;
+
+/** What a grant under the retired catalog set expanded to: Work listings, and nothing else. */
+const WORK_ONLY = "atproto repo:org.anthers.work";
+
+const CREATOR_SCOPE = CREATOR_SCOPES[0];
 
 let lastAuthorize: { input: string; options: { state?: string; scope?: string } } | undefined;
 let nextCallback: { did: string; state?: string; scope?: string } | undefined;
@@ -142,13 +152,17 @@ async function seedSession(d: string, userId?: number) {
 }
 
 describe("what the client is allowed to ask for", () => {
-	it("declares the publishing permission, and still no write-everything scope", () => {
+	it("declares both permission sets, and still no write-everything scope", () => {
 		const prev = process.env.BASE_URL;
 		process.env.BASE_URL = "https://anthers.org";
 		try {
 			const scope = buildClientMetadata().scope ?? "";
-			expect(scope).toContain(PUBLISH_SCOPE);
-			expect(PUBLISH_SCOPE).toBe("include:org.anthers.catalogPermissions");
+			expect(USER_SCOPES).toEqual(["include:org.anthers.userPermissions"]);
+			expect(CREATOR_SCOPES).toEqual(["include:org.anthers.creatorPermissions"]);
+			for (const asked of [...USER_SCOPES, ...CREATOR_SCOPES]) expect(scope).toContain(asked);
+			// ⚠️ Still declared while it is being retired, so a grant already made under it is not
+			// orphaned by the switch. This line goes in the change that retires it.
+			expect(scope).toContain("include:org.anthers.catalogPermissions");
 			expect(scope).not.toContain("repo:*");
 			expect(scope).not.toContain("transition:generic");
 		} finally {
@@ -157,39 +171,47 @@ describe("what the client is allowed to ask for", () => {
 		}
 	});
 
-	// 🚨 **The narrowness moved into the published Lexicon, so the guard moves with it.** The
-	// scope string no longer says what is being asked for — it names a document that does — and
-	// a test still asserting on the string would pass while that document quietly widened.
+	// 🚨 **The narrowness lives in the published Lexicons, so the guard reads them.** The scope
+	// string names a document rather than saying what is asked for, and a test asserting on the
+	// string would pass while that document quietly widened.
 	//
-	// ⚠️ **The document is published and can never be narrowed again**, so this reads the file
-	// that was published rather than describing it: a `*` collection here would be a permission
-	// over every record the creator will ever own, which is what this whole design avoids.
-	it("asks for one collection and three actions, in the Lexicon the consent screen reads", async () => {
-		const set = (await Bun.file("lexicons/org/anthers/catalogPermissions.json").json()) as {
-			id: string;
-			defs: {
-				main: {
-					type: string;
-					title: string;
-					detail: string;
-					permissions: { resource: string; collection: string[]; action: string[] }[];
+	// ⚠️ **A published set can never be narrowed again**, so this reads the files that are
+	// published rather than describing them: a `*` collection would be a permission over every
+	// record the account will ever own, which is what this whole design avoids. And each set must
+	// name exactly the collections the code judges a grant against, or a grant would be read as
+	// covering records it does not.
+	it("asks for exactly the collections the code writes, and three actions, in each set", async () => {
+		for (const [name, collections] of [
+			["userPermissions", USER_COLLECTIONS],
+			["creatorPermissions", CREATOR_COLLECTIONS],
+		] as const) {
+			const set = (await Bun.file(`lexicons/org/anthers/${name}.json`).json()) as {
+				id: string;
+				defs: {
+					main: {
+						type: string;
+						title: string;
+						detail: string;
+						permissions: { resource: string; collection: string[]; action: string[] }[];
+					};
 				};
 			};
-		};
 
-		expect(set.id).toBe("org.anthers.catalogPermissions");
-		expect(set.defs.main.type).toBe("permission-set");
-		expect(set.defs.main.permissions).toHaveLength(1);
+			expect(set.id).toBe(`org.anthers.${name}`);
+			expect(set.defs.main.type).toBe("permission-set");
+			expect(set.defs.main.permissions).toHaveLength(1);
 
-		const [permission] = set.defs.main.permissions;
-		expect(permission.resource).toBe("repo");
-		expect(permission.collection).toEqual(["org.anthers.work"]);
-		expect([...permission.action].sort()).toEqual(["create", "delete", "update"]);
+			const [permission] = set.defs.main.permissions;
+			expect(permission.resource).toBe("repo");
+			expect([...permission.collection].sort()).toEqual([...collections].sort());
+			expect(permission.collection).not.toContain("*");
+			expect([...permission.action].sort()).toEqual(["create", "delete", "update"]);
 
-		// ⭐ The title and the detail are the sentence somebody reads deciding whether to trust
-		// us, so they are copy rather than configuration — and they must not go empty.
-		expect(set.defs.main.title.length).toBeGreaterThan(0);
-		expect(set.defs.main.detail.length).toBeGreaterThan(0);
+			// ⭐ The title and the detail are the sentence somebody reads deciding whether to trust
+			// us, so they are copy rather than configuration — and they must not go empty.
+			expect(set.defs.main.title.length).toBeGreaterThan(0);
+			expect(set.defs.main.detail.length).toBeGreaterThan(0);
+		}
 	});
 });
 
@@ -205,7 +227,10 @@ describe("asking for the permission", () => {
 		);
 		expect(res.status).toBe(200);
 		expect(lastAuthorize?.input).toBe(did("sub"));
-		expect(lastAuthorize?.options.scope).toBe(`atproto ${PUBLISH_SCOPE}`);
+		// Both sets, the reader's alongside the creator's, because one request replaces the last.
+		expect(lastAuthorize?.options.scope).toBe(
+			`atproto ${[...USER_SCOPES, ...CREATOR_SCOPES].join(" ")}`,
+		);
 	});
 
 	// 🚨 **The one that matters, and the one an earlier version of this got backwards.** One
@@ -217,7 +242,7 @@ describe("asking for the permission", () => {
 		await seedSession(did("back"), user.id);
 
 		await startAuth({ handle: did("back"), intent: "login" });
-		expect(lastAuthorize?.options.scope).toContain(PUBLISH_SCOPE);
+		expect(lastAuthorize?.options.scope).toContain(CREATOR_SCOPE);
 	});
 
 	// ⚠️ And the other half: a reader is never asked for permission over a kind of record they
@@ -232,15 +257,17 @@ describe("asking for the permission", () => {
 		const token = await createSession(user.id, undefined, undefined);
 
 		await startAuth({ handle: "fresh.bsky.social", intent: "link" }, token);
-		expect(lastAuthorize?.options.scope).toContain(PUBLISH_SCOPE);
+		expect(lastAuthorize?.options.scope).toContain(CREATOR_SCOPE);
 	});
 
-	it("does not ask a reader for the creator permission", async () => {
+	// A reader's own records are Anthers working, so every reader is asked for them — and never
+	// for the creator set, over records they will not make.
+	it("asks a reader for their own records and not for the creator permission", async () => {
 		const user = await makeUser("read", { atprotoDid: did("read"), isCreator: false });
 		await seedSession(did("read"), user.id);
 
 		await startAuth({ handle: did("read"), intent: "login" });
-		expect(lastAuthorize?.options.scope).toBe("atproto");
+		expect(lastAuthorize?.options.scope).toBe(`atproto ${USER_SCOPES.join(" ")}`);
 	});
 
 	it("refuses an account with no linked identity", async () => {
@@ -309,6 +336,22 @@ describe("coming back from the consent screen", () => {
 		expect(url.searchParams.get("success")).toBe("publish_declined");
 		expect(url.searchParams.get("error")).toBeNull();
 		expect(await grantedScopeFor(did("no"))).toBe("atproto");
+		expect((await publishingStateFor(user.id)).route).toBe("available");
+	});
+
+	// 🚨 A grant made under the retired catalog set covers Works and nothing else. Reading it as
+	// publishing being on would leave every post and project quietly unwritten, so it reads as the
+	// state a creator can act on: asked again.
+	it("treats a grant under the retired catalog set as needing to be asked again", async () => {
+		const user = await makeUser("old", { atprotoDid: did("old") });
+		await seedSession(did("old"), user.id);
+
+		const url = await runCallback({
+			did: did("old"),
+			scope: WORK_ONLY,
+			state: JSON.stringify({ intent: "publish", userId: user.id }),
+		});
+		expect(url.searchParams.get("success")).toBe("publish_declined");
 		expect((await publishingStateFor(user.id)).route).toBe("available");
 	});
 
@@ -415,7 +458,7 @@ describe("opening a writer over a creator's own grant", () => {
 		await seedSession(did("percol"), user.id);
 		await db
 			.update(atprotoSessions)
-			.set({ scope: GRANTED })
+			.set({ scope: WORK_ONLY })
 			.where(eq(atprotoSessions.did, did("percol")));
 
 		expect(await oauthWriterFor(user.id, [POST_COLLECTION])).toEqual({

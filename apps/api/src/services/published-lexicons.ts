@@ -25,10 +25,21 @@
  *   curl "<its PDS>/xrpc/com.atproto.repo.listRecords?repo=<did>&collection=com.atproto.lexicon.schema"
  */
 
-/** The NSIDs published under anthers.org. Verified against the network on 2026-09-12. */
+/**
+ * The NSIDs published under anthers.org whose records Anthers writes.
+ *
+ * ⚠️ **The reader collections are published and deliberately absent.** `org.anthers.comment`,
+ * `review`, `vote` and `follow` wait on reusing a hosted account's session across writes: the
+ * reference PDS allows thirty new sessions in five minutes per account, a reader may cast thirty
+ * votes a minute, and every write opens one today. They are added in the change that lands that.
+ */
 export const PUBLISHED_LEXICONS: ReadonlySet<string> = new Set([
 	"org.anthers.work",
 	"org.anthers.catalogPermissions",
+	"org.anthers.post",
+	"org.anthers.project",
+	"org.anthers.userPermissions",
+	"org.anthers.creatorPermissions",
 ]);
 
 let override: ReadonlySet<string> | undefined;

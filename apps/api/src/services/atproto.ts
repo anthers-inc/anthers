@@ -14,12 +14,12 @@ import { atprotoSessions, users, works } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
+	CREATOR_COLLECTIONS,
 	EMAIL_SCOPE,
 	getAtprotoClient,
 	grantedScopeFor,
 	revokeAtprotoGrant,
 } from "./atproto-client.js";
-import { WORK_COLLECTION } from "./atproto-repo.js";
 import { scopeAllowsWriting } from "./atproto-scope.js";
 
 export interface AtprotoIdentity {
@@ -178,7 +178,7 @@ export async function publishingStateFor(userId: number): Promise<PublishingStat
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
 	if (await isHostedIdentity(did)) return { route: "hosted", offered, did, handle, listed };
 
-	const granted = scopeAllowsWriting(await grantedScopeFor(did), WORK_COLLECTION);
+	const granted = grantCoversCreatorRecords(await grantedScopeFor(did));
 	return { route: granted ? "granted" : "available", offered, did, handle, listed };
 }
 
@@ -216,13 +216,16 @@ export async function recordPublishGrant(
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
 	if (await isHostedIdentity(user.did)) return { status: "refused", reason: "hosted" };
 
-	if (!scopeAllowsWriting(grantedScope, WORK_COLLECTION)) return { status: "declined" };
+	if (!grantCoversCreatorRecords(grantedScope)) return { status: "declined" };
 
-	// ⭐ Their catalog, not just whatever they release next. Imported here because
-	// `work-listing.ts` reaches the hosted writer, which reaches `hosted-accounts.ts`, which
-	// reaches back into this module — the same cycle `unlinkAtprotoFromUser` documents.
+	// ⭐ Their catalog, not just whatever they release next — Works, posts and projects alike.
+	// Imported here because `work-listing.ts` reaches the hosted writer, which reaches
+	// `hosted-accounts.ts`, which reaches back into this module — the same cycle
+	// `unlinkAtprotoFromUser` documents.
 	const { queueAllListingsFor } = await import("./work-listing.js");
-	return { status: "granted", queued: await queueAllListingsFor(userId) };
+	const { queueAllCreatorRecordsFor } = await import("./creator-record-listing.js");
+	const queued = (await queueAllListingsFor(userId)) + (await queueAllCreatorRecordsFor(userId));
+	return { status: "granted", queued };
 }
 
 /** How many of this creator's Works are currently listed on the network. */
@@ -509,4 +512,17 @@ export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: s
 	await db.delete(atprotoSessions).where(eq(atprotoSessions.userId, userId));
 
 	return {};
+}
+
+/**
+ * Whether a granted scope lets Anthers keep a creator's whole catalog.
+ *
+ * 🚨 **Every creator collection, not Work listings alone.** A grant covering Works and not posts
+ * would read as publishing being on while every post quietly failed to go out, so anything short
+ * of the whole set is the state a creator can still act on — asked again — rather than a working
+ * state with a hole in it. A grant made under the retired catalog set covers Works alone, and is
+ * correctly reported as needing to be asked again.
+ */
+function grantCoversCreatorRecords(scope: string | null | undefined): boolean {
+	return CREATOR_COLLECTIONS.every((collection) => scopeAllowsWriting(scope, collection));
 }
