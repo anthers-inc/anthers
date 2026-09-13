@@ -24,7 +24,16 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, users, works } from "@anthers/db/schema";
+import {
+	accounts,
+	bookmarks,
+	libraryItems,
+	projectItems,
+	projects,
+	shareLinks,
+	users,
+	works,
+} from "@anthers/db/schema";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -426,6 +435,89 @@ describe("what an Adult rating costs", () => {
 			expect(res.status).toBe(200);
 			const body = (await res.json()) as { works: { title: string }[] };
 			expect(body.works.map((w) => w.title)).not.toContain(ADULT_TITLE);
+		});
+	});
+
+	describe("the reads that named it anyway", () => {
+		// 🚨 **Four reads applied no maturity filter**, found by the roadmap state pass on
+		// 2026-09-13: a share link, the Library, bookmarks and the project listing. Each hands
+		// back a Work's title or a description of it, so each disclosed the existence the rung
+		// withholds — most sharply for a Work corrected into Adult after somebody saved it,
+		// bookmarked it or was sent a link to it. Asserted as absences, like the rest of this file.
+		const token = `adenf-share-${run}`;
+		const controlToken = `adenf-share-mature-${run}`;
+		let readerId: number;
+
+		/** Every title a response mentions, wherever in the payload it sits. */
+		async function titlesIn(path: string, cookie?: string): Promise<string> {
+			const headers: Record<string, string> = { Origin: ORIGIN };
+			if (cookie) headers.Cookie = cookie;
+			const res = await req(path, { headers });
+			return JSON.stringify(await res.json());
+		}
+
+		beforeAll(async () => {
+			const [reader] = await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.username, readerName));
+			readerId = reader.id;
+			await db.insert(shareLinks).values([
+				{ token, workId: adultWork.id, sharerId: grownId },
+				{ token: controlToken, workId: matureWork.id, sharerId: grownId },
+			]);
+			await db.insert(libraryItems).values([
+				{ userId: readerId, workId: adultWork.id },
+				{ userId: grownId, workId: adultWork.id },
+			]);
+			await db.insert(bookmarks).values([
+				{ userId: readerId, workId: adultWork.id },
+				{ userId: readerId, creatorId },
+			]);
+			const [project] = await db
+				.insert(projects)
+				.values({
+					creatorId,
+					slug: `adenf-adult-only-${run}`,
+					title: `Adult-only project ${run}`,
+					isPublished: true,
+				})
+				.returning({ id: projects.id });
+			await db.insert(projectItems).values({ projectId: project.id, workId: adultWork.id });
+		}, DB_SETUP_TIMEOUT);
+
+		it("answers a share link to an Adult Work as gone, and one to a Mature Work as it is", async () => {
+			const adult = await req(`/api/content/share/${token}`, { headers: { Origin: ORIGIN } });
+			expect(adult.status).toBe(404);
+			expect(await adult.text()).not.toContain(ADULT_TITLE);
+
+			const mature = await req(`/api/content/share/${controlToken}`, {
+				headers: { Origin: ORIGIN },
+			});
+			expect(mature.status).toBe(200);
+		});
+
+		it("leaves it off the shelf of a reader who has not opted in, and on a verified one's", async () => {
+			expect(await titlesIn("/api/content/library", readerCookie)).not.toContain(ADULT_TITLE);
+			expect(await titlesIn("/api/content/library", grownCookie)).toContain(ADULT_TITLE);
+		});
+
+		it("leaves a bookmark to it out, and keeps the reader's other bookmarks", async () => {
+			const res = await req("/api/content/bookmarks", {
+				headers: { Origin: ORIGIN, Cookie: readerCookie },
+			});
+			const body = (await res.json()) as { bookmarks: { creatorId: number | null }[] };
+			expect(JSON.stringify(body)).not.toContain(ADULT_TITLE);
+			expect(body.bookmarks.some((b) => b.creatorId === creatorId)).toBe(true);
+		});
+
+		it("🚨 leaves a project holding only Adult work out of the listing, except for those who may see it", async () => {
+			const project = `Adult-only project ${run}`;
+			const path = `/api/content/projects?creator=${creatorName}`;
+			expect(await titlesIn(path)).not.toContain(project);
+			expect(await titlesIn(path, readerCookie)).not.toContain(project);
+			expect(await titlesIn(path, grownCookie)).toContain(project);
+			expect(await titlesIn(path, creatorCookie)).toContain(project);
 		});
 	});
 

@@ -85,6 +85,7 @@ import {
 	desc,
 	eq,
 	inArray,
+	isNull,
 	like,
 	ne,
 	or,
@@ -114,7 +115,7 @@ import {
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
-import { adultVisibility } from "../services/content-preferences.js";
+import { adultVisibility, maturityHiddenFrom } from "../services/content-preferences.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
 import {
 	permanentWorkIds,
@@ -127,6 +128,7 @@ import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
 import { notifyMany } from "../services/notifications.js";
 import {
 	consumedSeconds,
+	parentalHiddenFrom,
 	parentalPolicyFor,
 	parentalVisibility,
 } from "../services/parental-controls.js";
@@ -141,7 +143,12 @@ import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { beginScans, scanInlineUpload, scanReleaseGate } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
-import { resolveShareToken, revokeShareLink, shareLinkFor } from "../services/share-links.js";
+import {
+	isShareable,
+	resolveShareToken,
+	revokeShareLink,
+	shareLinkFor,
+} from "../services/share-links.js";
 import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
@@ -3286,6 +3293,12 @@ const contentRoutes = new Hono()
 				slug: works.slug,
 				publicId: works.publicId,
 				title: works.title,
+				visibility: works.visibility,
+				maturity: works.maturity,
+				streamEnabled: works.streamEnabled,
+				seedAccess: works.seedAccess,
+				takedownStatus: works.takedownStatus,
+				quarantineStatus: works.quarantineStatus,
 				sharerName: users.displayName,
 				sharerUsername: users.username,
 			})
@@ -3293,7 +3306,14 @@ const contentRoutes = new Hono()
 			.innerJoin(users, eq(users.id, link.sharerId))
 			.where(eq(works.id, link.workId))
 			.limit(1);
-		if (!row) return c.json({ error: "This link is no longer available" }, 404);
+		// 🚨 Asked again at resolution rather than trusted from the day the link was minted. A
+		// Work corrected into Adult after its link was pasted somewhere would otherwise go on
+		// answering that link with its title — to anybody holding it, signed in or not — which is
+		// the existence the rung withholds. Withdrawn, gated or taken-down Works fail the same
+		// check, and a link to one of those has nothing left to open either.
+		if (!row || !isShareable(row)) {
+			return c.json({ error: "This link is no longer available" }, 404);
+		}
 
 		return c.json({
 			workId: link.workId,
@@ -4064,6 +4084,28 @@ const contentRoutes = new Hono()
 			conditions.push(eq(projects.isPublished, true));
 		}
 
+		// 🚨 **A project whose released Works are all ones the viewer may not see is absent too.**
+		// A project carries no rating of its own, but its title and cover describe what is in
+		// it, so a project holding only Adult work would otherwise announce that work's existence
+		// to somebody who has not opted in — the thing the rung withholds. A project with no
+		// released Works at all is still listed, since there is nothing in it to disclose.
+		const listingViewerId = await getOptionalUserId(c);
+		const [{ prefs: viewerPrefs }, { policy: viewerPolicy }] = await Promise.all([
+			adultVisibility(listingViewerId),
+			parentalVisibility(listingViewerId),
+		]);
+		const memberVisible = and(
+			maturityHiddenFrom(viewerPrefs, listingViewerId, sql`w.creator_id`, sql`w.maturity`),
+			parentalHiddenFrom(viewerPolicy, listingViewerId, sql`w.creator_id`, sql`w.type`),
+		);
+		conditions.push(sql`(
+			NOT EXISTS (
+				SELECT 1 FROM project_items pi JOIN works w ON w.id = pi.work_id
+				WHERE pi.project_id = ${projects.id} AND w.visibility = 'released'
+			)
+			OR ${containsWork(memberVisible ?? sql`true`)}
+		)`);
+
 		if (creator) {
 			const [user] = await db
 				.select({ id: users.id })
@@ -4821,6 +4863,13 @@ const contentRoutes = new Hono()
 
 	.get("/bookmarks", requireAuth, async (c) => {
 		const user = c.get("user");
+		// A bookmark to a Work the reader may not see is left out rather than rendered with its
+		// title. Bookmarks to posts, projects and creators carry no rating and are unaffected,
+		// which is why the condition only binds rows that name a Work.
+		const [{ hidden: adultHidden }, { hidden: parentalHidden }] = await Promise.all([
+			adultVisibility(user.id),
+			parentalVisibility(user.id),
+		]);
 
 		const result = await db
 			.select({
@@ -4845,7 +4894,12 @@ const contentRoutes = new Hono()
 			.leftJoin(posts, eq(bookmarks.postId, posts.id))
 			.leftJoin(works, eq(bookmarks.workId, works.id))
 			.leftJoin(users, eq(bookmarks.creatorId, users.id))
-			.where(eq(bookmarks.userId, user.id))
+			.where(
+				and(
+					eq(bookmarks.userId, user.id),
+					or(isNull(bookmarks.workId), and(adultHidden, parentalHidden) ?? sql`true`),
+				),
+			)
 			.orderBy(asc(bookmarks.sortOrder));
 
 		return c.json({
@@ -4983,8 +5037,19 @@ const contentRoutes = new Hono()
 		const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
 		const projectIds = rows.map((r) => r.projectId).filter((id): id is number => id != null);
 
+		// 🚨 A shelf is a listing like any other, so a Work the reader may not see is absent from
+		// it rather than present and locked — including one they saved or bought before it was
+		// corrected into Adult, or before a guardian blocked it. The entry itself survives in
+		// `library_items` and comes back if they opt in or the block lifts.
+		const [{ hidden: adultHidden }, { hidden: parentalHidden }] = await Promise.all([
+			adultVisibility(user.id),
+			parentalVisibility(user.id),
+		]);
 		const workRows = workIds.length
-			? await db.select().from(works).where(inArray(works.id, workIds))
+			? await db
+					.select()
+					.from(works)
+					.where(and(inArray(works.id, workIds), adultHidden, parentalHidden))
 			: [];
 		const projectRows = projectIds.length
 			? await db
@@ -5024,7 +5089,16 @@ const contentRoutes = new Hono()
 					})
 					.from(projectItems)
 					.innerJoin(works, eq(projectItems.workId, works.id))
-					.where(and(inArray(projectItems.projectId, projectIds), eq(works.visibility, "released")))
+					.where(
+						and(
+							inArray(projectItems.projectId, projectIds),
+							eq(works.visibility, "released"),
+							// Counted the way the Project page lists them, so a saved album never
+							// claims a track the reader will not find inside it.
+							adultHidden,
+							parentalHidden,
+						),
+					)
 					.groupBy(projectItems.projectId)
 			: [];
 		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
