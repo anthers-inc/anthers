@@ -73,8 +73,10 @@ export default function FAQPage() {
 				</Section>
 			))}
 
-			{/* Closing — the same band shape /for-users and /for-creators end on. */}
-			<section className="bg-base-200/70">
+			{/* Closing — the same band shape /for-users and /for-creators end on. Its tint follows
+			    the alternation from the hero down, so it depends on how many categories there
+			    are; see `Section`. */}
+			<section className={FAQ_CATEGORIES.length % 2 === 1 ? "bg-base-200/70" : ""}>
 				<div className="mx-auto max-w-6xl px-6 py-24 text-center">
 					<Reveal>
 						<Sprig className="mx-auto mb-6 h-12 w-12 text-primary/70" />

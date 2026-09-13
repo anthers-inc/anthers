@@ -439,8 +439,9 @@ export default function CompareGhostPage() {
 				</div>
 			</Section>
 
-			{/* Closing */}
-			<section className="bg-base-200/70">
+			{/* Closing — untinted, because the bands alternate from the hero down and this one
+			    falls on a plain band; see `Section`. */}
+			<section>
 				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Reveal>
 						<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
