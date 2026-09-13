@@ -20,6 +20,7 @@
  */
 
 import { db } from "@anthers/db";
+import { isDevCheckout } from "@anthers/db/dev-only";
 import { atprotoOauthState, atprotoSessions } from "@anthers/db/schema";
 import { JoseKey } from "@atproto/jwk-jose";
 import {
@@ -212,19 +213,29 @@ export async function grantedScopeFor(did: string): Promise<string | null> {
  * writers were found asking `NODE_ENV` the same question and getting the same wrong answer.
  * `publicOrigin()` in `lib/deployment.ts` is where it lives now, so the API has one
  * definition of "public" rather than four descriptions of it that can drift.
+ *
+ * 🚨 **The refusal cannot read the origin, because a missing origin is the failure it
+ * exists for.** It reads the deployment's shape instead — `isDevCheckout()`, true only where
+ * the repository's own root files exist, which no deployed container carries — so a
+ * deployment that has lost its origin throws rather than advertising a loopback client
+ * identity. A refusal gated on `NODE_ENV` looks the same and can never fire here, because
+ * production sets no `NODE_ENV`; `scripts/node-env-guard.test.ts` refuses that branch.
+ *
+ * Both inputs are injectable so each outcome is testable from a checkout, where the default
+ * shape always answers "not deployed".
  */
-export function getBaseUrl(): string {
-	const explicit = process.env.BASE_URL;
+export function getBaseUrl(
+	env: Record<string, string | undefined> = process.env,
+	deployed: boolean = !isDevCheckout(import.meta.dir),
+): string {
+	const explicit = env.BASE_URL;
 	if (explicit) return explicit.replace(/\/+$/, "");
 
-	// Any https origin means this is deployed and reachable, whatever NODE_ENV says.
-	const frontend = publicOrigin();
+	// Any https origin means this is deployed and reachable.
+	const frontend = publicOrigin(env);
 	if (frontend) return frontend;
 
-	// Only a declared production environment is an ERROR — that combination means somebody
-	// meant to deploy and gave us nothing usable, which must fail loudly rather than emit a
-	// client identity no authorization server will accept.
-	if (process.env.NODE_ENV === "production") {
+	if (deployed) {
 		throw new Error(
 			"ATProto OAuth needs an https origin: set BASE_URL, or FRONTEND_URL to the public site.",
 		);
