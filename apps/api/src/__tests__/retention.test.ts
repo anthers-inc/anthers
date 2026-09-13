@@ -14,6 +14,7 @@
  * - A record inside three years is untouched.
  * - A notice with a **live suit** is never redacted, at any age.
  * - A notice still working through the process is never redacted, at any age.
+ * - A notice under a **legal hold** is never redacted while the hold is active.
  * - An **open** report is never redacted, at any age.
  * - The sweep is idempotent — `redactedAt` keeps it off rows it has done.
  * - `moderation_actions` is not swept at all.
@@ -23,6 +24,7 @@ import { db } from "@anthers/db/client";
 import {
 	type DmcaNoticeStatus,
 	dmcaNotices,
+	legalHolds,
 	moderationActions,
 	moderationReports,
 	users,
@@ -30,6 +32,7 @@ import {
 } from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
 import { eq, sql } from "drizzle-orm";
+import { liftHold, placeHold } from "../services/legal-hold";
 import {
 	redactClosedModerationReports,
 	redactionCutoff,
@@ -52,6 +55,7 @@ let reporterId: number;
 let workId: number;
 const createdNotices: number[] = [];
 const createdReports: number[] = [];
+const createdHolds: number[] = [];
 
 /** Comfortably past the clock. */
 function longAgo(): Date {
@@ -175,6 +179,8 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
+	// Holds reference their subject by id alone and go with nothing, so they are removed by hand.
+	for (const id of createdHolds) await db.delete(legalHolds).where(eq(legalHolds.id, id));
 	for (const id of createdNotices) await db.delete(dmcaNotices).where(eq(dmcaNotices.id, id));
 	for (const id of createdReports)
 		await db.delete(moderationReports).where(eq(moderationReports.id, id));
@@ -253,6 +259,34 @@ describe("DMCA notices past the clock", () => {
 		// court is the one version of this that could do real harm.
 		expect(after?.complainantAddress).toBe("9 Claim Lane, Anytown, US");
 		expect(after?.redactedAt).toBeNull();
+	});
+
+	it("🚨 never redacts a notice under a legal hold, and redacts it once the hold lifts", async () => {
+		const before = await makeNotice({
+			status: "restored",
+			receivedAt: longAgo(),
+			finalizedAt: longAgo(),
+			withCounterNotice: true,
+		});
+		const { holdId } = await placeHold({
+			subjectType: "dmca_notice",
+			subjectId: before.id,
+			reason: "Retention fixture — preservation request",
+		});
+		createdHolds.push(holdId);
+
+		await redactSettledDmcaNotices();
+		const held = await reloadNotice(before.id);
+		// A preservation order covers exactly what the sweep blanks, so both sides stay.
+		expect(held?.complainantAddress).toBe("9 Claim Lane, Anytown, US");
+		expect(held?.counterNotice?.subscriberAddress).toBe("1 Creator Way, Anytown, US");
+		expect(held?.redactedAt).toBeNull();
+
+		await liftHold(holdId);
+		await redactSettledDmcaNotices();
+		const lifted = await reloadNotice(before.id);
+		expect(lifted?.complainantAddress).toBe("");
+		expect(lifted?.redactedAt).toBeTruthy();
 	});
 
 	it("never redacts a notice still working through the process", async () => {

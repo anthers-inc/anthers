@@ -349,3 +349,22 @@ export const MODERATION_NOTE_MAX = 1000;
 export type ReportStatus = "open" | "resolved" | "dismissed";
 
 export const REPORT_STATUSES: readonly ReportStatus[] = ["open", "resolved", "dismissed"];
+
+/**
+ * What a legal hold can name. Deliberately small — add a kind when a sweep needs it.
+ *
+ * Each value names exactly one table, because ids collide across tables: `report` is a
+ * `moderation_reports` row, `abuse_report` an `abuse_reports` row, and `dmca_notice` a
+ * `dmca_notices` row. The list lives here so the hold service, the operator route's schema
+ * and the console cannot disagree about what a hold may point at — a kind the console could
+ * not offer would be a sweep with no reachable off switch.
+ */
+export const HOLD_SUBJECT_TYPES = [
+	"user",
+	"work",
+	"report",
+	"abuse_report",
+	"dmca_notice",
+] as const;
+
+export type HoldSubjectType = (typeof HOLD_SUBJECT_TYPES)[number];

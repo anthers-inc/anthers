@@ -25,18 +25,20 @@
  * is a cron job destroying the thing while an obligation to keep it is live.
  */
 import { db } from "@anthers/db/client";
-import { abuseReports, legalHolds, moderationReports, users, works } from "@anthers/db/schema";
+import {
+	abuseReports,
+	dmcaNotices,
+	legalHolds,
+	moderationReports,
+	users,
+	works,
+} from "@anthers/db/schema";
 import { PRESERVATION_HOLD_YEARS } from "@anthers/shared/constants";
+import type { HoldSubjectType } from "@anthers/shared/moderation";
 import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 
-/**
- * What a hold can name. Deliberately small — add a kind when a sweep needs it.
- *
- * `report` is a `moderation_reports` row and `abuse_report` is an `abuse_reports` row.
- * They are separate because the tables are: ids collide across them, so one value
- * covering both would hold the wrong row half the time.
- */
-export type HoldSubjectType = "user" | "work" | "report" | "abuse_report";
+/** What a hold can name — the list and the reason it is one list are in `@anthers/shared/moderation`. */
+export type { HoldSubjectType };
 
 /**
  * The date a § 2258A(h) preservation hold placed now would expire.
@@ -209,6 +211,14 @@ export async function describeSubject(
 				.where(eq(abuseReports.id, subjectId))
 				.limit(1);
 			return row ? `Abuse report #${subjectId} — ${row.url}` : null;
+		}
+		case "dmca_notice": {
+			const [row] = await db
+				.select({ workTitle: dmcaNotices.workTitle, status: dmcaNotices.status })
+				.from(dmcaNotices)
+				.where(eq(dmcaNotices.id, subjectId))
+				.limit(1);
+			return row ? `DMCA notice #${subjectId} — ${row.workTitle} (${row.status})` : null;
 		}
 	}
 }

@@ -21,12 +21,13 @@
  * somebody notice they have just preserved the wrong account.
  */
 
+import type { HoldSubjectType } from "@anthers/shared/moderation";
 import { displayHandle } from "@anthers/web-shared/profile";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 
-type SubjectType = "user" | "work" | "report" | "abuse_report";
+type SubjectType = HoldSubjectType;
 
 interface Hold {
 	id: number;
@@ -47,6 +48,7 @@ const SUBJECT_LABELS: Record<SubjectType, string> = {
 	work: "Work",
 	report: "Moderation report",
 	abuse_report: "Abuse report",
+	dmca_notice: "DMCA notice",
 };
 
 /**
