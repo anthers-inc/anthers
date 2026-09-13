@@ -13,7 +13,7 @@ So the door is closed for now, deliberately, and it will open. Building in the o
 ## What is open, today
 
 - **Security reports.** Always in scope, always welcome, whatever else is going on — see [`SECURITY.md`](./SECURITY.md).
-- **Reading the code.** That is what the [AGPL](./LICENSE.md) is for. Fork it, run it, learn from it, take it apart.
+- **Reading the code.** That is what the [license](./LICENSE.md) is for. Fork it, run it, learn from it, take it apart.
 - **Questions and comments.** [contact@anthers.org](mailto:contact@anthers.org) reaches a person.
 
 If you have found a real bug in the platform, tell us — a good bug report is a genuine contribution and we would rather have it than not. Just expect it to be fixed by us rather than merged from you, for now.

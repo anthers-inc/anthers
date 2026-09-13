@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * What the product is waiting on: every chosen icon whose file is not here yet.
  *

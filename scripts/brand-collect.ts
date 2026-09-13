@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * File every downloaded SVG into the library at once, and regenerate.
  *

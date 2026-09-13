@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * DMCA — the one place that files a notice, takes down a Work, restores it,
  * files a counter-notice, and rejects a notice.

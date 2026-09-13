@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * New / Edit **Work** — the Catalog's authoring surface, and a page rather than a dialog
  * since 2026-09-11.

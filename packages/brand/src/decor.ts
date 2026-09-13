@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Botanical decor generators — framework-agnostic SVG *string* builders that
 // compose brand assets (grass, blooms, bees) with hand-drawn inline geometry

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Delivery-layer access — that a denied viewer is never handed a *pointer* at the media,
  * not merely that the access reason says "gated".

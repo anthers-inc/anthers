@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The topbar light/dark switch, shared by the consumer site and the Studio. Shows a moon
 // in light mode (click → dark) and a sun in dark mode (click → light). The choice always

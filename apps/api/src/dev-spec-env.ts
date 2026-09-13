@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Fill in the non-secret configuration that dev and production genuinely share, by reading
  * the committed App Platform spec — instead of asking every developer to keep a second copy

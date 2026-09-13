@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Giving a hosted identity back: what the node is asked, in what order, and what each refusal
  * means for the erasure that called.

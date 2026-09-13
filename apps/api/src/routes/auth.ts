@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { MAX_PICKED_CREATORS, MAX_SIGNUP_AMOUNT } from "@anthers/shared/signup";

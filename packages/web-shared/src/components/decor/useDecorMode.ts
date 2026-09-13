@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // useDecorMode — the live light/dark mode for the baked-color decor layer. The decor SVGs
 // bake concrete colors (a background can't inherit currentColor), so they can't ride

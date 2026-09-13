@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The roadmap's rules, made enforceable. Three of them, and each exists because breaking
 // it produces something that still looks right.

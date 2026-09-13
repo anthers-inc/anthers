@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Setup project for the User Gauntlet walk: reset the fixture through its canonical
  * script (the same one `make gauntlet-reset` runs — never a reimplementation), sign the

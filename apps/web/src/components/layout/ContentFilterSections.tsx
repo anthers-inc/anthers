@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Shared sidebar filter sections used by both Discover and Feed pages.
  * Includes: Content Type, Price, Filters (type-specific), and Tags.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Moderation — the one place that files a report, hides a subject, restores it,
  * and assembles the operator's queue.

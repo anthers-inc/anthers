@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * A Project's shelf of Works: membership, ordering, and what a shelf is NOT allowed to do.
  *

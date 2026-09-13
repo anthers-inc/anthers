@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // OAuth 1.0a request signing (RFC 5849) for the Noun Project Icon API.
 //

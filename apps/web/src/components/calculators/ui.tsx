@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 // Shared presentational primitives for the resource calculators. Kept small and
 // DaisyUI-native so the three calculators read as one consistent set and follow

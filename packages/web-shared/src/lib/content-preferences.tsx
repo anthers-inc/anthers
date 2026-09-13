@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * What the reader has asked to meet, on the client side: the per-rung Hide / Blur / Show
  * settings, and the veil that applies the blur.

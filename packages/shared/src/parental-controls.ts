@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Parental controls — the policy half, pure and with no I/O, the same split as
  * `public-access.ts` and `resolveAccessSync`.

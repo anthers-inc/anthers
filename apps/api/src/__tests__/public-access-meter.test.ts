@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The Public Access meter, enforced end-to-end: a free account watches 10 hours of the
  * commons a month, the Public Access price given to Anthers removes the limit, and nothing

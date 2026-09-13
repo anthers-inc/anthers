@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The shape of `STRIPE_RETURN_PATHS` — what a value in it has to be, before anything asks
  * whether it resolves.

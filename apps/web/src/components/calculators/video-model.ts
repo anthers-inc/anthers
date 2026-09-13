@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 // Shared video-bitrate model for the Video Storage calculator. It sizes content
 // from the AV1 delivery ladder and a bytes-per-bitrate constant, and the reference

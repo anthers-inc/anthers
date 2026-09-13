@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // No page may scroll sideways on a phone. One test per logged-out route, at 390px.
 //

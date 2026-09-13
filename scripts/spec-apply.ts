@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Apply the **committed** App Platform spec to the live app without destroying the half the
  * committed file cannot carry.

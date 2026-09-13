@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Deterministic state hops for the User Gauntlet — the harness's way to place the viewer
  * on an exact rung of the staircase without walking a billing flow.

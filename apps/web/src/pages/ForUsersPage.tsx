@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The For Users marketing page — the production Meadow design (ported from the
 // Meadow design-lab reference, since removed; see git history). Airy editorial

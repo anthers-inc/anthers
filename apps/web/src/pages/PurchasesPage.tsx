@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { amountLabel } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The web-sized logo files are committed copies of the logo's exports, and this is what
 // stops them drifting. `bun run brand:logo` writes them and records both hashes; a

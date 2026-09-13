@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // A standalone brand asset, recolored via CSS mask so its color follows `text-*`
 // (like `currentColor`). Lets any single-color @anthers/brand SVG be dropped in

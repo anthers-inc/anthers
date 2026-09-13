@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The snapshot guard, driven against doctored journals rather than the real one — the
  * same technique `webhook-check` uses for its input files, and for the same reason: a

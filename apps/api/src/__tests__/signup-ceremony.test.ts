@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The emailed-code ceremony: prove the address, then build the account — or sign into the
 // one that is already there.

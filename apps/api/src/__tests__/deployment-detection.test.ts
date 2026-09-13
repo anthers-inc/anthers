@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Three security branches read `NODE_ENV`, which production does not set — so each of them
  * silently took its development branch on the live site.

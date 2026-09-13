@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Stripe Elements card styling. Stripe rejects `oklch()`/CSS vars, so resolve the
  * themed colors to concrete `rgb()` at runtime (rasterise one pixel), keeping the

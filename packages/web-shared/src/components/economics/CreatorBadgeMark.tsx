@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * A creator's Badge — a patch in the shape and color they chose, with their art on it.
  *

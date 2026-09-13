@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Light/dark theme — the single source of truth shared by every app that renders the
 // shared client layer (the consumer site and the Studio). The Meadow palette ships a

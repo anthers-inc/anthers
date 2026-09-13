@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * What somebody who followed a share link sees under the thing they came to watch: who sent
  * them, and a free account they can have without leaving the page.

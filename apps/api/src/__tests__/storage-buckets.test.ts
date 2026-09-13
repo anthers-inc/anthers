@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Which bucket an object belongs in — the public/private boundary, once it stopped being a
  * per-object flag.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Secrets that authorize a visitor past the pre-launch SiteGate: the password
  * typed into the gate (`SITE_PASSWORD`), and the invite keys carried in the

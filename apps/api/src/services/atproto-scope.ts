@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Reading an AT Protocol OAuth scope string, so Anthers can tell what it was actually granted.
  *

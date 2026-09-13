@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Shared presentation helpers for creator-owned library content items: the type
  * catalog, per-type icons/labels, the derived processing-state badge, and the card

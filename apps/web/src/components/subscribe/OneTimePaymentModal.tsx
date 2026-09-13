@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { StripeCardElement } from "@stripe/stripe-js";
 import { useMemo, useState } from "react";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Search the Noun Project library from the terminal, so choosing an emblem happens
  * against nearly ten million icons instead of against the few hundred already in

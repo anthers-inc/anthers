@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { AuthProvider } from "@anthers/web-shared/auth";
 import { ContentPreferencesProvider } from "@anthers/web-shared/content-preferences";

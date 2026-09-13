@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pins `isEmptySecret` — the predicate the 2026-08-15 secret clobber turned on.
  *

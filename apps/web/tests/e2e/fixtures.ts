@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_PASSWORD, GAUNTLET_CREATOR_USERNAME } from "@anthers/db/gauntlet";

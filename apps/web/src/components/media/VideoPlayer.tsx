@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The video player: HLS wiring, the Public Access meter, the Time Pool claim — and, since
  * 2026-08-13, controls that are ours rather than whatever the browser happened to draw.

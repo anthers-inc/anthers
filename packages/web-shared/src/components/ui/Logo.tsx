@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 import onelineDark from "@anthers/brand/logo/web/lockup-oneline-dark.png";
 import onelineLight from "@anthers/brand/logo/web/lockup-oneline-light.png";
 import stackedDark from "@anthers/brand/logo/web/lockup-stacked-dark.png";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Rasterize an **ebook** Work: one uploaded PDF in, one private page image out per page.
  *

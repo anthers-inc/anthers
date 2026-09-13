@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // A banded marketing page alternates tinted and plain from the hero to the closing band,
 // with no two bands of the same surface touching. See `Section` in

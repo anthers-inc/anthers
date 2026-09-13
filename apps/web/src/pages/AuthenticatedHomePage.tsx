@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";

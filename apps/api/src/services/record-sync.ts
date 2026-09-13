@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Bringing one row's record into line with the row, for every kind of record Anthers writes on
  * somebody's behalf apart from a Work's listing.

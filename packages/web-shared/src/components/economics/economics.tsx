@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The two Meadow economics cards — the interactive "Where your support for Anthers goes"
 // Badge picker and the one-time-purchase example — plus the badge ladder and the

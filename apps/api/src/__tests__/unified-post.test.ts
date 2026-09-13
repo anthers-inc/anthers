@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Catalog vertical slice — proves the Catalog/Posts split end to end against the real dev
  * database:

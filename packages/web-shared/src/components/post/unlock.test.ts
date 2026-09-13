@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `presentsAsLocked` — the difference between a Work that is gated and a Work that is
  * merely undeliverable to the person looking at it right now.

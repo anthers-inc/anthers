@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The unlock offer a gated Work reports — what the viewer still needs, and what to call it.
  *

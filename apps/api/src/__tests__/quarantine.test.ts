@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Quarantine — material taken out of reach of **everybody**, and the one assertion that
  * decides whether this feature works at all.

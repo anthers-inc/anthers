@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The growth-ladder model: what Anthers' books look like at a given scale, and the
  * account totals at which each staffing level becomes affordable.

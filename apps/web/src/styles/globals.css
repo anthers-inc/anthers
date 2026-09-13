@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: Apache-2.0 */
 @import "tailwindcss";
 /* Shared brand theme (palette + base surface), single source of truth in
    @anthers/web-shared. Its :root overrides are unlayered, so they win over DaisyUI's

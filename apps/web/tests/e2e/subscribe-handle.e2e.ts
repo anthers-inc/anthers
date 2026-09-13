@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The handle door on `/subscribe` — the one where Anthers issues the identity, and the one a
  * visitor now meets first.

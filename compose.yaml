@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 # Local dev Postgres for the Anthers hub. Production uses DigitalOcean Managed
 # Postgres; this container is the zero-setup local equivalent (the hub no longer
 # runs on a bare SQLite file, so dev now needs a Postgres). SQLite remains the

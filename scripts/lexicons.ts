@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Generate TypeScript from the `org.anthers.*` Lexicon documents, and verify the committed
  * output still matches them.

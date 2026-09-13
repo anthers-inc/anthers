@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * What an Adult rating does to a Work — which since 2026-08-28 is one thing rather than
  * four: it restricts **who may reach it** and touches nothing about what its creator may

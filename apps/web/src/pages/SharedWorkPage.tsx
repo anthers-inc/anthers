@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `/s/:token` — where a share link lands, and the only thing it does is point somewhere else.
  *

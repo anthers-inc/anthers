@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The Anthers-vs-Ghost comparison page — restyled into the Meadow design
 // (matching /for-creators). Airy editorial forest-green, Fraunces display serif
@@ -151,7 +151,7 @@ export default function CompareGhostPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
-									One-click data export, and an AGPL-licensed codebase
+									One-click data export, and an open-source codebase
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
@@ -242,7 +242,7 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<CodeBracketIcon className="h-6 w-6" />}
 							title="Open-source approach"
-							description="Ghost is fully open-source (MIT license) and self-hostable, and their non-profit foundation has been building in the open since 2013 — a decade of earned credibility. Anthers is licensed AGPL-3.0 and holds the same principle: hosting with us is meant to be a convenience, never a requirement."
+							description="Ghost is fully open-source (MIT license) and self-hostable, and their non-profit foundation has been building in the open since 2013 — a decade of earned credibility. Anthers is open source under the Apache-2.0 license and holds the same principle: hosting with us is meant to be a convenience, never a requirement."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
@@ -301,7 +301,7 @@ export default function CompareGhostPage() {
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="0% platform revenue share" anthers ghost />
 								<CompRow feature="Self-hostable" ghost />
-								{/* Anthers is AGPL-3.0 — this row marked only Ghost, which understated us on the
+								{/* Anthers is open source too — this row marked only Ghost, which understated us on the
 								    one axis where the honest differentiator actually lives. */}
 								<CompRow feature="Open-source codebase" anthers ghost />
 								{/* ⚠️ Names the identity rather than the linking, matching /compare/itch: signup
@@ -416,7 +416,7 @@ export default function CompareGhostPage() {
 								Anthers: open source
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Anthers is licensed AGPL-3.0. Creators will be able to store and serve their own
+								Anthers is licensed Apache-2.0. Creators will be able to store and serve their own
 								content — on their own hardware or their own cloud — while identity, payments and
 								discovery stay with the platform.
 							</p>

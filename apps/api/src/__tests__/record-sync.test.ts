@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The part of syncing a record that every kind shares: plan, open a repository only if the plan
  * writes, carry it out, remember the address.

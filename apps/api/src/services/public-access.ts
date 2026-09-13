@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The Public Access meter's database half — reading how much of the commons a viewer has
  * watched this month, and deciding whether they may watch more.

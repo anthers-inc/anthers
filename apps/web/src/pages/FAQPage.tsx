@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // The FAQ — restyled into the Meadow design 2026-08-14, because it was still the
 // pre-design-pass page (a bare container, DaisyUI's default collapse) sitting one

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // <MeadowVines> — the woven climbing side vines as an absolutely-positioned pair
 // (left + right, wide screens only), plus a field of bees drifting along them and

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * The guard on this codebase's most-repeated bug: a hand-rolled API base URL.
  *

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Integrations schema — see auth.ts for the role-classification legend. All three
  * tables are `node`: a creator's own external-platform connections and cross-publish

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // A one-shot scroll/load reveal: fades its children up into place the first time
 // they enter the viewport (or immediately, on mount, for anything already above

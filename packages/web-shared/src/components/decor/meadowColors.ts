@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 // Baked decor colors for the Meadow botanical layer, keyed by light/dark. The SVG
 // generators (vines, grass, pollen) bake colors into the image — a background

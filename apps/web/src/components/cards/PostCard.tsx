@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";

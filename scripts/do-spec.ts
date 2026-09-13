@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Shared vocabulary for the two tools that read App Platform specs — `spec-diff.ts`
  * (which reports drift) and `spec-apply.ts` (which resolves it).
