@@ -17,10 +17,10 @@
  * `mediums` is covered here too — it is the field /subscribe's medium chips shuffle on,
  * and it shares the same correlation, so it shares the same failure mode.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { follows, users, works } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { follows, posts, projects, users, works } from "@anthers/db/schema";
+import { and, eq, like } from "drizzle-orm";
 import app from "../index";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -99,11 +99,46 @@ beforeAll(async () => {
 		{ ...base, publicId: pid + 2, slug: `cl-draft-${id}`, type: "game", visibility: "private" },
 	]);
 
+	// Two published posts and one published project, plus an unpublished project. A card that
+	// counted posts would say 2 and one that ignored publishing would say 2 as well, so only the
+	// right query says 1.
+	await db.insert(posts).values([
+		{
+			creatorId: makerId,
+			title: "devlog one",
+			slug: `cl-post-a-${id}`,
+			publicId: pid + 3,
+			isPublished: true,
+		},
+		{
+			creatorId: makerId,
+			title: "devlog two",
+			slug: `cl-post-b-${id}`,
+			publicId: pid + 4,
+			isPublished: true,
+		},
+	]);
+	await db.insert(projects).values([
+		{ creatorId: makerId, title: "A project", slug: `cl-project-${id}`, isPublished: true },
+		{
+			creatorId: makerId,
+			title: "A draft project",
+			slug: `cl-project-draft-${id}`,
+			isPublished: false,
+		},
+	]);
+
 	await req(`/api/accounts/users/${makerName}/follow`, {
 		method: "POST",
 		headers: { Origin: ORIGIN, Cookie: fanCookie },
 	});
 }, DB_SETUP_TIMEOUT);
+
+// Projects and Works go with the account; posts do not, because a departed creator's posts are
+// tombstoned rather than destroyed — so the two this suite wrote are removed by hand.
+afterAll(async () => {
+	await db.delete(posts).where(like(posts.slug, `cl-post-%-${id}`));
+});
 
 describe("creator listing — derived columns", () => {
 	it("reports the follower count the follows table actually holds", async () => {
@@ -121,6 +156,17 @@ describe("creator listing — derived columns", () => {
 		expect(listed?.mediums?.slice().sort()).toEqual(["audio", "video"]);
 		// The private Work's type must not appear: a draft is not something anyone can find.
 		expect(listed?.mediums).not.toContain("game");
+	});
+
+	it("counts published projects as projects, and never posts or drafts", async () => {
+		const actual = await db
+			.select()
+			.from(projects)
+			.where(and(eq(projects.creatorId, makerId), eq(projects.isPublished, true)));
+		expect(actual.length).toBe(1);
+
+		const listed = (await listCreators()).find((c) => c.id === makerId);
+		expect(listed?.projectCount).toBe(actual.length);
 	});
 
 	it("tells a signed-in follower that they follow, and a stranger that they do not", async () => {
