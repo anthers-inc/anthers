@@ -19,6 +19,12 @@
  * them to decide who may reach a Work — so there is nothing for a lock to protect, and
  * locking them would take a creator's own warnings to their own readers out of their hands.
  *
+ * 🚨 **Every door that changes a rating asks for the Work's listing to be re-synced.** A rating
+ * decides whether a listing may exist at all — an Adult Work is never published to the network
+ * — so a correction into Adult that waited for the nightly reconcile would leave the Work's
+ * title and description public for up to a day after an operator had ruled it Adult. The sync
+ * job re-reads the Work and decides, so asking when nothing changed costs one read.
+ *
  * 🚨 **A rating is corrected, never deleted, and the appeal record outlives the decision.**
  * Same reasoning as the *Moderation & Reporting* page's removal-is-a-state rule: an appeal years later has to have
  * something to read, and a granted appeal that erased the correction would destroy the record
@@ -36,6 +42,7 @@ import {
 } from "@anthers/shared/content-rating";
 import { and, desc, eq } from "drizzle-orm";
 import { notify } from "./notifications.js";
+import { queueWorkListingSync } from "./work-listing.js";
 
 type WorkRow = typeof works.$inferSelect;
 export type RatingAppealRow = typeof workRatingAppeals.$inferSelect;
@@ -90,6 +97,7 @@ export async function declareRating(
 	if (input.notes) updates.maturityNotes = normalizeContentNotes(input.notes);
 
 	const [updated] = await db.update(works).set(updates).where(eq(works.id, work.id)).returning();
+	await queueWorkListingSync(work.id);
 	return updated;
 }
 
@@ -140,6 +148,7 @@ export async function correctRating(input: {
 		.set(updates)
 		.where(eq(works.id, input.workId))
 		.returning();
+	await queueWorkListingSync(input.workId);
 
 	await db.insert(moderationActions).values({
 		subjectType: "work",
@@ -271,6 +280,7 @@ export async function resolveRatingAppeal(input: {
 			.where(eq(works.id, appeal.workId))
 			.returning();
 		work = updated ?? null;
+		await queueWorkListingSync(appeal.workId);
 
 		await db.insert(moderationActions).values({
 			subjectType: "work",
