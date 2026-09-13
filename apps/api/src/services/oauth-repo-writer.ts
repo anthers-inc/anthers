@@ -27,7 +27,7 @@ import { users } from "@anthers/db/schema";
 import { TokenInvalidError, TokenRevokedError } from "@atproto/oauth-client";
 import { eq } from "drizzle-orm";
 import { getAtprotoClient, grantedScopeFor, recordGrantedScope } from "./atproto-client.js";
-import { type RecordRef, RepoAuthError, type RepoWriter, WORK_COLLECTION } from "./atproto-repo.js";
+import { type RecordRef, RepoAuthError, type RepoWriter } from "./atproto-repo.js";
 import { missingRepoActions, scopeAllowsWriting } from "./atproto-scope.js";
 
 /** Why no writer could be made over a creator's own grant. */
@@ -48,11 +48,20 @@ export type OauthWriterResult =
 /**
  * Open a writer onto the repository of the identity this account has linked.
  *
+ * 🚨 **The grant is checked against the collections the caller is about to write, never against
+ * a fixed one.** A creator's permission is per collection, and a writer opened on the strength
+ * of a grant over Work listings would sail past this gate for a post, be refused by the creator's
+ * own server, and be read as the creator having withdrawn a permission they never gave. The
+ * caller names every collection it will touch, and a grant missing any of them is `not_granted`.
+ *
  * ⚠️ **A revoked grant is forgotten here rather than merely reported.** The column exists to
  * tell the Studio whether publishing is on, so leaving it saying "granted" after the server has
  * said otherwise would show a creator a working state and give them nothing to press.
  */
-export async function oauthWriterFor(userId: number): Promise<OauthWriterResult> {
+export async function oauthWriterFor(
+	userId: number,
+	collections: readonly string[],
+): Promise<OauthWriterResult> {
 	const [row] = await db
 		.select({ did: users.atprotoDid })
 		.from(users)
@@ -63,7 +72,8 @@ export async function oauthWriterFor(userId: number): Promise<OauthWriterResult>
 
 	// The cheap gate. Most accounts will never have granted this, and answering them costs one
 	// column read rather than a conversation with somebody else's authorization server.
-	if (!scopeAllowsWriting(await grantedScopeFor(did), WORK_COLLECTION)) {
+	const stored = await grantedScopeFor(did);
+	if (!collections.every((collection) => scopeAllowsWriting(stored, collection))) {
 		return { writer: null, reason: "not_granted" };
 	}
 
@@ -95,12 +105,15 @@ export async function oauthWriterFor(userId: number): Promise<OauthWriterResult>
 	);
 	if (granted !== undefined) {
 		await recordGrantedScope(did, granted);
-		const missing = missingRepoActions(granted, WORK_COLLECTION);
-		if (missing.length > 0) {
-			console.log(
-				`[oauth-repo-writer] ${did}: the stored grant no longer covers ${missing.join(", ")}`,
-			);
-			return { writer: null, reason: "not_granted" };
+		for (const collection of collections) {
+			const missing = missingRepoActions(granted, collection);
+			if (missing.length > 0) {
+				console.log(
+					`[oauth-repo-writer] ${did}: the stored grant no longer covers ` +
+						`${missing.join(", ")} in ${collection}`,
+				);
+				return { writer: null, reason: "not_granted" };
+			}
 		}
 	}
 

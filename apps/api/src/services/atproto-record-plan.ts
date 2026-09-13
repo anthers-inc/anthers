@@ -16,10 +16,17 @@
  * something the network cannot confirm — which is why every refusal is reported with a reason
  * rather than swallowed, and why `atproto-reader-records.ts` enumerates them.
  *
- * ⚠️ **The delete branch is still the one to read twice.** A comment that is hidden, a review
- * that is anonymized, a vote whose account has gone: each must have its record REMOVED rather
- * than merely skipped once one exists. Skipping leaves an assertion on the network that
- * Anthers has stopped standing behind, and a record is public the moment it lands.
+ * 🚨 **Whether a refusal takes an existing record DOWN depends on whose record it is, and each
+ * kind says so itself.** A creator's post that goes back to a draft is the creator withdrawing
+ * it, so its record comes down. A reader's comment that an operator hides is not the reader
+ * withdrawing anything: the record stays where its author put it and Anthers declines to show
+ * it, which is the wiki's *User Records in the Atmosphere* ruling and how Bluesky treats the same
+ * problem. The same goes for a comment whose subject disappears — other people's records
+ * survive the thing they were about. Deleting those would be Anthers editing somebody's own
+ * repository over something they did not do. See {@link RecordKind.removes}.
+ *
+ * ⚠️ **Nothing is created or replaced in a collection whose Lexicon is unpublished**, for the
+ * reason `published-lexicons.ts` gives. Removal is never withheld.
  */
 import {
 	commentRecord,
@@ -61,6 +68,7 @@ import {
 	voteToRecord,
 } from "./atproto-reader-records.js";
 import { type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
+import { isLexiconPublished } from "./published-lexicons.js";
 
 export const COMMENT_COLLECTION = "org.anthers.comment";
 export const REVIEW_COLLECTION = "org.anthers.review";
@@ -78,28 +86,45 @@ export const FOLLOW_COLLECTION = "org.anthers.follow";
 export interface RecordKind<Input, R extends object, Reason extends string> {
 	readonly collection: string;
 	reasonFor(input: Input): Reason | null;
+	/**
+	 * Whether this refusal takes down a record that already exists, or leaves it where it is.
+	 *
+	 * 🚨 **True only when the refusal is the record's OWNER taking it back.** Anything else — a
+	 * moderator hiding it, its subject disappearing, a row that has drifted into a value the
+	 * schema cannot hold — is a reason not to write it again and never a reason to reach into
+	 * somebody's repository and delete what they said.
+	 */
+	removes(reason: Reason): boolean;
 	toRecord(input: Input): R | null;
 	readonly validator: LexiconValidator;
 }
+
+/** Why a record that would otherwise be written is being held back. */
+export type WithheldReason = "lexicon_unpublished";
 
 /** What should happen to one record, decided without touching the network. */
 export type RecordPlan<R, Reason extends string> =
 	| { action: "create"; record: R }
 	| { action: "replace"; rkey: string; record: R }
 	| { action: "delete"; rkey: string; reason: Reason }
-	| { action: "none"; reason: Reason }
+	/** A record exists and is deliberately left exactly as it is. */
+	| { action: "keep"; rkey: string; reason: Reason | WithheldReason }
+	| { action: "none"; reason: Reason | WithheldReason }
 	| { action: "invalid"; problem: string };
 
 /**
  * Decide what to do with one record, given whatever record it already has.
  *
- * 🚨 **"Unpublishable" is two different outcomes depending on whether a record exists**, and
- * conflating them is the bug this shape prevents. With no record, there is nothing to do.
- * With one, it has to come down.
+ * 🚨 **"Unpublishable" is three different outcomes, not two.** With no record there is nothing
+ * to do. With one, it comes down only when the kind says this refusal is its owner's — otherwise
+ * it is kept, and keeping it means keeping the stored address too, because forgetting where a
+ * record is strands it.
  *
  * ⚠️ **The record is validated against its own Lexicon before anything is sent.** The generated
  * validator is the same schema a consumer would check against, so a malformed record is caught
- * while it is still local — the one moment catching it is free.
+ * while it is still local — the one moment catching it is free. That happens BEFORE the
+ * publication gate, so a record that would be malformed is reported as such even while its
+ * schema is still a draft.
  */
 export function planRecord<Input, R extends object, Reason extends string>(
 	kind: RecordKind<Input, R, Reason>,
@@ -117,7 +142,10 @@ export function planRecord<Input, R extends object, Reason extends string>(
 
 	const reason = kind.reasonFor(input);
 	if (reason !== null) {
-		return rkey ? { action: "delete", rkey, reason } : { action: "none", reason };
+		if (!rkey) return { action: "none", reason };
+		return kind.removes(reason)
+			? { action: "delete", rkey, reason }
+			: { action: "keep", rkey, reason };
 	}
 
 	const record = kind.toRecord(input);
@@ -129,6 +157,14 @@ export function planRecord<Input, R extends object, Reason extends string>(
 	const parsed = kind.validator.safeParse(record);
 	if (!parsed.success) {
 		return { action: "invalid", problem: `record fails its own Lexicon: ${parsed.error}` };
+	}
+
+	// A draft schema writes nothing, and a record that somehow already exists under one is kept
+	// rather than forgotten — see `published-lexicons.ts`.
+	if (!isLexiconPublished(kind.collection)) {
+		return rkey
+			? { action: "keep", rkey, reason: "lexicon_unpublished" }
+			: { action: "none", reason: "lexicon_unpublished" };
 	}
 
 	return rkey ? { action: "replace", rkey, record } : { action: "create", record };
@@ -171,6 +207,11 @@ export async function syncRecord<Input, R extends object, Reason extends string>
 		}
 		case "none":
 			return { plan, uri: null };
+		case "keep":
+			// 🚨 The stored address stays. A record deliberately left on the network is still one
+			// Anthers has to be able to find — to rewrite when a comment is restored, or to remove
+			// when its author deletes it.
+			return { plan, uri: existingUri };
 		case "invalid":
 			// Deliberately leaves the stored URI alone. The two things that produce `invalid`
 			// are a URI nobody can parse and a record that fails its own schema, and neither is
@@ -185,6 +226,27 @@ export async function syncRecord<Input, R extends object, Reason extends string>
 // the followed account's identifier are looked up by the caller, so that planning stays a
 // pure function of what it is given.
 
+/**
+ * Which refusals of a reader's record are the reader taking it back.
+ *
+ * 🚨 **Only `empty_text`, which a reader reaches by editing their own words away.** Every other
+ * refusal leaves an existing record exactly where it is:
+ *
+ * - `hidden` is a moderator's decision, and the record stays where its author put it.
+ * - `subject_unpublished` and `subject_has_no_identity` are the SUBJECT going away, and other
+ *   people's records survive the thing they were about.
+ * - `no_author` is a closed account, whose records go with the account rather than one by one.
+ * - `bad_verdict` and `bad_direction` are a row that drifted after a valid record was written,
+ *   which is a reason to look at the row and not a reason to delete somebody's statement.
+ *
+ * A reader deleting the comment, the vote or the follow outright is the other way a record comes
+ * down, and it does not pass through here at all — the row is gone, so `remove-atproto-record`
+ * carries it.
+ */
+function readerRemoves(reason: UnpublishableReaderReason): boolean {
+	return reason === "empty_text";
+}
+
 export interface CommentInput {
 	comment: PublishableComment;
 	subjectUri: string | null;
@@ -193,6 +255,7 @@ export interface CommentInput {
 export const COMMENT_KIND: RecordKind<CommentInput, CommentRecord, UnpublishableReaderReason> = {
 	collection: COMMENT_COLLECTION,
 	reasonFor: ({ comment, subjectUri }) => unpublishableCommentReason(comment, subjectUri),
+	removes: readerRemoves,
 	toRecord: ({ comment, subjectUri }) => commentToRecord(comment, subjectUri),
 	validator: commentRecord,
 };
@@ -205,6 +268,7 @@ export interface ReviewInput {
 export const REVIEW_KIND: RecordKind<ReviewInput, ReviewRecord, UnpublishableReaderReason> = {
 	collection: REVIEW_COLLECTION,
 	reasonFor: ({ review, subjectUri }) => unpublishableReviewReason(review, subjectUri),
+	removes: readerRemoves,
 	toRecord: ({ review, subjectUri }) => reviewToRecord(review, subjectUri),
 	validator: reviewRecord,
 };
@@ -217,6 +281,7 @@ export interface VoteInput {
 export const VOTE_KIND: RecordKind<VoteInput, VoteRecord, UnpublishableReaderReason> = {
 	collection: VOTE_COLLECTION,
 	reasonFor: ({ vote, subjectUri }) => unpublishableVoteReason(vote, subjectUri),
+	removes: readerRemoves,
 	toRecord: ({ vote, subjectUri }) => voteToRecord(vote, subjectUri),
 	validator: voteRecord,
 };
@@ -230,6 +295,7 @@ export interface FollowInput {
 export const FOLLOW_KIND: RecordKind<FollowInput, FollowRecord, UnpublishableReaderReason> = {
 	collection: FOLLOW_COLLECTION,
 	reasonFor: ({ follow, creatorDid }) => unpublishableFollowReason(follow, creatorDid),
+	removes: readerRemoves,
 	toRecord: ({ follow, creatorDid }) => followToRecord(follow, creatorDid),
 	validator: followRecord,
 };
@@ -242,11 +308,22 @@ export const FOLLOW_KIND: RecordKind<FollowInput, FollowRecord, UnpublishableRea
 // reason the two have not been folded together.
 
 export const POST_COLLECTION = "org.anthers.post";
+
+/**
+ * Every refusal of a creator's record is the creator taking it back.
+ *
+ * A post returned to a draft, a project unpublished or left untitled — each is its creator
+ * deciding the thing should not be public, so a record already out there comes down.
+ */
+function creatorRemoves(_reason: UnpublishableCreatorReason): boolean {
+	return true;
+}
 export const PROJECT_COLLECTION = "org.anthers.project";
 
 export const POST_KIND: RecordKind<PublishablePost, PostRecord, UnpublishableCreatorReason> = {
 	collection: POST_COLLECTION,
 	reasonFor: (post) => unpublishablePostReason(post),
+	removes: creatorRemoves,
 	toRecord: (post) => postToRecord(post, { baseUrl: siteBaseUrl() }),
 	validator: postRecord,
 };
@@ -258,6 +335,7 @@ export const PROJECT_KIND: RecordKind<
 > = {
 	collection: PROJECT_COLLECTION,
 	reasonFor: (project) => unpublishableProjectReason(project),
+	removes: creatorRemoves,
 	toRecord: (project) => projectToRecord(project, { baseUrl: siteBaseUrl() }),
 	validator: projectRecord,
 };

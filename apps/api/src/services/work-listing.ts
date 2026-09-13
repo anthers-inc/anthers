@@ -38,15 +38,19 @@ import {
 	WORK_COLLECTION,
 	type WorkRecordPlan,
 } from "./atproto-repo.js";
-import { publishedCreatorRecords, removePublishedCreatorRecord } from "./creator-record-listing.js";
-import { type NoCreatorWriterReason, writerForCreator } from "./repo-writer.js";
+import {
+	creatorRecordCollection,
+	publishedCreatorRecords,
+	removePublishedCreatorRecord,
+} from "./creator-record-listing.js";
+import { type NoAccountWriterReason, writerForAccount } from "./repo-writer.js";
 
 /** What syncing one Work's listing did. */
 export type ListingSyncResult =
 	/** The record was created, replaced, deleted, or correctly left alone. */
 	| { status: "synced"; plan: WorkRecordPlan; uri: string | null }
 	/** No listing is possible or needed, for a reason that is nobody's fault. */
-	| { status: "skipped"; reason: NoCreatorWriterReason | "no_work" | "no_creator" }
+	| { status: "skipped"; reason: NoAccountWriterReason | "no_work" | "no_creator" }
 	/** Something worth retrying went wrong. The job wrapper decides what to do about it. */
 	| { status: "failed"; error: string };
 
@@ -99,7 +103,10 @@ export async function syncWorkListing(
 	// the creator was still there.
 	if (work.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
-	const opened = await writerForCreator(work.creatorId, opts);
+	const opened = await writerForAccount(work.creatorId, {
+		collections: [WORK_COLLECTION],
+		fetchImpl: opts.fetchImpl,
+	});
 	if (!opened.writer) return { status: "skipped", reason: opened.reason };
 
 	try {
@@ -229,7 +236,11 @@ export async function stopPublishingFor(creatorId: number): Promise<StopPublishi
 	const total = listed.length + creatorRecords.length;
 
 	if (total > 0) {
-		const opened = await writerForCreator(creatorId);
+		// Opened for exactly the collections this creator holds records in, so a grant over one
+		// of them is not refused for lacking another the creator has nothing in.
+		const collections = new Set(creatorRecords.map((r) => creatorRecordCollection(r.kind)));
+		if (listed.length > 0) collections.add(WORK_COLLECTION);
+		const opened = await writerForAccount(creatorId, { collections: [...collections] });
 		if (!opened.writer) {
 			// No writer means no way to reach the records. They stay where they are, and saying so
 			// is more useful than a revocation that would make it permanent.

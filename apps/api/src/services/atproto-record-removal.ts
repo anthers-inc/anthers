@@ -20,14 +20,14 @@
  * primitive means one delete path, and the delete path is the one that matters.
  */
 import { RepoAuthError, rkeyFromAtUri } from "./atproto-repo.js";
-import { type NoCreatorWriterReason, writerForCreator } from "./repo-writer.js";
+import { type NoAccountWriterReason, writerForAccount } from "./repo-writer.js";
 
 /** What removing one orphaned record did. */
 export type RecordRemovalResult =
 	/** The record is off the network, or was already. */
 	| { status: "removed" }
 	/** Nothing could be removed, for a reason retrying will not change. */
-	| { status: "skipped"; reason: NoCreatorWriterReason | "unreadable_uri" }
+	| { status: "skipped"; reason: NoAccountWriterReason | "unreadable_uri" }
 	/** Something worth retrying went wrong. The job wrapper decides what to do about it. */
 	| { status: "failed"; error: string };
 
@@ -50,7 +50,10 @@ export async function removeAtprotoRecord(args: {
 	// find by hand, and saying so is more useful than a removal that silently removed nothing.
 	if (!rkey) return { status: "skipped", reason: "unreadable_uri" };
 
-	const opened = await writerForCreator(args.creatorId, { fetchImpl: args.fetchImpl });
+	const opened = await writerForAccount(args.creatorId, {
+		collections: [args.collection],
+		fetchImpl: args.fetchImpl,
+	});
 	if (!opened.writer) return { status: "skipped", reason: opened.reason };
 
 	try {

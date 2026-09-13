@@ -27,6 +27,8 @@ import {
 	PUBLISH_SCOPE,
 	setAtprotoClient,
 } from "../services/atproto-client.js";
+import { POST_COLLECTION } from "../services/atproto-record-plan.js";
+import { WORK_COLLECTION } from "../services/atproto-repo.js";
 import { createSession } from "../services/auth.js";
 import { oauthWriterFor } from "../services/oauth-repo-writer.js";
 import { stopPublishingFor } from "../services/work-listing.js";
@@ -375,13 +377,19 @@ describe("coming back from the consent screen", () => {
 describe("opening a writer over a creator's own grant", () => {
 	it("is quiet about an account with no identity", async () => {
 		const user = await makeUser("none");
-		expect(await oauthWriterFor(user.id)).toEqual({ writer: null, reason: "no_identity" });
+		expect(await oauthWriterFor(user.id, [WORK_COLLECTION])).toEqual({
+			writer: null,
+			reason: "no_identity",
+		});
 	});
 
 	it("is quiet about an identity that has granted nothing", async () => {
 		const user = await makeUser("ung", { atprotoDid: did("ung") });
 		await seedSession(did("ung"), user.id);
-		expect(await oauthWriterFor(user.id)).toEqual({ writer: null, reason: "not_granted" });
+		expect(await oauthWriterFor(user.id, [WORK_COLLECTION])).toEqual({
+			writer: null,
+			reason: "not_granted",
+		});
 	});
 
 	it("is quiet about a grant that covers only some of the actions", async () => {
@@ -393,7 +401,32 @@ describe("opening a writer over a creator's own grant", () => {
 			.update(atprotoSessions)
 			.set({ scope: "atproto repo:org.anthers.work?action=create&action=delete" })
 			.where(eq(atprotoSessions.did, did("half")));
-		expect(await oauthWriterFor(user.id)).toEqual({ writer: null, reason: "not_granted" });
+		expect(await oauthWriterFor(user.id, [WORK_COLLECTION])).toEqual({
+			writer: null,
+			reason: "not_granted",
+		});
+	});
+	// 🚨 **A grant is per collection, and a writer is judged against what it is opened FOR.** The
+	// gate used to check Work listings whatever the caller was about to write, so a creator who had
+	// granted only that got a writer for their posts too — which their own server then refused, and
+	// the refusal read as a permission withdrawn that had never been given.
+	it("does not open a writer for posts on the strength of a grant over Work listings", async () => {
+		const user = await makeUser("percol", { atprotoDid: did("percol") });
+		await seedSession(did("percol"), user.id);
+		await db
+			.update(atprotoSessions)
+			.set({ scope: GRANTED })
+			.where(eq(atprotoSessions.did, did("percol")));
+
+		expect(await oauthWriterFor(user.id, [POST_COLLECTION])).toEqual({
+			writer: null,
+			reason: "not_granted",
+		});
+		// And one collection it lacks is enough to refuse a writer asked to cover two.
+		expect(await oauthWriterFor(user.id, [WORK_COLLECTION, POST_COLLECTION])).toEqual({
+			writer: null,
+			reason: "not_granted",
+		});
 	});
 });
 
