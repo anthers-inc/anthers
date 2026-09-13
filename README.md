@@ -15,7 +15,7 @@ No ads, ever. No shareholders, ever. Just freedom to see and be seen, to listen 
 
 `Anthers, Inc.` is a Colorado nonprofit corporation. There are no investors and no profit-taking: it cannot be acquired, and it cannot take corrupting investment. Our commitment to earnestly and unequivocally serving the interests of creators and their audiences is not just a promise, it's a structural commitment that can never be unwound.
 
-This repository is the whole platform: the API, the web app, the creator Studio, the desktop shell, and the shared packages underneath them. It is licensed [Apache-2.0](./LICENSE.md), with the exceptions listed in [`NOTICE`](./NOTICE).
+This repository is the whole platform: the API, the web app, the creator Studio, and the shared packages underneath them. The desktop app lives in [anthers-desktop](https://github.com/anthers-inc/anthers-desktop). It is licensed [Apache-2.0](./LICENSE.md), with the exceptions listed in [`NOTICE`](./NOTICE).
 
 ## Status
 

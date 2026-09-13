@@ -122,6 +122,10 @@ const BRITISH = [
 	"utilised",
 	"visualise",
 	"visualised",
+	"sexualise",
+	"sexualised",
+	"sexualises",
+	"sexualisation",
 ] as const;
 
 const WORD_RX = new RegExp(`\\b(${BRITISH.join("|")})\\b`, "gi");

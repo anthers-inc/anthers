@@ -217,7 +217,7 @@ function AtmospherePublishingSection() {
 
 				{outcome === "on" && (
 					<div className="alert alert-success text-sm">
-						<span>Your listings are on their way to your repository.</span>
+						<span>Your records are on their way to your repository.</span>
 					</div>
 				)}
 				{outcome === "declined" && (
@@ -233,18 +233,19 @@ function AtmospherePublishingSection() {
 
 				{state.route === "hosted" && (
 					<p className="text-sm text-base-content/70">
-						Anthers publishes a listing for each released Work into the repository behind{" "}
-						<span className="font-medium">@{state.handle}</span>, the handle it issued you. Nothing
-						to set up.
+						Anthers publishes a record for each released Work, post and project into the repository
+						behind <span className="font-medium">@{state.handle}</span>, the handle it issued you.
+						Nothing to set up.
 					</p>
 				)}
 
 				{state.route === "granted" && (
 					<>
 						<p className="text-sm text-base-content/70">
-							Anthers keeps a listing for each released Work in your own repository, under{" "}
-							<span className="font-medium">@{state.handle}</span>. A listing says what a work is
-							and where to reach it — never the work itself, and never who may open it.
+							Anthers keeps a record for each released Work, post and project in your own
+							repository, under <span className="font-medium">@{state.handle}</span>. A Work's
+							listing says what it is and where to reach it — never the work itself, and never who
+							may open it.
 						</p>
 						<p className="text-sm text-base-content/50">
 							{state.listed === 0
@@ -264,7 +265,8 @@ function AtmospherePublishingSection() {
 						{/* ⚠️ Said before they press it, not after. Stopping removes the records, and a
 						    deletion cannot be undone by us — it is their repository. */}
 						<p className="text-xs text-base-content/50">
-							Stopping removes the listings already on the network and hands the permission back.
+							Stopping removes the Works, posts and projects already on the network and hands the
+							permission back.
 						</p>
 					</>
 				)}
@@ -272,15 +274,16 @@ function AtmospherePublishingSection() {
 				{state.route === "available" && (
 					<>
 						<p className="text-sm text-base-content/70">
-							Anthers can keep a listing for each of your released Works in your own repository,
-							under <span className="font-medium">@{state.handle}</span>, so your catalog is
-							readable by other software on the network and outlives any one service — including
-							this one.
+							Anthers can keep a record for each of your released Works, posts and projects in your
+							own repository, under <span className="font-medium">@{state.handle}</span>, so your
+							catalog is readable by other software on the network and outlives any one service —
+							including this one.
 						</p>
 						<p className="text-sm text-base-content/50">
-							It asks for permission over that one kind of record and nothing else: not your posts,
-							not your follows, not your messages. A listing carries the title, description and a
-							link — never the work itself, and never who may open it.
+							It asks for permission over Anthers' own kinds of record and nothing else: not your
+							Bluesky posts, not your messages, not anything another app wrote. A Work's listing
+							carries the title, description and a link — never the work itself, and never who may
+							open it.
 						</p>
 						<div className="card-actions justify-end">
 							<button

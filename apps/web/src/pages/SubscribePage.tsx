@@ -501,8 +501,8 @@ const NOT_CARRIED = "—";
  *
  * ⚠️ `amountLabel` is right in prose — *"just $3"* — and wrong stacked in a column: a Time
  * Pool row reading `$0.25 · $1.50 · $3 · $4.50 · $6` does not scan as one series, and
- * `tabular-nums` cannot align figures that are not the same shape. 20.06's own table writes
- * `$3.00`. Prices in the header still use `amountLabel`, because those are prose.
+ * `tabular-nums` cannot align figures that are not the same shape. The generated perk ladder
+ * in the wiki's *Badges* writes `$3.00`. Prices in the header still use `amountLabel`, because those are prose.
  */
 const columnMoney = (amount: number) => `$${amount.toFixed(2)}`;
 
@@ -514,7 +514,6 @@ const columnMoney = (amount: number) => `$${amount.toFixed(2)}`;
  * GiB and it is not the same perk — at Free the space holds a published catalog and nothing
  * else, so an account that has never published has no storage at all until Root. Compared
  * on the figure alone, that upgrade *vanishes* from Root's card, because 50 equals 50.
- * 20.06's own table solves it the same way, with a `(creator)` / `(combined)` qualifier.
  */
 interface PerkCell {
 	value: string;
@@ -528,18 +527,16 @@ interface PerkRow {
 }
 
 /**
- * The confirmed perk set from 20.06 § Currently Confirmed Perks, one row per perk.
+ * The perk set, one row per perk — the same set `scripts/econ-figures.ts` renders into the
+ * wiki's *Badges* as the perk ladder.
  *
- * 🚨 **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
- * table are the same numbers as the sections they summarize, and neither may be edited
- * without the other. So the Sticker budget and the storage floor have real functions in
- * `constants.ts` — `stickerBudgetFor` and `storageGibFor` — rather than being read off the
- * table, and `econ:figures` fails the build on a figure typed into a page.
+ * 🚨 **Every figure is derived**: the Sticker budget and the storage floor come from
+ * `stickerBudgetFor` and `storageGibFor` in `constants.ts` rather than from any table, and
+ * `econ:figures` fails the build on a figure typed into a page.
  *
- * ⚠️ **The Sticker denominations are deliberately not here.** 20.06 sets them at three
- * values and no constant carries them, so writing them into this copy would be the typed
- * figure the scan exists to catch. The budget is shown; what it buys can be said once
- * Stickers have a primitive to attach to.
+ * ⚠️ **The Sticker denominations are deliberately not here.** They live in
+ * `@anthers/shared/stickers` as `STICKER_BATCHES`, and a matrix row is the wrong place to
+ * list art and amounts that change by batch; the budget is the per-rung figure.
  */
 const PERK_ROWS: PerkRow[] = [
 	{
@@ -587,8 +584,8 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Merch Discount",
-		// 20.06 leaves the size of the discount undecided, so the cell says that it exists
-		// and no more. A percentage invented here would be a figure with no source.
+		// The size of the discount is undecided and the shop does not exist yet, so the cell
+		// says that it is carried and no more. A percentage invented here would be a figure with no source.
 		desc: "A discount on merch anyone can buy from the Anthers shop, where the net revenue funds Anthers' charitable programs.",
 		cell: (amount) => ({ value: amount > 0 ? "Yes" : NOT_CARRIED }),
 	},
@@ -617,7 +614,7 @@ const same = (a: PerkCell, b: PerkCell) => a.value === b.value && a.note === b.n
  * What a rung adds over the one below it.
  *
  * 🚨 **Derived by comparing rungs, never a hand-kept list per Badge.** Five lists of perks
- * beside one table of the same perks is five more places for 20.06 to drift away from, and
+ * beside one table of the same perks is five more places for the perk ladder to drift from, and
  * the drift would be invisible: a card that has quietly stopped mentioning the storage
  * upgrade still renders and still reads fine.
  */
@@ -744,7 +741,7 @@ interface LadderProps {
  *
  * ⚠️ **No COMING pills** (Parker, 2026-08-24): most of this is designed rather than built
  * today, and all of it is meant to be built before the page is public. The ledger of what
- * exists is `constants.ts` and 20.06, not a badge on a marketing table.
+ * exists is `constants.ts` and the generated perk ladder, not a badge on a marketing table.
  */
 function BadgeLadder(props: LadderProps) {
 	const fits = useMatrixFits();

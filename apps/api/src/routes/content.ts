@@ -2593,15 +2593,14 @@ const contentRoutes = new Hono()
 		// below. A score is a fact about the Work, not about who is reading it: making it
 		// viewer-dependent would mean two people see different reviews for the same thing,
 		// and it would let one user move a creator's public average by blocking a
-		// reviewer. The small honest cost is that a blocker can see "4.2 from 10" over
-		// nine listed reviews — which is already true of a hidden review, and is the right
+		// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
+		// over nine listed reviews — which is already true of a hidden review, and is the right
 		// side of the trade.
 		// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
 		// so the public figure is the share who recommended it — "94% recommended" — which
 		// is an honest statistic where a mean of stars was arithmetic performed on guesses.
-		// Every visible review counts once: helpfulness sorts the list below and does not
-		// weight this, because a review somebody found useful is an easier one to read
-		// rather than a stronger recommendation.
+		// Every visible review counts once. Reviews cannot be voted on, so nothing weights one
+		// review above another here or in the list below, which is newest first.
 		const [agg] = await db
 			.select({
 				recommended: count(sql`case when ${reviews.verdict} = 'recommended' then 1 end`).mapWith(
@@ -4217,7 +4216,7 @@ const contentRoutes = new Hono()
 			);
 		}
 
-		// Summed views and mean score both range over the project's released Works, for the
+		// Summed views and the recommended share both range over the project's released Works, for the
 		// same reason the filters do. `trending` is deliberately absent: it needs views over
 		// a window and `works.view_count` is a lifetime counter, so there is nothing honest
 		// to order by — the option is gone from the sidebar rather than silently aliased.

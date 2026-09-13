@@ -427,17 +427,17 @@ function renderBadgePublicMarkdown(): string {
 		"",
 		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds free access and the programs, equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
 		"",
-		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you watch**, because delivery costs nothing at any volume.`,
+		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you stream or download**, because delivery costs nothing at any volume.`,
 	].join("\n");
 }
 
 /**
  * What each rung of Anthers' own ladder carries, for a public reader.
  *
- * 🚨 **Two of these five columns are LIVE and three are COMMITTED AND UNBUILT**, and the
- * table says so per column rather than in a footnote, because a reader scanning rows would
- * otherwise take the whole thing as a description of today. Public Access and the Time Pool
- * ship; the Sticker budget, the storage floor and purchase preservation do not.
+ * 🚨 **Three of these columns are LIVE and the storage floor is COMMITTED AND UNBUILT**, and
+ * the table says so rather than leaving it to a footnote, because a reader scanning rows would
+ * otherwise take the whole thing as a description of today. Free viewing, the Time Pool and
+ * Stickers ship; the storage floor and purchase preservation do not.
  *
  * ⚠️ **This block exists so the unbuilt figures are DERIVED rather than typed.**
  * `stickerBudgetFor` and `storageGibFor` both carry that instruction in their own doc

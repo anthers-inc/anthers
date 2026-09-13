@@ -94,9 +94,8 @@ let isAuthenticated = false;
 /**
  * The **share link** this page was reached by, if any.
  *
- * 🚨 **What this endpoint has always needed is an ATTRIBUTABLE claimant, not a logged-in
- * one**, and until 2026-08-28 the two were the same thing so the distinction never had to be
- * drawn. A share-link recipient has no account; the seconds are attributed to whoever shared
+ * 🚨 **What this endpoint needs is an ATTRIBUTABLE claimant, not a logged-in one.** A
+ * share-link recipient has no account; the seconds are attributed to whoever shared
  * the link, who does. So the flush below sends the token and the server decides whose month
  * pays — the browser never asserts an identity, it only says how it got here.
  */
@@ -120,11 +119,9 @@ let listenersBound = false;
  * `mousemove` would under-credit the real case it exists for: someone reading a
  * screenful of long-form text for a minute without scrolling.
  *
- * Per-element visibility (the IntersectionObserver gating presence claims on the
- * deliverable being on screen) now covers that long-form-reading case directly —
- * `elementVisible: true` credits regardless of whether `mousemove` fires. So the
- * defense for keeping `mousemove` is weaker now than when it was written (2026-07-26).
- * Revisit whether to drop it as a separate decision; this is the note, not the change.
+ * ⚠️ Per-element visibility does NOT cover that case on its own. The IntersectionObserver
+ * gate is ANDed with the idle gate in `isLive`, so a Work on screen still stops earning after
+ * `IDLE_TIMEOUT_MS` with no interaction — `mousemove` is what keeps a still reader live.
  */
 const INTERACTION_EVENTS = [
 	"pointerdown",
