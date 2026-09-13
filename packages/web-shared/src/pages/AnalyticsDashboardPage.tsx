@@ -23,7 +23,6 @@ import type {
 	ContentAnalyticsItem,
 	CreatorEarnings,
 	CrfSubsidy,
-	CrossPublishResult,
 	TimeseriesEntry,
 } from "../lib/types";
 
@@ -329,84 +328,6 @@ function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 	);
 }
 
-// ─── Cross-Publish History ───
-
-function CrossPublishHistory() {
-	const [results, setResults] = useState<CrossPublishResult[]>([]);
-	const [loading, setLoading] = useState(true);
-
-	useEffect(() => {
-		client.api.integrations["cross-publish"]
-			.$get()
-			.then((res) => res.json())
-			.then((data) => setResults((data as { results: CrossPublishResult[] }).results))
-			.catch(() => {})
-			.finally(() => setLoading(false));
-	}, []);
-
-	if (loading || results.length === 0) return null;
-
-	const statusBadge = (s: string) => {
-		switch (s) {
-			case "published":
-				return "badge-success";
-			case "pending":
-				return "badge-warning";
-			case "failed":
-				return "badge-error";
-			default:
-				return "badge-ghost";
-		}
-	};
-
-	return (
-		<div className="card bg-base-200 mb-8">
-			<div className="card-body p-4">
-				<h3 className="font-semibold text-sm mb-3">Cross-Publish History</h3>
-				<div className="overflow-x-auto">
-					<table className="table table-sm">
-						<thead>
-							<tr>
-								<th>Platform</th>
-								<th>Status</th>
-								<th>Date</th>
-								<th>Link</th>
-							</tr>
-						</thead>
-						<tbody>
-							{results.slice(0, 10).map((r) => (
-								<tr key={r.id}>
-									<td className="text-sm">{r.platform}</td>
-									<td>
-										<span className={`badge badge-xs ${statusBadge(r.status)}`}>{r.status}</span>
-									</td>
-									<td className="text-xs text-base-content/50">
-										{new Date(r.createdAt).toLocaleDateString()}
-									</td>
-									<td>
-										{r.externalUrl ? (
-											<a
-												href={r.externalUrl}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="link link-primary text-xs"
-											>
-												View
-											</a>
-										) : (
-											<span className="text-xs text-base-content/30">—</span>
-										)}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</div>
-		</div>
-	);
-}
-
 // ─── Hosting Subsidy ───
 
 function FoundationSubsidySection({
@@ -549,10 +470,6 @@ export default function AnalyticsDashboardPage() {
 					<ContentPerformanceTable content={content} />
 					<RevenueSection earnings={earnings} />
 					<FoundationSubsidySection crfStatus={crfStatus} />
-					{/* CrossPublishHistory hidden — the cross-publish job throws for all
-					    three targets (YouTube, itch.io, Substack), so the history is
-					    always empty. Restore when the Cross-Publishing lane ships. */}
-					{/* <CrossPublishHistory /> */}
 				</>
 			)}
 		</div>

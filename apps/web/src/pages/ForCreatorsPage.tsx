@@ -444,12 +444,13 @@ export default function ForCreatorsPage() {
 					<Reveal delay={110} className="h-full">
 						<Card className="card-lift h-full">
 							<h3 style={serif} className="mb-2 text-lg font-medium">
-								Cross-publishing <span className="text-xs text-base-content/45">(coming soon)</span>
+								Bringing Your Catalog Across{" "}
+								<span className="text-xs text-base-content/45">(not built yet)</span>
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Publish once, distribute everywhere. Push videos to YouTube, builds to Steam and
-								itch.io, posts to Substack—all from your Anthers dashboard. Unified analytics show
-								performance across all platforms.
+								One-time importers for itch.io, Patreon, Substack and YouTube are planned, so a
+								creator can bring an existing catalog over in one step rather than rebuilding it by
+								hand. None of the four works yet.
 							</p>
 						</Card>
 					</Reveal>

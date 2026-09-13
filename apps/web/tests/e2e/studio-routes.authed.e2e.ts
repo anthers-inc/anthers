@@ -92,7 +92,7 @@ test("every Studio tab lands on its own route", async ({ page, context }) => {
 	//
 	// "Import" is absent because the itch.io import endpoints all return "not yet
 	// implemented", so a creator who reached the page found a form that always failed.
-	// Restore the row when the Cross-Publishing lane ships them.
+	// Restore the row when the itch.io importer's backend is built.
 	const tabs = [
 		{ name: "Catalog", url: /\/studio\/catalog$/ },
 		{ name: "Posts", url: /\/studio\/posts$/ },

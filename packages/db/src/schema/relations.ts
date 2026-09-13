@@ -22,11 +22,6 @@ import {
 	transcodingJobs,
 	works,
 } from "./content.js";
-import {
-	crossPublishResults,
-	externalMetricSnapshots,
-	platformConnections,
-} from "./integrations.js";
 import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
 import {
 	accountCycles,
@@ -81,8 +76,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	creatorGates: many(creatorGates),
 
 	// Integrations
-	platformConnections: many(platformConnections),
-	crossPublishResults: many(crossPublishResults),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -131,7 +124,6 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
 	projectPosts: many(projectPosts), // Projects this post belongs to
 	workRefs: many(postWorkRefs),
 	attentionEvents: many(attentionEvents),
-	crossPublishResults: many(crossPublishResults),
 }));
 
 // Projects — they group Works and Posts.
@@ -282,23 +274,4 @@ export const poolDistributionsRelations = relations(poolDistributions, ({ one })
 
 export const creatorGatesRelations = relations(creatorGates, ({ one }) => ({
 	creator: one(users, { fields: [creatorGates.creatorId], references: [users.id] }),
-}));
-
-// ─── Integrations ────────────────────────────────────────────────────────────
-
-export const platformConnectionsRelations = relations(platformConnections, ({ one }) => ({
-	user: one(users, { fields: [platformConnections.userId], references: [users.id] }),
-}));
-
-export const crossPublishResultsRelations = relations(crossPublishResults, ({ one, many }) => ({
-	user: one(users, { fields: [crossPublishResults.userId], references: [users.id] }),
-	post: one(posts, { fields: [crossPublishResults.postId], references: [posts.id] }),
-	metricSnapshots: many(externalMetricSnapshots),
-}));
-
-export const externalMetricSnapshotsRelations = relations(externalMetricSnapshots, ({ one }) => ({
-	crossPublishResult: one(crossPublishResults, {
-		fields: [externalMetricSnapshots.crossPublishId],
-		references: [crossPublishResults.id],
-	}),
 }));

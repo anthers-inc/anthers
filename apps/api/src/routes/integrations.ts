@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Integration routes — analytics, platform connections, cross-publish,
- * itch.io import.
+ * Integration routes — creator analytics, and the itch.io importer that is not built yet.
  *
  * > [!warning] Analytics read TWO tables, and both halves are required
  * > Raw `attention_events` are deleted after `ATTENTION_RAW_RETENTION_DAYS` and rolled
@@ -23,15 +22,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import {
-	attentionDaily,
-	attentionEvents,
-	crossPublishResults,
-	platformConnections,
-	posts,
-	projects,
-	works,
-} from "@anthers/db/schema";
+import { attentionDaily, attentionEvents, posts, projects, works } from "@anthers/db/schema";
 import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
@@ -98,12 +89,6 @@ const integrationRoutes = new Hono()
 			.from(posts)
 			.where(eq(posts.creatorId, user.id));
 
-		// Cross-publish stats
-		const [publishCount] = await db
-			.select({ count: sql<number>`COUNT(*)::int` })
-			.from(crossPublishResults)
-			.where(eq(crossPublishResults.userId, user.id));
-
 		return c.json({
 			period,
 			events: {
@@ -128,7 +113,6 @@ const integrationRoutes = new Hono()
 				projects: Number(projectCount.count),
 				posts: Number(postCount.count),
 			},
-			crossPublishCount: Number(publishCount.count),
 		});
 	})
 
@@ -310,151 +294,6 @@ const integrationRoutes = new Hono()
 			period,
 		});
 	})
-
-	// ══════════════════════════════════════════════════════════════════════════
-	// PLATFORM CONNECTIONS
-	// ══════════════════════════════════════════════════════════════════════════
-
-	.get("/platforms", requireAuth, async (c) => {
-		const user = c.get("user");
-
-		const connections = await db
-			.select()
-			.from(platformConnections)
-			.where(eq(platformConnections.userId, user.id));
-
-		// Don't expose tokens to frontend
-		return c.json({
-			platforms: connections.map((conn) => ({
-				id: conn.id,
-				platform: conn.platform,
-				platformUserId: conn.platformUserId,
-				platformUsername: conn.platformUsername,
-				isActive: conn.isActive,
-				createdAt: conn.createdAt,
-			})),
-		});
-	})
-
-	.post(
-		"/platforms/connect",
-		requireAuth,
-		zValidator(
-			"json",
-			z.object({
-				platform: z.enum(["steam", "itchio", "substack"]),
-				apiKey: z.string().min(1),
-			}),
-		),
-		async (c) => {
-			const user = c.get("user");
-			const { platform, apiKey } = c.req.valid("json");
-
-			// Upsert
-			await db
-				.insert(platformConnections)
-				.values({
-					userId: user.id,
-					platform,
-					apiKey,
-					isActive: true,
-				})
-				.onConflictDoUpdate({
-					target: [platformConnections.userId, platformConnections.platform],
-					set: { apiKey, isActive: true, updatedAt: new Date() },
-				});
-
-			return c.json({ success: true }, 201);
-		},
-	)
-
-	.delete("/platforms/:platform/disconnect", requireAuth, async (c) => {
-		const user = c.get("user");
-		const { platform } = c.req.param();
-
-		const deleted = await db
-			.delete(platformConnections)
-			.where(
-				and(eq(platformConnections.userId, user.id), eq(platformConnections.platform, platform)),
-			)
-			.returning({ id: platformConnections.id });
-
-		if (deleted.length === 0) return c.json({ error: "Connection not found" }, 404);
-		return c.body(null, 204);
-	})
-
-	// ══════════════════════════════════════════════════════════════════════════
-	// CROSS-PUBLISH
-	// ══════════════════════════════════════════════════════════════════════════
-
-	.get("/cross-publish", requireAuth, async (c) => {
-		const user = c.get("user");
-		const platform = c.req.query("platform");
-
-		const conditions = [eq(crossPublishResults.userId, user.id)];
-		if (platform) {
-			conditions.push(eq(crossPublishResults.platform, platform));
-		}
-
-		const results = await db
-			.select()
-			.from(crossPublishResults)
-			.where(and(...conditions))
-			.orderBy(desc(crossPublishResults.createdAt));
-
-		return c.json({ results });
-	})
-
-	.post(
-		"/cross-publish/initiate",
-		requireAuth,
-		zValidator(
-			"json",
-			z.object({
-				platform: z.string().min(1),
-				postId: z.number().int(),
-			}),
-		),
-		async (c) => {
-			const user = c.get("user");
-			const { platform, postId } = c.req.valid("json");
-
-			// Check platform connection exists
-			const [conn] = await db
-				.select({ id: platformConnections.id })
-				.from(platformConnections)
-				.where(
-					and(
-						eq(platformConnections.userId, user.id),
-						eq(platformConnections.platform, platform),
-						eq(platformConnections.isActive, true),
-					),
-				)
-				.limit(1);
-
-			if (!conn) {
-				return c.json({ error: `Not connected to ${platform}` }, 400);
-			}
-
-			const [result] = await db
-				.insert(crossPublishResults)
-				.values({
-					userId: user.id,
-					platform,
-					postId,
-					status: "pending",
-				})
-				.returning();
-
-			await queue.send(
-				QUEUES.CROSS_PUBLISH,
-				{ crossPublishId: result.id },
-				JOB_OPTIONS[QUEUES.CROSS_PUBLISH],
-			);
-
-			return c.json({ result }, 201);
-		},
-	)
 
 	// ══════════════════════════════════════════════════════════════════════════
 	// ITCH.IO IMPORT

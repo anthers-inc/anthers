@@ -381,8 +381,9 @@ export default function App() {
 						<Route path="works/:publicId/edit" element={<WorkFormPage />} />
 						{/* Import route hidden — the itch.io import endpoints all return
 					    "not yet implemented", so a creator who reaches this page finds a
-					    form that always fails. Restore when the Cross-Publishing lane
-					    ships its import endpoints. */}
+					    form that always fails. Restore when the itch.io importer's backend
+					    is built, and rework the page for Works first: it still imports
+					    games as draft Projects. */}
 						{/* <Route path="import" element={<ImportPage />} /> */}
 						<Route path="settings" element={<StudioSettingsPage />} />
 					</Route>
