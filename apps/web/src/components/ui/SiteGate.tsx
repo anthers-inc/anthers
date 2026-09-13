@@ -176,7 +176,7 @@ export function SiteGatePanel({
 						margin is desktop-only (it centers nicely there); on mobile the hero's
 						own top padding handles the spacing. */}
 					<div className="mb-6 flex justify-center sm:mt-8">
-						<Logo variant="full" className="h-20 sm:h-28" />
+						<Logo variant="stacked" className="h-28" />
 					</div>
 
 					{/* Everything below the logo lives in an off-white (base-200) card so it

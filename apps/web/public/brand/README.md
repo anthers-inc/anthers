@@ -1,8 +1,8 @@
 # Brand assets referenced from outside this app
 
 🚨 **These paths are stable on purpose and must not be renamed, moved, or run through the
-bundler.** Everything the build imports is content-hashed — `anthers-lockup-mpamxr9x.png` and
-so on — which is right for anything the pages themselves load and wrong for anything a URL is
+bundler.** Everything the build imports is content-hashed — `lockup-oneline-light-mpamxr9x.png`
+and so on — which is right for anything the pages themselves load and wrong for anything a URL is
 written down for somewhere else. `public/` is copied verbatim into `dist/`, so what is here
 keeps the same address across every deploy.
 
@@ -17,5 +17,5 @@ identity would meet a Bluesky-branded email.
 nobody looks at until somebody reports a broken image in an email. If one of these has to
 move, grep the node repository and the Production Operations Runbook for its name first.
 
-Derived from `packages/brand/marks/export/anthers-mark-1024.png`, which is the source of
-truth for the mark. Regenerate rather than editing in place.
+Cut from the logo's 1:1 thumb in `packages/brand/logo/preps/` by `bun run brand:logo`, which
+records its hash; `scripts/brand-logo.test.ts` fails if it is edited in place.

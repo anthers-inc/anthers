@@ -266,7 +266,7 @@ export default function LoggedOutLayout() {
 			>
 				<div className="mx-auto max-w-6xl">
 					<div className="mb-8 flex flex-col items-center text-center">
-						<Logo className="h-24 -translate-x-4" />
+						<Logo className="h-24" />
 					</div>
 					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-6">
 						{FOOTER_NAV.map((col) => (

@@ -1,7 +1,7 @@
 <p align="center">
 	<picture>
-		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/marks/lockup/anthers-lockup-dark.png">
-		<img alt="Anthers" src="./packages/brand/marks/lockup/anthers-lockup.png" width="420">
+		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/logo/web/lockup-tagline-dark.png">
+		<img alt="Anthers" src="./packages/brand/logo/web/lockup-tagline-light.png" width="420">
 	</picture>
 </p>
 
@@ -82,7 +82,7 @@ A Bun workspace monorepo. Four packages, two apps, one deployment. (The desktop 
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
-| `packages/brand` | The brand assets that ship — first-party marks and lockups, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library; its third-party attribution is in `packages/brand/THIRD-PARTY.md`. |
+| `packages/brand` | The brand assets that ship — the official logo and its web-sized cuts, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library; its third-party attribution is in `packages/brand/THIRD-PARTY.md`. |
 
 Beyond those: `content/` is local dev object storage, `scripts/` holds the repo's own tooling, `.do/app.yaml` is the deployment spec, and the `Makefile` is the front door to nearly everything.
 

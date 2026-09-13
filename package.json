@@ -45,7 +45,8 @@
 		"brand:collect": "bun run scripts/brand-collect.ts",
 		"brand:prune": "bun run scripts/brand-prune.ts",
 		"brand:usage": "bun run scripts/brand-usage.ts",
-		"brand:attribution": "bun run scripts/brand-attribution.ts"
+		"brand:attribution": "bun run scripts/brand-attribution.ts",
+		"brand:logo": "bun run scripts/brand-logo.ts"
 	},
 	"devDependencies": {
 		"@atproto/api": "0.20.42",

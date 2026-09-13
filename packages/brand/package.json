@@ -3,15 +3,15 @@
 	"private": true,
 	"version": "0.1.0",
 	"license": "AGPL-3.0-or-later",
-	"description": "Anthers brand assets that ship — the first-party marks and lockups, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library.",
+	"description": "Anthers brand assets that ship — the official logo, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library.",
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./marks/*": "./marks/*"
+		"./logo/*": "./logo/*"
 	},
 	"files": [
 		"src",
-		"marks"
+		"logo"
 	],
 	"scripts": {
 		"build": "bun run scripts/build-icons.ts",
