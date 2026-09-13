@@ -10,6 +10,6 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.comment","org.anthers.review","org.anthers.vote","org.anthers.follow"],"action":["create","update","delete"]})], {"title":"Your Anthers Activity","detail":"Keep your comments, reviews, votes and follows in your own repository, so they stay yours and travel with you if you ever leave."});
+const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.comment","org.anthers.review","org.anthers.vote","org.anthers.follow"],"action":["create","update","delete"]})], {"title":"Your Anthers Activity","detail":"Keep your comments, reviews, votes and follows public in your own repository, so they stay yours and travel with you if you ever leave."});
 
 export { main };
