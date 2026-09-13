@@ -30,9 +30,9 @@ test.describe("the site declares a tab icon", () => {
 				})),
 			);
 
-		// An SVG for browsers that take one, a PNG for those that don't, and the iOS
-		// home-screen cut. Asserting the count rather than ">= 1" is deliberate: losing
-		// the PNG fallback alone would be invisible in Chromium, which prefers the SVG.
+		// The tab icon at two densities and the iOS home-screen cut. Asserting the count
+		// rather than ">= 1" is deliberate: losing one density alone would be invisible on
+		// whichever screen the browser was not choosing it for.
 		expect(icons.map((i) => i.rel).sort()).toEqual(["apple-touch-icon", "icon", "icon"]);
 
 		for (const icon of icons) {

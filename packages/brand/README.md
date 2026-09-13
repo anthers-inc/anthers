@@ -1,9 +1,9 @@
 # @anthers/brand
 
-The Anthers brand assets that **ship**: the first-party marks and lockups, and recolor-ready icon markup generated from the icon library. Consumed by every surface — the web SPA, the desktop shell, and anything later.
+The Anthers brand assets that **ship**: the official logo, and recolor-ready icon markup generated from the icon library. Consumed by every surface — the web SPA, the desktop shell, and anything later.
 
 ```
-marks/            First-party Anthers identity — SVG masters, lockups, raster exports
+logo/             The official logo — PSDs, their exports, and the generated web cuts
 src/              The public API + generated icon markup
 scripts/          The codegen
 icons.json        The register — what the product uses, and what it is waiting on
@@ -74,26 +74,25 @@ icons.bee;                                    // { viewBox, inner } — build yo
 - **Compose into a generated SVG background** (the tiled vines, the meadow floor): splice `iconGroup(...)` into the SVG string. `decor.ts` builds on this.
 
 
-# The marks
+# The logo
 
-`marks/` is first-party Anthers identity. The palette and type notes are in `marks/README.txt`.
+`logo/` is Anthers' official logo and **the only place it is ever edited**. It lives in this public repository rather than beside the icon library, so the art the site ships and the files it is made from are one copy rather than two to keep in step.
 
-- **`marks/*.svg`** — the vector masters: the mark (light and reversed cuts), a flat single-color silhouette for stamps and tiny sizes, and the flower alone.
-- **`marks/lockup/*.png`** — the wordmark lockups the app actually imports. Full-color raster, deliberately outside the recolor-ready pipeline above, because a full-color logo can't recolor from a single value. Four cuts: `anthers-lockup` / `-dark` carry the tagline; `-oneline` / `-oneline-dark` are the compact navbar cut.
+- **`logo/base/`** — the logo's layered PSD beside its exports: a one-line horizontal cut (`hone`), a two-line cut with the tagline (`htwo`), and a stacked cut with the orchids arched over the wordmark (`vert`), each for a light and a dark background.
+- **`logo/preps/`** — the prepared versions, each PSD beside its exports: a 3:1 banner and a 1:1 thumb, both on a background.
+- **`logo/web/`** — what the app actually loads, **generated**: every lockup trimmed to its artwork and scaled for the web, the tab and home-screen icons cut from the 1:1 thumb, and `manifest.json`.
 
-	```ts
-	import lockup from "@anthers/brand/marks/lockup/anthers-lockup.png"; // → hashed URL string
-	```
+**Re-export from a PSD, then run `bun run brand:logo` and commit what it writes.** The exports are 2560×1440 and several hundred kilobytes each, which is right for a source and wrong for a navbar, so the site never imports them directly. The generated files are committed rather than built, so the deploy path needs no image library. The manifest records the hash of every source and every output, and `scripts/brand-logo.test.ts` fails when either no longer matches — a re-export nobody regenerated, or an output somebody edited by hand. The script also writes `apps/web/public/brand/anthers-mark-256.png`, which is at a stable address on purpose; read `apps/web/public/brand/README.md` before touching it.
 
-	On web, prefer the shared `<Logo>` component (`@anthers/web-shared/ui/Logo`), which wraps all four and swaps light/dark off the active theme. Swap the files here to reship the mark everywhere at once.
+On web, use the shared `<Logo>` component (`@anthers/web-shared/ui/Logo`), which carries the three cuts and swaps light and dark off the active theme. Full-color art sits outside the recolor-ready icon pipeline above, because a full-color logo cannot recolor from a single value.
 
-- **`marks/export/*.png`** — raster exports at fixed sizes: 1024px marks, favicons, an apple-touch icon, and lockups on a cream ground.
+```ts
+import lockup from "@anthers/brand/logo/web/lockup-tagline-light.png"; // → hashed URL string
+```
 
-	⚠️ **The favicons are not wired to anything.** `apps/web` ships no `<link rel="icon">` at all, so the site currently renders with the browser default while `favicon-32.png`, `favicon-64.png` and `apple-touch-icon-180.png` sit here unused. Wiring them means copying into `apps/web/public/` and adding the tags — noted here because the assets existing is what makes the gap easy to miss.
-
-`app-icons/` used to sit here — Windows/macOS/Linux packaging icons reached by `tauri.conf.json` through a `../../../` path that bypassed this package's `exports`, because a Tauri config cannot resolve one. That relative path was the tell: they were desktop **packaging**, not brand art. They moved to [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) with the app on 2026-08-14.
+The desktop app's packaging icons live in [anthers-desktop](https://github.com/anthers-inc/anthers-desktop), which packages the built web app rather than this package, and are made from the same 1:1 thumb.
 
 
 # Licensing
 
-The package's own code is AGPL-3.0-or-later. `marks/` is first-party. The icon artwork is third-party and lives in the source repo with its attribution — see [`THIRD-PARTY.md`](./THIRD-PARTY.md) for the summary and the terms it rests on.
+The package's own code is AGPL-3.0-or-later. `logo/` is Anthers' own brand art, owned by Anthers, Inc.; it is not covered by that license and may be used only in association with Anthers itself. The icon artwork is third-party and lives in the source repo with its attribution — see [`THIRD-PARTY.md`](./THIRD-PARTY.md) for the summary and the terms it rests on.

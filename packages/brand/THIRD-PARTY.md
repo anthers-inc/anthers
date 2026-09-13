@@ -73,10 +73,10 @@ Two scoping notes, because both are easy to get backwards:
 
 The reasoning is the same one this file already rests on. The attribution belongs where the redistribution happens; for the eighteen that is here, and for a creator's Badge that is the page the Badge appears on.
 
-## Anthers marks (`marks/`)
+## The Anthers logo (`logo/`)
 
-First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources live in a **private** repository rather than here, because that repository mixes Anthers' own working files with licensed third-party art and is not ours to publish as a whole.
+Anthers' own brand art, owned by Anthers, Inc.: the layered PSDs, the PNGs exported from them, and the web cuts generated from those exports. It is not third-party art and it is not licensed under the repository's AGPL. The Anthers name and logo may be used only in association with Anthers itself, to refer to Anthers, and never to suggest that something is Anthers, or is endorsed by it, when it is not.
 
 ## Desktop packaging
 
-The Tauri packaging icons were here as `app-icons/` until 2026-08-14 and moved to [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) with the app. Derived from the Anthers mark above; same first-party provenance.
+The Tauri packaging icons were here as `app-icons/` until 2026-08-14 and moved to [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) with the app. Made from the logo's 1:1 thumb above; same first-party provenance.
