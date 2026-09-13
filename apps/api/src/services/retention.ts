@@ -99,6 +99,13 @@ export async function redactSettledDmcaNotices(now = new Date()): Promise<{ reda
 		coalesce(${dmcaNotices.finalizedAt}, ${dmcaNotices.receivedAt})
 	) <= ${cutoff.toISOString()}::timestamptz`;
 
+	// 🚨 Blanking a party's contact block is destruction for legal-hold purposes, the same as
+	// the report redaction below, and § 6.4 of the Legal Request and Preservation Policy says
+	// every automated sweep asks the hold first. A held notice keeps its contact details until
+	// the hold lifts and then ages out on the ordinary schedule.
+	const heldNotices = await allHeldSubjectIds("dmca_notice", now);
+	const notHeld = heldNotices.length > 0 ? notInArray(dmcaNotices.id, heldNotices) : undefined;
+
 	const rows = await db
 		.select({ id: dmcaNotices.id, counterNotice: dmcaNotices.counterNotice })
 		.from(dmcaNotices)
@@ -107,6 +114,7 @@ export async function redactSettledDmcaNotices(now = new Date()): Promise<{ reda
 				isNull(dmcaNotices.redactedAt),
 				// A live suit suspends the clock entirely.
 				isNull(dmcaNotices.suitFiledAt),
+				notHeld,
 				// Settled only — see the note above.
 				or(
 					sql`${dmcaNotices.finalizedAt} IS NOT NULL`,

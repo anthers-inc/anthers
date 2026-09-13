@@ -19,6 +19,7 @@ import { db } from "@anthers/db/client";
 import { rightsRequests } from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
+	HOLD_SUBJECT_TYPES,
 	isModerationReason,
 	isModerationSubjectType,
 	MODERATION_NOTE_MAX,
@@ -167,7 +168,7 @@ const resolveAppealSchema = z.object({
  * statutory and should not be arrived at by counting on a calendar.
  */
 const placeHoldSchema = z.object({
-	subjectType: z.enum(["user", "work", "report", "abuse_report"]),
+	subjectType: z.enum(HOLD_SUBJECT_TYPES),
 	subjectId: z.number().int().positive(),
 	reason: z.string().trim().min(1).max(MODERATION_NOTE_MAX),
 	note: z.string().max(MODERATION_NOTE_MAX).optional(),
