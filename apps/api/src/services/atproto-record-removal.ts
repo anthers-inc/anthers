@@ -15,8 +15,8 @@
  * rather than failing it. That is what lets the retry budget be generous, which it should be:
  * an orphaned record is the failure this whole design is shaped around.
  *
- * ⚠️ **It is deliberately not specific to a creator's own records.** A reader's comments,
- * reviews and votes are deleted outright too, and they will strand exactly the same way. One
+ * ⚠️ **It is deliberately not specific to a creator's own records.** A reader unvoting or
+ * unfollowing deletes a row outright too, and would strand its record exactly the same way. One
  * primitive means one delete path, and the delete path is the one that matters.
  */
 import { RepoAuthError, rkeyFromAtUri } from "./atproto-repo.js";
@@ -40,7 +40,7 @@ export type RecordRemovalResult =
  * stored string would be the worse of the two mistakes.
  */
 export async function removeAtprotoRecord(args: {
-	creatorId: number;
+	ownerId: number;
 	collection: string;
 	uri: string;
 	fetchImpl?: typeof fetch;
@@ -50,7 +50,7 @@ export async function removeAtprotoRecord(args: {
 	// find by hand, and saying so is more useful than a removal that silently removed nothing.
 	if (!rkey) return { status: "skipped", reason: "unreadable_uri" };
 
-	const opened = await writerForAccount(args.creatorId, {
+	const opened = await writerForAccount(args.ownerId, {
 		collections: [args.collection],
 		fetchImpl: args.fetchImpl,
 	});
@@ -85,7 +85,7 @@ export async function removeAtprotoRecord(args: {
  * that stays on the network. It is logged loudly for that reason.
  */
 export async function queueRecordRemoval(args: {
-	creatorId: number;
+	ownerId: number;
 	collection: string;
 	uri: string;
 }): Promise<void> {

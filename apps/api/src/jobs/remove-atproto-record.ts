@@ -17,7 +17,8 @@
 import { removeAtprotoRecord } from "../services/atproto-record-removal.js";
 
 export interface RemoveAtprotoRecordData {
-	creatorId: number;
+	/** Whose repository the record is in — a creator's, a voter's, a follower's. */
+	ownerId: number;
 	collection: string;
 	uri: string;
 }

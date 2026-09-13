@@ -178,6 +178,18 @@ export interface RecordOutcome<R, Reason extends string> {
 }
 
 /**
+ * Whether carrying out a plan needs a repository at all.
+ *
+ * ⭐ **Asked before a writer is opened, because opening one is not free.** A hosted writer is a
+ * `createSession` against the account's server, and the reference PDS allows thirty of those in
+ * five minutes and three hundred in a day per account. A plan that writes nothing — a draft, a
+ * kept record, a schema not yet published — must not spend any of that.
+ */
+export function planNeedsWriter(plan: RecordPlan<unknown, string>): boolean {
+	return plan.action === "create" || plan.action === "replace" || plan.action === "delete";
+}
+
+/**
  * Carry out {@link planRecord} against a repository.
  *
  * Returns the URI the caller should store rather than writing it, because the row and the
@@ -190,19 +202,27 @@ export async function syncRecord<Input, R extends object, Reason extends string>
 	input: Input,
 	existingUri: string | null,
 ): Promise<RecordOutcome<R, Reason>> {
-	const plan = planRecord(kind, input, existingUri);
+	return carryOutPlan(writer, kind.collection, planRecord(kind, input, existingUri), existingUri);
+}
 
+/** Perform a plan that has already been made. See {@link syncRecord}. */
+export async function carryOutPlan<R extends object, Reason extends string>(
+	writer: RepoWriter,
+	collection: string,
+	plan: RecordPlan<R, Reason>,
+	existingUri: string | null,
+): Promise<RecordOutcome<R, Reason>> {
 	switch (plan.action) {
 		case "create": {
-			const ref = await writer.createRecord(kind.collection, plan.record);
+			const ref = await writer.createRecord(collection, plan.record);
 			return { plan, uri: ref.uri };
 		}
 		case "replace": {
-			const ref = await writer.putRecord(kind.collection, plan.rkey, plan.record);
+			const ref = await writer.putRecord(collection, plan.rkey, plan.record);
 			return { plan, uri: ref.uri };
 		}
 		case "delete": {
-			await writer.deleteRecord(kind.collection, plan.rkey);
+			await writer.deleteRecord(collection, plan.rkey);
 			return { plan, uri: null };
 		}
 		case "none":
@@ -310,13 +330,18 @@ export const FOLLOW_KIND: RecordKind<FollowInput, FollowRecord, UnpublishableRea
 export const POST_COLLECTION = "org.anthers.post";
 
 /**
- * Every refusal of a creator's record is the creator taking it back.
+ * Which refusals of a creator's record are the creator taking it back.
  *
- * A post returned to a draft, a project unpublished or left untitled — each is its creator
- * deciding the thing should not be public, so a record already out there comes down.
+ * Every one except `no_creator`. A post returned to a draft, a project unpublished or left
+ * untitled — each is its creator deciding the thing should not be public, so a record already
+ * out there comes down.
+ *
+ * ⚠️ **`no_creator` is a closed account, and those records go with the account rather than one
+ * at a time** — for the same reason a reader's `no_author` keeps. There is also nobody left to
+ * open a repository for, so a plan to delete could not be carried out in any case.
  */
-function creatorRemoves(_reason: UnpublishableCreatorReason): boolean {
-	return true;
+function creatorRemoves(reason: UnpublishableCreatorReason): boolean {
+	return reason !== "no_creator";
 }
 export const PROJECT_COLLECTION = "org.anthers.project";
 

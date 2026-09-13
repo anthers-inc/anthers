@@ -214,6 +214,11 @@ export interface StopPublishingResult {
  * is the one place that has to know the full set, which is why it is worth the extra query even
  * for the majority of creators who have none.
  *
+ * ⚠️ **A reader's comments, reviews, votes and follows are deliberately NOT in that set.** Those
+ * are the person's own words in their own repository, canonical there rather than a listing
+ * Anthers keeps on their behalf — so handing back Anthers' permission to write is not a request
+ * to erase what they said, and the records stay theirs to keep or delete with their own tools.
+ *
  * ⚠️ **Anything stranded cancels the revocation.** Keeping a permission the creator asked to
  * withdraw is the lesser harm, because it is the only state from which a retry can finish the
  * job. The caller is told, and asking again is what fixes it.

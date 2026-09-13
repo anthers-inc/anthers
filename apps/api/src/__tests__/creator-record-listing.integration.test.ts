@@ -266,7 +266,7 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 		// remove the record from what was captured.
 		await db.delete(projects).where(eq(projects.id, project.id));
 		const result = await removeAtprotoRecord({
-			creatorId,
+			ownerId: creatorId,
 			collection: PROJECT_COLLECTION,
 			uri,
 		});
@@ -275,7 +275,9 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 
 		// ⚠️ And again, because a retry after a half-finished attempt has to finish the job rather
 		// than fail it — that is what lets this queue's retry budget be the most generous of the three.
-		expect(await removeAtprotoRecord({ creatorId, collection: PROJECT_COLLECTION, uri })).toEqual({
+		expect(
+			await removeAtprotoRecord({ ownerId: creatorId, collection: PROJECT_COLLECTION, uri }),
+		).toEqual({
 			status: "removed",
 		});
 	}, 60_000);

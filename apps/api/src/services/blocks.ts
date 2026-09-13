@@ -42,6 +42,8 @@
 import { db } from "@anthers/db/client";
 import { follows, userBlocks, users } from "@anthers/db/schema";
 import { and, eq, or, type SQL, sql } from "drizzle-orm";
+import { FOLLOW_COLLECTION } from "./atproto-record-plan.js";
+import { queueRecordRemoval } from "./atproto-record-removal.js";
 
 /**
  * Is either user blocking the other?
@@ -115,20 +117,39 @@ export async function blockUser(
 ): Promise<{ blocked: true } | { error: "self" }> {
 	if (blockerId === blockedId) return { error: "self" };
 
-	await db.transaction(async (tx) => {
+	const severed = await db.transaction(async (tx) => {
 		await tx.insert(userBlocks).values({ blockerId, blockedId }).onConflictDoNothing();
 
 		// Both directions. Following is not symmetric, so there can be a row each way and
 		// removing only the blocker's own would leave the blocked party subscribed.
-		await tx
+		return tx
 			.delete(follows)
 			.where(
 				or(
 					and(eq(follows.followerId, blockerId), eq(follows.creatorId, blockedId)),
 					and(eq(follows.followerId, blockedId), eq(follows.creatorId, blockerId)),
 				),
-			);
+			)
+			.returning({ followerId: follows.followerId, atprotoUri: follows.atprotoUri });
 	});
+
+	// 🚨 **Only the BLOCKER's own follow record comes down.** Blocking is their act, so severing
+	// their follow is them taking it back. The blocked person's follow record is theirs, in their
+	// repository, and a block is not something they did — so it stays where they put it, and
+	// Anthers simply stops acting on it. That is also how Bluesky treats a block.
+	//
+	// ⚠️ **Which puts a condition on rebuilding follows from the network**: a rebuild must honor
+	// `user_blocks`, or reading that record back would quietly re-subscribe somebody who was
+	// blocked. Enqueued after the commit, so a block that rolled back takes nothing down.
+	for (const { followerId, atprotoUri } of severed) {
+		if (followerId === blockerId && atprotoUri) {
+			await queueRecordRemoval({
+				ownerId: blockerId,
+				collection: FOLLOW_COLLECTION,
+				uri: atprotoUri,
+			});
+		}
+	}
 
 	return { blocked: true };
 }

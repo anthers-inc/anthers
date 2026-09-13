@@ -28,15 +28,46 @@
  * nobody has, which is a smaller problem and can wait behind it.
  */
 import { db } from "@anthers/db";
-import { hostedAccounts, posts, projects, works } from "@anthers/db/schema";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { queueCreatorRecordSync } from "../services/creator-record-listing.js";
+import {
+	comments,
+	follows,
+	hostedAccounts,
+	posts,
+	projects,
+	reviews,
+	users,
+	votes,
+	works,
+} from "@anthers/db/schema";
+import { and, eq, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
+import {
+	COMMENT_COLLECTION,
+	FOLLOW_COLLECTION,
+	POST_COLLECTION,
+	PROJECT_COLLECTION,
+	REVIEW_COLLECTION,
+	VOTE_COLLECTION,
+} from "../services/atproto-record-plan.js";
+import { isLexiconPublished } from "../services/published-lexicons.js";
+import { queueRecordSync, type RecordSyncKind } from "../services/record-sync.js";
+
+type Enqueue = (kind: RecordSyncKind, id: number) => Promise<void>;
+
 import { queueWorkListingSync } from "../services/work-listing.js";
 
 /** How many rows one sweep will queue, per kind. A ceiling, so a first run cannot flood. */
 const SWEEP_LIMIT = 500;
 
-export async function reconcileListings(): Promise<void> {
+/** Where the sweep sends what it finds. Injectable so a suite can see what it asked for. */
+export interface SweepSinks {
+	enqueueWork?: (workId: number) => Promise<void>;
+	enqueueRecord?: (kind: RecordSyncKind, id: number) => Promise<void>;
+}
+
+export async function reconcileListings(sinks: SweepSinks = {}): Promise<void> {
+	const enqueueWork = sinks.enqueueWork ?? queueWorkListingSync;
+	const enqueueRecord = sinks.enqueueRecord ?? queueRecordSync;
+
 	// ── Records that should not exist ────────────────────────────────────
 	//
 	// Deliberately expressed as "has a URI and is not plainly publishable" rather than as the
@@ -61,7 +92,7 @@ export async function reconcileListings(): Promise<void> {
 		)
 		.limit(SWEEP_LIMIT);
 
-	for (const row of stale) await queueWorkListingSync(row.id);
+	for (const row of stale) await enqueueWork(row.id);
 
 	// ── Records that should exist and do not ─────────────────────────────
 	//
@@ -88,14 +119,16 @@ export async function reconcileListings(): Promise<void> {
 					)
 					.limit(remaining);
 
-	for (const row of missing) await queueWorkListingSync(row.id);
+	for (const row of missing) await enqueueWork(row.id);
 
-	const creator = await reconcileCreatorRecords();
+	const creator = await reconcileCreatorRecords(enqueueRecord);
+	const reader = await reconcileReaderRecords(enqueueRecord);
 
-	if (stale.length > 0 || missing.length > 0 || creator.stale > 0 || creator.missing > 0) {
+	const toCorrect = stale.length + creator.stale;
+	const toPublish = missing.length + creator.missing + reader.missing;
+	if (toCorrect > 0 || toPublish > 0) {
 		console.log(
-			`[reconcile-listings] queued ${stale.length + creator.stale} to remove or correct, ` +
-				`${missing.length + creator.missing} to publish`,
+			`[reconcile-listings] queued ${toCorrect} to remove or correct, ${toPublish} to publish`,
 		);
 	}
 }
@@ -112,7 +145,9 @@ export async function reconcileListings(): Promise<void> {
  * starve the posts, and the ceiling is there to stop a first run flooding the queue rather than
  * to bound the total.
  */
-async function reconcileCreatorRecords(): Promise<{ stale: number; missing: number }> {
+async function reconcileCreatorRecords(
+	enqueueRecord: Enqueue,
+): Promise<{ stale: number; missing: number }> {
 	// ── Records that should not exist ────────────────────────────────────
 	//
 	// The same loose net as above, and loose for the same reason: the real test is TypeScript and
@@ -120,28 +155,28 @@ async function reconcileCreatorRecords(): Promise<{ stale: number; missing: numb
 	//
 	// 🚨 `is_published = false AND atproto_uri IS NOT NULL` is the shape that matters — a creator
 	// who retracted a post, whose `published_at` stayed stamped behind them.
+	//
+	// ⚠️ A post with no creator is deliberately NOT in the net. Its record is kept rather than
+	// removed, so selecting it would enqueue a sync that does nothing, every night, for ever.
 	const stalePosts = await db
 		.select({ id: posts.id })
 		.from(posts)
 		.where(
 			and(
 				isNotNull(posts.atprotoUri),
-				sql`(
-					${posts.isPublished} = false
-					OR ${posts.publishedAt} IS NULL
-					OR ${posts.creatorId} IS NULL
-				)`,
+				isNotNull(posts.creatorId),
+				sql`(${posts.isPublished} = false OR ${posts.publishedAt} IS NULL)`,
 			),
 		)
 		.limit(SWEEP_LIMIT);
-	for (const row of stalePosts) await queueCreatorRecordSync("post", row.id);
+	for (const row of stalePosts) await enqueueRecord("post", row.id);
 
 	const staleProjects = await db
 		.select({ id: projects.id })
 		.from(projects)
 		.where(and(isNotNull(projects.atprotoUri), eq(projects.isPublished, false)))
 		.limit(SWEEP_LIMIT);
-	for (const row of staleProjects) await queueCreatorRecordSync("project", row.id);
+	for (const row of staleProjects) await enqueueRecord("project", row.id);
 
 	// ── Records that should exist and do not ─────────────────────────────
 	//
@@ -150,24 +185,124 @@ async function reconcileCreatorRecords(): Promise<{ stale: number; missing: numb
 	// ever, to be skipped each time. The cost is that a creator who granted permission over an
 	// identity hosted ELSEWHERE is not swept — their records are covered by the per-event
 	// enqueues only, which is the same gap the Works sweep has and should be closed with it.
-	const missingPosts = await db
-		.select({ id: posts.id })
-		.from(posts)
-		.innerJoin(hostedAccounts, eq(hostedAccounts.userId, posts.creatorId))
-		.where(and(isNull(posts.atprotoUri), eq(posts.isPublished, true), isNotNull(posts.publishedAt)))
-		.limit(SWEEP_LIMIT);
-	for (const row of missingPosts) await queueCreatorRecordSync("post", row.id);
+	//
+	// ⚠️ And skipped outright while a kind's schema is unpublished, since every one of those syncs
+	// would plan `lexicon_unpublished` and write nothing. The half above still runs: removal is
+	// never withheld.
+	const missingPosts = !isLexiconPublished(POST_COLLECTION)
+		? []
+		: await db
+				.select({ id: posts.id })
+				.from(posts)
+				.innerJoin(hostedAccounts, eq(hostedAccounts.userId, posts.creatorId))
+				.where(
+					and(isNull(posts.atprotoUri), eq(posts.isPublished, true), isNotNull(posts.publishedAt)),
+				)
+				.limit(SWEEP_LIMIT);
+	for (const row of missingPosts) await enqueueRecord("post", row.id);
 
-	const missingProjects = await db
-		.select({ id: projects.id })
-		.from(projects)
-		.innerJoin(hostedAccounts, eq(hostedAccounts.userId, projects.creatorId))
-		.where(and(isNull(projects.atprotoUri), eq(projects.isPublished, true)))
-		.limit(SWEEP_LIMIT);
-	for (const row of missingProjects) await queueCreatorRecordSync("project", row.id);
+	const missingProjects = !isLexiconPublished(PROJECT_COLLECTION)
+		? []
+		: await db
+				.select({ id: projects.id })
+				.from(projects)
+				.innerJoin(hostedAccounts, eq(hostedAccounts.userId, projects.creatorId))
+				.where(and(isNull(projects.atprotoUri), eq(projects.isPublished, true)))
+				.limit(SWEEP_LIMIT);
+	for (const row of missingProjects) await enqueueRecord("project", row.id);
 
 	return {
 		stale: stalePosts.length + staleProjects.length,
 		missing: missingPosts.length + missingProjects.length,
+	};
+}
+
+/**
+ * The half of the sweep that catches a reader's interactions up with their subjects.
+ *
+ * 🚨 **This is what makes a comment's record appear once the thing it is about is listed.** A
+ * record names its subject by address, so a comment on a post with no record yet writes nothing,
+ * and nothing fans out from the post gaining one — a busy thread would turn a single first sync
+ * into a burst against every commenter's server. Instead this finds the rows that could now be
+ * written and asks for each, a sweep's worth at a time.
+ *
+ * ⚠️ **There is no "should not exist" half, and that is the design rather than an omission.** A
+ * reader's record comes down only when the reader takes it back — unvoting, unfollowing, editing
+ * their words away — and each of those enqueues its own removal as it happens. A hidden comment,
+ * or one whose subject has gone, keeps its record; a net for them would find only rows the
+ * planner is going to leave alone.
+ *
+ * ⚠️ **Hosted accounts only, with the same gap the Works half states**, and each kind is skipped
+ * while its schema is unpublished.
+ */
+async function reconcileReaderRecords(enqueueRecord: Enqueue): Promise<{ missing: number }> {
+	const subjectHasRecord = (type: SQL, id: SQL) => sql`(
+		(${type} = 'work' AND EXISTS (SELECT 1 FROM works s WHERE s.id = ${id} AND s.atproto_uri IS NOT NULL))
+		OR (${type} = 'post' AND EXISTS (SELECT 1 FROM posts s WHERE s.id = ${id} AND s.atproto_uri IS NOT NULL))
+		OR (${type} = 'comment' AND EXISTS (SELECT 1 FROM comments s WHERE s.id = ${id} AND s.atproto_uri IS NOT NULL))
+	)`;
+
+	const missingComments = !isLexiconPublished(COMMENT_COLLECTION)
+		? []
+		: await db
+				.select({ id: comments.id })
+				.from(comments)
+				.innerJoin(hostedAccounts, eq(hostedAccounts.userId, comments.userId))
+				.where(
+					and(
+						isNull(comments.atprotoUri),
+						eq(comments.moderationStatus, "visible"),
+						subjectHasRecord(sql`${comments.subjectType}`, sql`${comments.subjectId}`),
+					),
+				)
+				.limit(SWEEP_LIMIT);
+	for (const row of missingComments) await enqueueRecord("comment", row.id);
+
+	const missingReviews = !isLexiconPublished(REVIEW_COLLECTION)
+		? []
+		: await db
+				.select({ id: reviews.id })
+				.from(reviews)
+				.innerJoin(hostedAccounts, eq(hostedAccounts.userId, reviews.userId))
+				.innerJoin(works, eq(works.id, reviews.workId))
+				.where(
+					and(
+						isNull(reviews.atprotoUri),
+						eq(reviews.moderationStatus, "visible"),
+						isNotNull(works.atprotoUri),
+					),
+				)
+				.limit(SWEEP_LIMIT);
+	for (const row of missingReviews) await enqueueRecord("review", row.id);
+
+	const missingVotes = !isLexiconPublished(VOTE_COLLECTION)
+		? []
+		: await db
+				.select({ id: votes.id })
+				.from(votes)
+				.innerJoin(hostedAccounts, eq(hostedAccounts.userId, votes.userId))
+				.where(
+					and(
+						isNull(votes.atprotoUri),
+						subjectHasRecord(sql`${votes.subjectType}`, sql`${votes.subjectId}`),
+					),
+				)
+				.limit(SWEEP_LIMIT);
+	for (const row of missingVotes) await enqueueRecord("vote", row.id);
+
+	const missingFollows = !isLexiconPublished(FOLLOW_COLLECTION)
+		? []
+		: await db
+				.select({ id: follows.id })
+				.from(follows)
+				.innerJoin(hostedAccounts, eq(hostedAccounts.userId, follows.followerId))
+				.innerJoin(users, eq(users.id, follows.creatorId))
+				.where(and(isNull(follows.atprotoUri), isNotNull(users.atprotoDid)))
+				.limit(SWEEP_LIMIT);
+	for (const row of missingFollows) await enqueueRecord("follow", row.id);
+
+	return {
+		missing:
+			missingComments.length + missingReviews.length + missingVotes.length + missingFollows.length,
 	};
 }

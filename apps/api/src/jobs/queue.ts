@@ -170,10 +170,11 @@ export const QUEUES = {
 	// request — a record is a call to another server, and a creator's publishing must not fail
 	// because that server is down.
 	SYNC_WORK_LISTING: "sync-work-listing",
-	// Write, replace or remove the record describing a creator's post or project. Carries a kind
-	// and an id and nothing else, for the same reason the queue above carries only a Work id: the
-	// handler re-reads the row and decides from its current state.
-	SYNC_CREATOR_RECORD: "sync-creator-record",
+	// Write, replace or remove the record for one row: a creator's post or project, or a reader's
+	// comment, review, vote or follow. Carries a kind and an id and nothing else, for the same
+	// reason the queue above carries only a Work id: the handler re-reads the row and decides from
+	// its current state.
+	SYNC_ATPROTO_RECORD: "sync-atproto-record",
 	// Take a record off the network when the row that described it has been deleted outright.
 	//
 	// 🚨 **The one queue here whose payload is a DESCRIPTION rather than a hint**, and it has to
@@ -288,8 +289,8 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		expireInMinutes: 10,
 	},
 	// The same budget as a Work's listing, for the same reason: one small write, and a delete
-	// that never lands is a record advertising something its creator took down.
-	[QUEUES.SYNC_CREATOR_RECORD]: {
+	// that never lands is a record advertising something its owner took down.
+	[QUEUES.SYNC_ATPROTO_RECORD]: {
 		retryLimit: 8,
 		retryDelay: 60,
 		expireInMinutes: 10,
