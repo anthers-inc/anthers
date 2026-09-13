@@ -20,7 +20,6 @@ import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
-import { waitlistRoutes } from "./routes/waitlist.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
@@ -73,7 +72,6 @@ const app = new Hono()
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/moderation", moderationRoutes)
 	.route("/api/dmca", dmcaRoutes)
-	.route("/api/waitlist", waitlistRoutes)
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 

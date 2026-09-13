@@ -94,4 +94,4 @@ The desktop app's packaging icons live in [anthers-desktop](https://github.com/a
 
 # Licensing
 
-The package's own code is Apache-2.0. `logo/` is Anthers' own brand art, owned by Anthers, Inc.; it is not covered by that license and may be used only in association with Anthers itself. The icon artwork in `svg/` and the markup generated from it are Noun Project art that Anthers uses under its own license, and the Apache license does not cover them; `provenance.json` records each icon's creator and license.
+The package's own code is Apache-2.0. `logo/` is Anthers' own brand art, owned by Anthers, Inc.; it is not covered by that license and may be used only in association with Anthers itself. The icon artwork in `svg/` and the markup generated from it are Noun Project art that Anthers uses under the Noun Project's Royalty-Free License, which requires no attribution. Neither the Apache license nor Anthers' license covers anyone copying them from here, who needs a license of their own from the Noun Project; `provenance.json` records each icon's creator and the terms the Noun Project offers it under.

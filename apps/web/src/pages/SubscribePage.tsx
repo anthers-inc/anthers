@@ -524,6 +524,21 @@ interface PerkRow {
 	title: string;
 	desc: string;
 	cell: (amount: number) => PerkCell;
+	/**
+	 * A perk Anthers has committed to and not built. The row still shows what each rung will
+	 * carry, and says beside its title that it is not there yet, because a matrix read without
+	 * that is a list of things a supporter can use today.
+	 */
+	notBuilt?: true;
+}
+
+/** The marker beside a perk that is committed and not built. */
+function NotBuiltYet() {
+	return (
+		<span className="badge badge-ghost badge-sm ml-1.5 align-middle font-normal">
+			Not Built Yet
+		</span>
+	);
 }
 
 /**
@@ -571,6 +586,7 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Cloud Content Storage",
+		notBuilt: true,
 		desc: "Free storage for a catalog you publish. From Root the same space also holds your own files — cloud saves, and purchases you have kept.",
 		cell: (amount) => ({
 			value: `${storageGibFor(amount)} GiB`,
@@ -579,11 +595,13 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Purchase Preservation",
+		notBuilt: true,
 		desc: "A Work you bought that its creator later withdrew stays in your library to download. After that, keeping a copy is yours to do.",
 		cell: (amount) => ({ value: amount > 0 ? "While Badged" : `${WITHDRAWN_RESCUE_DAYS} days` }),
 	},
 	{
 		title: "Merch Discount",
+		notBuilt: true,
 		// The size of the discount is undecided and the shop does not exist yet, so the cell
 		// says that it is carried and no more. A percentage invented here would be a figure with no source.
 		desc: "A discount on merch anyone can buy from the Anthers shop, where the net revenue funds Anthers' charitable programs.",
@@ -898,7 +916,10 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									// 2px in a stronger tone, against the 1px `GRID` of every rule inside it.
 									className={`border-l-2 border-r border-t ${GRID} border-l-base-content/30 ${SURFACE_CHROME} px-4 py-3 text-left font-normal ${first ? `rounded-tl-2xl border-t-2 border-t-base-content/30` : ""} ${last ? `rounded-bl-2xl border-b-2 border-b-base-content/30` : ""} ${labelEdgeLit ? "border-r-primary/50" : ""}`}
 								>
-									<span className="block text-sm font-semibold">{row.title}</span>
+									<span className="block text-sm font-semibold">
+										{row.title}
+										{row.notBuilt && <NotBuiltYet />}
+									</span>
 									<span className="mt-0.5 block text-xs leading-snug text-base-content/55">
 										{row.desc}
 									</span>
@@ -1006,7 +1027,10 @@ function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
 										return (
 											<li key={row.title}>
 												<span className="flex items-baseline justify-between gap-3 text-sm">
-													<span className="font-medium">{row.title}</span>
+													<span className="font-medium">
+														{row.title}
+														{row.notBuilt && <NotBuiltYet />}
+													</span>
 													<strong className="shrink-0 text-right tabular-nums">
 														{cell.value}
 														{shownNote && (

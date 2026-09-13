@@ -131,6 +131,18 @@ describe("what a rung adds over the one below it", () => {
 		expect(titles(root, free)).toContain("Cloud Content Storage");
 	});
 
+	test("marks the perks that are committed and not built, and only those", () => {
+		// Root carries every perk, so its card lists them all. A perk that ships drops out of
+		// this list in the same change that builds it.
+		const unbuilt = marginalRows(root, free)
+			.concat(marginalRows(root, null))
+			.filter((row) => row.notBuilt)
+			.map((row) => row.title);
+		expect([...new Set(unbuilt)].sort()).toEqual(
+			["Cloud Content Storage", "Merch Discount", "Purchase Preservation"].sort(),
+		);
+	});
+
 	test("a middle rung adds only what actually moves", () => {
 		// Public Access, preservation, merch and recognition are all identical at Root and
 		// Sprout, so a Sprout card that listed them would be padding a comparison.

@@ -13,8 +13,11 @@ LICENSE.md, with the following exceptions.
   International license (https://creativecommons.org/licenses/by/4.0/).
 
 - Third-party files keep their own licenses. The icons in packages/brand/svg/,
-  and the markup generated from them, are Noun Project artwork that Anthers uses
-  under its own license; each icon's artist and license are recorded in
+  and the markup generated from them, are Noun Project artwork that Anthers, Inc.
+  uses under the Noun Project's Royalty-Free License
+  (https://thenounproject.com/legal/), which requires no attribution. That license
+  is Anthers' own, so anyone copying the icons from this repository needs a license
+  of their own from the Noun Project. Each icon's artist is recorded in
   packages/brand/provenance.json. The web fonts in apps/web/public/fonts/ are
   under the SIL Open Font License 1.1, described in
   apps/web/public/fonts/THIRD-PARTY.md.

@@ -77,8 +77,9 @@ if (has("json")) {
 	);
 	for (const icon of icons) {
 		// The license is the field a pick can go wrong on, so it sits where the eye lands
-		// rather than at the end of the line. Everything here is redistributable with
-		// attribution; the point is to see WHICH terms before choosing, not to filter.
+		// rather than at the end of the line. It is the terms the Noun Project offers the icon
+		// under; Anthers uses a CC BY 3.0 icon under its Royalty-Free License, without
+		// attribution. The point is to see WHICH terms before choosing, not to filter.
 		const creator = icon.creator?.name ?? "unknown";
 		const license = (icon.license_description ?? "?").replace(
 			"creative-commons-attribution",

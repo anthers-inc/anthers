@@ -10,9 +10,6 @@ import { type ReactNode, useEffect, useState } from "react";
 const STORAGE_KEY = "anthers_site_access";
 const INVITE_PARAM = "invite";
 
-type Interest = "user" | "creator" | "both";
-type SubmitState = "idle" | "submitting" | "success" | "error";
-
 // Lift the invite key out of the URL and rewrite the address bar without it.
 // The key is a shared secret we mail out in links, so it shouldn't linger where
 // it can be screenshotted, bookmarked, or pasted back to someone else — it has
@@ -77,7 +74,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 	return <SiteGatePanel onAuthorized={() => setAuthorized(true)} inviteRejected={inviteRejected} />;
 }
 
-// The pre-launch gate's presentation and its password/waitlist forms, kept
+// The pre-launch gate's presentation and its password form, kept
 // self-contained so it can render in two places: as the wall (mounted by
 // <SiteGate> above when unauthorized) and on its own /site-gate route, so the
 // look can be tinkered with locally without clearing the anthers_site_access
@@ -96,11 +93,6 @@ export function SiteGatePanel({
 	const [password, setPassword] = useState("");
 	const [passwordError, setPasswordError] = useState(false);
 	const [passwordLoading, setPasswordLoading] = useState(false);
-
-	// Waitlist form
-	const [email, setEmail] = useState("");
-	const [interest, setInterest] = useState<Interest>("both");
-	const [submitState, setSubmitState] = useState<SubmitState>("idle");
 
 	const handlePasswordSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -122,25 +114,6 @@ export function SiteGatePanel({
 			setPasswordError(true);
 		} finally {
 			setPasswordLoading(false);
-		}
-	};
-
-	const handleWaitlistSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setSubmitState("submitting");
-		try {
-			const res = await apiFetch("/api/waitlist", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email, interest }),
-			});
-			if (res.ok) {
-				setSubmitState("success");
-			} else {
-				setSubmitState("error");
-			}
-		} catch {
-			setSubmitState("error");
 		}
 	};
 
@@ -192,7 +165,7 @@ export function SiteGatePanel({
 								</p>
 
 								{/* The middle two paragraphs are desktop-only (`hidden sm:block`): on phones
-									we drop them so the gate stays short and the waitlist form is reachable
+									we drop them so the gate stays short and the early-access link is reachable
 									with minimal scrolling. */}
 								<div className="hidden sm:block">
 									<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
@@ -214,76 +187,9 @@ export function SiteGatePanel({
 								</p>
 							</div>
 
-							{/* Waitlist form */}
-							{submitState === "success" ? (
-								<div className="py-4">
-									<p className="text-xl font-medium text-success">You're on the list.</p>
-									<p className="text-base text-base-content/70 mt-2">
-										We'll reach out when things are ready.
-									</p>
-								</div>
-							) : (
-								<form onSubmit={handleWaitlistSubmit} className="flex flex-col gap-4">
-									<p className="text-base text-base-content/50">
-										We're excited to share Anthers with you but aren't quite ready yet. Leave your
-										email and we'll let you know when we're ready for you.
-									</p>
-
-									{/* Email input */}
-									<input
-										type="email"
-										required
-										className="input input-bordered w-full"
-										placeholder="you@example.com"
-										value={email}
-										onChange={(e) => {
-											setEmail(e.target.value);
-											if (submitState === "error") setSubmitState("idle");
-										}}
-									/>
-
-									{/* Interest toggle */}
-									<fieldset className="flex flex-col gap-1.5">
-										<legend className="text-sm text-base-content/60 text-left">
-											I'm interested as a...
-										</legend>
-										<div className="join w-full">
-											{(
-												[
-													["user", "User"],
-													["creator", "Creator"],
-													["both", "Both"],
-												] as const
-											).map(([value, label]) => (
-												<button
-													key={value}
-													type="button"
-													className={`join-item btn flex-1 ${
-														interest === value
-															? "btn-secondary"
-															: "btn-ghost border-base-content/20"
-													}`}
-													onClick={() => setInterest(value)}
-												>
-													{label}
-												</button>
-											))}
-										</div>
-									</fieldset>
-
-									{submitState === "error" && (
-										<p className="text-error text-base">Something went wrong. Please try again.</p>
-									)}
-
-									<button
-										type="submit"
-										className="btn btn-primary w-2/3 self-center"
-										disabled={submitState === "submitting"}
-									>
-										{submitState === "submitting" ? "Submitting..." : "Keep Me Posted"}
-									</button>
-								</form>
-							)}
+							<p className="text-base text-base-content/50">
+								We're excited to share Anthers with you, but we aren't quite ready yet.
+							</p>
 
 							{/* Password bypass link */}
 							<div>
