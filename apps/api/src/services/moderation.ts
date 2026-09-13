@@ -49,6 +49,7 @@ import {
 import { and, count, desc, eq, exists, inArray, isNull, max, or, sql } from "drizzle-orm";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { notify } from "./notifications.js";
+import { queueRecordSync } from "./record-sync.js";
 
 /**
  * Subject type → the table it lives in. The only place the mapping is written down.
@@ -352,6 +353,11 @@ export async function hideSubject(input: {
 			);
 	});
 
+	// ⚠️ Hiding writes nothing to the network — the record stays where its author put it, and the
+	// planner answers `keep` without opening a repository. It is asked for anyway, so that the
+	// decision about what a hide does to a record lives in the planner and nowhere else.
+	void queueRecordSync(input.subjectType as ContentSubjectType, input.subjectId);
+
 	return { status: "hidden" };
 }
 
@@ -398,6 +404,9 @@ export async function restoreSubject(input: {
 			note,
 		});
 	});
+
+	// A comment hidden before its record was ever written gets one now, since it is visible again.
+	void queueRecordSync(input.subjectType as ContentSubjectType, input.subjectId);
 
 	return { status: "visible" };
 }

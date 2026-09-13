@@ -64,6 +64,8 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
+import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
+import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import {
@@ -84,6 +86,7 @@ import {
 	setPin,
 	updateParentalControls,
 } from "../services/parental-controls.js";
+import { queueRecordSync } from "../services/record-sync.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -648,7 +651,14 @@ const accountRoutes = new Hono()
 			.values({ followerId: sessionUser.id, creatorId: creator.id })
 			.onConflictDoNothing();
 
-		// TODO: ATProto sync (sync_follow_to_atproto)
+		// Read back rather than taken from the insert, which returns nothing on the idempotent
+		// branch — and a repeated follow is still a reason to make sure the record exists.
+		const [follow] = await db
+			.select({ id: follows.id })
+			.from(follows)
+			.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)))
+			.limit(1);
+		if (follow) void queueRecordSync("follow", follow.id);
 
 		return c.json({ detail: "Followed." }, 201);
 	})
@@ -671,11 +681,23 @@ const accountRoutes = new Hono()
 		const deleted = await db
 			.delete(follows)
 			.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)))
-			.returning({ id: follows.id });
+			.returning({ id: follows.id, atprotoUri: follows.atprotoUri });
 
 		// Check if any rows were deleted
 		if (deleted.length === 0) {
 			return c.json({ error: "You were not following this user" }, 404);
+		}
+
+		// Unfollowing is the follower taking their record back. The address comes out of the
+		// delete, since the row that remembered it no longer exists.
+		for (const { atprotoUri } of deleted) {
+			if (atprotoUri) {
+				await queueRecordRemoval({
+					ownerId: sessionUser.id,
+					collection: FOLLOW_COLLECTION,
+					uri: atprotoUri,
+				});
+			}
 		}
 
 		return c.body(null, 204);

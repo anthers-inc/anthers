@@ -36,7 +36,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
-import { type SyncCreatorRecordData, syncCreatorRecordJob } from "./sync-creator-record.js";
+import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { watchHostedIdentities } from "./watch-identities.js";
@@ -109,12 +109,12 @@ async function start() {
 		},
 	);
 
-	await queue.work<SyncCreatorRecordData>(
-		QUEUES.SYNC_CREATOR_RECORD,
+	await queue.work<SyncAtprotoRecordData>(
+		QUEUES.SYNC_ATPROTO_RECORD,
 		{ localConcurrency: 2 },
 		async (jobs) => {
 			for (const job of jobs) {
-				await syncCreatorRecordJob(job.data);
+				await syncAtprotoRecordJob(job.data);
 			}
 		},
 	);

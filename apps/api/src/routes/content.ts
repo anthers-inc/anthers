@@ -106,13 +106,16 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { POST_COLLECTION, PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
+import {
+	POST_COLLECTION,
+	PROJECT_COLLECTION,
+	VOTE_COLLECTION,
+} from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
 import { adultVisibility } from "../services/content-preferences.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
-import { queueCreatorRecordSync } from "../services/creator-record-listing.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -134,6 +137,7 @@ import {
 	payoutStanding,
 } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
+import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { beginScans, scanInlineUpload, scanReleaseGate } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
@@ -2160,7 +2164,7 @@ const contentRoutes = new Hono()
 		// Asked for unconditionally rather than only when `isPublished` — the job re-reads and
 		// decides, and a draft costs one read to skip. Working out here whether it would publish
 		// would put the publishability rule in two places, and they would drift.
-		void queueCreatorRecordSync("post", post.id);
+		void queueRecordSync("post", post.id);
 
 		const linkedWorks = await loadPostWorks(post.id, user.id, deliveryCtx());
 		return c.json({ post: { ...post, linkedWorks } }, 201);
@@ -2309,7 +2313,7 @@ const contentRoutes = new Hono()
 		// Every edit, not only a publish or a retract: the record carries the post's URL, and a
 		// slug change moves it. ⚠️ Unpublishing reaches here too, which is the half that matters —
 		// it is what takes the record back down.
-		void queueCreatorRecordSync("post", updated.id);
+		void queueRecordSync("post", updated.id);
 
 		const linkedWorks = await loadPostWorks(updated.id, user.id, deliveryCtx());
 		return c.json({ post: { ...updated, linkedWorks } });
@@ -2367,7 +2371,7 @@ const contentRoutes = new Hono()
 		// before any of this, which is what makes them available at all — see `queueRecordRemoval`.
 		if (existing.atprotoUri && existing.creatorId !== null) {
 			await queueRecordRemoval({
-				creatorId: existing.creatorId,
+				ownerId: existing.creatorId,
 				collection: POST_COLLECTION,
 				uri: existing.atprotoUri,
 			});
@@ -2405,6 +2409,10 @@ const contentRoutes = new Hono()
 				.values({ userId: user.id, subjectType: "post", subjectId: post.id, body })
 				.returning();
 
+			// The record goes in the commenter's own repository, once the post has a record for it
+			// to name — see `reader-record-listing.ts` for what happens while it does not.
+			void queueRecordSync("comment", comment.id);
+
 			return c.json({ comment: { ...comment, username: user.username } }, 201);
 		},
 	)
@@ -2431,6 +2439,8 @@ const contentRoutes = new Hono()
 			.insert(comments)
 			.values({ userId: user.id, subjectType: "work", subjectId: work.id, body })
 			.returning();
+
+		void queueRecordSync("comment", comment.id);
 
 		return c.json({ comment: { ...comment, username: user.username } }, 201);
 	})
@@ -2492,13 +2502,18 @@ const contentRoutes = new Hono()
 		// Changing an upvote to a downvote UPDATES the one row. Inserting a second would let
 		// both count, which is the unique index's whole job and is worth doing in one
 		// statement so there is no window where neither or both exist.
-		await db
+		const [vote] = await db
 			.insert(votes)
 			.values({ userId: user.id, subjectType, subjectId, direction })
 			.onConflictDoUpdate({
 				target: [votes.userId, votes.subjectType, votes.subjectId],
 				set: { direction },
-			});
+			})
+			.returning({ id: votes.id });
+
+		// A flip rewrites the one record at its own address rather than adding a second, for the
+		// same reason the row is updated rather than duplicated.
+		void queueRecordSync("vote", vote.id);
 
 		const { tallies } = await voteTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
@@ -2518,7 +2533,7 @@ const contentRoutes = new Hono()
 	.delete("/votes", requireAuth, zValidator("json", voteTargetSchema), async (c) => {
 		const user = c.get("user");
 		const { subjectType, subjectId } = c.req.valid("json");
-		await db
+		const withdrawn = await db
 			.delete(votes)
 			.where(
 				and(
@@ -2526,7 +2541,21 @@ const contentRoutes = new Hono()
 					eq(votes.subjectType, subjectType),
 					eq(votes.subjectId, subjectId),
 				),
-			);
+			)
+			.returning({ atprotoUri: votes.atprotoUri });
+
+		// 🚨 **Withdrawing a vote is the voter taking their record back**, and the row that knew
+		// where it went is gone as of the line above — so the address is read out of the delete
+		// itself and travels with the job. See `queueRecordRemoval`.
+		for (const { atprotoUri } of withdrawn) {
+			if (atprotoUri) {
+				await queueRecordRemoval({
+					ownerId: user.id,
+					collection: VOTE_COLLECTION,
+					uri: atprotoUri,
+				});
+			}
+		}
 		const { tallies } = await voteTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
 		const owner = await ownsSubject(subjectType, subjectId, user.id);
@@ -2656,6 +2685,8 @@ const contentRoutes = new Hono()
 				set: { verdict, body: body.trim() },
 			})
 			.returning();
+
+		void queueRecordSync("review", review.id);
 
 		return c.json({ review }, 201);
 	})
@@ -4225,7 +4256,7 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
-		void queueCreatorRecordSync("project", project.id);
+		void queueRecordSync("project", project.id);
 
 		return c.json({ project }, 201);
 	})
@@ -4375,7 +4406,7 @@ const contentRoutes = new Hono()
 
 		// The record carries the title, the description and the URL, so any of the three moving
 		// is a reason to rewrite it — and unpublishing is what takes it down.
-		void queueCreatorRecordSync("project", updated.id);
+		void queueRecordSync("project", updated.id);
 
 		return c.json({ project: updated });
 	})
@@ -4396,7 +4427,7 @@ const contentRoutes = new Hono()
 
 		if (deleted[0].atprotoUri) {
 			await queueRecordRemoval({
-				creatorId: user.id,
+				ownerId: user.id,
 				collection: PROJECT_COLLECTION,
 				uri: deleted[0].atprotoUri,
 			});

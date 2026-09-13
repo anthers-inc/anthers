@@ -2,19 +2,10 @@
 /**
  * Keeping a creator's post and project records in step with the rows they describe.
  *
- * `atproto-record-plan.ts` decides what should happen and carries it out against any
- * repository; this module connects that to an actual row, an actual creator, and the column
- * that remembers where the record went. It is the only writer of `posts.atproto_uri` and
- * `projects.atproto_uri`.
- *
- * 🚨 **It re-reads the row rather than being told what changed, and that is the design.**
- * Publishability turns on state several services write — a post is published, unpublished,
- * scheduled, or its creator's account is erased — and a version taking "what happened" as an
- * argument would need every one of those call sites to describe its transition correctly and
- * for ever. Reading current state makes every call idempotent: running it twice is harmless,
- * running it late still converges, and a caller firing it for the wrong reason costs nothing.
- * **The enqueue is a hint that something moved, never a description of what.** The same
- * reasoning, and the same wording, as `work-listing.ts`.
+ * This module reads the rows and remembers where their records went; `record-sync.ts` does the
+ * planning and writing that every kind shares. It is the only writer of `posts.atproto_uri` and
+ * `projects.atproto_uri`, and it re-reads a row rather than being told what changed, for the
+ * reason that module gives.
  *
  * 🚨 **A record that outlives the thing it describes is the failure this is shaped around.**
  * A record is public the moment it lands, and deleting it afterwards broadcasts only the
@@ -34,20 +25,12 @@ import {
 	POST_KIND,
 	PROJECT_COLLECTION,
 	PROJECT_KIND,
-	type RecordPlan,
-	syncRecord,
 } from "./atproto-record-plan.js";
-import { RepoAuthError, type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
-import { type NoAccountWriterReason, writerForAccount } from "./repo-writer.js";
+import { type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
+import { type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
 
 /** What syncing one creator record did. */
-export type CreatorRecordSyncResult<R> =
-	/** The record was created, replaced, deleted, or correctly left alone. */
-	| { status: "synced"; plan: RecordPlan<R, UnpublishableCreatorReason>; uri: string | null }
-	/** No record is possible or needed, for a reason that is nobody's fault. */
-	| { status: "skipped"; reason: NoAccountWriterReason | "no_row" | "no_creator" }
-	/** Something worth retrying went wrong. The job wrapper decides what to do about it. */
-	| { status: "failed"; error: string };
+export type CreatorRecordSyncResult<R> = RecordSyncResult<R, UnpublishableCreatorReason>;
 
 /**
  * Bring one post's record into line with the post.
@@ -73,23 +56,17 @@ export async function syncPostRecord(
 		.where(eq(posts.id, postId))
 		.limit(1);
 	if (!post) return { status: "skipped", reason: "no_row" };
-	if (post.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
-	const writer = await writerForAccount(post.creatorId, {
-		collections: [POST_COLLECTION],
+	return syncOwnedRecord({
+		ownerId: post.creatorId,
+		kind: POST_KIND,
+		input: post,
+		existingUri: post.atprotoUri,
+		storeUri: async (uri) => {
+			await db.update(posts).set({ atprotoUri: uri }).where(eq(posts.id, postId));
+		},
 		fetchImpl: opts.fetchImpl,
 	});
-	if (!writer.writer) return { status: "skipped", reason: writer.reason };
-
-	try {
-		const outcome = await syncRecord(writer.writer, POST_KIND, post, post.atprotoUri);
-		if (outcome.uri !== post.atprotoUri) {
-			await db.update(posts).set({ atprotoUri: outcome.uri }).where(eq(posts.id, postId));
-		}
-		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
-	} catch (error) {
-		return failure(error);
-	}
 }
 
 /** Bring one project's record into line with the project. */
@@ -110,23 +87,17 @@ export async function syncProjectRecord(
 		.where(eq(projects.id, projectId))
 		.limit(1);
 	if (!project) return { status: "skipped", reason: "no_row" };
-	if (project.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
-	const writer = await writerForAccount(project.creatorId, {
-		collections: [PROJECT_COLLECTION],
+	return syncOwnedRecord({
+		ownerId: project.creatorId,
+		kind: PROJECT_KIND,
+		input: project,
+		existingUri: project.atprotoUri,
+		storeUri: async (uri) => {
+			await db.update(projects).set({ atprotoUri: uri }).where(eq(projects.id, projectId));
+		},
 		fetchImpl: opts.fetchImpl,
 	});
-	if (!writer.writer) return { status: "skipped", reason: writer.reason };
-
-	try {
-		const outcome = await syncRecord(writer.writer, PROJECT_KIND, project, project.atprotoUri);
-		if (outcome.uri !== project.atprotoUri) {
-			await db.update(projects).set({ atprotoUri: outcome.uri }).where(eq(projects.id, projectId));
-		}
-		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
-	} catch (error) {
-		return failure(error);
-	}
 }
 
 /** Which of a creator's two record types a sync is for. */
@@ -203,56 +174,6 @@ export async function removePublishedCreatorRecord(
 		await db.update(projects).set({ atprotoUri: null }).where(eq(projects.id, record.id));
 	}
 	return true;
-}
-
-/**
- * Ask for a post's or a project's record to be brought back into line, soon.
- *
- * ⭐ **Call this whenever publishability MIGHT have moved, without working out whether it did.**
- * The job re-reads and decides, so a spurious enqueue costs one database read and a duplicate
- * costs nothing. Under-calling is the expensive mistake here, not over-calling — the same trade
- * `queueWorkListingSync` makes, for the same reason.
- *
- * ⚠️ **Never throws.** Every caller is in the middle of something a creator asked for, and
- * publishing a post must not fail because a queue was briefly unavailable. A missed enqueue is
- * caught by the reconciling sweep; a publish that failed because of one is a creator's afternoon.
- */
-export async function queueCreatorRecordSync(kind: CreatorRecordKind, id: number): Promise<void> {
-	try {
-		const { queue, QUEUES, JOB_OPTIONS } = await import("../jobs/queue.js");
-		await queue.send(
-			QUEUES.SYNC_CREATOR_RECORD,
-			{ kind, id },
-			JOB_OPTIONS[QUEUES.SYNC_CREATOR_RECORD],
-		);
-	} catch (error) {
-		console.error(
-			`[creator-record] could not enqueue a sync for ${kind} ${id}: ` +
-				`${error instanceof Error ? error.message : String(error)}`,
-		);
-	}
-}
-
-/**
- * What a thrown sync amounts to.
- *
- * 🚨 **A refused credential is a skip, never a failure, because a failure is retried.** Every
- * other way a write can go wrong is answered by trying again; this one is answered by asking the
- * creator again, and eight retries against a revoked grant achieve nothing except hiding the
- * revocation from the person who could fix it. The stored URI is left alone either way — a
- * record already out there is still one Anthers must be able to find after a re-grant.
- *
- * ⚠️ **The grant column is deliberately NOT cleared here**, unlike `syncWorkListing`. A grant is
- * per collection, so a refusal writing a post says nothing about whether the same creator's Work
- * listings still may be written; the next writer to open reads the token itself and records
- * what it actually covers.
- */
-function failure(error: unknown): CreatorRecordSyncResult<never> {
-	if (error instanceof RepoAuthError) {
-		console.warn(`[creator-record] the grant for ${error.did} was refused — ${error.message}`);
-		return { status: "skipped", reason: "grant_lost" };
-	}
-	return { status: "failed", error: describe(error) };
 }
 
 /** Turn a thrown thing into something a job log can carry. */

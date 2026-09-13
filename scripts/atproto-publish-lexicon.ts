@@ -9,6 +9,10 @@
  * script therefore **prints what it would do and stops** unless a person passes `--write`
  * from a terminal and types the NSID back.
  *
+ * ⚠️ **Publishing a schema is not what starts Anthers writing records under it.** That is the
+ * NSID's entry in `PUBLISHED_LEXICONS` (`apps/api/src/services/published-lexicons.ts`), added in
+ * a code change after this has run — so the order is always review, publish, then write.
+ *
  * ⚠️ **What a schema record actually is was established by reading one off the network**,
  * not from the guide, which does not say. A `com.atproto.lexicon.schema` record is the
  * Lexicon document *verbatim* — `lexicon`, `id` and `defs` — with `$type` added, written at
@@ -196,6 +200,7 @@ if (import.meta.main) {
 	const argv = Bun.argv.slice(2);
 	const flag = (n: string) => argv[argv.indexOf(`--${n}`) + 1];
 
+	const published: string[] = [];
 	for (const plan of decision.plans) {
 		const typed = prompt(
 			`\nType the NSID to publish it, or anything else to skip:\n  ${plan.nsid}\n> `,
@@ -231,5 +236,17 @@ if (import.meta.main) {
 		console.log(`  publishing as ${writer.did}, named by ${plan.authorityDomain}`);
 		const ref = await writer.putRecord("com.atproto.lexicon.schema", plan.rkey, plan.record);
 		console.log(`  published ${ref.uri}`);
+		published.push(plan.nsid);
+	}
+
+	// ⚠️ Publishing a schema does not start Anthers writing records under it, on purpose: that is
+	// a separate decision made in code. Said here because this is the moment somebody needs it.
+	const collections = published.filter((nsid) => !nsid.endsWith("Permissions"));
+	if (collections.length > 0) {
+		console.log(
+			"\nAnthers writes no records under these until they are added to PUBLISHED_LEXICONS in\n" +
+				"apps/api/src/services/published-lexicons.ts:\n" +
+				collections.map((nsid) => `  ${nsid}`).join("\n"),
+		);
 	}
 }
