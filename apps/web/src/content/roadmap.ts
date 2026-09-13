@@ -202,8 +202,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "importers",
 						title: "Bringing Your Catalog Across",
 						blurb: "One-step imports from itch.io, Patreon, Substack and YouTube.",
-						bucket: "active",
-						note: "None of the four works yet.",
+						bucket: "planned",
 					},
 					{
 						id: "desktop",
@@ -522,6 +521,15 @@ export const ROADMAP: RoadmapGroup[] = [
 						doc: { id: "21.02", title: "Directing Your Support" },
 					},
 					{
+						id: "stickers",
+						title: "Stickers",
+						blurb:
+							"Hand part of your Time Pool to a creator you choose, rather than having all of it shared out by the time you spend.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						doc: { id: "21.01", title: "Badges" },
+					},
+					{
 						id: "own-amount",
 						title: "Giving an Amount of Your Own",
 						blurb: "Deciding what Anthers is worth to you, at any number rather than one of ours.",
@@ -534,8 +542,8 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "What a Higher Badge Carries",
 						blurb:
 							"Giving above the Public Access price buys no more access, by design. What it carries instead must make nobody else poorer.",
-						bucket: "planned",
-						note: "The perks listed beside the higher rungs are not built.",
+						bucket: "active",
+						note: "Stickers and the supporters page work. Storage, merch and preservation are not built.",
 						doc: { id: "21.01", title: "Badges" },
 					},
 				],
@@ -630,7 +638,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "An Operator Console Worth Using",
 						blurb: "Every moderation control reachable from a screen rather than by hand.",
 						bucket: "active",
-						note: "Two queues have a screen. The rest are API calls.",
+						note: "Moderation, rating appeals and legal holds have screens. The rest are API calls.",
 						doc: { id: "51.02", title: "How Removal Works" },
 					},
 				],
@@ -907,7 +915,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb: "Anthers running the identity server, which unblocks the above in one step.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
-						note: "Signing up starts by picking a handle — a new one here, or one you already have.",
+						note: "Not yet announced to the wider network, so other apps cannot find these accounts.",
 						doc: { id: "71.03", title: "The Anthers PDS and Creator Nodes" },
 					},
 					{
