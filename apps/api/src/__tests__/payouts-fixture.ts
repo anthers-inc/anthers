@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Make a fixture creator payout-ready, so a test can get as far as releasing a Work.
+ * Make a fixture account a fully set-up creator, so a test can get as far as publishing.
  *
- * 🚨 **Releasing requires completed payout setup since 2026-08-28**, and adding that gate
- * turned 41 tests across 15 files red at once — every one of them a suite whose real
- * subject was something else (the Catalog, the Library, DMCA, reviews, blocking) that
- * happened to need a released Work to test it. That breadth is the gate working: release
- * is a chokepoint, and a chokepoint nothing noticed would have been a gate that did not
- * hold.
+ * Publishing anything — releasing a Work, publishing or scheduling a post, publishing a
+ * project — takes creator mode AND completed payout setup (`publishRefusal`), so this sets
+ * both. An account that should be a creator without payouts sets `is_creator` itself.
+ *
+ * 🚨 **Most callers are suites whose real subject is something else** — the Catalog, the
+ * Library, DMCA, reviews, blocking — that need a released Work or a published post to test
+ * it. That breadth is the gate working: publishing is a chokepoint, and a chokepoint that
+ * nothing noticed would be a gate that did not hold.
  *
  * ⚠️ **This writes the row directly rather than going through Stripe**, which is the only
  * option — Connect onboarding is a hosted flow with an identity check in it, and there is
@@ -23,7 +25,7 @@ import { stripeAccounts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
- * Give this account a connected Stripe account that Stripe is happy with.
+ * Put this account in creator mode with a connected Stripe account that Stripe is happy with.
  *
  * Takes a username because that is what the fixtures have to hand at setup time, and most
  * of them do not keep the id. Idempotent, so a suite that calls it twice is fine.
@@ -36,6 +38,7 @@ export async function enablePayouts(username: string): Promise<void> {
 
 /** The same, when the caller already has the id. */
 export async function enablePayoutsFor(userId: number): Promise<void> {
+	await db.update(users).set({ isCreator: true }).where(eq(users.id, userId));
 	await db
 		.insert(stripeAccounts)
 		.values({

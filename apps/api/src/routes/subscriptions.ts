@@ -50,7 +50,7 @@ import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { isGiveable, stickerAmount } from "@anthers/shared/stickers";
 import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
@@ -77,6 +77,7 @@ import {
 	savedCardFor,
 	supportItems,
 } from "../services/billing.js";
+import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
 import { resolveShareToken } from "../services/share-links.js";
@@ -183,19 +184,34 @@ async function stickersDirectedIn(userId: number, billingCycle: string): Promise
 	return round2(Number(row?.total ?? 0));
 }
 
-async function creatorOf(kind: "work" | "post", id: number): Promise<number | null> {
+/**
+ * The creator of a Work or post a reader can see, or null when there is nothing public there.
+ *
+ * ⚠️ **Only something already in front of people can carry a Sticker.** A private Work, a
+ * draft post, a Work taken down or quarantined — none of them was put there by somebody set
+ * up to be paid, and a Sticker on one would direct money at a subject no reader could have
+ * found. Answered as absent rather than refused, so a guessed id learns nothing.
+ */
+async function publicCreatorOf(kind: "work" | "post", id: number): Promise<number | null> {
 	if (kind === "work") {
 		const [row] = await db
 			.select({ creatorId: works.creatorId })
 			.from(works)
-			.where(eq(works.id, id))
+			.where(
+				and(
+					eq(works.id, id),
+					eq(works.visibility, "released"),
+					eq(works.takedownStatus, "active"),
+					ne(works.quarantineStatus, "quarantined"),
+				),
+			)
 			.limit(1);
 		return row?.creatorId ?? null;
 	}
 	const [row] = await db
 		.select({ creatorId: posts.creatorId })
 		.from(posts)
-		.where(eq(posts.id, id))
+		.where(and(eq(posts.id, id), eq(posts.isPublished, true)))
 		.limit(1);
 	return row?.creatorId ?? null;
 }
@@ -208,12 +224,16 @@ async function creatorOf(kind: "work" | "post", id: number): Promise<number | nu
  * Sticker on a comment pays whoever made the thing being discussed. Paying commenters would
  * have Anthers moving money between users — a different regulatory question and a different
  * product — and it is one line of code away from happening by accident.
+ *
+ * 🚨 **And only a creator who can be paid right now.** Publishing takes completed payout setup,
+ * but an account Stripe later holds is still the creator of everything it released, and a
+ * Sticker given then would be money owed to somebody Anthers cannot pay.
  */
 async function stickerRecipient(
 	giverId: number,
 	subjectType: StickerSubject,
 	subjectId: number,
-): Promise<{ creatorId: number } | { error: string; code: string; status: 403 | 404 }> {
+): Promise<{ creatorId: number } | { error: string; code: string; status: 403 | 404 | 409 }> {
 	const notFound = { error: "Nothing to sticker", code: "no_subject", status: 404 } as const;
 
 	let creatorId: number | null = null;
@@ -221,7 +241,7 @@ async function stickerRecipient(
 		const [row] = await db
 			.select({ userId: comments.userId, type: comments.subjectType, id: comments.subjectId })
 			.from(comments)
-			.where(eq(comments.id, subjectId))
+			.where(and(eq(comments.id, subjectId), eq(comments.moderationStatus, "visible")))
 			.limit(1);
 		if (!row) return notFound;
 		if (row.userId !== giverId) {
@@ -231,9 +251,9 @@ async function stickerRecipient(
 				status: 403,
 			};
 		}
-		creatorId = await creatorOf(row.type === "work" ? "work" : "post", row.id);
+		creatorId = await publicCreatorOf(row.type === "work" ? "work" : "post", row.id);
 	} else {
-		creatorId = await creatorOf(subjectType, subjectId);
+		creatorId = await publicCreatorOf(subjectType, subjectId);
 	}
 	if (creatorId === null) return notFound;
 
@@ -241,6 +261,13 @@ async function stickerRecipient(
 	// gift and would let an account cycle money back to itself.
 	if (creatorId === giverId) {
 		return { error: "You cannot sticker your own work.", code: "own_work", status: 403 };
+	}
+	if (!(await canBePaid(creatorId))) {
+		return {
+			error: "This creator can't be paid at the moment, so a Sticker can't reach them.",
+			code: "creator_not_payable",
+			status: 409,
+		};
 	}
 	return { creatorId };
 }

@@ -4,6 +4,7 @@ import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -91,6 +92,8 @@ describe("Vertical Slice", () => {
 	});
 
 	it("create project succeeds when authenticated", async () => {
+		// Publishing takes a fully set-up creator; the /me check above has already read the defaults.
+		await enablePayouts(testUsername);
 		const slug = `test-game-${testId}`;
 		const res = await makeRequest("/api/content/projects", {
 			method: "POST",

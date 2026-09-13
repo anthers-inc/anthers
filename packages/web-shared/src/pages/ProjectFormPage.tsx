@@ -8,7 +8,9 @@ import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
+import { usePayoutsReady } from "../lib/payouts";
 import { creatorProjectUrl } from "../lib/profile";
+import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
 import { studioEditProjectUrl, studioUrl } from "../lib/studio";
 import type { Project } from "../lib/types";
@@ -58,6 +60,9 @@ export default function ProjectFormPage() {
 	const [coverImage, setCoverImage] = useState("");
 	const [coverPreview, setCoverPreview] = useState<string | null>(null);
 	const [isPublished, setIsPublished] = useState(false);
+	// Only going live needs payout setup, so a project already published stays editable.
+	const [wasPublished, setWasPublished] = useState(false);
+	const payoutsReady = usePayoutsReady();
 
 	// UI state.
 	const [loading, setLoading] = useState(isEdit);
@@ -82,6 +87,7 @@ export default function ProjectFormPage() {
 				setCoverImage(project.coverImage || "");
 				setCoverPreview(project.coverImage);
 				setIsPublished(project.isPublished ?? false);
+				setWasPublished(project.isPublished ?? false);
 			})
 			.catch(() => setError("Failed to load project."))
 			.finally(() => setLoading(false));
@@ -251,6 +257,7 @@ export default function ProjectFormPage() {
 							className="toggle toggle-primary"
 							checked={isPublished}
 							onChange={(e) => setIsPublished(e.target.checked)}
+							disabled={payoutsReady === false && !wasPublished}
 						/>
 						<div>
 							<span className="label-text font-medium">Publish</span>
@@ -259,6 +266,15 @@ export default function ProjectFormPage() {
 							</p>
 						</div>
 					</label>
+					{payoutsReady === false && !wasPublished && (
+						<p className="text-xs text-warning mt-1">
+							Set up payouts in{" "}
+							<Link to={studioUrl("/settings")} className="link">
+								Studio settings
+							</Link>{" "}
+							before publishing. You can keep building the project as a draft until then.
+						</p>
+					)}
 				</div>
 
 				{/*

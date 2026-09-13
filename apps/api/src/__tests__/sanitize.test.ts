@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "bun:test";
-import { db } from "@anthers/db/client";
-import { sql } from "drizzle-orm";
 import app from "../index";
 import { sanitizePostHtml } from "../services/sanitize";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayouts } from "./payouts-fixture.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -113,8 +112,8 @@ describe("post routes sanitize bodyHtml end to end", () => {
 			}),
 		});
 		expect(res.status).toBe(201);
-		// Posting is creator-only.
-		await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${username}`);
+		// Publishing takes a fully set-up creator.
+		await enablePayouts(username);
 		return res.headers.get("Set-Cookie")!.split(";")[0];
 	}
 

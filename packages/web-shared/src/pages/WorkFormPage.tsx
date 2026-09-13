@@ -46,6 +46,7 @@ import { keyToPreview, uploadImageFile } from "../components/post/mediaUpload";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { usePayoutsReady } from "../lib/payouts";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioEditWorkUrl, studioUrl } from "../lib/studio";
@@ -198,38 +199,8 @@ function WorkForm({ editing }: { editing: Work | null }) {
 		editing?.visibility === "released" ? "released" : "private",
 	);
 
-	/**
-	 * Whether payouts are set up, so the release control can say so before it is clicked.
-	 *
-	 * 🚨 **A prediction, never the decision.** `services/payouts.ts` is the authority and
-	 * `PATCH /works/:id` refuses with `payouts_required`; this exists for the same reason
-	 * `disabled={!maturity}` does below — don't offer a click that fails. `null` means the
-	 * answer has not arrived, and the control stays enabled until it does: a creator whose
-	 * status request failed should meet the server's refusal, not a disabled checkbox with
-	 * no explanation.
-	 */
-	const [payoutsReady, setPayoutsReady] = useState<boolean | null>(null);
-
-	useEffect(() => {
-		let live = true;
-		client.api.payments.stripe.onboard
-			.$get()
-			.then(async (res) => {
-				if (!res.ok) return;
-				const data = (await res.json()) as {
-					payoutsEnabled: boolean | null;
-					onboardingComplete: boolean | null;
-				};
-				// Both flags, matching the server's predicate exactly. Onboarding can finish
-				// while Stripe still declines to send money, and only the second answers
-				// "can this creator be paid".
-				if (live) setPayoutsReady(data.payoutsEnabled === true && data.onboardingComplete === true);
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, []);
+	/** Whether payouts are set up, so the release control can say so before it is clicked. */
+	const payoutsReady = usePayoutsReady();
 
 	// The creator's own Badge rungs. Best-effort: without them the table still renders its
 	// baseline row, which is the row that decides Public Access and the only one most

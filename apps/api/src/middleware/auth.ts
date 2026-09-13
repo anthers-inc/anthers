@@ -144,14 +144,16 @@ export const requireVerified = createMiddleware<AuthEnv>(async (c, next) => {
 export const requireCreator = createMiddleware<AuthEnv>(async (c, next) => {
 	const user = c.get("user");
 	if (!user?.isCreator) {
-		return c.json({ error: CREATOR_REQUIRED_MESSAGE, code: "creator_required" }, 403);
+		return c.json(
+			{
+				error: "Posting is for creators. Turn on creator mode in your account settings first.",
+				code: "creator_required",
+			},
+			403,
+		);
 	}
 	await next();
 });
-
-/** The refusal `requireCreator` sends, for a handler that has to refuse part of a request. */
-export const CREATOR_REQUIRED_MESSAGE =
-	"Posting is for creators. Turn on creator mode in your account settings first.";
 
 /**
  * Middleware that requires the authenticated user to be a platform admin.

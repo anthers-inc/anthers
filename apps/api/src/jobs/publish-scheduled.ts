@@ -13,21 +13,29 @@
  * a Work, which is where the media actually is. A post may go live announcing a Work that
  * is still encoding, exactly as it may link one the reader cannot open.
  *
- * 🚨 **Only a creator's draft goes live.** Posting is creator-only, and this is the one path
- * that publishes with nobody making a request, so the route's check cannot cover it. A draft
- * whose author has left creator mode — or whose account is gone, leaving `creator_id` null —
- * has its schedule cleared rather than kept, because a schedule left in place would publish a
- * stale draft the moment creator mode came back on.
+ * 🚨 **Only a fully set-up creator's draft goes live** — creator mode and completed payout
+ * setup, the rule `publishRefusal` holds for every publish. This is the one path that
+ * publishes with nobody making a request, so the route's check cannot cover it: a creator can
+ * schedule while set up and lose it before the date. A draft whose author is no longer set up
+ * — or whose account is gone, leaving `creator_id` null — has its schedule cleared rather than
+ * kept, because a schedule left in place would publish a stale draft the moment the author was
+ * set up again.
  */
 import { db } from "@anthers/db";
 import { posts, users } from "@anthers/db/schema";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
+import { publishRefusal } from "../services/payouts.js";
 import { queueRecordSync } from "../services/record-sync.js";
 
 /** Publish every due scheduled draft. Returns how many were published. */
 export async function publishScheduled(now: Date = new Date()): Promise<number> {
 	const due = await db
-		.select({ id: posts.id, slug: posts.slug, byCreator: users.isCreator })
+		.select({
+			id: posts.id,
+			slug: posts.slug,
+			creatorId: posts.creatorId,
+			isCreator: users.isCreator,
+		})
 		.from(posts)
 		.leftJoin(users, eq(posts.creatorId, users.id))
 		.where(
@@ -41,13 +49,16 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 
 	let published = 0;
 	for (const post of due) {
-		if (post.byCreator !== true) {
+		const refused =
+			post.creatorId === null ||
+			(await publishRefusal({ id: post.creatorId, isCreator: post.isCreator }, "publish")) !== null;
+		if (refused) {
 			await db
 				.update(posts)
 				.set({ scheduledFor: null, updatedAt: now })
 				.where(eq(posts.id, post.id));
 			console.log(
-				`[publish-scheduled] Cleared the schedule on post ${post.id}: its author is not a creator`,
+				`[publish-scheduled] Cleared the schedule on post ${post.id}: its author is not set up to publish`,
 			);
 			continue;
 		}

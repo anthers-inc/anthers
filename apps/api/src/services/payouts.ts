@@ -87,6 +87,12 @@ export async function canBePaid(userId: number): Promise<boolean> {
 }
 
 /**
+ * The word a refusal uses for what was refused. A Work is *released*; a post or a project is
+ * *published*. Nothing else differs between them.
+ */
+export type PublishAct = "release" | "publish";
+
+/**
  * What to tell a creator whose release was refused.
  *
  * Two messages rather than one, because the two states need different actions from
@@ -100,8 +106,60 @@ export async function canBePaid(userId: number): Promise<boolean> {
  * somebody somewhere is a route reference that no test can follow, exactly like the
  * `return_url` this was wrong alongside, so it is worth re-reading whenever either moves.
  */
-export function payoutRefusalMessage(standing: PayoutStanding): string {
+export function payoutRefusalMessage(
+	standing: PayoutStanding,
+	act: PublishAct = "release",
+): string {
 	return standing.connected
-		? "Your payout setup isn't finished — Stripe still needs something from you. Open Payouts under Studio settings to see what, and you'll be able to release once it clears."
-		: "Set up payouts before releasing your first Work. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you.";
+		? `Your payout setup isn't finished — Stripe still needs something from you. Open Payouts under Studio settings to see what, and you'll be able to ${act} once it clears.`
+		: act === "release"
+			? "Set up payouts before releasing your first Work. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you."
+			: "Set up payouts before publishing. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you.";
+}
+
+/** A refusal to publish, ready to send. */
+export interface PublishRefusal {
+	status: 403 | 409;
+	body: { error: string; code: "creator_required" | "payouts_required"; connected?: boolean };
+}
+
+/**
+ * Whether this account may put something in front of people, or why not.
+ *
+ * 🚨 **Publishing anything takes a fully set-up creator: creator mode AND completed payout
+ * setup** (Parker, 2026-09-13). It covers releasing a Work, publishing or scheduling a post,
+ * and publishing a project — every one of which can be paid for, a post and a Work through
+ * Stickers as well as the Time Pool — and it is what backs `/parents` and the Creator Terms in
+ * saying everyone who publishes is a verified adult. Drafting stays open, so a creator can
+ * prepare everything before payouts clear.
+ *
+ * Creator mode is checked first because it is the one the account holder can fix in a click,
+ * and a person told to finish Stripe onboarding before they have even turned creator mode on
+ * would be sent the long way round.
+ */
+export async function publishRefusal(
+	user: { id: number; isCreator: boolean | null },
+	act: PublishAct,
+): Promise<PublishRefusal | null> {
+	if (!user.isCreator) {
+		return {
+			status: 403,
+			body: {
+				error: `Only creators can ${act} on Anthers. Turn on creator mode in your account settings, then set up payouts.`,
+				code: "creator_required",
+			},
+		};
+	}
+	const standing = await payoutStanding(user.id);
+	if (standing.ready) return null;
+	return {
+		status: 409,
+		body: {
+			error: payoutRefusalMessage(standing, act),
+			code: "payouts_required",
+			// So the Studio can send them to the right place rather than guessing which half of
+			// the problem they have.
+			connected: standing.connected,
+		},
+	};
 }
