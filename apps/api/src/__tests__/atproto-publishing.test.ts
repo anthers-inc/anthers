@@ -160,9 +160,8 @@ describe("what the client is allowed to ask for", () => {
 			expect(USER_SCOPES).toEqual(["include:org.anthers.userPermissions"]);
 			expect(CREATOR_SCOPES).toEqual(["include:org.anthers.creatorPermissions"]);
 			for (const asked of [...USER_SCOPES, ...CREATOR_SCOPES]) expect(scope).toContain(asked);
-			// ⚠️ Still declared while it is being retired, so a grant already made under it is not
-			// orphaned by the switch. This line goes in the change that retires it.
-			expect(scope).toContain("include:org.anthers.catalogPermissions");
+			// Retired, and so no longer declared: nothing may ask for it again.
+			expect(scope).not.toContain("org.anthers.catalogPermissions");
 			expect(scope).not.toContain("repo:*");
 			expect(scope).not.toContain("transition:generic");
 		} finally {

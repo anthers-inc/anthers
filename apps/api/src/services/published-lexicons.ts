@@ -35,7 +35,6 @@
  */
 export const PUBLISHED_LEXICONS: ReadonlySet<string> = new Set([
 	"org.anthers.work",
-	"org.anthers.catalogPermissions",
 	"org.anthers.post",
 	"org.anthers.project",
 	"org.anthers.userPermissions",

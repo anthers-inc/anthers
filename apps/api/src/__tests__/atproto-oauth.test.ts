@@ -178,10 +178,11 @@ describe("client construction under Bun", () => {
 			expect(scope).toContain("atproto");
 			// Needed by signup, which reads the address from the PDS to save somebody typing.
 			expect(scope).toContain("transition:email");
-			// ⭐ **There IS a write scope now, and it is named rather than spelled out.** The
-			// permission set is what the consent screen renders; what it expands to, and that it
-			// stays narrow, is pinned in `atproto-publishing.test.ts` against the Lexicon itself.
-			expect(scope).toContain("include:org.anthers.catalogPermissions");
+			// ⭐ **There ARE write scopes, and they are named rather than spelled out.** A permission
+			// set is what the consent screen renders; what each expands to, and that it stays
+			// narrow, is pinned in `atproto-publishing.test.ts` against the Lexicons themselves.
+			expect(scope).toContain("include:org.anthers.userPermissions");
+			expect(scope).toContain("include:org.anthers.creatorPermissions");
 			// 🚨 The property worth guarding: `transition:generic` is App-Password-equivalent
 			// access to a creator's whole account. Declaring it would let any later call
 			// request it without a second thought.

@@ -252,16 +252,6 @@ export const USER_PERMISSION_SET = "org.anthers.userPermissions";
 export const CREATOR_PERMISSION_SET = "org.anthers.creatorPermissions";
 
 /**
- * The first permission set, which named Work listings alone.
- *
- * ⚠️ **Asked for by nothing, and still declared, for one reason.** It is being retired now that
- * the two sets above replace it, and a grant somebody already holds under it has to survive the
- * switch — so it stays in the client's declared scope until the set is retired, and is removed
- * from there in the same change that retires it.
- */
-export const CATALOG_PERMISSION_SET = "org.anthers.catalogPermissions";
-
-/**
  * The collections each set names, which is what a granted scope is actually judged against.
  *
  * 🚨 **A granted scope comes back as its EXPANSION, never as the set's name**, so nothing may
@@ -362,17 +352,10 @@ export function scopeFor(opts: { creator?: boolean; email?: boolean }): string {
  *
  * ⭐ **Every permission set a door may ask for is declared here first**, because an undeclared
  * scope is refused at the authorization server with `invalid_scope` — which is how
- * `transition:email` failed on 2026-08-22. The retiring catalog set stays declared until it is
- * retired, so a grant made under it is not orphaned by the switch. What each door actually asks
+ * `transition:email` failed on 2026-08-22. What each door actually asks
  * for is {@link scopeFor}.
  */
-const DECLARED_SCOPE = [
-	"atproto",
-	EMAIL_SCOPE,
-	...USER_SCOPES,
-	...CREATOR_SCOPES,
-	`include:${CATALOG_PERMISSION_SET}`,
-].join(" ");
+const DECLARED_SCOPE = ["atproto", EMAIL_SCOPE, ...USER_SCOPES, ...CREATOR_SCOPES].join(" ");
 
 /**
  * Client metadata, served at `/api/atproto/client-metadata.json` and fetched by every

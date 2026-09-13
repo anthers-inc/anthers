@@ -39,8 +39,7 @@
  *
  * `--set creator` (the default) asks for `org.anthers.creatorPermissions` and writes a Work
  * listing; `--set user` asks for `org.anthers.userPermissions` and writes a follow of the test
- * account itself; `--set catalog` asks for the retiring `org.anthers.catalogPermissions`. A set
- * naming several collections comes back expanded differently from one naming a single
+ * account itself. A set naming several collections comes back expanded differently from one naming a single
  * collection, which is the reason each is worth probing on its own.
  */
 
@@ -57,7 +56,6 @@ import {
 const SETS: Record<string, { permissionSet: string; collection: string }> = {
 	creator: { permissionSet: "org.anthers.creatorPermissions", collection: "org.anthers.work" },
 	user: { permissionSet: "org.anthers.userPermissions", collection: "org.anthers.follow" },
-	catalog: { permissionSet: "org.anthers.catalogPermissions", collection: "org.anthers.work" },
 };
 
 /**
