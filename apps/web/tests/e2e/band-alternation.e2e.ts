@@ -42,12 +42,17 @@ for (const route of BANDED_ROUTES) {
 		);
 
 		// A selector that stopped matching would pass the check below vacuously.
-		expect(bands.length, "no section bands found — has the page structure changed?").toBeGreaterThanOrEqual(3);
+		expect(
+			bands.length,
+			"no section bands found — has the page structure changed?",
+		).toBeGreaterThanOrEqual(3);
 		expect(bands[0].tinted, `the hero band ("${bands[0].label}") should be tinted`).toBe(true);
 
 		const touching = bands.flatMap((band, i) =>
 			i > 0 && band.tinted === bands[i - 1].tinted
-				? [`"${bands[i - 1].label}" and "${band.label}" are both ${band.tinted ? "tinted" : "plain"}`]
+				? [
+						`"${bands[i - 1].label}" and "${band.label}" are both ${band.tinted ? "tinted" : "plain"}`,
+					]
 				: [],
 		);
 		expect(touching).toEqual([]);
