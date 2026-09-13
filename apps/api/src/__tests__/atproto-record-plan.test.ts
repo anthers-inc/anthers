@@ -239,7 +239,6 @@ describe("a collection whose Lexicon is not published", () => {
 
 	it("writes under exactly the published schemas it has chosen to", async () => {
 		expect([...PUBLISHED_LEXICONS].sort()).toEqual([
-			"org.anthers.catalogPermissions",
 			"org.anthers.creatorPermissions",
 			"org.anthers.post",
 			"org.anthers.project",
