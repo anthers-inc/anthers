@@ -98,7 +98,12 @@ import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { embedCreator } from "../lib/handles.js";
-import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
+import {
+	CREATOR_REQUIRED_MESSAGE,
+	getOptionalUserId,
+	requireAuth,
+	requireCreator,
+} from "../middleware/auth.js";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -2093,7 +2098,7 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	.post("/posts", requireAuth, zValidator("json", createPostSchema), async (c) => {
+	.post("/posts", requireAuth, requireCreator, zValidator("json", createPostSchema), async (c) => {
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
@@ -2265,6 +2270,15 @@ const contentRoutes = new Hono()
 		const existing = await findPostRow(slug);
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
+
+		// 🚨 Putting a post in front of anyone is creator-only, and so is scheduling it, since the
+		// sweep publishes a scheduled draft with nobody asking. Everything else stays open to the
+		// owner who has since left creator mode — above all unpublishing, which is the safe
+		// direction and the one that takes a record back off the network.
+		const goesLive = data.isPublished === true || data.scheduledFor != null;
+		if (goesLive && !user.isCreator) {
+			return c.json({ error: CREATOR_REQUIRED_MESSAGE, code: "creator_required" }, 403);
+		}
 
 		// Linked Works must belong to the caller — validated before any writes so a bad
 		// reference never partially applies.

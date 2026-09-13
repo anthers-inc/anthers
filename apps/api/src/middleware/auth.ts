@@ -136,14 +136,22 @@ export const requireVerified = createMiddleware<AuthEnv>(async (c, next) => {
 /**
  * Middleware that requires the authenticated user to be a creator.
  * Must be used AFTER requireAuth.
+ *
+ * Posting is creator-only as a matter of what Anthers is rather than as a default: creators
+ * post and everyone else reacts (Parker, 2026-09-12). It is also what keeps a reader from
+ * writing an `org.anthers.post` record under the creator permission set.
  */
 export const requireCreator = createMiddleware<AuthEnv>(async (c, next) => {
 	const user = c.get("user");
 	if (!user?.isCreator) {
-		return c.json({ error: "Creator account required" }, 403);
+		return c.json({ error: CREATOR_REQUIRED_MESSAGE, code: "creator_required" }, 403);
 	}
 	await next();
 });
+
+/** The refusal `requireCreator` sends, for a handler that has to refuse part of a request. */
+export const CREATOR_REQUIRED_MESSAGE =
+	"Posting is for creators. Turn on creator mode in your account settings first.";
 
 /**
  * Middleware that requires the authenticated user to be a platform admin.
