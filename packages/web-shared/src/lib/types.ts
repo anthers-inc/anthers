@@ -843,7 +843,6 @@ export interface AnalyticsOverview {
 		projects: number;
 		posts: number;
 	};
-	crossPublishCount: number;
 }
 
 /**
@@ -873,29 +872,6 @@ export interface TimeseriesEntry {
 	watches: number;
 	reads: number;
 	listens: number;
-}
-
-export interface PlatformConnection {
-	id: number;
-	platform: string;
-	platformUserId: string | null;
-	platformUsername: string | null;
-	isActive: boolean | null;
-	createdAt: string;
-}
-
-export interface CrossPublishResult {
-	id: number;
-	userId: number;
-	platform: string;
-	postId: number | null;
-	externalId: string | null;
-	externalUrl: string | null;
-	status: string;
-	errorMessage: string | null;
-	publishedAt: string | null;
-	createdAt: string;
-	updatedAt: string;
 }
 
 // ─── Hosting-subsidy Types ───

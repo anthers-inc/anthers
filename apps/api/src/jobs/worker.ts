@@ -22,13 +22,11 @@ import { runEscalationSweep } from "../services/moderation.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
-import { type CrossPublishData, crossPublish } from "./cross-publish.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
-import { fetchExternalMetrics } from "./fetch-metrics.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
-import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue } from "./queue.js";
+import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
 import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
@@ -88,17 +86,6 @@ async function start() {
 		},
 	);
 
-	await queue.work<CrossPublishData>(
-		QUEUES.CROSS_PUBLISH,
-		{ localConcurrency: 2 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[cross-publish] Processing job ${job.id}`);
-				await crossPublish(job.data);
-			}
-		},
-	);
-
 	await queue.work<SyncWorkListingData>(
 		QUEUES.SYNC_WORK_LISTING,
 		{ localConcurrency: 2 },
@@ -154,13 +141,6 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[calculate-crf] Processing job ${job.id}`);
 			await calculateCrfSubsidies();
-		}
-	});
-
-	await queue.work(QUEUES.FETCH_METRICS, async (jobs) => {
-		for (const job of jobs) {
-			console.log(`[fetch-metrics] Processing job ${job.id}`);
-			await fetchExternalMetrics();
 		}
 	});
 
@@ -314,6 +294,7 @@ async function start() {
 	for (const [queueName, cron] of CRON_SCHEDULES) {
 		await queue.schedule(queueName, cron, {});
 	}
+	for (const retired of RETIRED_QUEUES) await queue.retire(retired);
 
 	// Recover any transcodes interrupted by the previous worker's shutdown.
 	// Best-effort: recovery must never crash the worker, so failures are logged,
