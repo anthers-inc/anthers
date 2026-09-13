@@ -10,7 +10,7 @@
  * `resolveAccessSync` is.
  *
  * The invariant this module exists to hold: **hiding is an UPDATE, never a
- * DELETE.** Nothing here removes a comment or a rating row. `hideSubject` flips
+ * DELETE.** Nothing here removes a comment or a review row. `hideSubject` flips
  * `moderation_status` and appends to `moderation_actions`; `restoreSubject`
  * flips it back and appends again. The content, its author, and its timestamps
  * are all still there afterwards — which is why an appeal, a creator-side tool,
@@ -18,9 +18,11 @@
  * a migration. If you are adding a moderation action and reach for `db.delete`,
  * that is the bug.
  *
- * Subjects are polymorphic (`comment` | `rating`), so `SUBJECTS` is the single
- * table mapping a subject type to its Drizzle table. Adding a third moderatable
- * kind means one entry there, not a new branch in every query.
+ * Subjects are polymorphic (`comment` | `review` | `user` | `work`). The two content kinds
+ * share a shape, so `CONTENT_SUBJECTS` is the single table mapping each to its Drizzle
+ * table, and another content kind means one entry there rather than a new branch in every
+ * query. `user` and `work` do not share that shape and are resolved on their own in
+ * `findSubject`.
  */
 
 import { db } from "@anthers/db/client";
@@ -147,7 +149,7 @@ export async function findSubject(
  * item by the same person updates their reason rather than adding a queue entry,
  * so one user can't inflate the count the queue sorts by.
  *
- * Self-reporting is allowed on purpose FOR CONTENT. Neither a comment nor a rating
+ * Self-reporting is allowed on purpose FOR CONTENT. Neither a comment nor a review
  * can be deleted by anyone today — not even its author — so a report is currently the
  * only way an author can ask for their own words to come down. It is refused for a
  * `user` subject, where it means nothing: the route rejects that case before getting

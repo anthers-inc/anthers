@@ -560,10 +560,10 @@ export const FREE_STORAGE_GIB = 50;
  * charging less because it provides less is the model working**: a self-hosting
  * creator stores and serves nothing here, so there is nothing to pass through.
  *
- * ⚠️ `POST /api/subscriptions/self-hosting` still sets the flag on the creator's
- * own assertion and verifies no origin, so this is now a bigger unearned discount
- * than it was. The fix is origin registration, not a price — see the wiki's *Federation and Creator Nodes* § *The one
- * thing that is currently untrue*.
+ * ⚠️ `POST /api/subscriptions/self-hosting` returns 503 unconditionally, because the flag
+ * was set on the creator's own assertion with no origin behind it. It stays closed until a
+ * registered origin can derive the flag, which is the Creator-Hosted Delivery work and the
+ * wiki's *The Anthers PDS and Creator Nodes*.
  */
 export const SELF_HOST_FEE = 0;
 

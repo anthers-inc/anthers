@@ -198,8 +198,7 @@ export default function ModerationQueue() {
 			});
 			if (!res.ok) {
 				// The server's own sentence, when it has one. A correction can be refused
-				// for a reason the operator needs to act on — moving a Work to Adult takes
-				// the working group rather than one person — and "that couldn't be set"
+				// for a reason the operator needs to act on, and "that couldn't be set"
 				// would send them looking for a bug instead.
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setError(body?.error || "That rating couldn't be set.");
@@ -395,14 +394,13 @@ export default function ModerationQueue() {
 																item.maturity === choice.value ? "btn-primary" : "btn-ghost"
 															}`}
 															disabled={acting || item.maturity === choice.value}
-															// ⚠️ Adult says what it DOES, not just what it means.
-															// The correction closes the Work's free public access
-															// as part of the same act, and an operator who is not
-															// told that is taking an action they did not know they
-															// were taking.
+															// ⚠️ Adult says what it DOES, not just what it means:
+															// the correction changes who may reach the Work and
+															// nothing about its price or earnings, and an operator
+															// should know that before pressing it.
 															title={
 																choice.value === "adult"
-																	? "Rate this Adult. Adult work can't be free, so this also closes its free public access — the creator is notified and can appeal."
+																	? "Rate this Adult. Only verified adults who opted in can reach it; its price and earnings are unchanged. The creator is notified and can appeal."
 																	: `Correct this Work's rating to ${choice.label}`
 															}
 															onClick={() => correctRating(item, choice.value)}

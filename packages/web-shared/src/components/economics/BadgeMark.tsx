@@ -23,8 +23,8 @@
  * ⭐ **Anthers' Root/Sprout/Petal/Blossom render through here too, and that is the point.**
  * The symmetry between the two ladders is most of why the support model reads cleanly, and
  * the strongest way to keep two things looking like one kind of object is for them to be one
- * component. Anthers' foreground is an emoji; a creator's is a library emblem or their own
- * art. Nothing else differs.
+ * component. Anthers' foreground is one of its four `badge-*` emblems; a creator's is a library
+ * emblem or their own art. Nothing else differs.
  */
 
 import type { BrandIconName } from "@anthers/brand";

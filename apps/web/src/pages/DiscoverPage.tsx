@@ -358,7 +358,7 @@ export default function DiscoverPage() {
 				</p>
 				<div className="bg-base-200 rounded-xl p-12">
 					<div className="flex items-center justify-center gap-2 text-base-content/30">
-						<BoltIcon className="w-8 h-8 animate-pulse" />
+						<BoltIcon className="w-8 h-8 motion-safe:animate-pulse" />
 						<span className="text-sm">Live ticker coming soon</span>
 					</div>
 				</div>

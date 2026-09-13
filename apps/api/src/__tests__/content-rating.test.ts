@@ -3,11 +3,12 @@
  * The content rating: declared by a creator, corrected by an operator, appealed by the
  * creator.
  *
- * 🚨 **The appeal half is not a nicety and the tests for it are not optional.** Anthers'
- * Adult rung is payment-gated, so an over-cautious call does not merely add a
- * warning to a work — it puts it behind a paywall, and for a queer coming-of-age story
- * wrongly flagged that is exactly the harm the category exists to prevent, produced by the
- * mechanism meant to prevent it (the wiki's *Content Standards*). A suite that covered only the correction would
+ * 🚨 **The appeal half is not a nicety and the tests for it are not optional.** An Adult
+ * rating makes a Work invisible to everyone who has not opted in and verified, so an
+ * over-cautious call does not merely add a warning to a work — it removes it from most readers'
+ * sight, and for a queer coming-of-age story wrongly flagged that is exactly the harm the
+ * category exists to prevent, produced by the mechanism meant to prevent it (the wiki's
+ * *Content Standards*). A suite that covered only the correction would
  * be green over the half that can do damage.
  *
  * ⚠️ **The lock is asymmetric, and both directions are asserted.** A creator may raise an

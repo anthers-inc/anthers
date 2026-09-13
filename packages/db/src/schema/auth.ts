@@ -164,10 +164,10 @@ export const rightsRequests = pgTable(
  * email and keeping nothing is the same failure as the fingerprinting claim and the
  * *"we do not sell paid content to minors"* line: a protection asserted, not held.
  *
- * `dedupeKey` is what makes a **daily sweep** safe. The rescue-window job and the
- * withdrawn-Work notice both run on a schedule and both re-evaluate the same rows every
- * time; without a unique key they would mail somebody every morning until the deadline
- * they were being warned about. It is a caller-supplied natural key — `work-withdrawn:
+ * `dedupeKey` is what makes a **repeated send** safe. A notice sent from anything that
+ * re-evaluates the same rows — a scheduled sweep, a retried job — would otherwise mail
+ * somebody again every time it ran; the withdrawn-Work rescue-window sweep, which is not
+ * built, is the case it was designed for. It is a caller-supplied natural key — `work-withdrawn:
  * <purchaseId>` — rather than a hash of the body, because the body is copy and copy
  * gets edited.
  *

@@ -158,7 +158,7 @@ const TERMS: LegalDocument = {
 		"**We won't sell your data, show you advertising, or optimize anything here to consume more of your attention.**",
 
 		"## What we expect from you",
-		"Don't post things that are illegal, that harass or threaten people, that sexualise minors in any way, or that you don't have the right to post. Don't try to break, overload, or get around the access controls on other people's work.",
+		"Don't post things that are illegal, that harass or threaten people, that sexualize minors in any way, or that you don't have the right to post. Don't try to break, overload, or get around the access controls on other people's work.",
 		"If you break these, we may hide the content, or in serious cases end your account. We keep a record of what we did and why, so that if you ask, you get an honest answer.",
 		"**If something is removed, we say so rather than making it silently vanish** — content shows whether it was removed by its author or by moderation. We do not publish the reason, because doing so would make a public accusation out of a moderation decision, and would risk exposing whoever reported it.",
 
