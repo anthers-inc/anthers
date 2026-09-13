@@ -1986,22 +1986,24 @@ function SignupForm({
 					.{hostedSuffix || "anthers.social"}
 				</span>
 			</div>
-			{/* ⚠️ **Always rendered, and always two lines tall, even with nothing to say.** The
-			    panel must not grow as somebody types, or the button moves out from under the
-			    pointer heading for it — and one reserved line is not enough: at 390px the
-			    longest of these messages wraps, which is exactly where the growth would hurt
-			    most. Two lines is the tallest any of them gets, so the region is fixed at every
-			    width. Same trade the note under the button makes with its invisible sizers. */}
+			{/* ⚠️ **Zero height while idle, and two lines tall once there is anything to say.**
+			    Idle has no message, so reserving room for one leaves this panel a gap taller than
+			    the Bluesky panel beside it, and the card resizes when the tabs are switched. The
+			    growth happens once, at the first keystroke, when hands are on the keyboard; after
+			    that the region must not change height, or the button moves out from under the
+			    pointer heading for it — and one line is not enough, because at 390px the longest
+			    of these messages wraps. The paragraph stays mounted while empty so the live
+			    region already exists when its first message arrives. */}
 			<p
 				id={`${hostedFieldId}-status`}
 				aria-live="polite"
-				className={`mt-1.5 min-h-[2.25rem] text-xs leading-snug ${handleStatusTone(hostedStatus)}`}
+				className={`text-xs leading-snug ${hostedStatus.status === "idle" ? "" : "mt-1.5 min-h-[2.25rem]"} ${handleStatusTone(hostedStatus)}`}
 			>
 				{handleStatusLine(hostedStatus)}
 			</p>
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg mt-3 w-full ${busy ? "btn-disabled" : ""}`}
+				className={`btn btn-primary btn-lg w-full ${hostedStatus.status === "idle" ? "mt-4" : "mt-3"} ${busy ? "btn-disabled" : ""}`}
 				// ⚠️ Refused only for what is knowably wrong. A name we could not check — the
 				// API was unreachable — still goes through, because the node is the authority
 				// and a browser that could not ask has learned nothing about the name.
@@ -2108,8 +2110,7 @@ function SignupForm({
 					<div aria-hidden="true" className="animate-pulse text-left">
 						<div className="mb-1 h-4 w-56 rounded bg-base-content/10" />
 						<div className="h-12 w-full rounded-lg bg-base-content/5" />
-						<div className="mt-1.5 min-h-[2.25rem]" />
-						<div className="mt-2 h-12 w-full rounded-lg bg-base-content/10" />
+						<div className="mt-4 h-12 w-full rounded-lg bg-base-content/10" />
 					</div>
 				)}
 
