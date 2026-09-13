@@ -78,6 +78,7 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${reporterNames[0]}, ${reporterNames[1]}, ${reporterNames[2]}, ${reporterNames[3]})`,
 	);
 	creator = await signUp(creatorName);
+	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
 	for (const name of reporterNames) reporters.push(await signUp(name));
 
 	const postRes = await post("/api/content/posts", creator, {

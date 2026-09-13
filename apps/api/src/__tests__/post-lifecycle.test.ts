@@ -86,6 +86,9 @@ beforeAll(async () => {
 	await enablePayouts(ownerName);
 	stranger = await signUp(strangerName);
 	await enablePayouts(strangerName);
+	await db.execute(
+		sql`UPDATE users SET is_creator = true WHERE username IN (${ownerName}, ${strangerName})`,
+	);
 }, DB_SETUP_TIMEOUT);
 
 // These suites run against the shared dev database and the usernames carry a per-run

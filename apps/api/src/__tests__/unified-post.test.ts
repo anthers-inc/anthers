@@ -69,6 +69,7 @@ describe("Catalog vertical slice", () => {
 			await enablePayouts(creatorName);
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
+			await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();
 		},

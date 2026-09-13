@@ -114,6 +114,7 @@ beforeAll(async () => {
 	viewerB = await signUp(viewerBName);
 	await enablePayouts(viewerBName);
 	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",

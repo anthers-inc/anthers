@@ -108,7 +108,9 @@ beforeAll(async () => {
 	reporter = await signUp(reporterName);
 	const subject = await signUp(subjectName);
 	await signUp(ghostName);
-	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+	await db.execute(
+		sql`UPDATE users SET is_admin = true, is_creator = true WHERE username = ${adminName}`,
+	);
 	await db.execute(
 		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE username = ${subjectName}`,
 	);

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "bun:test";
+import { db } from "@anthers/db/client";
+import { sql } from "drizzle-orm";
 import app from "../index";
 import { sanitizePostHtml } from "../services/sanitize";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -99,17 +101,20 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		'<img src="x" onerror="alert(1)">';
 
 	async function signUpAndGetCookie(): Promise<string> {
+		const username = `xss_${testId}`;
 		const res = await makeRequest("/api/auth/sign-up", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
 			body: JSON.stringify({
-				username: `xss_${testId}`,
+				username,
 				email: `xss_${testId}@example.com`,
 				password: "testpass123",
 				acceptTerms: true,
 			}),
 		});
 		expect(res.status).toBe(201);
+		// Posting is creator-only.
+		await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${username}`);
 		return res.headers.get("Set-Cookie")!.split(";")[0];
 	}
 

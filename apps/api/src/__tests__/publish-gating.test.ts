@@ -76,6 +76,9 @@ describe("Catalog CRUD and post links", () => {
 			await enablePayouts(ownerName);
 			strangerCookie = await signUp(strangerName);
 			await enablePayouts(strangerName);
+			await db.execute(
+				sql`UPDATE users SET is_creator = true WHERE username IN (${ownerName}, ${strangerName})`,
+			);
 			expect(ownerCookie).toBeTruthy();
 			expect(strangerCookie).toBeTruthy();
 		},
