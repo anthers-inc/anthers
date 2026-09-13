@@ -4,7 +4,7 @@
 # Shape (decided 2026-07-01, hub on Managed Postgres):
 #   - databases: a managed Postgres, bound to the app as ${anthersdb.DATABASE_URL}
 #   - api        service   — Hono API (Dockerfile + FFmpeg), serves /api and /health
-#   - worker     worker    — pg-boss job worker (transcode/audio/cross-publish + crons)
+#   - worker     worker    — pg-boss job worker (transcode/audio/scans/records + crons)
 #   - migrate    PRE_DEPLOY job — runs Drizzle migrations before each release
 #   - web        static site — the React SPA on the CDN
 # The whole site sits behind SiteGate (SITE_PASSWORD) until public launch;

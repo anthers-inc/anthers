@@ -10,8 +10,7 @@
  *
  * ⭐ This test exists because the rule is otherwise only written down, and the codebase
  * already holds everything needed to break it — `atproto_sessions` carries DPoP-bound
- * tokens that can write to a creator's repository, and `platform_connections` has a
- * publisher registry with a slot for exactly this. The gap between "we could" and "we did"
+ * tokens that can write to a creator's repository. The gap between "we could" and "we did"
  * is one plausible-looking commit, and the same reasoning that put a test behind
  * *"no third-party requests"* applies here: **an absence nothing exercises is an absence
  * nobody notices disappearing.**
@@ -130,15 +129,5 @@ describe("no social posting", () => {
 			for (const h of hits) console.error(`  ✗ ${h}`);
 		}
 		expect(hits).toEqual([]);
-	});
-
-	it("declares no cross-publish platform that is a social network", async () => {
-		// `platform_connections.platform` is the registry a publisher is looked up in, and
-		// adding a row for a social network is the most natural way this rule gets broken
-		// without anyone deciding to break it.
-		const schema = await Bun.file("packages/db/src/schema/integrations.ts").text();
-		for (const platform of ["bluesky", "bsky", "mastodon", "twitter", "threads"]) {
-			expect(schema.toLowerCase()).not.toContain(`"${platform}"`);
-		}
 	});
 });

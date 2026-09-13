@@ -132,6 +132,22 @@ class JobQueue {
 		await this.boss.schedule(queue, cronExpr, data);
 	}
 
+	/**
+	 * Stop a queue this code no longer runs: its schedule, any jobs waiting in it, and the queue.
+	 *
+	 * Each step is allowed to find nothing, because on every boot after the first there is
+	 * nothing left to find.
+	 */
+	async retire(queue: string): Promise<void> {
+		for (const step of [() => this.boss.unschedule(queue), () => this.boss.deleteQueue(queue)]) {
+			try {
+				await step();
+			} catch (err) {
+				console.warn(`[queue] retiring ${queue}: ${err instanceof Error ? err.message : err}`);
+			}
+		}
+	}
+
 	async stop(opts?: { graceful?: boolean; timeout?: number }): Promise<void> {
 		await this.boss.stop({ graceful: opts?.graceful ?? true, timeout: opts?.timeout });
 		this.started = false;
@@ -162,8 +178,6 @@ export const QUEUES = {
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Month-end allowance draw + remainder inflows
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
-	FETCH_METRICS: "fetch-metrics",
-	CROSS_PUBLISH: "cross-publish",
 	// Write, replace or remove a Work's public listing on the AT Protocol network. Carries only
 	// a Work id: the handler re-reads the Work and decides from its current state, so a
 	// duplicate is harmless and a late one still converges. Deliberately not part of the release
@@ -274,11 +288,6 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 300,
 		expireInMinutes: 10,
 	},
-	[QUEUES.CROSS_PUBLISH]: {
-		retryLimit: 2,
-		retryDelay: 120,
-		expireInMinutes: 5,
-	},
 	// ⚠️ **Retried generously and for a long time, because the delete path is the one that
 	// matters.** A create that never lands is a listing nobody has; a delete that never lands
 	// is a listing advertising something its creator withdrew, which is the failure this whole
@@ -324,10 +333,6 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 30,
 	},
-	[QUEUES.FETCH_METRICS]: {
-		retryLimit: 1,
-		expireInMinutes: 15,
-	},
 	[QUEUES.PUBLISH_SCHEDULED]: {
 		retryLimit: 1,
 		expireInMinutes: 5,
@@ -341,6 +346,22 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		expireInMinutes: 15,
 	},
 };
+
+/**
+ * Queues this code once ran and no longer does.
+ *
+ * 🚨 **pg-boss keeps a schedule in its own tables after the code that registered it is gone.**
+ * Deleting a queue from `QUEUES` and `CRON_SCHEDULES` stops this deployment registering it and
+ * does nothing about the row an earlier deployment wrote, so a retired cron goes on creating
+ * jobs that no worker listens for. The worker retires each of these on boot. Keep a name here
+ * after its queue is removed; the cost of an entry is one no-op per boot.
+ */
+export const RETIRED_QUEUES: readonly string[] = [
+	// Cross-publishing to other platforms, retired as a direction on 2026-08-31 and removed
+	// from the code on 2026-09-13.
+	"cross-publish",
+	"fetch-metrics",
+];
 
 /**
  * Every cron the worker registers, as data.
@@ -359,7 +380,6 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	[QUEUES.SETTLE_CYCLE, "0 2 1 * *"], // 2 AM on the 1st — settles the prior cycle
 	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
-	[QUEUES.FETCH_METRICS, "0 */6 * * *"], // every 6 hours
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
 	// creators out of these rows, so pruning ahead of it would cost earnings rather

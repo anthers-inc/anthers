@@ -73,7 +73,7 @@ describe("schema role classification", () => {
 		// Guards the guard: a rename or a move that emptied this list would otherwise make
 		// the test below pass by checking nothing, which is the failure mode a source scan
 		// is most prone to.
-		expect(schemaFiles.length).toBeGreaterThanOrEqual(7);
+		expect(schemaFiles.length).toBeGreaterThanOrEqual(6);
 	});
 
 	const untagged: string[] = [];
