@@ -59,7 +59,13 @@ function isWorthSaying(result: AnyResult): boolean {
 		return result.plan.action !== "none" && result.plan.action !== "keep";
 	}
 	if (result.status === "skipped") {
-		return result.reason === "no_row" || result.reason === "no_owner" || !isOrdinary(result.reason);
+		// ⚠️ **A row that is gone by the time its sync runs is quiet too.** Deleting a row is what
+		// produces this, and a delete that needs a record taken down carries its own removal job —
+		// so there is nothing left for the sync to do or to report. It is also most of what a local
+		// worker sees: every end-to-end run enqueues syncs through the real API against the dev
+		// database and then resets its fixtures, and the next `make dev` drains all of them.
+		if (result.reason === "no_row") return false;
+		return result.reason === "no_owner" || !isOrdinary(result.reason);
 	}
 	return true;
 }

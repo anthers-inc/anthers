@@ -25,9 +25,16 @@ export interface SyncWorkListingData {
 	workId: number;
 }
 
-/** The skip reasons nobody needs to read about. `no_work` and `no_creator` are not among them. */
+/**
+ * The skip reasons nobody needs to read about. `no_creator` is not among them.
+ *
+ * ⚠️ **`no_work` is**: a Work deleted before its sync ran has nothing left to sync, and the delete
+ * path is what takes a listing down. It is also most of what a local worker sees — every
+ * end-to-end run enqueues syncs through the real API against the dev database and then resets
+ * its fixtures, and the next `make dev` drains all of them.
+ */
 function isQuiet(reason: Extract<ListingSyncResult, { status: "skipped" }>["reason"]): boolean {
-	return reason !== "no_work" && reason !== "no_creator" && isOrdinary(reason);
+	return reason === "no_work" || (reason !== "no_creator" && isOrdinary(reason));
 }
 
 export async function syncWorkListingJob(data: SyncWorkListingData): Promise<void> {
