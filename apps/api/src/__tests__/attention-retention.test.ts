@@ -27,6 +27,7 @@ import { attentionDaily, attentionEvents, users } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { pruneAttention } from "../jobs/prune-attention.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -49,18 +50,7 @@ function post(path: string, cookie: string, body: unknown) {
 }
 
 async function signUp(username: string): Promise<string> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 const id = crypto.randomUUID().slice(0, 8);

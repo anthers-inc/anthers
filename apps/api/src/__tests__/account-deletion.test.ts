@@ -36,6 +36,7 @@ import {
 	requestDeletion,
 	runDueDeletions,
 } from "../services/account-deletion.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -60,18 +61,7 @@ function post(path: string, cookie: string, body?: unknown) {
 }
 
 async function signUp(username: string): Promise<string> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 async function idOf(username: string): Promise<number | null> {

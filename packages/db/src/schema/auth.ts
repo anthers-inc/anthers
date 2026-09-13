@@ -290,7 +290,7 @@ export const verificationTokens = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		token: text("token").notNull().unique(),
-		type: text("type").notNull(), // "email_verify" | "password_reset"
+		type: text("type").notNull(), // "email_verify"
 		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},

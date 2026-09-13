@@ -20,6 +20,7 @@ import { studioPreferences, users } from "@anthers/db/schema";
 import { DEFAULT_STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -39,18 +40,8 @@ let cookie: string;
 let userId: number;
 
 beforeAll(async () => {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	cookie = res.headers.get("Set-Cookie")!.split(";")[0];
+	const account = await createAccount(username);
+	cookie = account.cookie;
 	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
 	userId = row.id;
 }, DB_SETUP_TIMEOUT);

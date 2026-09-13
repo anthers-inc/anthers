@@ -53,12 +53,10 @@ interface AuthContextValue {
 	 * `SignupCeremonyModal` because the ordering matters — see the note on `leave()`
 	 * there about refreshing the auth context last.
 	 *
-	 * ⚠️ `POST /auth/sign-up` (username + email + password + acceptTerms) is still a live,
-	 * tested API route with **no caller in the app**. It is what `signUp` wrapped. Leave
-	 * it be unless you are deliberately retiring the password-signup path server-side too;
-	 * what must not come back is a *second* place in the UI that mints accounts, since
-	 * two doors have to keep agreeing about terms, onboarding and where a new account
-	 * lands, and the last pair had already drifted.
+	 * ⚠️ **There is no password sign-up route on the server either.** What must not come back
+	 * is a second place that mints accounts, in the UI or the API, since two doors have to keep
+	 * agreeing about terms, onboarding and where a new account lands, and the last pair had
+	 * already drifted. Tests make accounts with `apps/api/src/__tests__/account-fixture.ts`.
 	 */
 	signOut: () => Promise<void>;
 	/**

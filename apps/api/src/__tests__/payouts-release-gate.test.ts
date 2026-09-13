@@ -31,6 +31,7 @@ import { posts, projects, stripeAccounts, users, works } from "@anthers/db/schem
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayoutsFor } from "./payouts-fixture.js";
@@ -52,19 +53,9 @@ const readyName = `payready_${id}`;
 const payerName = `paypayer_${id}`;
 
 async function signUp(username: string): Promise<{ cookie: string; userId: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
+	const account = await createAccount(username);
 	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
-	return { cookie: res.headers.get("Set-Cookie")!.split(";")[0], userId: row!.id };
+	return { cookie: account.cookie, userId: row!.id };
 }
 
 describe("publishing requires a fully set-up creator", () => {

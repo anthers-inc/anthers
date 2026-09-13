@@ -21,6 +21,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -36,18 +37,7 @@ function req(path: string, options?: RequestInit) {
 }
 
 async function signUp(username: string) {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 const id = crypto.randomUUID().slice(0, 8);

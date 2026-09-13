@@ -18,6 +18,7 @@ import { attentionEvents } from "@anthers/db/schema";
 import { CREDIT_WINDOW_SECONDS } from "@anthers/shared/attention";
 import { and, eq, gte, sql } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -33,20 +34,10 @@ function req(path: string, options?: RequestInit) {
 }
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
+	const account = await createAccount(username);
 	return {
-		cookie: res.headers.get("Set-Cookie")!.split(";")[0],
-		id: (await res.json()).user.id,
+		cookie: account.cookie,
+		id: account.userId,
 	};
 }
 

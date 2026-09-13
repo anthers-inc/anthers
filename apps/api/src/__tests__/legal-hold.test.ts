@@ -27,43 +27,20 @@ import {
 } from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import app from "../index";
 import { pruneAttention } from "../jobs/prune-attention.js";
 import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions } from "../services/auth.js";
 import { isUnderHold, liftHold, placeHold, preservationExpiry } from "../services/legal-hold.js";
 import { redactClosedModerationReports } from "../services/retention.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
 
-const testFetch = app.fetch;
-const ORIGIN = "http://localhost:3000";
-
-function req(path: string, options?: RequestInit) {
-	return testFetch(new Request(`http://localhost${path}`, options));
-}
-
 async function signUp(username: string): Promise<number> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	const [row] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.username, username))
-		.limit(1);
-	return row.id;
+	return (await createAccount(username)).userId;
 }
 
 const id = crypto.randomUUID().slice(0, 8);

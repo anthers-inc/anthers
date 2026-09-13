@@ -22,14 +22,12 @@ import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
 	createEmailVerificationToken,
-	createPasswordResetToken,
 	createSession,
 	deleteSession,
 	getPendingDesktopAuth,
 	hashPassword,
 	listUserSessions,
 	redeemDesktopAuth,
-	resetPassword,
 	revokeUserSession,
 	startDesktopAuth,
 	validateSession,
@@ -40,7 +38,6 @@ import {
 	sendSignInCodeEmail,
 	sendSignupCodeEmail,
 	sendVerificationEmail,
-	sendWelcomeEmail,
 } from "../services/email.js";
 import {
 	hostedHandleFor,
@@ -61,31 +58,6 @@ import {
 import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
-
-const signUpSchema = z.object({
-	username: z
-		.string()
-		.min(3)
-		.max(150)
-		.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
-		// Impersonation only: profiles live under `/@name`, so a handle cannot collide
-		// with a page and there is no route blacklist — see reserved-usernames.ts.
-		.refine((name) => !isReservedUsername(name), "That username is reserved"),
-	email: z.string().email().max(254),
-	password: z.string().min(8).max(128),
-	/**
-	 * Must be `true`. Enforced at the API rather than only in the form, because the
-	 * 13+ floor is the **one** thing Anthers asserts about age and an unaccepted
-	 * assertion is not one — "you must be 13 or older" lived in a document no user had
-	 * ever seen, which made it closer to a wish than a term.
-	 *
-	 * A literal rather than a boolean: `false` is not a value that should be accepted
-	 * and silently recorded, it is a request that cannot be granted.
-	 */
-	acceptTerms: z.literal(true, {
-		errorMap: () => ({ message: "You need to accept the terms to create an account." }),
-	}),
-});
 
 const signInSchema = z.object({
 	login: z.string(), // accepts username or email
@@ -173,15 +145,6 @@ const claimUsernameSchema = z.object({
 
 const verifyEmailSchema = z.object({
 	token: z.string().min(1),
-});
-
-const requestPasswordResetSchema = z.object({
-	email: z.string().email(),
-});
-
-const resetPasswordSchema = z.object({
-	token: z.string().min(1),
-	password: z.string().min(8).max(128),
 });
 
 const changePasswordSchema = z.object({
@@ -352,46 +315,6 @@ async function mintFromProvedAddress(
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const authRoutes = new Hono()
-	// ── Sign Up ───────────────────────────────────────────────────────────────
-	.post("/sign-up", zValidator("json", signUpSchema, invalidBody), async (c) => {
-		const { username, email, password } = c.req.valid("json");
-
-		// Check for existing user (username or email)
-		const existing = await db
-			.select({ id: users.id, username: users.username, email: users.email })
-			.from(users)
-			.where(or(eq(users.username, username), eq(users.email, email)))
-			.limit(2);
-
-		for (const row of existing) {
-			if (row.username === username) {
-				return c.json({ error: "Username already taken" }, 409);
-			}
-			if (row.email === email) {
-				return c.json({ error: "Email already registered" }, 409);
-			}
-		}
-
-		// Create user
-		const passwordHash = await hashPassword(password);
-		const [user] = await db.insert(users).values({ username, email, passwordHash }).returning();
-
-		// Create session
-		const token = await createSession(
-			user.id,
-			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
-			c.req.header("User-Agent"),
-		);
-		setSessionCookie(c, token);
-
-		// Send the welcome + email-verification message. Never let a mail hiccup
-		// fail the sign-up itself — the user can always re-request verification.
-		const verifyToken = await createEmailVerificationToken(user.id);
-		await sendWelcomeEmail(user.email, user.username, verifyToken);
-
-		return c.json({ user: serializeUser(user) }, 201);
-	})
-
 	// ── Signup ceremony: ask, prove the address, then build the account ──────
 	//
 	// The order is the feature. `/subscribe` is where a visitor makes their choices;
@@ -828,41 +751,6 @@ const authRoutes = new Hono()
 
 		const verifyToken = await createEmailVerificationToken(user.id);
 		await sendVerificationEmail(user.email, user.username, verifyToken);
-		return c.json({ success: true });
-	})
-
-	// ── Request Password Reset ───────────────────────────────────────────────
-	.post(
-		"/request-password-reset",
-		zValidator("json", requestPasswordResetSchema, invalidBody),
-		async (c) => {
-			const { email } = c.req.valid("json");
-
-			// Always return success to prevent email enumeration
-			const [user] = await db
-				.select({ id: users.id })
-				.from(users)
-				.where(eq(users.email, email))
-				.limit(1);
-
-			if (user) {
-				await createPasswordResetToken(user.id);
-				// In production, would send email here
-			}
-
-			return c.json({ success: true });
-		},
-	)
-
-	// ── Reset Password ───────────────────────────────────────────────────────
-	.post("/reset-password", zValidator("json", resetPasswordSchema, invalidBody), async (c) => {
-		const { token, password } = c.req.valid("json");
-		const success = await resetPassword(token, password);
-
-		if (!success) {
-			return c.json({ error: "Invalid or expired reset token" }, 400);
-		}
-
 		return c.json({ success: true });
 	})
 

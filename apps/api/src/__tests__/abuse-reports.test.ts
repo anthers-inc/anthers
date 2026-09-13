@@ -30,6 +30,7 @@ import {
 } from "../services/abuse-reports.js";
 import { placeHold } from "../services/legal-hold.js";
 import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -74,18 +75,7 @@ let workPublicId: number;
 let workId: number;
 
 async function signUp(username: string): Promise<string> {
-	const res = await req("/api/auth/sign-up", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			acceptTerms: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	return res.headers.get("Set-Cookie")!.split(";")[0];
+	return (await createAccount(username)).cookie;
 }
 
 let creatorCookie: string;

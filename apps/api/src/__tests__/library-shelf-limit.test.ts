@@ -15,12 +15,12 @@ import { users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { SHELF_LIMIT } from "../services/library";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 purgeAccountsCreatedHere();
 
-const ORIGIN = "http://localhost:3000";
 const id = crypto.randomUUID().slice(0, 8);
 const readerName = `shelf_r_${id}`;
 
@@ -40,20 +40,8 @@ async function shelf(): Promise<{
 }
 
 beforeAll(async () => {
-	const res = await app.fetch(
-		new Request("http://localhost/api/auth/sign-up", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({
-				username: readerName,
-				email: `${readerName}@example.com`,
-				password: "testpass123",
-				acceptTerms: true,
-			}),
-		}),
-	);
-	expect(res.status).toBe(201);
-	cookie = res.headers.get("Set-Cookie")!.split(";")[0];
+	const account = await createAccount(readerName);
+	cookie = account.cookie;
 	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, readerName));
 	readerId = row.id;
 

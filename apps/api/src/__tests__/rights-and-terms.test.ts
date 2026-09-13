@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Terms acceptance at signup, and the data-rights intake.
+ * Terms acceptance when an account is finished, and the data-rights intake.
  *
  * **Acceptance is the one that matters most**, because it is what turns the 13+ floor
  * from a wish into a term. Before this, "you must be 13 or older" lived in a document
@@ -20,6 +20,7 @@ import { rightsRequests, users } from "@anthers/db/schema";
 import { RIGHTS_RESPONSE_DAYS } from "@anthers/shared/rights";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -33,47 +34,49 @@ function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
-function signUpBody(username: string, extra: Record<string, unknown>) {
-	return {
+/** Claim a handle as a fixture account that has not claimed one, with whatever terms field is given. */
+function claim(cookie: string, username: string, extra: Record<string, unknown>) {
+	return req("/api/auth/onboarding/claim", {
 		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({
-			username,
-			email: `${username}@example.com`,
-			password: "testpass123",
-			...extra,
-		}),
-	};
+		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+		body: JSON.stringify({ username, ...extra }),
+	});
 }
 
-describe("nobody gets an account without accepting the terms", () => {
-	it("refuses a signup that omits acceptance", async () => {
-		const name = `rt_omit_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
-		const res = await req("/api/auth/sign-up", signUpBody(name, {}));
-		expect(res.status).toBe(400);
+/** The account's handle, which stays null for as long as no claim has succeeded. */
+async function handleOf(userId: number) {
+	const [row] = await db
+		.select({ username: users.username })
+		.from(users)
+		.where(eq(users.id, userId));
+	return row?.username ?? null;
+}
 
-		// And no account was created — a 400 that still writes the row would be the
-		// worst of both.
-		const rows = await db.select().from(users).where(eq(users.username, name));
-		expect(rows).toEqual([]);
+// Terms are accepted where an account is finished — claiming its handle on `/welcome` — which
+// is the step every signup door passes through.
+describe("nobody gets an account without accepting the terms", () => {
+	it("refuses a claim that omits acceptance, and claims nothing", async () => {
+		const account = await createAccount(null);
+		const res = await claim(account.cookie, `rt_omit_${id}`, {});
+		expect(res.status).toBe(400);
+		// A 400 that still claimed the handle would be the worst of both.
+		expect(await handleOf(account.userId)).toBeNull();
 	});
 
 	it("refuses an explicit refusal rather than recording it", async () => {
 		// `false` is not a value to store, it is a request that cannot be granted.
-		const name = `rt_false_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
-		expect((await req("/api/auth/sign-up", signUpBody(name, { acceptTerms: false }))).status).toBe(
+		const account = await createAccount(null);
+		expect((await claim(account.cookie, `rt_false_${id}`, { acceptTerms: false })).status).toBe(
 			400,
 		);
-		expect(await db.select().from(users).where(eq(users.username, name))).toEqual([]);
+		expect(await handleOf(account.userId)).toBeNull();
 	});
 
-	it("accepts a signup that accepts", async () => {
-		const name = `rt_ok_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
-		const res = await req("/api/auth/sign-up", signUpBody(name, { acceptTerms: true }));
-		expect(res.status).toBe(201);
+	it("accepts a claim that accepts", async () => {
+		const account = await createAccount(null);
+		const res = await claim(account.cookie, `rt_ok_${id}`, { acceptTerms: true });
+		expect(res.status).toBe(200);
+		expect(await handleOf(account.userId)).toBe(`rt_ok_${id}`);
 	});
 });
 
@@ -81,9 +84,7 @@ describe("data-rights requests", () => {
 	it("stamps a 30-day deadline at creation and acknowledges it", async () => {
 		const name = `rt_req_${id}`;
 		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
-		const signUp = await req("/api/auth/sign-up", signUpBody(name, { acceptTerms: true }));
-		expect(signUp.status).toBe(201);
-		const cookie = signUp.headers.get("Set-Cookie")!.split(";")[0];
+		const { cookie } = await createAccount(name);
 
 		const before = Date.now();
 		const res = await req("/api/accounts/me/rights-requests", {
@@ -117,8 +118,7 @@ describe("data-rights requests", () => {
 	it("rejects an unknown kind rather than storing it", async () => {
 		const name = `rt_bad_${id}`;
 		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
-		const signUp = await req("/api/auth/sign-up", signUpBody(name, { acceptTerms: true }));
-		const cookie = signUp.headers.get("Set-Cookie")!.split(";")[0];
+		const { cookie } = await createAccount(name);
 
 		const res = await req("/api/accounts/me/rights-requests", {
 			method: "POST",
