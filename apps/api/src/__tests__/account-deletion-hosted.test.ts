@@ -148,7 +148,7 @@ describe("an account holding a handle Anthers issued", () => {
 	// problem that is not theirs.
 	it("finishes the erasure when the credential cannot be opened, and keeps the row as the record", async () => {
 		const result = await eraseAccount(strandId);
-		expect(result).toEqual({ erased: true });
+		expect(result).toEqual({ erased: true, strandedRecords: 0 });
 
 		const [gone] = await db.select({ id: users.id }).from(users).where(eq(users.id, strandId));
 		expect(gone).toBeUndefined();

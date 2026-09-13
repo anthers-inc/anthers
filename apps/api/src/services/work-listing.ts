@@ -228,61 +228,8 @@ export interface StopPublishingResult {
  * lost, is not reachable from here and is not counted.
  */
 export async function stopPublishingFor(creatorId: number): Promise<StopPublishingResult> {
-	const [listed, creatorRecords] = await Promise.all([
-		db
-			.select({ id: works.id, uri: works.atprotoUri })
-			.from(works)
-			.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri))),
-		publishedCreatorRecords(creatorId),
-	]);
-
-	let removed = 0;
-	let stranded = 0;
-	const total = listed.length + creatorRecords.length;
-
-	if (total > 0) {
-		// Opened for exactly the collections this creator holds records in, so a grant over one
-		// of them is not refused for lacking another the creator has nothing in.
-		const collections = new Set(creatorRecords.map((r) => creatorRecordCollection(r.kind)));
-		if (listed.length > 0) collections.add(WORK_COLLECTION);
-		const opened = await writerForAccount(creatorId, { collections: [...collections] });
-		if (!opened.writer) {
-			// No writer means no way to reach the records. They stay where they are, and saying so
-			// is more useful than a revocation that would make it permanent.
-			console.warn(`[work-listing] cannot stop publishing for ${creatorId}: ${opened.reason}`);
-			return { removed: 0, stranded: total, revoked: false };
-		}
-
-		for (const work of listed) {
-			const rkey = work.uri ? rkeyFromAtUri(work.uri, WORK_COLLECTION) : null;
-			if (!rkey) {
-				// An unreadable URI is counted as stranded rather than skipped: something is on the
-				// network that this column was meant to be able to find.
-				stranded += 1;
-				continue;
-			}
-			try {
-				await opened.writer.deleteRecord(WORK_COLLECTION, rkey);
-				await db.update(works).set({ atprotoUri: null }).where(eq(works.id, work.id));
-				removed += 1;
-			} catch (err) {
-				stranded += 1;
-				console.error(
-					`[work-listing] could not remove the listing for ${work.id}: ` +
-						`${err instanceof Error ? err.message : String(err)}`,
-				);
-			}
-		}
-
-		// The same writer, deliberately: these records live in the same repository, and opening a
-		// second one would double the work for no gain and give the two halves separate ways to fail.
-		for (const record of creatorRecords) {
-			if (await removePublishedCreatorRecord(opened.writer, record)) removed += 1;
-			else stranded += 1;
-		}
-	}
-
-	if (stranded > 0) return { removed, stranded, revoked: false };
+	const { removed, strandedUris } = await takeDownCreatorRecords(creatorId);
+	if (strandedUris.length > 0) return { removed, stranded: strandedUris.length, revoked: false };
 
 	const [row] = await db
 		.select({ did: users.atprotoDid })
@@ -294,4 +241,82 @@ export async function stopPublishingFor(creatorId: number): Promise<StopPublishi
 		await recordGrantedScope(row.did, null);
 	}
 	return { removed, stranded: 0, revoked: true };
+}
+
+/** What taking a creator's records off the network managed to do. */
+export interface RecordTakedownResult {
+	/** Records removed — Work listings, posts and projects together. */
+	removed: number;
+	/** The address of every record that could not be removed, and is therefore still out there. */
+	strandedUris: string[];
+}
+
+/**
+ * Take down every Work listing, post and project record Anthers published for a creator, and
+ * nothing else — the grant is left exactly as it was.
+ *
+ * Split out of {@link stopPublishingFor} because its two callers disagree about a failure.
+ * Withdrawing the permission keeps it when anything is stranded, since that is the only state a
+ * retry can finish from; erasing an account never waits on somebody else's server, so it takes
+ * down what it can, says what it could not, and carries on. Both need the removal to happen
+ * while the credential is still good, which is why neither revokes before calling this.
+ */
+export async function takeDownCreatorRecords(creatorId: number): Promise<RecordTakedownResult> {
+	const [listed, creatorRecords] = await Promise.all([
+		db
+			.select({ id: works.id, uri: works.atprotoUri })
+			.from(works)
+			.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri))),
+		publishedCreatorRecords(creatorId),
+	]);
+
+	let removed = 0;
+	const strandedUris: string[] = [];
+
+	if (listed.length + creatorRecords.length > 0) {
+		// Opened for exactly the collections this creator holds records in, so a grant over one
+		// of them is not refused for lacking another the creator has nothing in.
+		const collections = new Set(creatorRecords.map((r) => creatorRecordCollection(r.kind)));
+		if (listed.length > 0) collections.add(WORK_COLLECTION);
+		const opened = await writerForAccount(creatorId, { collections: [...collections] });
+		if (!opened.writer) {
+			// No writer means no way to reach the records. They stay where they are, and saying so
+			// is more useful than a revocation that would make it permanent.
+			console.warn(`[work-listing] cannot take down records for ${creatorId}: ${opened.reason}`);
+			return {
+				removed: 0,
+				strandedUris: [...listed.map((w) => w.uri ?? ""), ...creatorRecords.map((r) => r.uri)],
+			};
+		}
+
+		for (const work of listed) {
+			const rkey = work.uri ? rkeyFromAtUri(work.uri, WORK_COLLECTION) : null;
+			if (!rkey) {
+				// An unreadable URI is counted as stranded rather than skipped: something is on the
+				// network that this column was meant to be able to find.
+				strandedUris.push(work.uri ?? "");
+				continue;
+			}
+			try {
+				await opened.writer.deleteRecord(WORK_COLLECTION, rkey);
+				await db.update(works).set({ atprotoUri: null }).where(eq(works.id, work.id));
+				removed += 1;
+			} catch (err) {
+				strandedUris.push(work.uri ?? "");
+				console.error(
+					`[work-listing] could not remove the listing for ${work.id}: ` +
+						`${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+
+		// The same writer, deliberately: these records live in the same repository, and opening a
+		// second one would double the work for no gain and give the two halves separate ways to fail.
+		for (const record of creatorRecords) {
+			if (await removePublishedCreatorRecord(opened.writer, record)) removed += 1;
+			else strandedUris.push(record.uri);
+		}
+	}
+
+	return { removed, strandedUris };
 }

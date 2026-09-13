@@ -72,11 +72,12 @@ import {
 } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { revokeAtprotoGrant } from "./atproto-client.js";
-import { hostedHandlesFor, releaseHostedIdentities } from "./hosted-accounts.js";
+import { escapeHtml, sendOperationalAlert } from "./email.js";
+import { hostedHandlesFor, isHostedIdentity, releaseHostedIdentities } from "./hosted-accounts.js";
 import { isUnderHold } from "./legal-hold.js";
 import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
-import { queueWorkListingSync } from "./work-listing.js";
+import { queueWorkListingSync, takeDownCreatorRecords } from "./work-listing.js";
 
 /**
  * How long a user has to change their mind.
@@ -235,7 +236,9 @@ export async function cancelDeletion(userId: number): Promise<{ canceled: boolea
  * `purchases.buyer_id` is about to be too — after the cascade there is no way left to
  * ask which of this creator's Works somebody bought.
  */
-export async function eraseAccount(userId: number): Promise<{ erased: boolean }> {
+export async function eraseAccount(
+	userId: number,
+): Promise<{ erased: boolean; strandedRecords?: number }> {
 	// 🚨 The hold check is FIRST, before anything is read or swept, because every line
 	// below this destroys something. A filed CyberTipline report is itself a one-year
 	// preservation request under 18 U.S.C. § 2258A(h), and destroying records under a
@@ -265,6 +268,10 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 		.where(eq(users.id, userId))
 		.limit(1);
 	if (!user) return { erased: false };
+
+	// Asked before the identity server is reached, because releasing a hosted identity takes the
+	// row this reads — after it, a hosted DID would look like one held somewhere else.
+	const heldElsewhere = user.atprotoDid !== null && !(await isHostedIdentity(user.atprotoDid));
 
 	// 🚨 **The identity server is reached BEFORE anything is destroyed, and this step can stop
 	// the whole erasure.** `hosted_accounts.user_id` is `set null` rather than `cascade`, so
@@ -323,6 +330,38 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 	// holding this DID is a *different*, unfinished signup rather than anything of this
 	// account's, and `clearPendingSignup` already revokes the session behind one when it is
 	// abandoned. Neither is a live grant we would otherwise lose track of, which is the test.
+	//
+	// 🚨 **A creator's records come down first, while that grant can still remove them.** For an
+	// identity held somewhere else, the Work listings, posts and projects Anthers wrote live in a
+	// repository Anthers does not operate, and the grant being revoked on the next line is the
+	// only thing that can delete them. Revoking first would leave somebody who asked to be
+	// forgotten advertised on the network for good. A hosted identity needs nothing here: its
+	// repository, and every record in it, went with `releaseHostedIdentities` above.
+	//
+	// ⚠️ **A record that cannot be reached does not stop the erasure**, unlike `stopPublishingFor`,
+	// which keeps the grant so a retry can finish. A third party's outage is not a reason to
+	// refuse somebody their erasure, so what could not be removed is reported to the operators by
+	// address — there is nobody else left to tell — and the erasure goes on.
+	let strandedRecords = 0;
+	if (heldElsewhere) {
+		const takedown = await takeDownCreatorRecords(userId);
+		strandedRecords = takedown.strandedUris.length;
+		if (strandedRecords > 0) {
+			console.error(
+				`account-deletion: user ${userId} erased with ${strandedRecords} record(s) still on ` +
+					"the network, which Anthers could not remove",
+			);
+			await sendOperationalAlert({
+				subject: `An erased account left ${strandedRecords} record(s) on the network`,
+				html:
+					"<p>An account was erased and these records Anthers published on its behalf could " +
+					"not be removed. The erasure went ahead; the grant that could have removed them has " +
+					"now been revoked.</p><ul>" +
+					takedown.strandedUris.map((uri) => `<li>${escapeHtml(uri)}</li>`).join("") +
+					"</ul>",
+			});
+		}
+	}
 	if (user.atprotoDid) await revokeAtprotoGrant(user.atprotoDid);
 
 	const workIds = (
@@ -450,7 +489,7 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 	// performing one the database never agreed to.
 	await sweepCollected(mediaToSweep);
 
-	return { erased: true };
+	return { erased: true, strandedRecords };
 }
 
 /**

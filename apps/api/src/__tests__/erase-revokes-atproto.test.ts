@@ -21,13 +21,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { atprotoSessions, legalHolds, users } from "@anthers/db/schema";
+import { atprotoSessions, legalHolds, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import { liftHold, placeHold } from "../services/legal-hold.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -38,13 +39,30 @@ const RUN = Date.now().toString(36);
 let revoked: string[] = [];
 /** When set, the fake client throws this instead of revoking — the outage case. */
 let revokeThrows = false;
+/** Record deletions and revocations together, in the order they reached the fake client. */
+let events: string[] = [];
+
+/** A grant covering the listing collection, so a writer can be opened over it. */
+const LISTING_GRANT = "atproto repo:org.anthers.work";
 
 beforeAll(() => {
 	setAtprotoClient({
 		revoke: async (did: string) => {
 			if (revokeThrows) throw new Error("authorization server unreachable");
 			revoked.push(did);
+			events.push(`revoke ${did}`);
 		},
+		// Only reached for an account whose stored grant covers what is being removed, which is
+		// the one case where erasure can take a record down before the grant goes.
+		restore: async (did: string) => ({
+			did,
+			getTokenInfo: async () => ({ scope: LISTING_GRANT }),
+			fetchHandler: async (_path: string, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				events.push(`delete ${body.collection}/${body.rkey}`);
+				return new Response("{}", { headers: { "Content-Type": "application/json" } });
+			},
+		}),
 	} as never);
 }, DB_SETUP_TIMEOUT);
 
@@ -156,6 +174,47 @@ describe("eraseAccount revokes the ATProto grant", () => {
 		await eraseAccount(user.id);
 
 		expect(revoked.length).toBe(before);
+	});
+
+	it("🚨 takes a creator's listings off the network BEFORE the grant goes", async () => {
+		// Deleting a record needs the grant being revoked, so the order is the whole fix: the
+		// other way round leaves somebody who asked to be forgotten advertised for good.
+		const { userId, did } = await makeLinkedUser();
+		await db
+			.update(atprotoSessions)
+			.set({ scope: LISTING_GRANT })
+			.where(eq(atprotoSessions.did, did));
+		const work = await insertWork({ creatorId: userId, type: "game" });
+		await db
+			.update(works)
+			.set({ atprotoUri: `at://${did}/org.anthers.work/listing1` })
+			.where(eq(works.id, work.id));
+		events = [];
+
+		const result = await eraseAccount(userId);
+
+		expect(result.erased).toBe(true);
+		expect(result.strandedRecords).toBe(0);
+		expect(events).toEqual([`delete org.anthers.work/listing1`, `revoke ${did}`]);
+	});
+
+	it("🚨 erases anyway when a listing cannot be taken down, and still revokes", async () => {
+		// The counterweight, again. No grant is on file, so no writer opens and the listing is
+		// stranded — which must be reported rather than allowed to hold up the erasure.
+		const { userId, did } = await makeLinkedUser();
+		const work = await insertWork({ creatorId: userId, type: "game" });
+		await db
+			.update(works)
+			.set({ atprotoUri: `at://${did}/org.anthers.work/listing2` })
+			.where(eq(works.id, work.id));
+		events = [];
+
+		const result = await eraseAccount(userId);
+
+		expect(result.erased).toBe(true);
+		expect(result.strandedRecords).toBe(1);
+		expect(await userExists(userId)).toBe(false);
+		expect(events).toEqual([`revoke ${did}`]);
 	});
 
 	it("🚨 does NOT revoke an account under a legal hold, because it is not being erased", async () => {
