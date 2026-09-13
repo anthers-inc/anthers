@@ -21,6 +21,7 @@ export interface PublishablePost {
 	creatorId: number | null;
 	slug: string;
 	publicId: number;
+	isPublished: boolean;
 	publishedAt: Date | null;
 }
 
@@ -40,12 +41,19 @@ export interface PostRecord {
  * into, so the record is refused rather than written somewhere it does not belong.
  *
  * 🚨 **An unpublished post is a draft, and publishing one would put somebody's unfinished
- * writing on a network with no way to take it back.** `published_at` is the test rather than
- * any scheduling column: a scheduled post is still a draft until the sweep publishes it.
+ * writing on a network with no way to take it back.** A scheduled post is still a draft until
+ * the sweep publishes it, so neither `scheduled_for` nor anything derived from it is consulted.
+ *
+ * 🚨 **BOTH columns are read, because `published_at` survives an unpublish.** It is stamped on
+ * the transition into published and never cleared, so a creator who retracts a post leaves a
+ * row saying `is_published = false` beside a date saying when it went live. Testing the date
+ * alone reads that row as publishable — which would keep a record up for something its creator
+ * has taken down, the one failure this whole design exists to prevent. `is_published` is the
+ * creator's decision and the date is only evidence of a past one.
  */
 export function unpublishablePostReason(post: PublishablePost): UnpublishableCreatorReason | null {
 	if (post.creatorId === null) return "no_creator";
-	if (!post.publishedAt) return "not_published";
+	if (!post.isPublished || !post.publishedAt) return "not_published";
 	return null;
 }
 
@@ -84,6 +92,7 @@ export interface PublishableProject {
 	slug: string;
 	title: string;
 	description: string | null;
+	isPublished: boolean;
 }
 
 export interface ProjectRecord {
@@ -96,6 +105,12 @@ export interface ProjectRecord {
 /**
  * Whether a project may be described on the network.
  *
+ * 🚨 **A draft project gets no record, and `is_published` is the only thing that says so.**
+ * The browse listing filters on that column, so an unpublished project is one a creator has
+ * deliberately kept out of the public index while they assemble it — and a record is a louder
+ * publication than the listing it was withheld from. The project's own page not filtering the
+ * column is a separate matter and not a license to broadcast it.
+ *
  * ⚠️ **An untitled project gets no record, on the same reasoning that refuses an untitled
  * Work**: the Lexicon requires a title, and `title ?? ""` would satisfy that structurally
  * while naming nothing at all — an anonymous entry in somebody's public catalog.
@@ -104,6 +119,7 @@ export function unpublishableProjectReason(
 	project: PublishableProject,
 ): UnpublishableCreatorReason | null {
 	if (project.creatorId === null) return "no_creator";
+	if (!project.isPublished) return "not_published";
 	if (!project.title?.trim()) return "missing_title";
 	return null;
 }

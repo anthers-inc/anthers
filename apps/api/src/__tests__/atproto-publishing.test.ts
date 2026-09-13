@@ -436,4 +436,44 @@ describe("handing the permission back", () => {
 
 		await db.delete(works).where(eq(works.id, work.id));
 	});
+
+	// 🚨 **A creator with no Works at all, and the case the first implementation missed.** The
+	// writer used to be opened only when a Work carried a URI, so a creator whose only records
+	// were posts and projects took that branch, revoked cleanly, and left every one of them up —
+	// answering "stop writing on my behalf" by handing back the only credential that could.
+	it("takes posts and projects down too, and strands them rather than revoking", async () => {
+		const user = await makeUser("prj", { atprotoDid: did("prj") });
+		await seedSession(did("prj"), user.id);
+
+		const { posts, projects } = await import("@anthers/db/schema");
+		const [post] = await db
+			.insert(posts)
+			.values({
+				creatorId: user.id,
+				publicId: Date.now(),
+				slug: `${RUN}-prj-post`,
+				isPublished: true,
+				publishedAt: new Date(),
+				atprotoUri: `at://${did("prj")}/org.anthers.post/p1`,
+			})
+			.returning();
+		const [project] = await db
+			.insert(projects)
+			.values({
+				creatorId: user.id,
+				slug: `${RUN}-prj-project`,
+				title: "A Project",
+				isPublished: true,
+				atprotoUri: `at://${did("prj")}/org.anthers.project/j1`,
+			})
+			.returning();
+
+		// No grant on file, so no writer can be opened — and there is not one Work in sight.
+		const result = await stopPublishingFor(user.id);
+		expect(result).toEqual({ removed: 0, stranded: 2, revoked: false });
+		expect(revoked).not.toContain(did("prj"));
+
+		await db.delete(posts).where(eq(posts.id, post.id));
+		await db.delete(projects).where(eq(projects.id, project.id));
+	});
 });

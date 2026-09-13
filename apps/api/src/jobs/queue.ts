@@ -170,9 +170,19 @@ export const QUEUES = {
 	// request — a record is a call to another server, and a creator's publishing must not fail
 	// because that server is down.
 	SYNC_WORK_LISTING: "sync-work-listing",
-	// The backstop for the queue above. Per-event enqueues are the latency; this is the
+	// Write, replace or remove the record describing a creator's post or project. Carries a kind
+	// and an id and nothing else, for the same reason the queue above carries only a Work id: the
+	// handler re-reads the row and decides from its current state.
+	SYNC_CREATOR_RECORD: "sync-creator-record",
+	// Take a record off the network when the row that described it has been deleted outright.
+	//
+	// 🚨 **The one queue here whose payload is a DESCRIPTION rather than a hint**, and it has to
+	// be. A deleted post, project or comment has no row left to re-read, so the address has to be
+	// captured before the delete or the record stays up for ever describing something gone.
+	REMOVE_ATPROTO_RECORD: "remove-atproto-record",
+	// The backstop for the three queues above. Per-event enqueues are the latency; this is the
 	// guarantee, because an enqueue that failed, a job that exhausted its retries, and a state
-	// changed directly in SQL all leave a listing disagreeing with its Work and nothing noticing.
+	// changed directly in SQL all leave a record disagreeing with its row and nothing noticing.
 	RECONCILE_LISTINGS: "reconcile-listings",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	// Hash a stored object and ask a detection vendor about the hash. Keyed on the storage
@@ -275,6 +285,22 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	[QUEUES.SYNC_WORK_LISTING]: {
 		retryLimit: 8,
 		retryDelay: 60,
+		expireInMinutes: 10,
+	},
+	// The same budget as a Work's listing, for the same reason: one small write, and a delete
+	// that never lands is a record advertising something its creator took down.
+	[QUEUES.SYNC_CREATOR_RECORD]: {
+		retryLimit: 8,
+		retryDelay: 60,
+		expireInMinutes: 10,
+	},
+	// ⚠️ **The most generous budget of the three, because nothing else will ever catch this
+	// one.** A sync that never runs is found again by the reconciling sweep, which re-reads the
+	// row and re-decides; this job's row is gone, so the sweep has nothing to find it by. If the
+	// retries run out the record stays on the network permanently.
+	[QUEUES.REMOVE_ATPROTO_RECORD]: {
+		retryLimit: 12,
+		retryDelay: 120,
 		expireInMinutes: 10,
 	},
 	[QUEUES.DISTRIBUTE_POOL]: {

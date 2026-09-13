@@ -31,10 +31,12 @@ import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue } from "./queue.js";
 import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
 import { reconcileListings } from "./reconcile-listings.js";
+import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
 import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { type SyncCreatorRecordData, syncCreatorRecordJob } from "./sync-creator-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { watchHostedIdentities } from "./watch-identities.js";
@@ -103,6 +105,26 @@ async function start() {
 		async (jobs) => {
 			for (const job of jobs) {
 				await syncWorkListingJob(job.data);
+			}
+		},
+	);
+
+	await queue.work<SyncCreatorRecordData>(
+		QUEUES.SYNC_CREATOR_RECORD,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				await syncCreatorRecordJob(job.data);
+			}
+		},
+	);
+
+	await queue.work<RemoveAtprotoRecordData>(
+		QUEUES.REMOVE_ATPROTO_RECORD,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				await removeAtprotoRecordJob(job.data);
 			}
 		},
 	);

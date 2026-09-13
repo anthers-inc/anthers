@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Find Works whose public listing disagrees with the Work, and queue a sync for each.
+ * Find rows whose record on the network disagrees with the row, and queue a sync for each.
+ *
+ * Covers Works, posts and projects — everything Anthers publishes on a creator's behalf whose
+ * row is the truth and whose record is derived from it.
  *
  * 🚨 **The per-event enqueues are the latency; this is the guarantee.** Every path that can
- * change a Work's publishability asks for a sync as it goes, and each of those can still be
- * lost: `queueWorkListingSync` swallows a failure to enqueue on purpose — a creator's release
- * must not fail because a queue blinked — a job can exhaust its retries against a node that was
- * down all night, and a state changed directly in SQL asks for nothing at all. Without a sweep,
- * every one of those leaves a listing advertising something that is no longer listed, and
- * nothing ever notices.
+ * change publishability asks for a sync as it goes, and each of those can still be lost: both
+ * enqueue helpers swallow a failure on purpose — a creator's release or publish must not fail
+ * because a queue blinked — a job can exhaust its retries against a node that was down all
+ * night, and a state changed directly in SQL asks for nothing at all. Without a sweep, every one
+ * of those leaves a record advertising something that is no longer listed, and nothing ever
+ * notices.
+ *
+ * ⚠️ **A row DELETED outright is the one thing this cannot catch**, because the row it would
+ * compare against is exactly what has gone. That is `remove-atproto-record`'s job, enqueued
+ * before the delete, and it is why that queue has the most generous retry budget of the three.
  *
  * ⚠️ **It looks for DISAGREEMENT rather than recency**, so it is cheap and self-limiting: a
  * Work whose listing is already correct is never touched, and a sweep that finds nothing does
@@ -21,11 +28,12 @@
  * nobody has, which is a smaller problem and can wait behind it.
  */
 import { db } from "@anthers/db";
-import { hostedAccounts, works } from "@anthers/db/schema";
+import { hostedAccounts, posts, projects, works } from "@anthers/db/schema";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { queueCreatorRecordSync } from "../services/creator-record-listing.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 
-/** How many Works one sweep will queue. A ceiling, so a first run cannot flood the queue. */
+/** How many rows one sweep will queue, per kind. A ceiling, so a first run cannot flood. */
 const SWEEP_LIMIT = 500;
 
 export async function reconcileListings(): Promise<void> {
@@ -82,9 +90,84 @@ export async function reconcileListings(): Promise<void> {
 
 	for (const row of missing) await queueWorkListingSync(row.id);
 
-	if (stale.length > 0 || missing.length > 0) {
+	const creator = await reconcileCreatorRecords();
+
+	if (stale.length > 0 || missing.length > 0 || creator.stale > 0 || creator.missing > 0) {
 		console.log(
-			`[reconcile-listings] queued ${stale.length} to remove or correct, ${missing.length} to publish`,
+			`[reconcile-listings] queued ${stale.length + creator.stale} to remove or correct, ` +
+				`${missing.length + creator.missing} to publish`,
 		);
 	}
+}
+
+/**
+ * The same sweep over a creator's posts and projects.
+ *
+ * ⭐ **In this job rather than a cron of its own, deliberately.** A second schedule would be a
+ * second thing to notice had stopped running, and these disagree with their rows for exactly the
+ * reasons Work listings do — a swallowed enqueue, an exhausted retry, a row changed in SQL. One
+ * sweep, one cron, one thing to watch.
+ *
+ * ⚠️ **Each kind gets its own budget rather than sharing one.** A backlog of Works must not
+ * starve the posts, and the ceiling is there to stop a first run flooding the queue rather than
+ * to bound the total.
+ */
+async function reconcileCreatorRecords(): Promise<{ stale: number; missing: number }> {
+	// ── Records that should not exist ────────────────────────────────────
+	//
+	// The same loose net as above, and loose for the same reason: the real test is TypeScript and
+	// this is SQL, so keeping them in step is impossible and the job re-checks properly.
+	//
+	// 🚨 `is_published = false AND atproto_uri IS NOT NULL` is the shape that matters — a creator
+	// who retracted a post, whose `published_at` stayed stamped behind them.
+	const stalePosts = await db
+		.select({ id: posts.id })
+		.from(posts)
+		.where(
+			and(
+				isNotNull(posts.atprotoUri),
+				sql`(
+					${posts.isPublished} = false
+					OR ${posts.publishedAt} IS NULL
+					OR ${posts.creatorId} IS NULL
+				)`,
+			),
+		)
+		.limit(SWEEP_LIMIT);
+	for (const row of stalePosts) await queueCreatorRecordSync("post", row.id);
+
+	const staleProjects = await db
+		.select({ id: projects.id })
+		.from(projects)
+		.where(and(isNotNull(projects.atprotoUri), eq(projects.isPublished, false)))
+		.limit(SWEEP_LIMIT);
+	for (const row of staleProjects) await queueCreatorRecordSync("project", row.id);
+
+	// ── Records that should exist and do not ─────────────────────────────
+	//
+	// ⚠️ Joined against `hosted_accounts` for the reason the Works half gives: without it every
+	// published post by every creator without a handle would be selected on every sweep, for
+	// ever, to be skipped each time. The cost is that a creator who granted permission over an
+	// identity hosted ELSEWHERE is not swept — their records are covered by the per-event
+	// enqueues only, which is the same gap the Works sweep has and should be closed with it.
+	const missingPosts = await db
+		.select({ id: posts.id })
+		.from(posts)
+		.innerJoin(hostedAccounts, eq(hostedAccounts.userId, posts.creatorId))
+		.where(and(isNull(posts.atprotoUri), eq(posts.isPublished, true), isNotNull(posts.publishedAt)))
+		.limit(SWEEP_LIMIT);
+	for (const row of missingPosts) await queueCreatorRecordSync("post", row.id);
+
+	const missingProjects = await db
+		.select({ id: projects.id })
+		.from(projects)
+		.innerJoin(hostedAccounts, eq(hostedAccounts.userId, projects.creatorId))
+		.where(and(isNull(projects.atprotoUri), eq(projects.isPublished, true)))
+		.limit(SWEEP_LIMIT);
+	for (const row of missingProjects) await queueCreatorRecordSync("project", row.id);
+
+	return {
+		stale: stalePosts.length + staleProjects.length,
+		missing: missingPosts.length + missingProjects.length,
+	};
 }

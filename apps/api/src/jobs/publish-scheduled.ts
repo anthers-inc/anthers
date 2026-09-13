@@ -16,6 +16,7 @@
 import { db } from "@anthers/db";
 import { posts } from "@anthers/db/schema";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
+import { queueCreatorRecordSync } from "../services/creator-record-listing.js";
 
 /** Publish every due scheduled draft. Returns how many were published. */
 export async function publishScheduled(now: Date = new Date()): Promise<number> {
@@ -45,6 +46,11 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 			})
 			.where(eq(posts.id, post.id));
 		published += 1;
+		// ⚠️ **The only path that publishes a post without anybody making a request**, so it is
+		// the one enqueue that cannot be inferred from a route. A scheduled post whose record was
+		// never asked for would sit published on Anthers and absent from the network until its
+		// creator happened to edit it.
+		await queueCreatorRecordSync("post", post.id);
 		console.log(`[publish-scheduled] Published post ${post.id} (${post.slug})`);
 	}
 	return published;

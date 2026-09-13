@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Deciding what should happen to a reader's record, and carrying it out against a repository.
+ * Deciding what should happen to a record, and carrying it out against a repository.
  *
- * This is `atproto-repo.ts` for everything that is not a Work listing. The shape is the same —
+ * This is `atproto-repo.ts` for everything that is not a Work listing — a reader's comments,
+ * reviews, votes and follows, and a creator's posts and projects. The shape is the same —
  * a pure planner with its own tests, then a sync that performs the plan over the
- * {@link RepoWriter} seam — and it is deliberately ONE generic pair rather than four copies.
- * Comments, reviews, votes and follows differ only in which mapper they call and which
- * collection they land in; four planners would be four places for the delete branch to drift
- * apart, and the delete branch is the one that matters.
+ * {@link RepoWriter} seam — and it is deliberately ONE generic pair rather than one per record.
+ * They differ only in which mapper they call and which collection they land in; six planners
+ * would be six places for the delete branch to drift apart, and the delete branch is the one
+ * that matters.
  *
  * 🚨 **These records are canonical and the row is an index, which inverts what a failure
  * means.** A Work's listing going wrong leaves the Work intact, because the row is the truth.
@@ -24,9 +25,22 @@ import {
 	commentRecord,
 	followRecord,
 	type LexiconValidator,
+	postRecord,
+	projectRecord,
 	reviewRecord,
 	voteRecord,
 } from "@anthers/shared/lexicons";
+import {
+	type PostRecord,
+	type ProjectRecord,
+	type PublishablePost,
+	type PublishableProject,
+	postToRecord,
+	projectToRecord,
+	type UnpublishableCreatorReason,
+	unpublishablePostReason,
+	unpublishableProjectReason,
+} from "./atproto-creator-records.js";
 import {
 	type CommentRecord,
 	commentToRecord,
@@ -61,19 +75,19 @@ export const FOLLOW_COLLECTION = "org.anthers.follow";
  * because this module touches no database for the same reason `atproto-repo.ts` touches no
  * network client: the decision has to be checkable in isolation.
  */
-export interface RecordKind<Input, R extends object> {
+export interface RecordKind<Input, R extends object, Reason extends string> {
 	readonly collection: string;
-	reasonFor(input: Input): UnpublishableReaderReason | null;
+	reasonFor(input: Input): Reason | null;
 	toRecord(input: Input): R | null;
 	readonly validator: LexiconValidator;
 }
 
 /** What should happen to one record, decided without touching the network. */
-export type RecordPlan<R> =
+export type RecordPlan<R, Reason extends string> =
 	| { action: "create"; record: R }
 	| { action: "replace"; rkey: string; record: R }
-	| { action: "delete"; rkey: string; reason: UnpublishableReaderReason }
-	| { action: "none"; reason: UnpublishableReaderReason }
+	| { action: "delete"; rkey: string; reason: Reason }
+	| { action: "none"; reason: Reason }
 	| { action: "invalid"; problem: string };
 
 /**
@@ -87,11 +101,11 @@ export type RecordPlan<R> =
  * validator is the same schema a consumer would check against, so a malformed record is caught
  * while it is still local — the one moment catching it is free.
  */
-export function planRecord<Input, R extends object>(
-	kind: RecordKind<Input, R>,
+export function planRecord<Input, R extends object, Reason extends string>(
+	kind: RecordKind<Input, R, Reason>,
 	input: Input,
 	existingUri: string | null,
-): RecordPlan<R> {
+): RecordPlan<R, Reason> {
 	const rkey = existingUri ? rkeyFromAtUri(existingUri, kind.collection) : null;
 
 	// An unreadable stored URI is refused rather than read as "no record". Treating it as
@@ -121,8 +135,8 @@ export function planRecord<Input, R extends object>(
 }
 
 /** What a sync did, and the value the row's `atproto_uri` should now hold. */
-export interface RecordOutcome<R> {
-	plan: RecordPlan<R>;
+export interface RecordOutcome<R, Reason extends string> {
+	plan: RecordPlan<R, Reason>;
 	/** The record's address, or null when the row has no record any more. */
 	uri: string | null;
 }
@@ -134,12 +148,12 @@ export interface RecordOutcome<R> {
  * record have different owners — this module owns the record, and the row belongs to whatever
  * service created it.
  */
-export async function syncRecord<Input, R extends object>(
+export async function syncRecord<Input, R extends object, Reason extends string>(
 	writer: RepoWriter,
-	kind: RecordKind<Input, R>,
+	kind: RecordKind<Input, R, Reason>,
 	input: Input,
 	existingUri: string | null,
-): Promise<RecordOutcome<R>> {
+): Promise<RecordOutcome<R, Reason>> {
 	const plan = planRecord(kind, input, existingUri);
 
 	switch (plan.action) {
@@ -176,7 +190,7 @@ export interface CommentInput {
 	subjectUri: string | null;
 }
 
-export const COMMENT_KIND: RecordKind<CommentInput, CommentRecord> = {
+export const COMMENT_KIND: RecordKind<CommentInput, CommentRecord, UnpublishableReaderReason> = {
 	collection: COMMENT_COLLECTION,
 	reasonFor: ({ comment, subjectUri }) => unpublishableCommentReason(comment, subjectUri),
 	toRecord: ({ comment, subjectUri }) => commentToRecord(comment, subjectUri),
@@ -188,7 +202,7 @@ export interface ReviewInput {
 	subjectUri: string | null;
 }
 
-export const REVIEW_KIND: RecordKind<ReviewInput, ReviewRecord> = {
+export const REVIEW_KIND: RecordKind<ReviewInput, ReviewRecord, UnpublishableReaderReason> = {
 	collection: REVIEW_COLLECTION,
 	reasonFor: ({ review, subjectUri }) => unpublishableReviewReason(review, subjectUri),
 	toRecord: ({ review, subjectUri }) => reviewToRecord(review, subjectUri),
@@ -200,7 +214,7 @@ export interface VoteInput {
 	subjectUri: string | null;
 }
 
-export const VOTE_KIND: RecordKind<VoteInput, VoteRecord> = {
+export const VOTE_KIND: RecordKind<VoteInput, VoteRecord, UnpublishableReaderReason> = {
 	collection: VOTE_COLLECTION,
 	reasonFor: ({ vote, subjectUri }) => unpublishableVoteReason(vote, subjectUri),
 	toRecord: ({ vote, subjectUri }) => voteToRecord(vote, subjectUri),
@@ -213,9 +227,47 @@ export interface FollowInput {
 	creatorDid: string | null;
 }
 
-export const FOLLOW_KIND: RecordKind<FollowInput, FollowRecord> = {
+export const FOLLOW_KIND: RecordKind<FollowInput, FollowRecord, UnpublishableReaderReason> = {
 	collection: FOLLOW_COLLECTION,
 	reasonFor: ({ follow, creatorDid }) => unpublishableFollowReason(follow, creatorDid),
 	toRecord: ({ follow, creatorDid }) => followToRecord(follow, creatorDid),
 	validator: followRecord,
 };
+
+// ── The creator's two ────────────────────────────────────────────────────────────────────
+//
+// ⚠️ A Work's listing is NOT here: it predates this module, has its own planner in
+// `atproto-repo.ts`, and is the one record whose row is canonical rather than an index. The
+// asymmetry is argued in the wiki's *Federation → Where the Data Is Canonical* and is the
+// reason the two have not been folded together.
+
+export const POST_COLLECTION = "org.anthers.post";
+export const PROJECT_COLLECTION = "org.anthers.project";
+
+export const POST_KIND: RecordKind<PublishablePost, PostRecord, UnpublishableCreatorReason> = {
+	collection: POST_COLLECTION,
+	reasonFor: (post) => unpublishablePostReason(post),
+	toRecord: (post) => postToRecord(post, { baseUrl: siteBaseUrl() }),
+	validator: postRecord,
+};
+
+export const PROJECT_KIND: RecordKind<
+	PublishableProject,
+	ProjectRecord,
+	UnpublishableCreatorReason
+> = {
+	collection: PROJECT_COLLECTION,
+	reasonFor: (project) => unpublishableProjectReason(project),
+	toRecord: (project) => projectToRecord(project, { baseUrl: siteBaseUrl() }),
+	validator: projectRecord,
+};
+
+/**
+ * Where the public pages these records point at live.
+ *
+ * ⚠️ Read at call time rather than captured at import, so a test can set it and so a worker
+ * that starts before its environment is fully populated does not bake in the fallback.
+ */
+function siteBaseUrl(): string {
+	return process.env.FRONTEND_URL?.trim() || "https://anthers.org";
+}
