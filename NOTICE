@@ -12,11 +12,11 @@ LICENSE.md, with the following exceptions.
   Terms and Creator Terms, licensed under the Creative Commons Attribution 4.0
   International license (https://creativecommons.org/licenses/by/4.0/).
 
-- Third-party files keep their own licenses. The icon markup in
-  packages/brand/src/generated/icons.ts is derived from artwork on The Noun
-  Project under the Creative Commons Attribution 3.0 license, and its creators are
-  credited in packages/brand/THIRD-PARTY.md. The web fonts in
-  apps/web/public/fonts/ are under the SIL Open Font License 1.1, described in
+- Third-party files keep their own licenses. The icons in packages/brand/svg/,
+  and the markup generated from them, are Noun Project artwork that Anthers uses
+  under its own license; each icon's artist and license are recorded in
+  packages/brand/provenance.json. The web fonts in apps/web/public/fonts/ are
+  under the SIL Open Font License 1.1, described in
   apps/web/public/fonts/THIRD-PARTY.md.
 
 The Apache License grants no rights to the Anthers name or logo.

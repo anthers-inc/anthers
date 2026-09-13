@@ -65,8 +65,8 @@ export const BADGE_ART: Record<Badge, { emblem: string; shape: string; color: st
 	// ⭐ **Emblems rather than emoji** (Parker, 2026-09-04). The ladder was drawn with 🫚 🌱
 	// 🌷 🌼, which is somebody else's artwork rendered in whatever emoji font the viewer
 	// happens to have — so the same four Badges looked different on every platform and
-	// matched nothing else on the site. These are chosen art, credited in THIRD-PARTY.md,
-	// and they go through the same per-shape box a creator's emblem does.
+	// matched nothing else on the site. These are chosen Noun Project art, recorded in
+	// packages/brand/provenance.json, and they go through the same per-shape box a creator's emblem does.
 	//
 	// ⭐ **All four are dark art on a light field** (Parker, 2026-09-04). The ladder ran
 	// three that way and `clay` the other way round — a light emblem on a dark field — so

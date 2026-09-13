@@ -1,5 +1,5 @@
 {
-	"note": "The curated set: source art promoted for use in code, with friendly ids. Authored, not generated — `bun run brand:add <icon-id> --as <friendly-id>` appends here, and hand edits are fine. `path` is relative to svg/ in the private icon library; `nounId` is the Noun Project icon id, which the filename also carries and which the codegen checks against it. `why` is the reason this particular asset was chosen, and it is the only place that reason survives.",
+	"note": "The curated set: source art promoted for use in code, with friendly ids. Authored, not generated — `bun run brand:add <icon-id> --as <friendly-id>` appends here, and hand edits are fine. `path` is relative to packages/brand/svg; `nounId` is the Noun Project icon id, which the filename also carries and which the codegen checks against it. `why` is the reason this particular asset was chosen, and it is the only place that reason survives.",
 	"icons": [
 		{
 			"id": "bee",

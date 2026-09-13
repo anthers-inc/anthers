@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.1.0",
 	"license": "Apache-2.0",
-	"description": "Anthers brand assets that ship — the official logo, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library.",
+	"description": "Anthers brand assets that ship — the official logo, plus recolor-ready icon markup generated from Noun Project icons. The source SVGs and the generated markup are both committed.",
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",

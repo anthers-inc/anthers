@@ -82,7 +82,7 @@ A Bun workspace monorepo. Four packages, two apps, one deployment. (The desktop 
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
-| `packages/brand` | The brand assets that ship — the official logo and its web-sized cuts, plus recolor-ready icon markup generated from a private icon library. The generated markup is committed, so nothing here needs that library; its third-party attribution is in `packages/brand/THIRD-PARTY.md`. |
+| `packages/brand` | The brand assets that ship — the official logo and its web-sized cuts, plus recolor-ready icon markup generated from Noun Project icons, with both the source SVGs and the generated markup committed. |
 
 Beyond those: `content/` is local dev object storage, `scripts/` holds the repo's own tooling, `.do/app.yaml` is the deployment spec, and the `Makefile` is the front door to nearly everything.
 
@@ -152,4 +152,3 @@ Anthers' code is licensed under the **Apache License, Version 2.0**. See [`LICEN
 
 A platform that asks creators to trust it with their work and their livelihood should be one they can walk away with, and a permissive license means anybody may take this code and run it. Every version published here stays available under the license it went out with, so if Anthers ever stops being worth trusting, the last good version is the escape hatch.
 
-Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md).
