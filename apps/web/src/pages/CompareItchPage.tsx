@@ -32,6 +32,7 @@ import {
 	PuzzlePieceIcon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { studioUrl } from "../lib/studio";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -297,8 +298,13 @@ export default function CompareItchPage() {
 							</thead>
 							<tbody>
 								<CompRow feature="Game hosting & downloads" anthers patreon />
-								<CompRow feature="HTML5 web games" anthers patreon />
-								<CompRow feature="Customizable project pages" anthers patreon />
+								{/* ⚠️ Anthers frames a web build the creator hosts elsewhere; itch.io hosts the
+								    build itself. Serving web builds is planned, not built. */}
+								<CompRow feature="HTML5 games hosted on the platform" patreon />
+								<CompRow feature="Browser games embedded from your own host" anthers />
+								{/* Customizable project pages are not built: `page_config` is written and read
+								    by nothing. */}
+								<CompRow feature="Customizable project pages" patreon />
 								<CompRow feature="Reviews & comments" anthers patreon />
 								<CompRow feature="Devlogs & posts" anthers patreon />
 								<CompRow feature="Video hosting" anthers />
@@ -398,18 +404,18 @@ export default function CompareItchPage() {
 					<Eyebrow>Come on over</Eyebrow>
 					<H2>Bring your itch.io projects with you</H2>
 					<Lede>
-						Already have projects on itch.io? Anthers' import tool can help you bring your project
-						metadata over so you can get started quickly. You don't have to choose one or the
+						An importer that brings an itch.io catalog across in one step is planned and not built
+						yet, so for now a project comes over by hand. You don't have to choose one or the
 						other—publish on both, and let your audience find you wherever they prefer.
 					</Lede>
 				</Reveal>
 				<Reveal delay={120}>
 					<div className="mt-9 flex flex-wrap justify-center gap-3">
 						<Link
-							to={isAuthenticated ? "/dashboard/import" : "/subscribe"}
+							to={isAuthenticated ? studioUrl("/works/new") : "/subscribe"}
 							className="btn btn-primary rounded-full px-7"
 						>
-							Import from itch.io
+							{isAuthenticated ? "Add a Work" : "Get Started"}
 						</Link>
 						<Link
 							to="/for-creators"

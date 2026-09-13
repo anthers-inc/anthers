@@ -321,7 +321,7 @@ export default function ForCreatorsPage() {
 						<MediaCard
 							icon={<PuzzlePieceIcon className="h-8 w-8" />}
 							title="Games"
-							description="Upload builds for Windows, Mac, Linux. Host HTML5 games playable in the browser. Manage versions, platforms, and pricing."
+							description="Upload builds for Windows, Mac and Linux, embed a web build you host so it plays in the browser, and set platforms and pricing."
 							features={["Multi-platform downloads", "Web game embedding", "Build variants"]}
 						/>
 					</Reveal>

@@ -66,23 +66,16 @@ function FeedSidebarContent({
 						>
 							<XMarkIcon className="w-3.5 h-3.5" />
 						</button>
+						{/* 🚨 This listed three layers — follows, the network's likes and purchases, and
+						    followed interests — while only the first has ever run. The other two are the
+						    Layered Feed lane and are named here as not built, which is what the FAQ says. */}
 						<p className="text-base-content/70 mb-2 text-xs">
-							Your feed shows content in three layers, blended by recency:
+							Your feed shows posts and releases from the creators you follow, newest first.
 						</p>
-						<ul className="text-base-content/60 space-y-1 text-xs">
-							<li>
-								<strong className="text-base-content/80">Primary:</strong> Posts from creators you
-								follow
-							</li>
-							<li>
-								<strong className="text-base-content/80">Network:</strong> Things your follows
-								liked, shared, or purchased
-							</li>
-							<li>
-								<strong className="text-base-content/80">Ambient:</strong> Content matching your
-								interests -- never paid promotion
-							</li>
-						</ul>
+						<p className="text-base-content/60 text-xs">
+							Things the people you follow recommend, and work matching tags you follow, are planned
+							and not built yet — and neither will ever be paid placement.
+						</p>
 						<p className="text-base-content/40 text-xs mt-2">
 							No engagement-optimizing algorithms.{" "}
 							<Link to="/faq" className="link link-primary">
@@ -306,7 +299,7 @@ export default function AuthenticatedHomePage() {
 					<EmptyState
 						icon={<RssIcon className="w-12 h-12" />}
 						title="Your feed is empty"
-						description="Follow creators to see their latest posts and releases here. Content from your network -- things your follows like, share, and purchase -- will also appear."
+						description="Follow creators to see their latest posts and releases here, newest first."
 						action={
 							<Link to="/discover" className="btn btn-primary btn-sm">
 								Discover creators
