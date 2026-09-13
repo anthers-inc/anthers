@@ -186,10 +186,10 @@ export default function ForUsersPage() {
 				</Reveal>
 			</Section>
 
-			{/* ① Support creators directly — the wedge, and the tip of the funnel */}
+			{/* Support creators directly — the wedge, and the tip of the funnel */}
 			<Section tint>
 				<Reveal>
-					<Eyebrow>① Support creators directly</Eyebrow>
+					<Eyebrow>Support creators directly</Eyebrow>
 					<H2>When you pay a creator, that's what they get</H2>
 					<Lede>
 						We all deserve a way to support the people we love without tossing more money onto a
@@ -243,11 +243,11 @@ export default function ForUsersPage() {
 				</Reveal>
 			</Section>
 
-			{/* ② The Anthers commons — free floor + support for Anthers + Time Pool.
+			{/* The Anthers commons — free floor + support for Anthers + Time Pool.
 			    Second, deliberately: see the resequencing note in the page header. */}
 			<Section>
 				<Reveal>
-					<Eyebrow>② The Anthers commons</Eyebrow>
+					<Eyebrow>The Anthers commons</Eyebrow>
 					<H2>A garden that stays free for everyone</H2>
 					<Lede>
 						Everything above is between you and a creator. This part is the ground it grows in, and
@@ -342,20 +342,15 @@ export default function ForUsersPage() {
 			    is the last set of objections standing between a reader and the button, so it
 			    belongs on the way to the button; putting it below would make the accordions
 			    the final thing on the page and leave the CTA stranded above them. The
-			    questions themselves live in `content/faq.tsx` and are shared with /faq.
-
-			    ⚠️ Untinted, which breaks the page's tint alternation against § ② above it —
-			    and the alternative breaks it worse. The closing band is tinted, so a tinted
-			    FAQ would run straight into it and cost the CTA its edge, which is the one
-			    band on the page that needs one. Two untinted sections separated by 48 units
-			    of padding read as two sections; a merged closing band reads as an afterthought
-			    to the FAQ. */}
-			<Section>
+			    questions themselves live in `content/faq.tsx` and are shared with /faq. */}
+			<Section tint>
 				<FAQBlock surface="users" />
 			</Section>
 
-			{/* Closing */}
-			<section className="bg-base-200/70">
+			{/* Closing — untinted, because the bands alternate from the hero down and this is
+			    the sixth. Tinting it to bookend the page would put two tinted bands together
+			    with the FAQ above, which reads as one band; see `Section`. */}
+			<section>
 				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Reveal>
 						<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />

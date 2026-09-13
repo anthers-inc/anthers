@@ -665,7 +665,7 @@ export default function ForCreatorsPage() {
 			</Section>
 
 			{/* Your identity & work — profile + project-page previews, one section */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Your identity &amp; work</Eyebrow>
 					<H2>Your home on the internet</H2>
@@ -801,12 +801,13 @@ export default function ForCreatorsPage() {
 			    lead with take-home and then cover what the argument never reaches — the
 			    setup, the one charge, and what publishing here commits you to. Shared with
 			    /faq via `content/faq.tsx`. */}
-			<Section>
+			<Section tint>
 				<FAQBlock surface="creators" />
 			</Section>
 
-			{/* Closing */}
-			<section className="bg-base-200/70">
+			{/* Closing — untinted, because the bands alternate from the hero down and this one
+			    falls on a plain band; see `Section`. */}
+			<section>
 				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Reveal>
 						<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />

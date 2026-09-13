@@ -28,11 +28,11 @@ export type DecorColors = {
 export const DARK: DecorColors = {
 	pollen: "oklch(68% 0.1 95)",
 	pollenScale: 0.35,
-	stem: "oklch(75% 0.15 150)",
+	stem: "oklch(66% 0.11 152)",
 	flower: "oklch(71% 0.13 92)",
-	accent: "oklch(79% 0.13 76)",
-	grass: "oklch(42.4% 0.078 151)",
-	casing: "oklch(14% 0.014 70)",
+	accent: "oklch(76% 0.12 76)",
+	grass: "oklch(36% 0.06 152)",
+	casing: "oklch(13.5% 0.016 158)",
 	vineOpacity: 0.72,
 	floorOpacity: 1,
 };

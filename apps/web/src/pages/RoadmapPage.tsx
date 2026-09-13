@@ -54,15 +54,18 @@ const ACCENT: Record<Bucket, { pill: string; rule: string }> = {
 	launched: { pill: "bg-success/15 text-success", rule: "border-success/25" },
 };
 
+/** The bands alternate from the tinted hero (band 0) down, whatever the bucket count; see `Section`. */
+const tintedBand = (band: number) => band % 2 === 0;
+
 export default function RoadmapPage() {
 	return (
 		<div>
 			<Hero />
 			{BUCKETS.map((bucket, i) => (
-				<BucketSection key={bucket.id} bucket={bucket} tint={i % 2 === 1} />
+				<BucketSection key={bucket.id} bucket={bucket} tint={tintedBand(i + 1)} />
 			))}
-			<Growth />
-			<Closing />
+			<Growth tint={tintedBand(BUCKETS.length + 1)} />
+			<Closing tint={tintedBand(BUCKETS.length + 2)} />
 		</div>
 	);
 }
@@ -268,9 +271,9 @@ function DocChip({ doc }: { doc: NonNullable<RoadmapItem["doc"]> }) {
  * linked here because the wiki is not served from this site yet — which is itself a goal on
  * this page.
  */
-function Growth() {
+function Growth({ tint }: { tint: boolean }) {
 	return (
-		<Section>
+		<Section tint={tint}>
 			<Reveal>
 				<Eyebrow>How Anthers grows</Eyebrow>
 				<H2>Behind a ceiling, on purpose</H2>
@@ -449,9 +452,9 @@ function GrowthBlock({ title, children }: { title: string; children: React.React
 	);
 }
 
-function Closing() {
+function Closing({ tint }: { tint: boolean }) {
 	return (
-		<Section tint>
+		<Section tint={tint}>
 			<Reveal>
 				<Eyebrow>Built in the open</Eyebrow>
 				<H2>Hold us to this</H2>
