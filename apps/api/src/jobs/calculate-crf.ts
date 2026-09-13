@@ -25,6 +25,7 @@ import {
 	crfSubsidies,
 	poolDistributions,
 	posts,
+	projects,
 	purchases,
 	users,
 	works,
@@ -123,11 +124,17 @@ export async function calculateCrfSubsidies() {
 			.limit(1);
 		if (existing) continue;
 
-		// Published-post count, kept for the subsidy audit record.
+		// Published post and project counts, kept for the subsidy audit record. They are two
+		// queries on purpose: `project_count` was written from the post count, so every snapshot
+		// reported a creator's devlogs as their projects.
 		const [publishedPostCount] = await db
 			.select({ count: count() })
 			.from(posts)
 			.where(and(eq(posts.creatorId, creator.id), eq(posts.isPublished, true)));
+		const [publishedProjectCount] = await db
+			.select({ count: count() })
+			.from(projects)
+			.where(and(eq(projects.creatorId, creator.id), eq(projects.isPublished, true)));
 
 		// Storage is a library concern now: sum the file sizes of the assets on the
 		// creator's content items (which own their downloadable variants directly).
@@ -158,7 +165,7 @@ export async function calculateCrfSubsidies() {
 				creatorEarnings: earnings.toString(),
 				subsidyAmount: "0.00",
 				storageBytes,
-				projectCount: publishedPostCount?.count ?? 0,
+				projectCount: publishedProjectCount?.count ?? 0,
 				postCount: publishedPostCount?.count ?? 0,
 			});
 			continue;
@@ -183,7 +190,7 @@ export async function calculateCrfSubsidies() {
 			creatorEarnings: earnings.toString(),
 			subsidyAmount: subsidy.toString(),
 			storageBytes,
-			projectCount: publishedPostCount?.count ?? 0,
+			projectCount: publishedProjectCount?.count ?? 0,
 			postCount: publishedPostCount?.count ?? 0,
 		});
 

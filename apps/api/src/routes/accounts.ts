@@ -169,6 +169,15 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
  */
 const usersId = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
 
+/**
+ * How many published projects a creator has — what a creator card labels "projects".
+ *
+ * It counted published **posts** under this name, in all three listings that carry it, so a
+ * card read "3 projects" for a creator with three devlogs and no project at all. One fragment
+ * now, so the three cannot drift apart again.
+ */
+const publishedProjectCount = sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = ${usersId} AND is_published = true)`;
+
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 /**
@@ -309,10 +318,7 @@ const accountRoutes = new Hono()
 					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 						"follower_count",
 					),
-				projectCount:
-					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${usersId} AND is_published = true)`.as(
-						"project_count",
-					),
+				projectCount: publishedProjectCount.as("project_count"),
 			})
 			.from(users)
 			.innerJoin(
@@ -520,10 +526,7 @@ const accountRoutes = new Hono()
 					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 						"follower_count",
 					),
-				projectCount:
-					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${usersId} AND is_published = true)`.as(
-						"project_count",
-					),
+				projectCount: publishedProjectCount.as("project_count"),
 				// What a creator actually makes, taken from what they have released rather
 				// than from anything they declare — a self-described medium drifts the moment
 				// the catalog does. Feeds the medium chips on /subscribe.
@@ -575,10 +578,7 @@ const accountRoutes = new Hono()
 					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 						"follower_count",
 					),
-				projectCount:
-					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${usersId} AND is_published = true)`.as(
-						"project_count",
-					),
+				projectCount: publishedProjectCount.as("project_count"),
 				...(currentUserId
 					? {
 							isFollowing:
