@@ -179,6 +179,15 @@ export async function setHidden(userId: number, itemId: number, hidden: boolean)
 	return !!row;
 }
 
+/**
+ * The most shelf entries one read returns.
+ *
+ * ⚠️ **Past this, the OLDEST entries are the ones left out**, because the newest save is the one
+ * somebody is looking for when they open the shelf, and the response says it was cut short so
+ * the page can say so. Every entry beyond it still exists and still counts as saved.
+ */
+export const SHELF_LIMIT = 500;
+
 /** Next position on the shelf — newest last, matching the order things were saved. */
 async function nextSortOrder(userId: number): Promise<number> {
 	const [row] = await db
