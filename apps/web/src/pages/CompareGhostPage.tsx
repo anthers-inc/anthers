@@ -291,7 +291,7 @@ export default function CompareGhostPage() {
 								<CompRow feature="Custom website & themes" ghost />
 								<CompRow feature="Built-in SEO tools" ghost />
 								<CompRow feature="Game hosting & downloads" anthers />
-								<CompRow feature="HTML5 web games" anthers />
+								<CompRow feature="Browser games embedded from your own host" anthers />
 								<CompRow feature="Video hosting" anthers />
 								<CompRow feature="Audio / music hosting" anthers />
 								<CompRow feature="Reviews & comments" anthers />
@@ -310,7 +310,8 @@ export default function CompareGhostPage() {
 								    Running your own node is the part still unbuilt. */}
 								<CompRow feature="An AT Protocol identity you own" anthers />
 								<CompRow feature="Headless CMS / API" ghost />
-								<CompRow feature="Import from other platforms" anthers ghost />
+								{/* Anthers' importers are planned and not built. */}
+								<CompRow feature="Import from other platforms" ghost />
 							</tbody>
 						</table>
 					</Card>
