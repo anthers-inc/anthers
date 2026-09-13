@@ -75,8 +75,12 @@ function mintToken(): string {
  *
  * Adult is refused here for the additional reason that it is **invisible** rather than merely
  * locked: minting a link for one would be an admission that it exists.
+ *
+ * 🚨 **Exported because a link is resolved as well as minted.** A Work corrected into Adult, or
+ * withdrawn, or gated, after its link was pasted somewhere must stop answering that link with
+ * its title — so `GET /share/:token` asks this again rather than trusting the day it was minted.
  */
-function shareable(work: {
+export function isShareable(work: {
 	visibility: string;
 	maturity: string;
 	streamEnabled: boolean;
@@ -109,7 +113,7 @@ export async function shareLinkFor(
 ): Promise<{ link: ResolvedShareLink } | { refusal: ShareRefusal }> {
 	const [work] = await db.select().from(works).where(eq(works.id, workId)).limit(1);
 	if (!work) return { refusal: "not_found" };
-	if (!shareable(work)) return { refusal: "not_shareable" };
+	if (!isShareable(work)) return { refusal: "not_shareable" };
 
 	const [existing] = await db
 		.select()
