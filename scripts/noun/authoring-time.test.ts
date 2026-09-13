@@ -3,10 +3,10 @@
  * The Noun Project integration runs at AUTHORING time and never at build time.
  *
  * 🚨 **This is the one rule the whole arrangement rests on, so it is a test rather
- * than a paragraph.** `packages/brand` commits `src/generated/icons.ts`, and the
- * codegen states outright that the app builds identically with the source library
- * absent — which is what lets somebody clone this repository and build a working
- * site with no API key, no network call and no access to anything private. Wiring a
+ * than a paragraph.** `packages/brand` commits `src/generated/icons.ts` and the SVGs
+ * it is made from, which is what lets somebody clone this repository, build a working
+ * site and regenerate the icons with no API key, no network call and no access to
+ * anything private. Wiring a
  * fetch into the build would put a credential and a third-party dependency on the
  * deploy path for artwork that changes twice a year, cost an icon call per asset on
  * every cold build, and give away the property that makes the repository forkable.
@@ -69,7 +69,7 @@ describe("no build step talks to the API", () => {
 			const scripts = (JSON.parse(read(manifest)) as { scripts?: Record<string, string> }).scripts;
 			for (const [name, cmd] of Object.entries(scripts ?? {})) {
 				if (name !== "build" && !name.startsWith("build:")) continue;
-				// `brand:build` is the codegen, which reads the private library from disk;
+				// `brand:build` is the codegen, which reads packages/brand/svg from disk;
 				// `brand:add` and `brand:search` are the ones that reach the network.
 				expect({ manifest, name, reachesApi: /brand-(add|search|usage)|noun\//.test(cmd) }).toEqual(
 					{ manifest, name, reachesApi: false },
@@ -89,24 +89,17 @@ describe("no build step talks to the API", () => {
 });
 
 describe("the fork property", () => {
-	it("⭐ builds the brand package with the private icon library absent", async () => {
-		// The generated markup is committed precisely so this works. `build-icons.ts`
-		// degrades with a pointer rather than failing, the same way `econ:figures` skips
-		// its wiki blocks when the vault is not there.
-		const generated = join(REPO, "packages/brand/src/generated/icons.ts");
-		const before = readFileSync(generated, "utf8");
-		const proc = Bun.spawn(["bun", "run", "scripts/build-icons.ts"], {
+	it("⭐ regenerates the committed markup from the committed SVGs", async () => {
+		// The fork property in full: everything the codegen reads is in the repository, so
+		// a fork can rebuild the icons as well as the app. `--check` compares in memory and
+		// writes nothing, so a drift fails here without touching the working tree.
+		const proc = Bun.spawn(["bun", "run", "scripts/build-icons.ts", "--check"], {
 			cwd: join(REPO, "packages/brand"),
-			env: { ...process.env, BRAND_SOURCE: join(REPO, "no-such-icon-library") },
 			stdout: "pipe",
 			stderr: "pipe",
 		});
-		const out = await new Response(proc.stdout).text();
-		expect(await proc.exited).toBe(0);
-		expect(out).toContain("icon source not found");
-		// And it left the committed markup exactly as it was, which is the half that
-		// makes the degradation safe rather than merely quiet.
-		expect(readFileSync(generated, "utf8")).toBe(before);
+		const err = await new Response(proc.stderr).text();
+		expect({ exit: await proc.exited, err }).toEqual({ exit: 0, err: "" });
 	});
 
 	it("commits the generated markup rather than a manifest to resolve", () => {
@@ -126,7 +119,7 @@ describe("no authoring script writes an SVG the API handed over", () => {
 	/**
 	 * 🚨 **The key-creation flow required agreeing that the app will not cache SVG
 	 * files** (Parker, 2026-09-04) — a term in neither the published Terms of Use nor
-	 * the API documentation. Writing an API-fetched SVG into the private library is the
+	 * the API documentation. Writing an API-fetched SVG into `packages/brand/svg` is the
 	 * clearest instance of it, so `brand:add` takes the file from `--file` and the
 	 * subscription supplies it.
 	 *

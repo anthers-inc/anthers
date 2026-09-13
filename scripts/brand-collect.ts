@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * File every downloaded SVG into the library at once, and regenerate.
+ * File every downloaded SVG into `packages/brand/svg` at once, and regenerate.
  *
  *     bun run brand:collect                 # sweep ~/Downloads
  *     bun run brand:collect ~/Desktop       # sweep somewhere else
@@ -12,12 +12,12 @@
  * punctuation around it is not ours to predict.
  *
  * ⚠️ **Do not narrow this to a naming scheme.** It matched `noun-<term>-<id>.svg` at first,
- * from the shape of the files already in the library — which are named the way *we* file
+ * from the shape of the files already in `packages/brand/svg` — which are named the way *we* file
  * them, not the way they arrive. A real download is `noun_Butterfly_3662383.svg`, and the
  * mismatch presented as the tool quietly finding nothing.
  *
  * ⚠️ **Needs no API key.** Provenance was fetched when the icon was chosen. This moves
- * files, promotes them out of the wanted list, and re-runs the two generators.
+ * files, promotes them out of the wanted list, and re-runs the codegen.
  */
 
 import {
@@ -36,20 +36,14 @@ import {
 	type CuratedIcon,
 	readProvenance,
 	readRegister,
+	SVG_ROOT,
 	writeRegister,
 } from "./noun/provenance";
-
-const REPO = join(import.meta.dir, "..");
-const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
 
 const args = Bun.argv.slice(2).filter((a) => !a.startsWith("--"));
 const keep = Bun.argv.includes("--keep");
 const from = args[0] ?? join(process.env.HOME ?? "", "Downloads");
 
-if (!existsSync(SVG_ROOT)) {
-	console.error(`brand:collect: the private icon library is not at ${SVG_ROOT}.`);
-	process.exit(1);
-}
 if (!existsSync(from)) {
 	console.error(`brand:collect: nothing at ${from}.`);
 	process.exit(1);
@@ -144,10 +138,7 @@ writeRegister({
 	wanted: reg.wanted.filter((w) => !arrived.has(w.nounId)),
 });
 
-for (const [label, cmd, cwd] of [
-	["icons.ts", ["bun", "run", "build"], BRAND_DIR],
-	["THIRD-PARTY.md", ["bun", "run", join(REPO, "scripts", "brand-attribution.ts")], REPO],
-] as const) {
+for (const [label, cmd, cwd] of [["icons.ts", ["bun", "run", "build"], BRAND_DIR]] as const) {
 	const proc = Bun.spawn([...cmd], { cwd, stdout: "inherit", stderr: "inherit" });
 	if ((await proc.exited) !== 0) throw new Error(`regenerating ${label} failed`);
 }

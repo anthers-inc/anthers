@@ -7,16 +7,16 @@
  *     bun run brand:add --backfill        # provenance for curated icons that lack it
  *
  * ⭐ **This is the seven-step ritual collapsed into one command.** Adding an emblem
- * meant finding it on the site, downloading the SVG, dropping it in the private
- * library, adding an entry to the codegen, running the codegen against a checkout,
- * committing the regenerated markup, and hand-editing THIRD-PARTY.md. Exactly one of
- * those steps carries a licensing distinction; the other six were bookkeeping, and
+ * meant finding it on the site, downloading the SVG, filing it in `packages/brand/svg`,
+ * adding an entry to the codegen, running the codegen, recording who drew it and under
+ * what license, and committing the result. Exactly one of those steps carries a
+ * licensing distinction; the rest were bookkeeping, and
  * bookkeeping is what makes iterating on a pick expensive enough that people settle
  * for the first thumbnail that looked right.
  *
  * 🚨 **Authoring time, never build time.** It writes files a person then commits.
  * `packages/brand` keeps committing its generated markup so a fork builds with no
- * key, no network and no private library — see authoring-time.test.ts, which fails
+ * key and no network — see authoring-time.test.ts, which fails
  * if this credential's name ever appears on the deploy path.
  *
  * ⚠️ **One icon call, for the metadata.** The file comes from `--file` and spends
@@ -38,14 +38,11 @@ import {
 	readCurated,
 	readProvenance,
 	readRegister,
+	SVG_ROOT,
 	writeCurated,
 	writeProvenance,
 	writeRegister,
 } from "./noun/provenance";
-
-const REPO = join(import.meta.dir, "..");
-/** Where the private icon library lives — a sibling checkout, per the repo naming convention. */
-const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
 
 const VALUE_FLAGS = new Set(["as", "why", "group", "file"]);
 const args = Bun.argv.slice(2);
@@ -93,11 +90,6 @@ function toProvenance(raw: NounIcon): IconProvenance {
 async function regenerate() {
 	const steps: { label: string; cmd: string[]; cwd: string }[] = [
 		{ label: "icons.ts", cmd: ["bun", "run", "build"], cwd: BRAND_DIR },
-		{
-			label: "THIRD-PARTY.md",
-			cmd: ["bun", "run", join(REPO, "scripts", "brand-attribution.ts")],
-			cwd: REPO,
-		},
 	];
 	for (const { label, cmd, cwd } of steps) {
 		const proc = Bun.spawn(cmd, { cwd, stdout: "inherit", stderr: "inherit" });
@@ -204,27 +196,18 @@ if (dryRun) {
 	process.exit(0);
 }
 
-if (!existsSync(SVG_ROOT)) {
-	console.error(
-		`\nbrand:add: the private icon library is not at ${SVG_ROOT}.\n` +
-			"           Clone it beside this repository, or set BRAND_SOURCE to a checkout.\n" +
-			"           Nothing was written; the metadata call has already been spent.",
-	);
-	process.exit(1);
-}
-
 /**
  * The icon's markup, which comes from disk and may never come from the API.
  *
  * 🚨 **The key-creation flow requires agreeing that the app will not cache SVG
- * files** (Parker, 2026-09-04), and writing an API-fetched SVG into the private
- * library is the clearest instance of that. So `--file` is not a fallback for a
+ * files** (Parker, 2026-09-04), and writing an API-fetched SVG into `packages/brand/svg`
+ * is the clearest instance of that. So `--file` is not a fallback for a
  * download that is temporarily refused — **it is the only permitted route**, and
  * the API supplies search and metadata rather than files.
  *
  * ⭐ **A subscription is what makes the file side unambiguous.** NounPro exists
- * precisely so a subscriber may download and keep artwork, and every one of the 648
- * icons already in the library arrived that way. Hand-fetching one file from the
+ * precisely so a subscriber may download and keep artwork, and every icon already in
+ * `packages/brand/svg` arrived that way. Hand-fetching one file from the
  * permalink is the single step that stays manual, and six of the seven still go.
  *
  * ⚠️ **This is a contract constraint and not a plan limitation, which matters
@@ -287,7 +270,7 @@ if (!/<svg[\s>]/i.test(svg)) {
 }
 mkdirSync(dirname(join(SVG_ROOT, relPath)), { recursive: true });
 writeFileSync(join(SVG_ROOT, relPath), svg);
-console.log(`  wrote ${relPath} (${svg.length} bytes) into the private library`);
+console.log(`  wrote ${relPath} (${svg.length} bytes) into packages/brand/svg`);
 
 curated.push({
 	id: friendly,
