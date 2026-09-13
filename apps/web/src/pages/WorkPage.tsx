@@ -34,10 +34,8 @@ import ComicReader from "../components/media/ComicReader";
 import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
-import CommentThread from "../components/post/CommentThread";
 import InlineUnlock from "../components/post/InlineUnlock";
 import StickerBar from "../components/post/StickerBar";
-import VoteControl from "../components/post/VoteControl";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
@@ -517,26 +515,23 @@ export default function WorkPage() {
 			    particular Work can be shared — a client-side copy of that rule would be free to
 			    disagree, and the direction that matters is a stale page offering to share
 			    something that has since become gated or Adult. */}
-			{/* ⭐ A like on a Work needs NO access, unlike a review or a comment. A Sticker
-			    rides a like and may be given on any Work "gated or not, purchased or not",
-			    because it is a gift to the creator rather than payment for the Work — so
-			    gating this control would make that rule unbuildable. */}
-			<div className="flex items-center justify-between">
-				<VoteControl subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
-				{isAuthenticated && !shareToken && <ShareLinkButton workId={work.id} />}
-			</div>
+			{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
+			    (Parker, 2026-09-13). */}
+			{isAuthenticated && !shareToken && (
+				<div className="flex items-center justify-end">
+					<ShareLinkButton workId={work.id} />
+				</div>
+			)}
 
-			{/* A Sticker rides a like and follows the same access rule: it may be given on any
-			    Work, gated or not, purchased or not, because it is a gift to the creator
-			    rather than payment for the Work. */}
+			{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
+			    a gift to the creator rather than payment for the Work. It moves into the review
+			    composer when Stickers become attachments to reviews, comments and votes. */}
 			<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
 
 			{/* Reviews — a verdict on the work itself, which is the only thing a review
 			    was ever about. Gated behind access on the server: you can't review what you
 			    haven't been able to see. */}
 			<WorkReviews workId={work.id} />
-
-			<CommentThread subject={{ kind: "work", id: work.id }} canComment={canAccess} />
 
 			{/* Where this Work has been announced — the other half of an inert reference. */}
 			{work.postedIn && work.postedIn.length > 0 && (

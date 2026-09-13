@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A comment thread over any commentable subject.
+ * The comment thread under a post.
  *
- * One component for both surfaces, because a Post thread and a Work thread are the same
- * conversation UI asked about different subjects — and because the report affordance and
- * the "hidden comments simply aren't here" behavior are things it would be easy to get
- * subtly wrong in a second copy. The server already shares its read; this shares the view.
- *
- * A Work needed a thread at all because it can be released, consumed and paid for with no
- * post in sight; under the old model there was nowhere to say anything about it.
+ * 🚨 **Only posts have comments.** A Work takes no comments and no votes, because a review is
+ * the only feedback a Work accepts (Parker, 2026-09-13).
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
@@ -19,32 +14,24 @@ import ReportDialog from "../ui/ReportDialog";
 import VoteControl from "./VoteControl";
 
 interface CommentThreadProps {
-	subject: { kind: "post"; slug: string } | { kind: "work"; id: number };
-	/**
-	 * Set false to hide the composer — a Work the viewer can't open takes no comments,
-	 * because commenting on something you haven't seen isn't a conversation.
-	 */
-	canComment?: boolean;
+	subject: { kind: "post"; slug: string };
 }
 
-export default function CommentThread({ subject, canComment = true }: CommentThreadProps) {
+export default function CommentThread({ subject }: CommentThreadProps) {
 	const { isAuthenticated } = useAuth();
 	const [comments, setComments] = useState<Comment[]>([]);
 	const [body, setBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [reporting, setReporting] = useState<number | null>(null);
 
-	const key = subject.kind === "post" ? subject.slug : String(subject.id);
+	const key = subject.slug;
 
 	const fetchComments = useCallback(async () => {
-		const res =
-			subject.kind === "post"
-				? await client.api.content.posts[":slug"].comments.$get({ param: { slug: key } })
-				: await client.api.content.works[":id"].comments.$get({ param: { id: key } });
+		const res = await client.api.content.posts[":slug"].comments.$get({ param: { slug: key } });
 		if (!res.ok) return;
 		const data = (await res.json()) as unknown as { comments: Comment[] };
 		setComments(data.comments ?? []);
-	}, [subject.kind, key]);
+	}, [key]);
 
 	useEffect(() => {
 		fetchComments().catch(() => {});
@@ -55,16 +42,10 @@ export default function CommentThread({ subject, canComment = true }: CommentThr
 		if (!body.trim()) return;
 		setSubmitting(true);
 		try {
-			const res =
-				subject.kind === "post"
-					? await client.api.content.posts[":slug"].comments.$post({
-							param: { slug: key },
-							json: { body: body.trim() },
-						})
-					: await client.api.content.works[":id"].comments.$post({
-							param: { id: key },
-							json: { body: body.trim() },
-						});
+			const res = await client.api.content.posts[":slug"].comments.$post({
+				param: { slug: key },
+				json: { body: body.trim() },
+			});
 			if (res.ok) {
 				setBody("");
 				await fetchComments();
@@ -78,7 +59,7 @@ export default function CommentThread({ subject, canComment = true }: CommentThr
 		<div className="border-t border-base-300 pt-6">
 			<h2 className="text-xl font-bold mb-4">Comments ({comments.length})</h2>
 
-			{isAuthenticated && canComment && (
+			{isAuthenticated && (
 				<form onSubmit={submit} className="mb-6">
 					<textarea
 						className="textarea textarea-bordered w-full"

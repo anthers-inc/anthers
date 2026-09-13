@@ -44,7 +44,7 @@
  * left to a person.
  *
  * ⭐ **It drives HTTP and nothing else.** No `DATABASE_URL`, no direct writes, no fixture
- * tables — the Work and the comment are created the way a real creator would, from the
+ * tables — the draft post and the comment are created the way a real creator would, from the
  * operator's own session, so running it against production is an ordinary use of the product rather than an
  * exception to the rule that fixture scripts never touch it. That also means it exercises
  * the real path: CSRF, sessions, validation, and the ingress in front of all of it.
@@ -60,7 +60,7 @@
  *
  *   --path      which single report to file: `public` (the no-account form, the default) or
  *               `in-app` (the authenticated route, which needs --admin-login and creates a
- *               private Work and a comment from that account to report, removing them
+ *               draft post and a comment from that account to report, removing them
  *               afterwards).
  *   --wait      seconds to wait for the retry sweep before giving up (default 360; the
  *               cron runs every five minutes, so anything under 300 can report a false
@@ -285,45 +285,43 @@ async function signInAdmin(login: string, password: string): Promise<string | nu
 }
 
 /**
- * A private Work and a comment on it, made by the operator — the minimum an in-app report needs.
+ * A draft post and a comment on it, made by the operator — the minimum an in-app report needs.
  *
  * Made from the operator's own session, because no other account can be signed in from here:
- * accounts come from an emailed-code ceremony. The comment is reported by the same account that
- * wrote it, which the moderation service allows on purpose for content, so nothing else is
- * needed. The Work stays private, so nobody else ever sees the fixture.
+ * accounts come from an emailed-code ceremony. A post rather than a Work because only posts
+ * take comments. It stays a draft, so nobody else ever sees the fixture, and drafting a post
+ * needs only creator mode on the operator's account. The comment is reported by the same
+ * account that wrote it, which the moderation service allows on purpose for content.
  */
 async function createFixture(cookie: string): Promise<{
 	cookie: string;
-	workId: number;
+	postSlug: string;
 	commentId: number;
 } | null> {
-	const work = await call("/api/content/works", {
+	const draft = await call("/api/content/posts", {
 		method: "POST",
 		cookie,
-		body: JSON.stringify({
-			type: "text",
-			title: `Probe fixture ${TAG}`,
-			bodyHtml: "<p>Fixture.</p>",
-		}),
+		body: JSON.stringify({ title: `Probe fixture ${TAG}`, isPublished: false }),
 	});
-	if (work.status !== 201) {
-		log(`  ! could not create the fixture Work (${work.status}): ${JSON.stringify(work.body)}`);
+	if (draft.status !== 201) {
+		log(`  ! could not create the fixture post (${draft.status}): ${JSON.stringify(draft.body)}`);
+		if (draft.status === 403) log("    403 means the operator account is not in creator mode.");
 		return null;
 	}
-	const workId = work.body.work.id as number;
+	const postSlug = draft.body.post.slug as string;
 
-	const comment = await call(`/api/content/works/${workId}/comments`, {
+	const comment = await call(`/api/content/posts/${postSlug}/comments`, {
 		method: "POST",
 		cookie,
 		body: JSON.stringify({ body: `Fixture comment for ${TAG}. Safe to delete.` }),
 	});
 	if (comment.status !== 201) {
 		log(`  ! could not create the fixture comment (${comment.status})`);
-		return null;
+		return { cookie, postSlug, commentId: 0 };
 	}
 
-	log(`  · fixture: Work ${workId}, comment ${comment.body.comment.id}`);
-	return { cookie, workId, commentId: comment.body.comment.id as number };
+	log(`  · fixture: draft post ${postSlug}, comment ${comment.body.comment.id}`);
+	return { cookie, postSlug, commentId: comment.body.comment.id as number };
 }
 
 interface Probe {
@@ -413,7 +411,8 @@ async function main() {
 		fixture = adminCookie ? await createFixture(adminCookie) : null;
 		if (!adminCookie) log("  ! the admin sign-in failed, so there is no account to report from");
 		state.fixture = fixture;
-		if (fixture) {
+		// A fixture with no comment still comes back, so the cleanup can remove its draft post.
+		if (fixture && fixture.commentId > 0) {
 			log("Filing the in-app report…");
 			// `csam` on purpose: it is the reason the form steers a real child-safety
 			// reporter toward, and an escalation wired only to `illegal` would pass every
@@ -551,8 +550,8 @@ async function readEscalated(
  *
  * 🚨 **Reports are closed, never deleted.** A report is a record, and the whole moderation
  * model rests on removal being a state — so cleanup dismisses them, which is the outcome
- * an operator would reach for a report that turned out to need nothing. The Work and its
- * comment do go, because those are fixture content rather than a record of anything.
+ * an operator would reach for a report that turned out to need nothing. The draft post and
+ * its comment do go, because those are fixture content rather than a record of anything.
  *
  * No account is created, so none is left behind.
  */
@@ -563,17 +562,15 @@ async function cleanup(
 ): Promise<void> {
 	log("\nCleaning up…");
 	if (fixture) {
-		const del = await call(`/api/content/works/${fixture.workId}?force=true`, {
+		// Deleting the post takes its comments with it.
+		const del = await call(`/api/content/posts/${fixture.postSlug}`, {
 			method: "DELETE",
 			cookie: fixture.cookie,
 		});
-		// 204 is a real delete; 200 means the Work was WITHDRAWN rather than destroyed
-		// because somebody had bought it, which cannot happen to a fixture but is the
-		// documented other outcome and is not a failure.
 		log(
 			del.status === 204 || del.status === 200
-				? `  · removed Work ${fixture.workId} and its comment`
-				: `  ! could not remove Work ${fixture.workId} (${del.status})`,
+				? `  · removed the draft post ${fixture.postSlug} and its comment`
+				: `  ! could not remove the draft post ${fixture.postSlug} (${del.status})`,
 		);
 	}
 	if (!adminCookie) {
