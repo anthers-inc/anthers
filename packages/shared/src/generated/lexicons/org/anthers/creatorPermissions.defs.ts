@@ -10,6 +10,6 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.project","org.anthers.work","org.anthers.post"],"action":["create","update","delete"]})], {"title":"Your Anthers Catalog","detail":"Keep a listing for each project, work and post you publish in your own repository — its title, description and a link, never the work itself and never who may open it."});
+const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.project","org.anthers.work","org.anthers.post"],"action":["create","update","delete"]})], {"title":"Your Anthers Catalog","detail":"Keep a public record of each project, work and post you publish in your own repository: a project's or work's title, description and link, and a post's text and link. The files of a work, and who may open it, never go there."});
 
 export { main };
