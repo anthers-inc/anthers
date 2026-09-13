@@ -124,7 +124,6 @@ const PRIVACY: LegalDocument = {
 		"## Young people",
 		"**You have to be 13 or older to have an Anthers account.** We do not knowingly collect information from anyone under 13, and if we learn that we have, we delete it. There is no under-13 account and no plan for one — if we ever build something for younger children, it will be a separate service built for them, not a filtered corner of this one.",
 		"**We don't ask your age, and we don't verify it.** That is deliberate. Verifying age properly means collecting identity documents or dates of birth from everyone, and we are not willing to hold that about you in order to check a fact about a few. It means someone under 13 could sign up by not telling us — we would rather say that plainly than claim a protection we don't have.",
-		"**Content made for young audiences is free, and funded by us**, never advertising and never engagement-optimized. There is no advertising anywhere on Anthers and no mechanism anywhere that profits from anyone's attention, at any age.",
 		"Some things about this service are worth a parent knowing, and they're set out in plain language on our [page for parents and guardians](/parents) rather than buried here.",
 
 		"## Security",

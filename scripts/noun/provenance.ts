@@ -57,6 +57,12 @@ export interface IconProvenance {
 /**
  * The licenses Anthers may redistribute under, keyed by the vendor's own string.
  *
+ * ⚠️ **The key is the license the Noun Project offers an icon under, not the license Anthers
+ * holds it under.** Every `creative-commons-attribution` icon is used under the Noun Project's
+ * Royalty-Free License, which Anthers pays for through its NounPro subscription and which is
+ * CC BY 3.0 without the attribution requirement. The table still keys on the vendor's string
+ * because that is what decides whether the Royalty-Free License can reach an icon at all.
+ *
  * 🚨 **Unknown means fail, never means allow.** An icon whose `license_description`
  * is not in this table stops the build rather than passing quietly, because the one
  * failure mode that matters here is redistributing art under terms nobody read. Adding
@@ -65,8 +71,8 @@ export interface IconProvenance {
  */
 export const LICENSES: Record<string, { label: string; url: string | null }> = {
 	"creative-commons-attribution": {
-		label: "CC BY 3.0",
-		url: "https://creativecommons.org/licenses/by/3.0/",
+		label: "Royalty-Free (CC BY 3.0, no attribution)",
+		url: "https://thenounproject.com/legal/",
 	},
 	"public-domain": { label: "Public Domain", url: null },
 };
