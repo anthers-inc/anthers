@@ -37,6 +37,7 @@ import {
 	runDueDeletions,
 } from "../services/account-deletion.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -107,7 +108,7 @@ beforeAll(async () => {
 	leaver = await signUp(leaverName);
 	stayer = await signUp(stayerName);
 	await signUp(buyerName);
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${leaverName}`);
+	await enablePayouts(leaverName);
 
 	leaverId = (await idOf(leaverName))!;
 	buyerId = (await idOf(buyerName))!;

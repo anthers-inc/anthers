@@ -23,6 +23,7 @@ import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
 import { hideSubject, restoreSubject } from "../services/moderation.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayouts } from "./payouts-fixture.js";
 
 purgeAccountsCreatedHere();
 
@@ -83,7 +84,7 @@ beforeAll(async () => {
 	host = await signUp(hostName);
 	abe = await signUp(abeName);
 	bee = await signUp(beeName);
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${hostName}`);
+	await enablePayouts(hostName);
 
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });

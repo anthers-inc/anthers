@@ -14,13 +14,14 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, comments, stickers, users } from "@anthers/db/schema";
+import { accounts, comments, posts, stickers, stripeAccounts, users } from "@anthers/db/schema";
 import { stickerBudgetFor } from "@anthers/shared/constants";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { insertWork } from "./work-fixtures.js";
+import { insertWork, testPublicId } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -74,6 +75,8 @@ describe("giving a Sticker", () => {
 		giverId = byName.get(`stk_giver_${RUN}`)!;
 		creatorId = byName.get(`stk_creator_${RUN}`)!;
 		strangerId = byName.get(`stk_other_${RUN}`)!;
+		// A Sticker only reaches a creator who can be paid, which publishing already required.
+		await enablePayoutsFor(creatorId);
 
 		// The giver is at Blossom, so they have $2.00 of their Time Pool to direct.
 		await db
@@ -120,6 +123,62 @@ describe("giving a Sticker", () => {
 		});
 		expect(res.status).toBe(403);
 		expect((await res.json()).code).toBe("not_yours");
+	});
+
+	it("🚨 finds nothing to sticker on a Work that is not released, or a post that is a draft", async () => {
+		const privateWork = await insertWork({
+			creatorId,
+			type: "text",
+			title: `Private ${RUN}`,
+			visibility: "private",
+		});
+		const onWork = await give(giverCookie, {
+			subjectType: "work",
+			subjectId: privateWork.id,
+			artKey: "butterfly-small",
+		});
+		expect(onWork.status).toBe(404);
+
+		const [draft] = await db
+			.insert(posts)
+			.values({
+				creatorId,
+				publicId: testPublicId(),
+				slug: `stk-draft-${RUN}`,
+				title: "Draft",
+			})
+			.returning({ id: posts.id });
+		try {
+			const onPost = await give(giverCookie, {
+				subjectType: "post",
+				subjectId: draft.id,
+				artKey: "butterfly-small",
+			});
+			expect(onPost.status).toBe(404);
+		} finally {
+			await db.delete(posts).where(eq(posts.id, draft.id));
+		}
+	});
+
+	it("🚨 refuses a Sticker for a creator Stripe is holding, and directs nothing", async () => {
+		await db
+			.update(stripeAccounts)
+			.set({ payoutsEnabled: false })
+			.where(eq(stripeAccounts.userId, creatorId));
+		const before = (await db.select().from(stickers).where(eq(stickers.giverId, giverId))).length;
+		try {
+			const res = await give(giverCookie, {
+				subjectType: "work",
+				subjectId: workId,
+				artKey: "butterfly-small",
+			});
+			expect(res.status).toBe(409);
+			expect((await res.json()).code).toBe("creator_not_payable");
+			const after = await db.select().from(stickers).where(eq(stickers.giverId, giverId));
+			expect(after.length).toBe(before);
+		} finally {
+			await enablePayoutsFor(creatorId);
+		}
 	});
 
 	it("refuses a Sticker on your own work — that is not a gift, it is a loop", async () => {
@@ -297,6 +356,7 @@ describe("the Stickers on a page", () => {
 		const byName = new Map(rows.map((r) => [r.username, r.id]));
 		giverId = byName.get(`stk_show_${RUN}`)!;
 		creatorId = byName.get(`stk_showcreator_${RUN}`)!;
+		await enablePayoutsFor(creatorId);
 		await db
 			.insert(accounts)
 			.values({

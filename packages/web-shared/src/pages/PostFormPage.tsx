@@ -15,6 +15,7 @@ import RichTextEditor from "../components/editor/RichTextEditor";
 import PostWorkLinks from "../components/post/PostWorkLinks";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { usePayoutsReady } from "../lib/payouts";
 import { postUrl } from "../lib/postUrl";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
@@ -67,6 +68,11 @@ export default function PostFormPage() {
 	// Optional auto-publish time (datetime-local string). Non-empty = scheduled draft.
 	const [scheduledFor, setScheduledFor] = useState<string>("");
 
+	// Whether the post is already live, because only going live needs payout setup — a live
+	// post stays editable after payouts lapse.
+	const [wasPublished, setWasPublished] = useState(false);
+	const payoutsReady = usePayoutsReady();
+
 	// ── UI ──
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -95,6 +101,7 @@ export default function PostFormPage() {
 					setBodyHtml(post.bodyHtml ?? "");
 					setShowOnTimeline(post.showOnTimeline);
 					setIsPinned(post.isPinned);
+					setWasPublished(post.isPublished === true);
 					setScheduledFor(isoToLocalInput(post.scheduledFor));
 					setLinkedWorks((post.linkedWorks ?? []).map((r) => r.work));
 				} catch {
@@ -341,6 +348,20 @@ export default function PostFormPage() {
 						</p>
 					</FormField>
 
+					{payoutsReady === false && !wasPublished && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								<strong>Set up payouts before publishing.</strong> A post can be paid for with
+								Stickers, and payout setup is also what lets us say every creator here is an adult.
+								You can keep this as a draft until then.{" "}
+								<Link to={studioUrl("/settings")} className="link">
+									Set it up in Studio settings
+								</Link>
+								.
+							</span>
+						</div>
+					)}
+
 					{linkedWorks.some((w) => w.visibility === "private") && (
 						<div className="alert alert-info">
 							<span>
@@ -372,7 +393,7 @@ export default function PostFormPage() {
 								type="button"
 								className="btn btn-primary"
 								onClick={() => handleSubmit(false)}
-								disabled={saving}
+								disabled={saving || payoutsReady === false}
 							>
 								{saving ? "Saving..." : "Schedule"}
 							</button>
@@ -381,7 +402,7 @@ export default function PostFormPage() {
 								type="button"
 								className="btn btn-primary"
 								onClick={() => handleSubmit(true)}
-								disabled={saving}
+								disabled={saving || (payoutsReady === false && !wasPublished)}
 							>
 								{saving ? "Saving..." : "Publish Post"}
 							</button>

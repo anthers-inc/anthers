@@ -98,12 +98,7 @@ import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { embedCreator } from "../lib/handles.js";
-import {
-	CREATOR_REQUIRED_MESSAGE,
-	getOptionalUserId,
-	requireAuth,
-	requireCreator,
-} from "../middleware/auth.js";
+import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -138,12 +133,7 @@ import {
 	parentalPolicyFor,
 	parentalVisibility,
 } from "../services/parental-controls.js";
-import {
-	canBePaid,
-	NO_PAYOUT_ACCOUNT,
-	payoutRefusalMessage,
-	payoutStanding,
-} from "../services/payouts.js";
+import { canBePaid, publishRefusal } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
@@ -2103,6 +2093,13 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
+		// Drafting takes creator mode, which `requireCreator` has checked; publishing or
+		// scheduling takes payout setup as well.
+		if (data.isPublished || data.scheduledFor != null) {
+			const refusal = await publishRefusal(user, "publish");
+			if (refusal) return c.json(refusal.body, refusal.status);
+		}
+
 		// A post may only link the caller's own Works. Cross-creator references are a real
 		// future feature (collabs, bundles) but they need a consent story first.
 		const owned = await ownedWorkIds(data.workIds, user.id);
@@ -2272,13 +2269,17 @@ const contentRoutes = new Hono()
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		// 🚨 Putting a post in front of anyone is creator-only, and so is scheduling it, since the
-		// sweep publishes a scheduled draft with nobody asking. Everything else stays open to the
-		// owner who has since left creator mode — above all unpublishing, which is the safe
-		// direction and the one that takes a record back off the network.
-		const goesLive = data.isPublished === true || data.scheduledFor != null;
-		if (goesLive && !user.isCreator) {
-			return c.json({ error: CREATOR_REQUIRED_MESSAGE, code: "creator_required" }, 403);
+		// 🚨 Putting a post in front of anyone takes a fully set-up creator, and so does
+		// scheduling it, since the sweep publishes a scheduled draft with nobody asking. Asked
+		// only on the transition into published: the editor sends `isPublished: true` on every
+		// save of a live post, and a creator whose payouts lapsed must still be able to fix a
+		// typo in it. Everything else stays open to the owner — above all unpublishing, which is
+		// the safe direction and the one that takes a record back off the network.
+		const goesLive =
+			(data.isPublished === true && !existing.isPublished) || data.scheduledFor != null;
+		if (goesLive) {
+			const refusal = await publishRefusal(user, "publish");
+			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
 		// Linked Works must belong to the caller — validated before any writes so a bad
@@ -3594,40 +3595,20 @@ const contentRoutes = new Hono()
 		}
 
 		// 🚨 **The first readiness condition, and the only one that is about the CREATOR
-		// rather than the Work** (Parker, 2026-08-28). Payout setup must be complete before
-		// anything is released. `services/payouts.ts` carries the two reasons in full — it
-		// is what makes every creator here a verified adult, since Stripe checks identity
-		// and Anthers deliberately checks nothing; and it means no released Work is
-		// payout-ineligible, which matters because ungated work earns from the Time Pool by
-		// the time people spend with it.
-		//
-		// ⚠️ **The code did not enforce this until now and the Creator Terms always said it
-		// did** — *"a completed payment setup with Stripe before you can publish anything"*.
-		// `/parents` had grown a paragraph describing the gap as a gap, so the three
-		// disagreed in a way only a reader comparing them would catch. Both documents now
-		// describe this gate.
+		// rather than the Work.** Releasing takes a fully set-up creator — creator mode and
+		// completed payout setup — and `publishRefusal` carries the reasons: it is what makes
+		// every creator here a verified adult, since Stripe checks identity and Anthers
+		// deliberately checks nothing, and it means no released Work is payout-ineligible,
+		// which matters because ungated work earns from the Time Pool by the time people spend
+		// with it.
 		//
 		// Placed after the rating is written and before the Work-shaped checks: it is the
 		// cheapest to evaluate and the most fundamental, but the "a refusal never costs the
-		// creator their declaration" rule above applies to it exactly as to the others.
-		// ⚠️ `creatorId` is nullable, and a Work with nobody behind it fails this for the
-		// same reason a Work with an unfinished account does: there is no one to pay. Read
-		// as "not connected", which is true and produces the right message.
+		// creator their declaration" rule above applies to it exactly as to the others. The
+		// owner check above makes the caller the Work's creator, so the caller is who is asked.
 		if (releasing) {
-			const standing =
-				work.creatorId == null ? NO_PAYOUT_ACCOUNT : await payoutStanding(work.creatorId);
-			if (!standing.ready) {
-				return c.json(
-					{
-						error: payoutRefusalMessage(standing),
-						code: "payouts_required",
-						// So the Studio can send them to the right place rather than guessing
-						// which half of the problem they have.
-						connected: standing.connected,
-					},
-					409,
-				);
-			}
+			const refusal = await publishRefusal(user, "release");
+			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
 		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
@@ -4291,6 +4272,13 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
+		// A draft project is open to anyone, as a draft Work is; publishing one takes a fully
+		// set-up creator, the same as releasing a Work or publishing a post.
+		if (data.isPublished) {
+			const refusal = await publishRefusal(user, "publish");
+			if (refusal) return c.json(refusal.body, refusal.status);
+		}
+
 		const [existing] = await db
 			.select({ id: projects.id })
 			.from(projects)
@@ -4438,12 +4426,19 @@ const contentRoutes = new Hono()
 		const data = c.req.valid("json");
 
 		const [existing] = await db
-			.select({ id: projects.id, creatorId: projects.creatorId })
+			.select({ id: projects.id, creatorId: projects.creatorId, isPublished: projects.isPublished })
 			.from(projects)
 			.where(eq(projects.slug, slug))
 			.limit(1);
 		if (!existing) return c.json({ error: "Project not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
+
+		// Asked only on the transition into published, because the editor sends `isPublished`
+		// with every save and an already-published project must stay editable.
+		if (data.isPublished === true && !existing.isPublished) {
+			const refusal = await publishRefusal(user, "publish");
+			if (refusal) return c.json(refusal.body, refusal.status);
+		}
 
 		if (data.slug && data.slug !== slug) {
 			const [taken] = await db

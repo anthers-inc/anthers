@@ -30,6 +30,7 @@ import app from "../index";
 import { QUEUE_LIMIT } from "../services/moderation.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -108,9 +109,8 @@ beforeAll(async () => {
 	reporter = await signUp(reporterName);
 	const subject = await signUp(subjectName);
 	await signUp(ghostName);
-	await db.execute(
-		sql`UPDATE users SET is_admin = true, is_creator = true WHERE username = ${adminName}`,
-	);
+	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+	await enablePayouts(adminName);
 	await db.execute(
 		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE username = ${subjectName}`,
 	);

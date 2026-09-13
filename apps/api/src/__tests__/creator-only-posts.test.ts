@@ -12,6 +12,9 @@
  * 🚨 **What must stay open is the owner taking a post down.** Somebody who leaves creator mode
  * still owns what they posted, and unpublishing is what removes its record from the network.
  *
+ * Publishing also takes completed payout setup, which `payouts-release-gate.test.ts` covers;
+ * every creator here has it, so creator mode is the only variable.
+ *
  * ⚠️ **`queue.send` is replaced for the duration**, so a refused request can be shown to have
  * asked for no record, and nothing is actually enqueued.
  */
@@ -23,6 +26,7 @@ import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
 import { QUEUES, queue } from "../jobs/queue";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 purgeAccountsCreatedHere();
@@ -91,8 +95,9 @@ beforeAll(async () => {
 	maker = await signUp(makerName);
 	leaver = await signUp(leaverName);
 	reader = await signUp(readerName);
-	await setCreator(maker.id, true);
-	await setCreator(leaver.id, true);
+	// Both start fully set up, so creator mode is the only thing this suite takes away.
+	await enablePayoutsFor(maker.id);
+	await enablePayoutsFor(leaver.id);
 
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });
