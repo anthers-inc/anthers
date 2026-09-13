@@ -26,10 +26,11 @@ data/*
 # ─── IDE ───
 .vscode/
 .idea/
-# The Sublime project file IS tracked — it carries the folder exclusions and the
-# make-based build systems, which are the same for everyone. Its sibling
-# workspace file is per-user UI state (open tabs, find history, unsaved buffers)
-# that Sublime rewrites constantly, so that one stays local.
+# Sublime project and workspace files stay local, like the editor folders above. A
+# project file describes how one person lays out this checkout beside its sibling
+# repositories, which differs between machines, and the workspace file is per-user
+# UI state (open tabs, find history, unsaved buffers) that Sublime rewrites constantly.
+*.sublime-project
 *.sublime-workspace
 *.swp
 *.swo
