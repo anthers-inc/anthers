@@ -1,11 +1,9 @@
-<p align="center">
+<p align="left">
 	<picture>
 		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/logo/web/lockup-tagline-dark.png">
 		<img alt="Anthers" src="./packages/brand/logo/web/lockup-tagline-light.png" width="420">
 	</picture>
 </p>
-
-# Anthers
 
 Anthers is a non-profit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform. A harmonious ecosystem where we can all nurture a creative internet worth loving again.
 
@@ -150,4 +148,3 @@ make dev
 Anthers' code is licensed under the **Apache License, Version 2.0**. See [`LICENSE.md`](./LICENSE.md). [`NOTICE`](./NOTICE) lists what the license does not cover: the Anthers logo, the text of the legal instruments (which is CC BY 4.0), and third-party files under their own licenses. The license grants no rights to the Anthers name or logo.
 
 A platform that asks creators to trust it with their work and their livelihood should be one they can walk away with, and a permissive license means anybody may take this code and run it. Every version published here stays available under the license it went out with, so if Anthers ever stops being worth trusting, the last good version is the escape hatch.
-
