@@ -25,11 +25,27 @@ import { Glob } from "bun";
 const REPO = join(import.meta.dir, "..", "..");
 const CREDENTIAL = "NOUN_PROJECT";
 
-/** Every matching file under the repository, with dependency and build trees left out. */
+/**
+ * Every matching file under the repository, with dependency and build trees left out, and
+ * anything git ignores left out too.
+ *
+ * ⚠️ **An ignored path is not part of the repository, and a nested checkout lives in one.** A
+ * session's worktree under `.claude/worktrees/` carries its own `scripts/noun/client.ts`, whose
+ * path does not start with `scripts/`, so a scan that walked into it failed the build for a copy
+ * of this repository that ships nothing. A fork with no `.git` gets no answer from git and keeps
+ * every path, which is the stricter direction.
+ */
 function scan(pattern: string): string[] {
-	return [...new Glob(pattern).scanSync({ cwd: REPO, dot: true })].filter(
+	const found = [...new Glob(pattern).scanSync({ cwd: REPO, dot: true })].filter(
 		(p) => !/(^|\/)(node_modules|dist|build|\.git)(\/|$)/.test(p),
 	);
+	if (found.length === 0) return found;
+	const ignored = Bun.spawnSync(["git", "check-ignore", "--stdin"], {
+		cwd: REPO,
+		stdin: Buffer.from(found.join("\n")),
+	});
+	const skip = new Set(ignored.stdout.toString().split("\n").filter(Boolean));
+	return found.filter((p) => !skip.has(p));
 }
 
 const read = (p: string) => readFileSync(join(REPO, p), "utf8");

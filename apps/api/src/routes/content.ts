@@ -111,7 +111,14 @@ import {
 	VOTE_COLLECTION,
 } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
-import { notBlockedBy } from "../services/blocks.js";
+import { blockedUserIds, isBlocked, notBlockedBy } from "../services/blocks.js";
+import {
+	commentAncestry,
+	REPLY_SUBJECT_TYPE,
+	rootOfAncestry,
+	shapeThread,
+	threadCommentIds,
+} from "../services/comment-thread.js";
 import { adultVisibility, maturityHiddenFrom } from "../services/content-preferences.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
 import {
@@ -158,9 +165,11 @@ import { queueWorkListingSync } from "../services/work-listing.js";
  * copied into each new query; a read site that forgets one is a moderation leak,
  * not a cosmetic bug.
  *
- * Applied to: the comment list, the rating aggregate on the reviews endpoint, and
- * the rating aggregate embedded in post detail. Every public count of either is
- * derived from those. Deliberately NOT applied to a viewer's own `userRating` —
+ * Applied to: whether a comment can be voted on or replied to, the rating aggregate on
+ * the reviews endpoint, and the rating aggregate embedded in post detail. Every public
+ * count of either is derived from those. ⚠️ **The comment thread is the exception**: it
+ * reads hidden rows too, because a removed comment with replies beneath it is drawn as
+ * a gap, and `listComments` builds that gap from the id, subject and time alone. Deliberately NOT applied to a viewer's own `userRating` —
  * the star they see should be the star they actually submitted, and re-rating
  * only overwrites the score, so a hidden rating stays hidden.
  */
@@ -330,54 +339,88 @@ async function voteTallies(
 }
 
 /**
- * A subject's visible comments, newest first.
+ * A subject's thread: its comments, each followed by its replies, as a flat list in reading order.
  *
  * One function for both subject types — the Post thread and the Work thread differ only in
  * which `(subject_type, subject_id)` pair is asked about, so they cannot drift apart in how
- * they filter. That matters here more than most places: `visibleComment` is the whole of
- * moderation at read time, and a second copy of this query is a second place to forget it.
+ * they filter. That matters here more than most places: this is the whole of moderation and
+ * blocking at read time for a thread, and a second copy of it is a second place to forget one.
+ *
+ * ⭐ **Flat rather than nested, and ordered by the server.** Each entry carries its subject, so
+ * the client groups a reply under the comment it answers by that alone; the order within each
+ * group is decided in `shapeThread`, beside the score it reads. A nested payload would put the
+ * depth of a reply chain into the JSON parser's call stack.
  */
 async function listComments(
 	subjectType: CommentSubjectType,
 	subjectId: number,
 	viewerId: number | null = null,
 ) {
+	const ids = await threadCommentIds({ subjectType, subjectId });
+	if (ids.length === 0) return [];
+
 	// LEFT join, not inner. A **tombstoned** comment has a null author — its writer
 	// deleted their account and the comment stayed so the conversation around it still
 	// reads. An inner join would silently drop exactly those rows, which is the
 	// tombstone promise failing in the one place it is supposed to hold: the thread.
-	const rows = await db
-		.select({ comment: comments, username: users.username, avatar: users.avatar })
-		.from(comments)
-		.leftJoin(users, eq(comments.userId, users.id))
-		.where(
-			and(
-				eq(comments.subjectType, subjectType),
-				eq(comments.subjectId, subjectId),
-				visibleComment,
-				// A blocked pair does not meet in a thread, in either direction. This is the
-				// densest contact surface in the app, and it is one function precisely so
-				// there is one place to apply it — the same argument `visibleComment` makes.
-				notBlockedBy(viewerId, comments.userId),
-			),
-		)
-		.orderBy(desc(comments.createdAt));
+	const [rows, blocked] = await Promise.all([
+		db
+			.select({ comment: comments, username: users.username, avatar: users.avatar })
+			.from(comments)
+			.leftJoin(users, eq(comments.userId, users.id))
+			.where(inArray(comments.id, ids)),
+		// A blocked pair does not meet in a thread, in either direction. This is the densest
+		// contact surface in the app; `shapeThread` takes the blocked author's replies with them.
+		blockedUserIds(viewerId),
+	]);
 
-	const { tallies, mine } = await voteTallies(
-		"comment",
-		rows.map((r) => r.comment.id),
-		viewerId,
-	);
+	const visibleIds = rows
+		.filter((r) => r.comment.moderationStatus === "visible")
+		.map((r) => r.comment.id);
+	const { tallies, mine } = await voteTallies("comment", visibleIds, viewerId);
 
-	const scored = rows.map((r) => {
+	const nodes = rows.map((r) => {
+		const visible = r.comment.moderationStatus === "visible";
+		return {
+			row: r,
+			id: r.comment.id,
+			subjectType: r.comment.subjectType,
+			subjectId: r.comment.subjectId,
+			createdAt: r.comment.createdAt,
+			// A removed comment has no score to show, so it ranks as nothing rather than by
+			// votes a reader cannot see.
+			score: visible ? commentScore(tallies.get(r.comment.id) ?? NO_VOTES) : 0,
+			visible,
+			blocked: r.comment.userId !== null && blocked.has(r.comment.userId),
+		};
+	});
+
+	return shapeThread({ subjectType, subjectId }, nodes).map(({ kind, node }) => {
+		if (kind === "removed") {
+			/**
+			 * 🚨 **The place a removed comment was, built from nothing but where it sits.** Its
+			 * text, its author and its record address never leave the server — the address
+			 * names the author's DID — so this is written out field by field and never spread
+			 * from the row. It exists only because replies beneath it are still shown.
+			 */
+			return {
+				id: node.id,
+				subjectType: node.subjectType,
+				subjectId: node.subjectId,
+				createdAt: node.createdAt,
+				removed: true as const,
+			};
+		}
+		const r = node.row;
 		const tally = tallies.get(r.comment.id) ?? NO_VOTES;
 		return {
 			...r.comment,
+			removed: false as const,
 			username: r.username,
 			avatar: r.avatar,
-			// 🚨 Says only WHO, never WHY. A moderation removal is `moderation_status` and
-			// never reaches here at all; this flag means the author left. Conflating the two
-			// would have us telling readers a user deleted something they didn't.
+			// 🚨 Says only WHO, never WHY. A moderation removal is the `removed` entry above;
+			// this flag means the author left. Conflating the two would have us telling readers
+			// a user deleted something they didn't.
 			deletedByAuthor: r.comment.userId === null,
 			/**
 			 * The published score, floored at zero — and the only ranking key.
@@ -387,7 +430,7 @@ async function listComments(
 			 * use for them: everything it draws and everything that decides the order is this
 			 * one number plus `collapsed`.
 			 */
-			score: commentScore(tally),
+			score: node.score,
 			/**
 			 * The raw counts, and ONLY for whoever wrote this comment.
 			 *
@@ -401,28 +444,55 @@ async function listComments(
 				? { up: tally.up, down: tally.down }
 				: {}),
 			/**
-			 * ⚠️ A THIRD state, and it is neither of the other two. Moderation-hidden
-			 * comments never leave the server; `deletedByAuthor` is an author who left. This
-			 * one is still here, still readable, and folded because readers pushed it down.
+			 * ⚠️ A THIRD state, and it is neither of the other two. A removed comment arrives
+			 * as a gap with no text; `deletedByAuthor` is an author who left. This one is still
+			 * here, still readable, and folded because readers pushed it down.
 			 */
 			collapsed: isCollapsed(tally),
 			/** What this viewer did, so the control can show itself as pressed. */
 			viewerVote: mine.get(r.comment.id) ?? null,
 		};
 	});
+}
 
-	/**
-	 * ⭐ **Sorted by the number on screen, then by recency.**
-	 *
-	 * Sorting on the true net instead would order two comments that both display `0` by a
-	 * difference nobody can see, which is the invisible ranking Parker ruled out on
-	 * 2026-09-04. Below zero every comment ties here and falls back to recency; what
-	 * separates a merely unpopular one from a buried one is `collapsed`, which is visible.
-	 *
-	 * ⚠️ Sorted in memory on purpose. One thread is small, and doing it here keeps the
-	 * ordering rule in the same place as the score it reads rather than half in SQL.
-	 */
-	return scored.sort((a, b) => b.score - a.score || b.createdAt.getTime() - a.createdAt.getTime());
+/**
+ * Why this person may not reply to this comment under this post, or null when they may.
+ *
+ * 🚨 **Every refusal is the same 404**, because the reasons are ones a reader must not be able
+ * to tell apart. A comment that is removed, one under a different post and one written by
+ * somebody in a blocked pair all look like a comment that does not exist, which is what the
+ * thread already shows this reader.
+ *
+ * - **The comment must be visible.** A removed comment is not something anybody can answer, for
+ *   the same reason it cannot be voted on.
+ * - **It must sit under this post.** The route is the post's, so a reply that landed in some
+ *   other thread would be a comment the page that sent it never shows. A comment on a Work is
+ *   refused here too, since a Work takes no comments at all.
+ * - **Nobody above it may be in a blocked pair with the replier.** The thread drops a blocked
+ *   author's comment together with everything beneath it, so the replier cannot see this
+ *   comment either; a reply the replier's own thread would not show is a way around the block.
+ *   A removed comment above it does not refuse a reply, because that one is drawn as a gap.
+ */
+async function replyRefusal(
+	replyTo: number,
+	postId: number,
+	replierId: number,
+): Promise<string | null> {
+	const notFound = "Comment not found";
+	const ancestry = await commentAncestry(replyTo);
+	const parent = ancestry[0];
+	if (parent?.moderationStatus !== "visible") return notFound;
+
+	const root = rootOfAncestry(ancestry);
+	if (root?.subjectType !== "post" || root.subjectId !== postId) return notFound;
+
+	const authors = new Set(
+		ancestry.map((a) => a.userId).filter((id): id is number => id !== null && id !== replierId),
+	);
+	for (const author of authors) {
+		if (await isBlocked(replierId, author)) return notFound;
+	}
+	return null;
 }
 
 function estimateReadMinutes(text: string): number {
@@ -745,7 +815,14 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = createProjectSchema.partial();
 
-const createCommentSchema = z.object({ body: z.string().min(1).max(COMMENT_MAX) });
+/**
+ * A comment, or a reply when `replyTo` names the comment it answers. A reply is a comment whose
+ * subject is another comment, so it goes through the same route and the same limits.
+ */
+const createCommentSchema = z.object({
+	body: z.string().min(1).max(COMMENT_MAX),
+	replyTo: z.number().int().positive().optional(),
+});
 /**
  * A review: a verdict AND written text. The minimum is deliberately low — it's a
  * blunt instrument and "lol" clears it either way. The point of requiring text
@@ -2366,9 +2443,10 @@ const contentRoutes = new Hono()
 		// what keeps a deleted post from leaving a thread nothing can reach and nothing
 		// will ever clean up. (Their moderation reports survive on purpose: a report is a
 		// record, and `subjectStillExists` filters them out of the queue and the counts.)
-		await db
-			.delete(comments)
-			.where(and(eq(comments.subjectType, "post"), eq(comments.subjectId, existing.id)));
+		// ⚠️ **The whole thread, replies included.** A reply's subject is a comment, so a
+		// delete matching on the post alone would strand every reply beneath it.
+		const thread = await threadCommentIds({ subjectType: "post", subjectId: existing.id });
+		if (thread.length > 0) await db.delete(comments).where(inArray(comments.id, thread));
 
 		// 🚨 **The one enqueue in this file that cannot be a hint**, because there will be nothing
 		// left to re-read: the address and the account travel with the job. `existing` was read
@@ -2385,7 +2463,10 @@ const contentRoutes = new Hono()
 		return c.body(null, 204);
 	})
 
-	// ── Comments (on posts) ─────────────────────────────────────────────────────
+	// ── Comments (on posts) and replies ─────────────────────────────────────────
+	//
+	// A reply is posted to the same route with `replyTo`, and the thread read returns the
+	// replies with the comments — see `services/comment-thread.ts`.
 	//
 	// 🚨 **A Work takes no comments and no votes; a review is the only feedback it accepts**
 	// (Parker, 2026-09-13), so that Anthers has one coherent feedback model: posts and the
@@ -2408,10 +2489,20 @@ const contentRoutes = new Hono()
 			const post = await findPostRow(c.req.param("slug"));
 			if (!post) return c.json({ error: "Post not found" }, 404);
 
-			const { body } = c.req.valid("json");
+			const { body, replyTo } = c.req.valid("json");
+
+			if (replyTo !== undefined) {
+				const refusal = await replyRefusal(replyTo, post.id, user.id);
+				if (refusal) return c.json({ error: refusal }, 404);
+			}
+
 			const [comment] = await db
 				.insert(comments)
-				.values({ userId: user.id, subjectType: "post", subjectId: post.id, body })
+				.values(
+					replyTo === undefined
+						? { userId: user.id, subjectType: "post", subjectId: post.id, body }
+						: { userId: user.id, subjectType: REPLY_SUBJECT_TYPE, subjectId: replyTo, body },
+				)
 				.returning();
 
 			// The record goes in the commenter's own repository, once the post has a record for it
