@@ -316,10 +316,10 @@ export default function CompareItchPage() {
 								<CompRow feature="Adjustable revenue share" patreon />
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="Subscription pool model" anthers />
-								{/* ⚠️ Names the identity rather than the linking, because issuing one is the
-								    bigger claim and the one that is true: signup puts an AT Protocol identity
-								    on Anthers' own server, and its holder can take it. Linking an existing
-								    Bluesky account works too and is the smaller half. */}
+								{/* ⚠️ Names the identity because every account is one: signup either puts an
+								    AT Protocol identity on Anthers' own server, which its holder can take
+								    elsewhere, or builds the account on a Bluesky identity somebody already
+								    holds. */}
 								<CompRow feature="An AT Protocol identity you own" anthers />
 								<CompRow feature="Desktop client" patreon />
 								{/* 🚨 Ours was checked here until 2026-08-16 and **we have never had it**.

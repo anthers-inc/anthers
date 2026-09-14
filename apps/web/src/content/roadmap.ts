@@ -894,7 +894,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "bluesky-identity",
 						title: "Signing In with Bluesky",
 						blurb:
-							"Sign in, sign up, or link an identity you have. Anthers still verifies every signup with its own emailed code.",
+							"Sign up and sign in with a Bluesky identity you already have. Anthers still verifies every signup with its own emailed code.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "71.00", title: "The AT Protocol" },
