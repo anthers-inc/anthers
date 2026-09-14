@@ -26,6 +26,7 @@ import { db } from "@anthers/db";
 import { users } from "@anthers/db/schema";
 import { TokenInvalidError, TokenRevokedError } from "@atproto/oauth-client";
 import { eq } from "drizzle-orm";
+import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js";
 import { getAtprotoClient, grantedScopeFor, recordGrantedScope } from "./atproto-client.js";
 import { type RecordRef, RepoAuthError, type RepoWriter } from "./atproto-repo.js";
 import { missingRepoActions, scopeAllowsWriting } from "./atproto-scope.js";
@@ -39,7 +40,12 @@ export type NoOauthWriterReason =
 	/** They granted it and the authorization server now refuses. Asking again is the fix. */
 	| "grant_lost"
 	/** The authorization server would not answer. Worth retrying. */
-	| "session_unusable";
+	| "session_unusable"
+	/**
+	 * The identity's server is on the real network and this process is not a public deployment,
+	 * so nothing may be written there. See `lib/atproto-network.ts`.
+	 */
+	| "off_network";
 
 export type OauthWriterResult =
 	| { writer: RepoWriter }
@@ -94,6 +100,19 @@ export async function oauthWriterFor(
 				`${err instanceof Error ? err.message : String(err)}`,
 		);
 		return { writer: null, reason: "session_unusable" };
+	}
+
+	// 🛑 **Where the writes would land, checked before any of them is made.** The token's audience
+	// is the server holding the repository. A token that cannot be read is refused too, off a
+	// public deployment, because not knowing the destination is not permission to reach it.
+	const audience = await session.getTokenInfo(false).then(
+		(info) => info.aud,
+		() => "",
+	);
+	const refusal = atprotoWriteRefusal(audience);
+	if (refusal) {
+		warnRefusalOnce(refusal);
+		return { writer: null, reason: "off_network" };
 	}
 
 	// What the token itself says, which outranks the column. A grant narrowed since it was

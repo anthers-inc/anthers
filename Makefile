@@ -205,41 +205,47 @@ db-down: ## Stop the local dev Postgres (keeps data)
 db-generate: ## Generate Drizzle migration from schema changes
 	bun run db:generate
 
-# ─── Local Personal Data Server (compose.pds.yaml) ───
+# ─── Local AT Protocol network (scripts/atproto-network) ───
 # 🚨 The safe place to exercise anything that writes AT Protocol records. A record on a real
-# server is world-readable the moment it lands and is broadcast to everyone listening, and
-# deleting it afterwards broadcasts only the deletion — so prove it here first.
+# server is world-readable the moment it lands, and an identity registered with the real
+# directory is permanent. This network brings its own directory and its own server, both in
+# memory, and `network.mjs` refuses to start unless the server is pointed at that directory.
 #
-# Secrets are generated per run and never written to a file: this server holds nothing worth
-# protecting, and a value that exists only in the shell cannot be committed by accident.
+# `pds-up` always starts a fresh network, so a test run never inherits what an earlier one left.
 
-pds-up: ## Start a throwaway local PDS for record-writing tests
+ATPROTO_NETWORK := anthers-atproto-network
+
+pds-up: ## Start a fresh private AT Protocol network (directory :2582, server :2583)
 	@if ! docker info >/dev/null 2>&1; then \
 		echo "  -> ERROR: Docker isn't running. Start Docker Desktop/daemon, then retry."; \
 		exit 1; \
 	fi
-	@PDS_JWT_SECRET=$$(openssl rand -hex 16) \
-	 PDS_ADMIN_PASSWORD=$$(openssl rand -hex 16) \
-	 PDS_ROTATION_KEY=$$(openssl rand -hex 32) \
-	 docker compose -f compose.pds.yaml up -d
-	@echo "  -> waiting for the PDS to answer..."
-	@until curl -sf -m 2 http://localhost:2583/xrpc/_health >/dev/null 2>&1; do sleep 1; done
-	@echo "  -> PDS ready at http://localhost:2583"
+	@docker rm -f $(ATPROTO_NETWORK) >/dev/null 2>&1 || true
+	@docker build -q -t $(ATPROTO_NETWORK) scripts/atproto-network >/dev/null
+	@docker run -d --rm --name $(ATPROTO_NETWORK) -p 2582:2582 -p 2583:2583 $(ATPROTO_NETWORK) >/dev/null
+	@echo "  -> waiting for the network to answer..."
+	@until curl -sf -m 2 http://localhost:2583/xrpc/_health >/dev/null 2>&1 \
+		&& curl -sf -m 2 http://localhost:2582/_health >/dev/null 2>&1; do \
+		if ! docker ps -q -f name=^$(ATPROTO_NETWORK)$$ | grep -q .; then \
+			echo "  -> ERROR: the network exited:"; docker logs $(ATPROTO_NETWORK) 2>&1 | tail -5; exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo "  -> ready: directory http://localhost:2582, server http://localhost:2583"
 
-pds-test: ## Run the record-writing integration tests against the local PDS
+pds-test: ## Run the record-writing integration tests against the local network
 	@# Four suites: the writer against Anthers' own account, a Work's listing written into a
 	@# repository Anthers hosts on a creator's behalf, that creator's posts and projects, and a
 	@# reader's comments, votes, reviews and follows. The last three need the dev database as
-	@# well as the server, which is why they live with the other database tests.
-	ATPROTO_TEST_PDS=http://localhost:2583 bun test \
+	@# well as the network, which is why they live with the other database tests.
+	ATPROTO_TEST_PDS=http://localhost:2583 ATPROTO_PLC_URL=http://localhost:2582 bun test \
 	  scripts/atproto-writer.integration.test.ts \
 	  apps/api/src/__tests__/work-listing.integration.test.ts \
 	  apps/api/src/__tests__/creator-record-listing.integration.test.ts \
 	  apps/api/src/__tests__/reader-record-listing.integration.test.ts
 
-pds-down: ## Stop the local PDS and discard everything it held
-	@PDS_JWT_SECRET=x PDS_ADMIN_PASSWORD=x PDS_ROTATION_KEY=x \
-	 docker compose -f compose.pds.yaml down
+pds-down: ## Stop the local network, which discards everything it held
+	@docker rm -f $(ATPROTO_NETWORK) >/dev/null 2>&1 || true
 
 db-migrate: ## Apply pending migrations
 	bun run db:migrate

@@ -55,7 +55,8 @@ beforeAll(() => {
 		// the one case where erasure can take a record down before the grant goes.
 		restore: async (did: string) => ({
 			did,
-			getTokenInfo: async () => ({ scope: LISTING_GRANT }),
+			// A name that resolves nowhere, so the network guard lets the removal through.
+			getTokenInfo: async () => ({ aud: "https://pds.example", scope: LISTING_GRANT }),
 			fetchHandler: async (_path: string, init?: RequestInit) => {
 				const body = JSON.parse(String(init?.body ?? "{}"));
 				events.push(`delete ${body.collection}/${body.rkey}`);

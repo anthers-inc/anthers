@@ -22,6 +22,7 @@ import { db } from "@anthers/db";
 import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
+import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 purgeAccountsCreatedHere();
@@ -36,7 +37,7 @@ function restore(key: string, value: string | undefined) {
 }
 
 beforeAll(() => {
-	process.env.HOSTED_PDS_URL = "https://anthers.social";
+	process.env.HOSTED_PDS_URL = "https://anthers.test";
 	process.env.HOSTED_ACCOUNT_KEY = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
 		"hex",
 	);
@@ -61,19 +62,19 @@ async function makeAccount(tag: string) {
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
 			atprotoDid: `did:plc:${RUN}${tag}`,
-			atprotoHandle: `${RUN}${tag}.anthers.social`,
+			atprotoHandle: `${RUN}${tag}.anthers.test`,
 		})
 		.returning();
 	const did = `did:plc:${RUN}${tag}`;
 	await db.insert(hostedAccounts).values({
 		did,
 		userId: user.id,
-		handle: `${RUN}${tag}.anthers.social`,
+		handle: `${RUN}${tag}.anthers.test`,
 		sealedPassword: seal("a-generated-password"),
 	});
 	await db
 		.insert(hostedIdentities)
-		.values({ did, handle: `${RUN}${tag}.anthers.social`, headCid: "before" });
+		.values({ did, handle: `${RUN}${tag}.anthers.test`, headCid: "before" });
 	return { userId: user.id, did };
 }
 
@@ -86,7 +87,7 @@ function router(
 ): typeof fetch {
 	return (async (input: string | URL) => {
 		const url = String(input);
-		if (url.includes("plc.directory")) {
+		if (url.startsWith(`${plcDirectoryUrl()}/`)) {
 			// ⚠️ **Always the post-change state, because this flow reads the directory exactly
 			// once and only after the handle has moved.** Modelling it on the recovery-key fake,
 			// which reads twice and switches on the second, made this return the OLD head and
@@ -98,7 +99,7 @@ function router(
 					operation: {
 						alsoKnownAs: ["at://alice.example.com"],
 						rotationKeys: ["did:key:zAnthersOnline"],
-						services: { atproto_pds: { endpoint: "https://anthers.social" } },
+						services: { atproto_pds: { endpoint: "https://anthers.test" } },
 					},
 				},
 			]);
@@ -126,15 +127,15 @@ function json(body: unknown, status = 200): Response {
 }
 
 describe("what this door is not for", () => {
-	// 🚨 Changing which anthers.social name you hold is a different feature. The node would
+	// 🚨 Changing which anthers.test name you hold is a different feature. The node would
 	// accept it, so refusing is the hub's job — otherwise this becomes a second way to take an
 	// issued name, through a door built for domains somebody already owns.
-	it("refuses another anthers.social name, without asking the node", async () => {
+	it("refuses another anthers.test name, without asking the node", async () => {
 		const { userId } = await makeAccount("suffix");
 		let called = false;
 		const result = await swapHostedHandle(
 			userId,
-			{ handle: "someoneelse.anthers.social" },
+			{ handle: "someoneelse.anthers.test" },
 			{
 				fetchImpl: (async () => {
 					called = true;
@@ -195,7 +196,7 @@ describe("a domain that has not proved itself yet", () => {
 			.select({ handle: hostedAccounts.handle })
 			.from(hostedAccounts)
 			.where(eq(hostedAccounts.did, did));
-		expect(row.handle).toBe(`${RUN}waiting.anthers.social`);
+		expect(row.handle).toBe(`${RUN}waiting.anthers.test`);
 	});
 
 	// ⚠️ Upstream's wording is not ours to depend on. An unrecognized refusal is read as "not

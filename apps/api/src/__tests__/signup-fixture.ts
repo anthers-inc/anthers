@@ -23,6 +23,7 @@ import { fixtureDid } from "@anthers/db/fixture-did";
 import { signupCodes } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index.js";
+import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { startPendingSignup } from "../services/pending-signups.js";
 import { issueSignupCode } from "../services/signup-codes.js";
 
@@ -128,7 +129,7 @@ export function stubNetwork(): NetworkStub {
 						: answer({ error: "InvalidRequest" }, 400);
 				}
 				// Recording an identity reads its audit log; nothing here asserts on it.
-				if (url.startsWith("https://plc.directory/")) return answer({}, 404);
+				if (url.startsWith(`${plcDirectoryUrl()}/`)) return answer({}, 404);
 				// The Bluesky profile decoration on the OAuth callback path.
 				if (url.startsWith("https://public.api.bsky.app/")) return answer({});
 

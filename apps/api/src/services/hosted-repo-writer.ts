@@ -35,7 +35,7 @@ import { db } from "@anthers/db";
 import { hostedAccounts } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type { RecordRef, RepoWriter } from "./atproto-repo.js";
-import { nodeCall } from "./hosted-accounts.js";
+import { hostedPdsUrl, nodeCall } from "./hosted-accounts.js";
 import { open } from "./secret-box.js";
 
 /** Why no writer could be made. Every one of these is ordinary rather than an error. */
@@ -45,7 +45,12 @@ export type NoWriterReason =
 	/** The credential exists and this deployment's key cannot open it. */
 	| "credential_unopenable"
 	/** The node did not answer, or refused the session. Worth retrying. */
-	| "node_unreachable";
+	| "node_unreachable"
+	/**
+	 * No identity server this process may write to is configured: `HOSTED_PDS_URL` is unset, or
+	 * names a server on the real network from a machine that is not a public deployment.
+	 */
+	| "no_node";
 
 export type HostedWriterResult = { writer: RepoWriter } | { writer: null; reason: NoWriterReason };
 
@@ -70,6 +75,9 @@ export async function hostedWriterFor(
 		.where(eq(hostedAccounts.userId, userId))
 		.limit(1);
 	if (!row) return { writer: null, reason: "not_hosted" };
+	// Checked before the credential is opened, so a refused server is reported as what it is
+	// rather than as a node that did not answer.
+	if (!hostedPdsUrl()) return { writer: null, reason: "no_node" };
 
 	// `open` throws on a value this deployment's key cannot open, which is a real state — see
 	// `signup-probe.anthers.social` in the runbook. Retrying never opens it.

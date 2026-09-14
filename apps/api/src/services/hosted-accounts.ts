@@ -33,13 +33,29 @@ import {
 	normalizeHandleName as sharedNormalize,
 } from "@anthers/shared/handles";
 import { eq } from "drizzle-orm";
+import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { open, seal, secretBoxConfigured } from "./secret-box.js";
 
-/** Where the Anthers-run Personal Data Server answers, or the empty string when unset. */
+/**
+ * Where the Anthers-run Personal Data Server answers, or the empty string when unset.
+ *
+ * 🛑 **Also the empty string when this process may not write there** — a server on the real
+ * network, named from a machine that is not a public deployment. Everything below already treats
+ * an unset server as a closed door, so refusing here closes every door at once: no account is
+ * created, no record written, no handle changed and no directory operation requested. See
+ * `lib/atproto-network.ts`.
+ */
 function pdsUrl(): string {
-	return process.env.HOSTED_PDS_URL?.trim() ?? "";
+	const url = process.env.HOSTED_PDS_URL?.trim() ?? "";
+	if (!url) return "";
+	const refusal = atprotoWriteRefusal(url);
+	if (refusal) {
+		warnRefusalOnce(refusal);
+		return "";
+	}
+	return url;
 }
 
 /**
@@ -680,12 +696,18 @@ export async function nodeCall(
 	| { ok: true; body: Record<string, unknown> }
 	| { ok: false; retryable: boolean; error: string; message?: string }
 > {
+	// Not retryable: nothing but a change of configuration will make a server appear, and a
+	// relative path handed to `fetch` would fail in a way that reads as the node being down.
+	const base = pdsUrl();
+	if (!base) {
+		return { ok: false, retryable: false, error: "NoNode", message: "no usable HOSTED_PDS_URL" };
+	}
 	const { token, ...rest } = init;
 	const headers: Record<string, string> = { "Content-Type": "application/json" };
 	if (token) headers.Authorization = `Bearer ${token}`;
 	let res: Response;
 	try {
-		res = await doFetch(`${pdsUrl()}${path}`, {
+		res = await doFetch(`${base}${path}`, {
 			...rest,
 			headers: { ...headers, ...(rest.headers as Record<string, string> | undefined) },
 			signal: AbortSignal.timeout(30_000),
