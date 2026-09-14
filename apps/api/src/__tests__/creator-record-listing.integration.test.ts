@@ -25,6 +25,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, posts, projects, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { POST_COLLECTION, PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
@@ -292,6 +293,7 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 				email: `${RUN}plain@example.test`,
 				emailVerified: true,
 				isCreator: true,
+				atprotoDid: fixtureDid(),
 			})
 			.returning();
 		const [post] = await db

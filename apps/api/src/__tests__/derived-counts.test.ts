@@ -31,6 +31,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { posts, projectPosts, projects, users } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
@@ -84,6 +85,7 @@ beforeAll(async () => {
 			passwordHash: "x",
 			emailVerified: true,
 			isCreator: true,
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	creatorId = u.id;

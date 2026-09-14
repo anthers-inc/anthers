@@ -12,6 +12,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	accounts,
 	attentionEvents,
@@ -45,6 +46,7 @@ async function makeUser(tag: string): Promise<number> {
 			username: `dp_${tag}_${n}_${Date.now().toString(36)}`,
 			email: `dp_${tag}_${n}_${Date.now().toString(36)}@example.com`,
 			passwordHash: "x",
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	return row.id;

@@ -561,6 +561,13 @@
       "when": 1789331099148,
       "tag": "0079_delete_reviews_with_account",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1789349040277,
+      "tag": "0080_every_account_holds_an_identity",
+      "breakpoints": true
     }
   ]
 }

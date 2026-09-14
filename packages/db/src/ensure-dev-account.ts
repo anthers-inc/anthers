@@ -45,6 +45,7 @@
 
 import { and, eq, ne } from "drizzle-orm";
 import { devCheckoutRoot } from "./dev-only.js";
+import { fixtureDid } from "./fixture-did.js";
 import { db, users } from "./index.js";
 
 const TAG = "[dev-account]";
@@ -124,6 +125,7 @@ async function main() {
 			isCreator,
 			isAdmin,
 			emailVerified: true, // skip the verification wall for a login you actually use
+			atprotoDid: fixtureDid(),
 		});
 		console.log(
 			`${TAG} created "${username}" (${email}) — email pre-verified, creator=${isCreator}, admin=${isAdmin}.`,

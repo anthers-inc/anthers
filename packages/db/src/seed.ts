@@ -14,6 +14,7 @@ import { heldBadgeLabel, PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/share
 import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import { eq, like } from "drizzle-orm";
 import { assertDevCheckout } from "./dev-only.js";
+import { fixtureDid } from "./fixture-did.js";
 import {
 	accountCycles,
 	accounts,
@@ -765,6 +766,7 @@ async function seed() {
 				location: creator.location,
 				websiteUrl: creator.websiteUrl,
 				emailVerified: true,
+				atprotoDid: fixtureDid(),
 			})
 			.returning({ id: users.id });
 
@@ -1222,6 +1224,7 @@ async function seed() {
 				bio: tu.bio,
 				isCreator: false,
 				emailVerified: true,
+				atprotoDid: fixtureDid(),
 			})
 			.returning({ id: users.id });
 

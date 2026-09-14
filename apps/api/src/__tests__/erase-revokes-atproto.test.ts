@@ -21,6 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, legalHolds, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
@@ -167,6 +168,7 @@ describe("eraseAccount revokes the ATProto grant", () => {
 				username: `er_${RUN}_plain_${n}`,
 				email: `er_${RUN}_plain_${n}@example.com`,
 				passwordHash: "x",
+				atprotoDid: fixtureDid(),
 			})
 			.returning({ id: users.id });
 		const before = revoked.length;

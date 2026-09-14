@@ -13,6 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	comments,
 	follows,
@@ -57,6 +58,7 @@ async function user(tag: string, values: Partial<typeof users.$inferInsert> = {}
 			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 			...values,
 		})
 		.returning();

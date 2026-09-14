@@ -19,6 +19,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { mediaScans, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { scanStoredVideo, worstOutcome } from "../services/safety-scan";
@@ -159,6 +160,7 @@ describe("scanStoredVideo — object in, rows out", () => {
 				username: creatorName,
 				email: `${creatorName}@example.com`,
 				isCreator: true,
+				atprotoDid: fixtureDid(),
 			})
 			.returning({ id: users.id });
 		creatorId = creator.id;

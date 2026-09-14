@@ -17,6 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -120,6 +121,7 @@ async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> 
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
 			isCreator: true,
+			atprotoDid: fixtureDid(),
 			...values,
 		})
 		.returning();
