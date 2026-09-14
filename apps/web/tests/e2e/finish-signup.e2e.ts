@@ -53,9 +53,8 @@ const handleName = () =>
  * taken at `/finish`. A spec that filled `input[type="email"]` here was filling a field that
  * no longer exists, which is why these read as failures the moment the card changed.
  *
- * The availability check answers `unknown` in this suite — `playwright.config.ts` points the
- * API at `node.invalid` — and an unknown answer deliberately does not block the button, so
- * nothing here needs to stub it.
+ * The availability check asks the browser session's own identity server, which answers
+ * `available` for a fresh name, so nothing here needs to stub it.
  */
 async function startSignup(page: Page, picks?: () => Promise<void>) {
 	await page.goto("/subscribe");

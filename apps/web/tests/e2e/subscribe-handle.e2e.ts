@@ -20,13 +20,12 @@
  * The address is still what mints the account; it is asked for on `/finish`, which already
  * has a face for exactly that.
  *
- * ⚠️ **What it cannot assert.** Creating an identity means creating one on a real server,
- * which no test may do. `playwright.config.ts` points the suite at `node.invalid`, and the
- * availability check is intercepted in the browser so these tests do not depend on which
- * names happen to be taken on the real node this week. What happens server-side — that
- * nothing is issued before an address is proved, and that a requested name is dropped when a
- * signup is resumed by address — is pinned in `pending-signup.test.ts` and
- * `hosted-accounts.test.ts`.
+ * ⚠️ **What it does not assert.** The API runs against the browser session's private identity
+ * server, so nothing here can reach a real one, and the availability check is intercepted in
+ * the browser wherever a test needs a particular answer. Finishing a signup needs the emailed
+ * code, which no spec can read yet. What happens server-side — that nothing is issued before an
+ * address is proved, and that a requested name is dropped when a signup is resumed by address —
+ * is pinned in `pending-signup.test.ts` and `hosted-accounts.test.ts`.
  */
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
@@ -239,8 +238,8 @@ test.describe("signing up with a handle Anthers issues", () => {
 		// the card did not ask for it.
 		await expect(page.getByLabel(/where should we reach you/i)).toBeVisible({ timeout: 15_000 });
 
-		// ⚠️ **Matched as `name` followed by a suffix, not as `name.anthers.social`.** This
-		// suite points the API at `node.invalid` (see `playwright.config.ts`), so the suffix
+		// ⚠️ **Matched as `name` followed by a suffix, not as `name.anthers.social`.** The
+		// browser session's identity server issues handles under its own domain, so the suffix
 		// here is the test environment's rather than production's — and what is being asserted
 		// is that the WHOLE handle is shown rather than the part somebody typed, which is the
 		// property that survives either.
@@ -277,13 +276,13 @@ test.describe("signing up with a handle Anthers issues", () => {
 	test("a name held for another signup is refused where it was typed", async ({ page }) => {
 		await stubAvailability(page, (name) => ({
 			status: "available",
-			handle: `${name}.node.invalid`,
+			handle: `${name}.anthers.test`,
 		}));
 		await page.route("**/api/auth/signup/begin", async (route) => {
 			await route.fulfill({
 				status: 409,
 				contentType: "application/json",
-				body: JSON.stringify({ error: "heldname.node.invalid is taken." }),
+				body: JSON.stringify({ error: "heldname.anthers.test is taken." }),
 			});
 		});
 		await page.goto("/subscribe");
@@ -293,7 +292,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 			.getByRole("button", { name: /sign up with anthers/i })
 			.click();
 
-		await expect(topSignup(page).getByText("heldname.node.invalid is taken.")).toBeVisible();
+		await expect(topSignup(page).getByText("heldname.anthers.test is taken.")).toBeVisible();
 		await expect(page).toHaveURL(/\/subscribe/);
 		await expect(
 			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),

@@ -58,8 +58,8 @@ const handleName = () =>
  *
  * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/subscribe`
  * stopped asking for an address: signing up begins by picking a handle, and the address is
- * taken at `/finish`. The availability check answers `unknown` in this suite — the API points
- * at `node.invalid` — and an unknown answer deliberately does not block the button.
+ * taken at `/finish`. The availability check asks the browser session's own identity server,
+ * which answers `available` for a fresh name, so nothing here needs to stub it.
  */
 async function askForAccount(page: Page, cta = /sign up with anthers|create my account/i) {
 	await expect(topSignup(page).getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();

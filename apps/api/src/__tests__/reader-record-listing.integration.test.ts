@@ -22,15 +22,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import {
-	comments,
-	follows,
-	posts,
-	reviews,
-	users,
-	votes,
-	works,
-} from "@anthers/db/schema";
+import { comments, follows, posts, reviews, users, votes, works } from "@anthers/db/schema";
 import { eq, inArray, like } from "drizzle-orm";
 import {
 	COMMENT_COLLECTION,

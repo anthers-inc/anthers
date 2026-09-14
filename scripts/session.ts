@@ -121,11 +121,7 @@ export function sessionEnvironment(
 	const env: Record<string, string> = {
 		ANTHERS_SESSION: id,
 		DATABASE_URL: `postgres://anthers:anthers@localhost:${ports.postgres}/anthers`,
-		ATPROTO_PLC_URL: `http://localhost:${ports.plc}`,
-		HOSTED_PDS_URL: `http://localhost:${ports.pds}`,
-		HOSTED_PDS_INVITE_CODE: hosting.inviteCode,
-		HOSTED_ACCOUNT_KEY: hosting.accountKey,
-		ATPROTO_TEST_PDS: `http://localhost:${ports.pds}`,
+		...networkEnvironment(ports, hosting),
 		LOCAL_CONTENT_DIR: contentDir,
 	};
 	if (ports.api !== undefined && ports.preview !== undefined) {
@@ -134,6 +130,20 @@ export function sessionEnvironment(
 		env.BASE_URL = `http://localhost:${ports.api}`;
 	}
 	return env;
+}
+
+/** The part of a session's environment that points at its AT Protocol network. */
+export function networkEnvironment(
+	ports: Pick<SessionPorts, "plc" | "pds">,
+	hosting: { inviteCode: string; accountKey: string },
+): Record<string, string> {
+	return {
+		ATPROTO_PLC_URL: `http://localhost:${ports.plc}`,
+		HOSTED_PDS_URL: `http://localhost:${ports.pds}`,
+		HOSTED_PDS_INVITE_CODE: hosting.inviteCode,
+		HOSTED_ACCOUNT_KEY: hosting.accountKey,
+		ATPROTO_TEST_PDS: `http://localhost:${ports.pds}`,
+	};
 }
 
 /**
@@ -344,7 +354,7 @@ async function startPostgres(id: string, port: number): Promise<string> {
 	return name;
 }
 
-async function answers(url: string): Promise<boolean> {
+export async function answers(url: string): Promise<boolean> {
 	try {
 		const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
 		return res.ok;
@@ -398,7 +408,7 @@ const NETWORK_ADMIN_PASSWORD = "admin-pass";
  * code it is given. Minting a real one keeps signup on the same path it takes in production, where
  * the node does require one.
  */
-async function mintInviteCode(pds: number): Promise<string> {
+export async function mintInviteCode(pds: number): Promise<string> {
 	const res = await fetch(`http://localhost:${pds}/xrpc/com.atproto.server.createInviteCode`, {
 		method: "POST",
 		headers: {
@@ -489,7 +499,7 @@ export async function startSession(
 }
 
 /** Run a command with `env` laid over this process's environment, until it exits. */
-function runCommand(
+export function runCommand(
 	command: string[],
 	env: Record<string, string>,
 	detached: boolean,
@@ -502,7 +512,7 @@ function runCommand(
 	});
 }
 
-function exitCodeOf(child: ChildProcess, command: string[]): Promise<number> {
+export function exitCodeOf(child: ChildProcess, command: string[]): Promise<number> {
 	return new Promise<number>((resolve) => {
 		child.on("exit", (exitCode, signal) => resolve(exitCode ?? (signal ? 130 : 1)));
 		child.on("error", (err) => {
