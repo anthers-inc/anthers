@@ -3,7 +3,7 @@
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-generate db-migrate db-push db-studio db-seed sessions-clean \
         gauntlet-reset gauntlet-clean stripe-webhooks \
-        verify typecheck test lint lint-fix format \
+        verify verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
         spec-diff spec-apply deploy-status webhook-check dev-local \
 
@@ -76,7 +76,7 @@ install: ## Install all dependencies
 # anyone remembering. Undo with: git config --unset core.hooksPath
 hooks: ## Point git at the repo's tracked hooks (.githooks/)
 	@git config core.hooksPath .githooks
-	@echo "git hooks → .githooks (pre-push runs 'make verify'; bypass with git push --no-verify)"
+	@echo "git hooks → .githooks (pre-push runs 'make verify', or 'make verify-docs' when only markdown changed; bypass with git push --no-verify)"
 
 # Secrets come from the "Anthers Dev" Bitwarden project, not from `.env`. `bws run` sets
 # REAL environment variables, and those beat Bun's `.env` loading, so a stale line left in
@@ -246,6 +246,17 @@ verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright
 	bun test
 	$(MAKE) e2e-preflight
 	$(SESSION_BROWSER) bunx playwright test
+
+# The part of `verify` that can see a markdown file, which the pre-push hook runs instead of
+# `verify` when every file a push changes is markdown. Biome is here because it is cheap and
+# would be the first to notice if it learned to read markdown; the figures check owns the
+# README's money block; the two guards scan the repository's own documents. A new check that
+# reads markdown belongs here as well, and `scripts/pre-push-hook.test.ts` refuses a guard
+# under `scripts/` that names a tracked markdown file or walks `git ls-files` without being listed.
+verify-docs: ## Run only the checks that read markdown (the pre-push hook's docs-only path)
+	bun run lint
+	bun run econ:figures --check
+	bun test scripts/american-spelling-guard.test.ts scripts/credential-shape-guard.test.ts
 
 # The browser suite's own session: a database, a network, and free ports for the API and the
 # preview server, which is what lets it run beside `make dev` on :8000.

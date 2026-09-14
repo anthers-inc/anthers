@@ -3,21 +3,23 @@
 #
 # Run what CI runs, before the push rather than after it.
 #
-# This exists because nothing else can enforce it. GitHub's branch protection —
-# required status checks, "don't merge a red PR" — is a paid feature on a private
-# repo, so the only gate available is a local one. Without it a red commit reaches
-# `main` and simply stays there: an unformatted file landed in #168 and sat on
-# `main` for three days, because `bun run lint` runs the FORMATTER too and nobody
-# ran it locally.
+# `main` requires CI to pass before a pull request merges, but that protection does not
+# bind an administrator pushing straight to `main` or `release`, and a red commit that
+# arrives that way simply stays there: an unformatted file landed in #168 and sat on `main`
+# for three days, because `bun run lint` runs the FORMATTER too and nobody ran it locally.
+# This gate is the one that covers every push, and it catches a red branch before a pull
+# request spends CI's time finding out.
 #
-# `make verify` is deliberately the whole thing (typecheck, lint, migrate, unit
-# tests, full Playwright) rather than a fast subset. A subset is what produced the
-# problem: `bun test` alone is the unit suites, and `--project=gauntlet` skips the
-# project the marketing specs live in, so a copy change sailed through both and
-# failed in CI anyway.
+# `make verify` is deliberately the whole thing (typecheck, lint, migrate, unit tests, full
+# Playwright) rather than a fast subset. A subset is what produced the problem: `bun test`
+# alone is the unit suites, and `--project=gauntlet` skips the project the marketing specs
+# live in, so a copy change sailed through both and failed in CI anyway.
 #
-# Escape hatch: `git push --no-verify`. Use it for a WIP branch nobody builds on;
-# don't use it for anything heading at `main`, which is the one case this catches.
+# The one exception is a push whose every changed file is markdown, which runs
+# `make verify-docs` — the checks that read markdown at all — instead. See `docs_only` below.
+#
+# Escape hatch: `git push --no-verify`. Use it for a WIP branch nobody builds on; don't use
+# it for anything heading at `main`, which is the one case this catches.
 
 remote="$1"
 
@@ -32,14 +34,40 @@ remote="$1"
 # unverified. That is how a lint-red `main` accepted a push: the gate did not decline to
 # fail, it declined to run, and the two look identical from outside. A gate that can skip
 # itself quietly is worse than no gate, because it is trusted.
+#
+# 🚨 `docs_only` is the same hazard pointed the other way, so every doubt resolves to the
+# full suite. It starts true and ANY ref that cannot be proved markdown-only clears it: a
+# base commit that cannot be found, a diff that fails or comes back empty, a single path
+# not ending in `.md`. Renames are listed as a deletion plus an addition (`--no-renames`),
+# because otherwise `foo.ts → foo.md` reports only its new name and deleting code passes
+# as a documentation change. `scripts/pre-push-hook.test.ts` drives this file for real.
 zero="0000000000000000000000000000000000000000"
 refs_seen=0
 has_content=0
-while read -r _local_ref local_sha _remote_ref _remote_sha; do
+docs_only=1
+while read -r _local_ref local_sha _remote_ref remote_sha; do
 	refs_seen=$((refs_seen + 1))
 	[ -z "$local_sha" ] && continue
 	[ "$local_sha" = "$zero" ] && continue
 	has_content=1
+	[ "$docs_only" -eq 1 ] || continue
+
+	# A branch new to the remote has no remote tip, so it is measured from where it left
+	# `main`. A stale `origin/main` only widens that diff, which can only cost the fast path.
+	if [ "$remote_sha" = "$zero" ] || [ -z "$remote_sha" ]; then
+		base=$(git merge-base "$local_sha" origin/main 2>/dev/null) || base=""
+	else
+		base="$remote_sha"
+	fi
+	if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+		docs_only=0
+		continue
+	fi
+	if ! changed=$(git diff --no-renames --name-only "$base" "$local_sha" 2>/dev/null) \
+		|| [ -z "$changed" ] \
+		|| printf '%s\n' "$changed" | grep -qv '\.md$'; then
+		docs_only=0
+	fi
 done
 
 # Skip only when git actually told us what it is pushing AND every ref was a deletion.
@@ -48,13 +76,19 @@ if [ "$refs_seen" -gt 0 ] && [ "$has_content" -eq 0 ]; then
 	exit 0
 fi
 
-printf '\033[36m→ pre-push: running `make verify` before pushing to %s\033[0m\n' "$remote"
+target=verify
+if [ "$refs_seen" -gt 0 ] && [ "$docs_only" -eq 1 ]; then
+	target=verify-docs
+	printf '\033[36m→ pre-push: only markdown changed, so running `make verify-docs` before pushing to %s\033[0m\n' "$remote"
+else
+	printf '\033[36m→ pre-push: running `make verify` before pushing to %s\033[0m\n' "$remote"
+fi
 
-if make verify; then
-	printf '\033[32m✓ pre-push: verify passed\033[0m\n'
+if make "$target"; then
+	printf '\033[32m✓ pre-push: %s passed\033[0m\n' "$target"
 	exit 0
 fi
 
-printf '\n\033[31m✗ pre-push: verify FAILED — push aborted.\033[0m\n'
+printf '\n\033[31m✗ pre-push: %s FAILED — push aborted.\033[0m\n' "$target"
 printf '  Fix it, or bypass deliberately with: git push --no-verify\n'
 exit 1
