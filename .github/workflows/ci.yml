@@ -313,9 +313,15 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # The session's mail catcher, so the browser suite can read back the codes the API emails.
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports:
+          - 8025:8025
 
     env:
       DATABASE_URL: postgres://anthers:anthers@localhost:5432/anthers
+      MAIL_CATCHER_URL: http://localhost:8025
       # The job's service containers are this run's session, so the test preload and the
       # Playwright config use them rather than starting containers of their own
       # (scripts/session.ts).
@@ -451,6 +457,9 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # The session's mail catcher, so the browser suite can read back the codes the API emails.
+      mailpit:
+        image: axllent/mailpit:v1.27
 
     env:
       # 🚨 `postgres`, NOT `localhost` — the one thing that genuinely changes when a job
@@ -459,6 +468,8 @@ jobs:
       # is listening on 5432. The API started by playwright's webServer runs INSIDE this
       # container, so it reads the same variable and reaches the same place.
       DATABASE_URL: postgres://anthers:anthers@postgres:5432/anthers
+      # Addressed by service name for the same reason as the database.
+      MAIL_CATCHER_URL: http://mailpit:8025
       # The job's service containers are this run's session, so the test preload and the
       # Playwright config use them rather than starting containers of their own
       # (scripts/session.ts).

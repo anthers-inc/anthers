@@ -166,8 +166,8 @@ describe("handleNameProblem", () => {
 
 	it("refuses names that are too short or too long", () => {
 		expect(handleNameProblem("ab")).toContain("at least");
-		expect(handleNameProblem("a".repeat(31))).toContain("at most");
-		expect(handleNameProblem("a".repeat(30))).toBeNull();
+		expect(handleNameProblem("a".repeat(19))).toContain("at most");
+		expect(handleNameProblem("a".repeat(18))).toBeNull();
 	});
 
 	// 🚨 A handle is a domain name and an Anthers username is not, so the two alphabets differ

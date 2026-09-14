@@ -25,7 +25,12 @@ function counter(start: number): () => number {
 
 describe("the ports a session takes", () => {
 	it("keeps the conventional ports for dev, where .env and the tooling expect them", () => {
-		expect(sessionPorts("dev", () => 1)).toEqual({ postgres: 5432, plc: 2582, pds: 2583 });
+		expect(sessionPorts("dev", () => 1)).toEqual({
+			postgres: 5432,
+			plc: 2582,
+			pds: 2583,
+			mail: 8025,
+		});
 	});
 
 	it("takes free ports for a test run, so it can overlap dev and other runs", () => {
@@ -34,13 +39,14 @@ describe("the ports a session takes", () => {
 		expect(Object.values(ports)).not.toContain(5432);
 	});
 
-	it("also takes the API and preview ports for a browser run", () => {
+	it("also takes the API, preview and mail ports for a browser run", () => {
 		expect(sessionPorts("browser", counter(40000))).toEqual({
 			postgres: 40000,
 			plc: 40001,
 			pds: 40002,
 			api: 40003,
 			preview: 40004,
+			mail: 40005,
 		});
 	});
 
@@ -68,12 +74,14 @@ describe("the environment a session hands its command", () => {
 			LOCAL_CONTENT_DIR: "/tmp/s/content",
 		});
 		expect(env.API_PORT).toBeUndefined();
+		// A test run never sends mail, so it is given no inbox to send it to.
+		expect(env.MAIL_CATCHER_URL).toBeUndefined();
 	});
 
 	it("gives a browser run the API and preview ports and the base URL they imply", () => {
 		const env = sessionEnvironment(
 			"browser-abc",
-			{ postgres: 1, plc: 2, pds: 3, api: 40003, preview: 40004 },
+			{ postgres: 1, plc: 2, pds: 3, api: 40003, preview: 40004, mail: 40005 },
 			"/tmp/s",
 			{ inviteCode: "i", accountKey: "k" },
 		);
@@ -81,6 +89,7 @@ describe("the environment a session hands its command", () => {
 			API_PORT: "40003",
 			PREVIEW_PORT: "40004",
 			BASE_URL: "http://localhost:40003",
+			MAIL_CATCHER_URL: "http://localhost:40005",
 		});
 	});
 });

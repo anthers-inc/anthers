@@ -101,3 +101,33 @@ export async function signInAsCreator(context: BrowserContext): Promise<string> 
 }
 
 export { expect };
+
+/** The browser session's mail catcher, where every email the API sends lands. */
+export const MAIL_CATCHER_URL = process.env.MAIL_CATCHER_URL ?? "";
+
+/**
+ * The code in the newest email sent to `address`, read from the session's mail catcher.
+ *
+ * ⭐ **This is what lets a spec finish a ceremony rather than stop at the code field.** The code is
+ * hashed at rest, and an endpoint that handed it back would be a door nobody should have, so the
+ * only honest way to read one is where a person reads it — the inbox. Waits, because the API posts
+ * the email after answering the request that asked for it.
+ */
+export async function emailedCode(address: string, timeoutMs = 15_000): Promise<string> {
+	if (!MAIL_CATCHER_URL) {
+		throw new Error("no MAIL_CATCHER_URL — run the browser suite in a session (make test-e2e)");
+	}
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const res = await fetch(
+			`${MAIL_CATCHER_URL}/api/v1/search?query=${encodeURIComponent(`to:"${address}"`)}`,
+		);
+		const body = (await res.json()) as { messages?: { Subject: string }[] };
+		const code = body.messages
+			?.map((message) => message.Subject.match(/^([A-Z0-9]{6}) is your Anthers/)?.[1])
+			.find(Boolean);
+		if (code) return code;
+		if (Date.now() > deadline) throw new Error(`no code arrived for ${address}`);
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+}

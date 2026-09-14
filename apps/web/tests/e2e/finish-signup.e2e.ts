@@ -15,12 +15,9 @@
  * pending signup is a continuation of the one door rather than a rival to it. That is a
  * property of a guard, and a guard nothing exercises is a guard nobody will notice going.
  *
- * ⚠️ **What this spec cannot assert, and why.** It cannot complete a verification: the
- * emailed code is argon2-hashed at rest, there is deliberately no way to read it back out of
- * the database, and a test-only endpoint that handed back the live code for an address is
- * precisely the thing that must not exist. So the far side — code accepted, session issued,
- * payment, `/welcome` — is `pending-signup.test.ts`'s server-side, and by hand against a
- * live API. Everything on the near side of it is here.
+ * ⚠️ **The far side — the real code accepted and the account made — is `emailed-code.e2e.ts`**,
+ * which reads the code out of the session's mail catcher. Payment after it is
+ * `pending-signup.test.ts`'s server-side, and by hand. Everything on the near side is here.
  */
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
@@ -39,11 +36,11 @@ const rung = (page: Page, name: RegExp) =>
 	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
 
 /**
- * A handle nobody else will ask for. Lowercase letters and digits, inside the 30-character
+ * A handle nobody else will ask for. Lowercase letters and digits, inside the 18-character
  * ceiling `handleNameProblem` enforces.
  */
 const handleName = () =>
-	`e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 30);
+	`e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 18);
 
 /**
  * Start a signup at the one door and land where it takes you.
