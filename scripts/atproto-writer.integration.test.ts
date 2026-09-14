@@ -13,12 +13,13 @@
  * broadcasts only the deletion — anybody who kept a copy keeps it. Requiring the operator to
  * name the target means this can never reach production by defaulting to something.
  *
- *   make pds-up && make pds-test
+ * Every local `bun test` runs it, because the session the run starts sets `ATPROTO_TEST_PDS` to its
+ * own network (`scripts/session-preload.ts`). CI does not run a network yet, so it skips there.
  *
  * ⚠️ **The account this creates is deactivated rather than deleted.** Deleting an account
  * needs a token the server emails, which the local network has nowhere to send. The records
  * are removed properly in `afterAll`, which is the part that matters, and the network holds
- * everything in memory, so the account is gone when `make pds-down` stops it anyway.
+ * everything in memory, so the account is gone when the session removes it anyway.
  */
 import { afterAll, describe, expect, it } from "bun:test";
 import { AtpAgent } from "@atproto/api";

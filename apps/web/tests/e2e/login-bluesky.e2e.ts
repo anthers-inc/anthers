@@ -20,7 +20,7 @@
  * Someone who reads it as "sign up with Bluesky" finds out at the end of a round trip
  * through another website, so the modal has to say so before it sends them.
  */
-import { expect, test } from "./fixtures";
+import { API_URL, expect, test } from "./fixtures";
 
 test.describe("logging in with Bluesky", () => {
 	test("the button is wired to something", async ({ page }) => {
@@ -74,7 +74,7 @@ test.describe("logging in with Bluesky", () => {
 		// Still here, and still signed out. A failed handoff that navigated anyway would be
 		// a worse bug than the refusal it is reporting.
 		expect(new URL(page.url()).pathname).toBe("/login");
-		const me = await page.request.get("http://localhost:8000/api/auth/me");
+		const me = await page.request.get(`${API_URL}/api/auth/me`);
 		expect((await me.json()).user, "a refused handle must not create a session").toBeNull();
 	});
 

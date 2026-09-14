@@ -16,7 +16,7 @@
  * writing, so a copy that no longer matches what is published stops the run rather than being
  * trusted. The rules are `lexicon-evolution.ts`.
  *
- * ⭐ **Against a local server it is a rehearsal.** Pointed at the network `make pds-up` starts, it
+ * ⭐ **Against a local server it is a rehearsal.** Pointed at the network `make dev` starts, it
  * runs the whole write path — the same checks, the same write, the record read back — except the
  * two things only production has: the `_lexicon` DNS record, which cannot name a local account,
  * and the committed copies, which describe production and are left untouched.
@@ -33,7 +33,7 @@
  *
  *   bun run scripts/atproto-publish-lexicon.ts                    # show the plan, write nothing
  *   bun run scripts/atproto-publish-lexicon.ts --write \
- *     --service http://localhost:2583 --identifier alice.test     # rehearse against make pds-up
+ *     --service http://localhost:2583 --identifier alice.test     # rehearse inside make dev
  *   bun run scripts/atproto-publish-lexicon.ts --write \
  *     --service https://bsky.social --identifier anthers.org      # asks, then publishes
  *   bun run scripts/atproto-publish-lexicon.ts --write --retire <nsid> \

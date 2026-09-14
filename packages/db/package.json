@@ -7,6 +7,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./client": "./src/client.ts",
+		"./content-root": "./src/content-root.ts",
 		"./dev-only": "./src/dev-only.ts",
 		"./fixture-did": "./src/fixture-did.ts",
 		"./gauntlet": "./src/gauntlet.ts",

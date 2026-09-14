@@ -56,6 +56,19 @@ export function allowedOrigins(): string[] {
 			// The API itself serves spike test pages that make credentialed requests back
 			// to the API. Dev-only — no production page is served from the API origin.
 			"http://localhost:8000",
+			...sessionPreviewOrigins(),
 		]),
 	];
+}
+
+/**
+ * The preview origin of the browser test session this API belongs to, which took a free port
+ * rather than :4173 so that runs can overlap (`scripts/session.ts`). Exactly that one port, never a
+ * range: a local API accepting credentialed requests from every localhost page would trust
+ * whatever else a developer has running.
+ */
+function sessionPreviewOrigins(): string[] {
+	const port = process.env.PREVIEW_PORT;
+	if (!port || !/^\d{2,5}$/.test(port)) return [];
+	return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 }

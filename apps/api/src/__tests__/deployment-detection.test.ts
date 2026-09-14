@@ -21,7 +21,7 @@ import { isPublicDeployment, publicOrigin } from "../lib/deployment.js";
 import { allowedOrigins } from "../origins.js";
 import { sendAbuseAlert } from "../services/email.js";
 
-const TOUCHED = ["BASE_URL", "FRONTEND_URL", "NODE_ENV"] as const;
+const TOUCHED = ["BASE_URL", "FRONTEND_URL", "NODE_ENV", "PREVIEW_PORT"] as const;
 const saved = new Map<string, string | undefined>();
 
 beforeEach(() => {
@@ -110,6 +110,20 @@ describe("allowedOrigins in production's actual environment", () => {
 		const origins = allowedOrigins();
 		expect(origins).toContain("http://localhost:3000");
 		expect(origins).toContain("http://localhost:4173");
+	});
+
+	it("admits a browser test session's preview port on a developer's machine, and only that port", () => {
+		asDevelopment();
+		process.env.PREVIEW_PORT = "41234";
+		const origins = allowedOrigins();
+		expect(origins).toContain("http://localhost:41234");
+		expect(origins).not.toContain("http://localhost:41235");
+	});
+
+	it("ignores a preview port in production, where no session runs", () => {
+		asProduction();
+		process.env.PREVIEW_PORT = "41234";
+		expect(allowedOrigins().filter((o) => o.includes("41234"))).toEqual([]);
 	});
 });
 

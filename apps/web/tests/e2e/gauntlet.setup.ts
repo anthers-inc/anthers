@@ -39,8 +39,8 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 	// per CI run and throwing the first result away. What this step must leave behind is the
 	// viewer, so the sign-in below has an account to authenticate.
 
-	// The MEDIA FIXTURE is the opposite case and does belong here: nothing ever resets it,
-	// so seeding is idempotent and instant after the first run on a machine.
+	// The MEDIA FIXTURE is the opposite case and does belong here: nothing in the run resets
+	// it, so it is seeded once into the session's fresh database and every spec shares it.
 	//
 	// 🚨 It is seeded ONCE, here, rather than in each spec's `beforeAll` — which is where it
 	// started, and which broke a spec in a different file. Three specs in the `authed`

@@ -32,7 +32,7 @@ describe("devCheckoutRoot", () => {
 		const root = scratch();
 		mkdirSync(join(root, ".do"), { recursive: true });
 		writeFileSync(join(root, ".do", "app.yaml"), "name: anthers\n");
-		writeFileSync(join(root, "compose.yaml"), "services: {}\n");
+		writeFileSync(join(root, "Makefile"), "dev:\n");
 		const nested = join(root, "packages", "db", "src");
 		mkdirSync(nested, { recursive: true });
 
@@ -81,7 +81,7 @@ describe("assertDevCheckout", () => {
 
 		mkdirSync(join(root, ".do"), { recursive: true });
 		writeFileSync(join(root, ".do", "app.yaml"), "name: anthers\n");
-		writeFileSync(join(root, "compose.yaml"), "services: {}\n");
+		writeFileSync(join(root, "Makefile"), "dev:\n");
 		expect(() => assertDevCheckout(nested)).not.toThrow();
 	});
 });

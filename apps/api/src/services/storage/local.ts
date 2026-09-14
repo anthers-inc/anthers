@@ -2,23 +2,28 @@
 /**
  * Local filesystem storage implementation for development.
  *
- * Files are stored under ./content/ relative to the repo root.
- * Served via Hono's serveStatic middleware mounted at /content/*.
+ * Files are stored in the session's upload directory (`localContentRoot()`, which every
+ * `scripts/session.ts` session sets and removes), and served by the middleware at /content/*.
  */
 
 import { randomUUID } from "node:crypto";
 import { access, copyFile, mkdir, rename, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { localContentRoot } from "@anthers/db/content-root";
 import { assertServableKey } from "./acl.js";
 import type { StorageService } from "./types.js";
 
-/** Root directory for local content files (repo root /content/) */
-const CONTENT_ROOT = join(import.meta.dir, "../../../../../content");
-
-/** Base URL for serving local files */
+/**
+ * Base URL for serving local files: the API that serves `/content/*`.
+ *
+ * ⚠️ **`API_PORT` comes first because a URL is often minted outside the API.** The media fixture
+ * runs as its own process and stores the URLs it gets back, and in a browser test session the API
+ * sits on a free port that only `API_PORT` names — `PORT` there would be nothing, or the fixture
+ * script's own. A URL minted with the wrong port points every player at a server that is not there.
+ */
 function getBaseUrl(): string {
-	const port = process.env.PORT ?? "8000";
+	const port = process.env.API_PORT ?? process.env.PORT ?? "8000";
 	return `http://localhost:${port}`;
 }
 
@@ -32,14 +37,14 @@ export class LocalStorageService implements StorageService {
 		// up against S3, which is why the delivery tests assert URLs at the API layer.
 		_acl?: "public" | "private",
 	): Promise<string> {
-		const filePath = join(CONTENT_ROOT, key);
+		const filePath = join(localContentRoot(), key);
 		await mkdir(dirname(filePath), { recursive: true });
 		await Bun.write(filePath, body);
 		return key;
 	}
 
 	async downloadToTemp(key: string): Promise<string> {
-		const sourcePath = join(CONTENT_ROOT, key);
+		const sourcePath = join(localContentRoot(), key);
 		const ext = key.includes(".") ? `.${key.split(".").pop()}` : "";
 		const tempPath = join(tmpdir(), `local_dl_${randomUUID()}${ext}`);
 		await copyFile(sourcePath, tempPath);
@@ -47,19 +52,19 @@ export class LocalStorageService implements StorageService {
 	}
 
 	async read(key: string): Promise<Uint8Array | null> {
-		const file = Bun.file(join(CONTENT_ROOT, key));
+		const file = Bun.file(join(localContentRoot(), key));
 		if (!(await file.exists())) return null;
 		return new Uint8Array(await file.arrayBuffer());
 	}
 
 	async size(key: string): Promise<number | null> {
-		const file = Bun.file(join(CONTENT_ROOT, key));
+		const file = Bun.file(join(localContentRoot(), key));
 		if (!(await file.exists())) return null;
 		return file.size;
 	}
 
 	async readRange(key: string, offset: number, length: number): Promise<Uint8Array | null> {
-		const file = Bun.file(join(CONTENT_ROOT, key));
+		const file = Bun.file(join(localContentRoot(), key));
 		if (!(await file.exists())) return null;
 		if (length <= 0) return new Uint8Array(0);
 		// Bun.file().slice() is lazy — it describes the range and only the sliced bytes are
@@ -81,8 +86,8 @@ export class LocalStorageService implements StorageService {
 	/** Rename on disk, creating the destination directory. False when the source is absent. */
 	async move(fromKey: string, toKey: string): Promise<boolean> {
 		if (fromKey === toKey) return true;
-		const from = join(CONTENT_ROOT, fromKey);
-		const to = join(CONTENT_ROOT, toKey);
+		const from = join(localContentRoot(), fromKey);
+		const to = join(localContentRoot(), toKey);
 		try {
 			await access(from);
 		} catch {
@@ -109,7 +114,7 @@ export class LocalStorageService implements StorageService {
 
 	async delete(key: string): Promise<void> {
 		try {
-			await unlink(join(CONTENT_ROOT, key));
+			await unlink(join(localContentRoot(), key));
 		} catch (err: unknown) {
 			// Ignore "file not found" — delete is idempotent
 			if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT")
@@ -120,12 +125,12 @@ export class LocalStorageService implements StorageService {
 
 	async deletePrefix(prefix: string): Promise<void> {
 		// A prefix maps to a directory on disk; remove it recursively. Idempotent.
-		await rm(join(CONTENT_ROOT, prefix), { recursive: true, force: true });
+		await rm(join(localContentRoot(), prefix), { recursive: true, force: true });
 	}
 
 	async exists(key: string): Promise<boolean> {
 		try {
-			await access(join(CONTENT_ROOT, key));
+			await access(join(localContentRoot(), key));
 			return true;
 		} catch {
 			return false;
@@ -134,11 +139,11 @@ export class LocalStorageService implements StorageService {
 
 	/** Get the absolute filesystem path for a key (used by serveStatic) */
 	getAbsolutePath(key: string): string {
-		return join(CONTENT_ROOT, key);
+		return join(localContentRoot(), key);
 	}
 
 	/** Get the content root directory (for serveStatic configuration) */
 	static getContentRoot(): string {
-		return CONTENT_ROOT;
+		return localContentRoot();
 	}
 }

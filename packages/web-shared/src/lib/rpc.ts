@@ -60,7 +60,7 @@ export function apiSendsCookies(): boolean {
  * almost always same-origin:
  *   - the desktop shell   → whatever origin it injected (host-sniffing can't work
  *     from `tauri://localhost`, which would otherwise resolve to the app itself)
- *   - localhost / 127.0.0.1 → the dev API on :8000
+ *   - localhost / 127.0.0.1 → the dev API, on :8000 or the port the page announces
  *   - otherwise             → same-origin ("")
  *
  * There was a `studio.<host>` branch until 2026-08-11 that stripped the label to reach
@@ -80,8 +80,26 @@ export function apiBaseUrl(): string {
 	// host and read on the other, so the finishing page found an empty row and asked for an
 	// address Bluesky had already given us. Serve dev from `http://127.0.0.1:3000` and the
 	// whole flow stays on one host.
-	if (h === "localhost" || h === "127.0.0.1") return `http://${h}:8000`;
+	if (h === "localhost" || h === "127.0.0.1") return `http://${h}:${devApiPort()}`;
 	return "";
+}
+
+/**
+ * The port of the API behind a page served from localhost: `:8000` for `make dev`, or whatever
+ * the page's own server says.
+ *
+ * ⚠️ **A browser test run picks a free port for its API**, so it can run beside `make dev` and
+ * beside another run, and its preview server announces that port in a
+ * `<meta name="anthers-dev-api-port">` tag (`apps/web/serve.ts`). Nothing else serves the tag, and
+ * only a localhost page reads it, so a deployed page cannot be pointed anywhere by one.
+ */
+export function devApiPort(
+	doc: Pick<Document, "querySelector"> | undefined = globalThis.document,
+): string {
+	const announced = doc
+		?.querySelector('meta[name="anthers-dev-api-port"]')
+		?.getAttribute("content");
+	return announced && /^\d{2,5}$/.test(announced) ? announced : "8000";
 }
 
 /**

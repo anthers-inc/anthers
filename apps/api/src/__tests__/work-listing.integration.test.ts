@@ -14,7 +14,8 @@
  * afterwards broadcasts only the deletion, so anyone who kept a copy keeps it. Requiring the
  * operator to name the target is what stops this reaching production by defaulting to something.
  *
- *   make pds-up && make pds-test
+ * Every local `bun test` runs it, because the session the run starts sets `ATPROTO_TEST_PDS` to its
+ * own network (`scripts/session-preload.ts`). CI does not run a network yet, so it skips there.
  *
  * ⚠️ **This one needs the database as well as the server**, which is why it lives here rather
  * than beside its sibling in `scripts/`. It creates a real account on the throwaway server, seals

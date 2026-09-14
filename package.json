@@ -16,7 +16,7 @@
 		"dev:web": "bun run --filter web dev",
 		"build": "bun run --filter '*' build",
 		"typecheck": "bun run --filter '*' typecheck",
-		"test": "bun run --filter '*' test",
+		"test": "bun test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",

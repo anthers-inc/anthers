@@ -4,10 +4,16 @@ import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_PASSWORD, GAUNTLET_CREATOR_USERNAME } from "@anthers/db/gauntlet";
 import { type BrowserContext, test as base, expect, type Page } from "@playwright/test";
 
-/** The static preview the browser loads (playwright.config.ts webServer #1). */
-export const WEB_ORIGIN = "http://localhost:4173";
-/** The real API (webServer #2). Pages on localhost resolve their API base here — no proxy. */
-export const API_URL = "http://localhost:8000";
+/**
+ * The static preview the browser loads (playwright.config.ts webServer #1), on the port the
+ * browser session picked. Every run takes free ports, so two runs and a `make dev` coexist.
+ */
+export const WEB_ORIGIN = `http://localhost:${process.env.PREVIEW_PORT ?? 4173}`;
+/**
+ * The real API (webServer #2). The preview server tells the page which port this is, so pages
+ * reach it directly with no proxy — see `rpc.ts`.
+ */
+export const API_URL = `http://localhost:${process.env.API_PORT ?? 8000}`;
 /**
  * Where the setup project writes the signed-in viewer's storage state (session cookie +
  * SiteGate flag). The gauntlet project loads it via its `use.storageState`.

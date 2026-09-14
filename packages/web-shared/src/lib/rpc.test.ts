@@ -25,6 +25,7 @@
 import { describe, expect, it } from "bun:test";
 import { join, relative, resolve } from "node:path";
 import { Glob } from "bun";
+import { devApiPort } from "./rpc.js";
 
 const REPO = resolve(import.meta.dir, "../../../..");
 
@@ -78,5 +79,28 @@ describe("API origin resolution is centralized", () => {
 		const seen = [...glob.scanSync({ cwd: join(REPO, "apps/web/src") })];
 		expect(seen.length).toBeGreaterThan(50);
 		expect(await Bun.file(join(REPO, "packages/web-shared/src/lib/rpc.ts")).exists()).toBe(true);
+	});
+});
+
+describe("the dev API port a localhost page reaches", () => {
+	const page = (content: string | null) => ({
+		querySelector: (selector: string) =>
+			selector === 'meta[name="anthers-dev-api-port"]' && content !== null
+				? ({ getAttribute: (name: string) => (name === "content" ? content : null) } as Element)
+				: null,
+	});
+
+	it("is :8000 when the page announces nothing, which is `make dev`", () => {
+		expect(devApiPort(page(null))).toBe("8000");
+		expect(devApiPort(undefined)).toBe("8000");
+	});
+
+	it("is the port a browser test session's preview server announces", () => {
+		expect(devApiPort(page("41234"))).toBe("41234");
+	});
+
+	it("ignores an announcement that is not a port, rather than building a URL out of it", () => {
+		expect(devApiPort(page("evil.example/"))).toBe("8000");
+		expect(devApiPort(page(""))).toBe("8000");
 	});
 });

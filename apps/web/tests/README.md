@@ -77,12 +77,14 @@ Two kinds of spec live here, split into Playwright projects:
   transition, with **strict** error tracking (`trackErrorsStrict` — no `/api/`
   filter). Spec: the vault's `70-79 Testing & QA/70 - User Gauntlet.md`.
 
-**The suite now needs the real API + Postgres.** The config's second `webServer`
-entry reuses a running `make dev` API on :8000, or brings the dev database up
-itself (`make db-ready`, docker) and starts one. Pages served from localhost
-resolve their API base to `localhost:8000` (see `web-shared`'s `rpc.ts`), so
-there's no proxy — `origins.ts` allowlists the preview origin (:4173) outside
-production. In CI, Postgres is a service container (`.github/workflows/ci.yml` —
+**The suite needs the real API + Postgres, and it runs in a session of its own.**
+`make test-e2e` and `make verify` start one (`scripts/session.ts browser`): a fresh
+database, a private AT Protocol network, and free ports for the preview and the
+API, all removed when the run ends — so it never touches a running `make dev`, and
+two runs can overlap. A bare `bunx playwright test` refuses to start its servers
+outside one. The preview server announces the API's port to the page in a meta
+tag, which `web-shared`'s `rpc.ts` reads, so there's no proxy — and `origins.ts`
+allowlists that one preview origin outside production. In CI, Postgres is a service container (`.github/workflows/ci.yml` —
 there is no `e2e.yml`; it was folded into the single workflow long ago).
 
 🚨 **CI runs this suite as TWO jobs, split by system dependency**, and the split
@@ -94,8 +96,8 @@ on a good day and blew the job timeout twice in two days on a stalled Ubuntu
 mirror. `scripts/e2e-projects.ts` derives both jobs' `--project` arguments from
 that flag and **fails on a project that declares none** — Playwright 1.61 has no
 `--project` negation, so an undeclared project would otherwise run in neither job
-while both stayed green. Nothing changes locally: `make verify` and a bare
-`playwright test` still run every project.
+while both stayed green. Nothing changes locally: `make verify` and
+`make test-e2e` still run every project.
 
 **Billing is hybrid in the walk.** The support model made badge and support
 billing real Stripe flows (503 unconfigured, webhook-synced when configured), so the

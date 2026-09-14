@@ -1,3 +1,7 @@
 [install]
 # Hoist all dependencies to the root node_modules
 exact = true
+
+[test]
+# Every test run gets its own disposable database and AT Protocol network. See the file.
+preload = ["./scripts/session-preload.ts"]

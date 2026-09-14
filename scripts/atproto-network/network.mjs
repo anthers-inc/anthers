@@ -3,9 +3,8 @@
  * A private AT Protocol network for development and tests: a PLC directory and a Personal Data
  * Server, both held in memory and gone when the process stops.
  *
- *   make pds-up      # build and start it
- *   make pds-test    # run the record-writing integration tests against it
- *   make pds-down    # stop it, which discards everything it held
+ * `scripts/session.ts` starts one for every `make dev` and every test run and removes it when the
+ * run ends, so nothing it held outlives the session that made it.
  *
  * 🛑 **Nothing here may reach the real network, and the directory is the part that decides it.**
  * An identity registered with `plc.directory` is permanent — its log is append-only, and without
@@ -19,14 +18,16 @@
  * because it cannot run under Bun: its server depends on `better-sqlite3`, which Bun refuses to
  * load, and on `undici` internals that Bun replaces with its own.
  *
- * ⚠️ **The ports are fixed, and they are the AT Protocol tooling's own conventions** — 2582 for the
- * directory and 2583 for the server — because the server writes its own address into every
- * identity it creates, and that address has to be the one the host reaches it on.
+ * ⚠️ **The container must publish each port on the same number it listens on**, because the server
+ * writes its own address into every identity it creates, and that address has to be the one the
+ * host reaches it on. The defaults are the AT Protocol tooling's own conventions — 2582 for the
+ * directory and 2583 for the server — and `make dev` keeps them; a test run picks free ports and
+ * passes them in.
  */
 import { TestNetworkNoAppView } from "@atproto/dev-env";
 
-const PLC_PORT = 2582;
-const PDS_PORT = 2583;
+const PLC_PORT = Number(process.env.PLC_PORT ?? 2582);
+const PDS_PORT = Number(process.env.PDS_PORT ?? 2583);
 
 const network = await TestNetworkNoAppView.create({
 	plc: { port: PLC_PORT },
