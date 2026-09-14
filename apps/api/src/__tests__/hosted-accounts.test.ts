@@ -33,8 +33,9 @@ const before = {
 	invite: process.env.HOSTED_PDS_INVITE_CODE,
 };
 
-beforeAll(() => {
+beforeAll(async () => {
 	process.env.HOSTED_PDS_URL = PDS_URL;
+	await learnHandleDomain(PDS_URL, "anthers.test");
 });
 
 afterAll(() => {
@@ -53,9 +54,11 @@ const {
 	createHostedAccount,
 	handleNameProblem,
 	hostedHandleFor,
+	hostedHandleSuffix,
 	HostedAccountError,
 	normalizeHandleName,
 } = await import("../services/hosted-accounts.js");
+const { describingNode, learnHandleDomain } = await import("./node-fixture.js");
 
 /** A fetch that answers a fixed response, and records what it was asked for. */
 function fakeFetch(
@@ -76,15 +79,81 @@ function fakeFetch(
 }
 
 describe("normalizeHandleName", () => {
-	it("takes a name however somebody writes it", () => {
-		expect(normalizeHandleName("  @Alice  ")).toBe("alice");
-		expect(normalizeHandleName("Alice.anthers.test")).toBe("alice");
-		expect(normalizeHandleName("@alice.anthers.test")).toBe("alice");
+	it("takes a name however somebody writes it", async () => {
+		expect(await normalizeHandleName("  @Alice  ")).toBe("alice");
+		expect(await normalizeHandleName("Alice.anthers.test")).toBe("alice");
+		expect(await normalizeHandleName("@alice.anthers.test")).toBe("alice");
 	});
 
 	// The suffix is stripped only from the end. A name that merely contains it is a name.
-	it("does not strip a suffix that is not at the end", () => {
-		expect(normalizeHandleName("anthers.test.fan")).toBe("anthers.test.fan");
+	it("does not strip a suffix that is not at the end", async () => {
+		expect(await normalizeHandleName("anthers.test.fan")).toBe("anthers.test.fan");
+	});
+});
+
+describe("hostedHandleSuffix", () => {
+	/** A node address nobody else in the process has asked about, so the memo starts empty. */
+	const fresh = (tag: string) => `https://${tag}-${crypto.randomUUID().slice(0, 8)}.test`;
+
+	it("is the domain the node says it issues under, not the node's hostname", async () => {
+		const url = fresh("describe");
+		await learnHandleDomain(url, "handles.example");
+		process.env.HOSTED_PDS_URL = url;
+		try {
+			expect(await hostedHandleSuffix()).toBe("handles.example");
+			expect(await hostedHandleFor("alice")).toBe("alice.handles.example");
+		} finally {
+			process.env.HOSTED_PDS_URL = PDS_URL;
+		}
+	});
+
+	it("asks the node once and remembers what it said", async () => {
+		const url = fresh("memo");
+		process.env.HOSTED_PDS_URL = url;
+		try {
+			let asked = 0;
+			const counting = (async (input: string | URL | Request, init?: RequestInit) => {
+				asked++;
+				return describingNode("once.test")(input, init);
+			}) as unknown as typeof fetch;
+			expect(await hostedHandleSuffix({ fetchImpl: counting })).toBe("once.test");
+			expect(await hostedHandleSuffix({ fetchImpl: counting })).toBe("once.test");
+			expect(asked).toBe(1);
+		} finally {
+			process.env.HOSTED_PDS_URL = PDS_URL;
+		}
+	});
+
+	// 🚨 An empty suffix closes the door. Guessing the hostname instead is the disagreement with
+	// the node this lookup exists to rule out, and on a local network it is a refused handle.
+	it("is empty when the node does not answer, and asks again next time", async () => {
+		const url = fresh("down");
+		process.env.HOSTED_PDS_URL = url;
+		try {
+			const down = (async () => {
+				throw new Error("ECONNREFUSED");
+			}) as unknown as typeof fetch;
+			expect(await hostedHandleSuffix({ fetchImpl: down })).toBe("");
+			expect(await hostedHandleSuffix({ fetchImpl: describingNode("later.test") })).toBe(
+				"later.test",
+			);
+		} finally {
+			process.env.HOSTED_PDS_URL = PDS_URL;
+		}
+	});
+
+	it("refuses an answer that is not a domain rather than building handles out of it", async () => {
+		const url = fresh("garbage");
+		process.env.HOSTED_PDS_URL = url;
+		try {
+			const garbage = (async () =>
+				new Response(
+					JSON.stringify({ availableUserDomains: [".evil/../x"] }),
+				)) as unknown as typeof fetch;
+			expect(await hostedHandleSuffix({ fetchImpl: garbage })).toBe("");
+		} finally {
+			process.env.HOSTED_PDS_URL = PDS_URL;
+		}
 	});
 });
 
@@ -190,7 +259,7 @@ describe("createHostedAccount", () => {
 
 	it("sends the full handle, the address and the invite, and no recovery key", async () => {
 		const { impl, calls } = fakeFetch(() => ({
-			body: { did: "did:plc:new", handle: hostedHandleFor("alice") },
+			body: { did: "did:plc:new", handle: "alice.anthers.test" },
 		}));
 		const account = await createHostedAccount(
 			{ handleName: "alice", email: "alice@example.com" },

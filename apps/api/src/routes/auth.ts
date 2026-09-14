@@ -223,7 +223,7 @@ const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN;
  * from the httpOnly cookie alone. A hand-typed URL gets `null`, so the finishing page cannot
  * be talked into displaying somebody else's handle by anybody who knows it.
  */
-function serializePendingSignup(row: Awaited<ReturnType<typeof readPendingSignup>>) {
+async function serializePendingSignup(row: Awaited<ReturnType<typeof readPendingSignup>>) {
 	if (!row) return null;
 	return {
 		email: row.email,
@@ -252,7 +252,7 @@ function serializePendingSignup(row: Awaited<ReturnType<typeof readPendingSignup
 		 * ⚠️ Sent as the whole handle rather than the name, so the finishing page states what is
 		 * about to exist rather than assembling it from a suffix it keeps its own copy of.
 		 */
-		hostedHandle: row.hostedHandle ? hostedHandleFor(row.hostedHandle) : null,
+		hostedHandle: row.hostedHandle ? await hostedHandleFor(row.hostedHandle) : null,
 		picks: picksOf(row),
 		next: row.next,
 		/** When the signup, and the handle it holds, stop being held. */
@@ -272,7 +272,7 @@ async function handleRefusal(
 	handleName: string,
 	ownToken: string | undefined,
 ): Promise<{ error: string; status: 400 | 409 } | null> {
-	const full = hostedHandleFor(handleName);
+	const full = await hostedHandleFor(handleName);
 	if (await handleReservedElsewhere(handleName, ownToken)) {
 		return { error: `${full} is taken.`, status: 409 };
 	}
@@ -362,7 +362,7 @@ async function mintFromProvedAddress(
 			body: {
 				error: settled.refusal.message,
 				reason: settled.refusal.reason,
-				pending: serializePendingSignup(await readPendingSignup(row.token)),
+				pending: await serializePendingSignup(await readPendingSignup(row.token)),
 			},
 		};
 	}
@@ -457,10 +457,10 @@ const authRoutes = new Hono()
 		// name that arrives in somebody's own spelling has to be stored in the node's.
 		let requestedHandle: string | null = null;
 		if (hostedHandle) {
-			if (!hostedIdentityOffered()) {
+			if (!(await hostedIdentityOffered())) {
 				return c.json({ error: "Anthers isn't issuing handles right now." }, 503);
 			}
-			requestedHandle = normalizeHandleName(hostedHandle);
+			requestedHandle = await normalizeHandleName(hostedHandle);
 			const refusal = await handleRefusal(requestedHandle, previousToken);
 			if (refusal) return c.json({ error: refusal.error }, refusal.status);
 		}
@@ -476,7 +476,7 @@ const authRoutes = new Hono()
 			});
 		} catch (err) {
 			if (err instanceof HandleReservedError && requestedHandle) {
-				return c.json({ error: `${hostedHandleFor(requestedHandle)} is taken.` }, 409);
+				return c.json({ error: `${await hostedHandleFor(requestedHandle)} is taken.` }, 409);
 			}
 			throw err;
 		}
@@ -508,7 +508,7 @@ const authRoutes = new Hono()
 	// show the choices it is about to commit. Answers from the cookie and nothing else.
 	.get("/signup/pending", async (c) => {
 		const row = await readPendingSignup(getCookie(c, PENDING_SIGNUP_COOKIE));
-		return c.json({ pending: serializePendingSignup(row) });
+		return c.json({ pending: await serializePendingSignup(row) });
 	})
 
 	// Choose, or change, the handle an unfinished signup asks Anthers to issue — the finishing
@@ -523,11 +523,11 @@ const authRoutes = new Hono()
 				404,
 			);
 		}
-		if (!hostedIdentityOffered()) {
+		if (!(await hostedIdentityOffered())) {
 			return c.json({ error: "Anthers isn't issuing handles right now." }, 503);
 		}
 
-		const name = normalizeHandleName(c.req.valid("json").hostedHandle);
+		const name = await normalizeHandleName(c.req.valid("json").hostedHandle);
 		const refusal = await handleRefusal(name, token);
 		if (refusal) return c.json({ error: refusal.error }, refusal.status);
 
@@ -535,11 +535,11 @@ const authRoutes = new Hono()
 			await chooseHostedHandle(token as string, name);
 		} catch (err) {
 			if (err instanceof HandleReservedError) {
-				return c.json({ error: `${hostedHandleFor(name)} is taken.` }, 409);
+				return c.json({ error: `${await hostedHandleFor(name)} is taken.` }, 409);
 			}
 			throw err;
 		}
-		return c.json({ pending: serializePendingSignup(await readPendingSignup(token)) });
+		return c.json({ pending: await serializePendingSignup(await readPendingSignup(token)) });
 	})
 
 	// Abandon it — the "actually, never mind" on the finishing page. The row goes as well as

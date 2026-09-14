@@ -532,7 +532,7 @@ export async function establishSignupIdentity(
 	if (row.hostedHandle) {
 		const { createHostedAccount, HostedAccountError, hostedIdentityOffered, hostedPdsUrl } =
 			await import("./hosted-accounts.js");
-		if (!hostedIdentityOffered()) {
+		if (!(await hostedIdentityOffered())) {
 			return {
 				refusal: {
 					reason: "identity_unavailable",

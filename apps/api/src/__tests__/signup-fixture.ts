@@ -115,6 +115,9 @@ export function stubNetwork(): NetworkStub {
 					typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 				stub.calls.push(url);
 
+				if (url === `${NODE_URL}/xrpc/com.atproto.server.describeServer`) {
+					return answer({ availableUserDomains: [`.${new URL(NODE_URL).hostname}`] });
+				}
 				if (url.startsWith(`${NODE_URL}/xrpc/com.atproto.server.createAccount`)) {
 					const create = stub.create;
 					if (create.kind === "down") throw new Error("node.invalid does not resolve");

@@ -24,6 +24,7 @@ import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { learnHandleDomain } from "./node-fixture";
 
 purgeAccountsCreatedHere();
 
@@ -36,7 +37,8 @@ function restore(key: string, value: string | undefined) {
 	else process.env[key] = value;
 }
 
-beforeAll(() => {
+beforeAll(async () => {
+	await learnHandleDomain("https://anthers.test", "anthers.test");
 	process.env.HOSTED_PDS_URL = "https://anthers.test";
 	process.env.HOSTED_ACCOUNT_KEY = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
 		"hex",

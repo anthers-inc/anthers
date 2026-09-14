@@ -41,6 +41,7 @@ import { writerForAccount } from "../services/repo-writer.js";
 import { seal } from "../services/secret-box.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { learnHandleDomain } from "./node-fixture";
 
 purgeAccountsCreatedHere();
 
@@ -148,12 +149,14 @@ describe("when a write is refused", () => {
 });
 
 describe("the identity server Anthers hosts", () => {
+	beforeAll(() => learnHandleDomain("https://node.invalid", "node.invalid"));
+
 	it("creates no account on a real server from a developer's machine", async () => {
 		runAs(LOCAL);
 		process.env.HOSTED_PDS_URL = "https://anthers.social";
 		const spy = spyFetch();
 
-		expect(hostedIdentityOffered()).toBe(false);
+		expect(await hostedIdentityOffered()).toBe(false);
 		const attempt = createHostedAccount(
 			{ handleName: `${RUN}a`, email: `${RUN}a@example.test` },
 			{ fetchImpl: spy.fetch },
@@ -173,7 +176,7 @@ describe("the identity server Anthers hosts", () => {
 		process.env.HOSTED_PDS_URL = "https://node.invalid";
 		const spy = spyFetch();
 
-		expect(hostedIdentityOffered()).toBe(true);
+		expect(await hostedIdentityOffered()).toBe(true);
 		await expect(
 			createHostedAccount(
 				{ handleName: `${RUN}b`, email: `${RUN}b@example.test` },
