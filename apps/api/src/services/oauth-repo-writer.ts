@@ -32,7 +32,7 @@ import { missingRepoActions, scopeAllowsWriting } from "./atproto-scope.js";
 
 /** Why no writer could be made over a creator's own grant. */
 export type NoOauthWriterReason =
-	/** This creator has linked no identity at all — the common case, and not a problem. */
+	/** No such account. Every account holds an identity, so no creator is ever in this state. */
 	| "no_identity"
 	/** They hold an identity and have not granted Anthers permission to publish into it. */
 	| "not_granted"

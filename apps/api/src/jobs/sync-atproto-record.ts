@@ -49,7 +49,7 @@ const SYNCERS: Record<RecordSyncKind, (id: number) => Promise<AnyResult>> = {
  * Whether an outcome is worth a line in the worker log.
  *
  * ⭐ **Quiet about the ordinary, and the ordinary is most of it.** A plan that writes nothing —
- * a draft, a kept record, a schema not yet published — and an account with no identity or no
+ * a draft, a kept record, a schema not yet published — and an identity held elsewhere with no
  * grant describe the great majority of syncs, and a vote is cast far more often than a Work is
  * released. Logging them would bury the lines that mean something: a write, a removal, and the
  * skips that say a server or a credential is broken.

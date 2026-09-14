@@ -189,11 +189,11 @@ describe.skipIf(!SERVICE)("a Work's listing in a repository Anthers hosts", () =
 		expect(read.ok).toBe(false);
 	}, 60_000);
 
-	// ⚠️ The ordinary case, and the one that must never change: nobody is turned away for
-	// lacking a handle, so a creator without one publishes exactly as they always did. There are
-	// two routes into a repository now — a hosted identity and a permission granted over one
-	// held elsewhere — and this creator has neither, which is what `no_identity` says.
-	it("does nothing at all for a creator with no identity at all", async () => {
+	// ⚠️ The ordinary case, and the one that must never change: a creator whose identity lives
+	// elsewhere and who has granted nothing publishes exactly as everybody else does. There are
+	// two routes into a repository — a hosted identity and a permission granted over one held
+	// elsewhere — and this creator has neither, which is what `not_granted` says.
+	it("does nothing at all for a creator whose identity is neither hosted nor granted", async () => {
 		const [plain] = await db
 			.insert(users)
 			.values({
@@ -214,7 +214,7 @@ describe.skipIf(!SERVICE)("a Work's listing in a repository Anthers hosts", () =
 
 		const { syncWorkListing } = await import("../services/work-listing.js");
 		const result = await syncWorkListing(work.id);
-		expect(result).toEqual({ status: "skipped", reason: "no_identity" });
+		expect(result).toEqual({ status: "skipped", reason: "not_granted" });
 
 		const [row] = await db
 			.select({ uri: works.atprotoUri })

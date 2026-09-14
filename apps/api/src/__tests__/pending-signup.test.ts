@@ -9,11 +9,11 @@
  *
  * Three tests carry the weight and the rest are the surface around them:
  *
- *   • **An address-resumed signup does not carry an identity across.** Anyone can complete a
- *     real OAuth round trip with their own Bluesky account and then type *your* address; if
- *     the row handed its DID over when you proved that mailbox, your brand-new account would
- *     come into existence with a stranger's identity linked to it and they could sign in
- *     with it.
+ *   • **An address-resumed signup does not carry a Bluesky identity across.** Anyone can
+ *     complete a real OAuth round trip with their own Bluesky account and then type *your*
+ *     address; if the row handed its DID over when you proved that mailbox, your brand-new
+ *     account would come into existence with a stranger's identity on it and they could sign
+ *     in with it. Its handle stays as a hint, and the identity has to be proved again.
  *   • **The sign-in door still creates nothing.** It may now find an unfinished signup, which
  *     is what lets somebody carry on in another browser — but a mistyped address at `/login`
  *     has no pending signup behind it, so it mints exactly as much as it ever did.
@@ -26,6 +26,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -36,7 +37,6 @@ import {
 	PENDING_SIGNUP_TTL_MS,
 	readPendingSignup,
 	setPendingEmail,
-	shouldIssueHandle,
 	startPendingSignup,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
@@ -58,6 +58,7 @@ beforeAll(() => {
 afterAll(async () => {
 	setAtprotoClient(undefined);
 	await db.delete(pendingSignups).where(like(pendingSignups.email, `${RUN}%`));
+	await db.delete(pendingSignups).where(like(pendingSignups.hostedHandle, `${RUN}%`));
 	await db.delete(pendingSignups).where(like(pendingSignups.atprotoDid, `did:plc:${RUN}%`));
 	await db.delete(atprotoSessions).where(like(atprotoSessions.did, `did:plc:${RUN}%`));
 	await db.delete(signupCodes).where(like(signupCodes.email, `${RUN}%`));
@@ -87,6 +88,13 @@ async function begin(body: Record<string, unknown>): Promise<{ res: Response; to
 async function clearThrottle(email: string): Promise<void> {
 	await db.delete(signupCodes).where(eq(signupCodes.email, email.trim().toLowerCase()));
 }
+
+/** A placeholder Bluesky identity, as the OAuth callback would bind one. */
+const identity = (tag: string) => ({
+	did: did(tag),
+	handle: `${tag}.bsky.social`,
+	pdsUrl: "https://pds.example",
+});
 
 /** Spend a real code at either door, carrying whatever cookie is given. */
 async function spendCode(path: string, email: string, cookie: string): Promise<Response> {
@@ -151,7 +159,9 @@ describe("asking for an account writes it down", () => {
 	});
 
 	it("says nothing about whether the address already has an account", async () => {
-		await db.insert(users).values({ email: addr("known"), emailVerified: true });
+		await db
+			.insert(users)
+			.values({ email: addr("known"), emailVerified: true, atprotoDid: fixtureDid() });
 		const known = await begin({ email: addr("known") });
 		const stranger = await begin({ email: addr("stranger") });
 		// The moment these answer differently, this endpoint becomes a way to ask "is this
@@ -168,6 +178,7 @@ describe("finishing it in the same browser", () => {
 			picks: { anthers: 3, follow: ["carol"], seed: [] },
 			next: "/works/x-1",
 		});
+		await bindIdentityToPending(token, identity("finish"));
 
 		const res = await spendCode(
 			"/api/auth/signup/verify",
@@ -194,6 +205,7 @@ describe("finishing it in the same browser", () => {
 			.from(users)
 			.where(eq(users.email, addr("finish")));
 		expect(user.username).toBeNull();
+		expect(user.atprotoDid, "created holding its identity").toBe(did("finish"));
 		// A spent row cannot be replayed onto a second account.
 		expect(await readPendingSignup(token)).toBeUndefined();
 	});
@@ -265,6 +277,9 @@ describe("resuming it in another browser", () => {
 		await begin({ email: addr("proved") });
 		const signin = await spendCode("/api/auth/signin/verify", addr("proved"), "");
 		const token = (signin.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1];
+		// The identity is proved in THIS browser, as a Bluesky round trip from the finishing page
+		// would bind it.
+		await bindIdentityToPending(token, identity("proved"));
 
 		const res = await app.request("/api/auth/signup/complete", {
 			method: "POST",
@@ -429,18 +444,19 @@ describe("holding an address is not the same as having mailed it", () => {
 	});
 });
 
-describe("what an address-resumed signup may NOT carry across", () => {
-	it("drops the ATProto identity, because a mailbox was proved and an identity was not", async () => {
+describe("what an address-resumed signup carries across, and what it proves again", () => {
+	it("drops a Bluesky identity, because a mailbox was proved and an identity was not", async () => {
 		/*
 		 * 🚨 **The takeover this closes, in full.** A stranger completes a real OAuth round
 		 * trip with their own Bluesky account — so the DID on the row is genuinely theirs —
 		 * and types somebody else's address into the finishing page. They walk away. The
-		 * address's real owner signs up later in a browser with no cookie, completes a code
-		 * sent to their own mailbox, and their account comes into existence. If the row handed
-		 * its DID over at that point, the stranger could sign in to it with Bluesky forever.
+		 * address's real owner proves their own mailbox later in a browser with no cookie. If
+		 * the row handed its DID over at that point, the account created from it would carry
+		 * the stranger's identity, and the stranger could sign in to it with Bluesky forever.
 		 *
-		 * Proving a mailbox is not proving an identity. Coming back through Bluesky is how an
-		 * identity is re-proved, and that path keeps the row whole.
+		 * Proving a mailbox is not proving an identity. The handle stays behind only as a hint
+		 * for *Continue with Bluesky*, and nothing can be finished until an identity is proved in
+		 * this browser — which a stranger's identity cannot be, by the person whose mailbox it is.
 		 */
 		const token = await startPendingSignup({
 			email: addr("victim"),
@@ -459,7 +475,18 @@ describe("what an address-resumed signup may NOT carry across", () => {
 			row?.atprotoDid,
 			"an identity nobody re-proved must not survive the hand-over",
 		).toBeNull();
-		expect(row?.atprotoHandle).toBe("");
+		expect(row?.atprotoHandle, "its handle stays, as a hint and never as an identity").toBe(
+			"squatter.bsky.social",
+		);
+
+		const read = await app.request("/api/auth/signup/pending", {
+			headers: { Cookie: `signup_pending=${rebound}` },
+		});
+		const { pending } = (await read.json()) as {
+			pending: { atprotoHandle: string | null; blueskyHint: string | null };
+		};
+		expect(pending.atprotoHandle).toBeNull();
+		expect(pending.blueskyHint).toBe("squatter.bsky.social");
 
 		// And the stranger's OAuth session goes with it, rather than sitting there as a live
 		// token nobody tracks.
@@ -469,56 +496,77 @@ describe("what an address-resumed signup may NOT carry across", () => {
 			.where(eq(atprotoSessions.did, did("squatter")));
 		expect(orphan.length).toBe(0);
 
+		// 🚨 A hint cannot finish a signup. Without an identity proved here, nothing is created.
 		const finished = await app.request("/api/auth/signup/complete", {
 			method: "POST",
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${rebound}` },
 		});
-		expect(finished.status).toBe(201);
-		const [user] = await db
+		expect(finished.status).toBe(409);
+		expect(((await finished.json()) as { reason: string }).reason).toBe("no_identity");
+		const made = await db
 			.select()
 			.from(users)
 			.where(eq(users.email, addr("victim")));
-		expect(
-			user.atprotoDid,
-			"the account is the victim's, with nobody else's identity on it",
-		).toBeNull();
+		expect(made.length).toBe(0);
 
 		// The old token was rebound rather than left alive in the stranger's browser.
 		expect(await readPendingSignup(token)).toBeUndefined();
 	});
 
-	// ⭐ **A smaller version of the same takeover, and the reason it still matters.** Nobody
-	// gets an account out of this one — a requested handle is a preference rather than a
-	// credential. What a stranger would get is the right to **name** whoever proves the
-	// address, permanently and in public: the handle goes into an identity document the moment
-	// the account exists, and no part of that is undone by deleting an Anthers account.
-	// Retyping a handle is recoverable; a published identity is not.
-	it("drops a requested handle, because a stranger must not get to name you", async () => {
+	// ⭐ **The requested handle and the picks come across, still reserved**, because they are
+	// choices rather than credentials. Dropping them is what used to leave the real person with
+	// nothing to finish. The naming harm — a stranger choosing what you are called — only works
+	// if it is silent, which is why the finishing page shows this handle for confirmation.
+	it("keeps a requested handle and the picks, still reserved, for the finishing page to confirm", async () => {
+		const name = `${RUN}named`;
 		await startPendingSignup({
 			email: addr("named"),
-			hostedHandle: "somethingtheychose",
+			hostedHandle: name,
+			picks: { anthers: 4, follow: ["erin"], seed: [] },
 		});
 
 		const signin = await spendCode("/api/auth/signin/verify", addr("named"), "");
 		const rebound = (signin.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1];
 
 		const row = await readPendingSignup(rebound);
-		expect(
-			row?.hostedHandle,
-			"a name typed by whoever started this signup must not survive the hand-over",
-		).toBeNull();
+		expect(row?.hostedHandle).toBe(name);
+		expect(row?.picks).toMatchObject({ anthers: 4, follow: ["erin"] });
+		expect(row?.emailProvedAt).not.toBeNull();
+
+		const read = await app.request("/api/auth/signup/pending", {
+			headers: { Cookie: `signup_pending=${rebound}` },
+		});
+		const { pending } = (await read.json()) as {
+			pending: { hostedHandle: string | null; blueskyHint: string | null; expiresAt: string };
+		};
+		expect(pending.hostedHandle?.startsWith(`${name}.`)).toBe(true);
+		expect(pending.blueskyHint).toBeNull();
+		// The clock restarted at the hand-over: they are here and finishing, not abandoning.
+		expect(new Date(pending.expiresAt).getTime()).toBeGreaterThan(
+			Date.now() + PENDING_SIGNUP_TTL_MS - 60_000,
+		);
 	});
 });
 
-describe("which identity a finished signup gets", () => {
-	// 🚨 The rule, as a rule rather than as a condition buried in a long function. Inverting
-	// it would give somebody who came through the Bluesky door a second identity they never
-	// asked for, with Anthers holding its keys.
-	it("prefers an identity somebody proved over a name they typed", () => {
-		expect(shouldIssueHandle("alice", false)).toBe(true);
-		expect(shouldIssueHandle("alice", true)).toBe(false);
-		expect(shouldIssueHandle(null, false)).toBe(false);
-		expect(shouldIssueHandle(null, true)).toBe(false);
+describe("the two doors are exclusive", () => {
+	// 🚨 A row holding both a DID and a reserved name would leave the finish step to guess which
+	// identity somebody meant, and would keep a name off the board for a signup that no longer
+	// wants it.
+	it("choosing Bluesky releases a reserved handle", async () => {
+		const token = await startPendingSignup({ email: addr("switch"), hostedHandle: `${RUN}switch` });
+		await bindIdentityToPending(token, identity("switch"));
+
+		const row = await readPendingSignup(token);
+		expect(row?.atprotoDid).toBe(did("switch"));
+		expect(row?.hostedHandle).toBeNull();
+	});
+
+	it("a signup started with an identity reserves no handle", async () => {
+		const token = await startPendingSignup({
+			identity: identity("both"),
+			hostedHandle: `${RUN}both`,
+		});
+		expect((await readPendingSignup(token))?.hostedHandle).toBeNull();
 	});
 });
 

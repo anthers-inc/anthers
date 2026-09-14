@@ -16,12 +16,10 @@
  * lets an authorization-server error abort the erasure.
  *
  * ⭐ The client is faked because the alternative is an authorization server. `revoke` is the
- * only method any of this touches, so the fake records what it was called with and nothing
- * else — which is also what lets the "no DID" case assert an *absence* of calls.
+ * only method any of this touches, so the fake records what it was called with and nothing else.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, legalHolds, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
@@ -158,24 +156,6 @@ describe("eraseAccount revokes the ATProto grant", () => {
 
 		expect(revoked).toContain(did);
 		expect(await sessionExists(did)).toBe(false);
-	});
-
-	it("⭐ revokes nothing for an account that never linked one", async () => {
-		n += 1;
-		const [user] = await db
-			.insert(users)
-			.values({
-				username: `er_${RUN}_plain_${n}`,
-				email: `er_${RUN}_plain_${n}@example.com`,
-				passwordHash: "x",
-				atprotoDid: fixtureDid(),
-			})
-			.returning({ id: users.id });
-		const before = revoked.length;
-
-		await eraseAccount(user.id);
-
-		expect(revoked.length).toBe(before);
 	});
 
 	it("🚨 takes a creator's listings off the network BEFORE the grant goes", async () => {

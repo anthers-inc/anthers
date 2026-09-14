@@ -48,8 +48,8 @@ export async function syncWorkListingJob(data: SyncWorkListingData): Promise<voi
 
 	if (result.status === "skipped") {
 		// ⭐ Logged at all only because a sweep reading these is how somebody would notice the
-		// node being unreachable for everybody at once. The ordinary reasons — no identity, no
-		// grant — are deliberately quiet: between them they are the majority of accounts, and
+		// node being unreachable for everybody at once. The ordinary reason — an identity held
+		// elsewhere with no grant — is deliberately quiet: most such creators never grant one, and
 		// saying anything about them would train whoever reads these to skim.
 		if (!isQuiet(result.reason)) {
 			console.log(`[sync-work-listing] ${data.workId}: skipped (${result.reason})`);

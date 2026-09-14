@@ -283,9 +283,9 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 		});
 	}, 60_000);
 
-	// ⚠️ The ordinary case, and the one that must never change: nobody is turned away for lacking
-	// a handle, so a creator without one publishes exactly as they always did.
-	it("does nothing at all for a creator with no identity at all", async () => {
+	// ⚠️ The ordinary case, and the one that must never change: a creator whose identity lives
+	// elsewhere and who has granted nothing publishes exactly as everybody else does.
+	it("does nothing at all for a creator whose identity is neither hosted nor granted", async () => {
 		const [plain] = await db
 			.insert(users)
 			.values({
@@ -307,7 +307,7 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 			})
 			.returning();
 
-		expect(await syncPostRecord(post.id)).toEqual({ status: "skipped", reason: "no_identity" });
+		expect(await syncPostRecord(post.id)).toEqual({ status: "skipped", reason: "not_granted" });
 		const [row] = await db
 			.select({ uri: posts.atprotoUri })
 			.from(posts)

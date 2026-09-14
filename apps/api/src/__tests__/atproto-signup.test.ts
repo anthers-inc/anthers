@@ -21,13 +21,13 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import { readPdsEmail } from "../services/atproto.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import {
-	consumePendingSignup,
 	picksOf,
 	readPendingSignup,
 	startPendingSignup,
@@ -49,10 +49,8 @@ let nextCallback: { did: string; state?: string } | undefined;
 let lastScope: string | undefined;
 
 const realFetch = globalThis.fetch;
-const prevFlag = process.env.ATPROTO_SIGNUP_ENABLED;
 
 beforeAll(() => {
-	process.env.ATPROTO_SIGNUP_ENABLED = "true";
 	setAtprotoClient({
 		authorize: async (_handle: string, options: { scope?: string }) => {
 			lastScope = options.scope;
@@ -88,6 +86,7 @@ beforeAll(() => {
 				},
 			}),
 		},
+		revoke: async () => {},
 	} as never);
 
 	// The Bluesky profile decoration is a live call on this path and asserts nothing here.
@@ -104,8 +103,6 @@ afterEach(() => {
 afterAll(async () => {
 	setAtprotoClient(undefined);
 	globalThis.fetch = realFetch;
-	if (prevFlag === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
-	else process.env.ATPROTO_SIGNUP_ENABLED = prevFlag;
 	await db.delete(pendingSignups).where(like(pendingSignups.atprotoDid, `did:plc:${RUN}%`));
 	await db.delete(pendingSignups).where(like(pendingSignups.email, `${RUN}%`));
 	await db.delete(atprotoSessions).where(like(atprotoSessions.did, `did:plc:${RUN}%`));
@@ -133,6 +130,30 @@ async function runCallback(staged: {
 
 function pendingCookie(setCookie: string): string | undefined {
 	return setCookie.match(/signup_pending=([^;]+)/)?.[1];
+}
+
+/**
+ * Spend a real code for an address, carrying whatever cookies are given.
+ *
+ * 🚨 **The live code is dropped first, and without that the send throttle answers instead
+ * of the rule under test.** The callback posts a code itself now, so a second
+ * `issueSignupCode` seconds later returns `{code: null}` because one just went out — which
+ * reads identically to the service refusing, and fails this helper for a reason that has
+ * nothing to do with what the test is asserting.
+ */
+async function verify(email: string, cookie: string) {
+	await db.delete(signupCodes).where(eq(signupCodes.email, email.trim().toLowerCase()));
+	const issued = await issueSignupCode(email);
+	expect(issued.code, "the test needs the plaintext code the service just minted").toBeTruthy();
+	return app.request("/api/auth/signup/verify", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: "http://localhost:3000",
+			Cookie: cookie,
+		},
+		body: JSON.stringify({ email, code: issued.code }),
+	});
 }
 
 describe("the browser stays on one host", () => {
@@ -206,26 +227,10 @@ describe("the scope a signup asks for", () => {
 		expect(lastScope).not.toContain("transition:email");
 	});
 
-	it("tells the browser whether the door is open, so a closed one is not advertised", async () => {
-		// 🚨 Without this the closed state is a button that refuses when pressed, which is
-		// worse than no button. The API refuses either way; this decides whether anybody is
-		// invited to try.
-		const read = async () =>
-			((await (await app.request("/api/atproto/config")).json()) as { signupEnabled: boolean })
-				.signupEnabled;
-
-		expect(await read()).toBe(true);
-
-		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
-		delete process.env.ATPROTO_SIGNUP_ENABLED;
-		try {
-			expect(await read()).toBe(false);
-		} finally {
-			process.env.ATPROTO_SIGNUP_ENABLED = prev;
-		}
-	});
-
-	it("refuses before the round trip when signup is closed, not after", async () => {
+	// 🚨 **There is no switch in front of this door any more, and the test pins its absence.** The
+	// variable that used to close it is deliberately unset here: a switch put back — in the
+	// route or in `/config` — would refuse this request or advertise a closed state again.
+	it("offers signing up with Bluesky with nothing to switch on", async () => {
 		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
 		delete process.env.ATPROTO_SIGNUP_ENABLED;
 		try {
@@ -234,12 +239,18 @@ describe("the scope a signup asks for", () => {
 				headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
 				body: JSON.stringify({ handle: "someone.bsky.social", intent: "signup" }),
 			});
-			// Sending somebody to another website to authorize, and only then telling them the
-			// door is shut, is a worse refusal than this one.
-			expect(res.status).toBe(403);
+			expect(res.status).toBe(200);
+
+			const config = (await (await app.request("/api/atproto/config")).json()) as Record<
+				string,
+				unknown
+			>;
+			expect(Object.keys(config).sort()).toEqual(["hostedHandleSuffix", "hostedIdentityOffered"]);
+
+			const { url } = await runCallback({ did: did("noswitch") });
+			expect(url.searchParams.get("success")).toBe("needs_email");
 		} finally {
-			if (prev === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
-			else process.env.ATPROTO_SIGNUP_ENABLED = prev;
+			if (prev !== undefined) process.env.ATPROTO_SIGNUP_ENABLED = prev;
 		}
 	});
 });
@@ -320,7 +331,10 @@ describe("no answer a PDS can give creates an account", () => {
 		// The interesting one. The PDS says this address is confirmed — but its claim is
 		// somebody else's assertion, and taking over an existing account on the strength of
 		// it would be a takeover. The emailed code settles it instead.
-		await db.insert(users).values({ email: addr("taken"), emailVerified: true });
+		const ownDid = fixtureDid();
+		await db
+			.insert(users)
+			.values({ email: addr("taken"), emailVerified: true, atprotoDid: ownDid });
 		pds.body = { email: addr("taken"), emailConfirmed: true };
 
 		const { url } = await runCallback({ did: did("taken") });
@@ -330,7 +344,7 @@ describe("no answer a PDS can give creates an account", () => {
 			.select()
 			.from(users)
 			.where(eq(users.email, addr("taken")));
-		expect(existing.atprotoDid, "the existing account must not be adopted").toBeNull();
+		expect(existing.atprotoDid, "the existing account must not be adopted").toBe(ownDid);
 	});
 
 	it("carries the address forward as a prefill, without treating it as proof", async () => {
@@ -386,12 +400,12 @@ describe("no answer a PDS can give creates an account", () => {
 });
 
 describe("the sign-in door still cannot sign anyone up", () => {
-	it("refuses an unlinked handle even while signup is open", async () => {
+	it("refuses a handle that has no account, rather than signing it up", async () => {
 		pds.body = { email: addr("viadoor"), emailConfirmed: true };
 		const { url } = await runCallback({ did: did("viadoor"), intent: "login" });
 
-		// 🚨 Signup being open does not make the sign-in door a signup door. It asked for
-		// identity only, so it holds no address and could not create an account it can mail.
+		// 🚨 The sign-in door is not a signup door. It asked for identity only, so it holds no
+		// address and could not create an account it can mail.
 		expect(url.searchParams.get("error")).toBe("signup_disabled");
 		const rows = await db
 			.select()
@@ -408,34 +422,36 @@ describe("the proved identity on a pending signup", () => {
 		pdsUrl: "https://pds.example",
 	});
 
-	it("attaches to the account whose address was just proved", async () => {
+	it("becomes the identity of the account created when its address is proved", async () => {
 		const token = await startPendingSignup({ identity: identity("attach") });
-		const [user] = await db
-			.insert(users)
-			.values({ email: addr("attach") })
-			.returning();
 
-		expect((await consumePendingSignup(token, user.id))?.atprotoLinked).toBe(true);
-		const [after] = await db.select().from(users).where(eq(users.id, user.id));
-		expect(after.atprotoDid).toBe(did("attach"));
+		const res = await verify(addr("attach"), `signup_pending=${token}`);
+		expect(res.status).toBe(201);
+		const [user] = await db
+			.select()
+			.from(users)
+			.where(eq(users.email, addr("attach")));
+		// Created WITH it, in the same row — never an account first and an identity after.
+		expect(user.atprotoDid).toBe(did("attach"));
+		expect(user.atprotoHandle).toBe("someone.bsky.social");
+		expect(user.atprotoPdsUrl).toBe("https://pds.example");
 	});
 
 	it("is spent on use, so it cannot be replayed onto a second account", async () => {
 		const token = await startPendingSignup({ identity: identity("once") });
-		const [first] = await db
-			.insert(users)
-			.values({ email: addr("once1") })
-			.returning();
-		const [second] = await db
-			.insert(users)
-			.values({ email: addr("once2") })
-			.returning();
+		expect((await verify(addr("once1"), `signup_pending=${token}`)).status).toBe(201);
 
-		await consumePendingSignup(token, first.id);
-		expect(await consumePendingSignup(token, second.id)).toBeNull();
-
-		const [after] = await db.select().from(users).where(eq(users.id, second.id));
-		expect(after.atprotoDid).toBeNull();
+		const replay = await verify(addr("once2"), `signup_pending=${token}`);
+		expect(replay.status).toBe(409);
+		expect(((await replay.json()) as { reason: string }).reason).toBe("no_signup");
+		expect(
+			(
+				await db
+					.select()
+					.from(users)
+					.where(eq(users.email, addr("once2")))
+			).length,
+		).toBe(0);
 	});
 
 	it("refuses rather than steals a DID another account already holds", async () => {
@@ -443,16 +459,27 @@ describe("the proved identity on a pending signup", () => {
 			.insert(users)
 			.values({ email: addr("owner"), atprotoDid: did("contested") })
 			.returning();
-		const [other] = await db
-			.insert(users)
-			.values({ email: addr("other") })
-			.returning();
 
 		const token = await startPendingSignup({ identity: identity("contested") });
-		// ⚠️ Not fatal, deliberately: the signup still finishes, and the right outcome is a
-		// signed-in account with no link rather than a refusal at the last step.
-		expect((await consumePendingSignup(token, other.id))?.atprotoLinked).toBe(false);
+		const res = await verify(addr("other"), `signup_pending=${token}`);
 
+		// 🚨 Refused, and no account is made: an account without an identity is not a lesser
+		// outcome to fall back on any more, it is not an outcome at all.
+		expect(res.status).toBe(409);
+		const body = (await res.json()) as { reason: string; pending: { addressProved: boolean } };
+		expect(body.reason).toBe("identity_taken");
+		expect(body.pending.addressProved, "the code still counts for choosing again").toBe(true);
+
+		const row = await readPendingSignup(token);
+		expect(row?.atprotoDid, "the contested DID is dropped so another can be chosen").toBeNull();
+		expect(
+			(
+				await db
+					.select()
+					.from(users)
+					.where(eq(users.email, addr("other")))
+			).length,
+		).toBe(0);
 		const [stillOwner] = await db.select().from(users).where(eq(users.id, owner.id));
 		expect(stillOwner.atprotoDid).toBe(did("contested"));
 	});
@@ -470,14 +497,6 @@ describe("the proved identity on a pending signup", () => {
 		await sweepExpiredPendingSignups();
 		const rows = await db.select().from(pendingSignups).where(eq(pendingSignups.token, token));
 		expect(rows.length).toBe(0);
-	});
-
-	it("does nothing at all without a token", async () => {
-		const [user] = await db
-			.insert(users)
-			.values({ email: addr("notoken") })
-			.returning();
-		expect(await consumePendingSignup(undefined, user.id)).toBeNull();
 	});
 
 	it("lands on the pending signup this browser already started, picks and all", async () => {
@@ -508,30 +527,6 @@ describe("the proved identity on a pending signup", () => {
 });
 
 describe("finishing a parked signup through the emailed code", () => {
-	/**
-	 * Spend a real code for an address, carrying whatever cookies are given.
-	 *
-	 * 🚨 **The live code is dropped first, and without that the send throttle answers instead
-	 * of the rule under test.** The callback posts a code itself now, so a second
-	 * `issueSignupCode` seconds later returns `{code: null}` because one just went out — which
-	 * reads identically to the service refusing, and fails this helper for a reason that has
-	 * nothing to do with what the test is asserting.
-	 */
-	async function verify(email: string, cookie: string) {
-		await db.delete(signupCodes).where(eq(signupCodes.email, email.trim().toLowerCase()));
-		const issued = await issueSignupCode(email);
-		expect(issued.code, "the test needs the plaintext code the service just minted").toBeTruthy();
-		return app.request("/api/auth/signup/verify", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Origin: "http://localhost:3000",
-				Cookie: cookie,
-			},
-			body: JSON.stringify({ email, code: issued.code }),
-		});
-	}
-
 	it("creates the account and attaches the identity, in one ceremony", async () => {
 		pds.scope = "atproto"; // refused, so it parks
 		const { cookies } = await runCallback({ did: did("finish") });
@@ -556,33 +551,45 @@ describe("finishing a parked signup through the emailed code", () => {
 		expect(res.headers.get("set-cookie")).toMatch(/signup_pending=;|signup_pending=""/);
 	});
 
-	it("links a RETURNING account whose address matches, because they proved the mailbox", async () => {
-		// 🚨 The collision case, resolved. The PDS said this address was confirmed and we
-		// refused to act on that alone; a code we sent and they read is a different quality
-		// of evidence, and it is enough.
-		await db.insert(users).values({ email: addr("returning"), emailVerified: true });
+	it("signs a RETURNING account in without attaching the parked identity", async () => {
+		// 🚨 The collision case. A code we sent and they read proves the mailbox, so they are
+		// signed in to the account it belongs to — but that account already holds its one
+		// identity, and attaching a second would silently swap who it is on the network.
+		const ownDid = fixtureDid();
+		await db
+			.insert(users)
+			.values({ email: addr("returning"), emailVerified: true, atprotoDid: ownDid });
 		pds.body = { email: addr("returning"), emailConfirmed: true };
 		const { cookies } = await runCallback({ did: did("returning") });
+		const token = pendingCookie(cookies);
 
-		const res = await verify(addr("returning"), `signup_pending=${pendingCookie(cookies)}`);
+		const res = await verify(addr("returning"), `signup_pending=${token}`);
 		expect(res.status).toBe(200);
+		expect(((await res.json()) as { created: boolean }).created).toBe(false);
 
 		const [user] = await db
 			.select()
 			.from(users)
 			.where(eq(users.email, addr("returning")));
-		expect(user.atprotoDid).toBe(did("returning"));
+		expect(user.atprotoDid).toBe(ownDid);
+		expect(await readPendingSignup(token), "the parked signup is spent").toBeUndefined();
 	});
 
-	it("still signs somebody up when there is no parked identity at all", async () => {
-		// The ordinary ceremony, unchanged. This is the regression guard for touching it.
+	it("creates nothing for an address with no signup in progress", async () => {
+		// 🚨 The old ceremony minted an account from a proved address alone. Every account holds
+		// an identity now, so a code with no pending signup behind it has nothing to create.
 		const res = await verify(addr("plain"), "");
-		expect(res.status).toBe(201);
-		const [user] = await db
-			.select()
-			.from(users)
-			.where(eq(users.email, addr("plain")));
-		expect(user.atprotoDid).toBeNull();
+		expect(res.status).toBe(409);
+		expect(((await res.json()) as { reason: string }).reason).toBe("no_signup");
+		expect(res.headers.get("set-cookie") ?? "").not.toContain("session=");
+		expect(
+			(
+				await db
+					.select()
+					.from(users)
+					.where(eq(users.email, addr("plain")))
+			).length,
+		).toBe(0);
 	});
 });
 

@@ -1,27 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Signing in with Bluesky, linking one to an account, and unlinking again.
+ * Signing in with Bluesky.
  *
  * The protocol half is `atproto-oauth.test.ts`'s. What is tested here is the half that is
  * ours and that a person can actually reach: which door each intent opens, where someone
- * lands afterwards, and the two refusals that keep this from being a signup path or a
- * lockout.
+ * lands afterwards, and the refusals that keep this from being a signup path or a way to
+ * change which identity an account holds.
  *
  * 🚨 **The load-bearing assertions are the refusals.** A `next` that leaves the origin must
- * not survive the round trip; a Bluesky handle nobody has linked must not mint an account;
- * and unlinking must not strand an account that has no other way in — while no longer
- * refusing the many accounts that *do* and simply have no password.
+ * not survive the round trip; a Bluesky handle with no account must not mint one; and there
+ * is no linking intent at all, because an account is created holding its one identity and a
+ * flow that attached another would silently swap it.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
-import {
-	hasReachableEmail,
-	linkAtprotoToUser,
-	unlinkAtprotoFromUser,
-} from "../services/atproto.js";
+import { hasReachableEmail } from "../services/atproto.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import { createSession } from "../services/auth.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -113,6 +110,7 @@ async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> 
 			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 			...values,
 		})
 		.returning();
@@ -188,97 +186,43 @@ describe("where a sign-in lands", () => {
 });
 
 describe("signing in is not signing up", () => {
-	it("refuses a handle no account has linked, and creates nothing", async () => {
-		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
-		delete process.env.ATPROTO_SIGNUP_ENABLED;
-		try {
-			const url = await runCallback({
-				did: did("nobody"),
-				state: JSON.stringify({ intent: "login" }),
-			});
-			// The code the callback page turns into "there is no account", rather than into
-			// "something broke" — the distinction is the whole of what that person needs.
-			expect(url.searchParams.get("error")).toBe("signup_disabled");
-			expect(url.searchParams.get("success")).toBeNull();
+	it("refuses a handle that has no account, and creates nothing", async () => {
+		const url = await runCallback({
+			did: did("nobody"),
+			state: JSON.stringify({ intent: "login" }),
+		});
+		// The code the callback page turns into "there is no account", rather than into
+		// "something broke" — the distinction is the whole of what that person needs.
+		expect(url.searchParams.get("error")).toBe("signup_disabled");
+		expect(url.searchParams.get("success")).toBeNull();
 
-			const rows = await db
-				.select()
-				.from(users)
-				.where(eq(users.atprotoDid, did("nobody")));
-			expect(rows.length).toBe(0);
-		} finally {
-			if (prev === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
-			else process.env.ATPROTO_SIGNUP_ENABLED = prev;
-		}
+		const rows = await db
+			.select()
+			.from(users)
+			.where(eq(users.atprotoDid, did("nobody")));
+		expect(rows.length).toBe(0);
 	});
 });
 
-describe("linking", () => {
-	it("needs a session, and says which failure it was", async () => {
-		const res = await startAuth({ handle: "someone.bsky.social", intent: "link" });
-		expect(res.status).toBe(401);
-	});
-
-	it("refuses a DID another account already holds, as a code the page can render", async () => {
-		const owner = await makeUser("owner", { atprotoDid: did("shared") });
-		const other = await makeUser("other");
-
-		// ⚠️ A sentence here was unrenderable: `ATProtoCallbackPage` maps `did_already_linked`
-		// to words, and the service returned prose that could never match the key. It read
-		// fine on screen, which is why nothing caught it.
-		const result = await linkAtprotoToUser(other.id, {
-			did: did("shared"),
-			handle: "x.bsky.social",
-			pdsUrl: "https://pds.example",
-		});
-		expect(result.error).toBe("did_already_linked");
-		expect(owner.atprotoDid).toBe(did("shared"));
-	});
-
-	it("carries the session's own user through the flow, not the client's claim", async () => {
+describe("an account's identity cannot be changed through sign-in", () => {
+	// 🚨 **The link intent is gone, and a request for it must be refused rather than read as a
+	// sign-in.** An account is created holding its one identity; a flow that attached a second
+	// DID to a signed-in account would silently swap who that account is on the network.
+	it("refuses the link intent outright, even for a signed-in account", async () => {
 		const user = await makeUser("linker");
 		const token = await createSession(user.id, undefined, undefined);
+		lastAuthorize = undefined;
 
-		await startAuth(
-			{ handle: "someone.bsky.social", intent: "link", next: "/somewhere" },
+		const res = await startAuth(
+			{ handle: "someone.bsky.social", intent: "link" },
 			{ Cookie: `session=${token}` },
 		);
-		const state = JSON.parse(lastAuthorize?.options.state ?? "{}");
-		expect(state.userId).toBe(user.id);
-
-		const url = await runCallback({ did: did("linker"), state: lastAuthorize?.options.state });
-		expect(url.searchParams.get("success")).toBe("linked");
-
-		const [after] = await db.select().from(users).where(eq(users.id, user.id));
-		expect(after.atprotoDid).toBe(did("linker"));
+		expect(res.status).toBe(400);
+		expect(lastAuthorize, "nobody is sent to an authorization server").toBeUndefined();
 	});
 });
 
-describe("unlinking must not lock anyone out", () => {
-	it("lets a passwordless account with a real address unlink", async () => {
-		// 🚨 This is the regression. A password has been optional since the signup ceremony
-		// shipped — `/auth/signin/start` mails a code to any address that has an account —
-		// so refusing every passwordless account refused most of them.
-		const user = await makeUser("nopw", { atprotoDid: did("nopw"), passwordHash: null });
-		expect(await unlinkAtprotoFromUser(user.id)).toEqual({});
-
-		const [after] = await db.select().from(users).where(eq(users.id, user.id));
-		expect(after.atprotoDid).toBeNull();
-	});
-
-	it("refuses when the account has neither a password nor a reachable address", async () => {
-		const user = await makeUser("only", {
-			atprotoDid: did("only"),
-			passwordHash: null,
-			email: `${RUN}only@atproto.invalid`,
-		});
-		const result = await unlinkAtprotoFromUser(user.id);
-		expect(result.error).toMatch(/no way to sign in/i);
-
-		const [after] = await db.select().from(users).where(eq(users.id, user.id));
-		expect(after.atprotoDid).toBe(did("only"));
-	});
-
+describe("which addresses a sign-in code can reach", () => {
 	it("knows which addresses can actually be mailed", () => {
 		expect(hasReachableEmail("someone@example.com")).toBe(true);
 		// RFC 2606 reserves `.invalid` so it can never resolve — the placeholder is honest

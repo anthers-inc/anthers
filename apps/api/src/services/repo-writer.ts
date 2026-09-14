@@ -33,9 +33,10 @@ export type AccountWriterResult =
 /**
  * Whether a missing writer is the ordinary state of affairs rather than something wrong.
  *
- * ⭐ **The point of saying it once is that logging is where this gets quietly inverted.** Two of
- * these reasons describe the majority of accounts, and a sweep that reported them would train
- * whoever reads its output to skim — at which point the two that matter go past unread as well.
+ * ⭐ **The point of saying it once is that logging is where this gets quietly inverted.** An
+ * identity held elsewhere with no grant is an ordinary state for an account to be in, and a sweep
+ * that reported it would train whoever reads its output to skim — at which point the reasons
+ * that matter go past unread as well.
  */
 export function isOrdinary(reason: NoAccountWriterReason): boolean {
 	return reason === "no_identity" || reason === "not_granted";

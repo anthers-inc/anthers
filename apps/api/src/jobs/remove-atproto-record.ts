@@ -3,8 +3,8 @@
  * Take a record off the network after the row that described it was deleted.
  *
  * 🚨 **Every skip here is logged, which is the opposite of the sibling jobs and is deliberate.**
- * `sync-work-listing` and `sync-creator-record` stay quiet about a creator with no identity and
- * no grant, because those describe most accounts and saying so on every job would train whoever
+ * `sync-work-listing` and `sync-creator-record` stay quiet about a creator whose identity lives
+ * elsewhere with no grant, because that describes most such accounts and saying so on every job would train whoever
  * reads the log to skim. Nothing reaches this queue unless a record was known to exist, so
  * "there is no writer" here does not mean "this account never published" — it means a record
  * somebody published is still up and Anthers has just failed to take it down. That is worth a
