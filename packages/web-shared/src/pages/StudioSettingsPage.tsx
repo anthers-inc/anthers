@@ -177,7 +177,7 @@ function AtmospherePublishingSection() {
 	useEffect(load, []);
 
 	if (loading || !state) return null;
-	// No identity means no repository, and nothing here would be true for them.
+	// No such account — every account holds an identity, so this is a failed read, not a state.
 	if (state.route === "none") return null;
 	// Nothing to offer and nothing granted — say nothing rather than advertise a closed door.
 	if (state.route === "available" && !state.offered) return null;

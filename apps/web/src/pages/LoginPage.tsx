@@ -26,8 +26,8 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *
  * 🚨 **This was `AuthPage`, a card that toggled between logging in and a four-field
  * Create Account form, and the form is GONE (2026-08-17).** There is one signup door now
- * and it is `/subscribe` — an email address, a code, then `/welcome` for the handle and
- * the terms. `/signup` redirects there. The old card asked for username + email +
+ * and it is `/subscribe` — an identity (an Anthers handle or Bluesky), then an email address
+ * and a code at `/finish`, then `/welcome` for the username and the terms. `/signup` redirects there. The old card asked for username + email +
  * password + confirm before an account existed at all, which is the cost this platform
  * decided not to charge at the moment of decision; keeping it alive as a second door
  * meant two flows that had to agree about terms acceptance, onboarding and where a new
@@ -55,13 +55,12 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *   been available to every account through `/subscribe` since the ceremony shipped.
  *
  * 🚨 **Bluesky is a third way IN and is not a third way to sign up either** (2026-08-22).
- * It signs in an Anthers account that has already linked an ATProto identity, and a handle
- * nobody has linked comes back from the callback as `signup_disabled` rather than minting
- * anything. That refusal is the whole reason the affordance can live on this page at all,
- * and it is why the button is disclosed rather than given equal billing with the form: the
- * only people it works for are people who already have an account and went to settings to
- * connect one. Offering it as a way to *join* would be the second signup door this page
- * spent a deletion getting rid of.
+ * It signs in an account whose identity is a Bluesky one, resumes an unfinished signup started
+ * with that identity, and answers `signup_disabled` for a handle no account holds rather than
+ * minting anything. That refusal is the whole reason the affordance can live on this page at
+ * all, and it is why the button is disclosed rather than given equal billing with the form: the
+ * only people it works for are people who signed up with Bluesky. Offering it as a way to
+ * *join* would be the second signup door this page spent a deletion getting rid of.
  *
  * 🚨 **The card's height is decoration, and it is load-bearing decoration.** The botanical
  * flourishes are positioned against the card box and each spray reaches roughly seven rems

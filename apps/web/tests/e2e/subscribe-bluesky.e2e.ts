@@ -22,7 +22,7 @@
  * the modal, because its card has flourishes an inline field cannot clear.
  *
  * ⚠️ **The panel then lost its explanatory paragraph the same day**, because it made the
- * Bluesky tab twice the height of the email one and switching tabs resized the card under
+ * Bluesky tab twice the height of the other and switching tabs resized the card under
  * the reader. Two of the three promises it carried are said again by the flow itself
  * (`/welcome` takes the name and the terms; the emailed code arrives and explains itself),
  * so only the email-scope warning needed rehoming — it is in the note under the button now,
@@ -56,7 +56,7 @@ async function openBlueskyDoor(page: Page) {
 }
 
 test.describe("signing up with Bluesky", () => {
-	test("the tab reveals the handle field, and email is still the default door", async ({
+	test("the tab reveals the handle field, and the Anthers door is the default", async ({
 		page,
 	}) => {
 		await page.goto("/subscribe");
@@ -72,7 +72,7 @@ test.describe("signing up with Bluesky", () => {
 		await expect(blueskyTab).toBeVisible();
 		await expect(
 			topSignup(page).getByLabel("Bluesky handle"),
-			"email is the door a visitor meets; Bluesky is the other tab, not the default",
+			"the Anthers door is the one a visitor meets; Bluesky is the other tab, not the default",
 		).toHaveCount(0);
 
 		await openBlueskyDoor(page);
@@ -194,12 +194,9 @@ test.describe("signing up with Bluesky", () => {
 
 		await expect(page.getByText(/signing up as @/i)).toHaveCount(0);
 		await expect(page.getByText(/bluesky confirmed you as/i)).toHaveCount(0);
-		// 🚨 Wait for the tab switcher before reading the email door: the card starts with no
-		// tabs and the email field showing, so this assertion would pass on the first paint
-		// whatever the tabs later decide. It is only meaningful once the switcher has
-		// rendered. Whether the Bluesky button appears depends on the launch switch, which is
-		// not this test's subject — an assertion dragging in an unrelated condition is one
-		// that fails for unrelated reasons.
+		// 🚨 Wait for the tab switcher before reading the default door: the card starts with no
+		// tabs, so this assertion would pass on the first paint whatever the tabs later decide.
+		// It is only meaningful once the switcher has rendered.
 		await expect(topSignup(page).getByRole("tab", { name: "Bluesky", exact: true })).toBeVisible();
 		await expect(
 			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),

@@ -164,20 +164,16 @@ export default defineConfig({
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
 			/*
-			 * 🚨 **A launch switch the suite has to pin, or the suite tests the environment
-			 * instead of the code.** `ATPROTO_SIGNUP_ENABLED` is off by default so that
-			 * production stays closed until opening it is a deliberate decision — which means
-			 * a spec covering the Bluesky signup door passes locally (where `.env` sets it)
-			 * and fails in CI (where nothing does). Declaring it here makes the e2e
-			 * environment say what it is testing, rather than inheriting an answer.
+			 * 🚨 **The handle door is pinned here, or the suite tests the environment instead of
+			 * the code.** It needs three variables, because `hostedIdentityOffered` is a claim
+			 * that everything hosting needs is present — so a spec covering the door would pass
+			 * locally, where `.env` sets them, and fail in CI, where nothing does.
 			 *
 			 * ⚠️ It does NOT apply to a reused server. `reuseExistingServer` is on locally, so
 			 * a running `make dev` brings its own environment and this is ignored — if those
-			 * specs fail against a dev API, the flag is missing from your `.env`.
+			 * specs fail against a dev API, the variables are missing from your `.env`.
 			 *
-			 * The handle door needs three variables rather than one switch, because
-			 * `hostedIdentityOffered` is a claim that everything hosting needs is present. All
-			 * three are deliberately fake:
+			 * All three are deliberately fake:
 			 *
 			 * 🚨 **The server is `.invalid`, which RFC 2606 reserves so it can never resolve.**
 			 * A suite pointed at the real node would create accounts on it, and an availability
@@ -193,7 +189,6 @@ export default defineConfig({
 			 * throwaway per run is also what a test key should be.
 			 */
 			env: {
-				ATPROTO_SIGNUP_ENABLED: "true",
 				HOSTED_PDS_URL: "https://node.invalid",
 				HOSTED_PDS_INVITE_CODE: "e2e-no-such-invite",
 				HOSTED_ACCOUNT_KEY: randomBytes(32).toString("hex"),

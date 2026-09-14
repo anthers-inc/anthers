@@ -173,8 +173,11 @@ test.describe("an address the PDS handed us", () => {
 		codeSent: false,
 		addressProved: false,
 		atprotoHandle: "someone.bsky.social",
+		blueskyHint: null,
+		hostedHandle: null,
 		picks: { anthers: 0, follow: [], seed: [] },
 		next: "",
+		expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
 	};
 
 	async function stubPending(page: Page, pending: Record<string, unknown>) {
@@ -182,7 +185,7 @@ test.describe("an address the PDS handed us", () => {
 			await route.fulfill({
 				status: 200,
 				contentType: "application/json",
-				body: JSON.stringify({ pending, atprotoSignupEnabled: true }),
+				body: JSON.stringify({ pending }),
 			});
 		});
 	}
@@ -226,5 +229,74 @@ test.describe("an address the PDS handed us", () => {
 
 		await expect(page.locator('input[aria-label^="Code character"]')).toHaveCount(6);
 		await expect(page.getByText(/we sent a six-character code/i)).toBeVisible();
+	});
+});
+
+/**
+ * The identity step, which a signup reaches when it holds no identity to create its account with.
+ *
+ * 🚨 **Every account is created with its identity**, so a signup resumed in another browser from a
+ * Bluesky start — whose DID is dropped on purpose, because an address proof is not an identity
+ * proof — has to prove that identity again here, or choose another. The same stubbing constraint
+ * as above applies: the real state needs an OAuth round trip, so the pending record is faked and
+ * what is asserted is what the page does with it.
+ */
+test.describe("choosing or confirming the identity", () => {
+	const RESUMED = {
+		email: "someone@example.com",
+		codeSent: false,
+		addressProved: true,
+		atprotoHandle: null,
+		blueskyHint: "someone.bsky.social",
+		hostedHandle: null,
+		picks: { anthers: 0, follow: [], seed: [] },
+		next: "",
+		expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+	};
+
+	async function stubPending(page: Page, pending: Record<string, unknown>) {
+		await page.route("**/api/auth/signup/pending", async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({ pending }),
+			});
+		});
+	}
+
+	test("a Bluesky start resumed elsewhere asks for that identity to be proved again", async ({
+		page,
+	}) => {
+		await stubPending(page, RESUMED);
+		await page.goto("/finish");
+
+		await expect(page.getByText(/choose how you.ll be known/i)).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByText(/started as @someone\.bsky\.social/i)).toBeVisible();
+		await expect(
+			page.getByLabel("Bluesky handle"),
+			"the identity it was started with is offered, not retyped",
+		).toHaveValue("someone.bsky.social");
+		// 🚨 Nothing may be created before the identity is settled, so there is no create button.
+		await expect(page.getByRole("button", { name: /create my account/i })).toHaveCount(0);
+	});
+
+	test("a resumed handle is shown for confirmation before anything is created", async ({
+		page,
+	}) => {
+		await stubPending(page, {
+			...RESUMED,
+			blueskyHint: null,
+			hostedHandle: "someone.anthers.social",
+		});
+		await page.goto("/finish");
+
+		// 🚨 The handle may have been typed by whoever started the signup, so it is named out loud
+		// and can be changed before the account exists.
+		await expect(page.getByText(/created as @someone\.anthers\.social/i)).toBeVisible({
+			timeout: 15_000,
+		});
+		await expect(page.getByRole("button", { name: /create my account/i })).toBeVisible();
+		await page.getByRole("button", { name: /use a different identity/i }).click();
+		await expect(page.getByText(/choose how you.ll be known/i)).toBeVisible();
 	});
 });

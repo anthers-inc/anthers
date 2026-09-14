@@ -33,8 +33,9 @@ export interface User {
 	location: string | null;
 	emailVerified: boolean | null;
 	themePreference: Theme | null;
-	atprotoDid: string | null;
-	atprotoHandle: string | null;
+	/** Every account holds exactly one ATProto identity, so both are always present. */
+	atprotoDid: string;
+	atprotoHandle: string;
 	createdAt: string;
 }
 
@@ -47,11 +48,11 @@ interface AuthContextValue {
 	 * 🚨 **There is no `signUp` here, and putting one back would rebuild a second signup
 	 * door** (removed 2026-08-17 with the Create Account card that was its only caller).
 	 *
-	 * Signing up is a *ceremony*, not a call: `POST /auth/signup/start` mails a code,
-	 * `/signup/verify` creates the account and issues the session, and `/welcome` claims
-	 * the handle and takes terms acceptance. It lives in `pages/SubscribePage.tsx` +
-	 * `SignupCeremonyModal` because the ordering matters — see the note on `leave()`
-	 * there about refreshing the auth context last.
+	 * Signing up is a *ceremony*, not a call: `POST /auth/signup/begin` writes a pending signup
+	 * holding the chosen identity, `/finish` proves the address with an emailed code,
+	 * `/signup/verify` (or `/signup/complete`) creates the account with its identity and issues
+	 * the session, and `/welcome` claims the username and takes terms acceptance. It lives in
+	 * `pages/SubscribePage.tsx` and `pages/FinishSignupPage.tsx` because the ordering matters.
 	 *
 	 * ⚠️ **There is no password sign-up route on the server either.** What must not come back
 	 * is a second place that mints accounts, in the UI or the API, since two doors have to keep
@@ -76,9 +77,10 @@ interface AuthContextValue {
 	 *
 	 * ⚠️ **This is not the second signup door the `signUp` note above forbids, and the
 	 * difference is worth being precise about, because it looks like one.** It mints
-	 * nothing: it starts an OAuth round trip, and the account — if there is to be one — is
-	 * created server-side by the callback or by `/auth/signup/verify`, both of which leave
-	 * `username` null so that `/welcome` still claims the handle and still takes the terms.
+	 * nothing: it starts an OAuth round trip whose callback parks the proved identity on the
+	 * pending signup, and the account — if there is to be one — is created server-side by
+	 * `/auth/signup/verify` or `/signup/complete`, which leave `username` null so that `/welcome`
+	 * still claims it and still takes the terms.
 	 * It also lives on **`/subscribe`**, the one signup page, rather than adding a second
 	 * place in the UI that people can join from. What the deleted `signUp` did that this
 	 * does not is create an account straight from a form, with its own idea of onboarding.
@@ -89,9 +91,7 @@ interface AuthContextValue {
 	 * hand over read access to their email address.
 	 */
 	signUpWithBluesky: (handle: string, next?: string | null) => Promise<void>;
-	linkBluesky: (handle: string) => Promise<void>;
 	grantPublishing: () => Promise<void>;
-	unlinkBluesky: () => Promise<void>;
 	refreshUser: () => Promise<void>;
 }
 
@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	 */
 	const beginAtprotoAuth = useCallback(
 		async (
-			json: { handle?: string; intent: "login" | "link" | "signup" | "publish"; next?: string },
+			json: { handle?: string; intent: "login" | "signup" | "publish"; next?: string },
 			fallback: string,
 		) => {
 			const res = await client.api.atproto.auth.$post({ json });
@@ -212,14 +212,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		[beginAtprotoAuth],
 	);
 
-	const linkBluesky = useCallback(
-		async (handle: string) => {
-			// No `next`: linking always ends up back in settings, where it started.
-			await beginAtprotoAuth({ handle, intent: "link" }, "Couldn't start Bluesky linking.");
-		},
-		[beginAtprotoAuth],
-	);
-
 	/**
 	 * Ask for permission to keep this creator's Work listings in their own repository.
 	 *
@@ -229,14 +221,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const grantPublishing = useCallback(async () => {
 		await beginAtprotoAuth({ intent: "publish" }, "Couldn't start the Bluesky permission.");
 	}, [beginAtprotoAuth]);
-
-	const unlinkBluesky = useCallback(async () => {
-		const res = await client.api.atproto.unlink.$post();
-		if (!res.ok) {
-			throw new Error(await errorText(res, "Unlink failed."));
-		}
-		await refreshUser();
-	}, [refreshUser]);
 
 	return (
 		<AuthContext.Provider
@@ -248,9 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				signOut,
 				signInWithBluesky,
 				signUpWithBluesky,
-				linkBluesky,
 				grantPublishing,
-				unlinkBluesky,
 				refreshUser,
 			}}
 		>

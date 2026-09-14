@@ -486,12 +486,10 @@ export default function WorkPage() {
 				)}
 			</section>
 
-			{/* Who sent them, and a free account without leaving the page. Rendered under the
+			{/* Who sent them, and the way to an account of their own. Rendered under the
 			    deliverable rather than above it: they came here to watch something, and an
 			    invitation that interrupted that would be the funnel this deliberately is not. */}
-			{shareToken && !user && (
-				<SharedWorkBanner sharedBy={work.sharedBy ?? null} onSignedIn={refetch} />
-			)}
+			{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
 			{/* The public blurb — visible whether or not the viewer can open the Work, because a
 			    locked Work still has to say what it is. The gated prose renders above, inside

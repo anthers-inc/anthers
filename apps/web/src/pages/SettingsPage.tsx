@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { MATURITY_DISPLAY_CHOICES, type MaturityDisplay } from "@anthers/shared/content-rating";
-import { normalizeHandleName } from "@anthers/shared/handles";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
@@ -16,7 +15,6 @@ import { CardElement, Elements, useElements, useStripe } from "@stripe/react-str
 import { useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
-import { handleStatusLine, handleStatusTone, useHandleAvailability } from "../lib/hosted-handle";
 import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
@@ -537,30 +535,19 @@ function BlockedSection() {
 /**
  * The account's identity on the AT Protocol network, whichever way it got one.
  *
- * 🚨 **Three states, and each one hides the offers that would be wrong in it.** An account can
- * hold a handle Anthers issued, hold one it brought from somewhere else, or hold neither — and
- * an account may have exactly one. Showing both doors to somebody who already walked through a
- * door is how a person ends up with two identities and nothing saying which is theirs, so the
- * card they see is decided here rather than by four separate components each guessing.
+ * 🚨 **Every account holds exactly one identity, the one it was created with**, so there are two
+ * states and neither offers a second: a handle Anthers issued, or an identity the person brought
+ * from another server. Swapping one for the other is not built, and nothing here implies it is.
  *
  * ⚠️ **Whether an identity is Anthers-issued is derived from the suffix, not from a flag on the
- * account.** `/api/atproto/config` reports the suffix handles hang under, and only Anthers
- * issues names beneath it, so a handle ending in it is one of ours. The alternative is a column
- * that means the same thing and can disagree with the node. **The server does not trust this
- * derivation** — `unlinkAtprotoFromUser` asks `hosted_accounts` directly — so the worst a
- * wrong answer here can do is show a button that then refuses.
- *
- * ⚠️ **One state is deliberately left showing an offer that will be refused**: an account with a
- * credential row and no DID, which is what a provisioning that half-failed leaves behind. The
- * browser cannot see that row and the refusal names the handle it already holds, so the person
- * learns the useful thing either way — and inventing a field to describe a state the docblock on
- * `provisionHostedIdentity` calls unreachable in practice would be paying for it every render.
+ * account.** `/api/atproto/config` reports the suffix handles hang under, and only Anthers issues
+ * names beneath it, so a handle ending in it is one of ours. The server does not trust this
+ * derivation — the recovery-key and domain routes ask `hosted_accounts` directly — so the worst a
+ * wrong answer here can do is show a card whose button then refuses.
  */
 function IdentitySection() {
 	const { user } = useAuth();
-	const [hostingOpen, setHostingOpen] = useState(false);
-	const [suffix, setSuffix] = useState("");
-	const [justIssued, setJustIssued] = useState<string | null>(null);
+	const [suffix, setSuffix] = useState<string | null>(null);
 	const [recovery, setRecovery] = useState<RecoveryKeyState | null>(null);
 
 	useEffect(() => {
@@ -568,24 +555,20 @@ function IdentitySection() {
 		client.api.atproto.config
 			.$get()
 			.then((res) => res.json())
-			.then(({ hostedIdentityOffered, hostedHandleSuffix }) => {
-				if (!live) return;
-				setHostingOpen(hostedIdentityOffered);
-				setSuffix(hostedHandleSuffix);
+			.then(({ hostedHandleSuffix }) => {
+				if (live) setSuffix(hostedHandleSuffix);
 			})
 			.catch(() => {
-				/* Unreachable API: the offer stays closed, and what is already linked still shows. */
+				/* Unreachable API: the handle still shows, without the cards only a hosted one gets. */
+				if (live) setSuffix("");
 			});
 		return () => {
 			live = false;
 		};
 	}, []);
 
-	// Only asked for once it is known there is an identity to ask about — the endpoint requires
-	// a session and answers `hosted: false` for an account with none, which is a round trip
-	// worth not making on every settings visit.
 	useEffect(() => {
-		if (!user?.atprotoDid) return;
+		if (!user) return;
 		let live = true;
 		client.api.atproto["recovery-key"]
 			.$get()
@@ -599,33 +582,23 @@ function IdentitySection() {
 		return () => {
 			live = false;
 		};
-	}, [user?.atprotoDid]);
+	}, [user]);
 
-	const handle = user?.atprotoHandle ?? "";
+	// ⚠️ Waits for the suffix rather than guessing, so a hosted identity is never shown for a frame
+	// as one somebody brought, or the reverse.
+	if (!user || suffix === null) return null;
+	const handle = user.atprotoHandle;
 	const hosted = !!suffix && handle.endsWith(`.${suffix}`);
 
+	if (!hosted) return <BroughtIdentityCard handle={handle} did={user.atprotoDid} />;
 	return (
 		<>
-			{hosted && (
-				<AnthersHandleCard
-					handle={handle}
-					justIssued={justIssued}
-					holdsRecoveryKey={!!recovery?.didKey}
-				/>
-			)}
+			<AnthersHandleCard handle={handle} holdsRecoveryKey={!!recovery?.didKey} />
 			{/* ⚠️ Waits for the answer rather than rendering the offer meanwhile. Somebody who
 			    already holds a key would otherwise be offered another one for the frame between
-			    the page loading and the API answering — the same defect as the handle offer above. */}
-			{hosted && recovery && <RecoveryKeyCard state={recovery} onSeated={setRecovery} />}
-			{hosted && user?.atprotoDid && <DomainHandleCard handle={handle} did={user.atprotoDid} />}
-			{/* ⚠️ **`user &&` rather than `!user?.atprotoDid`**, which is also true while the account
-			    is still loading. The config answer and the account arrive independently, so without
-			    it an account that already holds an identity can be offered another one for the
-			    frame between them. */}
-			{user && !user.atprotoDid && !hosted && hostingOpen && (
-				<AnthersHandleOffer suffix={suffix} onIssued={setJustIssued} />
-			)}
-			{!hosted && <BlueskySection />}
+			    the page loading and the API answering. */}
+			{recovery && <RecoveryKeyCard state={recovery} onSeated={setRecovery} />}
+			<DomainHandleCard handle={handle} did={user.atprotoDid} />
 		</>
 	);
 }
@@ -975,20 +948,14 @@ function RecoveryKeyCard({
  * have to infer that from the absence of a button, and a card that described the name without
  * describing the custody would be selling the good half of the arrangement.
  *
- * 🚨 **There is no unlink here and the omission is the feature.** Unlinking is for an identity
- * that lives somewhere else and carries on without Anthers; this one lives on Anthers' own node
- * and the hub holds the only password to it, so detaching it would leave a person with a
- * repository they can no longer reach. The route refuses it too — see
- * `unlinkAtprotoFromUser` — because a guard that lives only in a component is a guard that
- * lives nowhere.
+ * Deleting the account is what releases this identity, and there is no other way to part with
+ * it: it lives on Anthers' own node and the hub holds the only password to it.
  */
 function AnthersHandleCard({
 	handle,
-	justIssued,
 	holdsRecoveryKey,
 }: {
 	handle: string;
-	justIssued: string | null;
 	holdsRecoveryKey: boolean;
 }) {
 	const { user } = useAuth();
@@ -996,12 +963,6 @@ function AnthersHandleCard({
 		<div className="card bg-base-200">
 			<div className="card-body">
 				<h3 className="card-title text-lg">Your Anthers Handle</h3>
-
-				{justIssued && (
-					<div className="alert alert-success text-sm">
-						<span>{justIssued} is yours.</span>
-					</div>
-				)}
 
 				<div className="flex items-center gap-2">
 					<div className="badge badge-success">Issued</div>
@@ -1026,240 +987,35 @@ function AnthersHandleCard({
 }
 
 /**
- * Asking Anthers for a handle, for an account that does not have an identity yet.
+ * The identity an account was created with, when it lives on a server other than Anthers'.
  *
- * 🚨 **This is not a signup door.** It acts on an account that already exists and is signed in,
- * which is what makes it a different thing from `/subscribe` rather than a second copy of it —
- * and what enforces that is the session the route requires, not that this is buried in
- * settings. `/subscribe` remains the one place an account is minted.
+ * ⚠️ **Nothing to do here, and that is accurate rather than unfinished.** The account signs in
+ * with this identity and holds no other; there is no unlink because an account cannot exist
+ * without its identity, and swapping it for another is not built.
  *
- * ⚠️ **The field and its verdict line are `lib/hosted-handle.ts`'s**, shared with the signup
- * card, so that "we could not check" cannot come to mean one thing here and another there.
+ * ⚠️ **The copy is easy to overclaim.** It names the identity and what it is for, and says
+ * nothing about what Anthers publishes into it — that is the Studio's publishing card, and
+ * `RETIRED_COPY` exists because that framing has drifted onto pages it did not belong on before.
  */
-function AnthersHandleOffer({
-	suffix,
-	onIssued,
-}: {
-	suffix: string;
-	onIssued: (handle: string) => void;
-}) {
-	const { refreshUser } = useAuth();
-	const [name, setName] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const status = useHandleAvailability(name, { open: true, suffix });
-
-	const ask = async (e: React.FormEvent) => {
-		e.preventDefault();
-		const asked = normalizeHandleName(name, suffix);
-		if (!asked) return;
-		setError(null);
-		setBusy(true);
-		try {
-			const res = await client.api.atproto.handle.$post({ json: { name: asked } });
-			const body = await res.json();
-			if ("error" in body) {
-				setError(body.error);
-				setBusy(false);
-				return;
-			}
-			// ⚠️ **The account is refreshed rather than this card reporting success itself.** What
-			// replaces this form is the card drawn from the account, so anything shown here on the
-			// strength of the response alone would be a second description of the same fact — and
-			// the one that goes stale is always the one nothing else reads.
-			onIssued(body.handle);
-			await refreshUser();
-		} catch {
-			setError("Couldn't reach Anthers. Please try again.");
-			setBusy(false);
-		}
-	};
-
-	return (
-		<div className="card bg-base-200">
-			<div className="card-body">
-				<h3 className="card-title text-lg">An Anthers Handle</h3>
-
-				{error && (
-					<div className="alert alert-error text-sm">
-						<span>{error}</span>
-					</div>
-				)}
-
-				<p className="text-sm text-base-content/60">
-					Anthers can issue you a name on the AT Protocol network — a handle you sign in with, and
-					an identity that is yours rather than a row in Anthers' database. Anthers runs the server
-					it lives on and holds the keys to it.
-				</p>
-				<form onSubmit={ask} className="flex flex-col gap-2">
-					<div className="flex items-center gap-2">
-						<input
-							type="text"
-							className="input input-bordered flex-1"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							placeholder="yourname"
-							aria-label="The handle you'd like"
-							aria-describedby="anthers-handle-status"
-							autoComplete="off"
-							spellCheck={false}
-							autoCapitalize="none"
-						/>
-						<span aria-hidden="true" className="shrink-0 text-sm text-base-content/40">
-							.{suffix || "anthers.social"}
-						</span>
-					</div>
-					<p
-						id="anthers-handle-status"
-						aria-live="polite"
-						className={`text-xs leading-snug ${handleStatusTone(status)}`}
-					>
-						{handleStatusLine(status)}
-					</p>
-					<button
-						type="submit"
-						className="btn btn-primary btn-sm w-fit"
-						// Refused only for what is knowably wrong. A name we could not check still goes
-						// through, because the node is the authority and a browser that could not ask
-						// has learned nothing about the name.
-						disabled={
-							busy || !name.trim() || status.status === "invalid" || status.status === "taken"
-						}
-					>
-						{busy ? "Asking…" : "Get this handle"}
-					</button>
-				</form>
-			</div>
-		</div>
-	);
-}
-
-/**
- * Connecting a Bluesky (ATProto) identity to this account.
- *
- * ⚠️ **The copy here is the whole feature, and it is easy to overclaim.** What linking does
- * today is exactly two things: it proves the same person holds both identities, and it lets
- * that handle sign in at `/login`. It publishes nothing, moves no content, and grants
- * Anthers no ability to act on the account — the OAuth request asks for the `atproto` scope,
- * which is identity and nothing else. Saying more than that would trip `RETIRED_COPY`, and
- * the guard exists because this exact framing drifted back onto marketing pages twice.
- */
-function BlueskySection() {
-	const { user, linkBluesky, unlinkBluesky, refreshUser } = useAuth();
-	const [searchParams] = useSearchParams();
-	const [handle, setHandle] = useState("");
-	const [linking, setLinking] = useState(false);
-	const [unlinking, setUnlinking] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const blueskyResult = searchParams.get("bluesky");
-	const isLinked = !!user?.atprotoDid;
-
-	useEffect(() => {
-		if (blueskyResult === "linked") {
-			refreshUser();
-		}
-	}, [blueskyResult, refreshUser]);
-
-	const handleLink = async (e: React.FormEvent) => {
-		e.preventDefault();
-		// A handle is a domain name; the leading `@` is how people write it, not part of it.
-		const identifier = handle.trim().replace(/^@/, "");
-		if (!identifier) return;
-		setError(null);
-		setLinking(true);
-		try {
-			await linkBluesky(identifier);
-			// linkBluesky redirects, so we won't reach here
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.");
-			setLinking(false);
-		}
-	};
-
-	const handleUnlink = async () => {
-		setError(null);
-		setUnlinking(true);
-		try {
-			await unlinkBluesky();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to unlink Bluesky account.");
-		} finally {
-			setUnlinking(false);
-		}
-	};
-
+function BroughtIdentityCard({ handle, did }: { handle: string; did: string }) {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
 				<h3 className="card-title text-lg">
 					<BlueskyMark />
-					Bluesky / ATProto
+					Your Identity
 				</h3>
-
-				{blueskyResult === "linked" && (
-					<div className="alert alert-success text-sm">
-						<span>Bluesky account linked successfully.</span>
-					</div>
-				)}
-
-				{error && (
-					<div className="alert alert-error text-sm">
-						<span>{error}</span>
-					</div>
-				)}
-
-				{isLinked ? (
-					<div className="flex flex-col gap-3">
-						<div className="flex items-center gap-2">
-							<div className="badge badge-success">Linked</div>
-							<span className="text-sm font-medium">
-								{user.atprotoHandle ? `@${user.atprotoHandle}` : "handle unavailable"}
-							</span>
-						</div>
-						<p className="text-xs text-base-content/50">DID: {user.atprotoDid}</p>
-						<p className="text-sm text-base-content/60">
-							You can log in to Anthers with this handle. Unlinking stops that and leaves everything
-							else on your account untouched.
-						</p>
-						<button
-							type="button"
-							className="btn btn-outline btn-error btn-sm w-fit"
-							onClick={handleUnlink}
-							disabled={unlinking}
-						>
-							{unlinking ? "Unlinking…" : "Unlink Bluesky"}
-						</button>
-					</div>
-				) : (
-					<form onSubmit={handleLink} className="flex flex-col gap-3">
-						<p className="text-sm text-base-content/60">
-							Connect a Bluesky account and you can log in to Anthers with it. Anthers asks only to
-							confirm who you are — it can't post, follow, or change anything on your Bluesky
-							account.
-						</p>
-						<p className="text-sm text-base-content/60">
-							Linking doesn't publish your Anthers work to Bluesky or move it anywhere. Federation
-							is a direction we're committed to, not something we've shipped.
-						</p>
-						<div className="flex gap-2">
-							<input
-								type="text"
-								className="input input-bordered flex-1"
-								value={handle}
-								onChange={(e) => setHandle(e.target.value)}
-								placeholder="alice.bsky.social"
-							/>
-							<button
-								type="submit"
-								className="btn btn-primary btn-sm"
-								disabled={linking || !handle.trim()}
-							>
-								{linking ? "Linking…" : "Link account"}
-							</button>
-						</div>
-					</form>
-				)}
+				<div className="flex items-center gap-2">
+					<span className="text-sm font-medium">
+						{handle ? `@${handle}` : "handle unavailable"}
+					</span>
+				</div>
+				<p className="text-xs text-base-content/50">DID: {did}</p>
+				<p className="text-sm text-base-content/60">
+					Your Anthers account is built on this identity, and it is how you sign in. It lives on
+					your own server rather than on Anthers', so it carries on existing whatever happens to
+					your Anthers account.
+				</p>
 			</div>
 		</div>
 	);
