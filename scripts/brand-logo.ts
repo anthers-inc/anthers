@@ -58,7 +58,7 @@ export const OUTPUTS: Output[] = [
 	),
 	...[32, 64, 180].map((size) => ({
 		file: `${LOGO}/web/icon-${size}.png`,
-		source: `${LOGO}/preps/antherslogo_thumb1x1_light.png`,
+		source: `${LOGO}/preps/anthersthumb_1x1_light.png`,
 		height: size,
 		kind: "icon" as const,
 	})),
@@ -74,7 +74,7 @@ export const OUTPUTS: Output[] = [
 	// by address. See apps/web/public/brand/README.md before renaming it.
 	{
 		file: "apps/web/public/brand/anthers-mark-256.png",
-		source: `${LOGO}/preps/antherslogo_thumb1x1_light.png`,
+		source: `${LOGO}/preps/anthersthumb_1x1_light.png`,
 		height: 256,
 		kind: "icon",
 	},
