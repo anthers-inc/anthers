@@ -48,6 +48,7 @@ import {
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
 import { and, count, desc, eq, exists, inArray, isNull, max, or, sql } from "drizzle-orm";
+import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { notify } from "./notifications.js";
 import { queueRecordSync } from "./record-sync.js";
@@ -743,12 +744,31 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			.from(comments)
 			.leftJoin(users, eq(comments.userId, users.id))
 			.where(inArray(comments.id, commentIds));
+		// ⚠️ **A reply is about a comment, and the page an operator needs is the post above it.**
+		// Its own `subject_id` names the comment it answers, so reading that as a post's id would
+		// link the queue to whichever post happens to share the number.
+		const replyRoots = await commentRoots(
+			rows.filter((r) => r.subjectType === REPLY_SUBJECT_TYPE).map((r) => r.id),
+		);
+		const rootOf = (r: (typeof rows)[number]) =>
+			r.subjectType === REPLY_SUBJECT_TYPE
+				? replyRoots.get(r.id)
+				: { subjectType: r.subjectType, subjectId: r.subjectId };
+		const roots = rows.map(rootOf).filter((root) => root !== undefined);
 		const contexts = await loadContexts(
-			rows.map((r) => ({ kind: r.subjectType === "work" ? "work" : "post", id: r.subjectId })),
+			roots.map((root) => ({
+				kind: root.subjectType === "work" ? "work" : "post",
+				id: root.subjectId,
+			})),
 		);
 		for (const r of rows) {
+			const root = rootOf(r);
 			items.set(key("comment", r.id), {
-				...base("comment", r, contexts.get(`${r.subjectType}:${r.subjectId}`) ?? null),
+				...base(
+					"comment",
+					r,
+					root ? (contexts.get(`${root.subjectType}:${root.subjectId}`) ?? null) : null,
+				),
 				excerpt: r.body,
 				verdict: null,
 			});

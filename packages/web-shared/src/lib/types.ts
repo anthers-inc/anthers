@@ -486,10 +486,21 @@ export interface ProjectWork extends Work {
 	sortOrder: number;
 }
 
+/**
+ * One comment in a thread, which is a reply when its subject is another comment.
+ *
+ * ⭐ **A reply is not a different kind of thing**, and there is no parent field: `subjectType`
+ * is `comment` and `subjectId` is the comment it answers, which is the same fact the record on
+ * the network carries. A thread arrives flat, in reading order, and is grouped by that alone.
+ */
 export interface Comment {
 	id: number;
-	userId: number;
-	postId: number;
+	/** Null exactly when `username` is — the author deleted their account. */
+	userId: number | null;
+	/** `post` for a comment on a post, `comment` for a reply, and `work` only on older rows. */
+	subjectType: string;
+	subjectId: number;
+	removed: false;
 	body: string;
 	atprotoUri: string | null;
 	createdAt: string;
@@ -527,14 +538,32 @@ export interface Comment {
 	 * Pushed below the collapse threshold by readers.
 	 *
 	 * ⚠️ **A third state, and never to be drawn like the other two.** A moderation removal
-	 * never reaches the client at all, and a tombstone is an author who deleted their
-	 * account. This comment is here, readable, and folded — the crowd did it, not a
+	 * arrives as a `RemovedComment` with nothing in it, and a tombstone is an author who
+	 * deleted their account. This comment is here, readable, and folded — the crowd did it, not a
 	 * moderator, and the UI has to say so.
 	 */
 	collapsed: boolean;
 	/** What this viewer did: `up`, `down`, or nothing yet. */
 	viewerVote: "up" | "down" | null;
 }
+
+/**
+ * The place a comment removed by moderation was, sent only because replies beneath it are shown.
+ *
+ * 🚨 **No text, no author and no record address, by construction.** The server never sends them,
+ * and a renderer should not reach for them: this says where the gap is and that it is a removal,
+ * which is a different thing from an author who deleted their account.
+ */
+export interface RemovedComment {
+	id: number;
+	subjectType: string;
+	subjectId: number;
+	createdAt: string;
+	removed: true;
+}
+
+/** What a thread is made of: comments, and the gaps removed ones left above their replies. */
+export type ThreadComment = Comment | RemovedComment;
 
 /** One written review: a score plus the words that justify it. */
 export interface Review {

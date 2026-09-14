@@ -75,6 +75,7 @@ import {
 	savedCardFor,
 	supportItems,
 } from "../services/billing.js";
+import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -237,7 +238,7 @@ async function stickerRecipient(
 	let creatorId: number | null = null;
 	if (subjectType === "comment") {
 		const [row] = await db
-			.select({ userId: comments.userId, type: comments.subjectType, id: comments.subjectId })
+			.select({ userId: comments.userId })
 			.from(comments)
 			.where(and(eq(comments.id, subjectId), eq(comments.moderationStatus, "visible")))
 			.limit(1);
@@ -249,7 +250,12 @@ async function stickerRecipient(
 				status: 403,
 			};
 		}
-		creatorId = await publicCreatorOf(row.type === "work" ? "work" : "post", row.id);
+		// ⚠️ **The ROOT of the thread, never the comment's own subject.** A reply's subject is
+		// another comment, and reading its id as a post's pays whoever wrote the post that
+		// happens to share that number.
+		const root = rootOfAncestry(await commentAncestry(subjectId));
+		if (!root || (root.subjectType !== "work" && root.subjectType !== "post")) return notFound;
+		creatorId = await publicCreatorOf(root.subjectType, root.subjectId);
 	} else {
 		creatorId = await publicCreatorOf(subjectType, subjectId);
 	}
