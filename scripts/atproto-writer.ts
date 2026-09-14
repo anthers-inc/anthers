@@ -6,7 +6,7 @@
  * `hosted-repo-writer.ts` for identities Anthers hosts and `oauth-repo-writer.ts` for a grant
  * over an identity held elsewhere. This is the third way in, for the two things a script does —
  * `atproto-publish-lexicon.ts` publishing schemas into Anthers' own account, and the integration
- * suites writing into a throwaway account on the local network `make pds-up` starts.
+ * suites writing into a throwaway account on a session's private network (`scripts/session.ts`).
  *
  * 🛑 **It refuses to reach a server on the real network unless the caller passes `realNetwork`.**
  * A record there is public the moment it lands, so the safe default is the one that cannot

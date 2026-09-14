@@ -25,7 +25,7 @@
  * page says what the button is about to do, a handle is not mistaken for an address, and a
  * refused code signs nobody in.
  */
-import { expect, test } from "./fixtures";
+import { API_URL, expect, test } from "./fixtures";
 
 /** An address that cannot collide with a real account or another run. */
 const addr = () => `e2e-login-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -106,7 +106,7 @@ test.describe("signing in with an emailed code", () => {
 
 		// Asserted against the API, because a refused code that still minted a session would
 		// look identical on the page.
-		const me = await page.request.get("http://localhost:8000/api/auth/me");
+		const me = await page.request.get(`${API_URL}/api/auth/me`);
 		expect((await me.json()).user, "a refused code must not create a session").toBeNull();
 	});
 });

@@ -1,0 +1,4 @@
+[test]
+# The same disposable session the root runs tests in, so `bun test` from this directory never
+# reaches a database somebody else is using. See scripts/session-preload.ts.
+preload = ["../../scripts/session-preload.ts"]

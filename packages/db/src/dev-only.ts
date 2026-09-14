@@ -25,8 +25,8 @@
  *   - **`.do/app.yaml`** — the deployment spec, which by construction never travels inside
  *     the thing it deploys. This is the marker `dev-spec-env.ts` already relies on; if it
  *     ever enters the image, both guards fail together and each comment points at the other.
- *   - **`compose.yaml`** — the definition of the local dev Postgres, which is exactly the
- *     database a dev-only bootstrap is allowed to write to.
+ *   - **`Makefile`** — the entry point every local session starts from, and the thing that brings
+ *     up the disposable database a dev-only bootstrap is allowed to write to.
  *
  * A positive requirement is the whole point: a missing value must never be the thing that
  * removes a protection, which is the rule the empty-`SITE_PASSWORD` incident wrote down and
@@ -37,7 +37,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /** Root files that exist in a checkout and in no deployed container. */
-const CHECKOUT_MARKERS = [join(".do", "app.yaml"), "compose.yaml"];
+const CHECKOUT_MARKERS = [join(".do", "app.yaml"), "Makefile"];
 
 /** How far up to walk. `packages/db/src` is three levels below the root; eight is slack. */
 const MAX_DEPTH = 8;
@@ -85,7 +85,7 @@ export function assertDevCheckout(startDir?: string): void {
 	if (isDevCheckout(startDir)) return;
 	throw new Error(
 		"refusing to run outside a repository checkout — this is a dev-only script that writes " +
-			"fixture data. A deployed container carries no .do/app.yaml and no compose.yaml, which " +
+			"fixture data. A deployed container carries no .do/app.yaml and no Makefile, which " +
 			"is how this guard tells the two apart; see packages/db/src/dev-only.ts.",
 	);
 }

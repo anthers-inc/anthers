@@ -30,7 +30,7 @@
  * behavior this whole change exists to remove.
  */
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { API_URL, expect, test } from "./fixtures";
 
 /** An address that cannot collide with a real account or another run. */
 const addr = () =>
@@ -363,7 +363,7 @@ test.describe("the code field", () => {
 		// 🚨 And nobody is signed in. A failed verification that still minted a session
 		// would be invisible here — the page looks identical — so it is asserted against
 		// the API rather than the page.
-		const me = await page.request.get("http://localhost:8000/api/auth/me");
+		const me = await page.request.get(`${API_URL}/api/auth/me`);
 		expect((await me.json()).user, "a refused code must not create a session").toBeNull();
 	});
 });

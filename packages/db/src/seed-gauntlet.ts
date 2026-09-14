@@ -34,6 +34,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { and, eq, inArray, like } from "drizzle-orm";
+import { localContentRoot } from "./content-root.js";
 import { assertDevCheckout } from "./dev-only.js";
 import { fixtureDid } from "./fixture-did.js";
 import {
@@ -69,10 +70,10 @@ import {
 const TAG = "[gauntlet]";
 
 /**
- * Local content root, mirroring the API's LocalStorageService (repo root /content/).
- * Only used when the storage backend is local — which is every place this fixture runs.
+ * Local content root, the same directory the API's LocalStorageService reads. Only used when the
+ * storage backend is local — which is every place this fixture runs.
  */
-const CONTENT_ROOT = join(import.meta.dir, "../../../content");
+const CONTENT_ROOT = localContentRoot();
 
 /** Resolve the viewer whose relationship with the creator the gauntlet walks. */
 function resolveViewerUsername(): string {

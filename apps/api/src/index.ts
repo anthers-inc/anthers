@@ -23,6 +23,7 @@ import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
+import { LocalStorageService } from "./services/storage/local.js";
 import { matchesInviteKey, matchesSitePassword } from "./site-gate.js";
 
 const app = new Hono()
@@ -46,7 +47,10 @@ const app = new Hono()
 		if (isQuarantinedKey(decodeURIComponent(c.req.path).slice("/content/".length))) {
 			return c.json({ error: "Not found" }, 404);
 		}
-		return serveStatic({ root: "../../" })(c, next);
+		return serveStatic({
+			root: LocalStorageService.getContentRoot(),
+			rewriteRequestPath: (path) => path.slice("/content".length),
+		})(c, next);
 	})
 	.get("/health", (c) => c.json({ status: "ok" }))
 	// Authorizes a visitor past the pre-launch SiteGate. Two ways in, same result

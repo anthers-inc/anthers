@@ -8,8 +8,24 @@ import { defineConfig, devices } from "@playwright/test";
 // webServer command (build.ts + serve.ts) resolves ./dist correctly.
 const here = fileURLToPath(new URL(".", import.meta.url));
 const apiDir = fileURLToPath(new URL("../api", import.meta.url));
-const PORT = 4173;
-const API_PORT = 8000;
+/*
+ * 🚨 **This suite runs inside a browser session, never against a database somebody else is using.**
+ * `make test-e2e` and `make verify` start one (`scripts/session.ts browser`), which brings up its
+ * own Postgres and AT Protocol network and hands this config free ports for the preview and the
+ * API — so a run can overlap `make dev` on :8000, or another run, without either touching the
+ * other's data. The fallbacks below are CI's, where the job's service containers are the session.
+ */
+const PORT = Number(process.env.PREVIEW_PORT ?? 4173);
+const API_PORT = Number(process.env.API_PORT ?? 8000);
+
+/**
+ * Refuses to start a server outside a session. A bare `bunx playwright test` would otherwise bring
+ * the API up against whatever `.env` names — the running dev session's database — and seed the
+ * gauntlet fixture into it. Checked in the command rather than at the top of this file, because
+ * `scripts/e2e-projects.ts` imports the config just to read its projects.
+ */
+const REQUIRE_SESSION =
+	'test -n "$ANTHERS_SESSION" || { echo "Run the browser suite in a session: make test-e2e, or bun run ../../scripts/session.ts browser -- bunx playwright test"; exit 1; }';
 
 export default defineConfig({
 	testDir: "./tests/e2e",
@@ -122,22 +138,19 @@ export default defineConfig({
 		// of you contradicts. It cost a debugging cycle on 2026-07-28, chasing a fix that was
 		// already correct. A rebuild is a few seconds; a lie is expensive.
 		{
-			command: `bun run build.ts && PORT=${PORT} bun run serve.ts`,
+			command: `${REQUIRE_SESSION} && bun run build.ts && PORT=${PORT} API_PORT=${API_PORT} bun run serve.ts`,
 			cwd: here,
 			url: `http://localhost:${PORT}`,
 			reuseExistingServer: false,
 			timeout: 120_000,
 		},
-		// The real API + Postgres. Pages served from localhost resolve their API base to
-		// localhost:8000 (see web-shared rpc.ts), so no proxy is involved — but the API and
-		// database must genuinely be up, which is the deliberate cost of authenticated e2e.
-		// Locally this reuses a running `make dev` API (same port, same database); without
-		// one it brings the dev Postgres up itself (docker) and starts the API. In CI the
-		// database is a service container and the environment carries DATABASE_URL.
+		// The real API + Postgres. The preview tells pages which port the API took (see
+		// web-shared rpc.ts), so no proxy is involved — but the API and database must genuinely
+		// be up, which is the deliberate cost of authenticated e2e. The session supplies the
+		// database; in CI it is a service container and the job's environment carries it.
 		//
-		// Reuse is kept HERE, unlike the SPA above, because this server doesn't serve the
-		// bundle — it runs from source, so a running `make dev` API is already current. That
-		// asymmetry is the point: reuse what can't go stale, rebuild what can.
+		// NEVER reused either. A running `make dev` API is current code, but it is the dev
+		// session's database, and a suite that seeds and resets fixtures must not reach it.
 		{
 			// In CI the API is run under a restart loop, because Bun sometimes segfaults it.
 			//
@@ -160,7 +173,7 @@ export default defineConfig({
 			// happening and the Bun version is worth revisiting, so do not let it go quiet.
 			command: process.env.CI
 				? 'for i in 1 2 3 4 5; do bun src/server.ts && break; echo "[api] exited unexpectedly — restart $i/5"; sleep 1; done'
-				: "make -C ../.. db-ready && bun --env-file=../../.env src/server.ts",
+				: `${REQUIRE_SESSION} && bun --env-file=../../.env src/server.ts`,
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
 			/*
@@ -168,10 +181,6 @@ export default defineConfig({
 			 * the code.** It needs three variables, because `hostedIdentityOffered` is a claim
 			 * that everything hosting needs is present — so a spec covering the door would pass
 			 * locally, where `.env` sets them, and fail in CI, where nothing does.
-			 *
-			 * ⚠️ It does NOT apply to a reused server. `reuseExistingServer` is on locally, so
-			 * a running `make dev` brings its own environment and this is ignored — if those
-			 * specs fail against a dev API, the variables are missing from your `.env`.
 			 *
 			 * All three are deliberately fake:
 			 *
@@ -189,11 +198,12 @@ export default defineConfig({
 			 * throwaway per run is also what a test key should be.
 			 */
 			env: {
+				PORT: String(API_PORT),
 				HOSTED_PDS_URL: "https://node.invalid",
 				HOSTED_PDS_INVITE_CODE: "e2e-no-such-invite",
 				HOSTED_ACCOUNT_KEY: randomBytes(32).toString("hex"),
 			},
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 			timeout: 180_000,
 		},
 	],

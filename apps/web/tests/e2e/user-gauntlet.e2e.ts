@@ -42,7 +42,7 @@ import { profileUrl } from "@anthers/web-shared/profile";
 const BUY = `G${2 + BADGE_RUNGS.length}`;
 
 import { expect, type Page, test } from "@playwright/test";
-import { API_URL, trackErrorsStrict } from "./fixtures";
+import { API_URL, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -212,7 +212,7 @@ async function expectVideoBytes(page: Page, key: string): Promise<void> {
 	);
 	// The rewrite stamps `FRONTEND_URL` as the origin, because in production the site and
 	// the API share one origin behind App Platform's ingress. This harness has no proxy —
-	// the SPA is on :4173 and the API on :8000 — so the *path* is the contract worth
+	// the SPA and the API are on separate ports — so the *path* is the contract worth
 	// asserting and the origin is deployment config. Re-point it at the API to follow it.
 	const variant = await page.request.get(atApi(variantUrl as string));
 	expect(variant.status(), `${key} variant playlist`).toBe(200);
@@ -437,7 +437,7 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 		`${API_URL}/api/content/posts/${gauntletPost("G2").slug}-post/comments`,
 		{
 			data: { body: "Commenting on a post I cannot read (recorded gauntlet behavior)." },
-			headers: { Origin: "http://localhost:4173" },
+			headers: { Origin: WEB_ORIGIN },
 		},
 	);
 	expect(res.status(), "commenting on an inaccessible post (recorded behavior)").toBe(201);

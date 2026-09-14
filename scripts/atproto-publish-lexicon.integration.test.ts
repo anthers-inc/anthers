@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Publishing and retiring schemas, against the private network `make pds-up` starts.
+ * Publishing and retiring schemas, against the test session's private network.
  *
  * `atproto-publish-lexicon.test.ts` proves every refusal against an in-memory repository. This
  * proves the part that talks to a server: that each of Anthers' real schemas goes out and reads
@@ -9,10 +9,11 @@
  * only the DNS answer stubbed — pointed at a temporary directory rather than `lexicons-published/`,
  * which describes production and is never touched by a test.
  *
- * 🚨 **It refuses to run unless `ATPROTO_TEST_PDS` names a server**, which `make pds-test` sets to
- * the local network; the writer underneath refuses a real server regardless.
+ * 🚨 **It refuses to run unless `ATPROTO_TEST_PDS` names a server**, and the writer underneath refuses
+ * a real server regardless.
  *
- *   make pds-up && make pds-test
+ * Every local `bun test` runs it, because the session the run starts sets `ATPROTO_TEST_PDS` to its
+ * own network (`scripts/session-preload.ts`). CI does not run a network yet, so it skips there.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";

@@ -21,7 +21,8 @@
  * afterwards broadcasts only the deletion, so anyone who kept a copy keeps it. Requiring the
  * operator to name the target is what stops this reaching production by defaulting to something.
  *
- *   make pds-up && make pds-test
+ * Every local `bun test` runs it, because the session the run starts sets `ATPROTO_TEST_PDS` to its
+ * own network (`scripts/session-preload.ts`). CI does not run a network yet, so it skips there.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";

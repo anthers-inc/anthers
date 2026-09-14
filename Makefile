@@ -1,11 +1,10 @@
 # ─── Anthers Makefile ───
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
-        db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
-        pds-up pds-test pds-down \
+        db-generate db-migrate db-push db-studio db-seed sessions-clean \
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
-        e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
+        e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
         spec-diff spec-apply deploy-status webhook-check dev-local \
 
 # ─── OS detection ───
@@ -100,9 +99,12 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 		$(MAKE) dev-local; \
 	fi
 
-dev-local: db-ready ## Start dev reading secrets from .env (offline, or no vault access)
-	@mkdir -p data
-	@bun run db:dev-account
+# 🚨 **Every `make dev` starts from nothing and leaves nothing.** `scripts/session.ts` brings up a
+# fresh database and a private AT Protocol network, migrates, ensures the dev account, runs the
+# servers, and removes all of it when they stop — including after a crash, which the next session
+# cleans up. Anything set up by hand during a session is gone when it ends; a file-change restart
+# under `bun --watch` is not an end.
+dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@KILLED=0; \
 	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
@@ -113,33 +115,25 @@ dev-local: db-ready ## Start dev reading secrets from .env (offline, or no vault
 		fi; \
 	done; \
 	[ "$$KILLED" = "1" ] && sleep 1 || true
-	@setsid bun run dev & DEV_PID=$$!; \
-	echo $$DEV_PID > .dev.pid; \
-	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
-	wait $$DEV_PID 2>/dev/null; \
-	rm -f .dev.pid
+	@bun run scripts/session.ts dev --pid-file .dev.pid -- \
+		sh -c 'bun run db:dev-account && exec bun run dev'
 
-dev-api: db-ready ## Start API dev server only
-	@mkdir -p data
+# The API alone still needs a database, so it starts the dev session itself — which means it cannot
+# run beside `make dev`, and the session refuses rather than letting the two share one.
+dev-api: ## Start API dev server only, in its own dev session
 	@EXISTING_PID=$$(lsof -ti :$(API_PORT) 2>/dev/null); \
 	if [ -n "$$EXISTING_PID" ]; then \
 		echo "  -> WARNING: Port $(API_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
 		kill $$EXISTING_PID 2>/dev/null || true; \
 		sleep 1; \
 	fi
-	@setsid bun run dev:api & DEV_PID=$$!; \
-	echo $$DEV_PID > .dev-api.pid; \
-	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-api.pid" EXIT; \
-	wait $$DEV_PID 2>/dev/null; \
-	rm -f .dev-api.pid
+	@bun run scripts/session.ts dev --pid-file .dev-api.pid -- \
+		sh -c 'bun run db:dev-account && exec bun run dev:api'
 
-dev-worker: db-ready ## Start background job worker only
-	@mkdir -p data
-	@setsid bun run dev:worker & DEV_PID=$$!; \
-	echo $$DEV_PID > .dev-worker.pid; \
-	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-worker.pid" EXIT; \
-	wait $$DEV_PID 2>/dev/null; \
-	rm -f .dev-worker.pid
+# The worker joins the dev session a `make dev-api` started rather than starting its own, since a
+# worker with a database of its own would have nothing to work on.
+dev-worker: ## Start background job worker only, inside the running dev session
+	@bun run scripts/session.ts attach dev -- bun run dev:worker
 
 dev-web: ## Start web dev server only
 	@EXISTING_PID=$$(lsof -ti :$(WEB_PORT) 2>/dev/null); \
@@ -181,92 +175,46 @@ down: ## Stop everything
 		echo "  -> No dev servers running"; \
 	fi
 
-# ─── Database (Postgres via compose.yaml) ───
-# Dev runs on a local containerized Postgres (the hub left SQLite). `make dev`
-# brings it up and migrates automatically via `db-ready`; the targets below are
-# for running those steps by hand. Prod uses DO Managed Postgres.
+# ─── Sessions: the database and the AT Protocol network (scripts/session.ts) ───
+# There is no standing dev database. Each `make dev` and each test run brings up its own Postgres
+# and its own private AT Protocol network, and removes both when it ends; `bun test` does the same
+# on its own (scripts/session-preload.ts). Prod uses DO Managed Postgres.
+#
+# 🚨 The network is the only place anything may write AT Protocol records. A record on a real
+# server is world-readable the moment it lands, and an identity registered with the real
+# directory is permanent; the session's network brings its own directory, and `network.mjs`
+# refuses to start unless its server is pointed at it.
+#
+# The targets below act on the RUNNING dev session, so start `make dev` first.
 
-db-ready: ## Ensure the dev Postgres is up, accepting connections, and migrated
-	@if ! docker info >/dev/null 2>&1; then \
-		echo "  -> ERROR: Docker isn't running. Start Docker Desktop/daemon, then retry."; \
-		exit 1; \
-	fi
-	@docker compose up -d
-	@echo "  -> waiting for Postgres to accept connections..."
-	@until docker compose exec -T postgres pg_isready -U anthers -d anthers >/dev/null 2>&1; do sleep 1; done
-	@bun run db:migrate
-
-db-up: ## Start the local dev Postgres (detached)
-	docker compose up -d
-
-db-down: ## Stop the local dev Postgres (keeps data)
-	docker compose down
+SESSION_DEV := bun run scripts/session.ts attach dev --
 
 db-generate: ## Generate Drizzle migration from schema changes
 	bun run db:generate
 
-# ─── Local AT Protocol network (scripts/atproto-network) ───
-# 🚨 The safe place to exercise anything that writes AT Protocol records. A record on a real
-# server is world-readable the moment it lands, and an identity registered with the real
-# directory is permanent. This network brings its own directory and its own server, both in
-# memory, and `network.mjs` refuses to start unless the server is pointed at that directory.
-#
-# `pds-up` always starts a fresh network, so a test run never inherits what an earlier one left.
+db-migrate: ## Apply pending migrations to the running dev session (make dev migrates on its own)
+	$(SESSION_DEV) bun run db:migrate
 
-ATPROTO_NETWORK := anthers-atproto-network
+db-push: ## Push schema directly to the running dev session (no migration files)
+	$(SESSION_DEV) bun run db:push
 
-pds-up: ## Start a fresh private AT Protocol network (directory :2582, server :2583)
-	@if ! docker info >/dev/null 2>&1; then \
-		echo "  -> ERROR: Docker isn't running. Start Docker Desktop/daemon, then retry."; \
-		exit 1; \
-	fi
-	@docker rm -f $(ATPROTO_NETWORK) >/dev/null 2>&1 || true
-	@docker build -q -t $(ATPROTO_NETWORK) scripts/atproto-network >/dev/null
-	@docker run -d --rm --name $(ATPROTO_NETWORK) -p 2582:2582 -p 2583:2583 $(ATPROTO_NETWORK) >/dev/null
-	@echo "  -> waiting for the network to answer..."
-	@until curl -sf -m 2 http://localhost:2583/xrpc/_health >/dev/null 2>&1 \
-		&& curl -sf -m 2 http://localhost:2582/_health >/dev/null 2>&1; do \
-		if ! docker ps -q -f name=^$(ATPROTO_NETWORK)$$ | grep -q .; then \
-			echo "  -> ERROR: the network exited:"; docker logs $(ATPROTO_NETWORK) 2>&1 | tail -5; exit 1; \
-		fi; \
-		sleep 1; \
-	done
-	@echo "  -> ready: directory http://localhost:2582, server http://localhost:2583"
+db-studio: ## Open Drizzle Studio on the running dev session's database
+	$(SESSION_DEV) bun run db:studio
 
-pds-test: ## Run the record-writing integration tests against the local network
-	@# Five suites: the writer against Anthers' own account, publishing and retiring its schemas,
-	@# a Work's listing written into a repository Anthers hosts on a creator's behalf, that
-	@# creator's posts and projects, and a reader's comments, votes, reviews and follows. The last
-	@# three need the dev database as well as the network, which is why they live with the other
-	@# database tests.
-	ATPROTO_TEST_PDS=http://localhost:2583 ATPROTO_PLC_URL=http://localhost:2582 bun test \
-	  scripts/atproto-writer.integration.test.ts \
-	  scripts/atproto-publish-lexicon.integration.test.ts \
-	  apps/api/src/__tests__/work-listing.integration.test.ts \
-	  apps/api/src/__tests__/creator-record-listing.integration.test.ts \
-	  apps/api/src/__tests__/reader-record-listing.integration.test.ts
+db-seed: ## Seed the running dev session with fake creators/projects/posts
+	$(SESSION_DEV) bun run db:seed
 
-pds-down: ## Stop the local network, which discards everything it held
-	@docker rm -f $(ATPROTO_NETWORK) >/dev/null 2>&1 || true
+gauntlet-reset: ## Reset the User Gauntlet fixture in the running dev session
+	$(SESSION_DEV) bun run db:gauntlet
+	$(SESSION_DEV) bun run db:gauntlet:media
 
-db-migrate: ## Apply pending migrations
-	bun run db:migrate
+gauntlet-clean: ## Remove the User Gauntlet fixture from the running dev session
+	$(SESSION_DEV) bun run db:gauntlet:clean
 
-db-push: ## Push schema directly (dev only, no migration files)
-	bun run db:push
-
-db-studio: ## Open Drizzle Studio (database GUI)
-	bun run db:studio
-
-db-seed: ## Seed dev database with fake creators/projects/posts
-	bun run db:seed
-
-gauntlet-reset: db-ready ## Reset the User Gauntlet fixture and put the dev account back on the floor
-	bun run db:gauntlet
-	bun run db:gauntlet:media
-
-gauntlet-clean: db-ready ## Remove the User Gauntlet fixture entirely
-	bun run db:gauntlet:clean
+# A session removes its own containers when it ends, and the next session removes any a crash left
+# behind — so this is only for reclaiming them without starting anything.
+sessions-clean: ## Remove every session container and directory whose run has ended
+	@bun -e 'import { clearAbandonedSessions } from "./scripts/session.ts"; await clearAbandonedSessions()'
 
 stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside `make dev`; needs the Stripe CLI)
 	@command -v stripe >/dev/null 2>&1 || { echo "  Stripe CLI not found — install it (and optionally run 'stripe login')."; exit 1; }
@@ -274,13 +222,6 @@ stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside
 	if [ -n "$$KEY" ]; then export STRIPE_API_KEY="$$KEY"; fi; \
 	echo "  Forwarding Stripe webhooks -> localhost:$(API_PORT)/api/payments/stripe/webhook"; \
 	stripe listen --forward-to localhost:$(API_PORT)/api/payments/stripe/webhook
-
-db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipes data)
-	docker compose down -v
-	docker compose up -d
-	@echo "  -> waiting for Postgres to accept connections..."
-	@until docker compose exec -T postgres pg_isready -U anthers -d anthers >/dev/null 2>&1; do sleep 1; done
-	$(MAKE) db-migrate
 
 # ─── Quality ───
 
@@ -290,30 +231,29 @@ db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipe
 # that has actually broken CI here. If this passes, ci.yml should too; if you skip it, you
 # are guessing. (The `images` job isn't mirrored — it needs Docker and exists to catch a
 # workspace-manifest failure mode that only appears in an image build.)
-verify: ## Run everything CI runs: typecheck, lint, migrate, unit tests, full Playwright
+#
+# Each half runs in a session of its own — `bun test` starts one itself, and the browser suite runs
+# inside `SESSION_BROWSER` — so a verify run shares nothing with a running `make dev` or with
+# another verify.
+verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright
 	bun run typecheck
 	bun run lint
 	bun run econ:figures --check
 	bun run lex:check
 	bun run db:snapshots
-	$(MAKE) db-ready
 	bun test
-	$(MAKE) free-preview-port
 	$(MAKE) e2e-preflight
-	cd apps/web && bunx playwright test
+	$(SESSION_BROWSER) bunx playwright test
 
-# The SPA preview server is never reused (see playwright.config.ts), so Playwright now
-# refuses to start when something already holds the port — loudly, which is the point.
-# The blessed targets clear it for you so that strictness isn't just an obstacle; running
-# `bunx playwright test` by hand still gets the error, which is the right default.
-free-preview-port:
-	@fuser -k 4173/tcp >/dev/null 2>&1 && echo "  freed a stale preview server on :4173" || true
+# The browser suite's own session: a database, a network, and free ports for the API and the
+# preview server, which is what lets it run beside `make dev` on :8000.
+SESSION_BROWSER := cd apps/web && bun run ../../scripts/session.ts browser --
 
 typecheck: ## Run TypeScript type checking
 	bun run typecheck
 
-test: ## Run all tests
-	bun run test
+test: ## Run the unit and integration suites, in a session of their own
+	bun test
 
 lint: ## Check linting with Biome
 	bun run lint
@@ -380,20 +320,20 @@ e2e-install: ## Install the Chromium build Playwright drives (one-time)
 
 # Refuses, and names the command that fixes it, for the two environment failures that both
 # present as every test failing instantly. See scripts/e2e-preflight.ts.
-e2e-preflight: ## Assert the browser launches and the API port is ours or free
+e2e-preflight: ## Assert the browser Playwright drives can launch
 	@bun run scripts/e2e-preflight.ts
 
 screenshots: ## Screenshot routes and flag JS errors (ROUTES="/a /b" to override)
 	cd apps/web && bun run build.ts && bun run scripts/screenshot.ts $(ROUTES)
 
-test-e2e: free-preview-port e2e-preflight ## Run the Playwright e2e suite (builds + serves automatically)
-	cd apps/web && bunx playwright test
+test-e2e: e2e-preflight ## Run the Playwright e2e suite in its own session (builds + serves automatically)
+	$(SESSION_BROWSER) bunx playwright test
 
-test-e2e-ui: free-preview-port e2e-preflight ## Run the Playwright e2e suite in UI mode
-	cd apps/web && bunx playwright test --ui
+test-e2e-ui: e2e-preflight ## Run the Playwright e2e suite in UI mode, in its own session
+	$(SESSION_BROWSER) bunx playwright test --ui
 
-test-gauntlet: free-preview-port e2e-preflight ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
-	cd apps/web && bunx playwright test --project=gauntlet
+test-gauntlet: e2e-preflight ## Run the User Gauntlet spec pass in its own session
+	$(SESSION_BROWSER) bunx playwright test --project=gauntlet
 
 
 # ─── Desktop Studio (Tauri) ───

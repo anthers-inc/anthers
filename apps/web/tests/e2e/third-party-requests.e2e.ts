@@ -33,7 +33,7 @@ test.describe("third-party requests", () => {
 				seen++;
 				const url = new URL(req.url());
 				// data: and blob: carry no network request; localhost is us (the preview
-				// on :4173 and the API on :8000 both count as first-party here).
+				// server and the API both count as first-party here).
 				if (url.protocol !== "http:" && url.protocol !== "https:") return;
 				if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return;
 				offOrigin.push(req.url());
