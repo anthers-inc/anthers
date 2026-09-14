@@ -9,7 +9,8 @@
  * PNGs exported from it, and the only place the art is ever edited. Those exports are
  * 2560×1440 and several hundred kilobytes each, which is right for a source and wrong for
  * a navbar, so this trims each lockup to its artwork, scales it to a few times the largest
- * size it is drawn at, and cuts the tab and home-screen icons from the 1:1 thumb.
+ * size it is drawn at, cuts the tab and home-screen icons from the 1:1 thumb, and trims the
+ * bare 1:1 mark for drawing inline.
  *
  * **Run it after re-exporting from a PSD, and commit what it writes.** The outputs are
  * committed rather than built so the site builds without an image library on the deploy
@@ -57,15 +58,23 @@ export const OUTPUTS: Output[] = [
 	),
 	...[32, 64, 180].map((size) => ({
 		file: `${LOGO}/web/icon-${size}.png`,
-		source: `${LOGO}/preps/antherslogo_thumb1x1_light.png`,
+		source: `${LOGO}/preps/anthersthumb_1x1_light.png`,
 		height: size,
 		kind: "icon" as const,
 	})),
+	// The bare mark on no background, for drawing inline beside text — the Anthers tab on the
+	// signup card, at `h-5`. Trimmed like a lockup, since the mark does not fill its square.
+	{
+		file: `${LOGO}/web/mark-60.png`,
+		source: `${LOGO}/preps/anthersicon_1x1_trans.png`,
+		height: 60,
+		kind: "lockup",
+	},
 	// 🚨 A stable URL, not a bundled asset: the identity server's email header points at it
 	// by address. See apps/web/public/brand/README.md before renaming it.
 	{
 		file: "apps/web/public/brand/anthers-mark-256.png",
-		source: `${LOGO}/preps/antherslogo_thumb1x1_light.png`,
+		source: `${LOGO}/preps/anthersthumb_1x1_light.png`,
 		height: 256,
 		kind: "icon",
 	},

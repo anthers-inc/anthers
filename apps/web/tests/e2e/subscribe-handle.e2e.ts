@@ -61,7 +61,7 @@ async function stubAvailability(
  * answers is asserting about a shape rather than about a door.
  */
 async function openHandleDoor(page: Page) {
-	await expect(topSignup(page).getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+	await expect(topSignup(page).getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();
 }
 
 test.describe("signing up with a handle Anthers issues", () => {
@@ -80,7 +80,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		).toHaveCount(0);
 		await expect(topSignup(page).getByLabel(/where should we reach you/i)).toHaveCount(0);
 		await expect(
-			topSignup(page).getByRole("button", { name: /create my free account/i }),
+			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
 			"the button should refuse until there is a name to ask for",
 		).toBeDisabled();
 
@@ -137,7 +137,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		await topSignup(page).getByLabel("The handle you'd like").fill("alice");
 		await expect(topSignup(page).getByText(/alice\.anthers\.social is taken/i)).toBeVisible();
 		await expect(
-			topSignup(page).getByRole("button", { name: /create my free account/i }),
+			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
 			"a name the node has already given away is not one to send anybody to /finish with",
 		).toBeDisabled();
 	});
@@ -169,7 +169,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		await topSignup(page).getByLabel("The handle you'd like").fill("alice");
 		await expect(topSignup(page).getByText(/couldn't check that just now/i)).toBeVisible();
 		await expect(
-			topSignup(page).getByRole("button", { name: /create my free account/i }),
+			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
 			"the node is the authority, and a browser that could not ask has learned nothing",
 		).toBeEnabled();
 	});
@@ -196,7 +196,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		// part of one. Stripping it is a real behavior and this is the only test of it.
 		await topSignup(page).getByLabel("The handle you'd like").fill("@alice");
 		await topSignup(page)
-			.getByRole("button", { name: /create my free account/i })
+			.getByRole("button", { name: /sign up with anthers/i })
 			.click();
 
 		await expect.poll(() => payload).not.toBeNull();
@@ -225,7 +225,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		await openHandleDoor(page);
 		await topSignup(page).getByLabel("The handle you'd like").fill("someonenewentirely");
 		await topSignup(page)
-			.getByRole("button", { name: /create my free account/i })
+			.getByRole("button", { name: /sign up with anthers/i })
 			.click();
 
 		await expect(page).toHaveURL(/\/finish$/);
@@ -274,7 +274,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		await expect(topSignup(page).getByRole("tab", { name: "Email", exact: true })).toBeVisible();
 		await expect(topSignup(page).getByLabel(/where should we reach you/i)).toBeVisible();
 		await expect(
-			topSignup(page).getByRole("tab", { name: "New Handle", exact: true }),
+			topSignup(page).getByRole("tab", { name: "Anthers", exact: true }),
 			"a door that cannot work is worse than no door — see hostedIdentityOffered",
 		).toHaveCount(0);
 	});
@@ -297,7 +297,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 		await topSignup(page).getByLabel("The handle you'd like").fill("bad_name");
 		await expect(topSignup(page).getByText(/no underscores/i)).toBeVisible();
 		await expect(
-			topSignup(page).getByRole("button", { name: /create my free account/i }),
+			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
 		).toBeDisabled();
 
 		// Long enough that a 400ms debounce would have fired several times over.

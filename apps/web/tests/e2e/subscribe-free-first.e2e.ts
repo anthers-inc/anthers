@@ -344,7 +344,7 @@ test.describe("/subscribe leads with the free door", () => {
 		// both copies read the same state, because two fields that disagreed would let somebody
 		// submit a value they had corrected in the other one.
 		const top = page.locator('[data-signup="top"]');
-		await expect(top.getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+		await expect(top.getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();
 		await top.getByLabel("The handle you'd like").fill("someonespecific");
 		await expect(
 			page.locator('[data-signup="summary"]').getByLabel("The handle you'd like"),

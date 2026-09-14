@@ -39,27 +39,33 @@
 		},
 		{
 			"file": "packages/brand/logo/web/icon-32.png",
-			"source": "packages/brand/logo/preps/antherslogo_thumb1x1_light.png",
-			"sourceSha256": "e530eb57922b60604db9625e1c2abb5d7aad63af4e37738d396aa464c9b9187e",
-			"sha256": "21d0e7c4de9a28514b7ecb2504b22037948e3b2eb7364a5b3eadb31a081706ee"
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "18efa9883e2bd1737eb15e71c6276b4ab0e06bf15b35156e2bd6adb0295971c0"
 		},
 		{
 			"file": "packages/brand/logo/web/icon-64.png",
-			"source": "packages/brand/logo/preps/antherslogo_thumb1x1_light.png",
-			"sourceSha256": "e530eb57922b60604db9625e1c2abb5d7aad63af4e37738d396aa464c9b9187e",
-			"sha256": "3950d86f8e54edc3ce83ae28743f9e7d22e51cc94945cfc23e8b0ed3e5fd658b"
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "206a223a4312e85e2f2fa82e44a2c5693de264c35252d90e8c6bd42bf61bbe8a"
 		},
 		{
 			"file": "packages/brand/logo/web/icon-180.png",
-			"source": "packages/brand/logo/preps/antherslogo_thumb1x1_light.png",
-			"sourceSha256": "e530eb57922b60604db9625e1c2abb5d7aad63af4e37738d396aa464c9b9187e",
-			"sha256": "c7ddcdd27929322b43164087394b28ffd2a6f791f89971ead5d869bf1c6ac864"
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "3889d922e2e3004f18fdf237d2c86941905611dae78632eb6f70b85fc8941531"
+		},
+		{
+			"file": "packages/brand/logo/web/mark-60.png",
+			"source": "packages/brand/logo/preps/anthersicon_1x1_trans.png",
+			"sourceSha256": "0f490c1ad50545c41e1af81f90981c63630d9ccbc0068b31cecccb2fda8ad758",
+			"sha256": "5420343bf1b9d7ad0ace6ea67ff6f939ffc080c0019181381c4201dae5b1cab9"
 		},
 		{
 			"file": "apps/web/public/brand/anthers-mark-256.png",
-			"source": "packages/brand/logo/preps/antherslogo_thumb1x1_light.png",
-			"sourceSha256": "e530eb57922b60604db9625e1c2abb5d7aad63af4e37738d396aa464c9b9187e",
-			"sha256": "a33ac28a174ac926a51484eecc8a2f873c10e9804e25c75c0c5e57d008bc6c8f"
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "c316eb99bafeb05fc499538a7cbc4d9ee57d1758eed76cd944689caf36040380"
 		}
 	]
 }
