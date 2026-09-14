@@ -4,13 +4,9 @@
  *
  * 🚨 **An account can only come into existence through a pending signup that carries an identity**,
  * so a suite that used to spend a code for a bare address and get an account has to bring one.
- * `signUp` binds a placeholder Bluesky identity to a pending signup the way the OAuth callback
- * would, then spends a real code against it — the ceremony, with the round trip on somebody else's
- * website left out, because no test may take it.
- *
- * ⚠️ **The placeholder DIDs come from `fixtureDid()` and are a stopgap** until the task
- * "Replace seeded test data with sanitized dumps from production" decides how tests get an account.
- * Nothing resolves or publishes to them.
+ * `signUp` binds a real identity on the test session's server to a pending signup the way the OAuth
+ * callback would, then spends a real code against it — the ceremony, with the round trip on
+ * somebody else's website left out, because no test may take it.
  *
  * 🚨 **`stubNetwork` fails loudly on any address it was not told about.** Creating a hosted identity
  * reaches the node, and recording one reads the PLC directory, both through the global `fetch`; a
@@ -19,13 +15,13 @@
  */
 import { afterAll, beforeAll } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { signupCodes } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index.js";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { startPendingSignup } from "../services/pending-signups.js";
 import { issueSignupCode } from "../services/signup-codes.js";
+import { broughtIdentity } from "./account-fixture.js";
 
 /** CSRF requires a real browser Origin — a bare Request never reaches the handler. */
 export const JSON_HEADERS = { "Content-Type": "application/json", Origin: "http://localhost:3000" };
@@ -53,13 +49,13 @@ export async function spendCode(path: string, email: string, token?: string): Pr
 }
 
 /**
- * Create an account through the ceremony, with a placeholder Bluesky identity, and hand back the
- * response `/signup/verify` gave — which carries the session cookie.
+ * Create an account through the ceremony, with a brought identity on the session's server, and hand
+ * back the response `/signup/verify` gave — which carries the session cookie.
  */
 export async function signUp(email: string): Promise<Response> {
 	const token = await startPendingSignup({
 		email,
-		identity: { did: fixtureDid(), handle: "fixture.bsky.social", pdsUrl: "https://pds.example" },
+		identity: await broughtIdentity(),
 	});
 	return spendCode("/api/auth/signup/verify", email, token);
 }

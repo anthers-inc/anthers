@@ -10,7 +10,6 @@
  */
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoOauthState, atprotoSessions, users } from "@anthers/db/schema";
 import { JoseKey } from "@atproto/jwk-jose";
 import { eq, like } from "drizzle-orm";
@@ -25,6 +24,7 @@ import {
 	setAtprotoClient,
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -269,19 +269,14 @@ describe("session store", () => {
 		expect(row).toBeDefined();
 		expect(row.userId).toBeNull();
 
-		const [user] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}u`,
-				email: `${RUN}@example.test`,
-				emailVerified: false,
-				atprotoDid: fixtureDid(),
-			})
-			.returning();
-		await attachSessionToUser(did, user.id);
+		const user = await createAccount(`${RUN}u`, {
+			email: `${RUN}@example.test`,
+			identity: "brought",
+		});
+		await attachSessionToUser(did, user.userId);
 
 		const [linked] = await db.select().from(atprotoSessions).where(eq(atprotoSessions.did, did));
-		expect(linked.userId).toBe(user.id);
+		expect(linked.userId).toBe(user.userId);
 	});
 });
 

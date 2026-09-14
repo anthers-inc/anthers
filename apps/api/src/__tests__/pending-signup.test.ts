@@ -26,7 +26,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -41,6 +40,10 @@ import {
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
 import { issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
+import { createAccount } from "./account-fixture";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+purgeAccountsCreatedHere();
 
 const RUN = `ps${Date.now().toString(36)}`;
 const addr = (tag: string) => `${RUN}${tag}@example.test`;
@@ -159,9 +162,7 @@ describe("asking for an account writes it down", () => {
 	});
 
 	it("says nothing about whether the address already has an account", async () => {
-		await db
-			.insert(users)
-			.values({ email: addr("known"), emailVerified: true, atprotoDid: fixtureDid() });
+		await createAccount(null, { email: addr("known"), emailVerified: true, identity: "brought" });
 		const known = await begin({ email: addr("known") });
 		const stranger = await begin({ email: addr("stranger") });
 		// The moment these answer differently, this endpoint becomes a way to ask "is this

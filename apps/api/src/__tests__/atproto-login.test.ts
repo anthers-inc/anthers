@@ -14,7 +14,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -103,6 +102,14 @@ async function runCallback(staged: { did: string; state?: string }): Promise<URL
 	return new URL(res.headers.get("location") as string);
 }
 
+/**
+ * An account bound to the identity the faked OAuth callback signs in as.
+ *
+ * ⚠️ **Written directly, with the suite's own `did(tag)`, because the identity exists only inside
+ * the faked OAuth client** — its resolver and its session are stubs, so there is no server for a
+ * real identity to live on. This moves to a real identity when the local network gains a server
+ * standing in for `bsky.social`, and the OAuth round trip with it.
+ */
 async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> = {}) {
 	const [user] = await db
 		.insert(users)
@@ -110,7 +117,7 @@ async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> 
 			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
-			atprotoDid: fixtureDid(),
+			atprotoDid: did(tag),
 			...values,
 		})
 		.returning();

@@ -19,10 +19,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { learnHandleDomain } from "./node-fixture";
 
@@ -54,30 +54,22 @@ afterAll(async () => {
 });
 
 const { swapHostedHandle } = await import("../services/hosted-accounts.js");
-const { seal } = await import("../services/secret-box.js");
 
+/**
+ * An account holding an identity the session's server issued, its credential sealed under this
+ * file's key, and a watched head this file controls — so the directory the router fakes is the
+ * only thing that decides what the swap reads.
+ */
 async function makeAccount(tag: string) {
-	const [user] = await db
-		.insert(users)
-		.values({
-			username: `${RUN}${tag}`,
-			email: `${RUN}${tag}@example.test`,
-			emailVerified: true,
-			atprotoDid: `did:plc:${RUN}${tag}`,
-			atprotoHandle: `${RUN}${tag}.anthers.test`,
-		})
-		.returning();
-	const did = `did:plc:${RUN}${tag}`;
-	await db.insert(hostedAccounts).values({
-		did,
-		userId: user.id,
-		handle: `${RUN}${tag}.anthers.test`,
-		sealedPassword: seal("a-generated-password"),
+	const account = await createAccount(`${RUN}${tag}`, {
+		email: `${RUN}${tag}@example.test`,
+		emailVerified: true,
 	});
 	await db
-		.insert(hostedIdentities)
-		.values({ did, handle: `${RUN}${tag}.anthers.test`, headCid: "before" });
-	return { userId: user.id, did };
+		.update(hostedIdentities)
+		.set({ headCid: "before" })
+		.where(eq(hostedIdentities.did, account.did));
+	return { userId: account.userId, did: account.did, handle: account.handle };
 }
 
 /** A node that answers `updateHandle` however a test needs, and a directory behind it. */
@@ -156,17 +148,13 @@ describe("what this door is not for", () => {
 	});
 
 	it("refuses an account with no identity Anthers issued", async () => {
-		const [user] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}none`,
-				email: `${RUN}none@example.test`,
-				emailVerified: true,
-				atprotoDid: fixtureDid(),
-			})
-			.returning();
+		const user = await createAccount(`${RUN}none`, {
+			email: `${RUN}none@example.test`,
+			emailVerified: true,
+			identity: "brought",
+		});
 		const result = await swapHostedHandle(
-			user.id,
+			user.userId,
 			{ handle: "alice.example.com" },
 			{ fetchImpl: router() },
 		);
@@ -178,7 +166,7 @@ describe("a domain that has not proved itself yet", () => {
 	// 🚨 The whole point. This is what a first attempt looks like while DNS propagates, and
 	// reporting it as a refusal would be wrong most of the time somebody used this.
 	it("comes back as unproven, carrying the DID they need to publish", async () => {
-		const { userId, did } = await makeAccount("waiting");
+		const { userId, did, handle } = await makeAccount("waiting");
 		const result = await swapHostedHandle(
 			userId,
 			{ handle: "alice.example.com" },
@@ -198,7 +186,7 @@ describe("a domain that has not proved itself yet", () => {
 			.select({ handle: hostedAccounts.handle })
 			.from(hostedAccounts)
 			.where(eq(hostedAccounts.did, did));
-		expect(row.handle).toBe(`${RUN}waiting.anthers.test`);
+		expect(row.handle).toBe(handle);
 	});
 
 	// ⚠️ Upstream's wording is not ours to depend on. An unrecognized refusal is read as "not

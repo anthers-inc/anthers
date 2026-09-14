@@ -19,10 +19,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 purgeAccountsCreatedHere();
@@ -57,7 +57,6 @@ afterAll(async () => {
 const { isSecp256k1DidKey, seatRecoveryKey, requestRecoveryKeyToken } = await import(
 	"../services/hosted-recovery-key.js"
 );
-const { seal } = await import("../services/secret-box.js");
 
 /** The vector both key generators check themselves against. Public half of a discarded pair. */
 const GOOD_KEY = "did:key:zQ3shkEHrW2UqqapTySPVtXC3HpndFZjWWYL3xTHzRBwA2923";
@@ -140,42 +139,37 @@ function didKeyFor(compressed: Uint8Array): string {
 
 // ─── The flow itself ─────────────────────────────────────────────────────────
 
+/**
+ * An account holding an identity the session's server issued, with its credential sealed under this
+ * file's key — or under one this process does not have, for the case that must refuse.
+ *
+ * ⚠️ **The watched head the fixture recorded is removed**, because these cases model that table
+ * themselves: several assert the baseline the flow writes, which a head already present would hide.
+ */
 async function makeAccount(tag: string, opts: { openable?: boolean } = {}) {
-	const [user] = await db
-		.insert(users)
-		.values({
-			username: `${RUN}${tag}`,
-			email: `${RUN}${tag}@example.test`,
-			emailVerified: true,
-			atprotoDid: `did:plc:${RUN}${tag}`,
-		})
-		.returning();
-	const did = `did:plc:${RUN}${tag}`;
-	await db.insert(hostedAccounts).values({
-		did,
-		userId: user.id,
-		handle: `${RUN}${tag}.anthers.social`,
-		sealedPassword:
-			opts.openable === false
-				? "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj"
-				: seal("a-generated-password"),
+	const account = await createAccount(`${RUN}${tag}`, {
+		email: `${RUN}${tag}@example.test`,
+		emailVerified: true,
 	});
-	return { userId: user.id, did };
+	await db.delete(hostedIdentities).where(eq(hostedIdentities.did, account.did));
+	if (opts.openable === false) {
+		await db
+			.update(hostedAccounts)
+			.set({ sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj" })
+			.where(eq(hostedAccounts.did, account.did));
+	}
+	return { userId: account.userId, did: account.did };
 }
 
 describe("asking for a key when the account has none to put one on", () => {
 	it("refuses an account with no hosted identity, without calling anything", async () => {
-		const [user] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}none`,
-				email: `${RUN}none@example.test`,
-				emailVerified: true,
-				atprotoDid: fixtureDid(),
-			})
-			.returning();
+		const user = await createAccount(`${RUN}none`, {
+			email: `${RUN}none@example.test`,
+			emailVerified: true,
+			identity: "brought",
+		});
 		let called = false;
-		const result = await requestRecoveryKeyToken(user.id, {
+		const result = await requestRecoveryKeyToken(user.userId, {
 			fetchImpl: (async () => {
 				called = true;
 				return new Response("{}");

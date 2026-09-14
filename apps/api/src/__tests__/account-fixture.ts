@@ -96,6 +96,24 @@ export interface FixtureAccount {
 	user: typeof users.$inferSelect;
 }
 
+const passwordHashes = new Map<string, Promise<string>>();
+
+/**
+ * The hash of a fixture password, computed once per password and shared.
+ *
+ * ⚠️ **argon2id takes about 90 ms by design**, and nearly every fixture account has the same
+ * password, so hashing it per account added minutes of nothing to a run. One hash verifies against
+ * every row that stores it.
+ */
+function fixturePasswordHash(password: string): Promise<string> {
+	let hash = passwordHashes.get(password);
+	if (!hash) {
+		hash = hashPassword(password);
+		passwordHashes.set(password, hash);
+	}
+	return hash;
+}
+
 /**
  * A handle name nobody else in the session holds.
  *
@@ -115,7 +133,7 @@ function fixtureHandleName(): string {
  * server keeps is a throwaway of its own, so a later hosted account for the same person is not refused
  * for reusing it.
  */
-async function bringIdentity(): Promise<AtprotoIdentity> {
+async function createBroughtIdentity(): Promise<AtprotoIdentity> {
 	const url = process.env.HOSTED_PDS_URL ?? "";
 	const handle = `${fixtureHandleName()}.${await hostedHandleSuffix()}`;
 	const res = await fetch(`${url}/xrpc/com.atproto.server.createAccount`, {
@@ -135,6 +153,14 @@ async function bringIdentity(): Promise<AtprotoIdentity> {
 		);
 	}
 	return { did: body.did, handle: body.handle, pdsUrl: url };
+}
+
+/**
+ * A brought identity on the session's server and no account for it — what a suite driving the
+ * Bluesky door binds to a pending signup, the way the OAuth callback would.
+ */
+export function broughtIdentity(): Promise<AtprotoIdentity> {
+	return onSessionNetwork(createBroughtIdentity);
 }
 
 /**
@@ -171,14 +197,16 @@ export async function createAccount(
 	// passes the type check and would put a placeholder DID straight back over the real one.
 	for (const column of ["atprotoDid", "atprotoHandle", "atprotoPdsUrl"] as const) {
 		if (opts.fields && column in opts.fields) {
-			throw new Error(`a fixture account's ${column} is issued by the server; use the one it returns`);
+			throw new Error(
+				`a fixture account's ${column} is issued by the server; use the one it returns`,
+			);
 		}
 	}
 
 	const created = await onSessionNetwork(async () => {
 		const pendingToken =
 			opts.identity === "brought"
-				? await startPendingSignup({ email, identity: await bringIdentity() })
+				? await startPendingSignup({ email, identity: await createBroughtIdentity() })
 				: await startPendingSignup({ email, hostedHandle: fixtureHandleName() });
 		const pending = await readPendingSignup(pendingToken);
 		if (!pending) throw new Error(`the pending signup for ${email} vanished before it was used`);
@@ -191,7 +219,7 @@ export async function createAccount(
 		);
 	}
 
-	const passwordHash = await hashPassword(opts.password ?? FIXTURE_PASSWORD);
+	const passwordHash = await fixturePasswordHash(opts.password ?? FIXTURE_PASSWORD);
 	const [user] = await db
 		.update(users)
 		.set({
