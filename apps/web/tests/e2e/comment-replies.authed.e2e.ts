@@ -98,11 +98,17 @@ test("⭐ a reply written in the browser lands under the comment it answers, ind
 		.filter({ hasText: text("question") })
 		.last();
 	await row.getByRole("button", { name: /^Reply to/ }).click();
-	await page
-		.getByRole("textbox", { name: `Reply to ${GAUNTLET_CREATOR_USERNAME}` })
-		.fill(text("answer"));
+	const field = page.getByRole("textbox", { name: `Reply to ${GAUNTLET_CREATOR_USERNAME}` });
+	await field.fill(text("answer"));
+	const posted = page.waitForResponse(
+		(r) => r.request().method() === "POST" && r.url().endsWith(`/posts/${POST_SLUG}/comments`),
+	);
 	await page.getByRole("button", { name: "Post reply" }).click();
+	expect((await posted).status()).toBe(201);
 
+	// ⚠️ **Wait for the form to close before looking for the words.** `getByText` also matches
+	// the textarea while it still holds them, so looking first passes before the write lands.
+	await expect(field).toHaveCount(0);
 	await expect(page.getByText(text("answer"), { exact: true })).toBeVisible();
 	const [stored] = await db
 		.select({ id: comments.id, subjectType: comments.subjectType, subjectId: comments.subjectId })
