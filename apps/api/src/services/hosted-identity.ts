@@ -21,6 +21,7 @@
  * guessed would eventually guess wrong in the direction of silence. A person reads the
  * alert and decides.
  */
+import { plcDirectoryUrl } from "../lib/atproto-network.js";
 
 /** What the audit log says about an identity right now. */
 export interface ObservedIdentity {
@@ -166,7 +167,7 @@ export async function readIdentityHead(
 	did: string,
 	opts: { directoryUrl?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<ObservedIdentity | null> {
-	const base = opts.directoryUrl ?? "https://plc.directory";
+	const base = opts.directoryUrl ?? plcDirectoryUrl();
 	const doFetch = opts.fetchImpl ?? fetch;
 	try {
 		const res = await doFetch(`${base}/${encodeURIComponent(did)}/log/audit`, {

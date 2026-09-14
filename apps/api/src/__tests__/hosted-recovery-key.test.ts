@@ -22,6 +22,7 @@ import { db } from "@anthers/db";
 import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
+import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 purgeAccountsCreatedHere();
@@ -346,7 +347,7 @@ function router(
 	let directoryReads = 0;
 	return (async (input: string | URL, init?: RequestInit) => {
 		const url = String(input);
-		if (url.includes("plc.directory")) {
+		if (url.startsWith(`${plcDirectoryUrl()}/`)) {
 			directoryReads += 1;
 			const first = directoryReads === 1;
 			return json([

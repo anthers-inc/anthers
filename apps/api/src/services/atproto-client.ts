@@ -30,6 +30,7 @@ import {
 	OAuthClient,
 } from "@atproto/oauth-client";
 import { eq, lt } from "drizzle-orm";
+import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { publicOrigin } from "../lib/deployment.js";
 import { WORK_COLLECTION } from "./atproto-repo.js";
 
@@ -423,6 +424,8 @@ export function getAtprotoClient(): OAuthClient {
 	client = new OAuthClient({
 		clientMetadata: buildClientMetadata(),
 		responseMode: "query",
+		// The directory `did:plc` identities resolve in, which a local network points at its own.
+		plcDirectoryUrl: plcDirectoryUrl(),
 		// DNS-over-HTTPS rather than `node:dns`, which Bun does not expose the same way and
 		// which is the transitive reason the Node client cannot be used here.
 		handleResolver: new AtprotoDohHandleResolver({

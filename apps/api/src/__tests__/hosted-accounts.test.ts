@@ -14,7 +14,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-const PDS_URL = "https://anthers.social";
+const PDS_URL = "https://anthers.test";
 
 // Set before the module is imported: every reader is a function called at use, but the tests
 // below assume the door is open, and a suffix derived from an unset variable is empty.
@@ -78,13 +78,13 @@ function fakeFetch(
 describe("normalizeHandleName", () => {
 	it("takes a name however somebody writes it", () => {
 		expect(normalizeHandleName("  @Alice  ")).toBe("alice");
-		expect(normalizeHandleName("Alice.anthers.social")).toBe("alice");
-		expect(normalizeHandleName("@alice.anthers.social")).toBe("alice");
+		expect(normalizeHandleName("Alice.anthers.test")).toBe("alice");
+		expect(normalizeHandleName("@alice.anthers.test")).toBe("alice");
 	});
 
 	// The suffix is stripped only from the end. A name that merely contains it is a name.
 	it("does not strip a suffix that is not at the end", () => {
-		expect(normalizeHandleName("anthers.social.fan")).toBe("anthers.social.fan");
+		expect(normalizeHandleName("anthers.test.fan")).toBe("anthers.test.fan");
 	});
 });
 
@@ -137,7 +137,7 @@ describe("checkHandleAvailability", () => {
 	it("asks about the whole handle, not the name", async () => {
 		const { impl, calls } = fakeFetch(() => ({ status: 400 }));
 		await checkHandleAvailability("alice", { fetchImpl: impl });
-		expect(calls[0].url).toContain(encodeURIComponent("alice.anthers.social"));
+		expect(calls[0].url).toContain(encodeURIComponent("alice.anthers.test"));
 	});
 
 	// A resolved handle is one that exists. This reads backwards, which is why it is pinned.
@@ -185,7 +185,7 @@ describe("checkHandleAvailability", () => {
 
 describe("createHostedAccount", () => {
 	beforeAll(() => {
-		process.env.HOSTED_PDS_INVITE_CODE = "anthers.social-testcode";
+		process.env.HOSTED_PDS_INVITE_CODE = "anthers.test-testcode";
 	});
 
 	it("sends the full handle, the address and the invite, and no recovery key", async () => {
@@ -198,20 +198,20 @@ describe("createHostedAccount", () => {
 		);
 
 		expect(account.did).toBe("did:plc:new");
-		expect(account.handle).toBe("alice.anthers.social");
+		expect(account.handle).toBe("alice.anthers.test");
 		expect(account.password.length).toBeGreaterThan(20);
 
 		const sent = JSON.parse(String(calls[0].init?.body));
-		expect(sent.handle).toBe("alice.anthers.social");
+		expect(sent.handle).toBe("alice.anthers.test");
 		expect(sent.email).toBe("alice@example.com");
-		expect(sent.inviteCode).toBe("anthers.social-testcode");
+		expect(sent.inviteCode).toBe("anthers.test-testcode");
 		// 🚨 The custody decision, pinned. Passing a `recoveryKey` here would hand somebody a
 		// key at the moment they are least able to keep it — see the module note.
 		expect(sent).not.toHaveProperty("recoveryKey");
 	});
 
 	it("gives a different password every time", async () => {
-		const { impl } = fakeFetch(() => ({ body: { did: "did:plc:x", handle: "x.anthers.social" } }));
+		const { impl } = fakeFetch(() => ({ body: { did: "did:plc:x", handle: "x.anthers.test" } }));
 		const a = await createHostedAccount(
 			{ handleName: "aaa", email: "a@x.com" },
 			{ fetchImpl: impl },
@@ -249,7 +249,7 @@ describe("createHostedAccount", () => {
 	// A 200 that carries no DID is a server saying something went wrong in a way the status
 	// line did not. Reading it as success would store a row with no identity in it.
 	it("refuses an answer with no identity in it", async () => {
-		const { impl } = fakeFetch(() => ({ body: { handle: "alice.anthers.social" } }));
+		const { impl } = fakeFetch(() => ({ body: { handle: "alice.anthers.test" } }));
 		await expect(
 			createHostedAccount({ handleName: "alice", email: "a@x.com" }, { fetchImpl: impl }),
 		).rejects.toBeInstanceOf(HostedAccountError);

@@ -16,7 +16,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-const PDS_URL = "https://anthers.social";
+const PDS_URL = "https://anthers.test";
 
 // 🚨 Restored afterwards, because `bun test` runs every file in one process — left set, these
 // open the handle door for the rest of the suite pointed at the real node. Nothing here
@@ -94,7 +94,7 @@ function healthyNode(overrides: Record<string, Route> = {}) {
 	let listed = false;
 	return nodeFetch({
 		"com.atproto.repo.describeRepo": () => ({
-			body: { did: DID, handle: "alice.anthers.social", collections: ["com.example.note"] },
+			body: { did: DID, handle: "alice.anthers.test", collections: ["com.example.note"] },
 		}),
 		"com.atproto.server.createSession": () => ({ body: { did: DID, accessJwt: "test-access" } }),
 		"com.atproto.repo.listRecords": () => {
@@ -147,8 +147,8 @@ describe("purgeHostedIdentity", () => {
 		const email = calls.find((c) => c.method === "com.atproto.server.updateEmail")?.body
 			.email as string;
 
-		expect(handle).toMatch(/^deleted-[0-9a-f]{8}\.anthers\.social$/);
-		expect(email).toMatch(/^deleted-[0-9a-f]{8}@anthers\.social$/);
+		expect(handle).toMatch(/^deleted-[0-9a-f]{8}\.anthers\.test$/);
+		expect(email).toMatch(/^deleted-[0-9a-f]{8}@anthers\.test$/);
 		expect(handle).not.toContain("alice");
 		expect(email).not.toContain("alice");
 		// One account reads as one account to whoever is looking at the node's rows.

@@ -24,7 +24,9 @@
 import { db } from "@anthers/db";
 import { hostedIdentities } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { escapeHtml, sendOperationalAlert } from "../services/email.js";
+import { hostedPdsUrl } from "../services/hosted-accounts.js";
 import {
 	assessIdentity,
 	type IdentityFinding,
@@ -46,7 +48,8 @@ export interface WatchResult {
  * assert on outcomes instead of scraping stdout.
  */
 export async function watchHostedIdentities(): Promise<WatchResult> {
-	const pdsUrl = process.env.HOSTED_PDS_URL?.trim();
+	// Through the hub's own accessor, so a server this process may not reach is not listed either.
+	const pdsUrl = hostedPdsUrl();
 
 	// The listing is what discovers new accounts; the stored rows are what keeps old ones
 	// watched. A deployment with no server of its own still watches whatever it already
@@ -163,7 +166,7 @@ export function describeFinding(finding: IdentityFinding): { subject: string; ht
 			`<li>operation: ${escapeHtml(finding.from ?? "—")} &rarr; ${escapeHtml(finding.to)}</li>` +
 			`</ul>` +
 			`<p>The full history is at ` +
-			`https://plc.directory/${encodeURIComponent(finding.did)}/log/audit</p>`,
+			`${plcDirectoryUrl()}/${encodeURIComponent(finding.did)}/log/audit</p>`,
 	};
 }
 
