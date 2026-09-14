@@ -1079,7 +1079,7 @@ function DataSection() {
 			.catch((e) => setError(e instanceof Error ? e.message : "Could not load your data."));
 	};
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: load on mount only
+	// Load on mount only.
 	useEffect(load, []);
 
 	const handleExport = async () => {

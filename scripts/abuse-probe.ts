@@ -230,10 +230,14 @@ function log(line: string) {
 	console.log(line);
 }
 
-async function call(
+/**
+ * `T` is what the caller expects back, taken on trust the way `res.json()` would be — a body
+ * that is not JSON arrives as its text, and a status check before reading it is the guard.
+ */
+async function call<T = unknown>(
 	path: string,
 	init: RequestInit & { cookie?: string } = {},
-): Promise<{ status: number; body: any; setCookie: string | null }> {
+): Promise<{ status: number; body: T; setCookie: string | null }> {
 	const { cookie, ...rest } = init;
 	const res = await fetch(`${args.base}${path}`, {
 		...rest,
@@ -245,13 +249,13 @@ async function call(
 		},
 	});
 	const text = await res.text();
-	let body: any = null;
+	let body: unknown = null;
 	try {
 		body = text ? JSON.parse(text) : null;
 	} catch {
 		body = text;
 	}
-	return { status: res.status, body, setCookie: res.headers.get("set-cookie") };
+	return { status: res.status, body: body as T, setCookie: res.headers.get("set-cookie") };
 }
 
 function sessionCookie(setCookie: string | null): string | null {
@@ -298,7 +302,7 @@ async function createFixture(cookie: string): Promise<{
 	postSlug: string;
 	commentId: number;
 } | null> {
-	const draft = await call("/api/content/posts", {
+	const draft = await call<{ post: { slug: string } }>("/api/content/posts", {
 		method: "POST",
 		cookie,
 		body: JSON.stringify({ title: `Probe fixture ${TAG}`, isPublished: false }),
@@ -308,20 +312,23 @@ async function createFixture(cookie: string): Promise<{
 		if (draft.status === 403) log("    403 means the operator account is not in creator mode.");
 		return null;
 	}
-	const postSlug = draft.body.post.slug as string;
+	const postSlug = draft.body.post.slug;
 
-	const comment = await call(`/api/content/posts/${postSlug}/comments`, {
-		method: "POST",
-		cookie,
-		body: JSON.stringify({ body: `Fixture comment for ${TAG}. Safe to delete.` }),
-	});
+	const comment = await call<{ comment: { id: number } }>(
+		`/api/content/posts/${postSlug}/comments`,
+		{
+			method: "POST",
+			cookie,
+			body: JSON.stringify({ body: `Fixture comment for ${TAG}. Safe to delete.` }),
+		},
+	);
 	if (comment.status !== 201) {
 		log(`  ! could not create the fixture comment (${comment.status})`);
 		return { cookie, postSlug, commentId: 0 };
 	}
 
 	log(`  · fixture: draft post ${postSlug}, comment ${comment.body.comment.id}`);
-	return { cookie, postSlug, commentId: comment.body.comment.id as number };
+	return { cookie, postSlug, commentId: comment.body.comment.id };
 }
 
 interface Probe {
@@ -384,7 +391,7 @@ async function main() {
 	// failure here is the one nobody would ever find out about.
 	if (args.path === "public") {
 		log("\nFiling the public no-account report…");
-		const publicRes = await call("/api/moderation/abuse-reports", {
+		const publicRes = await call<{ reportId: number }>("/api/moderation/abuse-reports", {
 			method: "POST",
 			body: JSON.stringify({
 				url: `${args.base}/works/probe-fixture`,
@@ -417,7 +424,7 @@ async function main() {
 			// `csam` on purpose: it is the reason the form steers a real child-safety
 			// reporter toward, and an escalation wired only to `illegal` would pass every
 			// other test and miss the code the interface points the most serious report at.
-			const inApp = await call("/api/moderation/reports", {
+			const inApp = await call<{ reportId: number }>("/api/moderation/reports", {
 				method: "POST",
 				cookie: fixture.cookie,
 				body: JSON.stringify({
@@ -515,9 +522,12 @@ async function main() {
 /** What the provider says became of this report's alert. Null while unknown. */
 async function readDelivery(probe: Probe, adminCookie: string): Promise<Probe["delivery"]> {
 	const kind = probe.kind === "public" ? "abuse" : "report";
-	const res = await call(`/api/admin/escalation-delivery?kind=${kind}&id=${probe.reportId}`, {
-		cookie: adminCookie,
-	});
+	const res = await call<{ status?: Probe["delivery"] } | null>(
+		`/api/admin/escalation-delivery?kind=${kind}&id=${probe.reportId}`,
+		{
+			cookie: adminCookie,
+		},
+	);
 	if (res.status !== 200) return null;
 	return res.body?.status ?? null;
 }
@@ -529,18 +539,23 @@ async function readEscalated(
 	commentId?: number,
 ): Promise<boolean | null> {
 	if (probe.kind === "public") {
-		const res = await call("/api/admin/abuse-reports?closed=1", { cookie: adminCookie });
+		const res = await call<{ reports?: { id: number; escalatedAt: string | null }[] }>(
+			"/api/admin/abuse-reports?closed=1",
+			{ cookie: adminCookie },
+		);
 		if (res.status !== 200) return null;
-		const row = (res.body.reports ?? []).find((r: any) => r.id === probe.reportId);
+		const row = (res.body.reports ?? []).find((r) => r.id === probe.reportId);
 		return row ? Boolean(row.escalatedAt) : null;
 	}
 	// The moderation queue is keyed by subject rather than by report, so the comment is
 	// what identifies it. `floorAlerted` is false while any floor report on that subject
 	// is still unescalated, which is exactly the question being asked.
-	const res = await call("/api/admin/moderation?filter=reported", { cookie: adminCookie });
+	const res = await call<{
+		items?: { subjectType: string; subjectId: number; floorAlerted: boolean }[];
+	}>("/api/admin/moderation?filter=reported", { cookie: adminCookie });
 	if (res.status !== 200) return null;
 	const item = (res.body.items ?? []).find(
-		(i: any) => i.subjectType === "comment" && i.subjectId === commentId,
+		(i) => i.subjectType === "comment" && i.subjectId === commentId,
 	);
 	return item ? Boolean(item.floorAlerted) : null;
 }

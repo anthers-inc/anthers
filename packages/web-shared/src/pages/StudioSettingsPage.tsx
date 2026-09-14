@@ -173,7 +173,7 @@ function AtmospherePublishingSection() {
 			.catch(() => setState(null))
 			.finally(() => setLoading(false));
 	};
-	// biome-ignore lint/correctness/useExhaustiveDependencies: one read on mount, by design.
+	// One read on mount, by design.
 	useEffect(load, []);
 
 	if (loading || !state) return null;

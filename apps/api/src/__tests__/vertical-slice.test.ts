@@ -104,7 +104,9 @@ describe("Vertical Slice", () => {
 		expect(res.status).toBe(200);
 		const data = await res.json();
 		expect(data.projects.length).toBeGreaterThan(0);
-		expect(data.projects.some((p: any) => p.slug === `test-game-${testId}`)).toBe(true);
+		expect(data.projects.some((p: { slug: string }) => p.slug === `test-game-${testId}`)).toBe(
+			true,
+		);
 	});
 
 	it("Zod validates project creation input", async () => {

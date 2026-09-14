@@ -27,6 +27,7 @@ import { useLocation } from "react-router-dom";
  */
 export default function ScrollToTop() {
 	const { pathname } = useLocation();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `pathname` is the trigger rather than an input — the effect runs on every navigation.
 	useLayoutEffect(() => {
 		window.scrollTo(0, 0);
 		for (const el of document.querySelectorAll("main")) el.scrollTop = 0;

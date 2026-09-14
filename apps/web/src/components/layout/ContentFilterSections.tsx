@@ -18,6 +18,7 @@ import {
 	VideoCameraIcon,
 	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
+import { useId } from "react";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -158,6 +159,8 @@ export default function ContentFilterSections({
 	tag,
 	onUpdateParams,
 }: ContentFilterSectionsProps) {
+	// At most one type-specific select renders at a time, so one id names whichever it is.
+	const filterSelectId = useId();
 	return (
 		<>
 			{/* Content type */}
@@ -267,8 +270,11 @@ export default function ContentFilterSections({
 
 					{contentType === "game" && (
 						<div className="mb-3">
-							<label className="text-xs text-base-content/50 mb-1 block">Platform</label>
+							<label htmlFor={filterSelectId} className="text-xs text-base-content/50 mb-1 block">
+								Platform
+							</label>
 							<select
+								id={filterSelectId}
 								className="select select-bordered select-xs w-full"
 								value={platform}
 								onChange={(e) => onUpdateParams({ platform: e.target.value })}
@@ -284,8 +290,11 @@ export default function ContentFilterSections({
 
 					{contentType === "audio" && (
 						<div className="mb-3">
-							<label className="text-xs text-base-content/50 mb-1 block">Duration</label>
+							<label htmlFor={filterSelectId} className="text-xs text-base-content/50 mb-1 block">
+								Duration
+							</label>
 							<select
+								id={filterSelectId}
 								className="select select-bordered select-xs w-full"
 								value={duration}
 								onChange={(e) => onUpdateParams({ duration: e.target.value })}
@@ -300,8 +309,11 @@ export default function ContentFilterSections({
 
 					{contentType === "video" && (
 						<div className="mb-3">
-							<label className="text-xs text-base-content/50 mb-1 block">Duration</label>
+							<label htmlFor={filterSelectId} className="text-xs text-base-content/50 mb-1 block">
+								Duration
+							</label>
 							<select
+								id={filterSelectId}
 								className="select select-bordered select-xs w-full"
 								value={duration}
 								onChange={(e) => onUpdateParams({ duration: e.target.value })}

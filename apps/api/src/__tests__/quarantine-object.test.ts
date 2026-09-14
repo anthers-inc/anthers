@@ -21,7 +21,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { mediaQuarantine, mediaScans, moderationActions, users } from "@anthers/db/schema";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { MIN_PDQ_QUALITY } from "../lib/pdq.js";
 import { isUnderHold } from "../services/legal-hold.js";

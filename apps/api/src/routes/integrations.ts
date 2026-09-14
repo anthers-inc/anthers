@@ -28,8 +28,17 @@ import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
-import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { requireAuth } from "../middleware/auth.js";
+
+/** One Work's attention over the analytics period, merged across the raw and rolled-up tables. */
+interface WorkStats {
+	id: number;
+	publicId: number | null;
+	title: string;
+	slug: string;
+	eventCount: number;
+	totalDuration: number;
+}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -133,7 +142,7 @@ const integrationRoutes = new Hono()
 		//
 		// `publicId` rides along because that is what a durable Work URL is built from; the
 		// row id would work today and break the moment a link is shared.
-		const result: any[] = [];
+		const result: (WorkStats & { type: "work" })[] = [];
 
 		if (type === "all" || type === "posts" || type === "works") {
 			const postStats = await db
@@ -180,17 +189,7 @@ const integrationRoutes = new Hono()
 
 			// Merge on Work id: a Work whose history straddles the retention boundary has
 			// rows in both tables, and returning it twice would double it in the UI.
-			const byWork = new Map<
-				number,
-				{
-					id: number;
-					publicId: number | null;
-					title: string;
-					slug: string;
-					eventCount: number;
-					totalDuration: number;
-				}
-			>();
+			const byWork = new Map<number, WorkStats>();
 			for (const r of [...postStats, ...rolledStats]) {
 				if (r.workId == null) continue;
 				const existing = byWork.get(r.workId);
@@ -213,7 +212,7 @@ const integrationRoutes = new Hono()
 				...[...byWork.values()]
 					.sort((a, b) => b.eventCount - a.eventCount)
 					.slice(0, 50)
-					.map((r) => ({ type: "work", ...r })),
+					.map((r) => ({ type: "work" as const, ...r })),
 			);
 		}
 

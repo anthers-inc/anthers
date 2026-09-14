@@ -107,18 +107,18 @@ export default function LoggedOutLayout() {
 						can be restored by flipping the flag once localization ships. */}
 					{LOCALIZATION_ENABLED && (
 						<div className="dropdown dropdown-end">
-							<label
+							{/* A focusable button and an untabbable list, for the reasons on the account
+							    menu in LoggedInLayout. */}
+							<button
+								type="button"
 								tabIndex={0}
 								className="btn btn-ghost btn-sm btn-circle"
 								aria-label="Select language"
 								title="Select language"
 							>
 								<GlobeAltIcon className="w-5 h-5" />
-							</label>
-							<ul
-								tabIndex={0}
-								className="menu menu-sm dropdown-content mt-3 z-50 w-36 p-2 shadow bg-base-200 rounded-box"
-							>
+							</button>
+							<ul className="menu menu-sm dropdown-content mt-3 z-50 w-36 p-2 shadow bg-base-200 rounded-box">
 								<li>
 									<button type="button">English</button>
 								</li>
@@ -138,13 +138,12 @@ export default function LoggedOutLayout() {
 					<div className="flex flex-1 items-center gap-1">
 						{/* Mobile menu */}
 						<div className="dropdown lg:hidden">
-							<label tabIndex={0} className="btn btn-ghost">
+							{/* A focusable button and an untabbable list, for the reasons on the account
+							    menu in LoggedInLayout. */}
+							<button type="button" tabIndex={0} className="btn btn-ghost" aria-label="Menu">
 								<Bars3Icon className="w-5 h-5" />
-							</label>
-							<ul
-								tabIndex={0}
-								className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
-							>
+							</button>
+							<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
 								<li>
 									<Link to="/">For Users</Link>
 								</li>

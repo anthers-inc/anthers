@@ -47,8 +47,8 @@ export default function TransparentReceipt({
 					<span>Listed price</span>
 					<span className="font-medium">{fmt(price)}</span>
 				</div>
-				{takenFrom.map((line, i) => (
-					<div key={`t${i}`} className="flex justify-between text-base-content/60">
+				{takenFrom.map((line) => (
+					<div key={line.label} className="flex justify-between text-base-content/60">
 						<span>
 							{line.label}
 							{line.note && <span className="text-xs ml-1">({line.note})</span>}
@@ -63,8 +63,8 @@ export default function TransparentReceipt({
 					<span>−{fmt(0)}</span>
 				</div>
 				{added.length > 0 && <div className="divider my-1" />}
-				{added.map((line, i) => (
-					<div key={`a${i}`} className="flex justify-between text-base-content/60">
+				{added.map((line) => (
+					<div key={line.label} className="flex justify-between text-base-content/60">
 						<span>
 							{line.label}
 							{line.note && <span className="text-xs ml-1">({line.note})</span>}

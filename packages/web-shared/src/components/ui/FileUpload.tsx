@@ -67,41 +67,49 @@ export default function FileUpload({
 
 	return (
 		<div>
-			<div
-				className={`border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-					dragOver
-						? "border-primary bg-primary/10"
-						: "border-base-content/20 hover:border-primary/50"
-				} ${compact ? "p-3" : "p-6"}`}
-				onDragOver={(e) => {
-					e.preventDefault();
-					setDragOver(true);
-				}}
-				onDragLeave={() => setDragOver(false)}
-				onDrop={handleDrop}
-				onClick={() => inputRef.current?.click()}
-			>
-				{preview ? (
-					<div className="relative">
-						<img src={preview} alt="Preview" className="max-h-48 mx-auto rounded object-contain" />
-						{onClear && (
-							<button
-								type="button"
-								className="btn btn-circle btn-xs btn-error absolute top-1 right-1"
-								onClick={(e) => {
-									e.stopPropagation();
-									handleClear();
-								}}
-							>
-								<XMarkIcon className="w-3 h-3" />
-							</button>
-						)}
-					</div>
-				) : (
-					<div className="flex flex-col items-center gap-2 text-base-content/50">
-						<ArrowUpTrayIcon className={compact ? "w-5 h-5" : "w-8 h-8"} />
-						<span className={compact ? "text-xs" : "text-sm"}>{fileName || label}</span>
-					</div>
+			{/* The drop zone is a real button so a file can be chosen from the keyboard — the
+			    input is `display: none`, and the clickable div this used to be was reachable by
+			    pointer only. Clear is a sibling laid over it rather than a child, because buttons
+			    cannot nest; its offset is the zone's border plus padding. */}
+			<div className="relative">
+				<button
+					type="button"
+					aria-label={fileName || label}
+					className={`block w-full border-2 border-dashed rounded-lg cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+						dragOver
+							? "border-primary bg-primary/10"
+							: "border-base-content/20 hover:border-primary/50"
+					} ${compact ? "p-3" : "p-6"}`}
+					onDragOver={(e) => {
+						e.preventDefault();
+						setDragOver(true);
+					}}
+					onDragLeave={() => setDragOver(false)}
+					onDrop={handleDrop}
+					onClick={() => inputRef.current?.click()}
+				>
+					{preview ? (
+						<img src={preview} alt="" className="max-h-48 mx-auto rounded object-contain" />
+					) : (
+						<span className="flex flex-col items-center gap-2 text-base-content/50">
+							<ArrowUpTrayIcon className={compact ? "w-5 h-5" : "w-8 h-8"} />
+							<span className={compact ? "text-xs" : "text-sm"}>{fileName || label}</span>
+						</span>
+					)}
+				</button>
+				{preview && onClear && (
+					<button
+						type="button"
+						aria-label="Clear"
+						className={`btn btn-circle btn-xs btn-error absolute ${
+							compact
+								? "top-[calc(1rem+2px)] right-[calc(1rem+2px)]"
+								: "top-[calc(1.75rem+2px)] right-[calc(1.75rem+2px)]"
+						}`}
+						onClick={handleClear}
+					>
+						<XMarkIcon className="w-3 h-3" />
+					</button>
 				)}
 			</div>
 			<input

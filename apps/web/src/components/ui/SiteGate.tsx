@@ -207,6 +207,7 @@ export function SiteGatePanel({
 												setPassword(e.target.value);
 												setPasswordError(false);
 											}}
+											// biome-ignore lint/a11y/noAutofocus: the gate's one field, so arriving here is the intent to fill it in.
 											autoFocus
 										/>
 										<button

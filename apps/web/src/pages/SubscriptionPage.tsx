@@ -30,7 +30,7 @@ import type {
 	PoolDistribution,
 	SeedListResponse,
 } from "@anthers/web-shared/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -86,23 +86,37 @@ async function getJson<T>(path: string): Promise<T> {
 
 function InfoTip({ text }: { text: string }) {
 	const [show, setShow] = useState(false);
+	const tipId = useId();
+	// A button, so the tip opens on focus as well as on hover; a hover-only span could not be
+	// reached by keyboard or read by a screen reader at all. The text stays in the DOM while
+	// hidden because `aria-describedby` reads it from there.
 	return (
-		<span
+		<button
+			type="button"
+			aria-label="More Information"
+			aria-describedby={tipId}
 			className="relative inline-flex ml-1 cursor-help"
 			onMouseEnter={() => setShow(true)}
 			onMouseLeave={() => setShow(false)}
+			onFocus={() => setShow(true)}
+			onBlur={() => setShow(false)}
 		>
-			<span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-base-content/20 text-[9px] font-semibold text-base-content/40 leading-none">
+			<span
+				aria-hidden="true"
+				className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-base-content/20 text-[9px] font-semibold text-base-content/40 leading-none"
+			>
 				i
 			</span>
-			{show && (
-				<div className="absolute z-50 left-1/2 top-full mt-1 pointer-events-none">
-					<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs text-base-content/70 w-56 font-normal normal-case tracking-normal leading-relaxed">
-						{text}
-					</div>
-				</div>
-			)}
-		</span>
+			<span
+				id={tipId}
+				role="tooltip"
+				className={`${show ? "block" : "hidden"} absolute z-50 left-1/2 top-full mt-1 pointer-events-none`}
+			>
+				<span className="block bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs text-left text-base-content/70 w-56 font-normal normal-case tracking-normal leading-relaxed">
+					{text}
+				</span>
+			</span>
+		</button>
 	);
 }
 

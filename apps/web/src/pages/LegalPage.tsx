@@ -116,6 +116,7 @@ export default function LegalPage({ slug }: { slug: string }) {
 	const doc = LEGAL_DOCUMENTS[slug];
 	const { pathname } = useLocation();
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `pathname` is the trigger rather than an input — the effect runs on every navigation.
 	useEffect(() => {
 		window.scrollTo(0, 0);
 	}, [pathname]);

@@ -62,7 +62,7 @@
  * A generated-figures guard only covers what it is pointed at, and nothing said the
  * app was outside it.
  */
-import { type Dirent, existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
@@ -969,7 +969,7 @@ function renderUserCasesMarkdown(): string {
 		"",
 		`**They pay** is the whole monthly charge with sales tax, the only thing added on top; the card cost sits *inside* it and is paid to the processor. **Directed reaches** is what a creator receives after that charge's card fee is split pro-rata — so it rises as a share the more somebody gives, because the flat part is paid once per charge rather than once per creator.`,
 		"",
-		"**A purchase, against a storefront taking " + pc.rivalCutPct + ".**",
+		`**A purchase, against a storefront taking ${pc.rivalCutPct}.**`,
 		"",
 		table(
 			[
