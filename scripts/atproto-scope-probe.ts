@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Ask one question and answer it with evidence: **will bsky.social honor a `repo:`-scoped
- * permission today?**
+ * Ask one question and answer it with evidence: **does bsky.social still honor the narrow
+ * permissions Anthers asks for?**
  *
- * If it will, Anthers can publish a creator's Work listing into the repository they already
- * have — the thing that currently requires `transition:generic`, which is App-Password
- * equivalent access to somebody's whole account and is the reason record publishing is
- * limited to identities Anthers hosts. If it will not, the wait is confirmed rather than
- * assumed, which is worth almost as much.
+ * Publishing into the repository of a creator whose identity lives elsewhere depends on it:
+ * `oauth-repo-writer.ts` writes with a grant over Anthers' own collections and nothing broader.
+ * The answer was yes on 2026-09-11 for a raw `repo:` scope and on 2026-09-12 for both permission
+ * sets, and this is how that finding is retested — because the ecosystem moves weekly, and
+ * learning that it stopped being true from a creator whose listings quietly stopped updating is
+ * the worse way to find out.
  *
  * 🚨 **`transition:generic` appears nowhere in this file, and that is the experiment.** The
  * whole point is to find out what a *narrow* grant can do. A probe that fell back to the
@@ -17,17 +18,24 @@
  * ⚠️ **An authorization server ACCEPTING a scope proves very little**, which is why this
  * goes all the way to a write. Anthers' own findings already record (2026-08-22) that
  * bsky.social accepts granular scopes at registration *and accepts a nonsense collection
- * too*. Only `com.atproto.repo.createRecord` returning success or a refusal separates "the
- * permission is honored" from "the string was tolerated".
+ * too*. Only `com.atproto.repo.createRecord` answering separates "the permission is honored"
+ * from "the string was tolerated".
+ *
+ * 🛑 **And the write commits nothing.** It carries a `swapCommit` naming a commit the repository
+ * can never be at, and the reference PDS checks that last: the OAuth permission first, then the
+ * record against its Lexicon, and only then whether the repository is at the named commit. So
+ * `InvalidSwap` is the answer "the permission is honored and the record is valid", a permission
+ * refusal is the answer "it is not", and in neither case does anything land in the repository
+ * or go out on the firehose. A real write would broadcast a creation and a deletion to everyone
+ * listening, which is exactly the kind of messy write Anthers does not make from a test.
  *
  * **It refuses to run without a terminal**, for two reasons rather than one. OAuth needs a
- * person at a browser, so there is nothing for an unattended run to do; and this writes a
- * real record into a real repository on the public network, which is not something a cron
- * job should be able to start.
+ * person at a browser, so there is nothing for an unattended run to do; and it sends a write to
+ * a real repository on the public network, which is not something a cron job should be able to
+ * start even when the write is built to be refused.
  *
- * **The record is deleted in a `finally`**, on success and on failure. A listing that
- * outlives the thing it advertises is the failure the whole listing design is shaped around,
- * and a probe that leaves one behind has created exactly that.
+ * ⚠️ **If a server ever ignores `swapCommit` and commits the record anyway, the probe deletes it
+ * and says so loudly**, because that would be a finding in itself and a record left behind.
  *
  * Usage:
  *   bun run scripts/atproto-scope-probe.ts --handle anthersinc-test.bsky.social
@@ -37,8 +45,8 @@
  * the running app should use if it works; `--form repo` asks with the raw scope string,
  * which is proven and is the fallback.
  *
- * `--set creator` (the default) asks for `org.anthers.creatorPermissions` and writes a Work
- * listing; `--set user` asks for `org.anthers.userPermissions` and writes a follow of the test
+ * `--set creator` (the default) asks for `org.anthers.creatorPermissions` and sends a Work
+ * listing; `--set user` asks for `org.anthers.userPermissions` and sends a follow of the test
  * account itself. A set naming several collections comes back expanded differently from one naming a single
  * collection, which is the reason each is worth probing on its own.
  */
@@ -81,6 +89,38 @@ function scopeFor(form: string, set: { permissionSet: string; collection: string
 	return null;
 }
 
+/**
+ * A commit the repository can never be at: the CID of an empty CBOR map.
+ *
+ * ⚠️ **Well-formed on purpose, so the refusal is about the swap and not the syntax.** A commit
+ * object is never an empty map, so no repository's head can have this CID, and a server that
+ * parses it has to carry the write all the way to the commit before refusing it.
+ */
+export const IMPOSSIBLE_COMMIT = "bafyreigbtj4x7ip5legnfznufuopl4sg4knzc2cof6duas4b3q2fy6swua";
+
+/** What a write's answer says about the permission, read the way this probe's findings depend on. */
+export type ProbeVerdict =
+	/** Refused at the commit, after the permission and the record were both accepted. */
+	| "honored"
+	/** Refused for the credentials: the permission is not honored. */
+	| "not_honored"
+	/** Refused for the record's shape, which says nothing about the permission. */
+	| "record_invalid"
+	/** The server committed it despite the swap, which is a finding and a record to remove. */
+	| "committed"
+	/** Anything else, which a person has to read. */
+	| "unclear";
+
+export function verdictFor(status: number, body: { error?: string } | null): ProbeVerdict {
+	if (status >= 200 && status < 300) return "committed";
+	if (body?.error === "InvalidSwap") return "honored";
+	if (status === 401 || status === 403) return "not_honored";
+	if (status === 400 && (body?.error === "InvalidRequest" || body?.error === "InvalidRecord")) {
+		return "record_invalid";
+	}
+	return "unclear";
+}
+
 /** Where the authorization server sends the browser back. Must be a literal loopback IP. */
 const PORT = Number(process.env.PROBE_PORT ?? 7325);
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
@@ -100,7 +140,7 @@ function arg(name: string): string | undefined {
  * fine: the record says where a work can be reached and asserts nothing about what is there.
  */
 function probeRecord(collection: string, did: string) {
-	// A follow of the test account itself: valid, harmless, and removed seconds later.
+	// A follow of the test account itself: valid, and never committed.
 	if (collection === "org.anthers.follow") return { $type: collection, subject: did };
 	return {
 		$type: collection,
@@ -109,7 +149,7 @@ function probeRecord(collection: string, did: string) {
 		url: "https://anthers.org/scope-probe",
 		releasedAt: new Date().toISOString(),
 		description:
-			"A throwaway record written by Anthers' scope probe to find out whether a narrow repo: permission is honored. It should be deleted seconds after it was made.",
+			"A record sent by Anthers' scope probe to find out whether a narrow repo: permission is honored. It is sent with a commit swap the repository can never satisfy, so it should never be committed.",
 	};
 }
 
@@ -256,7 +296,7 @@ async function main() {
 	console.log(`Authorized as ${did}`);
 	console.log(`  scope granted: ${info?.scope ?? "(the session did not report one)"}\n`);
 
-	// ── 2. Write ────────────────────────────────────────────────────────────
+	// ── 2. Write, refused at the commit ─────────────────────────────────────
 	let rkey: string | null = null;
 	try {
 		const res = await session.fetchHandler("/xrpc/com.atproto.repo.createRecord", {
@@ -266,6 +306,7 @@ async function main() {
 				repo: did,
 				collection: COLLECTION,
 				record: probeRecord(COLLECTION, did),
+				swapCommit: IMPOSSIBLE_COMMIT,
 			}),
 		});
 		const body = (await res.json().catch(() => null)) as {
@@ -274,24 +315,38 @@ async function main() {
 			message?: string;
 		} | null;
 
-		if (res.ok && body?.uri) {
-			rkey = body.uri.split("/").pop() ?? null;
-			console.log("RESULT: ✅ THE WRITE SUCCEEDED.");
-			console.log(`  ${body.uri}`);
-			console.log("\n  A narrow repo: permission is honored on bsky.social today.");
-			console.log("  Anthers can publish listings into a creator's own repository without");
-			console.log("  asking for access to the rest of their account.");
-		} else {
-			console.log(`RESULT: ❌ the write was refused — HTTP ${res.status}.`);
-			console.log(`  error:   ${body?.error ?? "(none)"}`);
-			console.log(`  message: ${body?.message ?? "(none)"}`);
-			console.log("\n  ⚠️ Read the error before concluding the permission is unavailable:");
-			console.log("     an auth/scope error means it is not honored yet;");
-			console.log("     a lexicon or validation error means this probe's record is wrong;");
-			console.log("     and a loopback client may be restricted in ways a real one is not.");
+		switch (verdictFor(res.status, body)) {
+			case "honored":
+				console.log("RESULT: ✅ THE PERMISSION IS HONORED.");
+				console.log(`  The server accepted the permission and the record, and refused only the`);
+				console.log(`  commit swap (${body?.message ?? "InvalidSwap"}). Nothing was written.`);
+				console.log("\n  A narrow repo: permission is honored on bsky.social today.");
+				break;
+			case "not_honored":
+				console.log(`RESULT: ❌ the permission is not honored — HTTP ${res.status}.`);
+				console.log(`  error:   ${body?.error ?? "(none)"}`);
+				console.log(`  message: ${body?.message ?? "(none)"}`);
+				break;
+			case "record_invalid":
+				console.log("RESULT: ⚠️ the record was refused for its shape, which says nothing about");
+				console.log("  the permission. This probe's record is wrong; fix it and run again.");
+				console.log(`  message: ${body?.message ?? "(none)"}`);
+				break;
+			case "committed":
+				rkey = body?.uri?.split("/").pop() ?? null;
+				console.log("RESULT: 🚨 THE SERVER COMMITTED THE RECORD despite the impossible swap.");
+				console.log(`  ${body?.uri ?? "(no URI returned)"}`);
+				console.log("  That is a finding in itself: this probe's no-write proof does not hold");
+				console.log("  there. The permission IS honored, and the record is being removed now.");
+				break;
+			default:
+				console.log(`RESULT: ? an answer this probe cannot read — HTTP ${res.status}.`);
+				console.log(`  error:   ${body?.error ?? "(none)"}`);
+				console.log(`  message: ${body?.message ?? "(none)"}`);
+				console.log("  A loopback client may be restricted in ways a real one is not.");
 		}
 	} finally {
-		// ── 3. Clean up, always ─────────────────────────────────────────────
+		// ── 3. Clean up ─────────────────────────────────────────────────────
 		if (rkey) {
 			const del = await session
 				.fetchHandler("/xrpc/com.atproto.repo.deleteRecord", {
@@ -302,17 +357,19 @@ async function main() {
 				.catch(() => null);
 			console.log(
 				del?.ok
-					? "\nCleaned up: the probe record was deleted."
-					: "\n⚠️ COULD NOT DELETE the probe record — remove it by hand.",
+					? "\nRemoved the record the server should never have committed."
+					: "\n⚠️ COULD NOT DELETE the committed probe record — remove it by hand.",
 			);
 		}
 		// The grant itself is revoked too. Leaving a live authorization on a test account
-		// for a probe that has finished is the same untidiness as leaving the record.
+		// for a probe that has finished is the same untidiness as leaving a record.
 		await client.revoke(did).catch(() => {});
 	}
 }
 
-main().catch((err) => {
-	console.error(err);
-	process.exit(1);
-});
+if (import.meta.main) {
+	main().catch((err) => {
+		console.error(err);
+		process.exit(1);
+	});
+}
