@@ -155,12 +155,13 @@ interface AppState {
  * the PDS had just handed over.
  *
  * Production sets `FRONTEND_URL` and it wins, as it must — there the API and the SPA share one
- * origin and none of this applies.
+ * origin and none of this applies. A browser test session serves its preview on a port of its
+ * own and names it in `PREVIEW_PORT`; `make dev` serves the SPA on 3000.
  */
 function getFrontendUrl(c: { req: { url: string } }): string {
 	const configured = process.env.FRONTEND_URL;
 	if (configured) return configured;
-	return `http://${new URL(c.req.url).hostname}:3000`;
+	return `http://${new URL(c.req.url).hostname}:${process.env.PREVIEW_PORT ?? "3000"}`;
 }
 
 /**

@@ -70,6 +70,8 @@ export interface SessionPorts {
 	postgres: number;
 	plc: number;
 	pds: number;
+	/** The server standing in for `bsky.social`, where identities Anthers does not host live. */
+	bluesky: number;
 	/** The API and the static preview server, which only a browser run starts. */
 	api?: number;
 	preview?: number;
@@ -93,7 +95,7 @@ export interface Session {
 
 /** The ports a session uses. `dev` is fixed; every other kind asks `freePort` for each one. */
 export function sessionPorts(kind: SessionKind, freePort: () => number): SessionPorts {
-	if (kind === "dev") return { postgres: 5432, plc: 2582, pds: 2583, mail: 8025 };
+	if (kind === "dev") return { postgres: 5432, plc: 2582, pds: 2583, bluesky: 2586, mail: 8025 };
 	const taken = new Set<number>();
 	const next = () => {
 		for (;;) {
@@ -104,7 +106,7 @@ export function sessionPorts(kind: SessionKind, freePort: () => number): Session
 			}
 		}
 	};
-	const ports: SessionPorts = { postgres: next(), plc: next(), pds: next() };
+	const ports: SessionPorts = { postgres: next(), plc: next(), pds: next(), bluesky: next() };
 	if (kind === "browser") {
 		ports.api = next();
 		ports.preview = next();
@@ -141,9 +143,15 @@ export function sessionEnvironment(
 	return env;
 }
 
-/** The part of a session's environment that points at its AT Protocol network. */
+/**
+ * The part of a session's environment that points at its AT Protocol network.
+ *
+ * ⚠️ **`ATPROTO_HANDLE_RESOLVER` is the Bluesky stand-in**, because a handle on a private network
+ * resolves over no DNS: the hub's OAuth client asks that server instead, which answers for the
+ * `.bsky.test` identities the Bluesky door signs in with.
+ */
 export function networkEnvironment(
-	ports: Pick<SessionPorts, "plc" | "pds">,
+	ports: Pick<SessionPorts, "plc" | "pds" | "bluesky">,
 	hosting: { inviteCode: string; accountKey: string },
 ): Record<string, string> {
 	return {
@@ -152,6 +160,8 @@ export function networkEnvironment(
 		HOSTED_PDS_INVITE_CODE: hosting.inviteCode,
 		HOSTED_ACCOUNT_KEY: hosting.accountKey,
 		ATPROTO_TEST_PDS: `http://localhost:${ports.pds}`,
+		BLUESKY_STAND_IN_URL: `http://localhost:${ports.bluesky}`,
+		ATPROTO_HANDLE_RESOLVER: `http://localhost:${ports.bluesky}`,
 	};
 }
 
@@ -372,7 +382,12 @@ export async function answers(url: string): Promise<boolean> {
 	}
 }
 
-async function startNetwork(id: string, plc: number, pds: number): Promise<string> {
+async function startNetwork(
+	id: string,
+	plc: number,
+	pds: number,
+	bluesky: number,
+): Promise<string> {
 	const name = `anthers-${id}-atproto`;
 	const build = await docker(["build", "-q", "-t", NETWORK_IMAGE, "scripts/atproto-network"]);
 	if (!build.ok) throw new Error(`could not build the AT Protocol network image:\n${build.out}`);
@@ -387,10 +402,19 @@ async function startNetwork(id: string, plc: number, pds: number): Promise<strin
 		`PLC_PORT=${plc}`,
 		"-e",
 		`PDS_PORT=${pds}`,
+		"-e",
+		`BLUESKY_PORT=${bluesky}`,
+		// The schemas Anthers has published, so the stand-in can resolve its permission sets.
+		"-v",
+		`${join(REPO_ROOT, "lexicons-published")}:/lexicons-published:ro`,
+		"-e",
+		"LEXICONS_DIR=/lexicons-published",
 		"-p",
 		`127.0.0.1:${plc}:${plc}`,
 		"-p",
 		`127.0.0.1:${pds}:${pds}`,
+		"-p",
+		`127.0.0.1:${bluesky}:${bluesky}`,
 		NETWORK_IMAGE,
 	]);
 	if (!run.ok) throw new Error(`could not start the AT Protocol network:\n${run.out}`);
@@ -399,6 +423,7 @@ async function startNetwork(id: string, plc: number, pds: number): Promise<strin
 		name,
 		async () =>
 			(await answers(`http://localhost:${pds}/xrpc/_health`)) &&
+			(await answers(`http://localhost:${bluesky}/xrpc/_health`)) &&
 			(await answers(`http://localhost:${plc}/_health`)),
 	);
 	return name;
@@ -520,7 +545,7 @@ export async function startSession(
 		const started = Date.now();
 		await Promise.all([
 			startPostgres(id, ports.postgres),
-			startNetwork(id, ports.plc, ports.pds),
+			startNetwork(id, ports.plc, ports.pds, ports.bluesky),
 			ports.mail !== undefined ? startMailCatcher(id, ports.mail) : Promise.resolve(""),
 		]);
 		env = sessionEnvironment(id, ports, contentDir, {
@@ -531,7 +556,7 @@ export async function startSession(
 		await migrate(env);
 		log(
 			`[session] ${id} ready in ${((Date.now() - started) / 1000).toFixed(1)}s — database :${ports.postgres}, ` +
-				`directory :${ports.plc}, server :${ports.pds}` +
+				`directory :${ports.plc}, server :${ports.pds}, Bluesky stand-in :${ports.bluesky}` +
 				(ports.mail !== undefined ? `, mail http://localhost:${ports.mail}` : ""),
 		);
 	} catch (err) {

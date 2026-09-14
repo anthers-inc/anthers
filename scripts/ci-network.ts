@@ -24,6 +24,7 @@ import { answers, exitCodeOf, mintInviteCode, networkEnvironment, runCommand } f
 
 const PLC_PORT = 2582;
 const PDS_PORT = 2583;
+const BLUESKY_PORT = 2586;
 
 async function main(): Promise<number> {
 	// Bun drops a `--` that comes straight after the script, so the separator may or may not arrive.
@@ -32,7 +33,13 @@ async function main(): Promise<number> {
 	if (command.length === 0) throw new Error("usage: bun run scripts/ci-network.ts -- <command...>");
 
 	const network = spawn("node", [join(import.meta.dir, "atproto-network", "network.mjs")], {
-		env: { ...process.env, PLC_PORT: String(PLC_PORT), PDS_PORT: String(PDS_PORT) },
+		env: {
+			...process.env,
+			PLC_PORT: String(PLC_PORT),
+			PDS_PORT: String(PDS_PORT),
+			BLUESKY_PORT: String(BLUESKY_PORT),
+			LEXICONS_DIR: join(import.meta.dir, "..", "lexicons-published"),
+		},
 		stdio: ["ignore", "inherit", "inherit"],
 	});
 	let exited = false;
@@ -45,6 +52,7 @@ async function main(): Promise<number> {
 		if (exited) throw new Error("the AT Protocol network exited before it was ready");
 		if (
 			(await answers(`http://localhost:${PDS_PORT}/xrpc/_health`)) &&
+			(await answers(`http://localhost:${BLUESKY_PORT}/xrpc/_health`)) &&
 			(await answers(`http://localhost:${PLC_PORT}/_health`))
 		) {
 			break;
@@ -55,7 +63,7 @@ async function main(): Promise<number> {
 	}
 
 	const env = networkEnvironment(
-		{ plc: PLC_PORT, pds: PDS_PORT },
+		{ plc: PLC_PORT, pds: PDS_PORT, bluesky: BLUESKY_PORT },
 		{ inviteCode: await mintInviteCode(PDS_PORT), accountKey: randomBytes(32).toString("hex") },
 	);
 	console.log(`[ci-network] ready: directory :${PLC_PORT}, server :${PDS_PORT}`);
