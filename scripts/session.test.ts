@@ -29,13 +29,14 @@ describe("the ports a session takes", () => {
 			postgres: 5432,
 			plc: 2582,
 			pds: 2583,
+			bluesky: 2586,
 			mail: 8025,
 		});
 	});
 
 	it("takes free ports for a test run, so it can overlap dev and other runs", () => {
 		const ports = sessionPorts("test", counter(40000));
-		expect(ports).toEqual({ postgres: 40000, plc: 40001, pds: 40002 });
+		expect(ports).toEqual({ postgres: 40000, plc: 40001, pds: 40002, bluesky: 40003 });
 		expect(Object.values(ports)).not.toContain(5432);
 	});
 
@@ -44,16 +45,17 @@ describe("the ports a session takes", () => {
 			postgres: 40000,
 			plc: 40001,
 			pds: 40002,
-			api: 40003,
-			preview: 40004,
-			mail: 40005,
+			bluesky: 40003,
+			api: 40004,
+			preview: 40005,
+			mail: 40006,
 		});
 	});
 
 	it("never hands the same port to two services, even when the system repeats one", () => {
-		const repeats = [41000, 41000, 41001, 41001, 41002];
+		const repeats = [41000, 41000, 41001, 41001, 41002, 41003];
 		const ports = sessionPorts("test", () => repeats.shift() ?? 0);
-		expect(new Set(Object.values(ports)).size).toBe(3);
+		expect(new Set(Object.values(ports)).size).toBe(4);
 	});
 });
 
@@ -61,7 +63,7 @@ describe("the environment a session hands its command", () => {
 	it("points the database, the directory and the hosting server at the session's own", () => {
 		const env = sessionEnvironment(
 			"test-abc",
-			{ postgres: 40000, plc: 40001, pds: 40002 },
+			{ postgres: 40000, plc: 40001, pds: 40002, bluesky: 40003 },
 			"/tmp/s/content",
 			{ inviteCode: "localhost-abcde-fghij", accountKey: "k".repeat(64) },
 		);
@@ -81,7 +83,7 @@ describe("the environment a session hands its command", () => {
 	it("gives a browser run the API and preview ports and the base URL they imply", () => {
 		const env = sessionEnvironment(
 			"browser-abc",
-			{ postgres: 1, plc: 2, pds: 3, api: 40003, preview: 40004, mail: 40005 },
+			{ postgres: 1, plc: 2, pds: 3, bluesky: 4, api: 40003, preview: 40004, mail: 40005 },
 			"/tmp/s",
 			{ inviteCode: "i", accountKey: "k" },
 		);

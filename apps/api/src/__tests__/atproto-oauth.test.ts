@@ -12,6 +12,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
 import { atprotoOauthState, atprotoSessions, users } from "@anthers/db/schema";
 import { JoseKey } from "@atproto/jwk-jose";
+import { AtprotoDohHandleResolver } from "@atproto/oauth-client";
 import { eq, like } from "drizzle-orm";
 import { resolveIdentity } from "../services/atproto.js";
 import {
@@ -19,6 +20,7 @@ import {
 	buildClientMetadata,
 	getAtprotoClient,
 	getBaseUrl,
+	localNetworkOptions,
 	oauthSessionStore,
 	oauthStateStore,
 	setAtprotoClient,
@@ -178,6 +180,31 @@ describe("client construction under Bun", () => {
 			if (prev === undefined) delete process.env.BASE_URL;
 			else process.env.BASE_URL = prev;
 		}
+	});
+});
+
+describe("how the client reaches a local network", () => {
+	// 🚨 The lenient direction — plain HTTP, and handles resolved through a named server — must be
+	// out of reach of a deployment, including one that has lost a variable. A container carries no
+	// checkout, so that is what decides it.
+	it("stays strict in a deployment, even when a resolver is named", () => {
+		const options = localNetworkOptions(
+			{ ATPROTO_HANDLE_RESOLVER: "http://localhost:2586" },
+			false,
+		);
+		expect(options.allowHttp).toBe(false);
+		expect(options.handleResolver).toBeInstanceOf(AtprotoDohHandleResolver);
+	});
+
+	it("reaches a session's Bluesky stand-in from a checkout", () => {
+		expect(localNetworkOptions({ ATPROTO_HANDLE_RESOLVER: "http://localhost:2586" }, true)).toEqual(
+			{ allowHttp: true, handleResolver: "http://localhost:2586" },
+		);
+	});
+
+	it("resolves over DNS from a checkout that names no resolver, so a real Bluesky account still signs in", () => {
+		const options = localNetworkOptions({}, true);
+		expect(options.handleResolver).toBeInstanceOf(AtprotoDohHandleResolver);
 	});
 });
 

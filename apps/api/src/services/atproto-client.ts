@@ -414,6 +414,37 @@ export function buildClientMetadata() {
 let client: OAuthClient | undefined;
 
 /**
+ * How the client resolves handles and which servers it will talk to: the real network's rules
+ * unless this is a checkout running on a local session's network.
+ *
+ * 🚨 **Decided by the checkout, never by `isPublicDeployment()`.** Accepting plain-HTTP
+ * authorization servers and resolving handles through a named server are the lenient direction,
+ * and `isPublicDeployment()` answers false for any process that has lost its `FRONTEND_URL` — so
+ * leniency keyed on it would switch on in exactly the deployment that misplaced a variable. A
+ * deployed container carries no checkout, so `isDevCheckout()` cannot be talked into it.
+ *
+ * Inside a checkout the local network's Bluesky stand-in serves plain HTTP and its handles resolve
+ * over no DNS, so the session names a server that answers `resolveHandle` for them
+ * (`ATPROTO_HANDLE_RESOLVER`). Without one — a checkout signing in with a real Bluesky account —
+ * handles resolve over DNS-over-HTTPS as they do in production.
+ */
+export function localNetworkOptions(
+	env: Record<string, string | undefined> = process.env,
+	checkout: boolean = isDevCheckout(import.meta.dir),
+): { allowHttp: boolean; handleResolver: string | AtprotoDohHandleResolver } {
+	const resolver = env.ATPROTO_HANDLE_RESOLVER?.trim();
+	if (checkout && resolver) return { allowHttp: true, handleResolver: resolver };
+	return {
+		allowHttp: checkout,
+		// DNS-over-HTTPS rather than `node:dns`, which Bun does not expose the same way and
+		// which is the transitive reason the Node client cannot be used here.
+		handleResolver: new AtprotoDohHandleResolver({
+			dohEndpoint: env.ATPROTO_DOH_ENDPOINT ?? "https://cloudflare-dns.com/dns-query",
+		}),
+	};
+}
+
+/**
  * The shared client. Built lazily so importing this module never reaches the network or
  * requires configuration — the same reason `getStripe()` exists rather than a module-level
  * constant, and the same failure it avoids: "are we configured?" becoming a property of
@@ -426,11 +457,7 @@ export function getAtprotoClient(): OAuthClient {
 		responseMode: "query",
 		// The directory `did:plc` identities resolve in, which a local network points at its own.
 		plcDirectoryUrl: plcDirectoryUrl(),
-		// DNS-over-HTTPS rather than `node:dns`, which Bun does not expose the same way and
-		// which is the transitive reason the Node client cannot be used here.
-		handleResolver: new AtprotoDohHandleResolver({
-			dohEndpoint: process.env.ATPROTO_DOH_ENDPOINT ?? "https://cloudflare-dns.com/dns-query",
-		}),
+		...localNetworkOptions(),
 		runtimeImplementation: {
 			createKey: (algs: string[]) => JoseKey.generate(algs),
 			getRandomValues: (length: number) => crypto.getRandomValues(new Uint8Array(length)),

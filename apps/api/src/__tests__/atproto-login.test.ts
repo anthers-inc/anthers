@@ -107,8 +107,9 @@ async function runCallback(staged: { did: string; state?: string }): Promise<URL
  *
  * ⚠️ **Written directly, with the suite's own `did(tag)`, because the identity exists only inside
  * the faked OAuth client** — its resolver and its session are stubs, so there is no server for a
- * real identity to live on. This moves to a real identity when the local network gains a server
- * standing in for `bsky.social`, and the OAuth round trip with it.
+ * real identity to live on. The fake is what reaches the branches a real server cannot be made to
+ * produce on demand; the real round trip, against the session's Bluesky stand-in, is
+ * `apps/web/tests/e2e/bluesky-door.e2e.ts`.
  */
 async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> = {}) {
 	const [user] = await db
