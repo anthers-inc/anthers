@@ -1,0 +1,39 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.vote",
+	"defs": {
+		"main": {
+			"type": "record",
+			"key": "tid",
+			"description": "A vote on a work, a post, a comment or a review — the voter saying which way they want it to move. It is a vote with a direction rather than a reaction with a sentiment, because that is what the gesture actually does: it is the input to ranking. Both directions are published, deliberately. If votes decide what rises and what folds away, publishing only the ones pushing upward would describe the mechanism dishonestly. How a service DISPLAYS them is its own decision and no part of this record.",
+			"record": {
+				"type": "object",
+				"required": ["subject", "direction"],
+				"properties": {
+					"subject": {
+						"type": "ref",
+						"ref": "#subject"
+					},
+					"direction": {
+						"type": "string",
+						"description": "Which way the voter wants this subject to move. `up` — more people should see it. `down` — fewer should. Named for the effect rather than for a feeling, because framing it as approval invites the familiar bind where somebody withholds a vote from work they think is important but did not enjoy. This is an open set: consumers must accept values not listed here, because a third kind may be added later.",
+						"knownValues": ["up", "down"],
+						"maxLength": 32
+					}
+				}
+			}
+		},
+		"subject": {
+			"type": "object",
+			"description": "What this record is about, named by the address of a record on the network. An OBJECT rather than a bare string, deliberately: a published field's type can never change, so a bare address would close the door on ever carrying anything beside it — a content identifier pinning the subject to one version being the obvious candidate. What KIND of thing the subject is needs no field of its own, because the collection segment of the address already says it. A vote whose subject is a review is asking whether that review helped, which is the same gesture and needs no separate record type.",
+			"required": ["uri"],
+			"properties": {
+				"uri": {
+					"type": "string",
+					"format": "at-uri",
+					"description": "The address of the record this is about. Version pinning is deliberately absent rather than forgotten: a work's listing is rewritten whenever its creator edits the title or the description, so a subject pinned to the version that existed on the day would come to point at something gone, through no act of the person who cast this vote."
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,45 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.review",
+	"defs": {
+		"main": {
+			"type": "record",
+			"key": "tid",
+			"description": "A review of a work — whether the reviewer recommends it, and the words that explain why. It is a review rather than a rating because a verdict without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and recommending one means nothing. It lives in the reviewer's own repository. Editing a review rewrites this record in place rather than writing a new one, so a link to it keeps working — which also means a reference to one exact version of a review is not something a consumer can rely on.",
+			"record": {
+				"type": "object",
+				"required": ["subject", "verdict"],
+				"properties": {
+					"subject": {
+						"type": "ref",
+						"ref": "#subject"
+					},
+					"verdict": {
+						"type": "string",
+						"description": "Whether the reviewer recommends this work. Deliberately a verdict rather than a score on a scale: a star rating asks each person to convert a feeling into a number, which they do inconsistently and mostly by picking an extreme, and averaging the results treats ordinal answers as if the distance between them were equal. A yes-or-no leaves the nuance to the aggregate, where a proportion of readers recommending something is an honest statistic rather than an arithmetic mean of guesses. An OPEN SET, and a string rather than a boolean for exactly that reason: a boolean's type could never grow, while a middle verdict can be added here later if one is ever wanted. Anthers writes only the two listed today, and somebody who feels neither simply does not post a review.",
+						"knownValues": ["recommended", "not-recommended"],
+						"maxLength": 64
+					},
+					"text": {
+						"type": "string",
+						"description": "Why the reviewer reached that verdict. Plain text, so every consumer can render it without a sanitizer. OPTIONAL here although Anthers requires it when somebody writes a review, and the split is deliberate: requiring words is a policy, and a policy can change, while required and optional can never be swapped once a schema is published. Enforcing it where the review is written keeps the rule exactly as strict and leaves the schema able to describe a review written under a later one. The limits sit far above what Anthers accepts, because a length limit can never be raised — new data must stay valid under the old schema — so a limit set to today's product rule would become tomorrow's ceiling.",
+						"maxGraphemes": 25000,
+						"maxLength": 250000
+					}
+				}
+			}
+		},
+		"subject": {
+			"type": "object",
+			"description": "What this record is about, named by the address of a record on the network. An OBJECT rather than a bare string, deliberately: a published field's type can never change, so a bare address would close the door on ever carrying anything beside it — a content identifier pinning the subject to one version being the obvious candidate. What KIND of thing the subject is needs no field of its own, because the collection segment of the address already says it.",
+			"required": ["uri"],
+			"properties": {
+				"uri": {
+					"type": "string",
+					"format": "at-uri",
+					"description": "The address of the record this is about. Version pinning is deliberately absent rather than forgotten: a work's listing is rewritten whenever its creator edits the title or the description, so a subject pinned to the version that existed on the day would come to point at something gone, through no act of the person who wrote this."
+				}
+			}
+		}
+	}
+}

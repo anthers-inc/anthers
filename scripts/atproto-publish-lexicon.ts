@@ -9,6 +9,18 @@
  * script therefore **prints what it would do and stops** unless a person passes `--write`
  * from a terminal and types the NSID back.
  *
+ * ⭐ **What went out is committed, and every publish is checked against it.** `lexicons-published/`
+ * holds a byte-for-byte copy of each schema as it was published, which this writes when it
+ * publishes and removes when it retires. `lex:check` compares `lexicons/` against those copies in
+ * CI, so a breaking edit fails at the pull request; this compares them against the network before
+ * writing, so a copy that no longer matches what is published stops the run rather than being
+ * trusted. The rules are `lexicon-evolution.ts`.
+ *
+ * ⭐ **Against a local server it is a rehearsal.** Pointed at the network `make pds-up` starts, it
+ * runs the whole write path — the same checks, the same write, the record read back — except the
+ * two things only production has: the `_lexicon` DNS record, which cannot name a local account,
+ * and the committed copies, which describe production and are left untouched.
+ *
  * ⚠️ **Publishing a schema is not what starts Anthers writing records under it.** That is the
  * NSID's entry in `PUBLISHED_LEXICONS` (`apps/api/src/services/published-lexicons.ts`), added in
  * a code change after this has run — so the order is always review, publish, then write.
@@ -21,6 +33,8 @@
  *
  *   bun run scripts/atproto-publish-lexicon.ts                    # show the plan, write nothing
  *   bun run scripts/atproto-publish-lexicon.ts --write \
+ *     --service http://localhost:2583 --identifier alice.test     # rehearse against make pds-up
+ *   bun run scripts/atproto-publish-lexicon.ts --write \
  *     --service https://bsky.social --identifier anthers.org      # asks, then publishes
  *   bun run scripts/atproto-publish-lexicon.ts --write --retire <nsid> \
  *     --service https://bsky.social --identifier anthers.org      # asks, then removes one
@@ -31,11 +45,21 @@
  * strand code that still depends on the name resolving. 🚨 **A retired NSID is never reused for
  * a different shape**: software that read the old schema may still hold records claiming it.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
+import { isOffNetworkUrl } from "../apps/api/src/lib/atproto-network.js";
+import type { SessionWriter } from "./atproto-writer.js";
+import {
+	evolutionProblems,
+	LEXICON_DIR,
+	type LexiconDoc,
+	PUBLISHED_DIR,
+	publishedPath,
+	readLexiconDocs,
+} from "./lexicon-evolution.js";
 
-/** Where the Lexicon JSON lives, relative to the repository root. */
-const LEXICON_DIR = "lexicons";
+/** The collection every schema record lives in. */
+export const SCHEMA_COLLECTION = "com.atproto.lexicon.schema";
 
 export interface PublishPlan {
 	nsid: string;
@@ -44,6 +68,8 @@ export interface PublishPlan {
 	/** The DNS name that has to carry the authority's DID for this schema to resolve. */
 	authorityDomain: string;
 	record: Record<string, unknown>;
+	/** The Lexicon file the record was read from, copied verbatim into `lexicons-published/`. */
+	sourcePath: string;
 }
 
 export type Decision = { refuse: string } | { plans: PublishPlan[]; write: boolean };
@@ -69,29 +95,14 @@ export function lexiconAuthorityDomain(nsid: string): string {
 
 /** Every Lexicon JSON file under `lexicons/`, as a publish plan each. */
 export function collectPlans(root = LEXICON_DIR): PublishPlan[] {
-	const plans: PublishPlan[] = [];
-	const walk = (dir: string) => {
-		for (const entry of readdirSync(dir)) {
-			const path = join(dir, entry);
-			if (statSync(path).isDirectory()) {
-				walk(path);
-				continue;
-			}
-			if (!entry.endsWith(".json")) continue;
-			const doc = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-			const nsid = doc.id as string;
-			if (typeof nsid !== "string") throw new Error(`${path} has no \`id\``);
-			plans.push({
-				nsid,
-				rkey: nsid,
-				authorityDomain: lexiconAuthorityDomain(nsid),
-				// The document verbatim, with `$type` added and nothing removed.
-				record: { $type: "com.atproto.lexicon.schema", ...doc },
-			});
-		}
-	};
-	walk(root);
-	return plans;
+	return [...readLexiconDocs(root)].map(([nsid, { doc, path }]) => ({
+		nsid,
+		rkey: nsid,
+		authorityDomain: lexiconAuthorityDomain(nsid),
+		// The document verbatim, with `$type` added and nothing removed.
+		record: { $type: SCHEMA_COLLECTION, ...doc },
+		sourcePath: path,
+	}));
 }
 
 /**
@@ -200,20 +211,198 @@ export function describePlan(plan: PublishPlan): string {
 	].join("\n");
 }
 
+/** The committed copies of what is published. An interface so the write path can be tested. */
+export interface PublishedCopies {
+	read(nsid: string): LexiconDoc | null;
+	/** Record that `sourcePath` is what went out, byte for byte. */
+	write(nsid: string, sourcePath: string): void;
+	remove(nsid: string): void;
+}
+
+/** The copies in `lexicons-published/`. */
+export function publishedCopies(root = PUBLISHED_DIR): PublishedCopies {
+	return {
+		read(nsid) {
+			const path = publishedPath(nsid, root);
+			return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as LexiconDoc) : null;
+		},
+		write(nsid, sourcePath) {
+			const path = publishedPath(nsid, root);
+			mkdirSync(dirname(path), { recursive: true });
+			copyFileSync(sourcePath, path);
+		},
+		remove(nsid) {
+			rmSync(publishedPath(nsid, root), { force: true });
+		},
+	};
+}
+
+/** Where one run publishes, and what it checks against. */
+export interface PublishTarget {
+	writer: SessionWriter;
+	/** True against a local server: no DNS authority to check, and the committed copies are left alone. */
+	rehearsal: boolean;
+	resolveTxt(domain: string): Promise<string[]>;
+	copies: PublishedCopies;
+}
+
+export type PublishOutcome =
+	| { nsid: string; status: "published"; uri: string }
+	| { nsid: string; status: "unchanged" }
+	| { nsid: string; status: "retired" }
+	| { nsid: string; status: "refused"; reason: string };
+
+/** A document with its keys sorted at every level, so two copies compare by content. */
+function canonical(value: unknown): string {
+	return JSON.stringify(value, (_key, v) =>
+		v && typeof v === "object" && !Array.isArray(v)
+			? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
+			: v,
+	);
+}
+
+/** A schema record as a Lexicon document: the record without its `$type`. */
+function asDoc(record: Record<string, unknown> | null): LexiconDoc | null {
+	if (!record) return null;
+	const { $type: _type, ...doc } = record;
+	return doc as LexiconDoc;
+}
+
+/**
+ * Why this account may not speak for a schema's authority, or null when it may.
+ *
+ * Never asked during a rehearsal: a local account is named by no DNS record, which is exactly
+ * why a local server is safe to publish to.
+ */
+async function authorityRefusal(domain: string, target: PublishTarget): Promise<string | null> {
+	if (target.rehearsal) return null;
+	const txt = await target.resolveTxt(domain);
+	if (authorityNamesAccount(txt, target.writer.did)) return null;
+	return (
+		`${domain} does not name ${target.writer.did} (it holds ` +
+		`${txt.length > 0 ? txt.join(", ") : "nothing"}), so the schema would never resolve`
+	);
+}
+
+/**
+ * Publish one schema, after every check that can stop it.
+ *
+ * The order is deliberate: nothing is written until the edit is known to be compatible, the
+ * account is known to speak for the namespace, and the committed copy is known to match what is
+ * really out there. A schema already published exactly as it stands is left alone rather than
+ * written again.
+ */
+export async function publishPlan(
+	plan: PublishPlan,
+	target: PublishTarget,
+): Promise<PublishOutcome> {
+	const { nsid } = plan;
+	const doc = asDoc(plan.record) as LexiconDoc;
+	const committed = target.copies.read(nsid);
+
+	if (committed) {
+		const breaking = evolutionProblems(committed, doc);
+		if (breaking.length > 0) {
+			return {
+				nsid,
+				status: "refused",
+				reason: `it breaks what is published: ${breaking.join("; ")}`,
+			};
+		}
+	}
+
+	const authority = await authorityRefusal(plan.authorityDomain, target);
+	if (authority) return { nsid, status: "refused", reason: authority };
+
+	if (!target.rehearsal) {
+		const live = asDoc(await target.writer.getRecord(SCHEMA_COLLECTION, plan.rkey));
+		if (committed && !live) {
+			return {
+				nsid,
+				status: "refused",
+				reason: `${PUBLISHED_DIR}/ says it is published, and the network has no record of it`,
+			};
+		}
+		if (!committed && live) {
+			return {
+				nsid,
+				status: "refused",
+				reason:
+					`the network has a published copy that ${PUBLISHED_DIR}/ does not, so something ` +
+					"published it without this script — commit what is out there before changing it",
+			};
+		}
+		if (committed && live && canonical(live) !== canonical(committed)) {
+			return {
+				nsid,
+				status: "refused",
+				reason: `the copy in ${PUBLISHED_DIR}/ no longer matches what is published`,
+			};
+		}
+		if (live && canonical(live) === canonical(doc)) return { nsid, status: "unchanged" };
+	}
+
+	const ref = await target.writer.putRecord(SCHEMA_COLLECTION, plan.rkey, plan.record);
+	const stored = asDoc(await target.writer.getRecord(SCHEMA_COLLECTION, plan.rkey));
+	if (canonical(stored) !== canonical(doc)) {
+		return {
+			nsid,
+			status: "refused",
+			reason: `the server stored something other than what was sent, at ${ref.uri} — inspect it by hand`,
+		};
+	}
+	if (!target.rehearsal) target.copies.write(nsid, plan.sourcePath);
+	return { nsid, status: "published", uri: ref.uri };
+}
+
+/** Take one schema off the network, and its committed copy with it. `retireRefusal` runs first. */
+export async function retireSchema(nsid: string, target: PublishTarget): Promise<PublishOutcome> {
+	const authority = await authorityRefusal(lexiconAuthorityDomain(nsid), target);
+	if (authority) return { nsid, status: "refused", reason: authority };
+	await target.writer.deleteRecord(SCHEMA_COLLECTION, nsid);
+	if (!target.rehearsal) target.copies.remove(nsid);
+	return { nsid, status: "retired" };
+}
+
 if (import.meta.main) {
+	const argv = Bun.argv.slice(2);
+	const flag = (n: string) => argv[argv.indexOf(`--${n}`) + 1];
 	const plans = collectPlans();
-	const decision = decide(Bun.argv.slice(2), process.env, {
-		hasTty: Boolean(process.stdin.isTTY),
-		plans,
-	});
+	const decision = decide(argv, process.env, { hasTty: Boolean(process.stdin.isTTY), plans });
 
 	if (isRefusal(decision)) {
 		console.error(`\nrefused: ${decision.refuse}\n`);
 		process.exit(1);
 	}
 
-	const argvAll = Bun.argv.slice(2);
-	const retiring = argvAll.includes("--retire") ? argvAll[argvAll.indexOf("--retire") + 1] : null;
+	const copies = publishedCopies();
+	const service = decision.write ? flag("service") : "";
+	const rehearsal = decision.write && isOffNetworkUrl(service);
+	if (rehearsal) {
+		console.log(`\n⭐ REHEARSAL against ${service}: the _lexicon DNS check is skipped and`);
+		console.log(`   ${PUBLISHED_DIR}/ is left untouched, because both describe production.\n`);
+	}
+
+	/** One login for the whole run, after the person has said what they want. */
+	async function openTarget(): Promise<PublishTarget> {
+		const password = prompt("  password: ");
+		if (!password) {
+			console.log("  stopped (no password given)");
+			process.exit(0);
+		}
+		const { sessionWriter } = await import("./atproto-writer.js");
+		// Every gate in `decide` has passed and a person has typed back what is about to go out,
+		// which is the one situation this writer may reach the real network in.
+		const writer = await sessionWriter({
+			service,
+			identifier: flag("identifier"),
+			password,
+			realNetwork: true,
+		});
+		return { writer, rehearsal, resolveTxt: resolveAuthorityTxt, copies };
+	}
+
+	const retiring = argv.includes("--retire") ? flag("retire") : null;
 	if (retiring !== null) {
 		const refusal = retireRefusal(retiring, decision.plans);
 		if (refusal) {
@@ -227,8 +416,6 @@ if (import.meta.main) {
 			console.log("Nothing was removed. Pass --write, --service and --identifier to retire it.\n");
 			process.exit(0);
 		}
-		const { sessionWriter } = await import("./atproto-writer.js");
-		const flagOf = (n: string) => argvAll[argvAll.indexOf(`--${n}`) + 1];
 		if (
 			prompt(`Type the NSID to retire it, or anything else to stop:\n  ${retiring}\n> `) !==
 			retiring
@@ -236,30 +423,41 @@ if (import.meta.main) {
 			console.log("  stopped; nothing was removed");
 			process.exit(0);
 		}
-		const password = prompt("  password: ");
-		if (!password) {
-			console.log("  stopped (no password given)");
-			process.exit(0);
-		}
-		const writer = await sessionWriter({
-			service: flagOf("service"),
-			identifier: flagOf("identifier"),
-			password,
-		});
-		const domain = lexiconAuthorityDomain(retiring);
-		const txt = await resolveAuthorityTxt(domain);
-		if (!authorityNamesAccount(txt, writer.did)) {
-			console.error(`  refused: ${domain} does not name ${writer.did}`);
+		const outcome = await retireSchema(retiring, await openTarget());
+		if (outcome.status === "refused") {
+			console.error(`  refused: ${outcome.reason}`);
 			process.exit(1);
 		}
-		await writer.deleteRecord("com.atproto.lexicon.schema", retiring);
-		console.log(`  retired ${retiring} from ${writer.did}`);
+		console.log(`  retired ${retiring}`);
+		if (!rehearsal) console.log(`  removed its copy from ${PUBLISHED_DIR}/ — commit that`);
 		console.log("  🚨 Never publish a different shape under this NSID again.");
 		process.exit(0);
 	}
 
 	console.log(`\nLexicons found (${decision.plans.length}):\n`);
-	for (const plan of decision.plans) console.log(`${describePlan(plan)}\n`);
+	const candidates: PublishPlan[] = [];
+	for (const plan of decision.plans) {
+		console.log(describePlan(plan));
+		const committed = copies.read(plan.nsid);
+		const doc = asDoc(plan.record);
+		if (!committed) {
+			console.log("    status     not published yet");
+			candidates.push(plan);
+		} else if (canonical(committed) === canonical(doc)) {
+			console.log("    status     published, unchanged");
+			if (rehearsal) candidates.push(plan);
+		} else {
+			const breaking = evolutionProblems(committed, doc as LexiconDoc);
+			if (breaking.length > 0) {
+				console.log("    status     🛑 BREAKS what is published, and will not be offered:");
+				for (const problem of breaking) console.log(`                 ${problem}`);
+			} else {
+				console.log("    status     published, with compatible changes");
+				candidates.push(plan);
+			}
+		}
+		console.log("");
+	}
 
 	if (!decision.write) {
 		console.log("Nothing was written. Pass --write, --service and --identifier to publish.\n");
@@ -267,56 +465,45 @@ if (import.meta.main) {
 		console.log("   retyped, made required or removed. Read the Lexicon first.\n");
 		process.exit(0);
 	}
-
-	// The write path is deliberately the shortest part of this file, and it is not reached
-	// without a person having typed the NSID back at the prompt below.
-	const { sessionWriter } = await import("./atproto-writer.js");
-	const argv = Bun.argv.slice(2);
-	const flag = (n: string) => argv[argv.indexOf(`--${n}`) + 1];
-
-	const published: string[] = [];
-	for (const plan of decision.plans) {
-		const typed = prompt(
-			`\nType the NSID to publish it, or anything else to skip:\n  ${plan.nsid}\n> `,
-		);
-		if (typed !== plan.nsid) {
-			console.log(`  skipped ${plan.nsid}`);
-			continue;
-		}
-		const password = prompt("  password: ");
-		if (!password) {
-			console.log("  skipped (no password given)");
-			continue;
-		}
-		const writer = await sessionWriter({
-			service: flag("service"),
-			identifier: flag("identifier"),
-			password,
-		});
-
-		// The last gate, and the one a person cannot check by eye. Publishing into an account
-		// the authority does not name produces a schema that never resolves while looking
-		// entirely successful from this side.
-		const txt = await resolveAuthorityTxt(plan.authorityDomain);
-		if (!authorityNamesAccount(txt, writer.did)) {
-			console.error(
-				`  refused: ${plan.authorityDomain} does not name ${writer.did}\n` +
-					`           it holds: ${txt.length > 0 ? txt.join(", ") : "(nothing)"}\n` +
-					`           publishing here would produce a schema that never resolves.`,
-			);
-			continue;
-		}
-
-		console.log(`  publishing as ${writer.did}, named by ${plan.authorityDomain}`);
-		const ref = await writer.putRecord("com.atproto.lexicon.schema", plan.rkey, plan.record);
-		console.log(`  published ${ref.uri}`);
-		published.push(plan.nsid);
+	if (candidates.length === 0) {
+		console.log("Nothing to publish: every schema is published as it stands.\n");
+		process.exit(0);
 	}
 
+	// The write path is not reached without a person having typed each NSID back.
+	const chosen = candidates.filter(
+		(plan) =>
+			prompt(`\nType the NSID to publish it, or anything else to skip:\n  ${plan.nsid}\n> `) ===
+			plan.nsid,
+	);
+	if (chosen.length === 0) {
+		console.log("  nothing chosen; nothing was written");
+		process.exit(0);
+	}
+
+	const target = await openTarget();
+	const published: string[] = [];
+	for (const plan of chosen) {
+		const outcome = await publishPlan(plan, target);
+		if (outcome.status === "published") {
+			console.log(`  published ${outcome.uri}`);
+			published.push(plan.nsid);
+		} else if (outcome.status === "unchanged") {
+			console.log(`  ${plan.nsid} is already published exactly as it stands`);
+		} else if (outcome.status === "refused") {
+			console.error(`  refused ${plan.nsid}: ${outcome.reason}`);
+		}
+	}
+
+	if (published.length > 0 && !rehearsal) {
+		console.log(
+			`\nCopied what went out into ${PUBLISHED_DIR}/ — commit it with the Lexicon change.`,
+		);
+	}
 	// ⚠️ Publishing a schema does not start Anthers writing records under it, on purpose: that is
 	// a separate decision made in code. Said here because this is the moment somebody needs it.
 	const collections = published.filter((nsid) => !nsid.endsWith("Permissions"));
-	if (collections.length > 0) {
+	if (collections.length > 0 && !rehearsal) {
 		console.log(
 			"\nAnthers writes no records under these until they are added to PUBLISHED_LEXICONS in\n" +
 				"apps/api/src/services/published-lexicons.ts:\n" +

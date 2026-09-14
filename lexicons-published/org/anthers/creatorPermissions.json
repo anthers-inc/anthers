@@ -1,0 +1,19 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.creatorPermissions",
+	"defs": {
+		"main": {
+			"type": "permission-set",
+			"title": "Your Anthers Catalog",
+			"detail": "Keep a public record of each project, work and post you publish in your own repository: a project's or work's title, description and link, and a post's text and link. The files of a work, and who may open it, never go there.",
+			"permissions": [
+				{
+					"type": "permission",
+					"resource": "repo",
+					"collection": ["org.anthers.project", "org.anthers.work", "org.anthers.post"],
+					"action": ["create", "update", "delete"]
+				}
+			]
+		}
+	}
+}

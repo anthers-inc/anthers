@@ -234,12 +234,14 @@ pds-up: ## Start a fresh private AT Protocol network (directory :2582, server :2
 	@echo "  -> ready: directory http://localhost:2582, server http://localhost:2583"
 
 pds-test: ## Run the record-writing integration tests against the local network
-	@# Four suites: the writer against Anthers' own account, a Work's listing written into a
-	@# repository Anthers hosts on a creator's behalf, that creator's posts and projects, and a
-	@# reader's comments, votes, reviews and follows. The last three need the dev database as
-	@# well as the network, which is why they live with the other database tests.
+	@# Five suites: the writer against Anthers' own account, publishing and retiring its schemas,
+	@# a Work's listing written into a repository Anthers hosts on a creator's behalf, that
+	@# creator's posts and projects, and a reader's comments, votes, reviews and follows. The last
+	@# three need the dev database as well as the network, which is why they live with the other
+	@# database tests.
 	ATPROTO_TEST_PDS=http://localhost:2583 ATPROTO_PLC_URL=http://localhost:2582 bun test \
 	  scripts/atproto-writer.integration.test.ts \
+	  scripts/atproto-publish-lexicon.integration.test.ts \
 	  apps/api/src/__tests__/work-listing.integration.test.ts \
 	  apps/api/src/__tests__/creator-record-listing.integration.test.ts \
 	  apps/api/src/__tests__/reader-record-listing.integration.test.ts
