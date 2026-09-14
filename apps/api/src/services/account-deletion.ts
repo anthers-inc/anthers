@@ -309,10 +309,9 @@ export async function eraseAccount(
 	// Erasure deleted the `atproto_sessions` row by cascade and stopped until 2026-08-29, so
 	// somebody who asked to be forgotten was left with a live OAuth authorization on their
 	// Bluesky account pointing at an Anthers that no longer held anything — and with the row
-	// gone, nothing on our side could find it to try again. That is precisely the outcome
-	// `unlinkAtprotoFromUser` orders its two steps to avoid, and it matters more here: an
-	// unlink is somebody tidying a connection they can see and redo, while an erasure is
-	// somebody being promised there are no loose ends.
+	// gone, nothing on our side could find it to try again. An erasure is somebody being
+	// promised there are no loose ends, so the revocation has to happen while the row still
+	// says where to send it.
 	//
 	// ⚠️ **Best-effort and non-fatal**, which is what `revokeAtprotoGrant` guarantees. A
 	// revocation that fails must never leave an account undeleted — a third party's outage is

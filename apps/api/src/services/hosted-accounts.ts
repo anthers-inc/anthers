@@ -6,12 +6,11 @@
  * and creates them. It is the only place an account is created on the node, and the only
  * place the credentials for one are written down.
  *
- * ⭐ **Why hosting is a feature at all, since nobody is turned away without it.** A record
- * has to live in the creator's own repository, and writing into a repository Anthers does not
- * host would need `transition:generic` — a scope that grants everything, which is not a thing
- * to ask a creator for. So a creator without an Anthers-hosted identity cannot have the
- * protocol half at all. Hosting is what makes records work for anybody rather than for
- * nobody, and the third door at signup is what makes hosting reachable.
+ * ⭐ **Why Anthers issues identities at all.** Every account is an ATProto identity, and most
+ * people arriving do not already hold one — so issuing one at signup is what lets nobody be
+ * turned away for lacking one. It is also what makes records work: a record has to live in the
+ * creator's own repository, and an identity Anthers hosts is one Anthers can write into without
+ * asking a creator for a scope that grants everything.
  *
  * 🚨 **No recovery key is issued here, and that is a decision rather than an omission**
  * (Parker, 2026-09-08). The protocol would let Anthers seat a key the account holder controls
@@ -90,8 +89,9 @@ export function hostedHandleSuffix(): string {
  * Whether Anthers can actually issue an identity right now.
  *
  * ⚠️ **Every piece has to be present, and the door is closed if any is missing.** A door that
- * refuses when pressed is worse than no door — the same reason `atprotoSignupEnabled` is read
- * by the browser as well as by the server. The pieces are: a server to create the account on,
+ * refuses when pressed is worse than no door, which is why the browser asks this through
+ * `/api/atproto/config` and shows only the Bluesky door when it is false. The pieces are: a
+ * server to create the account on,
  * a credential it will accept, and a key to seal the account's password with. Missing any one
  * of them means an account that cannot be created, or one created and immediately
  * unreachable.
@@ -331,64 +331,25 @@ function refusalOf(error: string | undefined, message: string | undefined): Host
 	}
 }
 
-// ─── Issuing one, and writing down what came back ────────────────────────────
+// ─── Writing down an identity that has just been created ────────────────────
 
-/** What provisioning did. `null` on the handle means nothing was issued. */
-export interface ProvisionResult {
-	did: string | null;
-	handle: string | null;
-	/** Why it did not happen, for the person who asked or for whoever operates Anthers. */
-	error?: { message: string; fault: "name" | "operational" };
+/** Where the node answers, for recording on the account an identity was created for. */
+export function hostedPdsUrl(): string {
+	return pdsUrl();
 }
 
 /**
- * Issue an identity to an account that already exists, and record everything about it.
+ * Record everything about an identity the node has just created for a new account.
  *
- * 🚨 **Called only after the address has been proved**, which is what makes this safe to run
- * unattended. An identity issued from a typed address would be an identity bound to whoever
- * typed it, and the whole signup ceremony exists to stop that — see
- * `services/pending-signups.ts`.
+ * 🚨 **The account row already carries the DID when this runs.** Signup creates the identity
+ * first and the account second — see `establishSignupIdentity` in `services/pending-signups.ts`
+ * — so there is no link step here and no moment at which the account exists without its
+ * identity.
  *
- * ⚠️ **Nothing here may throw into a signup.** An account that has just come into existence
- * is not improved by failing at the last step over a handle: the person keeps the account they
- * asked for, and the identity is something they can ask for again from settings. Every failure
- * therefore comes back as a value.
- *
- * Four things are written, in an order chosen so a crash leaves the smallest mess. The
- * credentials go down first, because an identity whose password was never stored is the one
- * failure nobody can undo from outside. The link and the watch row follow.
+ * ⚠️ **The credential goes down first**, because an identity whose password was never stored is
+ * the one failure nobody can undo from outside. The watch row follows.
  */
-export async function provisionHostedIdentity(input: {
-	userId: number;
-	handleName: string;
-	email: string;
-}): Promise<ProvisionResult> {
-	if (!hostedIdentityOffered()) {
-		return {
-			did: null,
-			handle: null,
-			error: { message: "Anthers isn't issuing handles right now.", fault: "operational" },
-		};
-	}
-
-	let account: HostedAccount;
-	try {
-		account = await createHostedAccount({ handleName: input.handleName, email: input.email });
-	} catch (err) {
-		if (err instanceof HostedAccountError) {
-			return { did: null, handle: null, error: { message: err.message, fault: err.fault } };
-		}
-		console.error("[hosted-accounts] account creation failed:", err);
-		return {
-			did: null,
-			handle: null,
-			error: { message: "Couldn't create the handle.", fault: "operational" },
-		};
-	}
-
-	// First, because this is the only copy. Everything below can be reconstructed by looking
-	// at the node; a password that was never written down cannot be.
-	//
+export async function recordHostedIdentity(userId: number, account: HostedAccount): Promise<void> {
 	// ⚠️ **The conflict clause is defensive and the log under it is the point.** The DID was
 	// minted a moment ago, so a row cannot already exist — but `onConflictDoNothing` would
 	// swallow it if one somehow did, and what it would be swallowing is the only copy of a
@@ -398,7 +359,7 @@ export async function provisionHostedIdentity(input: {
 		.insert(hostedAccounts)
 		.values({
 			did: account.did,
-			userId: input.userId,
+			userId,
 			handle: account.handle,
 			sealedPassword: seal(account.password),
 		})
@@ -411,25 +372,12 @@ export async function provisionHostedIdentity(input: {
 		);
 	}
 
-	const { linkAtprotoToUser } = await import("./atproto.js");
-	const linked = await linkAtprotoToUser(input.userId, {
-		did: account.did,
-		handle: account.handle,
-		pdsUrl: pdsUrl(),
-	});
-	if (linked.error) {
-		// Unreachable in practice — the DID was minted a moment ago, so nothing else can hold
-		// it — and reported rather than asserted, because the alternative to noticing is an
-		// identity that exists and belongs to nobody.
-		console.error(`[hosted-accounts] could not link ${account.did}: ${linked.error}`);
-	}
-
 	// ⭐ **Watched from the first minute rather than from the next sweep.** `watch-identities`
 	// would find this within the hour on its own, and would then record whatever it found as
 	// the first sighting — so an operation signed in between would become the baseline instead
 	// of an alert. Reading the head now makes the identity as issued the thing every later run
 	// is compared against. A directory that has not caught up yet simply leaves it to the
-	// sweep, which is the behavior that was there before.
+	// sweep.
 	const observed = await readIdentityHead(account.did);
 	if (observed) {
 		await db
@@ -444,154 +392,13 @@ export async function provisionHostedIdentity(input: {
 			})
 			.onConflictDoNothing();
 	}
-
-	return { did: account.did, handle: account.handle };
-}
-
-// ─── Asking for one later ────────────────────────────────────────────────────
-
-/**
- * What came of an account asking for a handle after it already existed.
- *
- * ⚠️ **`fault` decides who is being told and what they can do about it.** `name` means try
- * another one, `account` means this account is not eligible and no name would change that, and
- * `operational` means nothing about the request was wrong and somebody at Anthers has to act.
- * Flattening the three into one error would leave somebody retyping a name that was never the
- * problem — the same distinction {@link HostedAccountError} draws, widened by the one case that
- * only exists once an account is in the picture.
- */
-export type HandleRequestResult =
-	| { status: "issued"; did: string; handle: string }
-	| { status: "refused"; message: string; fault: "name" | "account" | "operational" };
-
-/**
- * Accounts with an identity being issued to them at this moment.
- *
- * ⚠️ **It covers a repeated press and not a distributed race**, and the difference is worth
- * being honest about: this process is one of several, so two requests landing on two instances
- * inside the node round trip would both pass. What that costs is a spare identity rather than a
- * broken account — both are written down, both are linked to the user, the later link wins, and
- * `releaseHostedIdentities` finds every row by `user_id` regardless of which one the account
- * signs in as. The realistic case is one person pressing twice, and this is what answers it.
- */
-const beingIssued = new Set<number>();
-
-/**
- * Issue a handle to an account that already exists, if it may have one.
- *
- * 🚨 **This is not a signup door and must never become one.** It acts on an account that is
- * already signed in, which is what makes it a different thing from `/subscribe` rather than a
- * second copy of it — and the guard is the session the route requires, not that the page is
- * hard to find.
- *
- * ⚠️ **An account that already holds an identity is refused rather than migrated.** Somebody
- * who signed in with Bluesky has a DID, and issuing a second would leave them holding two with
- * nothing saying which one is theirs; swapping one for the other is a real question about what
- * happens to the records under the first, and it is not this. Refusing plainly leaves that
- * question open, which is the point.
- *
- * ⚠️ **The address has to be proved, for the same reason it is proved at signup.** The node is
- * given the account's address and binds the identity to it, so issuing one from an address
- * nobody confirmed would bind an identity to whoever typed it.
- */
-export async function requestHostedHandle(input: {
-	userId: number;
-	handleName: string;
-}): Promise<HandleRequestResult> {
-	if (!hostedIdentityOffered()) {
-		return {
-			status: "refused",
-			fault: "operational",
-			message: "Anthers isn't issuing handles right now.",
-		};
-	}
-
-	const [account] = await db
-		.select({
-			email: users.email,
-			emailVerified: users.emailVerified,
-			atprotoDid: users.atprotoDid,
-			atprotoHandle: users.atprotoHandle,
-		})
-		.from(users)
-		.where(eq(users.id, input.userId))
-		.limit(1);
-	if (!account) {
-		return { status: "refused", fault: "account", message: "Account not found." };
-	}
-
-	// ⚠️ **Asked first, and separately from the DID, because they are different refusals.** A
-	// credential row with no link on the account is what a provisioning that half-failed leaves
-	// behind, and issuing a second identity over the top of it would strand the first — an
-	// account on the node whose password is stored against a user who cannot see it.
-	const held = await hostedHandlesFor(input.userId);
-	if (held.length > 0) {
-		return {
-			status: "refused",
-			fault: "account",
-			message: `Anthers has already issued you ${held[0]}.`,
-		};
-	}
-
-	if (account.atprotoDid) {
-		return {
-			status: "refused",
-			fault: "account",
-			message: `This account already signs in as ${
-				account.atprotoHandle || account.atprotoDid
-			}, an identity on another server. Unlink it first if you want an Anthers handle instead.`,
-		};
-	}
-
-	if (!account.emailVerified) {
-		return {
-			status: "refused",
-			fault: "account",
-			message: "Confirm your email address first — the identity is created with it.",
-		};
-	}
-
-	if (beingIssued.has(input.userId)) {
-		return {
-			status: "refused",
-			fault: "account",
-			message: "A handle is already on its way for this account.",
-		};
-	}
-	beingIssued.add(input.userId);
-	try {
-		const result = await provisionHostedIdentity({
-			userId: input.userId,
-			handleName: normalizeHandleName(input.handleName),
-			email: account.email,
-		});
-		if (result.error) {
-			return { status: "refused", fault: result.error.fault, message: result.error.message };
-		}
-		if (!result.did || !result.handle) {
-			// Unreachable: provisioning reports every failure as an error rather than as a blank
-			// success. Answered rather than asserted, because the alternative is a route that
-			// reports success while the caller has nothing to show.
-			return {
-				status: "refused",
-				fault: "operational",
-				message: "The handle server answered with no identity.",
-			};
-		}
-		return { status: "issued", did: result.did, handle: result.handle };
-	} finally {
-		beingIssued.delete(input.userId);
-	}
 }
 
 /**
  * Whether this DID is one Anthers issued and still holds the credentials to.
  *
- * 🚨 **What reads it is the unlink route**, which must refuse for a hosted identity: unlinking
- * is for an identity that lives somewhere else and carries on existing without Anthers, and
- * doing it to this one would detach somebody from a repository Anthers is still hosting on
- * their behalf and still holds the only password to. It would look like a tidy way to leave
- * and would leave nothing.
+ * Publishing reads it: a hosted identity needs no grant, because Anthers already holds the
+ * credential to write into its repository.
  */
 export async function isHostedIdentity(did: string): Promise<boolean> {
 	const [row] = await db
