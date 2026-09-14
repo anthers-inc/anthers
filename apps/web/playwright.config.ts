@@ -181,10 +181,13 @@ export default defineConfig({
 			 * says it issues under — and the browser session (or `scripts/ci-network.ts` in CI)
 			 * supplies a real server for all of them, private to this run. So a spec that walks
 			 * the door walks it against an identity server that answers, and the write guard in
-			 * `lib/atproto-network.ts` refuses anything that is not local. Only the port is set here.
+			 * `lib/atproto-network.ts` refuses anything that is not local. Only the ports are set here.
 			 */
 			env: {
 				PORT: String(API_PORT),
+				// Where the OAuth callback sends the browser back to. CI has no session to name it, and
+				// without it the API falls back to `make dev`'s 3000, where nothing is listening.
+				PREVIEW_PORT: String(PORT),
 			},
 			reuseExistingServer: false,
 			timeout: 180_000,
