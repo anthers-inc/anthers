@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, moderationReports, users } from "@anthers/db/schema";
+import { comments, moderationReports } from "@anthers/db/schema";
 import { FLOOR_MODERATION_REASONS, isFloorReason } from "@anthers/shared/moderation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";

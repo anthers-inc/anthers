@@ -145,6 +145,7 @@ export default function AudioPlayer({
 
 	return (
 		<div className="rounded-lg bg-base-200 p-4">
+			{/* biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below. */}
 			<audio ref={audioRef} src={src} preload="metadata" />
 
 			<div className="flex items-center gap-3">

@@ -190,8 +190,7 @@ export default function EmailCodeForm({
 			<div className="flex justify-center gap-2" onPaste={onPaste}>
 				{digits.map((digit, i) => (
 					<input
-						// The boxes are positional and never reorder, so the index IS the identity.
-						// eslint-disable-next-line react/no-array-index-key
+						// biome-ignore lint/suspicious/noArrayIndexKey: the boxes are positional and never reorder, so the index IS the identity.
 						key={`code-${i}`}
 						ref={(el) => {
 							inputs.current[i] = el;

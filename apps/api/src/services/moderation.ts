@@ -35,7 +35,6 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
-import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import { verdictLabel } from "@anthers/shared/content";
 import {
 	FLOOR_MODERATION_REASONS,

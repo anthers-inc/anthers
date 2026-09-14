@@ -1024,7 +1024,12 @@ export default function CreatorProfilePage() {
 							{creator.bio ? (
 								<div className="prose prose-sm">
 									{creator.bio.split("\n").map((line, i) => (
-										<p key={i}>{line}</p>
+										<p
+											// biome-ignore lint/suspicious/noArrayIndexKey: lines of one string, re-split whole on every render; two blank lines are identical, so position is the only identity.
+											key={i}
+										>
+											{line}
+										</p>
 									))}
 								</div>
 							) : (

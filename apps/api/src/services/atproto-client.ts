@@ -42,24 +42,24 @@ const STATE_TTL_MS = 60 * 60 * 1000;
  * is serializable, so both stores round-trip through it. Lifted from
  * `@atproto/oauth-client-node`'s `toDpopKeyStore`, which is the whole of what it adds.
  */
-function withDpopKey<
-	T extends {
-		get: (k: string) => Promise<any>;
-		set: (k: string, v: any) => Promise<void>;
-		del: (k: string) => Promise<void>;
-	},
->(store: T) {
+function withDpopKey(store: {
+	get: (k: string) => Promise<Record<string, unknown> | undefined>;
+	set: (k: string, v: unknown) => Promise<void>;
+	del: (k: string) => Promise<void>;
+}) {
 	return {
-		async set(key: string, { dpopKey, ...data }: any) {
+		async set(key: string, { dpopKey, ...data }: { dpopKey: JoseKey; [field: string]: unknown }) {
 			const dpopJwk = dpopKey.privateJwk;
 			if (!dpopJwk) throw new Error("Private DPoP JWK is missing.");
 			await store.set(key, { ...data, dpopJwk });
 		},
-		async get(key: string) {
+		async get(key: string): Promise<(Record<string, unknown> & { dpopKey: JoseKey }) | undefined> {
 			const found = await store.get(key);
 			if (!found) return undefined;
 			const { dpopJwk, ...data } = found;
-			return { ...data, dpopKey: await JoseKey.fromJWK(dpopJwk) };
+			// Only ever written by `set` above, from a key's own `privateJwk`.
+			const jwk = dpopJwk as Parameters<typeof JoseKey.fromJWK>[0];
+			return { ...data, dpopKey: await JoseKey.fromJWK(jwk) };
 		},
 		del: (key: string) => store.del(key),
 	};

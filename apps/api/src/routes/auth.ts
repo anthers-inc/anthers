@@ -4,7 +4,7 @@ import { users } from "@anthers/db/schema";
 import { MAX_PICKED_CREATORS, MAX_SIGNUP_AMOUNT } from "@anthers/shared/signup";
 import { zValidator } from "@hono/zod-validator";
 import { eq, or } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
 import {
@@ -296,13 +296,7 @@ async function handleRefusal(
  * already holds its identity. A created account gets no verification mail, because the code just
  * typed IS the verification.
  */
-async function mintFromProvedAddress(
-	c: Parameters<typeof setSessionCookie>[0] & {
-		req: { header: (name: string) => string | undefined };
-	},
-	email: string,
-	pendingToken: string | undefined,
-) {
+async function mintFromProvedAddress(c: Context, email: string, pendingToken: string | undefined) {
 	const signIn = async (userId: number) => {
 		const token = await createSession(
 			userId,

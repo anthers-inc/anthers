@@ -226,9 +226,9 @@ describe("oauth state store", () => {
 		expect(back).toBeDefined();
 		// The key must come back as a usable Key, not the JWK it was stored as — that
 		// conversion is the whole job of the store wrapper.
-		expect(typeof back.dpopKey.privateJwk).toBe("object");
-		expect(back.appState).toBe(JSON.stringify({ intent: "publish", userId: 7 }));
-		expect(back.iss).toBe("https://bsky.social");
+		expect(typeof back?.dpopKey.privateJwk).toBe("object");
+		expect(back?.appState).toBe(JSON.stringify({ intent: "publish", userId: 7 }));
+		expect(back?.iss).toBe("https://bsky.social");
 	});
 
 	it("survives a process restart, which the previous in-memory Map did not", async () => {

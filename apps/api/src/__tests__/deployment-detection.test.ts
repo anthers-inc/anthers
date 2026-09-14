@@ -15,7 +15,7 @@
  * deployment's. Both were run — see the task record.
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { PENDING_SIGNUP_COOKIE, setSecureCookie, setSessionCookie } from "../lib/cookies.js";
 import { isPublicDeployment, publicOrigin } from "../lib/deployment.js";
 import { allowedOrigins } from "../origins.js";
@@ -128,7 +128,7 @@ describe("allowedOrigins in production's actual environment", () => {
 });
 
 /** Read the cookie a browser would actually be sent, rather than the options object. */
-async function setCookieHeader(write: (c: any) => void): Promise<string> {
+async function setCookieHeader(write: (c: Context) => void): Promise<string> {
 	const app = new Hono();
 	app.get("/", (c) => {
 		write(c);

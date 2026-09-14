@@ -254,7 +254,7 @@ export async function resolveRatingAppeal(input: {
 		.select()
 		.from(workRatingAppeals)
 		.where(eq(workRatingAppeals.id, input.appealId));
-	if (!appeal || appeal.status !== "open") return null;
+	if (appeal?.status !== "open") return null;
 
 	const [resolved] = await db
 		.update(workRatingAppeals)

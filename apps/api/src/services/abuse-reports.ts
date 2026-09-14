@@ -26,7 +26,6 @@
 
 import { db } from "@anthers/db/client";
 import { abuseReports, works } from "@anthers/db/schema";
-import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import {
 	FLOOR_MODERATION_REASONS,
 	isFloorReason,

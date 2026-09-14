@@ -5,27 +5,18 @@ import { postUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { Comment, Post } from "@anthers/web-shared/types";
+import type { Post } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import {
-	ClockIcon,
-	FilmIcon,
-	FlagIcon,
-	MusicalNoteIcon,
-	PhotoIcon,
-} from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
 import CommentThread from "../components/post/CommentThread";
 import StickerBar from "../components/post/StickerBar";
 import VoteControl from "../components/post/VoteControl";
-import ReportDialog from "../components/ui/ReportDialog";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { studioEditPostUrl } from "../lib/studio";
 
-/** Whether a transcoding job is still in-flight (show a status card, not a player). */
 export default function PostPage() {
 	const { slug } = useParams<{ slug: string }>();
 	const location = useLocation();
@@ -33,8 +24,6 @@ export default function PostPage() {
 	const { isAuthenticated, user } = useAuth();
 	const [post, setPost] = useState<Post | null>(null);
 	const [loading, setLoading] = useState(true);
-	/** Which comment the report dialog is open for, if any. */
-	const [reportingComment, setReportingComment] = useState<number | null>(null);
 
 	// ── Owner actions (edit / unpublish / delete) ──
 	const [showHistory, setShowHistory] = useState(false);
@@ -44,24 +33,6 @@ export default function PostPage() {
 	>([]);
 	const [purgeMedia, setPurgeMedia] = useState(false);
 	const [actioning, setActioning] = useState(false);
-
-	// After a purchase, the webhook grants access asynchronously — poll the post until
-	// access lands (or a few seconds pass), so the page reveals the unlocked content
-	// on its own rather than making the buyer refresh.
-	const refetchPost = useCallback(async () => {
-		if (!slug) return;
-		for (let i = 0; i < 10; i++) {
-			const res = await client.api.content.posts[":slug"].$get({ param: { slug } });
-			if (res.ok) {
-				const data = (await res.json()) as unknown as { post: Post };
-				setPost(data.post);
-				// A post is never gated, so there is nothing to poll for here — one fetch is
-				// the whole story. (Unlocking a WORK re-fetches on its own page.)
-				return;
-			}
-			await new Promise((r) => setTimeout(r, 800));
-		}
-	}, [slug]);
 
 	/** Path whose post is already in state — see the skip below. */
 	const loadedPath = useRef<string | null>(null);

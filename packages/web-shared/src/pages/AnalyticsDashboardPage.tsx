@@ -76,6 +76,7 @@ function SparkBar({
 			<div className="flex items-end gap-px h-16">
 				{data.map((value, i) => (
 					<div
+						// biome-ignore lint/suspicious/noArrayIndexKey: one bar per day in a fixed window, so position is the day.
 						key={i}
 						className={`flex-1 ${color} rounded-t-sm opacity-80 min-h-[2px]`}
 						style={{ height: `${(value / max) * 100}%` }}

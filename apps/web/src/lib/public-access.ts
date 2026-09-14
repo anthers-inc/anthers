@@ -83,7 +83,10 @@ async function fetchBudget(): Promise<void> {
  * which is what the wall renders from.
  */
 export function refreshBudget(): void {
-	inFlight ??= fetchBudget().finally(() => {
+	// An explicit read rather than `??=`, which Biome counts as a write only and so reports
+	// this guard as unused — and its suggested fix would delete it.
+	if (inFlight) return;
+	inFlight = fetchBudget().finally(() => {
 		inFlight = null;
 	});
 }
@@ -100,11 +103,7 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
 	useEffect(() => {
 		listeners.add(setBudget);
 		if (current) setBudget(current);
-		else {
-			inFlight ??= fetchBudget().finally(() => {
-				inFlight = null;
-			});
-		}
+		else refreshBudget();
 		return () => {
 			listeners.delete(setBudget);
 		};

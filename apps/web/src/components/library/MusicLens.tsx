@@ -58,9 +58,7 @@ export default function MusicLens({ items }: { items: LensItem[] }) {
 	/** Which saved album is being fetched, so its play button can show it is working. */
 	const [loadingAlbum, setLoadingAlbum] = useState<number | null>(null);
 
-	const albums = items
-		.map((i) => i.project)
-		.filter((p): p is LensProject => p != null && p.isAlbum);
+	const albums = items.map((i) => i.project).filter((p): p is LensProject => p?.isAlbum === true);
 
 	// Saved audio Works, in shelf order. These are the "singles" — tracks kept on their
 	// own, as opposed to records kept whole.

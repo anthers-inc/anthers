@@ -50,6 +50,13 @@ describe("secret-box", () => {
 		const [v, iv, tag, body] = seal("hunter2").split(".");
 		const flipped = Buffer.from(tag, "base64url");
 		flipped[0] ^= 0xff;
+		expect(() => open([v, iv, flipped.toString("base64url"), body].join("."))).toThrow();
+	});
+
+	it("refuses a value whose IV was changed", () => {
+		const [v, iv, tag, body] = seal("hunter2").split(".");
+		const flipped = Buffer.from(iv, "base64url");
+		flipped[0] ^= 0xff;
 		expect(() => open([v, flipped.toString("base64url"), tag, body].join("."))).toThrow();
 	});
 

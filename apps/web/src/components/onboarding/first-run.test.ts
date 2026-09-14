@@ -26,8 +26,8 @@ beforeEach(() => {
 		setItem: (k: string, v: string) => store.set(k, v),
 		removeItem: (k: string) => store.delete(k),
 	});
-	(globalThis as any).sessionStorage = shim(session);
-	(globalThis as any).localStorage = shim(local);
+	(globalThis as { sessionStorage?: unknown }).sessionStorage = shim(session);
+	(globalThis as { localStorage?: unknown }).localStorage = shim(local);
 });
 
 describe("someone who gave Seeds", () => {
@@ -84,7 +84,7 @@ describe("someone who came in cold", () => {
 
 	test("falls back to `cold` when storage is unavailable", () => {
 		// A browser with storage disabled, and the classic signup page, both land here.
-		(globalThis as any).sessionStorage = undefined;
+		(globalThis as { sessionStorage?: unknown }).sessionStorage = undefined;
 		expect(readArrival()).toEqual({ kind: "cold" });
 	});
 
