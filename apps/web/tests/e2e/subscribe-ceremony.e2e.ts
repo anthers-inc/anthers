@@ -15,16 +15,10 @@
  * context tore the page down mid-flow and the payment modal silently never opened. No
  * error, no failing test, and nothing a route test could have seen.
  *
- * ⚠️ **What this spec cannot assert, and why.** It cannot complete a verification,
- * because the emailed code is argon2-hashed at rest — there is deliberately no way to
- * read it back out of the database, and the only other copy goes to the API's stdout,
- * which Playwright's `webServer` owns. A test-only endpoint that handed back the live
- * code for an address was considered and rejected: it is precisely the thing that must
- * not exist, and having it in the codebase at all is a worse risk than this gap.
- *
- * So the successful path — code accepted, session issued, payment modal, `/welcome` —
- * is verified by hand against a live API, and what is pinned here is everything on the
- * near side of that: the ceremony **opens in place**, the field behaves, a bad code is
+ * ⚠️ **The successful path with the real code is `emailed-code.e2e.ts`**, which reads the code
+ * out of the session's mail catcher; a test-only endpoint that handed the code back was
+ * rejected, and still must not exist. The payment modal after it is verified by hand, and
+ * what is pinned here is everything on the near side of that: the ceremony **opens in place**, the field behaves, a bad code is
  * refused, and nobody is signed in by accident. The single most valuable of those is
  * the first, because "it redirected to /signup and the user lost their picks" is the
  * behavior this whole change exists to remove.
@@ -48,10 +42,10 @@ const addr = () =>
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /**
- * A handle nobody else will ask for, inside the 30-character ceiling the name rules enforce.
+ * A handle nobody else will ask for, inside the 18-character ceiling the name rules enforce.
  */
 const handleName = () =>
-	`e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 30);
+	`e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 18);
 
 /**
  * Ask for an account and land on the page that finishes it.

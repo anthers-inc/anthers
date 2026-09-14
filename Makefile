@@ -103,7 +103,8 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # fresh database and a private AT Protocol network, migrates, seeds it (`bun run db:seed`: your dev
 # account, the User Gauntlet's creator and viewer, and the media fixture's catalog with its records
 # on the network, each a real identity), runs the servers, and removes all of it when they stop —
-# including after a crash, which the next session cleans up. Anything set up by hand during a session is gone when it ends; a file-change restart
+# including after a crash, which the next session cleans up. Every email the servers send lands in
+# the session's mail catcher at http://localhost:8025 rather than in a real inbox. Anything set up by hand during a session is gone when it ends; a file-change restart
 # under `bun --watch` is not an end.
 dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@KILLED=0; \

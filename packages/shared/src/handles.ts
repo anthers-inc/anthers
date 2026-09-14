@@ -22,11 +22,16 @@
 export const MIN_HANDLE_NAME = 3;
 
 /**
- * The longest. A DNS label may be 63 characters and a handle 253, so this is Anthers' limit
- * rather than the protocol's — a name has to be sayable, and nobody is served by a 63-
- * character one.
+ * The longest, which is the identity server's limit rather than a choice of Anthers'.
+ *
+ * 🚨 **The reference PDS refuses a name longer than 18 characters under its own domain** —
+ * `Handle too long`, in `ensureHandleServiceConstraints` — and `anthers.social` runs it. This was
+ * 30 until the local network surfaced the gap: a 19-character name passed the card, read as
+ * available (the server answers a too-long name the way it answers a free one), was reserved,
+ * and was refused only at the end of signup, after the address had been proved.
+ * `handle-length.test.ts` holds the two limits together against a real server.
  */
-export const MAX_HANDLE_NAME = 30;
+export const MAX_HANDLE_NAME = 18;
 
 /**
  * Turn whatever somebody typed into the name part of a handle.

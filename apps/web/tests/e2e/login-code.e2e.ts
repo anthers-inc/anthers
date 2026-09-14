@@ -7,13 +7,10 @@
  * `/subscribe` in a footnote, which is the signup door wearing a sign-in hat. Submitting
  * with the box empty now mails a code and opens the same six-box field `/subscribe` uses.
  *
- * ⚠️ **What this spec cannot assert, and why.** It cannot complete a sign-in, for the same
- * reason `subscribe-ceremony.e2e.ts` cannot complete a signup: the emailed code is
- * argon2-hashed at rest and the only plaintext copy goes to the API's stdout, which
- * Playwright's `webServer` owns. A test-only endpoint that handed the live code back for an
- * address is precisely the thing that must not exist.
+ * ⚠️ **Completing a sign-in with the real code is `emailed-code.e2e.ts`'s job**, which reads the
+ * code out of the session's mail catcher. This spec pins the page around it.
  *
- * It also cannot assert the load-bearing property — that this door **never creates an
+ * It cannot assert the load-bearing property — that this door **never creates an
  * account** — because there is deliberately no way to ask the API whether an address is
  * registered. That one is pinned server-side, in `signup-ceremony.test.ts`
  * (*"a valid code for an address with no account creates NOTHING"*), and it is the

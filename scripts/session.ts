@@ -58,6 +58,8 @@ const REPO_ROOT = join(import.meta.dir, "..");
 export const SESSIONS_DIR = dirname(dirname(DEV_SESSION_CONTENT_DIR));
 
 const NETWORK_IMAGE = "anthers-atproto-network";
+/** Pinned, so the inbox a session opens does not change underneath it between runs. */
+const MAIL_IMAGE = "axllent/mailpit:v1.27";
 const POSTGRES_IMAGE = "postgres:16";
 
 /** Labels on every container a session starts, so a later session can find the abandoned ones. */
@@ -71,6 +73,11 @@ export interface SessionPorts {
 	/** The API and the static preview server, which only a browser run starts. */
 	api?: number;
 	preview?: number;
+	/**
+	 * The mail catcher's API and inbox, which only sessions that run the API start: a test run
+	 * never sends, because `sendEmail` refuses under the test runner.
+	 */
+	mail?: number;
 }
 
 export interface Session {
@@ -86,7 +93,7 @@ export interface Session {
 
 /** The ports a session uses. `dev` is fixed; every other kind asks `freePort` for each one. */
 export function sessionPorts(kind: SessionKind, freePort: () => number): SessionPorts {
-	if (kind === "dev") return { postgres: 5432, plc: 2582, pds: 2583 };
+	if (kind === "dev") return { postgres: 5432, plc: 2582, pds: 2583, mail: 8025 };
 	const taken = new Set<number>();
 	const next = () => {
 		for (;;) {
@@ -101,6 +108,7 @@ export function sessionPorts(kind: SessionKind, freePort: () => number): Session
 	if (kind === "browser") {
 		ports.api = next();
 		ports.preview = next();
+		ports.mail = next();
 	}
 	return ports;
 }
@@ -124,6 +132,7 @@ export function sessionEnvironment(
 		...networkEnvironment(ports, hosting),
 		LOCAL_CONTENT_DIR: contentDir,
 	};
+	if (ports.mail !== undefined) env.MAIL_CATCHER_URL = `http://localhost:${ports.mail}`;
 	if (ports.api !== undefined && ports.preview !== undefined) {
 		env.API_PORT = String(ports.api);
 		env.PREVIEW_PORT = String(ports.preview);
@@ -424,6 +433,31 @@ export async function mintInviteCode(pds: number): Promise<string> {
 	return body.code;
 }
 
+/**
+ * The session's mail catcher: every email the API sends lands in an inbox the session reads.
+ *
+ * ⚠️ **Only its HTTP port is published.** The API hands it messages through its send API rather
+ * than over SMTP, so nothing in a session speaks SMTP at all, and the same port serves the inbox a
+ * developer opens in a browser.
+ */
+async function startMailCatcher(id: string, port: number): Promise<string> {
+	const name = `anthers-${id}-mail`;
+	const run = await docker([
+		"run",
+		"-d",
+		"--rm",
+		"--name",
+		name,
+		...labels(id),
+		"-p",
+		`127.0.0.1:${port}:8025`,
+		MAIL_IMAGE,
+	]);
+	if (!run.ok) throw new Error(`could not start the mail catcher on port ${port}:\n${run.out}`);
+	await waitFor("The mail catcher", name, () => answers(`http://localhost:${port}/livez`));
+	return name;
+}
+
 async function migrate(env: Record<string, string>): Promise<void> {
 	const proc = Bun.spawn(["bun", "run", "packages/db/src/migrate.ts"], {
 		cwd: REPO_ROOT,
@@ -467,7 +501,11 @@ export async function startSession(
 	writeFileSync(join(dir, "owner"), String(process.pid));
 	mkdirSync(contentDir);
 
-	const containers = [`anthers-${id}-postgres`, `anthers-${id}-atproto`];
+	const containers = [
+		`anthers-${id}-postgres`,
+		`anthers-${id}-atproto`,
+		...(ports.mail !== undefined ? [`anthers-${id}-mail`] : []),
+	];
 	const stopSync = () => {
 		Bun.spawnSync(["docker", "rm", "-f", ...containers], { stdout: "ignore", stderr: "ignore" });
 		rmSync(dir, { recursive: true, force: true });
@@ -480,7 +518,11 @@ export async function startSession(
 	let env: Record<string, string>;
 	try {
 		const started = Date.now();
-		await Promise.all([startPostgres(id, ports.postgres), startNetwork(id, ports.plc, ports.pds)]);
+		await Promise.all([
+			startPostgres(id, ports.postgres),
+			startNetwork(id, ports.plc, ports.pds),
+			ports.mail !== undefined ? startMailCatcher(id, ports.mail) : Promise.resolve(""),
+		]);
 		env = sessionEnvironment(id, ports, contentDir, {
 			inviteCode: await mintInviteCode(ports.pds),
 			accountKey: randomBytes(32).toString("hex"),
@@ -489,7 +531,8 @@ export async function startSession(
 		await migrate(env);
 		log(
 			`[session] ${id} ready in ${((Date.now() - started) / 1000).toFixed(1)}s — database :${ports.postgres}, ` +
-				`directory :${ports.plc}, server :${ports.pds}`,
+				`directory :${ports.plc}, server :${ports.pds}` +
+				(ports.mail !== undefined ? `, mail http://localhost:${ports.mail}` : ""),
 		);
 	} catch (err) {
 		await stop();

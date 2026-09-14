@@ -2,9 +2,11 @@
 /**
  * Transactional email via Resend.
  *
- * Centralizes outbound email. When RESEND_API_KEY is unset (typical for local
- * dev), sends become no-ops that log to the console; senders that carry an
- * actionable link also log the link so the flow can still be completed locally.
+ * Centralizes outbound email. A local session delivers every message to its mail catcher
+ * (`MAIL_CATCHER_URL`, which `scripts/session.ts` sets), so a code or a link arrives in an inbox
+ * the session can read rather than in somebody's real mailbox. Without a catcher and without
+ * RESEND_API_KEY, sends become no-ops that log to the console; senders that carry a code or an
+ * actionable link log it too, so the flow can still be completed locally.
  *
  * The default sender is on the Resend-verified anthers.org domain; override with
  * EMAIL_FROM (must also be on a Resend-verified domain). The onboarding@resend.dev
@@ -79,6 +81,8 @@ export async function sendEmail({ to, subject, html }: SendArgs): Promise<SendRe
 		console.warn(`[email] test run — not sending "${subject}" to ${to}`);
 		return { sent: false, messageId: null };
 	}
+	const catcher = mailCatcherUrl();
+	if (catcher) return deliverToCatcher(catcher, { to, subject, html });
 	const client = resendClient();
 	if (!client) {
 		console.warn(`[email] RESEND_API_KEY unset — skipped "${subject}" to ${to}`);
@@ -93,6 +97,57 @@ export async function sendEmail({ to, subject, html }: SendArgs): Promise<SendRe
 		return { sent: true, messageId: data?.id ?? null };
 	} catch (err) {
 		console.error(`[email] send to ${to} threw:`, err);
+		return { sent: false, messageId: null };
+	}
+}
+
+/**
+ * The session's mail catcher, or null when mail should go to Resend.
+ *
+ * 🚨 **Never in a public deployment, whatever the environment says.** A catcher in production would
+ * swallow every code and alert while reporting each one sent — sign-in would stop working for
+ * everybody and nothing would say why — so the variable is ignored there rather than trusted.
+ */
+export function mailCatcherUrl(
+	env: Record<string, string | undefined> = process.env,
+): string | null {
+	const url = env.MAIL_CATCHER_URL?.trim().replace(/\/+$/, "");
+	if (!url || isPublicDeployment(env)) return null;
+	return url;
+}
+
+/**
+ * Hand a message to the session's mail catcher through its send API.
+ *
+ * ⭐ **It takes precedence over Resend inside a session**, including when `make dev` has put the dev
+ * Resend key in the environment: a session's addresses are fixture addresses, and an inbox the
+ * session can read is what lets an emailed code be finished by hand or by a browser spec.
+ */
+async function deliverToCatcher(
+	catcher: string,
+	{ to, subject, html }: SendArgs,
+): Promise<SendResult> {
+	const from = FROM.match(/^(.*?)\s*<(.+)>$/);
+	try {
+		const res = await fetch(`${catcher}/api/v1/send`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				From: from ? { Name: from[1], Email: from[2] } : { Email: FROM },
+				To: [{ Email: to }],
+				Subject: subject,
+				HTML: html,
+			}),
+			signal: AbortSignal.timeout(10_000),
+		});
+		if (!res.ok) {
+			console.error(`[email] the mail catcher refused "${subject}" to ${to}: HTTP ${res.status}`);
+			return { sent: false, messageId: null };
+		}
+		const body = (await res.json().catch(() => ({}))) as { ID?: string };
+		return { sent: true, messageId: body.ID ?? null };
+	} catch (err) {
+		console.error(`[email] the mail catcher at ${catcher} did not answer:`, err);
 		return { sent: false, messageId: null };
 	}
 }
@@ -189,7 +244,7 @@ export async function sendSignupCodeEmail(to: string, code: string): Promise<voi
 		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:#ffffff;">${escapeHtml(code)}</p>
 		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't ask to join Anthers, you can ignore this email — no account has been created.</p>`,
 	);
-	const sent = await sendEmail({ to, subject: `${code} is your Anthers code`, html });
+	const { sent } = await sendEmail({ to, subject: `${code} is your Anthers code`, html });
 	if (!sent) console.info(`[email] signup code for ${to}: ${code}`);
 }
 
@@ -211,7 +266,7 @@ export async function sendSignInCodeEmail(to: string, code: string): Promise<voi
 		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:#ffffff;">${escapeHtml(code)}</p>
 		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in, you can ignore this email — and your account is unchanged.</p>`,
 	);
-	const sent = await sendEmail({ to, subject: `${code} is your Anthers sign-in code`, html });
+	const { sent } = await sendEmail({ to, subject: `${code} is your Anthers sign-in code`, html });
 	if (!sent) console.info(`[email] sign-in code for ${to}: ${code}`);
 }
 
@@ -229,7 +284,7 @@ export async function sendVerificationEmail(
 			url,
 		),
 	);
-	const sent = await sendEmail({ to, subject: "Verify your email for Anthers", html });
+	const { sent } = await sendEmail({ to, subject: "Verify your email for Anthers", html });
 	if (!sent) console.info(`[email] verify link for ${to}: ${url}`);
 }
 
