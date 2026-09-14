@@ -57,8 +57,7 @@ export const users = pgTable("users", {
 	/**
 	 * Argon2id hash, or null.
 	 *
-	 * Null has meant "ATProto-only" for a long time; since the signup ceremony it also
-	 * means **"chose not to set one"**, which is a supported end state rather than a
+	 * Null means **"chose not to set one"**, which is a supported end state rather than a
 	 * half-finished account. Those users sign in with an emailed code (`/auth/signup/*`),
 	 * which is why that pair signs in an existing account as well as creating a new one.
 	 */
@@ -77,7 +76,17 @@ export const users = pgTable("users", {
 	// UI light/dark preference ("light" | "dark"); null = no account-level choice, so
 	// the client falls back to the device (localStorage) setting / default.
 	themePreference: text("theme_preference"),
-	atprotoDid: text("atproto_did").unique(),
+	/**
+	 * The ATProto identity this account is. **Every account holds one**, either an identity
+	 * the person already had (a Bluesky account, say) or one Anthers issued and hosts for
+	 * them on `anthers.social`.
+	 *
+	 * 🚨 **NOT NULL is the rule rather than a convenience.** Anthers writes public records into
+	 * the account's own repository, so an account with no identity has nowhere for its
+	 * follows, comments and listings to live. Signup attaches the identity in the same step that
+	 * creates the row, which is what lets this column refuse a null.
+	 */
+	atprotoDid: text("atproto_did").notNull().unique(),
 	atprotoHandle: text("atproto_handle").default(""),
 	atprotoPdsUrl: text("atproto_pds_url").default(""),
 	/**
@@ -487,14 +496,18 @@ export const pendingSignups = pgTable(
 		atprotoHandle: text("atproto_handle").notNull().default(""),
 		atprotoPdsUrl: text("atproto_pds_url").notNull().default(""),
 		/**
-		 * The handle somebody asked Anthers to issue them, when they came through the third
-		 * door. Just the name — `alice`, not `alice.anthers.social`.
+		 * The handle somebody asked Anthers to issue them, through the Anthers door. Just the
+		 * name — `alice`, not `alice.anthers.social`.
 		 *
-		 * 🚨 **A request rather than a reservation, and nothing here holds the name.** The
-		 * identity is created only once the address has been proved, so two people may ask for
-		 * the same name and the second one is refused at that point. Reserving it on this row
-		 * instead would let anybody take a name off the board by typing it, which is the same
-		 * hazard that keeps the pre-account address out of `users`.
+		 * 🚨 **This is the reservation, and the unique index below is what makes it hold**
+		 * (Parker, 2026-09-13). A name is held from the moment the button is pressed until the
+		 * signup finishes, is abandoned or changed, or expires, so nobody is stranded at the last
+		 * step by somebody else taking it. The identity itself is still created only once the
+		 * address has been proved, because creating one publishes a DID nobody can withdraw.
+		 *
+		 * ⚠️ **The cost is that typing a name takes it off the board for a week**, before anybody
+		 * has proved anything. One pending signup per browser bounds it today; the proof-of-work
+		 * captcha task is the fuller answer.
 		 */
 		hostedHandle: text("hosted_handle"),
 		/** `SignupPicks` from `@anthers/shared/signup` — validated at the route, never trusted raw. */
@@ -510,6 +523,8 @@ export const pendingSignups = pgTable(
 		// Resuming by identity, which is what a second OAuth round trip unlocks.
 		index("idx_pending_signups_did").on(table.atprotoDid),
 		index("idx_pending_signups_expires").on(table.expiresAt),
+		// The reservation. Postgres treats NULLs as distinct, so rows asking for no handle never collide.
+		uniqueIndex("uq_pending_signups_hosted_handle").on(table.hostedHandle),
 	],
 );
 

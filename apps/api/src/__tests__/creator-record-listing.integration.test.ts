@@ -25,6 +25,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, posts, projects, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { POST_COLLECTION, PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
@@ -282,9 +283,9 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 		});
 	}, 60_000);
 
-	// ⚠️ The ordinary case, and the one that must never change: nobody is turned away for lacking
-	// a handle, so a creator without one publishes exactly as they always did.
-	it("does nothing at all for a creator with no identity at all", async () => {
+	// ⚠️ The ordinary case, and the one that must never change: a creator whose identity lives
+	// elsewhere and who has granted nothing publishes exactly as everybody else does.
+	it("does nothing at all for a creator whose identity is neither hosted nor granted", async () => {
 		const [plain] = await db
 			.insert(users)
 			.values({
@@ -292,6 +293,7 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 				email: `${RUN}plain@example.test`,
 				emailVerified: true,
 				isCreator: true,
+				atprotoDid: fixtureDid(),
 			})
 			.returning();
 		const [post] = await db
@@ -305,7 +307,7 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 			})
 			.returning();
 
-		expect(await syncPostRecord(post.id)).toEqual({ status: "skipped", reason: "no_identity" });
+		expect(await syncPostRecord(post.id)).toEqual({ status: "skipped", reason: "not_granted" });
 		const [row] = await db
 			.select({ uri: posts.atprotoUri })
 			.from(posts)

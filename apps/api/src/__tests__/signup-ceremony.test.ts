@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The emailed-code ceremony: prove the address, then build the account — or sign into the
-// one that is already there.
+// The emailed-code ceremony: prove the address, then build the account with the identity its
+// pending signup carries — or sign into the one that is already there.
 //
 // Two doors onto one code table, and the difference between them is the property this file
 // exists to pin. `/auth/signup/*` (from `/subscribe`) may CREATE an account; `/auth/signin/*`
@@ -20,7 +20,7 @@
 // that absence needs a test).
 import { afterAll, describe, expect, test } from "bun:test";
 import { db } from "@anthers/db/client";
-import { signupCodes, users } from "@anthers/db/schema";
+import { pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import {
@@ -34,6 +34,7 @@ import {
 	SIGNUP_CODE_TTL_MS,
 } from "../services/signup-codes.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { signUp } from "./signup-fixture";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -55,6 +56,7 @@ afterAll(async () => {
 	// The unit suites share the dev database, so clean up after ourselves — see the
 	// Agents Hub's note on the dev DB not being a clean room.
 	await db.delete(signupCodes).where(like(signupCodes.email, `${RUN}-%`));
+	await db.delete(pendingSignups).where(like(pendingSignups.email, `${RUN}-%`));
 	await db.delete(users).where(like(users.email, `${RUN}-%`));
 });
 
@@ -222,8 +224,7 @@ describe("POST /auth/signup/start tells the caller nothing", () => {
 	test("an unknown address and a registered one are indistinguishable", async () => {
 		const known = addr("known");
 		// Give the address a real account first.
-		const issued = await issueSignupCode(known);
-		await post("/api/auth/signup/verify", { email: known, code: issued.code });
+		expect((await signUp(known)).status).toBe(201);
 
 		const unknownRes = await post("/api/auth/signup/start", { email: addr("unknown") });
 		const knownRes = await post("/api/auth/signup/start", { email: known });
@@ -246,21 +247,26 @@ describe("POST /auth/signup/start tells the caller nothing", () => {
 });
 
 describe("POST /auth/signup/verify", () => {
-	test("creates the account, verified, nameless, and signed in", async () => {
+	test("creates the account, verified, nameless, holding its identity, and signed in", async () => {
 		const email = addr("create");
-		const issued = await issueSignupCode(email);
 
-		const res = await post("/api/auth/signup/verify", { email, code: issued.code });
+		const res = await signUp(email);
 		expect(res.status).toBe(201);
 
 		const body = (await res.json()) as {
-			user: { id: number; username: string | null; emailVerified: boolean };
+			user: {
+				id: number;
+				username: string | null;
+				emailVerified: boolean;
+				atprotoDid: string | null;
+			};
 			created: boolean;
 			needsOnboarding: boolean;
 		};
 		expect(body.created).toBe(true);
 		expect(body.needsOnboarding).toBe(true);
 		expect(body.user.username).toBeNull();
+		expect(body.user.atprotoDid?.startsWith("did:plc:")).toBe(true);
 
 		// Verified from the first instant: the code they just typed IS the verification,
 		// and a second "please confirm" would teach them to ignore the first.
@@ -273,8 +279,7 @@ describe("POST /auth/signup/verify", () => {
 
 	test("signs an existing account in rather than creating a second one", async () => {
 		const email = addr("return");
-		const first = await issueSignupCode(email);
-		const created = await post("/api/auth/signup/verify", { email, code: first.code });
+		const created = await signUp(email);
 		const createdBody = (await created.json()) as { user: { id: number } };
 
 		const second = await issueSignupCode(email, new Date(Date.now() + SIGNUP_CODE_RESEND_MS + 1));
@@ -292,8 +297,7 @@ describe("POST /auth/signup/verify", () => {
 
 	test("a wrong code is refused with one message, whoever the address belongs to", async () => {
 		const registered = addr("msg-known");
-		const issued = await issueSignupCode(registered);
-		await post("/api/auth/signup/verify", { email: registered, code: issued.code });
+		await signUp(registered);
 
 		const onKnown = await post("/api/auth/signup/verify", {
 			email: registered,
@@ -335,8 +339,7 @@ describe("issueSignInCode", () => {
 	/** Walk the signup ceremony to a real account and return its address. */
 	async function accountFor(tag: string): Promise<string> {
 		const email = addr(tag);
-		const issued = await issueSignupCode(email);
-		await post("/api/auth/signup/verify", { email, code: issued.code });
+		await signUp(email);
 		return email;
 	}
 
@@ -381,8 +384,7 @@ describe("issueSignInCode", () => {
 describe("POST /auth/signin/start tells the caller nothing", () => {
 	test("an unknown address and a registered one are indistinguishable", async () => {
 		const known = addr("sis-known");
-		const issued = await issueSignupCode(known);
-		await post("/api/auth/signup/verify", { email: known, code: issued.code });
+		await signUp(known);
 
 		const unknownRes = await post("/api/auth/signin/start", { email: addr("sis-unknown") });
 		const knownRes = await post("/api/auth/signin/start", { email: known });
@@ -399,8 +401,7 @@ describe("POST /auth/signin/start tells the caller nothing", () => {
 describe("POST /auth/signin/verify", () => {
 	async function accountFor(tag: string): Promise<string> {
 		const email = addr(tag);
-		const issued = await issueSignupCode(email);
-		await post("/api/auth/signup/verify", { email, code: issued.code });
+		await signUp(email);
 		return email;
 	}
 
@@ -493,9 +494,8 @@ describe("POST /auth/onboarding/claim", () => {
 	/** Walk the ceremony to a signed-in, nameless account and return its cookie. */
 	async function pendingAccount(tag: string): Promise<{ cookie: string; email: string }> {
 		const email = addr(tag);
-		const issued = await issueSignupCode(email);
-		const res = await post("/api/auth/signup/verify", { email, code: issued.code });
-		const cookie = (res.headers.get("Set-Cookie") ?? "").split(";")[0];
+		const res = await signUp(email);
+		const cookie = (res.headers.get("Set-Cookie") ?? "").match(/session=[^;]+/)?.[0] ?? "";
 		return { cookie, email };
 	}
 
@@ -615,10 +615,10 @@ describe("POST /auth/onboarding/claim", () => {
 	 * assertion is not one** — the phrase lived in a document no user had ever seen,
 	 * which made it closer to a wish than a term.
 	 *
-	 * The ceremony moves where this has to be asked. `/subscribe` collects an address and
-	 * nothing else, and `/signup/verify` creates the account the moment the code checks
-	 * out — so **onboarding is the only place left**, and if it does not ask, nobody ever
-	 * agreed to anything.
+	 * The ceremony moves where this has to be asked. `/subscribe` collects an identity and
+	 * nothing else, `/finish` an address, and `/signup/verify` creates the account the moment
+	 * the code checks out — so **onboarding is the only place left**, and if it does not ask,
+	 * nobody ever agreed to anything.
 	 */
 	test("refuses to claim a handle without the terms actually being accepted", async () => {
 		const { cookie, email } = await pendingAccount("terms");
@@ -645,8 +645,7 @@ describe("POST /auth/onboarding/claim", () => {
 describe("a pending account has no public existence", () => {
 	test("it is absent from the creator listing even when flagged a creator", async () => {
 		const email = addr("ghost");
-		const issued = await issueSignupCode(email);
-		await post("/api/auth/signup/verify", { email, code: issued.code });
+		await signUp(email);
 
 		// Force the one state that could leak: a creator with no handle. Nothing in the
 		// app can reach this, which is exactly why it is worth asserting — the listing

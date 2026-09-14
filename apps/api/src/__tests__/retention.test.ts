@@ -21,6 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	type DmcaNoticeStatus,
 	dmcaNotices,
@@ -160,6 +161,7 @@ beforeAll(async () => {
 			passwordHash: "x",
 			emailVerified: true,
 			isCreator: true,
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	creatorId = creator.id;
@@ -170,6 +172,7 @@ beforeAll(async () => {
 			email: `${reporterName}@example.com`,
 			passwordHash: "x",
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	reporterId = reporter.id;

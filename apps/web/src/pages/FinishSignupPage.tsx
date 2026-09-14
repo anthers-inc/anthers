@@ -15,12 +15,18 @@
  * where the choices get made; pressing *Create My Account* writes them down and brings the
  * person here, where there is nothing to reconsider and one thing to do.
  *
- * **A signup that is written down is resumable.** The pending account holds the picks, so
- * pressing the button and walking away costs nothing: come back in this browser and the
- * cookie finds it, come back in another and a code sent to the address finds it, come back
- * through Bluesky and the identity finds it. 🚨 What resumption is never gated on is
- * *naming* an address or a handle — see `services/pending-signups.ts`, which carries the
+ * **A signup that is written down is resumable.** The pending account holds the picks and the
+ * handle it reserved, so pressing the button and walking away costs nothing for a week: come
+ * back in this browser and the cookie finds it, come back in another and a code sent to the
+ * address finds it, come back through Bluesky and the identity finds it. 🚨 What resumption is
+ * never gated on is *naming* an address or a handle, and a Bluesky identity never crosses on an
+ * address proof — it is proved again here — see `services/pending-signups.ts`, which carries the
  * takeover that closes.
+ *
+ * 🚨 **An account is created only with its identity**, so this page has an identity step: shown
+ * whenever the signup holds neither a Bluesky identity nor a requested handle, which is what a
+ * signup resumed from a Bluesky start looks like in a new browser, and what a refusal at the last
+ * step (a name the node would not issue, an identity that already has an account) leaves behind.
  *
  * ⚠️ **This page must not become a second signup door.** the *Making an Account* page's rule is a prohibition on a
  * second place *in the UI that mints accounts*, and a page reachable only by already having
@@ -30,6 +36,7 @@
  * this page.
  */
 
+import anthersMark from "@anthers/brand/logo/web/mark-60.png";
 import { amountLabel, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { EMPTY_PICKS, type SignupPicks, supportTotal } from "@anthers/shared/signup";
@@ -39,14 +46,20 @@ import { useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { AtSymbolIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeForm from "../components/auth/EmailCodeForm";
+import {
+	BlueskyHandleField,
+	FIELD_BUTTON_GAP,
+	HostedHandleField,
+	hostedNameSubmittable,
+} from "../components/auth/HandleFields";
 import SignupSteps, { signupSteps } from "../components/onboarding/SignupSteps";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
+import { useHandleAvailability } from "../lib/hosted-handle";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -56,22 +69,35 @@ interface Pending {
 	/** Whether a code has actually gone out to that address — never merely that we hold one. */
 	codeSent: boolean;
 	addressProved: boolean;
+	/** The Bluesky handle of an identity proved in this browser. */
 	atprotoHandle: string | null;
-	/** The handle Anthers has been asked to issue, in full. Null unless the third door. */
+	/** The Bluesky handle a signup was started with, when it has to be proved again here. */
+	blueskyHint: string | null;
+	/** The handle Anthers has been asked to issue, in full, and held until `expiresAt`. */
 	hostedHandle: string | null;
 	picks: SignupPicks;
 	next: string;
+	expiresAt: string;
+}
+
+/** What `/signup/verify` and `/signup/complete` answer when a signup cannot be finished yet. */
+interface Refusal {
+	error: string;
+	reason?: string;
+	pending?: Pending | null;
 }
 
 /**
- * Which of the page's three faces is showing.
+ * Which of the page's faces is showing.
  *
+ * `identity` comes first whenever the signup holds no identity to create its account with.
  * `address` is asked for only when there is none — a Bluesky signup whose PDS refused the
  * email scope, or one whose owner wants to correct a typo. `code` is the ordinary case.
- * `resumed` is the one that needs no code at all, because the address was proved at `/login`
- * in another browser and asking again would be asking somebody to prove the same fact twice.
+ * `resumed` is the one that needs no code at all, because the address is already proved — at
+ * `/login` in another browser, or by a code whose signup could not be finished at the time —
+ * and asking again would be asking somebody to prove the same fact twice.
  */
-type Face = "loading" | "address" | "code" | "resumed";
+type Face = "loading" | "identity" | "address" | "code" | "resumed";
 
 /**
  * Which face a pending signup calls for.
@@ -90,13 +116,16 @@ export function faceFor(pending: {
 	email: string | null;
 	codeSent: boolean;
 	addressProved: boolean;
+	atprotoHandle: string | null;
+	hostedHandle: string | null;
 }): Exclude<Face, "loading"> {
+	if (!pending.atprotoHandle && !pending.hostedHandle) return "identity";
 	if (pending.addressProved) return "resumed";
 	return pending.email && pending.codeSent ? "code" : "address";
 }
 
 export default function FinishSignupPage() {
-	const { user, isLoading, refreshUser } = useAuth();
+	const { user, isLoading, refreshUser, signUpWithBluesky } = useAuth();
 	const navigate = useNavigate();
 
 	const [pending, setPending] = useState<Pending | null>(null);
@@ -104,8 +133,17 @@ export default function FinishSignupPage() {
 	const [email, setEmail] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	/** Set when the account was made and the handle asked for was not issued. */
-	const [handleTrouble, setHandleTrouble] = useState<string | null>(null);
+	/** The identity step's fields, the same two `/subscribe` offers. */
+	const [hostedName, setHostedName] = useState("");
+	const [hostedRefusal, setHostedRefusal] = useState<string | null>(null);
+	const [hostedOpen, setHostedOpen] = useState(false);
+	const [hostedSuffix, setHostedSuffix] = useState("");
+	const [blueskyHandle, setBlueskyHandle] = useState("");
+	const [blueskyRefusal, setBlueskyRefusal] = useState<string | null>(null);
+	const hostedStatus = useHandleAvailability(hostedName, {
+		open: hostedOpen,
+		suffix: hostedSuffix,
+	});
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [charge, setCharge] = useState<{
 		anthersSupport: number;
@@ -123,12 +161,6 @@ export default function FinishSignupPage() {
 	 */
 	const owedOnboarding = useRef(false);
 	const destination = useRef<string | null>(null);
-	/** What the finished signup was carrying, held while the handle news is on screen. */
-	const pendingCommit = useRef<{
-		needsOnboarding: boolean;
-		picks: SignupPicks | null;
-		next: string | null;
-	} | null>(null);
 
 	// ── What this browser is finishing ───────────────────────────────────────
 	useEffect(() => {
@@ -177,6 +209,7 @@ export default function FinishSignupPage() {
 				// value of having asked for it: the field arrives filled in and one press
 				// sends the code.
 				setEmail(row.email ?? "");
+				setBlueskyHandle(row.blueskyHint ?? "");
 				setFace(faceFor(row as Pending));
 			})
 			.catch(() => {
@@ -186,6 +219,26 @@ export default function FinishSignupPage() {
 			live = false;
 		};
 	}, [isLoading, user, navigate]);
+
+	// Whether Anthers can issue a handle here, and the suffix it hangs under — for the identity
+	// step, which offers the same two doors `/subscribe` does.
+	useEffect(() => {
+		let live = true;
+		client.api.atproto.config
+			.$get()
+			.then((res) => res.json())
+			.then(({ hostedIdentityOffered, hostedHandleSuffix }) => {
+				if (!live) return;
+				setHostedOpen(hostedIdentityOffered);
+				setHostedSuffix(hostedHandleSuffix);
+			})
+			.catch(() => {
+				/* Unreachable API: the Anthers field stays closed, and Bluesky needs no answer. */
+			});
+		return () => {
+			live = false;
+		};
+	}, []);
 
 	const picks = pending?.picks ?? EMPTY_PICKS;
 	const next = sanitizeNextPath(pending?.next || undefined);
@@ -274,42 +327,34 @@ export default function FinishSignupPage() {
 		[byUsername, leave, next, picks],
 	);
 
-	/**
-	 * Shared by the code path and the resumed path: an account now exists.
-	 *
-	 * 🚨 **A handle that could not be issued stops the page rather than travelling with it.**
-	 * The account is real either way and nothing is broken, but somebody who asked for a name
-	 * and did not get it must be told at the moment it happened — carrying the news to the next
-	 * page, or dropping it, would leave them believing they have an identity they do not have.
-	 * Everything else about the signup still commits; it commits on the button.
-	 */
+	/** Shared by the code path and the resumed path: an account now exists. */
 	const accountMade = useCallback(
 		async (result: {
 			needsOnboarding: boolean;
 			picks: SignupPicks | null;
 			next: string | null;
-			hostedHandleError?: string | null;
 		}) => {
 			owedOnboarding.current = result.needsOnboarding;
-			if (result.hostedHandleError) {
-				pendingCommit.current = result;
-				setHandleTrouble(result.hostedHandleError);
-				setBusy(false);
-				return;
-			}
 			await commit(result);
 		},
 		[commit],
 	);
 
-	/** Carry on after being told the handle did not happen. */
-	const continuePastHandleTrouble = async () => {
-		const result = pendingCommit.current;
-		if (!result) return;
-		setHandleTrouble(null);
-		setBusy(true);
-		await commit(result);
-	};
+	/**
+	 * The signup could not be finished yet, and the server has said what it now looks like.
+	 *
+	 * ⚠️ **The code was right, so this is not an error in the code box.** The address is proved
+	 * and the signup is waiting on its identity — chosen again, proved again, or tried again once
+	 * Anthers' server answers — and the page moves to the face that asks for exactly that.
+	 */
+	const refused = useCallback((body: Refusal) => {
+		setError(body.error);
+		if (body.pending) {
+			setPending(body.pending);
+			setFace(faceFor(body.pending));
+		}
+		setBusy(false);
+	}, []);
 
 	// ── Asking for an address ────────────────────────────────────────────────
 	const sendCode = async () => {
@@ -338,12 +383,17 @@ export default function FinishSignupPage() {
 			const address = pending?.email ?? email.trim();
 			const res = await client.api.auth.signup.verify.$post({ json: { email: address, code } });
 			if (!res.ok) {
-				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				const body = (await res.json().catch(() => ({}))) as Refusal;
+				// A refusal that carries the signup back is about the identity, not the code.
+				if (body.reason && body.pending !== undefined) {
+					refused(body);
+					return;
+				}
 				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
 			}
 			await accountMade((await res.json()) as Parameters<typeof accountMade>[0]);
 		},
-		[accountMade, email, pending?.email],
+		[accountMade, email, pending?.email, refused],
 	);
 
 	const finishResumed = async () => {
@@ -352,13 +402,67 @@ export default function FinishSignupPage() {
 		try {
 			const res = await client.api.auth.signup.complete.$post();
 			if (!res.ok) {
-				setError("We couldn't finish that signup. Start again from the signup page.");
-				setBusy(false);
+				const body = (await res.json().catch(() => ({}))) as Partial<Refusal>;
+				refused({
+					error: body.error ?? "We couldn't finish that signup. Start again from the signup page.",
+					pending: body.pending,
+				});
 				return;
 			}
 			await accountMade((await res.json()) as Parameters<typeof accountMade>[0]);
 		} catch {
 			setError("Something went wrong. Please try again.");
+			setBusy(false);
+		}
+	};
+
+	/**
+	 * Choose, or change, the handle Anthers issues for this signup — reserving it — and move on.
+	 *
+	 * ⚠️ A name taken or held for somebody else is refused in the field's own status line, so the
+	 * step does not grow and the person can type another straight away.
+	 */
+	const chooseHostedHandle = async () => {
+		const name = hostedName.trim().replace(/^@/, "");
+		if (!name) return;
+		setBusy(true);
+		setHostedRefusal(null);
+		setError(null);
+		try {
+			const res = await client.api.auth.signup.identity.$post({ json: { hostedHandle: name } });
+			const body = (await res.json().catch(() => ({}))) as {
+				error?: string;
+				pending?: Pending | null;
+			};
+			if (!res.ok || !body.pending) {
+				setHostedRefusal(body.error ?? "Couldn't hold that handle. Please try again.");
+				return;
+			}
+			setPending(body.pending);
+			setFace(faceFor(body.pending));
+		} catch {
+			setHostedRefusal("Couldn't reach Anthers. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	/**
+	 * Prove a Bluesky identity in this browser. The round trip binds it to this signup at the
+	 * callback and comes back to this page, which then finishes without asking for another code
+	 * when the address is already proved.
+	 */
+	const continueWithBluesky = async () => {
+		const value = blueskyHandle.trim().replace(/^@/, "");
+		if (!value) return;
+		setBusy(true);
+		setBlueskyRefusal(null);
+		try {
+			await signUpWithBluesky(value, next);
+		} catch (err) {
+			setBlueskyRefusal(
+				err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.",
+			);
 			setBusy(false);
 		}
 	};
@@ -396,55 +500,22 @@ export default function FinishSignupPage() {
 		username: "todo",
 	});
 
-	/**
-	 * The account was made and the handle was not.
-	 *
-	 * ⭐ **It says what is true in the order that matters**: the account exists, then what did
-	 * not happen, then that it is not the end of the road. Somebody who has just confirmed an
-	 * address and been shown a refusal needs the first of those before they can read the rest.
-	 * The button is the only way on, so the news cannot be scrolled past.
-	 */
-	if (handleTrouble) {
-		return (
-			<SignupSteps steps={steps} eyebrow="Almost There" title="Your account is ready">
-				<div className="mt-6 rounded-xl bg-base-200 p-4 text-left">
-					<p className="text-sm text-base-content/70">
-						Your account is set up and you are signed in. What did not work is the handle:{" "}
-						<strong>{handleTrouble}</strong>
-					</p>
-					{/* ⭐ **It names settings now, because settings can do it.** This paragraph
-					    deliberately promised nothing while asking for a handle later was unbuilt —
-					    copy that offers a way out of a dead end is the same failure as a roadmap
-					    entry written in the present tense. The sentence is true as of the identity
-					    section in settings, and it should go back to promising nothing if that ever
-					    stops being so. */}
-					<p className="mt-3 text-sm text-base-content/70">
-						Nothing else about your signup is affected, and nothing is waiting on it. You can ask
-						for a handle again from your settings whenever you like.
-					</p>
-				</div>
-				<button
-					type="button"
-					className={`btn btn-primary btn-lg mt-6 w-full ${busy ? "btn-disabled" : ""}`}
-					disabled={busy}
-					onClick={() => void continuePastHandleTrouble()}
-				>
-					{busy ? "Working…" : "Continue"}
-				</button>
-			</SignupSteps>
-		);
-	}
-
 	return (
 		<SignupSteps
 			steps={steps}
 			eyebrow="Almost There"
-			title={face === "resumed" ? "Pick up where you left off" : "Confirm your email"}
+			title={
+				face === "identity"
+					? "Choose how you'll be known"
+					: face === "resumed"
+						? "Pick up where you left off"
+						: "Confirm your email"
+			}
 		>
 			{/* 🚨 Why an email field is in front of somebody who just authenticated somewhere
 			    else. Without this the page reads as a flow that forgot what it was doing —
 			    which is how a signup gets abandoned three steps in. */}
-			{pending.atprotoHandle && (
+			{pending.atprotoHandle && face !== "resumed" && (
 				<div className="mt-6 flex items-start gap-3 rounded-xl bg-base-200 p-4 text-left">
 					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0" />
 					<p className="text-sm text-base-content/70">
@@ -458,22 +529,81 @@ export default function FinishSignupPage() {
 			{/* ⭐ **The same job as the Bluesky panel above, from the other direction.** That one
 			    explains why an email field is in front of somebody who just authenticated
 			    elsewhere; this one explains why it is in front of somebody who only asked for a
-			    name. Both answer the question a page that appears to have forgotten what it was
-			    doing provokes.
-
-			    🚨 It also says the name is not yet theirs, because it is not. Nothing is
-			    reserved by asking — the identity is created when the code is read — and a page
-			    that let somebody believe otherwise would be making a promise the next person to
-			    type the same name would break. */}
-			{pending.hostedHandle && (
+			    name — and says the name is being held, so confirming later is safe. */}
+			{pending.hostedHandle && (face === "address" || face === "code") && (
 				<div className="mt-6 flex items-start gap-3 rounded-xl bg-base-200 p-4 text-left">
-					<AtSymbolIcon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+					<img src={anthersMark} alt="" className="mt-0.5 h-5 w-auto shrink-0" />
 					<p className="text-sm text-base-content/70">
-						You asked for <strong className="break-all">{pending.hostedHandle}</strong>. It is
-						issued once you confirm your email below, and not before — so confirm now if you would
-						like to keep it.
+						<strong className="break-all">@{pending.hostedHandle}</strong> is held for you until{" "}
+						{heldUntil(pending.expiresAt)}. It becomes yours once you confirm your email below.
 					</p>
 				</div>
+			)}
+
+			{face === "identity" && (
+				<IdentityStep
+					blueskyHint={pending.blueskyHint}
+					hostedOpen={hostedOpen}
+					busy={busy}
+					hosted={
+						<form
+							className="text-left"
+							onSubmit={(e) => {
+								e.preventDefault();
+								void chooseHostedHandle();
+							}}
+						>
+							<HostedHandleField
+								id="finish-hosted"
+								label="A new handle on Anthers"
+								name={hostedName}
+								onNameChange={(value) => {
+									setHostedName(value);
+									setHostedRefusal(null);
+								}}
+								status={hostedStatus}
+								suffix={hostedSuffix}
+								refusal={hostedRefusal}
+							/>
+							<button
+								type="submit"
+								className={`btn btn-primary ${FIELD_BUTTON_GAP} w-full ${busy ? "btn-disabled" : ""}`}
+								disabled={
+									busy || !!hostedRefusal || !hostedNameSubmittable(hostedName, hostedStatus)
+								}
+							>
+								Use This Handle
+							</button>
+						</form>
+					}
+					bluesky={
+						<form
+							className="text-left"
+							onSubmit={(e) => {
+								e.preventDefault();
+								void continueWithBluesky();
+							}}
+						>
+							<BlueskyHandleField
+								id="finish-bluesky"
+								label="Your Bluesky identity"
+								value={blueskyHandle}
+								onChange={(value) => {
+									setBlueskyHandle(value);
+									setBlueskyRefusal(null);
+								}}
+								refusal={blueskyRefusal}
+							/>
+							<button
+								type="submit"
+								className={`btn btn-primary ${FIELD_BUTTON_GAP} w-full ${busy ? "btn-disabled" : ""}`}
+								disabled={busy || !blueskyHandle.trim()}
+							>
+								Continue with Bluesky
+							</button>
+						</form>
+					}
+				/>
 			)}
 
 			{face === "address" && (
@@ -545,11 +675,16 @@ export default function FinishSignupPage() {
 				</div>
 			)}
 
+			{/* 🚨 **The identity is shown before anything is created, and that is a security
+			    property rather than a courtesy.** A signup resumed by address may carry a handle
+			    somebody else typed; asking for it to be confirmed or changed here is what stops a
+			    stranger naming the person whose mailbox this is. */}
 			{face === "resumed" && (
 				<div className="mt-6">
 					<p className="text-base leading-relaxed text-base-content/65">
-						Your address is confirmed and your choices are still here. One press and the account is
-						yours.
+						Your address is confirmed and your choices are still here. Your account will be created
+						as{" "}
+						<strong className="break-all">@{pending.atprotoHandle ?? pending.hostedHandle}</strong>.
 					</p>
 					<button
 						type="button"
@@ -557,7 +692,17 @@ export default function FinishSignupPage() {
 						onClick={() => void finishResumed()}
 						disabled={busy}
 					>
-						{busy ? "Working…" : "Create my account"}
+						{busy ? "Working…" : "Create My Account"}
+					</button>
+					<button
+						type="button"
+						className="mt-3 link text-sm text-base-content/60"
+						onClick={() => {
+							setError(null);
+							setFace("identity");
+						}}
+					>
+						Use a different identity
 					</button>
 				</div>
 			)}
@@ -678,6 +823,58 @@ function ChosenSummary({
 				<span>A month</span>
 				<span className="ml-auto tabular-nums">{total > 0 ? amountLabel(total) : "Free"}</span>
 			</p>
+		</div>
+	);
+}
+
+/** The day a held handle is released, said the way a person would say it. */
+function heldUntil(iso: string): string {
+	return new Date(iso).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+}
+
+/**
+ * The identity step: a handle Anthers issues, or a Bluesky identity proved in this browser.
+ *
+ * ⚠️ **A signup started with Bluesky leads with Bluesky**, and says which identity it was started
+ * as, because that is the one the person most likely wants to continue with — and a stranger's
+ * identity named here tells the real owner of the mailbox that somebody else began this signup.
+ */
+function IdentityStep({
+	blueskyHint,
+	hostedOpen,
+	busy,
+	hosted,
+	bluesky,
+}: {
+	blueskyHint: string | null;
+	hostedOpen: boolean;
+	busy: boolean;
+	hosted: React.ReactNode;
+	bluesky: React.ReactNode;
+}) {
+	return (
+		<div className="mt-6 space-y-6" aria-busy={busy}>
+			<p className="text-base leading-relaxed text-base-content/65">
+				{blueskyHint ? (
+					<>
+						This signup was started as <strong className="break-all">@{blueskyHint}</strong>. Sign
+						in with Bluesky here to confirm it's you, or take a handle on Anthers instead.
+					</>
+				) : (
+					"Every Anthers account is an identity on the AT Protocol network. Take a new handle on Anthers, or use the Bluesky identity you already have."
+				)}
+			</p>
+			{blueskyHint ? (
+				<>
+					{bluesky}
+					{hostedOpen && hosted}
+				</>
+			) : (
+				<>
+					{hostedOpen && hosted}
+					{bluesky}
+				</>
+			)}
 		</div>
 	);
 }

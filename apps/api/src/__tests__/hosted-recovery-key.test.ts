@@ -19,6 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -145,6 +146,7 @@ async function makeAccount(tag: string, opts: { openable?: boolean } = {}) {
 			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
+			atprotoDid: `did:plc:${RUN}${tag}`,
 		})
 		.returning();
 	const did = `did:plc:${RUN}${tag}`;
@@ -168,6 +170,7 @@ describe("asking for a key when the account has none to put one on", () => {
 				username: `${RUN}none`,
 				email: `${RUN}none@example.test`,
 				emailVerified: true,
+				atprotoDid: fixtureDid(),
 			})
 			.returning();
 		let called = false;

@@ -6,21 +6,19 @@
  *   GET  /client-metadata.json — OAuth client metadata document
  *   POST /auth                 — Initiate OAuth flow (returns authorization URL)
  *   GET  /callback             — OAuth callback (exchanges code, creates session, redirects)
- *   GET  /pending              — What a signup waiting on an address knows about itself
  *   GET  /handle-available     — Is a name Anthers could issue still free?
- *   POST /handle               — Issue one to the account making the request
  *   POST /handle/domain        — Point an issued identity at a domain the holder owns
  *   GET  /recovery-key         — Has this account taken one, and which key
  *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
  *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
  *   GET  /publishing           — How this account's Work listings reach the network, if at all
  *   POST /publishing/stop      — Take the listings down and hand the permission back
- *   POST /unlink               — Unlink ATProto identity from account
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
  * it is the runtime-agnostic core rather than the Node package. What is left here is the
- * four intents — link an identity to the account you are signed into, sign in with one, sign
- * up with one, or let Anthers publish your listings into one — and the ceremony each owes.
+ * three intents — sign in with an identity, sign up with one, or let Anthers publish a
+ * creator's listings into one — and the ceremony each owes. There is no linking: every account
+ * is created holding its one identity, and swapping it for another is not built.
  *
  * 🚨 **The ACCOUNT decides the scope, not the intent, and getting that backwards is the bug
  * this route was rebuilt to remove.** One OAuth session is stored per DID and each
@@ -30,8 +28,8 @@
  * holds, and a returning person sees no consent screen for a grant they have already made.
  *
  * ⭐ **A record in somebody's repository is Anthers working, not an accessory they opt into.**
- * The permission to write one belongs with linking an identity, the way permissions belong with
- * authorizing any application. `publish` exists as the one separate ask because the creator
+ * The permission to write one belongs with connecting an identity, the way permissions belong
+ * with authorizing any application. `publish` exists as the one separate ask because the creator
  * tier is the one permission most accounts have no use for — asked once, when somebody starts
  * publishing, and carried by every sign-in after that.
  */
@@ -45,17 +43,13 @@ import { PENDING_SIGNUP_COOKIE, setPendingSignupCookie, setSessionCookie } from 
 import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoPublishEnabled,
-	atprotoSignupEnabled,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
-	isCreatorAccount,
 	isCreatorIdentity,
-	linkAtprotoToUser,
 	publishingStateFor,
 	readPdsEmail,
 	recordPublishGrant,
 	resolveIdentity,
-	unlinkAtprotoFromUser,
 } from "../services/atproto.js";
 import {
 	attachSessionToUser,
@@ -72,7 +66,6 @@ import {
 	hostedHandleSuffix,
 	hostedIdentityOffered,
 	normalizeHandleName,
-	requestHostedHandle,
 	swapHostedHandle,
 } from "../services/hosted-accounts.js";
 import {
@@ -83,6 +76,7 @@ import {
 import {
 	bindIdentityToPending,
 	findPendingByDid,
+	handleReservedElsewhere,
 	issueCodeForPending,
 	readPendingSignup,
 	sweepExpiredPendingSignups,
@@ -98,9 +92,6 @@ import {
  * explanation instead of a message saying which character is the problem.
  */
 const handleQuerySchema = z.object({ name: z.string().min(1).max(300) });
-
-/** The same bound, for the same reason, on the request that actually issues one. */
-const handleRequestSchema = z.object({ name: z.string().min(1).max(300) });
 
 /** A domain being taken as a handle. The node is the authority; this only bounds the body. */
 const domainSwapSchema = z.object({ handle: z.string().min(1).max(253) });
@@ -126,7 +117,7 @@ const authInitSchema = z.object({
 	 * flow by using it.
 	 */
 	handle: z.string().min(1).optional(),
-	intent: z.enum(["login", "link", "signup", "publish"]).default("login"),
+	intent: z.enum(["login", "signup", "publish"]).default("login"),
 	/**
 	 * Where to land afterwards — the thing the person was trying to do when signing in
 	 * interrupted them. Client-supplied, and therefore sanitized before it is stored rather
@@ -147,7 +138,7 @@ const authInitSchema = z.object({
  * matters is what the browser is finally told to navigate to.
  */
 interface AppState {
-	intent: "login" | "link" | "signup" | "publish";
+	intent: "login" | "signup" | "publish";
 	userId?: number;
 	next?: string;
 }
@@ -196,25 +187,12 @@ function getFrontendUrl(c: { req: { url: string } }): string {
  * alternative was asking every reader for permission to write Work listings they will never
  * have, which is the kind of over-ask a platform arguing for minimal permissions cannot make.
  * The resolution is one the SDK performs anyway a moment later.
- *
- * 🚨 **Linking is the exception, and getting it wrong would have been invisible.** A creator
- * attaching a Bluesky account has no DID on their account *yet* — that is what linking is for —
- * so resolving the handle and looking it up finds nobody and answers "reader". They would have
- * connected an identity and been asked for nothing, then had to go and grant publishing as a
- * second errand. The signed-in account is the one to ask about here, and it is already known.
  */
-async function scopeForFlow(
-	intent: AppState["intent"],
-	subject: string,
-	signedInUserId?: number,
-): Promise<string> {
+async function scopeForFlow(intent: AppState["intent"], subject: string): Promise<string> {
 	// Signing up has no account to read, so it gets the base set plus the address scope.
 	if (intent === "signup") return scopeFor({ email: true });
 	// An explicit ask, from somebody who went looking for it.
 	if (intent === "publish") return scopeFor({ creator: true });
-	if (intent === "link" && signedInUserId !== undefined) {
-		return scopeFor({ creator: await isCreatorAccount(signedInUserId) });
-	}
 	return scopeFor({ creator: await isCreatorIdentity(subject) });
 }
 
@@ -260,22 +238,16 @@ const atprotoRoutes = new Hono()
 		const { handle, intent, next } = c.req.valid("json");
 
 		let userId: number | undefined;
-		if (intent === "link" || intent === "publish") {
+		if (intent === "publish") {
 			const token = c.req.header("Cookie")?.match(/session=([^;]+)/)?.[1];
 			if (!token) {
-				return c.json({ error: "Authentication required for linking" }, 401);
+				return c.json({ error: "Authentication required" }, 401);
 			}
 			const result = await validateSession(token);
 			if (!result) {
 				return c.json({ error: "Invalid session" }, 401);
 			}
 			userId = result.user.id;
-		}
-
-		// Refused here rather than at the callback, so nobody is sent through an
-		// authorization screen on another website to be told no on the way back.
-		if (intent === "signup" && !atprotoSignupEnabled()) {
-			return c.json({ error: "Signing up with Bluesky isn't open yet." }, 403);
 		}
 
 		// ⚠️ **The publishing flow authorizes against the DID on the account, never the handle in
@@ -295,9 +267,7 @@ const atprotoRoutes = new Hono()
 				return c.json({ error: "Publishing to your own repository isn't open yet." }, 403);
 			}
 			const state = await publishingStateFor(userId as number);
-			if (!state.did) {
-				return c.json({ error: "Link a Bluesky account first, in your settings." }, 409);
-			}
+			if (!state.did) return c.json({ error: "Account not found." }, 404);
 			if (state.route === "hosted") {
 				return c.json(
 					{ error: "Anthers already publishes your listings — this handle lives on its own node." },
@@ -319,7 +289,7 @@ const atprotoRoutes = new Hono()
 			};
 			const url = await getAtprotoClient().authorize(subject, {
 				state: JSON.stringify(appState),
-				scope: await scopeForFlow(intent, subject, userId),
+				scope: await scopeForFlow(intent, subject),
 			});
 			return c.json({ authorization_url: url.toString() });
 		} catch (err) {
@@ -396,16 +366,6 @@ const atprotoRoutes = new Hono()
 				return back({ success: "publishing", next });
 			}
 
-			if (appState.intent === "link") {
-				if (!appState.userId) return fail("not_authenticated");
-
-				const linkResult = await linkAtprotoToUser(appState.userId, identity);
-				if (linkResult.error) return fail(linkResult.error);
-
-				await attachSessionToUser(identity.did, appState.userId);
-				return back({ success: "linked" });
-			}
-
 			// ── Login and signup ─────────────────────────────────────────────
 			//
 			// They share everything after "is there an account for this DID?", including the
@@ -435,8 +395,6 @@ const atprotoRoutes = new Hono()
 
 			if (!user) {
 				// ── Signup ───────────────────────────────────────────────────
-				if (!atprotoSignupEnabled()) return fail("signup_disabled");
-
 				// 🚨 **A signup NEVER completes here, whatever the PDS said.** The identity is
 				// proved and parked, and the address is confirmed by our own emailed code on
 				// `/subscribe` before any account exists.
@@ -516,18 +474,13 @@ const atprotoRoutes = new Hono()
 
 	// ── What the browser needs to know before it offers anything ─────────────
 	//
-	// 🚨 **Without this the closed state is a button that refuses**, which is worse than no
-	// button: `ATPROTO_SIGNUP_ENABLED` is a launch switch, and while it is off `/subscribe`
-	// should look exactly as it did before this existed rather than advertising a door and
-	// then apologizing. The API refuses either way — this only decides whether anyone is
-	// invited to try.
-	//
-	// The third door has its own answer and its own switch: hosting is offered only when every
-	// piece it needs is configured, and the suffix travels with it so the browser can show a
-	// handle in full without a second copy of `anthers.social` living in the front end.
+	// Both signup doors are always offered, and the Anthers one needs every piece of hosting
+	// configured — a door that refuses when pressed is worse than no door, so the browser asks
+	// and shows only the Bluesky door when hosting is off. The suffix travels with the answer so
+	// the browser can show a handle in full without a second copy of `anthers.social` living in
+	// the front end.
 	.get("/config", (c) =>
 		c.json({
-			signupEnabled: atprotoSignupEnabled(),
 			hostedIdentityOffered: hostedIdentityOffered(),
 			hostedHandleSuffix: hostedHandleSuffix(),
 		}),
@@ -540,43 +493,21 @@ const atprotoRoutes = new Hono()
 	// one moment there is nothing useful to do about it.
 	//
 	// ⚠️ **It enumerates nothing that is not already public.** The node answers
-	// `com.atproto.identity.resolveHandle` to anybody who asks, so this adds no way of learning
-	// which handles exist — it only saves the browser from talking to a second origin. What it
-	// deliberately does NOT reveal is anything about Anthers accounts: a handle is free or not
-	// at the node, and whether somebody has an Anthers account is a different question this
-	// route cannot be asked.
+	// `com.atproto.identity.resolveHandle` to anybody who asks, and a name held for somebody's
+	// unfinished signup reads as taken exactly as it would to that person's rival at the card.
+	// What it deliberately does NOT reveal is anything about Anthers accounts or about who holds
+	// a reservation.
+	//
+	// ⭐ **This browser's own reservation reads as available**, so somebody who pressed the
+	// button and came back to the same name is told it is theirs.
 	.get("/handle-available", zValidator("query", handleQuerySchema), async (c) => {
 		if (!hostedIdentityOffered()) {
 			return c.json({ status: "unknown" as const, handle: "" });
 		}
 		const name = normalizeHandleName(c.req.valid("query").name);
-		const result = await checkHandleAvailability(name);
+		const held = await handleReservedElsewhere(name, getCookie(c, PENDING_SIGNUP_COOKIE));
+		const result = held ? { status: "taken" as const } : await checkHandleAvailability(name);
 		return c.json({ ...result, handle: hostedHandleFor(name) });
-	})
-
-	// ── Ask Anthers for a handle ─────────────────────────────────────────────
-	//
-	// 🚨 **The session is the guard, and it is the whole difference between this and a signup
-	// door.** `/subscribe` is the one place an account is minted; this acts on one that already
-	// exists and is signed in, which is a different thing rather than a quieter version of the
-	// same thing. It creates no account here, mints nothing for a visitor, and answers 401 to
-	// anybody who is not already somebody.
-	//
-	// ⚠️ **Three refusals with three status codes, because they are three different problems.**
-	// A name somebody can change is a 400, an account that may not have one is a 409 whatever it
-	// types, and a node that will not answer is a 503 that says to try later. Collapsing them
-	// would leave the page unable to tell somebody whether typing again is worth doing.
-	.post("/handle", requireAuth, zValidator("json", handleRequestSchema), async (c) => {
-		const user = c.get("user");
-		const result = await requestHostedHandle({
-			userId: user.id,
-			handleName: c.req.valid("json").name,
-		});
-		if (result.status === "issued") {
-			return c.json({ did: result.did, handle: result.handle });
-		}
-		const status = result.fault === "name" ? 400 : result.fault === "account" ? 409 : 503;
-		return c.json({ error: result.message }, status);
 	})
 
 	// ── Take a domain you own as your handle ─────────────────────────────────
@@ -693,18 +624,6 @@ const atprotoRoutes = new Hono()
 			);
 		}
 		return c.json(result);
-	})
-
-	// ── Unlink ───────────────────────────────────────────────────────────────
-	.post("/unlink", requireAuth, async (c) => {
-		const user = c.get("user");
-		const result = await unlinkAtprotoFromUser(user.id);
-
-		if (result.error) {
-			return c.json({ error: result.error }, 400);
-		}
-
-		return c.json({ success: true });
 	});
 
 export { atprotoRoutes };

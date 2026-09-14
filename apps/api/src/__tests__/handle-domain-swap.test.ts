@@ -19,6 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -59,6 +60,7 @@ async function makeAccount(tag: string) {
 			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
+			atprotoDid: `did:plc:${RUN}${tag}`,
 			atprotoHandle: `${RUN}${tag}.anthers.social`,
 		})
 		.returning();
@@ -153,7 +155,12 @@ describe("what this door is not for", () => {
 	it("refuses an account with no identity Anthers issued", async () => {
 		const [user] = await db
 			.insert(users)
-			.values({ username: `${RUN}none`, email: `${RUN}none@example.test`, emailVerified: true })
+			.values({
+				username: `${RUN}none`,
+				email: `${RUN}none@example.test`,
+				emailVerified: true,
+				atprotoDid: fixtureDid(),
+			})
 			.returning();
 		const result = await swapHostedHandle(
 			user.id,

@@ -11,9 +11,8 @@
  * 🚨 **Signing up starts with a handle rather than an address** (Parker, 2026-09-08), because
  * the records a *reader* writes belong in that reader's own repository — so an account with no
  * identity could never write a follow or a comment, which makes it permanently lesser rather
- * than merely plainer. The address door is gone while hosting works, and comes back only when
- * hosting is unconfigured, where the alternative is refusing everybody who has no Bluesky
- * account.
+ * than merely plainer. There is no address door at all: with hosting unconfigured the card
+ * offers Bluesky alone.
  *
  * ⭐ **This door asks for one field, and the reason is structural rather than aesthetic.** The
  * card sits above the Badge ladder, so a taller tab pushes the page down under whoever is
@@ -65,18 +64,17 @@ async function openHandleDoor(page: Page) {
 }
 
 test.describe("signing up with a handle Anthers issues", () => {
-	test("the handle is the door a visitor meets, and the address door is gone", async ({ page }) => {
+	test("the handle is the door a visitor meets, and there is no address door", async ({ page }) => {
 		await page.goto("/subscribe");
 		await openHandleDoor(page);
 
 		await expect(topSignup(page).getByLabel("The handle you'd like")).toBeVisible();
 
-		// 🚨 **The address door is not merely unselected, it is absent.** Offering "just an
-		// address" beside this would offer an account that can never write a follow or a
-		// comment, and that is not a plainer account — it is a permanently lesser one.
+		// 🚨 **There is no address door.** Offering "just an address" would offer an account that
+		// can never write a follow or a comment, and every account is an identity.
 		await expect(
 			topSignup(page).getByRole("tab", { name: "Email", exact: true }),
-			"an address-only account is not on offer while a handle is possible",
+			"an address-only account is never on offer",
 		).toHaveCount(0);
 		await expect(topSignup(page).getByLabel(/where should we reach you/i)).toHaveCount(0);
 		await expect(
@@ -213,7 +211,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	// intercepts `/signup/begin` so it can read what was sent; this one lets it through so
 	// there is a real pending signup to come back to, and asserts on what `/finish` then says.
 	// Without this, "the name travels" is only checked as far as the request body.
-	test("the finishing page names the handle, and says it is not yours yet", async ({ page }) => {
+	test("the finishing page names the handle, and says it is held", async ({ page }) => {
 		// ⚠️ Stubbed BEFORE the page loads. Registering a route afterwards leaves a window in
 		// which the card's first check reaches the real API, which is a race that resolves
 		// differently under parallel load than it does alone.
@@ -223,7 +221,10 @@ test.describe("signing up with a handle Anthers issues", () => {
 		}));
 		await page.goto("/subscribe");
 		await openHandleDoor(page);
-		await topSignup(page).getByLabel("The handle you'd like").fill("someonenewentirely");
+		// ⚠️ **A fresh name every run, because asking reserves it.** A fixed name is held by the
+		// previous run's pending signup for a week, and the second run would be refused.
+		const name = `e2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+		await topSignup(page).getByLabel("The handle you'd like").fill(name);
 		await topSignup(page)
 			.getByRole("button", { name: /sign up with anthers/i })
 			.click();
@@ -243,40 +244,60 @@ test.describe("signing up with a handle Anthers issues", () => {
 		// here is the test environment's rather than production's — and what is being asserted
 		// is that the WHOLE handle is shown rather than the part somebody typed, which is the
 		// property that survives either.
-		await expect(page.getByText(/someonenewentirely\.[a-z.]+/)).toBeVisible();
+		await expect(page.getByText(new RegExp(`${name}\\.[a-z.]+`))).toBeVisible();
 
-		// 🚨 **Nothing is reserved by asking**, and the page has to say so. Two people may ask
-		// for the same name and the second is told when the first confirms — a page that let
-		// somebody believe the name was already theirs would be making a promise on behalf of
-		// whoever confirms first.
-		await expect(page.getByText(/issued once you confirm your email/i)).toBeVisible();
+		// 🚨 **Pressing the button reserved the name**, and the page says so and until when, so
+		// confirming tomorrow is safe.
+		await expect(page.getByText(/is held for you until/i)).toBeVisible();
 	});
 
-	// 🚨 **The one case where the address door comes back.** With hosting unconfigured a handle
-	// is impossible, so the only remaining door would be Bluesky — and anybody without a
-	// Bluesky account could not sign up at all. Falling back is what stops a missing secret
-	// from closing the site to most people, and production is in exactly this state until the
-	// two secrets are set, so this is the flow that ships first rather than a hypothetical.
-	test("with hosting unconfigured, the address door comes back", async ({ page }) => {
+	// 🚨 **With hosting unconfigured the Anthers door closes and Bluesky stands alone.** There is
+	// no address door to fall back to, because an account is always an identity — and a door that
+	// cannot work is worse than no door, so the Anthers tab is absent rather than refusing.
+	test("with hosting unconfigured, Bluesky is the only door", async ({ page }) => {
 		await page.route("**/api/atproto/config", async (route) => {
 			await route.fulfill({
 				status: 200,
 				contentType: "application/json",
-				body: JSON.stringify({
-					signupEnabled: true,
-					hostedIdentityOffered: false,
-					hostedHandleSuffix: "",
-				}),
+				body: JSON.stringify({ hostedIdentityOffered: false, hostedHandleSuffix: "" }),
 			});
 		});
 		await page.goto("/subscribe");
 
-		await expect(topSignup(page).getByRole("tab", { name: "Email", exact: true })).toBeVisible();
-		await expect(topSignup(page).getByLabel(/where should we reach you/i)).toBeVisible();
+		await expect(topSignup(page).getByLabel("Bluesky handle")).toBeVisible();
+		await expect(topSignup(page).getByRole("tab")).toHaveCount(0);
+		await expect(topSignup(page).getByLabel(/where should we reach you/i)).toHaveCount(0);
+		await expect(topSignup(page).getByLabel("The handle you'd like")).toHaveCount(0);
+	});
+
+	// 🚨 **A name held for somebody else's signup is refused on the card, in the field's own line.**
+	// The reservation is what stops two people being promised one name, and the refusal has to
+	// arrive while the person is still looking at the field — in the reserved line, so the card
+	// does not grow under them.
+	test("a name held for another signup is refused where it was typed", async ({ page }) => {
+		await stubAvailability(page, (name) => ({
+			status: "available",
+			handle: `${name}.node.invalid`,
+		}));
+		await page.route("**/api/auth/signup/begin", async (route) => {
+			await route.fulfill({
+				status: 409,
+				contentType: "application/json",
+				body: JSON.stringify({ error: "heldname.node.invalid is taken." }),
+			});
+		});
+		await page.goto("/subscribe");
+		await openHandleDoor(page);
+		await topSignup(page).getByLabel("The handle you'd like").fill("heldname");
+		await topSignup(page)
+			.getByRole("button", { name: /sign up with anthers/i })
+			.click();
+
+		await expect(topSignup(page).getByText("heldname.node.invalid is taken.")).toBeVisible();
+		await expect(page).toHaveURL(/\/subscribe/);
 		await expect(
-			topSignup(page).getByRole("tab", { name: "Anthers", exact: true }),
-			"a door that cannot work is worse than no door — see hostedIdentityOffered",
-		).toHaveCount(0);
+			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
+		).toBeDisabled();
 	});
 
 	// 🚨 **Spelling is answered in the browser, without asking anything.** An underscore is

@@ -8,6 +8,7 @@
 		".": "./src/index.ts",
 		"./client": "./src/client.ts",
 		"./dev-only": "./src/dev-only.ts",
+		"./fixture-did": "./src/fixture-did.ts",
 		"./gauntlet": "./src/gauntlet.ts",
 		"./media-fixture": "./src/media-fixture.ts",
 		"./schema": "./src/schema/index.ts"

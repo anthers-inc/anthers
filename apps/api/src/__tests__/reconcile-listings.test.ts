@@ -13,6 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	comments,
 	follows,
@@ -24,7 +25,7 @@ import {
 	votes,
 	works,
 } from "@anthers/db/schema";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { reconcileListings } from "../jobs/reconcile-listings.js";
 import { setPublishedLexiconsForTesting } from "../services/published-lexicons.js";
 import type { RecordSyncKind } from "../services/record-sync.js";
@@ -57,6 +58,7 @@ async function user(tag: string, values: Partial<typeof users.$inferInsert> = {}
 			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 			...values,
 		})
 		.returning();
@@ -128,13 +130,8 @@ beforeAll(async () => {
 		.insert(follows)
 		.values({ followerId: reader.id, creatorId: creator.id })
 		.returning();
-	const [followNoIdentity] = await db
-		.insert(follows)
-		.values({ followerId: reader.id, creatorId: plain.id })
-		.returning();
-	made.follows.push(follow.id, followNoIdentity.id);
+	made.follows.push(follow.id);
 	ids.waitingFollow = follow.id;
-	ids.noIdentityFollow = followNoIdentity.id;
 
 	const post = async (name: string, values: Partial<typeof posts.$inferInsert>) => {
 		const [row] = await db
@@ -180,7 +177,9 @@ afterAll(async () => {
 	if (made.posts.length) await db.delete(posts).where(inArray(posts.id, made.posts));
 	if (made.projects.length) await db.delete(projects).where(inArray(projects.id, made.projects));
 	if (made.works.length) await db.delete(works).where(inArray(works.id, made.works));
-	await db.delete(hostedAccounts).where(inArray(hostedAccounts.userId, made.users));
+	// By DID rather than by owner: the account purge can run first and null `user_id`, which would
+	// leave this credential matching nothing.
+	await db.delete(hostedAccounts).where(eq(hostedAccounts.did, `did:plc:${RUN}reader`));
 	if (made.users.length) await db.delete(users).where(inArray(users.id, made.users));
 });
 
@@ -226,8 +225,6 @@ describe("with every schema published", () => {
 		// Subject not yet listed: nothing to name.
 		expect(asked).not.toContain(`comment:${ids.subjectUnlistedComment}`);
 		expect(asked).not.toContain(`vote:${ids.subjectUnlistedVote}`);
-		// Followed account has no identity: nothing to name either.
-		expect(asked).not.toContain(`follow:${ids.noIdentityFollow}`);
 		// Already written: not missing.
 		expect(asked).not.toContain(`comment:${ids.alreadyWrittenComment}`);
 		// Not hosted here: the stated gap, asserted so that closing it is a deliberate change.

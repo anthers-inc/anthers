@@ -13,6 +13,7 @@
  * `is_admin` inside a test would leave the flag set for every suite that follows.
  */
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { legalHolds, sessions, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { expect, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
@@ -30,7 +31,12 @@ test.beforeAll(async () => {
 	// production, by a write nobody can reach through the app.
 	const [row] = await db
 		.insert(users)
-		.values({ username: OPERATOR, email: `${OPERATOR}@example.com`, isAdmin: true })
+		.values({
+			username: OPERATOR,
+			email: `${OPERATOR}@example.com`,
+			isAdmin: true,
+			atprotoDid: fixtureDid(),
+		})
 		.returning({ id: users.id });
 	operatorId = row.id;
 	await db

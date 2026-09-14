@@ -21,6 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	accountCycles,
 	accounts,
@@ -65,6 +66,7 @@ async function makeUser(kind: string): Promise<number> {
 			username: `${tag}_${kind}_${n}`,
 			email: `${tag}_${kind}_${n}@example.com`,
 			passwordHash: "x",
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	madeUserIds.push(row.id);

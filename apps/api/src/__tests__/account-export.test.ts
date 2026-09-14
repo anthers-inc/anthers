@@ -187,7 +187,7 @@ describe("the export contains no credentials", () => {
 		// ATProto access/refresh tokens and the DPoP private key are the other
 		// credentials a user's row can reach. None of them are in scope, and the key
 		// names are asserted so a future `select()` with no arguments is caught even
-		// on an account that has never linked anything.
+		// on an account whose identity holds no stored session.
 		const { text } = await rawExport(subject);
 		for (const forbidden of [
 			"accessToken",

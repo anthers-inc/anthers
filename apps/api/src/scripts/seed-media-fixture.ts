@@ -28,6 +28,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
 import { assertDevCheckout } from "@anthers/db/dev-only";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	MEDIA_FIXTURE_DISPLAY_NAME,
 	MEDIA_FIXTURE_EMAIL,
@@ -203,6 +204,7 @@ async function ensureCreator(): Promise<number> {
 			bio: "A fixture creator whose Works carry real, playable media.",
 			isCreator: true,
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	console.log(`${TAG} created creator "${MEDIA_FIXTURE_USERNAME}" (id ${created.id})`);

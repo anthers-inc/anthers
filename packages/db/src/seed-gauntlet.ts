@@ -35,6 +35,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { and, eq, inArray, like } from "drizzle-orm";
 import { assertDevCheckout } from "./dev-only.js";
+import { fixtureDid } from "./fixture-did.js";
 import {
 	GAUNTLET_CREATOR_EMAIL,
 	GAUNTLET_CREATOR_PASSWORD,
@@ -114,6 +115,7 @@ async function ensureViewer(): Promise<void> {
 			// Pre-verified: checkout and Seed-giving carry requireVerified, and there is no
 			// email loop to click through in a headless run.
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
@@ -141,6 +143,7 @@ async function ensureCreator(): Promise<number> {
 			bio: "A fixture creator for the User Gauntlet. Every post below sits on a known rung of the ladder.",
 			isCreator: true,
 			emailVerified: true,
+			atprotoDid: fixtureDid(),
 		})
 		.returning({ id: users.id });
 	console.log(`${TAG} created creator "${GAUNTLET_CREATOR_USERNAME}" (id ${created.id})`);

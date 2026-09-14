@@ -40,7 +40,7 @@ import { open } from "./secret-box.js";
 
 /** Why no writer could be made. Every one of these is ordinary rather than an error. */
 export type NoWriterReason =
-	/** This creator holds no identity Anthers hosts — the common case, and not a problem. */
+	/** This account's identity lives on a server other than Anthers' node — ordinary, and not a problem. */
 	| "not_hosted"
 	/** The credential exists and this deployment's key cannot open it. */
 	| "credential_unopenable"
@@ -52,11 +52,11 @@ export type HostedWriterResult = { writer: RepoWriter } | { writer: null; reason
 /**
  * Open a writer onto the repository of the identity this account holds.
  *
- * 🚨 **A creator with no hosted identity is the ORDINARY case and must stay that way.** Nobody
- * is turned away for lacking one, so this answers `not_hosted` and every caller carries on —
- * publishing a Work must not behave differently, fail, or warn because its creator never took
- * a handle. The day that stops being true is the day Anthers has quietly made an identity a
- * requirement.
+ * 🚨 **A creator whose identity Anthers does not host is an ORDINARY case and must stay that
+ * way.** Somebody who signed up with Bluesky holds their identity elsewhere, so this answers
+ * `not_hosted` and every caller carries on — publishing a Work must not behave differently, fail,
+ * or warn because its creator's identity lives on another server. The day that stops being true
+ * is the day Anthers has quietly made a hosted identity a requirement.
  */
 export async function hostedWriterFor(
 	userId: number,

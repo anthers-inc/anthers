@@ -13,6 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { moderationActions, users } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { QUEUES, queue } from "../jobs/queue";
@@ -48,11 +49,20 @@ function listingSyncs(): unknown[] {
 beforeAll(async () => {
 	const [creator] = await db
 		.insert(users)
-		.values({ username: `rls_c_${run}`, email: `rls_c_${run}@example.com`, isCreator: true })
+		.values({
+			username: `rls_c_${run}`,
+			email: `rls_c_${run}@example.com`,
+			isCreator: true,
+			atprotoDid: fixtureDid(),
+		})
 		.returning();
 	const [operator] = await db
 		.insert(users)
-		.values({ username: `rls_o_${run}`, email: `rls_o_${run}@example.com` })
+		.values({
+			username: `rls_o_${run}`,
+			email: `rls_o_${run}@example.com`,
+			atprotoDid: fixtureDid(),
+		})
 		.returning();
 	creatorId = creator.id;
 	operatorId = operator.id;

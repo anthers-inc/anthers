@@ -29,6 +29,7 @@
 
 import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	poolDistributions,
 	purchases,
@@ -64,6 +65,7 @@ async function makeUser(name: string, extra: Record<string, unknown> = {}): Prom
 			passwordHash: "x",
 			emailVerified: true,
 			isCreator: true,
+			atprotoDid: fixtureDid(),
 			...extra,
 		})
 		.returning({ id: users.id });

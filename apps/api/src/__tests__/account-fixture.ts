@@ -11,10 +11,13 @@
  * stays false, no handle is claimed through `/welcome`, and no welcome email is sent. A suite
  * testing any of those drives the ceremony routes themselves rather than this.
  *
- * The account gets a password, so a suite can still exercise `POST /api/auth/sign-in`.
+ * The account gets a password, so a suite can still exercise `POST /api/auth/sign-in`, and a
+ * placeholder DID from `fixtureDid()`, because every account holds an identity and a fixture
+ * has no real one to hold. Nothing may resolve or publish to it.
  */
 
 import { db } from "@anthers/db/client";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { users } from "@anthers/db/schema";
 import { createSession, hashPassword } from "../services/auth";
 
@@ -48,7 +51,10 @@ export async function createAccount(
 	const email =
 		opts.email ?? `${username ?? `unclaimed_${crypto.randomUUID().slice(0, 8)}`}@example.com`;
 	const passwordHash = await hashPassword(opts.password ?? FIXTURE_PASSWORD);
-	const [user] = await db.insert(users).values({ username, email, passwordHash }).returning();
+	const [user] = await db
+		.insert(users)
+		.values({ username, email, passwordHash, atprotoDid: fixtureDid() })
+		.returning();
 	const token = await createSession(user.id);
 	return { cookie: `session=${token}`, token, userId: user.id, username, email };
 }

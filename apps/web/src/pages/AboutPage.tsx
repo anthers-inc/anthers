@@ -266,9 +266,11 @@ export default function AboutPage() {
 									their own support levels and choose what each one carries.
 								</p>
 								<p>
-									Making an account takes an email address and nothing else. A free account can
-									stream {FREE_PUBLIC_ACCESS_HOURS} hours a month of everything creators have left
-									open to everyone, free forever, and supporting Anthers removes that limit.
+									Making an account takes a handle and an email address, and nothing else. The
+									handle is an identity on the AT Protocol network, either one Anthers issues or a
+									Bluesky identity you already have. A free account can stream{" "}
+									{FREE_PUBLIC_ACCESS_HOURS} hours a month of everything creators have left open to
+									everyone, free forever, and supporting Anthers removes that limit.
 								</p>
 							</div>
 						</Card>

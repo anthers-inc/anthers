@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "atproto_did" SET NOT NULL;

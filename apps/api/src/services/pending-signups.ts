@@ -2,24 +2,32 @@
 /**
  * The pending account — a signup somebody has asked for and not yet finished.
  *
- * 🚨 **This module is the only writer of `pending_signups`.** All three signup doors go
- * through it, and so does every way of coming back to one, because the rules about what may
- * be carried across from an unfinished signup are the whole of the security here and they do
- * not survive being restated at three call sites.
+ * 🚨 **This module is the only writer of `pending_signups`.** Both signup doors go through it,
+ * and so does every way of coming back to one, because the rules about what may be carried
+ * across from an unfinished signup are the whole of the security here and they do not survive
+ * being restated at every call site.
  *
- * The doors are an address, an identity somebody already has, and an identity they are asking
- * Anthers to issue. ⭐ **The third one changes nothing about the shape of this file**, which
- * is the argument for putting it here: a requested handle is one more thing a pending signup
- * carries and hands over at the same moment as everything else — after a code has been read
- * out of a mailbox — rather than a second route that mints something.
+ * 🚨 **Every account is an ATProto identity, so a pending signup is not finished until it holds
+ * one.** The two doors are an identity somebody already has (Bluesky, proved by an OAuth round
+ * trip) and one they are asking Anthers to issue (a handle on `anthers.social`). The address is
+ * proved on both, by a code Anthers sends, but it is never the identity.
  *
  * **What a pending signup is for.** `/subscribe` is where a visitor makes their choices;
- * pressing *Create My Account* writes them here and takes the person off that page to one
- * whose only job is finishing. Two things follow from writing the row at that moment rather
- * than at the end. The next thing asked of somebody is the only thing in front of them,
- * rather than a modal over a page still inviting them to add and remove picks. And a signup
- * that is written down is **resumable**: press the button, walk away, come back, and the
- * choices are still there.
+ * pressing the button writes them here and takes the person off that page to one whose only
+ * job is finishing. Two things follow from writing the row at that moment rather than at the
+ * end. The next thing asked of somebody is the only thing in front of them, rather than a
+ * modal over a page still inviting them to add and remove picks. And a signup that is written
+ * down is **resumable**: press the button, walk away for days, come back, and the choices are
+ * still there.
+ *
+ * 🚨 **The row is also the reservation** (Parker, 2026-09-13). A requested handle is held from
+ * the moment the button is pressed until the signup finishes, is abandoned or changed, or
+ * expires — the unique index on `hosted_handle` enforces it, and the availability check reads
+ * it. Waiting until the code is read to claim the name is what used to strand somebody at the
+ * last step with a name taken out from under them. ⚠️ **Nothing is created on the node early**:
+ * an identity created at the click would publish a DID to the PLC directory for a signup that
+ * may never finish, and that cannot be taken back. The reservation is binding without it,
+ * because Anthers is the only thing that creates accounts on its node.
  *
  * 🚨 **The pre-account state lives here rather than on `users`, and the hazard decides
  * that.** `users.email` is `NOT NULL UNIQUE`, so a pending row on `users` would claim an
@@ -45,31 +53,31 @@
  * **A second OAuth round trip**, which is how a Bluesky signup resumes anywhere. Proving
  * the DID again is at least as strong as proving it the first time.
  *
- * 🚨 **An address-resumed row may not carry its ATProto identity across, and that is the
- * sharp edge of this whole design.** The takeover it prevents: somebody completes a real
- * OAuth round trip with their own Bluesky account, types *your* address into the finishing
- * page, and walks away. You sign up later in a browser with no cookie, complete a code sent
- * to your own mailbox, and — if the row handed its DID over — your account would come into
- * existence with a stranger's Bluesky identity linked to it, which they could then sign in
- * with. So `resumeByProvedAddress` **clears the identity** rather than trusting it. That is the
- * same argument the table's own note makes about being keyed by a token instead of by a DID,
- * applied to the address.
+ * 🚨 **Across browsers, choices travel and credentials are proved again, and that is the sharp
+ * edge of this whole design.** A pending signup carries two kinds of thing. A requested handle
+ * and the support picks are *choices*; a Bluesky DID is a *credential*. The takeover the
+ * difference prevents: somebody completes a real OAuth round trip with their own Bluesky
+ * account, types *your* address into the finishing page, and walks away. You later prove your
+ * own mailbox in a browser with no cookie, and — if the row handed its DID over — your account
+ * would come into existence with a stranger's identity attached, which they could then sign in
+ * with. So `resumeByProvedAddress` **clears the DID** and keeps only its handle, as a hint the
+ * finishing page shows beside *Continue with Bluesky*; a stranger's identity cannot be re-proved
+ * by the person whose mailbox it is.
  *
- * ⚠️ **The route back is settings, not the finishing page.** This note used to say the
- * finishing page offers to connect Bluesky again; it does not, and has not since that page
- * was cut back — `signUpWithBluesky` is reachable from `/subscribe` alone. What the person
- * actually does is finish the signup and link the identity from settings, which costs one
- * round trip and proves the thing that needs proving. The clearing is right either way; the
- * sentence justifying it was describing a button that is not there.
+ * ⚠️ **The requested handle does travel, because the harm there only works when it is silent.**
+ * A stranger who types your address and asks for an ugly name would be naming you — which is
+ * why the finishing page shows a resumed signup's handle and asks for it to be confirmed or
+ * changed before anything is created, rather than creating it on arrival.
  */
 
 import { db } from "@anthers/db/client";
-import { atprotoSessions, pendingSignups } from "@anthers/db/schema";
+import { atprotoSessions, pendingSignups, users } from "@anthers/db/schema";
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { normalizePicks, type SignupPicks } from "@anthers/shared/signup";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, ne } from "drizzle-orm";
 import type { AtprotoIdentity } from "./atproto.js";
 import { attachSessionToUser, revokeAtprotoGrant } from "./atproto-client.js";
+import type { HostedAccount } from "./hosted-accounts.js";
 
 /**
  * How long an unfinished signup waits before it has to be started again.
@@ -102,12 +110,78 @@ function expiry(now = Date.now()): Date {
 }
 
 /**
+ * A requested handle another unfinished signup is already holding.
+ *
+ * Thrown rather than returned because it can only be discovered by the write itself: two
+ * signups asking for one name at the same moment both pass the availability check, and the
+ * unique index is what decides between them.
+ */
+export class HandleReservedError extends Error {
+	constructor() {
+		super("That handle is being held for another signup.");
+		this.name = "HandleReservedError";
+	}
+}
+
+/** Whether a write failed on a unique index — postgres-js reports it, and Drizzle may wrap it. */
+function isUniqueViolation(err: unknown): boolean {
+	const code = (e: unknown) => (e as { code?: string } | null)?.code;
+	return code(err) === "23505" || code((err as { cause?: unknown } | null)?.cause) === "23505";
+}
+
+/**
+ * Free a handle held by a signup that has already expired.
+ *
+ * ⚠️ **The sweep is housekeeping and never the gate**, which is why this exists: an expired row
+ * reads as absent everywhere else, but the unique index still sees it until the sweep runs, and
+ * a name must not stay held past its expiry because a job has not come round yet.
+ */
+async function releaseExpiredReservation(handleName: string): Promise<void> {
+	const gone = await db
+		.delete(pendingSignups)
+		.where(
+			and(eq(pendingSignups.hostedHandle, handleName), lt(pendingSignups.expiresAt, new Date())),
+		)
+		.returning({ did: pendingSignups.atprotoDid });
+	for (const row of gone) {
+		if (row.did) await dropOrphanAtprotoSession(row.did);
+	}
+}
+
+/**
+ * Whether an unfinished signup other than this browser's is holding a handle.
+ *
+ * ⚠️ **This browser's own reservation does not count against it**, so somebody who pressed the
+ * button, came back and is still looking at the name they asked for is told it is theirs rather
+ * than that it is taken.
+ */
+export async function handleReservedElsewhere(
+	handleName: string,
+	ownToken: string | undefined,
+): Promise<boolean> {
+	const [row] = await db
+		.select({ token: pendingSignups.token })
+		.from(pendingSignups)
+		.where(
+			and(
+				eq(pendingSignups.hostedHandle, handleName),
+				gt(pendingSignups.expiresAt, new Date()),
+				ownToken ? ne(pendingSignups.token, ownToken) : undefined,
+			),
+		)
+		.limit(1);
+	return !!row;
+}
+
+/**
  * Write down a signup somebody has just asked for, and return the token that binds it to
  * their browser.
  *
  * ⚠️ **The caller's previous row is dropped first**, so one browser holds one pending
  * signup. Pressing the button twice is a person changing their mind, not two signups, and
  * leaving the first alive would mean a later resume could find the wrong one.
+ *
+ * Throws {@link HandleReservedError} when the requested handle is held by another signup.
  */
 export async function startPendingSignup(input: {
 	previousToken?: string;
@@ -116,31 +190,60 @@ export async function startPendingSignup(input: {
 	next?: string | null;
 	identity?: AtprotoIdentity;
 	/**
-	 * The handle somebody asked Anthers to issue — the third door.
+	 * The handle somebody asked Anthers to issue, reserved by this write.
 	 *
-	 * ⚠️ **Mutually exclusive with `identity` by construction rather than by a check here.**
-	 * The doors are tabs: somebody either brings an identity or asks for one, and the card
-	 * cannot submit both. If a row ever carried both, `consumePendingSignup` prefers the
-	 * proved identity, because a DID somebody has demonstrably signed for outranks a name
-	 * they merely typed.
+	 * ⚠️ **Mutually exclusive with `identity`.** The doors are tabs: somebody either brings an
+	 * identity or asks for one. Choosing one clears the other everywhere a row is changed, so a
+	 * row never holds both.
 	 */
 	hostedHandle?: string | null;
 }): Promise<string> {
+	const hostedHandle = input.identity ? null : input.hostedHandle || null;
+	if (hostedHandle) await releaseExpiredReservation(hostedHandle);
 	if (input.previousToken) await clearPendingSignup(input.previousToken);
 
 	const token = mintToken();
-	await db.insert(pendingSignups).values({
-		token,
-		email: normalize(input.email),
-		picks: normalizePicks(input.picks),
-		next: sanitizeNextPath(input.next ?? undefined) ?? "",
-		atprotoDid: input.identity?.did ?? null,
-		atprotoHandle: input.identity?.handle ?? "",
-		atprotoPdsUrl: input.identity?.pdsUrl ?? "",
-		hostedHandle: input.hostedHandle || null,
-		expiresAt: expiry(),
-	});
+	try {
+		await db.insert(pendingSignups).values({
+			token,
+			email: normalize(input.email),
+			picks: normalizePicks(input.picks),
+			next: sanitizeNextPath(input.next ?? undefined) ?? "",
+			atprotoDid: input.identity?.did ?? null,
+			atprotoHandle: input.identity?.handle ?? "",
+			atprotoPdsUrl: input.identity?.pdsUrl ?? "",
+			hostedHandle,
+			expiresAt: expiry(),
+		});
+	} catch (err) {
+		if (isUniqueViolation(err)) throw new HandleReservedError();
+		throw err;
+	}
 	return token;
+}
+
+/**
+ * Change the identity an unfinished signup is asking for to a handle Anthers issues.
+ *
+ * It reserves the new name, releases the one held before, and drops any Bluesky identity the
+ * row carried — the doors are exclusive. Throws {@link HandleReservedError} when another signup
+ * holds the name.
+ */
+export async function chooseHostedHandle(token: string, handleName: string): Promise<void> {
+	const row = await readPendingSignup(token);
+	if (!row) return;
+
+	await releaseExpiredReservation(handleName);
+	try {
+		await db
+			.update(pendingSignups)
+			.set({ hostedHandle: handleName, atprotoDid: null, atprotoHandle: "", atprotoPdsUrl: "" })
+			.where(eq(pendingSignups.token, token));
+	} catch (err) {
+		if (isUniqueViolation(err)) throw new HandleReservedError();
+		throw err;
+	}
+	if (row.atprotoDid) await dropOrphanAtprotoSession(row.atprotoDid);
 }
 
 /** Read a pending signup without spending it. An expired row reads as absent. */
@@ -164,32 +267,16 @@ export function picksOf(row: PendingSignup): SignupPicks {
 }
 
 /**
- * Whether to issue the handle a signup asked for.
- *
- * 🚨 **A proved identity beats a requested one, and that is the whole of this function.** The
- * doors are tabs on one card, so a row should never carry both — but if one ever did, issuing
- * an identity to an account that has just linked a different one would leave somebody holding
- * two, with nothing saying which is theirs and Anthers holding the keys to the one they did
- * not ask for. A DID somebody has demonstrably signed for outranks a name they typed.
- *
- * Pure and exported because it is a decision rather than a step: the alternative is one
- * condition inside a long function, which is exactly the shape that gets inverted by somebody
- * simplifying a boolean.
- */
-export function shouldIssueHandle(
-	requestedHandle: string | null,
-	atprotoLinked: boolean,
-): requestedHandle is string {
-	return !!requestedHandle && !atprotoLinked;
-}
-
-/**
  * Attach a proved ATProto identity to the signup this browser is in the middle of, or start
  * one if there is none.
  *
  * Starting one covers the case where the OAuth round trip outlived the cookie — a long
  * detour, or a browser that dropped it. There is nothing to recover in that case but the
  * identity itself, which is the part that was just proved.
+ *
+ * ⚠️ **Choosing Bluesky releases any handle the row was holding**, because the doors are
+ * exclusive and a name reserved for a signup that no longer wants it is a name nobody else can
+ * have for a week.
  *
  * ⚠️ **The address the PDS gave us lands here as a prefill and never as proof.** It is
  * written only when the row has none of its own: a person who typed an address at
@@ -209,6 +296,7 @@ export async function bindIdentityToPending(
 			atprotoDid: identity.did,
 			atprotoHandle: identity.handle,
 			atprotoPdsUrl: identity.pdsUrl,
+			hostedHandle: null,
 			...(row.email ? {} : { email: normalize(prefillEmail) }),
 		})
 		.where(eq(pendingSignups.token, row.token));
@@ -236,15 +324,19 @@ export async function findPendingByDid(did: string): Promise<PendingSignup | und
  * Hand back an unfinished signup to somebody who has just proved the address on it, and
  * bind it to *this* browser.
  *
- * 🚨 **The ATProto identity is cleared rather than carried across.** The caller has proved
- * a mailbox, not an identity, and the row's DID was written by whoever completed an OAuth
- * round trip — which is not necessarily the same person, because the address on the row was
- * only ever typed. See the module note for the takeover this closes. Linking the identity from
- * settings once the account exists is the route back — it costs one round trip and proves the
- * thing that actually needs proving. ⚠️ Not the finishing page, which does not offer it.
+ * 🚨 **The Bluesky DID is cleared rather than carried across.** The caller has proved a
+ * mailbox, not an identity, and the row's DID was written by whoever completed an OAuth round
+ * trip — which is not necessarily the same person, because the address on the row was only
+ * ever typed. See the module note for the takeover this closes. Its handle stays behind as a
+ * hint, so the finishing page can offer *Continue with Bluesky* for the identity somebody
+ * started with, and the round trip there proves it again.
  *
- * Returns the row's token, so the caller can rebind the cookie, or undefined when there is
- * no unfinished signup for that address.
+ * ⭐ **The requested handle and the picks are kept**, still reserved, because they are choices
+ * rather than credentials and the finishing page asks for them to be confirmed before anything
+ * is created. Dropping them is what used to leave the real person with nothing to finish.
+ *
+ * Returns the row, rebound to a new token so the caller can set the cookie, or undefined when
+ * there is no unfinished signup for that address.
  */
 export async function resumeByProvedAddress(email: string): Promise<PendingSignup | undefined> {
 	const address = normalize(email);
@@ -266,16 +358,9 @@ export async function resumeByProvedAddress(email: string): Promise<PendingSignu
 		.set({
 			token,
 			emailProvedAt: new Date(),
+			// The credential goes; its handle stays as the hint described above.
 			atprotoDid: null,
-			atprotoHandle: "",
 			atprotoPdsUrl: "",
-			// 🚨 **The requested handle goes with it, for a smaller version of the same reason.**
-			// It is a preference rather than a credential, so carrying it across would not hand
-			// anybody an account — it would attach a permanent, public name **somebody else
-			// chose** to the identity of whoever proves the address. A stranger who types your
-			// address and asks for an ugly name would be naming you. Retyping a handle is
-			// recoverable; a published identity document is not.
-			hostedHandle: null,
 			// The clock restarts: they are here and finishing, not abandoning.
 			expiresAt: expiry(),
 		})
@@ -327,7 +412,9 @@ export async function setPendingEmail(token: string, email: string): Promise<voi
  */
 export async function issueCodeForPending(token: string | undefined): Promise<void> {
 	const row = await readPendingSignup(token);
-	if (!row?.email || row.codeSentAt) return;
+	// A row whose address is already proved needs no code: it was resumed in this browser, and
+	// the person is back from a Bluesky round trip to finish it.
+	if (!row?.email || row.codeSentAt || row.emailProvedAt) return;
 
 	try {
 		const { issueSignupCode } = await import("./signup-codes.js");
@@ -363,84 +450,177 @@ export async function markCodeSent(token: string | undefined): Promise<void> {
 }
 
 /**
- * Spend a pending signup against the account it has just become, and return what it was
- * carrying so the caller can act on the choices.
+ * Record that the address on a signup has been proved, by a code just spent.
  *
- * 🚨 **The row is deleted whatever happens.** A pending signup that has been looked at has
- * done its job, and leaving a spent one alive is how a replay becomes possible — the same
- * rule the parked identity carried before this table generalized it.
- *
- * The identity is attached through `linkAtprotoToUser`, which refuses rather than steals a
- * DID some other account already holds. A refusal is deliberately not fatal: the right
- * outcome is a signed-in account with no link, which the person can sort out from settings.
+ * ⚠️ **Stamped before the identity is created, so a failure there costs nothing.** If the node
+ * is down at the last step, the person has still read the code; the stamp is what lets them
+ * finish later — here or in another browser — without being asked to prove the same mailbox
+ * twice. The proved address replaces whatever was typed, because the proof is what counts.
  */
-export async function consumePendingSignup(
-	token: string | undefined,
-	userId: number,
-): Promise<{
-	picks: SignupPicks;
-	next: string;
-	atprotoLinked: boolean;
-	/** The handle Anthers issued, or null when none was asked for or none could be. */
-	hostedHandle: string | null;
-	/** Why an asked-for handle was not issued. Shown to the person, so it is a sentence. */
-	hostedHandleError: string | null;
-} | null> {
-	const row = await readPendingSignup(token);
-	if (!row) return null;
+export async function markAddressProved(token: string, email: string): Promise<void> {
+	await db
+		.update(pendingSignups)
+		.set({ email: normalize(email), emailProvedAt: new Date() })
+		.where(eq(pendingSignups.token, token));
+}
 
-	await db.delete(pendingSignups).where(eq(pendingSignups.token, row.token));
+/** The identity a new account is about to be created with. */
+export type SignupIdentity =
+	/** An identity somebody already holds, proved by an OAuth round trip in this browser. */
+	| { kind: "brought"; did: string; handle: string; pdsUrl: string }
+	/** An identity Anthers has just created on its own node. */
+	| { kind: "hosted"; account: HostedAccount; pdsUrl: string };
 
-	let atprotoLinked = false;
+/** Why a signup could not be finished yet. The message is shown to the person, so it is a sentence. */
+export interface SignupRefusal {
+	reason: "no_identity" | "identity_taken" | "handle_unavailable" | "identity_unavailable";
+	message: string;
+	/** A person can act on 409s; a 503 is Anthers' problem and says to try again. */
+	status: 409 | 503;
+}
+
+/**
+ * Settle the identity a signup will create its account with, before any account exists.
+ *
+ * 🚨 **This runs BEFORE the `users` row is written, and that order is the rule.** Every account
+ * is an ATProto identity, so an account created first and given its identity second is an
+ * account that exists without one whenever the second step fails. Here a failure leaves the
+ * pending signup exactly where it was — address proved, handle still reserved — and the
+ * finishing page says what to do.
+ *
+ * ⚠️ **A refusal about the identity changes the row so the finishing page can offer a choice.**
+ * A Bluesky identity that already has an Anthers account is dropped (the answer is to sign in
+ * with it), and a name the node will not issue releases its reservation (the answer is another
+ * name). An operational failure changes nothing, because the same request will work later.
+ *
+ * Called only once the address has been proved, which is what makes creating an identity here
+ * safe: an identity issued from a typed address would be bound to whoever typed it.
+ */
+export async function establishSignupIdentity(
+	row: PendingSignup,
+	email: string,
+): Promise<{ identity: SignupIdentity } | { refusal: SignupRefusal }> {
 	if (row.atprotoDid) {
-		// Imported lazily to keep the identity rules in one module without a cycle at load.
-		const { linkAtprotoToUser } = await import("./atproto.js");
-		const result = await linkAtprotoToUser(userId, {
-			did: row.atprotoDid,
-			handle: row.atprotoHandle,
-			pdsUrl: row.atprotoPdsUrl,
-		});
-		atprotoLinked = !result.error;
-		// ⚠️ **Claim the OAuth session for the account too.** The callback writes it keyed by
-		// DID, before there is an account to own it, so `userId` is null until something
-		// reconciles it — and a row left null is one the sweep is entitled to treat as an
-		// orphan. It would be recreated on the next sign-in either way, but a signup that
-		// finished should not leave its own credentials looking abandoned.
-		if (atprotoLinked) await attachSessionToUser(row.atprotoDid, userId);
+		const [holder] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.atprotoDid, row.atprotoDid))
+			.limit(1);
+		if (holder) {
+			await db
+				.update(pendingSignups)
+				.set({ atprotoDid: null, atprotoPdsUrl: "" })
+				.where(eq(pendingSignups.token, row.token));
+			return {
+				refusal: {
+					reason: "identity_taken",
+					message: `@${row.atprotoHandle} already has an Anthers account. Sign in with Bluesky instead, or choose another identity.`,
+					status: 409,
+				},
+			};
+		}
+		return {
+			identity: {
+				kind: "brought",
+				did: row.atprotoDid,
+				handle: row.atprotoHandle,
+				pdsUrl: row.atprotoPdsUrl,
+			},
+		};
 	}
 
-	/**
-	 * 🚨 **The third door is served here and nowhere else, which is what keeps it a door on
-	 * the one signup rather than a second way to mint an account.** An identity is issued only
-	 * after the address has been proved, on exactly the same footing as the Bluesky door's DID
-	 * being attached here — and for the same reason. A name typed at `/subscribe` is a request;
-	 * the code just read out of a mailbox is what makes it somebody's.
-	 *
-	 * ⚠️ **A proved identity wins over a requested one.** A row should never carry both — the
-	 * doors are tabs — and if one somehow does, the DID somebody signed for outranks the name
-	 * they typed, and issuing a second identity to an account that already has one would leave
-	 * the account holding two with no way to say which is theirs.
-	 */
-	let hostedHandle: string | null = null;
-	let hostedHandleError: string | null = null;
-	// See {@link shouldIssueHandle} for the rule and the reason.
-	if (shouldIssueHandle(row.hostedHandle, atprotoLinked)) {
-		const { provisionHostedIdentity } = await import("./hosted-accounts.js");
-		const issued = await provisionHostedIdentity({
-			userId,
-			handleName: row.hostedHandle,
-			email: row.email ?? "",
-		});
-		hostedHandle = issued.handle;
-		hostedHandleError = issued.error?.message ?? null;
-		// An operational failure is nobody's fault and is invisible from outside, so it is the
-		// one that has to be logged. A refused name is reported to the person who chose it.
-		if (issued.error?.fault === "operational") {
-			console.error(`[pending-signups] could not issue a handle: ${issued.error.message}`);
+	if (row.hostedHandle) {
+		const { createHostedAccount, HostedAccountError, hostedIdentityOffered, hostedPdsUrl } =
+			await import("./hosted-accounts.js");
+		if (!hostedIdentityOffered()) {
+			return {
+				refusal: {
+					reason: "identity_unavailable",
+					message: "Anthers isn't issuing handles right now. Your handle is still held for you.",
+					status: 503,
+				},
+			};
+		}
+		try {
+			const account = await createHostedAccount({ handleName: row.hostedHandle, email });
+			return { identity: { kind: "hosted", account, pdsUrl: hostedPdsUrl() } };
+		} catch (err) {
+			if (err instanceof HostedAccountError && err.fault === "name") {
+				await db
+					.update(pendingSignups)
+					.set({ hostedHandle: null })
+					.where(eq(pendingSignups.token, row.token));
+				return { refusal: { reason: "handle_unavailable", message: err.message, status: 409 } };
+			}
+			// Nobody's fault and invisible from outside, so it is the one that has to be logged.
+			console.error("[pending-signups] could not create the identity:", err);
+			const message =
+				err instanceof HostedAccountError ? err.message : "Couldn't create the handle.";
+			return {
+				refusal: {
+					reason: "identity_unavailable",
+					message: `${message} Your handle is still held for you — try again in a moment.`,
+					status: 503,
+				},
+			};
 		}
 	}
 
-	return { picks: picksOf(row), next: row.next, atprotoLinked, hostedHandle, hostedHandleError };
+	return {
+		refusal: {
+			reason: "no_identity",
+			message: "Choose a handle, or sign up with Bluesky, to finish creating your account.",
+			status: 409,
+		},
+	};
+}
+
+/**
+ * Spend a pending signup against the account just created from it, and write down what its
+ * identity needs.
+ *
+ * 🚨 **The row is deleted whatever happens.** A pending signup that has become an account has
+ * done its job, and leaving a spent one alive is how a replay becomes possible.
+ *
+ * ⚠️ **A hosted identity's credential is written first**, because the password in it is the only
+ * copy — see `recordHostedIdentity`. A brought identity's OAuth session is claimed for the
+ * account, since the callback wrote it keyed by DID before there was an account to own it, and a
+ * row left with a null `userId` is one the sweep is entitled to treat as an orphan.
+ */
+export async function completePendingSignup(
+	token: string,
+	userId: number,
+	identity: SignupIdentity,
+): Promise<{ picks: SignupPicks; next: string } | null> {
+	const row = await readPendingSignup(token);
+	await db.delete(pendingSignups).where(eq(pendingSignups.token, token));
+
+	if (identity.kind === "hosted") {
+		const { recordHostedIdentity } = await import("./hosted-accounts.js");
+		await recordHostedIdentity(userId, identity.account);
+	} else {
+		await attachSessionToUser(identity.did, userId);
+	}
+
+	return row ? { picks: picksOf(row), next: row.next } : null;
+}
+
+/**
+ * Spend a pending signup without creating anything — its address turned out to belong to an
+ * account that already exists, and that person is simply signed in.
+ *
+ * ⚠️ **The identity it carried is not attached**, because the account already holds its own and
+ * an account holds exactly one. The reservation is released and an unclaimed OAuth session is
+ * revoked, the same as abandoning. The picks still come back, so somebody who chose to support a
+ * creator on the way in is not asked twice.
+ */
+export async function spendPendingSignup(
+	token: string,
+): Promise<{ picks: SignupPicks; next: string } | null> {
+	const row = await readPendingSignup(token);
+	if (!row) return null;
+	await clearPendingSignup(token);
+	return { picks: picksOf(row), next: row.next };
 }
 
 /** Abandon a pending signup outright. Safe to call with no token, or a stale one. */
@@ -479,7 +659,7 @@ export async function sweepExpiredPendingSignups(): Promise<number> {
  * authorization server first.
  *
  * A row deleted without a revocation leaves a live token we no longer track, which is the
- * worse of the two — the same argument `unlinkAtprotoFromUser` makes.
+ * worse of the two.
  */
 async function dropOrphanAtprotoSession(did: string): Promise<void> {
 	const [orphan] = await db

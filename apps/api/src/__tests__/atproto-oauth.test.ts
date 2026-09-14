@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * ATProto OAuth: the client builds under Bun, its stores survive a restart, and the
- * signup door stays shut.
+ * ATProto OAuth: the client builds under Bun, and its stores survive a restart.
  *
  * 🚨 The first test is the load-bearing one and it looks trivial. `@atproto/oauth-client-node`
  * — the package every guide reaches for — throws at IMPORT time under Bun, from a
@@ -11,6 +10,7 @@
  */
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
+import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoOauthState, atprotoSessions, users } from "@anthers/db/schema";
 import { JoseKey } from "@atproto/jwk-jose";
 import { eq, like } from "drizzle-orm";
@@ -192,7 +192,7 @@ describe("oauth state store", () => {
 			dpopKey,
 			verifier: "v",
 			authMethod: "none",
-			appState: JSON.stringify({ intent: "link", userId: 7 }),
+			appState: JSON.stringify({ intent: "publish", userId: 7 }),
 		});
 
 		const back = await oauthStateStore.get(key);
@@ -200,7 +200,7 @@ describe("oauth state store", () => {
 		// The key must come back as a usable Key, not the JWK it was stored as — that
 		// conversion is the whole job of the store wrapper.
 		expect(typeof back.dpopKey.privateJwk).toBe("object");
-		expect(back.appState).toBe(JSON.stringify({ intent: "link", userId: 7 }));
+		expect(back.appState).toBe(JSON.stringify({ intent: "publish", userId: 7 }));
 		expect(back.iss).toBe("https://bsky.social");
 	});
 
@@ -271,7 +271,12 @@ describe("session store", () => {
 
 		const [user] = await db
 			.insert(users)
-			.values({ username: `${RUN}u`, email: `${RUN}@example.test`, emailVerified: false })
+			.values({
+				username: `${RUN}u`,
+				email: `${RUN}@example.test`,
+				emailVerified: false,
+				atprotoDid: fixtureDid(),
+			})
 			.returning();
 		await attachSessionToUser(did, user.id);
 
@@ -279,17 +284,6 @@ describe("session store", () => {
 		expect(linked.userId).toBe(user.id);
 	});
 });
-
-/*
- * 🚨 **The signup-gate tests moved to `atproto-signup.test.ts` on 2026-08-22, and the
- * coverage got stronger rather than thinner.** They used to call a service function —
- * `createAccountFromAtproto` — that created an account when the PDS reported the address
- * confirmed. That function is gone: an ATProto signup now ends at `/auth/signup/verify`
- * like every other one, after a code Anthers sent has been read. So the gate is tested
- * where it is actually enforced, at the two routes: `/auth` refuses `intent: "signup"` with
- * a 403 before anybody is sent to an authorization server, and the callback refuses with
- * `signup_disabled`.
- */
 
 describe("identity resolution", () => {
 	afterAll(() => setAtprotoClient(undefined));

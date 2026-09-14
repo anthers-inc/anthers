@@ -10,15 +10,15 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
  * Where an ATProto round trip lands (route: `/auth/atproto/callback`).
  *
  * The API has already done everything that matters by the time this renders — exchanged
- * the code, linked or signed in, set the session cookie — and redirected here with the
+ * the code, signed in or parked a signup, set the session cookie — and redirected here with the
  * outcome in the query. So this page is a *translator*: it turns one word into a sentence
  * and sends the person on.
  *
  * 🚨 **Nothing here creates an account, and every signup-shaped outcome goes somewhere that
  * cannot become a second door.** Coming back from the *signup* door is `needs_email`: the
  * identity is proved and written onto the pending signup, and `/finish` completes the
- * ordinary emailed-code ceremony. Coming back from the *sign-in* door with a handle nobody
- * has linked is `resume_signup` when there is an unfinished signup for that identity —
+ * ordinary emailed-code ceremony. Coming back from the *sign-in* door with a handle no account
+ * holds is `resume_signup` when there is an unfinished signup for that identity —
  * proving the DID a second time is the same evidence as proving it the first — and
  * `signup_disabled` when there is not, because the honest answer is then that there is no
  * account, not that something broke.
@@ -29,25 +29,20 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
  *
  * ⚠️ Keys are the API's vocabulary, not free text. Four of them (`missing_params`,
  * `session_expired`, `state_mismatch`, `auth_failed`) belonged to the hand-rolled OAuth
- * client that PR #56 deleted and had been unreachable since; `did_already_linked` was
- * unreachable in the other direction, because the service was returning a whole sentence
- * where this map expected a code. A message table is exactly the sort of thing that rots
- * without anything going visibly wrong, since the fallback below reads plausibly.
+ * client that PR #56 deleted and had been unreachable since. A message table is exactly the
+ * sort of thing that rots without anything going visibly wrong, since the fallback below reads
+ * plausibly — so a code the API stops sending leaves this table in the same change.
  */
 const ERROR_MESSAGES: Record<string, string> = {
 	signup_disabled:
-		"That Bluesky account isn't connected to an Anthers account yet — signing in can't create one. Sign up, and the same handle will work from then on.",
-	not_authenticated: "You have to be signed in to link a Bluesky account.",
-	did_already_linked: "That Bluesky account is already linked to a different Anthers account.",
-	signup_failed: "We couldn't finish setting up that account.",
+		"There's no Anthers account for that Bluesky identity yet — signing in can't create one. Sign up with it, and the same handle will work from then on.",
+	not_authenticated: "You have to be signed in to do that.",
 	exchange_failed: "Bluesky didn't complete the sign-in. Please try again.",
 	// 🚨 The publishing grant's own refusals. `wrong_identity` is the one with teeth: it means
-	// the account authorized at Bluesky was not the one linked here, and granting anyway would
+	// the account authorized at Bluesky was not the account's own identity, and granting anyway would
 	// have pointed a creator's catalog at somebody else's repository.
 	wrong_identity:
-		"That's a different Bluesky account from the one linked here. Sign in to the linked account and try again.",
-	not_linked:
-		"Connect a Bluesky account in your settings first — your listings go in its repository.",
+		"That's a different Bluesky account from the one your Anthers account is built on. Sign in to that one and try again.",
 	hosted:
 		"Anthers already publishes your listings — your handle lives on the server Anthers runs, so there's nothing to grant.",
 };
@@ -76,18 +71,11 @@ export default function ATProtoCallbackPage() {
 		// may be queued after. The same ordering bug cost `/subscribe` a real defect.
 		if (success === "login") {
 			refreshUser().then(() => {
-				// An account that never claimed a handle still owes one, and it cannot be
+				// An account that never claimed a username still owes one, and it cannot be
 				// linked to or found until it does.
 				navigate(needsOnboarding ? withNextPath("/welcome", next) : (next ?? "/feed"), {
 					replace: true,
 				});
-			});
-			return;
-		}
-
-		if (success === "linked") {
-			refreshUser().then(() => {
-				navigate("/settings?bluesky=linked", { replace: true });
 			});
 			return;
 		}

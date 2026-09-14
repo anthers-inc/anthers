@@ -122,7 +122,6 @@ import type { PublicUser } from "@anthers/web-shared/types";
 import {
 	ArrowDownTrayIcon,
 	BanknotesIcon,
-	EnvelopeIcon,
 	HeartIcon,
 	PlayCircleIcon,
 	ServerStackIcon,
@@ -138,17 +137,19 @@ import React, {
 	useSyncExternalStore,
 } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import {
+	BlueskyHandleField,
+	FIELD_BUTTON_GAP,
+	FIELD_STATUS,
+	HostedHandleField,
+	hostedNameSubmittable,
+} from "../components/auth/HandleFields";
 import { storedGibPerSourceHour } from "../components/calculators/video-model";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
 import { FAQBlock } from "../components/ui/FAQ";
-import {
-	type HandleStatus,
-	handleStatusLine,
-	handleStatusTone,
-	useHandleAvailability,
-} from "../lib/hosted-handle";
+import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
  * Both of these were quarantined in a named `SPIKE` block until 2026-08-12, because
@@ -1551,13 +1552,11 @@ function GoFurtherCard({
  * one you have. The address is asked for afterwards, at `/finish`, once we know whether a
  * Bluesky server is going to hand one over.
  *
- * ⚠️ **`email` survives as a fallback and is not a door anybody is offered while hosting
- * works.** With hosting unconfigured, `handle` is impossible and the only door left would be
- * Bluesky — so anyone without a Bluesky account could not sign up at all. The card drops back
- * to the address it always asked for rather than stranding them. That state is a degraded
- * deployment rather than a choice, and `hostedIdentityOffered` is what distinguishes them.
+ * ⚠️ **There is no third door.** An account is always an identity, so there is nothing to fall
+ * back to when hosting is unconfigured except the Bluesky door alone — which is what the card
+ * shows then, a degraded deployment rather than a choice.
  */
-type Door = "email" | "bluesky" | "handle";
+type Door = "bluesky" | "handle";
 
 /**
  * The line under the signup button, for one reading of the page.
@@ -1583,12 +1582,11 @@ function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
 	if (paying)
 		return "We'll confirm your email first. You'll see the exact charge before anything is taken.";
 	if (door === "bluesky") return "Bluesky will ask to share your email address.";
-	// 🚨 Both of the doors that are actually offered carry news rather than reassurance now,
-	// because neither of them asks for an address and somebody pressing the button needs to
-	// know one is coming. The alternative — a second field here — is what the note under the
-	// Bluesky panel exists to avoid, since a taller panel resizes the card as tabs are switched.
-	if (door === "handle") return "We'll ask for your email next, to confirm it's you.";
-	return "We'll email you a code to confirm your address.";
+	// 🚨 Both doors carry news rather than reassurance, because neither asks for an address and
+	// somebody pressing the button needs to know one is coming. The alternative — a second field
+	// here — is what the note under the Bluesky panel exists to avoid, since a taller panel
+	// resizes the card as tabs are switched.
+	return "We'll ask for your email next, to confirm it's you.";
 }
 
 /**
@@ -1600,10 +1598,9 @@ function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
  * so it narrows the set rather than joining it.
  */
 function signupNoteSizers(signedIn: boolean): string[] {
-	if (signedIn) return [signupNote(true, false, "email")];
+	if (signedIn) return [signupNote(true, false, "handle")];
 	return [
-		signupNote(false, true, "email"),
-		signupNote(false, false, "email"),
+		signupNote(false, true, "handle"),
 		signupNote(false, false, "bluesky"),
 		signupNote(false, false, "handle"),
 	];
@@ -1626,20 +1623,7 @@ function signupNoteSizers(signedIn: boolean): string[] {
  */
 
 /**
- * The line under a handle field, held open on BOTH doors whether or not it has anything to say.
- *
- * ⚠️ **It is always two lines tall, and the Bluesky door reserves it too.** The Anthers door
- * reports on the name as somebody types — checking, taken, yours — so its line must not grow
- * with its message, or the button moves out from under the pointer heading for it. One line is
- * not enough, because at 390px the longest of these messages wraps. The Bluesky door never says
- * anything here, and holds the same line open anyway so the two panels are the same height and
- * switching tabs never resizes the card. `2lh` follows the line height, so tightening the
- * leading tightens the reservation with it.
- */
-const FIELD_STATUS = "mt-1 min-h-[2lh] text-xs leading-tight";
-
-/**
- * The signup control: two doors on a tab switcher, an address or a Bluesky handle.
+ * The signup control: two doors on a tab switcher, a handle Anthers issues or a Bluesky one.
  *
  * 🚨 **One component, rendered twice, and that is deliberate rather than lazy.** It opens
  * the page — because the first thing a visitor needs to know is that joining costs nothing
@@ -1647,16 +1631,14 @@ const FIELD_STATUS = "mt-1 min-h-[2lh] text-xs leading-tight";
  * of this markup would be two things to keep honest about what the button promises, and
  * the promise is the part that matters.
  *
- * Both instances read the same `email` state, so typing in one fills the other; only the
- * input's `id` differs, which is why `idPrefix` exists. `door` is shared for the same
- * reason: a reader who picks Bluesky at the top and scrolls to the bottom should find the
- * card they chose, not the one they didn't.
+ * Both instances read the same field state, so typing in one fills the other; only the
+ * inputs' `id`s differ, which is why `idPrefix` exists. `door` is shared for the same reason:
+ * a reader who picks Bluesky at the top and scrolls to the bottom should find the card they
+ * chose, not the one they didn't.
  *
- * ⚠️ **The tabs replaced a divider and a second button underneath the email field**, which
- * made Bluesky read as the afterthought rather than as the other half of one choice. They
- * appear only where there genuinely are two doors: a signed-in visitor has no address to
- * give, somebody returning from Bluesky without a usable address has already used that
- * door, and the door is closed entirely when the API says signup is off.
+ * ⚠️ **The tabs make Bluesky the other half of one choice rather than an afterthought.** They
+ * appear only where there genuinely are two doors: a signed-in visitor has nothing to sign up
+ * for, and the Anthers door is closed when hosting is not configured.
  */
 function SignupForm({
 	idPrefix,
@@ -1666,17 +1648,18 @@ function SignupForm({
 	noteSizers,
 	error,
 	success,
-	email,
-	onEmailChange,
+	signedIn,
 	onSubmit,
 	onBluesky,
 	handle,
 	onHandleChange,
+	blueskyRefusal,
 	onHostedHandle,
 	hostedName,
 	onHostedNameChange,
 	hostedStatus,
 	hostedSuffix,
+	hostedRefusal,
 	doorsAnswered,
 	door,
 	onDoorChange,
@@ -1702,9 +1685,8 @@ function SignupForm({
 	noteSizers?: string[];
 	error: string | null;
 	success: string | null;
-	/** Null when signed in — there is no address to ask a returning user for. */
-	email: string | null;
-	onEmailChange: (value: string) => void;
+	/** A signed-in visitor gets a button that commits their picks, and no doors at all. */
+	signedIn: boolean;
 	onSubmit: () => void;
 	/**
 	 * Hand the typed handle off to Bluesky. Null when the door should not be offered at all.
@@ -1713,21 +1695,25 @@ function SignupForm({
 	 * so nothing may be queued after it, and `busy` is deliberately left set.
 	 */
 	onBluesky: ((handle: string) => void) | null;
-	/** The Bluesky handle being typed, shared by both copies of this card like `email`. */
+	/** The Bluesky handle being typed, shared by both copies of this card. */
 	handle: string;
 	onHandleChange: (value: string) => void;
+	/** Why the last handoff to Bluesky did not start, shown in the field's reserved line. */
+	blueskyRefusal: string | null;
 	/**
 	 * Ask Anthers to issue a handle. Null when hosting is not being offered — see
 	 * `hostedIdentityOffered` for why the door is closed rather than refusing when pressed.
 	 */
 	onHostedHandle: ((name: string) => void) | null;
-	/** The name being typed into the handle door, shared like `email` and `handle`. */
+	/** The name being typed into the handle door, shared like `handle`. */
 	hostedName: string;
 	onHostedNameChange: (value: string) => void;
 	/** What the API last said about `hostedName`. */
 	hostedStatus: HandleStatus;
 	/** The suffix issued handles hang under, as the API reports it. Empty until it answers. */
 	hostedSuffix: string;
+	/** Why the server refused the name as submitted — taken, or held for another signup. */
+	hostedRefusal: string | null;
 	/**
 	 * Whether it is yet known which doors exist. False for the moment before the API answers.
 	 *
@@ -1742,7 +1728,6 @@ function SignupForm({
 	/** Outer spacing only — the card's own box is this component's, not a caller's. */
 	className?: string;
 }) {
-	const fieldId = `${idPrefix}-email`;
 	const handleFieldId = `${idPrefix}-handle`;
 	const hostedFieldId = `${idPrefix}-hosted`;
 
@@ -1750,10 +1735,10 @@ function SignupForm({
 	 * The doors actually on offer, in the order they are shown.
 	 *
 	 * ⚠️ **Built rather than counted, because each one closes for its own reason.** A signed-in
-	 * visitor has no address to give, the Bluesky door is shut while the launch switch is off,
-	 * and the handle door is shut unless every piece of hosting is configured. The strip appears
-	 * only when at least two survive: one tab above a panel reads as a control that has lost its
-	 * other half, which is worse than the plain card a single door falls back to.
+	 * visitor has neither, and the handle door is shut unless every piece of hosting is
+	 * configured. The strip appears only when both survive: one tab above a panel reads as a
+	 * control that has lost its other half, which is worse than the plain card a single door
+	 * falls back to.
 	 *
 	 * 🚨 **Bluesky is LAST, and that is the brand rule deciding the layout rather than a
 	 * preference.** The butterfly keeps its own color whether or not its tab is selected —
@@ -1765,24 +1750,6 @@ function SignupForm({
 	 * does no harm.
 	 */
 	const doors: { key: Door; label: string; icon: React.ReactNode }[] = [
-		// 🚨 **The address door appears only when a handle is impossible.** Signing up starts
-		// with an identity now, and offering "just an address" beside it would offer an account
-		// that can never write a follow or a comment — which is not a plainer account, it is a
-		// permanently lesser one. It comes back when hosting is unconfigured, because the
-		// alternative there is refusing everybody who has no Bluesky account.
-		...(email !== null && !onHostedHandle
-			? [
-					{
-						key: "email" as const,
-						label: "Email",
-						icon: (
-							<EnvelopeIcon
-								className={`h-5 w-5 ${door === "email" ? "text-primary" : "text-base-content/40"}`}
-							/>
-						),
-					},
-				]
-			: []),
 		...(onHostedHandle
 			? [
 					{
@@ -1808,47 +1775,10 @@ function SignupForm({
 	 * arrives after the first render — so a chosen door that is no longer on offer falls back
 	 * to the first that is, rather than rendering a card with no panel in it.
 	 */
-	const shown = doors.some((d) => d.key === door) ? door : (doors[0]?.key ?? "email");
-	/**
-	 * ⚠️ **Every panel keys off `shown` alone, never off `tabbed`.** They used to fall back to
-	 * "no tabs means show the email field", which was true while email was always a door and
-	 * became wrong the moment it stopped being one: with hosting on and the Bluesky switch off
-	 * there is exactly one door, no tab strip, and the fallback would have rendered the address
-	 * field while the handle door sat unreachable. `shown` is always a door that exists.
-	 */
-	const showEmail = doorsAnswered && email !== null && shown === "email";
+	const shown = doors.some((d) => d.key === door) ? door : (doors[0]?.key ?? "bluesky");
+	// ⚠️ **Every panel keys off `shown` alone, never off `tabbed`**, because a single door has no
+	// tab strip and still has a panel. `shown` is always a door that exists.
 	const note = noteFor(shown);
-
-	const emailPanel = showEmail && (
-		<form
-			className="text-left"
-			onSubmit={(e) => {
-				e.preventDefault();
-				onSubmit();
-			}}
-		>
-			<label className="label px-0 pb-1" htmlFor={fieldId}>
-				<span className="text-sm font-semibold">Where should we reach you?</span>
-			</label>
-			<input
-				id={fieldId}
-				type="email"
-				required
-				autoComplete="email"
-				placeholder="you@example.com"
-				className="input input-bordered w-full"
-				value={email ?? ""}
-				onChange={(e) => onEmailChange(e.target.value)}
-			/>
-			<button
-				type="submit"
-				className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
-				disabled={busy}
-			>
-				{busy ? "Working…" : cta}
-			</button>
-		</form>
-	);
 
 	/**
 	 * The Bluesky door, asked for in place rather than in a modal.
@@ -1861,7 +1791,7 @@ function SignupForm({
 	 *
 	 * ⚠️ **The panel is a field and a button, and nothing else** (Parker, 2026-08-24). It
 	 * carried a paragraph explaining the round trip, which made the Bluesky tab twice the
-	 * height of the email one — so switching tabs resized the card under the reader. What
+	 * height of the other — so switching tabs resized the card under the reader. What
 	 * survives of that explanation is the one-line `note` below the button.
 	 *
 	 * 🚨 **One of the three promises survives, and it is in the `note` under the button.**
@@ -1879,40 +1809,12 @@ function SignupForm({
 				onBluesky(handle);
 			}}
 		>
-			<label className="label px-0 pb-1" htmlFor={handleFieldId}>
-				<span className="text-sm font-semibold">What&rsquo;s your handle?</span>
-			</label>
-			{/* A handle is a domain name, so this is `text` with a URL keyboard rather than an
-			    `email`-shaped field. The `@` is drawn in the box, the same as on the Anthers
-			    door, because it is how people write a handle and not part of one — so one typed
-			    anyway is stripped on submit rather than fought with while typing.
-
-			    The box is a `<label>` rather than a `<div>` so a click anywhere in it, the `@`
-			    included, lands in the field. */}
-			<label
-				htmlFor={handleFieldId}
-				className="input input-bordered flex w-full items-center gap-0"
-			>
-				<span aria-hidden="true" className="shrink-0 text-base-content/40">
-					@
-				</span>
-				<input
-					id={handleFieldId}
-					type="text"
-					inputMode="url"
-					autoComplete="username"
-					spellCheck={false}
-					autoCapitalize="none"
-					placeholder="alice.bsky.social"
-					aria-label="Bluesky handle"
-					className="min-w-0 flex-1 bg-transparent p-0 outline-none"
-					value={handle}
-					onChange={(e) => onHandleChange(e.target.value)}
-				/>
-			</label>
-			{/* Nothing is ever said here; the line is held open so this panel is exactly as tall
-			    as the Anthers one. See `FIELD_STATUS`. */}
-			<p aria-hidden="true" className={FIELD_STATUS} />
+			<BlueskyHandleField
+				id={handleFieldId}
+				value={handle}
+				onChange={onHandleChange}
+				refusal={blueskyRefusal}
+			/>
 			{/* 🚨 No butterfly on this button, and that is a compliance decision rather than a
 			    visual one. Bluesky's guidance allows their mark in three colors only, and the
 			    one that reads on `btn-primary` differs by theme — our primary is a deep green
@@ -1922,7 +1824,7 @@ function SignupForm({
 			    surface we control, which is where it belongs. */}
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg mt-2 w-full ${busy ? "btn-disabled" : ""}`}
+				className={`btn btn-primary btn-lg ${FIELD_BUTTON_GAP} w-full ${busy ? "btn-disabled" : ""}`}
 				disabled={busy || !handle.trim()}
 			>
 				{busy ? "Taking you to Bluesky…" : "Sign Up with Bluesky"}
@@ -1931,7 +1833,7 @@ function SignupForm({
 	);
 
 	/**
-	 * The handle door: one field, exactly like the other two.
+	 * The handle door: one field, exactly like the Bluesky one.
 	 *
 	 * 🚨 **It does not ask for an email address, and that is the whole reason it fits.** The
 	 * account is still minted from a proved address — nothing about that changed — but asking
@@ -1941,8 +1843,7 @@ function SignupForm({
 	 * Bluesky signups whose server refuses to share one, and this door reuses it.
 	 *
 	 * ⭐ It is also the rule this page has always followed: *"the ONE field this page
-	 * collects"*. For this door the handle is that field, because the handle is the only thing
-	 * about it that is not true of the other two.
+	 * collects"*. For this door the handle is that field.
 	 */
 	const hostedPanel = doorsAnswered && shown === "handle" && onHostedHandle && (
 		<form
@@ -1952,94 +1853,18 @@ function SignupForm({
 				onHostedHandle(hostedName);
 			}}
 		>
-			<label className="label px-0 pb-1" htmlFor={hostedFieldId}>
-				<span className="text-sm font-semibold">What would you like to be called?</span>
-			</label>
-			{/* A handle is a domain name, so this is `text` with a URL keyboard and no
-			    autocapitalization — the same treatment the Bluesky field gets, for the same
-			    reason. */}
-			{/* ⭐ **The suffix lives in the field rather than in a sentence under it** (Parker,
-			    2026-09-08, following Bluesky's own signup). A line saying *"your handle will end
-			    in .anthers.social"* is an explanation of something the field could simply show,
-			    and showing it means an empty field already reads `.anthers.social` and a filled
-			    one reads the whole handle as it will exist. It also earns back the line that
-			    used to state the alphabet, which validation says better and only when it applies.
-
-			    ⚠️ **The input sizes itself to its own content, which is what puts the suffix
-			    immediately after what somebody typed instead of against the far edge.** An
-			    invisible copy of the value holds the box open and the input is laid over it —
-			    the same sizer technique as the note below, with one difference that matters:
-			    the input is taken OUT of flow. Sharing a grid cell with the sizer does not
-			    work, because a text input contributes its own intrinsic width to that cell and
-			    wins whenever the value is short, which left a character of dead space between
-			    the name and a suffix that should be flush against it. `whitespace-pre` is
-			    load-bearing too: without it a trailing space collapses and the suffix jumps
-			    left while the caret does not.
-
-			    🚨 **The box is a `<label>` for the field, and that is what makes it clickable.**
-			    The input itself is only as wide as what has been typed — a single space's width
-			    while empty — so without the label nearly every click in the box lands on the
-			    `@`, the suffix or the padding and focuses nothing. */}
-			<label
-				htmlFor={hostedFieldId}
-				className="input input-bordered flex w-full items-center gap-0 overflow-hidden"
-			>
-				<span aria-hidden="true" className="shrink-0 text-base-content/40">
-					@
-				</span>
-				<span className="relative min-w-0 shrink">
-					<input
-						id={hostedFieldId}
-						type="text"
-						inputMode="url"
-						autoComplete="off"
-						spellCheck={false}
-						autoCapitalize="none"
-						// ⚠️ **`size={1}` is what lets the sizer decide the width.** An input carries an
-						// intrinsic width of about twenty characters, and inside a grid cell that
-						// intrinsic width wins over an empty sizer — which put the suffix against the
-						// far edge of the box instead of next to the caret.
-						size={1}
-						aria-label="The handle you'd like"
-						aria-describedby={`${hostedFieldId}-status`}
-						className="absolute inset-0 w-full bg-transparent p-0 outline-none"
-						value={hostedName}
-						onChange={(e) => onHostedNameChange(e.target.value)}
-					/>
-					{/* ⚠️ **A single space when empty, rather than a minimum width on the input.** The
-					    cell is as wide as whichever of the two is wider, so a minimum on the input
-					    is a minimum that survives into the typed state — which left a character's
-					    gap between the name and the suffix that should be flush against it. */}
-					<span aria-hidden="true" className="invisible block whitespace-pre">
-						{hostedName || " "}
-					</span>
-				</span>
-				{/* The suffix is not editable and not part of what anybody types, so it is text
-				    rather than a value — which is also what lets an empty field read as the
-				    domain a handle will hang under. */}
-				<span aria-hidden="true" className="shrink-0 text-base-content/40">
-					.{hostedSuffix || "anthers.social"}
-				</span>
-			</label>
-			<p
-				id={`${hostedFieldId}-status`}
-				aria-live="polite"
-				className={`${FIELD_STATUS} ${handleStatusTone(hostedStatus)}`}
-			>
-				{handleStatusLine(hostedStatus)}
-			</p>
+			<HostedHandleField
+				id={hostedFieldId}
+				name={hostedName}
+				onNameChange={onHostedNameChange}
+				status={hostedStatus}
+				suffix={hostedSuffix}
+				refusal={hostedRefusal}
+			/>
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg mt-2 w-full ${busy ? "btn-disabled" : ""}`}
-				// ⚠️ Refused only for what is knowably wrong. A name we could not check — the
-				// API was unreachable — still goes through, because the node is the authority
-				// and a browser that could not ask has learned nothing about the name.
-				disabled={
-					busy ||
-					!hostedName.trim() ||
-					hostedStatus.status === "invalid" ||
-					hostedStatus.status === "taken"
-				}
+				className={`btn btn-primary btn-lg ${FIELD_BUTTON_GAP} w-full ${busy ? "btn-disabled" : ""}`}
+				disabled={busy || !!hostedRefusal || !hostedNameSubmittable(hostedName, hostedStatus)}
 			>
 				{busy ? "Working…" : cta}
 			</button>
@@ -2103,7 +1928,7 @@ function SignupForm({
 			{/* The strip's own height, held while it is not yet known whether there is one. Without
 			    this the card grows by a tab's worth the moment the answer lands, which moves the
 			    whole page under a reader — the defect the panel heights are all managed for. */}
-			{!doorsAnswered && email !== null && (
+			{!doorsAnswered && !signedIn && (
 				<div aria-hidden="true" className="h-[3.0625rem] border-b border-base-300 bg-base-300/30" />
 			)}
 			{tabbed && (
@@ -2115,17 +1940,16 @@ function SignupForm({
 			)}
 
 			<div className="p-6">
-				{/* The ONE field this page collects. Username and password are deliberately not
-				    asked for here — they cost nothing at the moment of decision and everything
-				    at the moment of doubt, so they move to onboarding, after the address is
-				    confirmed and after any charge. */}
+				{/* The ONE field this page collects: the identity. Username and password are
+				    deliberately not asked for here — they cost nothing at the moment of decision and
+				    everything at the moment of doubt, so they move to onboarding, after the address
+				    is confirmed and after any charge. */}
 				{/* ⚠️ **This card no longer has a "finishing a Bluesky signup" state**, because
 				    nobody comes back to this page to finish one. Coming back from bsky.social to
 				    a marketing page with a prefilled email box is exactly what Parker's
 				    walkthrough could not tell apart from having accomplished nothing; the
 				    callback lands on `/finish` now, where saying whose signup it is finishing is
 				    the page's whole subject rather than a banner over a form. */}
-				{emailPanel}
 				{blueskyPanel}
 				{hostedPanel}
 
@@ -2133,16 +1957,16 @@ function SignupForm({
 				    grow by a field's height the moment the answer lands. It is one label and one
 				    input tall, which is what every door is, and it carries no words because the
 				    question it is holding room for is the thing not yet known. */}
-				{!doorsAnswered && email !== null && (
+				{!doorsAnswered && !signedIn && (
 					<div aria-hidden="true" className="animate-pulse text-left">
 						<div className="mb-1 h-4 w-56 rounded bg-base-content/10" />
 						<div className="h-12 w-full rounded-lg bg-base-content/5" />
 						<div className={FIELD_STATUS} />
-						<div className="mt-2 h-12 w-full rounded-lg bg-base-content/10" />
+						<div className={`${FIELD_BUTTON_GAP} h-12 w-full rounded-lg bg-base-content/10`} />
 					</div>
 				)}
 
-				{email === null && (
+				{signedIn && (
 					<button
 						type="button"
 						className={`btn btn-primary btn-lg w-full ${busy ? "btn-disabled" : ""}`}
@@ -2334,32 +2158,30 @@ export default function SubscribePage() {
 	 */
 	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 
-	const [email, setEmail] = useState("");
 	/**
-	 * Which door the signup card is showing — shared by both copies of it, like `email`.
+	 * Which door the signup card is showing — shared by both copies of it.
 	 *
-	 * Email is the default because it is the one every visitor can use; the Bluesky tab
-	 * asks for an account on another service.
+	 * The Anthers door is the default because it is the one every visitor can use; the Bluesky
+	 * tab asks for an account on another service.
 	 */
-	const [door, setDoor] = useState<Door>("email");
+	const [door, setDoor] = useState<Door>("handle");
 	/** The Bluesky handle being typed, shared by both copies of the signup card. */
 	const [handle, setHandle] = useState("");
+	/** Why the last handoff to Bluesky did not start. Cleared as soon as the handle changes. */
+	const [blueskyRefusal, setBlueskyRefusal] = useState<string | null>(null);
 	/**
-	 * Whether the Bluesky door is open at all.
-	 *
-	 * ⚠️ Starts false and is only ever turned on, so the page never flashes a button it is
-	 * about to take away — and a browser that cannot reach the API simply sees the page as
-	 * it was before this feature existed, which is the correct degraded state.
-	 */
-	const [blueskySignupOpen, setBlueskySignupOpen] = useState(false);
-	/**
-	 * Whether Anthers can issue a handle at all. Starts false and is only ever turned on, for
-	 * the same reason the Bluesky door is: the API knows whether every piece of hosting is
-	 * configured, and a door that refuses when pressed is worse than no door.
+	 * Whether Anthers can issue a handle at all. Starts false and is only ever turned on: the
+	 * API knows whether every piece of hosting is configured, and a door that refuses when
+	 * pressed is worse than no door.
 	 */
 	const [hostedOpen, setHostedOpen] = useState(false);
 	/** The name being typed into the handle door. */
 	const [hostedName, setHostedName] = useState("");
+	/**
+	 * Why the server refused the name as submitted — taken, or held for somebody else's signup.
+	 * Cleared as soon as the name changes, because it describes a name no longer in the field.
+	 */
+	const [hostedRefusal, setHostedRefusal] = useState<string | null>(null);
 	/** The suffix the API says handles hang under. Empty until it answers, like the door. */
 	const [hostedSuffix, setHostedSuffix] = useState("");
 	/**
@@ -2372,9 +2194,8 @@ export default function SubscribePage() {
 	 * about to disappear. Losing what somebody typed is a different order of problem from a
 	 * control appearing late, which is all the Bluesky tab ever risked.
 	 *
-	 * Set on failure as well as on success: an unreachable API is an answer — the doors are the
-	 * ones that need no configuration — and leaving this false would hold the card empty
-	 * forever.
+	 * Set on failure as well as on success: an unreachable API is an answer — the Bluesky door
+	 * needs no configuration — and leaving this false would hold the card empty forever.
 	 */
 	const [doorsAnswered, setDoorsAnswered] = useState(false);
 
@@ -2411,22 +2232,21 @@ export default function SubscribePage() {
 		}
 	}, []);
 
-	// Is the Bluesky door open? Signed-out visitors only, because that is the only state
-	// this page offers it in.
+	// Can Anthers issue a handle here? Signed-out visitors only, because that is the only state
+	// this page offers a door in. Bluesky is always offered.
 	useEffect(() => {
 		if (signedIn) return;
 		let live = true;
 		client.api.atproto.config
 			.$get()
 			.then((res) => res.json())
-			.then(({ signupEnabled, hostedIdentityOffered, hostedHandleSuffix }) => {
+			.then(({ hostedIdentityOffered, hostedHandleSuffix }) => {
 				if (!live) return;
-				setBlueskySignupOpen(signupEnabled);
 				setHostedOpen(hostedIdentityOffered);
 				setHostedSuffix(hostedHandleSuffix);
 			})
 			.catch(() => {
-				/* Unreachable API: leave both doors closed, and fall back to the address. */
+				/* Unreachable API: leave the Anthers door closed; Bluesky needs no answer. */
 			})
 			.finally(() => {
 				if (live) setDoorsAnswered(true);
@@ -2704,70 +2524,47 @@ export default function SubscribePage() {
 	 * pending signup rather than being left behind on a page nobody is looking at.
 	 */
 	const beginSignup = useCallback(
-		async (address?: string, hostedHandle?: string) => {
-			await client.api.auth.signup.begin.$post({
+		async (hostedHandle?: string) => {
+			const res = await client.api.auth.signup.begin.$post({
 				json: {
-					...(address ? { email: address } : {}),
 					...(hostedHandle ? { hostedHandle } : {}),
 					picks,
 					...(next ? { next } : {}),
 				},
 			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				throw new Error(body.error ?? "Couldn't start your signup. Please try again.");
+			}
 		},
 		[picks, next],
 	);
 
-	const submit = async () => {
-		if (!signedIn) {
-			const address = email.trim();
-			if (!address) {
-				setError("Add an email address so we can confirm it's you.");
-				return;
-			}
-			setBusy(true);
-			setError(null);
-			try {
-				// Answers 200 whatever happened, deliberately — see the route. So there is
-				// nothing to branch on here, and the next page opens either way.
-				await beginSignup(address);
-				navigate("/finish");
-			} catch {
-				setError("Couldn't start your signup. Please try again.");
-				setBusy(false);
-			}
-			// ⚠️ No `setBusy(false)` on the success path: this page is unmounting, and putting
-			// the button back only invites a second press from a page that is already going.
-			return;
-		}
-		await commit();
-	};
-
 	/**
-	 * Ask for an account and a handle to go with it, and hand the visitor to `/finish`.
+	 * Ask for an account with a handle Anthers issues, and hand the visitor to `/finish`.
 	 *
-	 * 🚨 **Nothing is reserved by pressing this.** The name rides on the pending signup as a
-	 * request, and the identity is created only once a code has been read out of a mailbox — so
-	 * two people may ask for the same name and the second one is told at that point. Holding
-	 * the name here instead would let anybody take one off the board by typing it, which is the
-	 * same hazard that keeps a pre-account address out of `users`.
+	 * 🚨 **Pressing this reserves the name** (Parker, 2026-09-13). The pending signup holds it
+	 * until the signup finishes, is abandoned or changed, or expires, so nobody else can take it
+	 * while the address is being confirmed. A name that is taken or held for somebody else is
+	 * refused here, in the field's own status line, while the person is still looking at it.
 	 */
 	const startHostedHandle = useCallback(
 		async (raw: string) => {
 			const name = raw.trim().replace(/^@/, "");
-			if (!name) {
-				setError("Pick the handle you'd like, so we know what to call you.");
-				return;
-			}
+			if (!name) return;
 			setBusy(true);
-			setError(null);
+			setHostedRefusal(null);
 			try {
-				await beginSignup(undefined, name);
+				await beginSignup(name);
 				navigate("/finish");
-			} catch {
-				setError("Couldn't start your signup. Please try again.");
+			} catch (err) {
+				setHostedRefusal(
+					err instanceof Error ? err.message : "Couldn't start your signup. Please try again.",
+				);
 				setBusy(false);
 			}
-			// As above: no `setBusy(false)` on the way out, since this page is unmounting.
+			// ⚠️ No `setBusy(false)` on the success path: this page is unmounting, and putting the
+			// button back only invites a second press from a page that is already going.
 		},
 		[beginSignup, navigate],
 	);
@@ -2791,17 +2588,16 @@ export default function SubscribePage() {
 			// A handle is a domain name; the leading `@` is how people write it, not part of
 			// it. Stripped here rather than while typing, so the field never fights anyone.
 			const value = raw.trim().replace(/^@/, "");
-			if (!value) {
-				setError("Add your Bluesky handle so we know which account to confirm.");
-				return;
-			}
+			if (!value) return;
 			setBusy(true);
-			setError(null);
+			setBlueskyRefusal(null);
 			try {
 				await beginSignup();
 				await signUpWithBluesky(value, next);
 			} catch (err) {
-				setError(err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.");
+				setBlueskyRefusal(
+					err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.",
+				);
 				setBusy(false);
 			}
 		},
@@ -2828,23 +2624,28 @@ export default function SubscribePage() {
 		busy,
 		error,
 		success,
-		email: signedIn ? null : email,
-		onEmailChange: setEmail,
+		signedIn,
 		noteFor: (shown: Door) => signupNote(signedIn, total > 0, shown),
 		noteSizers: signupNoteSizers(signedIn),
-		onSubmit: submit,
-		// Offered only to somebody signed out, and only while the door is actually open —
-		// see `blueskySignupOpen` for why a button that refuses is worse than no button.
-		onBluesky: signedIn || !blueskySignupOpen ? null : startBluesky,
+		onSubmit: commit,
+		// Both doors are for people who do not have an account yet, and Bluesky is always one.
+		onBluesky: signedIn ? null : startBluesky,
 		handle,
-		onHandleChange: setHandle,
-		// The same rule for the third door. Somebody already signed in who wants a handle asks
-		// for one in settings; this page is for people who do not have an account yet.
+		onHandleChange: (value: string) => {
+			setHandle(value);
+			setBlueskyRefusal(null);
+		},
+		blueskyRefusal,
+		// The Anthers door is offered only while hosting is actually configured.
 		onHostedHandle: signedIn || !hostedOpen ? null : startHostedHandle,
 		hostedName,
-		onHostedNameChange: setHostedName,
+		onHostedNameChange: (value: string) => {
+			setHostedName(value);
+			setHostedRefusal(null);
+		},
 		hostedStatus,
 		hostedSuffix,
+		hostedRefusal,
 		// A signed-in visitor has no doors to wait on: the card is a button either way.
 		doorsAnswered: signedIn || doorsAnswered,
 		door,

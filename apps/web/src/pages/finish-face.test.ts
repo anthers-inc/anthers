@@ -22,10 +22,14 @@
 import { describe, expect, it } from "bun:test";
 import { faceFor } from "./FinishSignupPage";
 
+// A signup holding an identity, unless a test takes it away — the address faces are only ever
+// reached by a signup that has one.
 const pending = (over: Partial<Parameters<typeof faceFor>[0]> = {}) => ({
 	email: null,
 	codeSent: false,
 	addressProved: false,
+	atprotoHandle: null,
+	hostedHandle: "alice.anthers.social",
 	...over,
 });
 
@@ -56,5 +60,25 @@ describe("choosing the face", () => {
 		expect(
 			faceFor(pending({ email: "someone@example.com", codeSent: true, addressProved: true })),
 		).toBe("resumed");
+	});
+
+	it("🚨 asks for an identity before anything else when the signup holds none", () => {
+		// Every account is created with its identity, so a signup without one cannot be finished
+		// by any code — asking for the address first would lead somebody to a refusal.
+		expect(faceFor(pending({ hostedHandle: null }))).toBe("identity");
+	});
+
+	it("asks for an identity even when the address is already proved", () => {
+		// A Bluesky start resumed in another browser: the DID was dropped on purpose, and has to be
+		// proved again here before the account can exist.
+		expect(
+			faceFor(pending({ hostedHandle: null, email: "someone@example.com", addressProved: true })),
+		).toBe("identity");
+	});
+
+	it("counts a Bluesky identity proved in this browser as an identity", () => {
+		expect(faceFor(pending({ hostedHandle: null, atprotoHandle: "alice.bsky.social" }))).toBe(
+			"address",
+		);
 	});
 });

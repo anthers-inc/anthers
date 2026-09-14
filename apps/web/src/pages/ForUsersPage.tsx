@@ -95,22 +95,19 @@ export default function ForUsersPage() {
 					</Reveal>
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
-							{/* 🚨 /subscribe, not /signup, and the sentence below is the reason. `/subscribe`
-							    collects an address and nothing else — the handle and any password are asked
-							    for at `/welcome`, after the account exists — while `/signup` is still the
-							    four-field form. Sending a reader who has just been promised "an email address
-							    is all it takes" to a username + password + confirm form makes the promise
-							    false at the click. It also puts the creator picker in front of a new account,
-							    which is the thing this page now leads with. */}
+							{/* 🚨 /subscribe is the one signup door, so this button goes nowhere else. It is
+							    where a reader picks a handle or brings their Bluesky identity, and it puts the
+							    creator picker in front of a new account, which is the thing this page leads
+							    with. The sentence below has to stay true of what that page asks for. */}
 							<Link to="/subscribe" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
 								Start Exploring
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
-							An email address is all it takes — no card, no trial, nothing to cancel. Every account
-							downloads freely and streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
-							month, free forever. You'll only ever be asked to pay when you decide to back a
-							creator.
+							A handle and an email address are all it takes — no card, no trial, nothing to cancel.
+							Every account downloads freely and streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public
+							Access a month, free forever. You'll only ever be asked to pay when you decide to back
+							a creator.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
