@@ -69,8 +69,8 @@ export function isDevCheckout(startDir?: string): boolean {
  *
  * 🚨 **The scripts this guards had no guard of any kind**, which is a larger version of the
  * hazard `ensure-dev-account.ts` at least gestured at: `db:gauntlet` **deletes** every Work
- * belonging to its creator, `db:seed --reset` deletes its own rows, and `db:gauntlet:state`
- * rewrites a person's support. Each was one `DATABASE_URL` away from doing that to production.
+ * belonging to its creator and `db:gauntlet:state` rewrites a person's support. Each was one
+ * `DATABASE_URL` away from doing that to production.
  *
  * ⚠️ **`db:admin` is deliberately NOT guarded.** It exists to promote an account *in
  * production* over `DATABASE_URL` — running against a deployed database is its purpose, not

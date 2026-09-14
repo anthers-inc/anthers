@@ -100,9 +100,10 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 	fi
 
 # 🚨 **Every `make dev` starts from nothing and leaves nothing.** `scripts/session.ts` brings up a
-# fresh database and a private AT Protocol network, migrates, ensures the dev account, runs the
-# servers, and removes all of it when they stop — including after a crash, which the next session
-# cleans up. Anything set up by hand during a session is gone when it ends; a file-change restart
+# fresh database and a private AT Protocol network, migrates, seeds it (`bun run db:seed`: your dev
+# account, the User Gauntlet's creator and viewer, and the media fixture's catalog with its records
+# on the network, each a real identity), runs the servers, and removes all of it when they stop —
+# including after a crash, which the next session cleans up. Anything set up by hand during a session is gone when it ends; a file-change restart
 # under `bun --watch` is not an end.
 dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@KILLED=0; \
@@ -116,7 +117,7 @@ dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	done; \
 	[ "$$KILLED" = "1" ] && sleep 1 || true
 	@bun run scripts/session.ts dev --pid-file .dev.pid -- \
-		sh -c 'bun run db:dev-account && exec bun run dev'
+		sh -c 'bun run db:seed && exec bun run dev'
 
 # The API alone still needs a database, so it starts the dev session itself — which means it cannot
 # run beside `make dev`, and the session refuses rather than letting the two share one.
@@ -128,7 +129,7 @@ dev-api: ## Start API dev server only, in its own dev session
 		sleep 1; \
 	fi
 	@bun run scripts/session.ts dev --pid-file .dev-api.pid -- \
-		sh -c 'bun run db:dev-account && exec bun run dev:api'
+		sh -c 'bun run db:seed && exec bun run dev:api'
 
 # The worker joins the dev session a `make dev-api` started rather than starting its own, since a
 # worker with a database of its own would have nothing to work on.
@@ -201,7 +202,7 @@ db-push: ## Push schema directly to the running dev session (no migration files)
 db-studio: ## Open Drizzle Studio on the running dev session's database
 	$(SESSION_DEV) bun run db:studio
 
-db-seed: ## Seed the running dev session with fake creators/projects/posts
+db-seed: ## Re-run the session seed in the running dev session (make dev runs it on its own)
 	$(SESSION_DEV) bun run db:seed
 
 gauntlet-reset: ## Reset the User Gauntlet fixture in the running dev session

@@ -28,7 +28,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
 import { assertDevCheckout } from "@anthers/db/dev-only";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	MEDIA_FIXTURE_DISPLAY_NAME,
 	MEDIA_FIXTURE_EMAIL,
@@ -50,7 +49,10 @@ import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
+import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { storage } from "../services/storage/index.js";
+import { syncWorkListing } from "../services/work-listing.js";
+import { createLocalAccount } from "./local-accounts.js";
 
 const TAG = "[media-fixture]";
 const FORCE = process.argv.includes("--force");
@@ -194,19 +196,18 @@ async function ensureCreator(): Promise<number> {
 		.limit(1);
 	if (existing) return existing.id;
 
-	const [created] = await db
-		.insert(users)
-		.values({
-			username: MEDIA_FIXTURE_USERNAME,
-			email: MEDIA_FIXTURE_EMAIL,
-			passwordHash: await Bun.password.hash(MEDIA_FIXTURE_PASSWORD, "argon2id"),
+	const created = await createLocalAccount({
+		username: MEDIA_FIXTURE_USERNAME,
+		email: MEDIA_FIXTURE_EMAIL,
+		handleName: MEDIA_FIXTURE_USERNAME,
+		passwordHash: await Bun.password.hash(MEDIA_FIXTURE_PASSWORD, "argon2id"),
+		emailVerified: true,
+		fields: {
 			displayName: MEDIA_FIXTURE_DISPLAY_NAME,
 			bio: "A fixture creator whose Works carry real, playable media.",
 			isCreator: true,
-			emailVerified: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
+		},
+	});
 	console.log(`${TAG} created creator "${MEDIA_FIXTURE_USERNAME}" (id ${created.id})`);
 	return created.id;
 }
@@ -412,6 +413,36 @@ async function ensureProject(creator: number): Promise<void> {
 	}
 }
 
+/**
+ * Write the fixture's listings into its creator's repository on the session's network.
+ *
+ * ⭐ **Through the services the listing jobs run**, so what lands is exactly the record a released
+ * Work and a published project produce in production, and a session opens with a catalog that is
+ * really on its network rather than rows that only claim to be. Each call decides for itself, so a
+ * gated or unreleased Work is left alone the way the job would leave it.
+ */
+async function publishRecords(creatorId: number): Promise<void> {
+	const owned = await db
+		.select({ id: works.id, slug: works.slug })
+		.from(works)
+		.where(eq(works.creatorId, creatorId));
+	const outcomes: string[] = [];
+	for (const work of owned) {
+		const result = await syncWorkListing(work.id);
+		outcomes.push(`${work.slug}: ${result.status}`);
+	}
+	const [project] = await db
+		.select({ id: projects.id })
+		.from(projects)
+		.where(eq(projects.slug, MEDIA_FIXTURE_PROJECT.slug))
+		.limit(1);
+	if (project) {
+		const result = await syncProjectRecord(project.id);
+		outcomes.push(`${MEDIA_FIXTURE_PROJECT.slug}: ${result.status}`);
+	}
+	console.log(`${TAG} records — ${outcomes.join(", ")}`);
+}
+
 async function main() {
 	assertDevCheckout();
 
@@ -426,6 +457,7 @@ async function main() {
 	await ensurePayouts(creator);
 	for (const spec of MEDIA_FIXTURE_WORKS) await seedMediaFor(spec, creator);
 	await ensureProject(creator);
+	await publishRecords(creator);
 	console.log(
 		`${TAG} ${MEDIA_FIXTURE_WORKS.length} Work(s) ready under "${MEDIA_FIXTURE_USERNAME}"`,
 	);

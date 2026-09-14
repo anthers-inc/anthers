@@ -1192,7 +1192,7 @@ const BLOCKS: Block[] = [
  * ⚠️ **`packages/db/src` is here for the seed data, and joined the list 2026-08-16.**
  * Not a page, but the seeds and the gauntlet are prose a developer reads to learn what
  * the model supports — and they had drifted exactly as the README did, for exactly the
- * same reason: outside the scan, so nothing looked. `seed.ts` carried a `pwyw` pricing
+ * same reason: outside the scan, so nothing looked. The demo seeder carried a `pwyw` pricing
  * type and a work blurb promising pay-what-you-want, for a mechanism that has never
  * existed; the gauntlet printed a viewer's support as a Seed count. One sweep, then this
  * line, so it is the last time.
@@ -1217,7 +1217,7 @@ const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"]
  *
  * 🚨 **It was `["README.md"]` — one file — until 2026-08-18, and the same reasoning that
  * added the README argued for all of it.** Fixing one file and leaving its neighbors
- * outside is how the gap reproduces: `packages/db/TEST_ACCOUNTS.md` was a **complete
+ * outside is how the gap reproduces: the demo seeder's test-accounts document was a **complete
  * description of the pre-retirement model** (a "Rank (Anthers-Seeds)" column, Anthers
  * Gates, Seed Gates, "whole $3 Seeds"), and `apps/web/tests/README.md` said "badge/Seed
  * billing" — both invisible for the same reason the README was, two days after a sweep

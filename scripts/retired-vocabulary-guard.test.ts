@@ -72,7 +72,6 @@ const EXEMPT: { pattern: RegExp; why: string }[] = [
 /** How many mentions each file is allowed. A file absent from here is allowed none. */
 const BUDGET: Record<string, number> = {
 	"packages/shared/src/constants.ts": 3,
-	"packages/db/src/seed.ts": 1,
 	"apps/api/src/__tests__/access-staircase.test.ts": 2,
 	"apps/api/src/__tests__/creator-preview.test.ts": 2,
 	"apps/api/src/routes/subscriptions.ts": 2,

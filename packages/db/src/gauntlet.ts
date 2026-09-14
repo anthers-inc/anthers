@@ -90,7 +90,7 @@ export const BADGE_WALK: number[] = BADGE_RUNGS.flatMap((amount, i) => {
 /** The purchase rung's list price — what the creator receives; fees are added on top. */
 export const DOWNLOAD_PRICE = "9.99";
 
-/** publicIds are stable and sit well clear of `seed.ts`'s 100_000_00x range. */
+/** publicIds are stable and sit well clear of the media fixture's 910_000_000 range. */
 const PUBLIC_ID_BASE = 900_000_000;
 
 /** The "everyone" baseline denied, then one rung allowed at `threshold` dollars a month. */
