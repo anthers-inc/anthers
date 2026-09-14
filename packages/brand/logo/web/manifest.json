@@ -56,6 +56,12 @@
 			"sha256": "c7ddcdd27929322b43164087394b28ffd2a6f791f89971ead5d869bf1c6ac864"
 		},
 		{
+			"file": "packages/brand/logo/web/mark-60.png",
+			"source": "packages/brand/logo/preps/anthersicon_1x1_trans.png",
+			"sourceSha256": "0f490c1ad50545c41e1af81f90981c63630d9ccbc0068b31cecccb2fda8ad758",
+			"sha256": "5420343bf1b9d7ad0ace6ea67ff6f939ffc080c0019181381c4201dae5b1cab9"
+		},
+		{
 			"file": "apps/web/public/brand/anthers-mark-256.png",
 			"source": "packages/brand/logo/preps/antherslogo_thumb1x1_light.png",
 			"sourceSha256": "e530eb57922b60604db9625e1c2abb5d7aad63af4e37738d396aa464c9b9187e",

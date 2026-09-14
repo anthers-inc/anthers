@@ -60,10 +60,10 @@ const handleName = () =>
 async function startSignup(page: Page, picks?: () => Promise<void>) {
 	await page.goto("/subscribe");
 	if (picks) await picks();
-	await expect(topSignup(page).getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+	await expect(topSignup(page).getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();
 	await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
 	await topSignup(page)
-		.getByRole("button", { name: /create my (free )?account/i })
+		.getByRole("button", { name: /sign up with anthers|create my account/i })
 		.click();
 	await expect(page).toHaveURL(/\/finish$/);
 }

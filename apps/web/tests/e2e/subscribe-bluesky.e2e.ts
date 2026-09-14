@@ -46,7 +46,7 @@ const topSignup = (page: Page) => page.locator('[data-signup="top"]');
  *
  * ⚠️ **The two doors sit behind a tab switcher since 2026-08-23**, so neither the handle
  * field nor its button is on the page until the tab is chosen. The tab is named "Bluesky"
- * and the button "Sign up with Bluesky", which is what keeps `role=tab` + name from
+ * and the button "Sign Up with Bluesky", which is what keeps `role=tab` + name from
  * colliding with `role=button` + name — worth preserving, because a locator that matched
  * both would be ambiguous rather than wrong, and strict mode would report it as a missing
  * element.
@@ -202,7 +202,7 @@ test.describe("signing up with Bluesky", () => {
 		// that fails for unrelated reasons.
 		await expect(topSignup(page).getByRole("tab", { name: "Bluesky", exact: true })).toBeVisible();
 		await expect(
-			topSignup(page).getByRole("button", { name: /create my free account/i }),
+			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
 		).toBeVisible();
 	});
 });

@@ -61,8 +61,8 @@ const handleName = () =>
  * taken at `/finish`. The availability check answers `unknown` in this suite — the API points
  * at `node.invalid` — and an unknown answer deliberately does not block the button.
  */
-async function askForAccount(page: Page, cta = /create my (free )?account/i) {
-	await expect(topSignup(page).getByRole("tab", { name: "New Handle", exact: true })).toBeVisible();
+async function askForAccount(page: Page, cta = /sign up with anthers|create my account/i) {
+	await expect(topSignup(page).getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();
 	await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
 	await topSignup(page).getByRole("button", { name: cta }).click();
 	await expect(page).toHaveURL(/\/finish$/);
@@ -188,7 +188,7 @@ test.describe("starting an account from /subscribe", () => {
 	}) => {
 		await page.goto("/subscribe");
 
-		await askForAccount(page, /create my free account/i);
+		await askForAccount(page, /sign up with anthers/i);
 
 		// 🚨 **The property this whole change exists for.** The code box used to open as a
 		// modal *over this page* — the last thing asked of somebody, on top of a page still
@@ -219,9 +219,7 @@ test.describe("starting an account from /subscribe", () => {
 		const cta = topSignup(page).getByRole("button", { name: /create my account & continue/i });
 		await expect(cta, "the CTA should promise more than a free account").toBeVisible();
 
-		await expect(
-			topSignup(page).getByRole("tab", { name: "New Handle", exact: true }),
-		).toBeVisible();
+		await expect(topSignup(page).getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();
 		await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
 		await cta.click();
 
@@ -266,7 +264,7 @@ test.describe("starting an account from /subscribe", () => {
 
 	test("the free path has no payment step to promise", async ({ page }) => {
 		await page.goto("/subscribe");
-		await askForAccount(page, /create my free account/i);
+		await askForAccount(page, /sign up with anthers/i);
 		const rail = page.getByRole("list", { name: "Signup Progress" });
 		await expect(rail.getByText("Your Email", { exact: true })).toBeVisible();
 		await expect(rail.getByText("Payment", { exact: true })).toHaveCount(0);

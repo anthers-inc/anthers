@@ -85,6 +85,7 @@
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
 //     nothing in the UI calls it.)
 
+import anthersMark from "@anthers/brand/logo/web/mark-60.png";
 import type { Badge, BadgeKey } from "@anthers/shared/constants";
 import {
 	amountLabel,
@@ -120,7 +121,6 @@ import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import {
 	ArrowDownTrayIcon,
-	AtSymbolIcon,
 	BanknotesIcon,
 	EnvelopeIcon,
 	HeartIcon,
@@ -1626,6 +1626,19 @@ function signupNoteSizers(signedIn: boolean): string[] {
  */
 
 /**
+ * The line under a handle field, held open on BOTH doors whether or not it has anything to say.
+ *
+ * ⚠️ **It is always two lines tall, and the Bluesky door reserves it too.** The Anthers door
+ * reports on the name as somebody types — checking, taken, yours — so its line must not grow
+ * with its message, or the button moves out from under the pointer heading for it. One line is
+ * not enough, because at 390px the longest of these messages wraps. The Bluesky door never says
+ * anything here, and holds the same line open anyway so the two panels are the same height and
+ * switching tabs never resizes the card. `2lh` follows the line height, so tightening the
+ * leading tightens the reservation with it.
+ */
+const FIELD_STATUS = "mt-1 min-h-[2lh] text-xs leading-tight";
+
+/**
  * The signup control: two doors on a tab switcher, an address or a Bluesky handle.
  *
  * 🚨 **One component, rendered twice, and that is deliberate rather than lazy.** It opens
@@ -1774,12 +1787,11 @@ function SignupForm({
 			? [
 					{
 						key: "handle" as const,
-						label: "New Handle",
-						icon: (
-							<AtSymbolIcon
-								className={`h-5 w-5 ${door === "handle" ? "text-primary" : "text-base-content/40"}`}
-							/>
-						),
+						label: "Anthers",
+						// Full color in both states, like the butterfly beside it: the tab carries
+						// the selected state, and a mark that dimmed on one side of the strip but
+						// not the other would read as the two doors being unequal.
+						icon: <img src={anthersMark} alt="" className="h-5 w-auto" />,
 					},
 				]
 			: []),
@@ -1871,21 +1883,36 @@ function SignupForm({
 				<span className="text-sm font-semibold">What&rsquo;s your handle?</span>
 			</label>
 			{/* A handle is a domain name, so this is `text` with a URL keyboard rather than an
-			    `email`-shaped field. The leading `@` is how people write it and not part of
-			    it — stripped on submit, never fought with while typing. */}
-			<input
-				id={handleFieldId}
-				type="text"
-				inputMode="url"
-				autoComplete="username"
-				spellCheck={false}
-				autoCapitalize="none"
-				placeholder="alice.bsky.social"
-				aria-label="Bluesky handle"
-				className="input input-bordered w-full"
-				value={handle}
-				onChange={(e) => onHandleChange(e.target.value)}
-			/>
+			    `email`-shaped field. The `@` is drawn in the box, the same as on the Anthers
+			    door, because it is how people write a handle and not part of one — so one typed
+			    anyway is stripped on submit rather than fought with while typing.
+
+			    The box is a `<label>` rather than a `<div>` so a click anywhere in it, the `@`
+			    included, lands in the field. */}
+			<label
+				htmlFor={handleFieldId}
+				className="input input-bordered flex w-full items-center gap-0"
+			>
+				<span aria-hidden="true" className="shrink-0 text-base-content/40">
+					@
+				</span>
+				<input
+					id={handleFieldId}
+					type="text"
+					inputMode="url"
+					autoComplete="username"
+					spellCheck={false}
+					autoCapitalize="none"
+					placeholder="alice.bsky.social"
+					aria-label="Bluesky handle"
+					className="min-w-0 flex-1 bg-transparent p-0 outline-none"
+					value={handle}
+					onChange={(e) => onHandleChange(e.target.value)}
+				/>
+			</label>
+			{/* Nothing is ever said here; the line is held open so this panel is exactly as tall
+			    as the Anthers one. See `FIELD_STATUS`. */}
+			<p aria-hidden="true" className={FIELD_STATUS} />
 			{/* 🚨 No butterfly on this button, and that is a compliance decision rather than a
 			    visual one. Bluesky's guidance allows their mark in three colors only, and the
 			    one that reads on `btn-primary` differs by theme — our primary is a deep green
@@ -1895,10 +1922,10 @@ function SignupForm({
 			    surface we control, which is where it belongs. */}
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
+				className={`btn btn-primary btn-lg mt-2 w-full ${busy ? "btn-disabled" : ""}`}
 				disabled={busy || !handle.trim()}
 			>
-				{busy ? "Taking you to Bluesky…" : "Sign up with Bluesky"}
+				{busy ? "Taking you to Bluesky…" : "Sign Up with Bluesky"}
 			</button>
 		</form>
 	);
@@ -1947,8 +1974,16 @@ function SignupForm({
 			    wins whenever the value is short, which left a character of dead space between
 			    the name and a suffix that should be flush against it. `whitespace-pre` is
 			    load-bearing too: without it a trailing space collapses and the suffix jumps
-			    left while the caret does not. */}
-			<div className="input input-bordered flex w-full items-center gap-0 overflow-hidden">
+			    left while the caret does not.
+
+			    🚨 **The box is a `<label>` for the field, and that is what makes it clickable.**
+			    The input itself is only as wide as what has been typed — a single space's width
+			    while empty — so without the label nearly every click in the box lands on the
+			    `@`, the suffix or the padding and focuses nothing. */}
+			<label
+				htmlFor={hostedFieldId}
+				className="input input-bordered flex w-full items-center gap-0 overflow-hidden"
+			>
 				<span aria-hidden="true" className="shrink-0 text-base-content/40">
 					@
 				</span>
@@ -1985,25 +2020,17 @@ function SignupForm({
 				<span aria-hidden="true" className="shrink-0 text-base-content/40">
 					.{hostedSuffix || "anthers.social"}
 				</span>
-			</div>
-			{/* ⚠️ **Zero height while idle, and two lines tall once there is anything to say.**
-			    Idle has no message, so reserving room for one leaves this panel a gap taller than
-			    the Bluesky panel beside it, and the card resizes when the tabs are switched. The
-			    growth happens once, at the first keystroke, when hands are on the keyboard; after
-			    that the region must not change height, or the button moves out from under the
-			    pointer heading for it — and one line is not enough, because at 390px the longest
-			    of these messages wraps. The paragraph stays mounted while empty so the live
-			    region already exists when its first message arrives. */}
+			</label>
 			<p
 				id={`${hostedFieldId}-status`}
 				aria-live="polite"
-				className={`text-xs leading-snug ${hostedStatus.status === "idle" ? "" : "mt-1.5 min-h-[2.25rem]"} ${handleStatusTone(hostedStatus)}`}
+				className={`${FIELD_STATUS} ${handleStatusTone(hostedStatus)}`}
 			>
 				{handleStatusLine(hostedStatus)}
 			</p>
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg w-full ${hostedStatus.status === "idle" ? "mt-4" : "mt-3"} ${busy ? "btn-disabled" : ""}`}
+				className={`btn btn-primary btn-lg mt-2 w-full ${busy ? "btn-disabled" : ""}`}
 				// ⚠️ Refused only for what is knowably wrong. A name we could not check — the
 				// API was unreachable — still goes through, because the node is the authority
 				// and a browser that could not ask has learned nothing about the name.
@@ -2110,7 +2137,8 @@ function SignupForm({
 					<div aria-hidden="true" className="animate-pulse text-left">
 						<div className="mb-1 h-4 w-56 rounded bg-base-content/10" />
 						<div className="h-12 w-full rounded-lg bg-base-content/5" />
-						<div className="mt-4 h-12 w-full rounded-lg bg-base-content/10" />
+						<div className={FIELD_STATUS} />
+						<div className="mt-2 h-12 w-full rounded-lg bg-base-content/10" />
 					</div>
 				)}
 
@@ -2786,7 +2814,7 @@ export default function SubscribePage() {
 	 *
 	 * ⚠️ **Both read the same state, so both stay honest about the same total.** Somebody
 	 * who scrolls down, adds support, and scrolls back up finds the top button saying
-	 * *"Create my account & continue"* rather than still promising free — which is correct:
+	 * *"Create my account & continue"* rather than still reading as a free signup — which is correct:
 	 * they chose to pay. What must never happen is the two disagreeing.
 	 */
 	const signupProps = {
@@ -2796,7 +2824,7 @@ export default function SubscribePage() {
 				: "Save my picks"
 			: total > 0
 				? "Create my account & continue"
-				: "Create my free account",
+				: "Sign Up with Anthers",
 		busy,
 		error,
 		success,
@@ -2878,6 +2906,10 @@ export default function SubscribePage() {
 								className="mx-auto mt-14 max-w-2xl text-balance text-2xl font-light leading-snug"
 							>
 								If that sounds good, sign up for free below and let&rsquo;s get started.
+							</p>
+							<p className="mx-auto mt-3 max-w-xl text-balance text-base leading-relaxed text-base-content/60">
+								You can create a new ATProto identity on Anthers, or use your existing Bluesky
+								identity if you already have one.
 							</p>
 
 							<div className="mx-auto mt-6 max-w-md">
