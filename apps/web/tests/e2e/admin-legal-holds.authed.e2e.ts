@@ -12,36 +12,39 @@
  * viewer and creator are deliberately ordinary accounts, and promoting either of them to
  * `is_admin` inside a test would leave the flag set for every suite that follows.
  */
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
-import { legalHolds, sessions, users } from "@anthers/db/schema";
+import { legalHolds } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { expect, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 const RUN = Date.now().toString(36);
 const OPERATOR = `e2e_op_${RUN}`;
 
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
+
 let operatorId = 0;
-/** The operator's session, written beside the account because there is no sign-up to issue one. */
-const TOKEN = `e2e-op-${RUN}-${crypto.randomUUID()}`;
+/** The operator's session, issued beside the account because there is no sign-up to issue one. */
+let TOKEN = "";
 
 test.beforeAll(async () => {
-	// Accounts are made by an emailed-code ceremony a browser test cannot read, so the operator
-	// and a live session for it are written directly. Admin is set the same way it is set in
-	// production, by a write nobody can reach through the app.
-	const [row] = await db
-		.insert(users)
-		.values({
-			username: OPERATOR,
-			email: `${OPERATOR}@example.com`,
-			isAdmin: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
-	operatorId = row.id;
-	await db
-		.insert(sessions)
-		.values({ token: TOKEN, userId: operatorId, expiresAt: new Date(Date.now() + 3_600_000) });
+	// Accounts are made by an emailed-code ceremony a browser test cannot read, so the operator is
+	// made by the helper every seed uses — a real identity on the session's network, the way signup
+	// makes one — with a live session beside it. Admin is set the same way it is set in production,
+	// by a write nobody can reach through the app.
+	const made = JSON.parse(
+		execFileSync(
+			"bun",
+			["run", "db:local-account", "--username", OPERATOR, "--admin", "--session"],
+			{ cwd: REPO_ROOT, encoding: "utf8" },
+		)
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { userId: number; session: string };
+	operatorId = made.userId;
+	TOKEN = made.session;
 });
 
 test.afterAll(async () => {

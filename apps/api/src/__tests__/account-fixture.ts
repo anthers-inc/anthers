@@ -3,8 +3,8 @@
  * A signed-in fixture account, created the way signup creates one and holding a real identity on
  * the test session's own AT Protocol network.
  *
- * 🚨 **The account comes from `createAccountFromSignup`, the one place an account row is written**,
- * so a fixture has the shape a real account has: an identity issued by the hosting server, its
+ * 🚨 **The account comes from `createLocalAccount`, which calls `createAccountFromSignup` — the one
+ * place an account row is written** — so a fixture has the shape a real account has: an identity issued by the hosting server, its
  * credential sealed in `hosted_accounts`, and its DID, handle and server on the row. Only the
  * emailed code is skipped, because no suite can read that email. A placeholder DID used to stand
  * in for the identity, which meant every path that resolves or writes to one was untested for every
@@ -29,17 +29,14 @@
  * The account gets a password, so a suite can still exercise `POST /api/auth/sign-in`.
  */
 
-import { db } from "@anthers/db/client";
-import { users } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import type { users } from "@anthers/db/schema";
+import {
+	createBroughtIdentity,
+	createLocalAccount,
+	type LocalAccountFields,
+} from "../scripts/local-accounts";
 import type { AtprotoIdentity } from "../services/atproto";
 import { createSession, hashPassword } from "../services/auth";
-import { hostedHandleSuffix } from "../services/hosted-accounts";
-import {
-	createAccountFromSignup,
-	readPendingSignup,
-	startPendingSignup,
-} from "../services/pending-signups";
 
 /** The session's own hosting, as the preload set it, before any suite overrode it. */
 const SESSION_HOSTING = {
@@ -115,52 +112,11 @@ function fixturePasswordHash(password: string): Promise<string> {
 }
 
 /**
- * A handle name nobody else in the session holds.
- *
- * Not the username: an Anthers username may carry an underscore and a handle may not, and the two
- * are separate names in production too.
- */
-function fixtureHandleName(): string {
-	return `fx${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
-}
-
-/**
- * An identity created straight on the session's server, the way somebody arrives already holding one.
- *
- * ⚠️ **It lives on the same server Anthers hosts on**, because the session has one server. What makes
- * it "brought" is that Anthers holds no credential for it — no `hosted_accounts` row — so the hub can
- * reach it only through a grant, exactly as it reaches an identity on `bsky.social`. The address the
- * server keeps is a throwaway of its own, so a later hosted account for the same person is not refused
- * for reusing it.
- */
-async function createBroughtIdentity(): Promise<AtprotoIdentity> {
-	const url = process.env.HOSTED_PDS_URL ?? "";
-	const handle = `${fixtureHandleName()}.${await hostedHandleSuffix()}`;
-	const res = await fetch(`${url}/xrpc/com.atproto.server.createAccount`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			handle,
-			email: `brought-${crypto.randomUUID()}@example.com`,
-			password: crypto.randomUUID(),
-			inviteCode: process.env.HOSTED_PDS_INVITE_CODE,
-		}),
-	});
-	const body = (await res.json()) as { did?: string; handle?: string; message?: string };
-	if (!res.ok || !body.did || !body.handle) {
-		throw new Error(
-			`the session's server would not create a brought identity: ${body.message ?? res.status}`,
-		);
-	}
-	return { did: body.did, handle: body.handle, pdsUrl: url };
-}
-
-/**
  * A brought identity on the session's server and no account for it — what a suite driving the
  * Bluesky door binds to a pending signup, the way the OAuth callback would.
  */
 export function broughtIdentity(): Promise<AtprotoIdentity> {
-	return onSessionNetwork(createBroughtIdentity);
+	return onSessionNetwork(() => createBroughtIdentity());
 }
 
 /**
@@ -183,53 +139,24 @@ export async function createAccount(
 		identity?: "hosted" | "brought";
 		/**
 		 * Anything else the suite needs on the row — `isCreator`, an admin flag, a date. The identity
-		 * columns are the fixture's to set, so a suite cannot quietly put a placeholder DID back.
+		 * columns are the server's to set, so a suite cannot quietly put a placeholder DID back.
 		 */
-		fields?: Omit<
-			Partial<typeof users.$inferInsert>,
-			"atprotoDid" | "atprotoHandle" | "atprotoPdsUrl"
-		>;
+		fields?: LocalAccountFields;
 	} = {},
 ): Promise<FixtureAccount> {
 	const email =
 		opts.email ?? `${username ?? `unclaimed_${crypto.randomUUID().slice(0, 8)}`}@example.com`;
-	// Checked at run time as well as in the type, because a suite's `values` of the wider insert type
-	// passes the type check and would put a placeholder DID straight back over the real one.
-	for (const column of ["atprotoDid", "atprotoHandle", "atprotoPdsUrl"] as const) {
-		if (opts.fields && column in opts.fields) {
-			throw new Error(
-				`a fixture account's ${column} is issued by the server; use the one it returns`,
-			);
-		}
-	}
-
-	const created = await onSessionNetwork(async () => {
-		const pendingToken =
-			opts.identity === "brought"
-				? await startPendingSignup({ email, identity: await createBroughtIdentity() })
-				: await startPendingSignup({ email, hostedHandle: fixtureHandleName() });
-		const pending = await readPendingSignup(pendingToken);
-		if (!pending) throw new Error(`the pending signup for ${email} vanished before it was used`);
-		return createAccountFromSignup(pending, email);
-	});
-	if ("refusal" in created) {
-		throw new Error(
-			`fixture account ${email} was refused: ${created.refusal.message} (${created.refusal.reason}). ` +
-				"Is this run inside a session with its own network? See scripts/session-preload.ts.",
-		);
-	}
-
 	const passwordHash = await fixturePasswordHash(opts.password ?? FIXTURE_PASSWORD);
-	const [user] = await db
-		.update(users)
-		.set({
-			...opts.fields,
+	const user = await onSessionNetwork(() =>
+		createLocalAccount({
 			username,
+			email,
+			identity: opts.identity,
 			passwordHash,
 			emailVerified: opts.emailVerified ?? false,
-		})
-		.where(eq(users.id, created.user.id))
-		.returning();
+			fields: opts.fields,
+		}),
+	);
 	const token = await createSession(user.id);
 	return {
 		cookie: `session=${token}`,

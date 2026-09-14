@@ -8,10 +8,6 @@
  * state, which is the whole point — a gauntlet that starts somewhere slightly different
  * each time can't tell you what changed.
  *
- * Deliberately NOT an extension of `seed.ts`: that one is a random demo seeder (randomInt,
- * pick, fuzzy dates) whose whole job is to make the app look populated. A fixture's job is
- * the opposite — to be boring and identical every time.
- *
  * Usage:
  *   bun run db:gauntlet                 # reset to the floor (make gauntlet-reset)
  *   bun run db:gauntlet --user alice    # use a viewer other than DEV_ACCOUNT_USERNAME
@@ -33,22 +29,6 @@
 
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { and, eq, inArray, like } from "drizzle-orm";
-import { localContentRoot } from "./content-root.js";
-import { assertDevCheckout } from "./dev-only.js";
-import { fixtureDid } from "./fixture-did.js";
-import {
-	GAUNTLET_CREATOR_EMAIL,
-	GAUNTLET_CREATOR_PASSWORD,
-	GAUNTLET_CREATOR_USERNAME,
-	GAUNTLET_GATES,
-	GAUNTLET_POSTS,
-	GAUNTLET_SLUG_PREFIX,
-	GAUNTLET_VIEWER_EMAIL,
-	GAUNTLET_VIEWER_PASSWORD,
-	GAUNTLET_VIEWER_USERNAME,
-	type GauntletPost,
-} from "./gauntlet.js";
 import {
 	accounts,
 	assets,
@@ -65,7 +45,23 @@ import {
 	stripeAccounts,
 	users,
 	works,
-} from "./index.js";
+} from "@anthers/db";
+import { localContentRoot } from "@anthers/db/content-root";
+import { assertDevCheckout } from "@anthers/db/dev-only";
+import {
+	GAUNTLET_CREATOR_EMAIL,
+	GAUNTLET_CREATOR_PASSWORD,
+	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_GATES,
+	GAUNTLET_POSTS,
+	GAUNTLET_SLUG_PREFIX,
+	GAUNTLET_VIEWER_EMAIL,
+	GAUNTLET_VIEWER_PASSWORD,
+	GAUNTLET_VIEWER_USERNAME,
+	type GauntletPost,
+} from "@anthers/db/gauntlet";
+import { and, eq, inArray, like } from "drizzle-orm";
+import { createLocalAccount } from "./local-accounts.js";
 
 const TAG = "[gauntlet]";
 
@@ -101,24 +97,20 @@ async function ensureViewer(): Promise<void> {
 		.limit(1);
 	if (existing) return;
 
-	const passwordHash = await Bun.password.hash(GAUNTLET_VIEWER_PASSWORD, {
-		algorithm: "argon2id",
-	});
-	const [created] = await db
-		.insert(users)
-		.values({
-			username: GAUNTLET_VIEWER_USERNAME,
-			email: GAUNTLET_VIEWER_EMAIL,
-			passwordHash,
+	const created = await createLocalAccount({
+		username: GAUNTLET_VIEWER_USERNAME,
+		email: GAUNTLET_VIEWER_EMAIL,
+		handleName: GAUNTLET_VIEWER_USERNAME,
+		passwordHash: await Bun.password.hash(GAUNTLET_VIEWER_PASSWORD, { algorithm: "argon2id" }),
+		// Pre-verified: checkout and support carry requireVerified, and there is no email loop to
+		// click through in a headless run.
+		emailVerified: true,
+		fields: {
 			displayName: "Gauntlet Viewer",
 			bio: "The harness's viewer for automated User Gauntlet walks.",
 			isCreator: false,
-			// Pre-verified: checkout and Seed-giving carry requireVerified, and there is no
-			// email loop to click through in a headless run.
-			emailVerified: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
+		},
+	});
 	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
 }
 
@@ -131,22 +123,18 @@ async function ensureCreator(): Promise<number> {
 		.limit(1);
 	if (existing) return existing.id;
 
-	const passwordHash = await Bun.password.hash(GAUNTLET_CREATOR_PASSWORD, {
-		algorithm: "argon2id",
-	});
-	const [created] = await db
-		.insert(users)
-		.values({
-			username: GAUNTLET_CREATOR_USERNAME,
-			email: GAUNTLET_CREATOR_EMAIL,
-			passwordHash,
+	const created = await createLocalAccount({
+		username: GAUNTLET_CREATOR_USERNAME,
+		email: GAUNTLET_CREATOR_EMAIL,
+		handleName: GAUNTLET_CREATOR_USERNAME,
+		passwordHash: await Bun.password.hash(GAUNTLET_CREATOR_PASSWORD, { algorithm: "argon2id" }),
+		emailVerified: true,
+		fields: {
 			displayName: "Gauntlet Creator",
 			bio: "A fixture creator for the User Gauntlet. Every post below sits on a known rung of the ladder.",
 			isCreator: true,
-			emailVerified: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
+		},
+	});
 	console.log(`${TAG} created creator "${GAUNTLET_CREATOR_USERNAME}" (id ${created.id})`);
 	return created.id;
 }

@@ -134,13 +134,13 @@ make install
 make dev
 ```
 
-`make dev` starts a fresh session — its own Postgres and a private AT Protocol network — applies migrations, and starts the API, the worker and the web dev server. The API listens on `:8000` and the frontend on `:3000`. **Nothing persists between sessions**: stopping `make dev` removes the database, the network and anything uploaded, and the next one starts clean.
+`make dev` starts a fresh session — its own Postgres and a private AT Protocol network — applies migrations, seeds a dev account and a small catalog, and starts the API, the worker and the web dev server. The API listens on `:8000` and the frontend on `:3000`. **Nothing persists between sessions**: stopping `make dev` removes the database, the network and anything uploaded, and the next one starts clean.
 
 | Command | What it does |
 |---|---|
 | `make dev` | Everything, in a fresh session: Postgres, network, migrations, API, worker, web |
 | `make down` | Stop the dev servers and remove the session |
-| `make db-seed` | <!-- econ:allow — the database seed script, not the retired payment noun -->Seed fake creators, Works and posts into the running session |
+| `make db-seed` | <!-- econ:allow — the database seed script, not the retired payment noun -->Re-run the session seed — your dev account, the User Gauntlet's accounts and a small catalog — which `make dev` runs on its own |
 | `make verify` | The pre-push gate — typecheck, lint, unit tests, and the full Playwright suite, in CI's order |
 
 `make help` lists the rest. Configuration is documented inline in [`.env.example`](./.env.example); nothing outside it is required to boot.
