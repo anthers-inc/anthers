@@ -18,15 +18,16 @@
  * own network (`scripts/session-preload.ts`). CI does not run a network yet, so it skips there.
  *
  * ⚠️ **This one needs the database as well as the server**, which is why it lives here rather
- * than beside its sibling in `scripts/`. It creates a real account on the throwaway server, seals
- * that account's password exactly as signup would, and lets the ordinary code path do the rest —
- * so what is exercised is the production path rather than a rehearsal of it.
+ * than beside its sibling in `scripts/`. Its creator is an ordinary fixture account, which signup's
+ * own code gives a real identity on the throwaway server with its credential sealed, and the
+ * ordinary code path does the rest — so what is exercised is the production path rather than a
+ * rehearsal of it.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
-import { hostedAccounts, users, works } from "@anthers/db/schema";
+import { users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { insertWork } from "./work-fixtures";
 
@@ -35,10 +36,6 @@ const SERVICE = process.env.ATPROTO_TEST_PDS;
 purgeAccountsCreatedHere();
 
 const RUN = `wl${Date.now().toString(36)}`;
-// Base 36 rather than a plain timestamp: the server refuses a long first segment outright, and
-// `.test` is the domain a development PDS offers.
-const handle = `probe-${Date.now().toString(36)}.test`;
-const password = `probe-${crypto.randomUUID()}`;
 
 const before = { url: process.env.HOSTED_PDS_URL, key: process.env.HOSTED_ACCOUNT_KEY };
 
@@ -59,7 +56,6 @@ afterAll(async () => {
 	restore("HOSTED_PDS_URL", before.url);
 	restore("HOSTED_ACCOUNT_KEY", before.key);
 	await db.delete(works).where(like(works.slug, `${RUN}%`));
-	await db.delete(hostedAccounts).where(like(hostedAccounts.did, `%${RUN}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
 });
 
@@ -69,32 +65,13 @@ let did = "";
 
 describe.skipIf(!SERVICE)("a Work's listing in a repository Anthers hosts", () => {
 	it("sets up an account on the server and seals its credential the way signup does", async () => {
-		const res = await fetch(`${SERVICE}/xrpc/com.atproto.server.createAccount`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ handle, email: `${handle}@example.invalid`, password }),
+		const account = await createAccount(`${RUN}creator`, {
+			email: `${RUN}creator@example.test`,
+			emailVerified: true,
 		});
-		expect(res.ok).toBe(true);
-		const account = (await res.json()) as { did: string };
+		await db.update(users).set({ isCreator: true }).where(eq(users.id, account.userId));
+		creatorId = account.userId;
 		did = account.did;
-
-		const [user] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}creator`,
-				email: `${RUN}creator@example.test`,
-				emailVerified: true,
-				isCreator: true,
-				atprotoDid: did,
-				atprotoHandle: handle,
-			})
-			.returning();
-		creatorId = user.id;
-
-		const { seal } = await import("../services/secret-box.js");
-		await db
-			.insert(hostedAccounts)
-			.values({ did, userId: creatorId, handle, sealedPassword: seal(password) });
 	}, 60_000);
 
 	it("writes a record into the creator's own repository when a Work is released", async () => {
@@ -195,16 +172,13 @@ describe.skipIf(!SERVICE)("a Work's listing in a repository Anthers hosts", () =
 	// two routes into a repository — a hosted identity and a permission granted over one held
 	// elsewhere — and this creator has neither, which is what `not_granted` says.
 	it("does nothing at all for a creator whose identity is neither hosted nor granted", async () => {
-		const [plain] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}plain`,
-				email: `${RUN}plain@example.test`,
-				emailVerified: true,
-				isCreator: true,
-				atprotoDid: fixtureDid(),
-			})
-			.returning();
+		const plainAccount = await createAccount(`${RUN}plain`, {
+			email: `${RUN}plain@example.test`,
+			emailVerified: true,
+			identity: "brought",
+		});
+		await db.update(users).set({ isCreator: true }).where(eq(users.id, plainAccount.userId));
+		const plain = { id: plainAccount.userId };
 		const work = await insertWork({
 			creatorId: plain.id,
 			type: "game",

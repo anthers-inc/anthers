@@ -29,7 +29,6 @@
 
 import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	poolDistributions,
 	purchases,
@@ -42,6 +41,7 @@ import { eq, inArray, lt } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
 import { storage } from "../services/storage/index.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -57,20 +57,13 @@ let userSeq = 0;
 async function makeUser(name: string, extra: Record<string, unknown> = {}): Promise<number> {
 	userSeq += 1;
 	const tag = `${name}${userSeq}_${SUFFIX}`;
-	const [row] = await db
-		.insert(users)
-		.values({
-			username: tag,
-			email: `${tag}@example.test`,
-			passwordHash: "x",
-			emailVerified: true,
-			isCreator: true,
-			atprotoDid: fixtureDid(),
-			...extra,
-		})
-		.returning({ id: users.id });
-	created.push(row.id);
-	return row.id;
+	const { userId } = await createAccount(tag, {
+		email: `${tag}@example.test`,
+		emailVerified: true,
+		fields: { isCreator: true, ...extra },
+	});
+	created.push(userId);
+	return userId;
 }
 
 afterAll(async () => {

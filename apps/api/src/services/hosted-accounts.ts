@@ -78,8 +78,11 @@ function inviteCode(): string {
 	return process.env.HOSTED_PDS_INVITE_CODE?.trim() ?? "";
 }
 
+/** What each node said its handle domain is, by node address, so it is asked once per process. */
+const learnedHandleDomains = new Map<string, Promise<string>>();
+
 /**
- * The suffix issued handles hang under, derived from the server's own hostname.
+ * The suffix issued handles hang under, as the node itself reports it.
  *
  * 🚨 It is `anthers.social` and never a subdomain of `anthers.org`. The session cookie is
  * issued with `Domain=.anthers.org`, so a browser sends it to every subdomain — issuing
@@ -87,15 +90,41 @@ function inviteCode(): string {
  * willing to send somebody else's session. The separate domain is what keeps a naming
  * decision from being an account-takeover surface.
  *
- * ⚠️ Derived rather than configured, because a second variable is a second thing that can
- * disagree with the server. The node's own `describeServer` reports `availableUserDomains`
- * and is the authority if they ever differ.
+ * ⭐ **Asked of the node rather than derived or configured.** `describeServer` reports the
+ * domains the node will issue handles under, and it is the only answer that cannot disagree with
+ * what `createAccount` then accepts. The node's hostname happens to match in production, and does
+ * not on a local network: that server is `localhost`, it refuses a `.localhost` handle, and it
+ * issues `.test` ones.
+ *
+ * ⚠️ **A node that does not answer leaves the suffix empty, and that closes the door** — see
+ * `hostedIdentityOffered`. No fallback guesses one, because a guessed suffix is exactly the
+ * disagreement this exists to rule out, and a node that is down cannot issue a handle anyway. An
+ * empty answer is not remembered, so the next call asks again.
  */
-export function hostedHandleSuffix(): string {
+export async function hostedHandleSuffix(opts: { fetchImpl?: typeof fetch } = {}): Promise<string> {
 	const url = pdsUrl();
 	if (!url) return "";
+	const known = learnedHandleDomains.get(url);
+	if (known) return known;
+	const learning = describeHandleDomain(url, opts.fetchImpl ?? fetch);
+	learnedHandleDomains.set(url, learning);
+	const domain = await learning;
+	if (!domain) learnedHandleDomains.delete(url);
+	return domain;
+}
+
+/** The first domain a node's `describeServer` offers, without its leading dot, or "". */
+async function describeHandleDomain(url: string, doFetch: typeof fetch): Promise<string> {
 	try {
-		return new URL(url).hostname;
+		const res = await doFetch(`${url}/xrpc/com.atproto.server.describeServer`, {
+			signal: AbortSignal.timeout(10_000),
+		});
+		if (!res.ok) return "";
+		const body = (await res.json()) as { availableUserDomains?: unknown };
+		const [first] = Array.isArray(body.availableUserDomains) ? body.availableUserDomains : [];
+		if (typeof first !== "string") return "";
+		const domain = first.replace(/^\./, "").toLowerCase();
+		return /^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(domain) ? domain : "";
 	} catch {
 		return "";
 	}
@@ -115,13 +144,19 @@ export function hostedHandleSuffix(): string {
  * ⚠️ Every piece is read at call time rather than at import, so an API that boots without any
  * of this configured is an API with the door closed rather than one that will not start.
  */
-export function hostedIdentityOffered(): boolean {
-	return !!pdsUrl() && !!inviteCode() && !!hostedHandleSuffix() && secretBoxConfigured();
+export async function hostedIdentityOffered(
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<boolean> {
+	if (!pdsUrl() || !inviteCode() || !secretBoxConfigured()) return false;
+	return !!(await hostedHandleSuffix(opts));
 }
 
 /** The full handle a requested name would become. */
-export function hostedHandleFor(name: string): string {
-	return `${name}.${hostedHandleSuffix()}`;
+export async function hostedHandleFor(
+	name: string,
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<string> {
+	return `${name}.${await hostedHandleSuffix(opts)}`;
 }
 
 /**
@@ -131,8 +166,8 @@ export function hostedHandleFor(name: string): string {
  * takes as an argument because a browser learns it from the API and a server derives it from
  * the node's own URL.
  */
-export function normalizeHandleName(raw: string): string {
-	return sharedNormalize(raw, hostedHandleSuffix());
+export async function normalizeHandleName(raw: string): Promise<string> {
+	return sharedNormalize(raw, await hostedHandleSuffix());
 }
 
 /**
@@ -213,7 +248,7 @@ export async function checkHandleAvailability(
 	const doFetch = opts.fetchImpl ?? fetch;
 	try {
 		const endpoint = new URL(`${url}/xrpc/com.atproto.identity.resolveHandle`);
-		endpoint.searchParams.set("handle", hostedHandleFor(name));
+		endpoint.searchParams.set("handle", await hostedHandleFor(name, { fetchImpl: doFetch }));
 		const res = await doFetch(endpoint.toString(), { signal: AbortSignal.timeout(10_000) });
 		if (res.ok) return { status: "taken" };
 		// A 400 is the node saying it cannot resolve that handle, which is what free looks
@@ -288,13 +323,20 @@ export async function createHostedAccount(
 
 	const password = generatePassword();
 	const doFetch = opts.fetchImpl ?? fetch;
+	// A node that will not say which domain it issues under is not issuing, whatever it would
+	// answer to `createAccount` — and a handle built on an empty suffix would come back as the
+	// person's fault.
+	const suffix = await hostedHandleSuffix({ fetchImpl: doFetch });
+	if (!suffix) {
+		throw new HostedAccountError("Anthers isn't issuing handles right now.", "operational");
+	}
 	let res: Response;
 	try {
 		res = await doFetch(`${url}/xrpc/com.atproto.server.createAccount`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
-				handle: hostedHandleFor(input.handleName),
+				handle: `${input.handleName}.${suffix}`,
 				email: input.email,
 				password,
 				inviteCode: code,
@@ -481,7 +523,7 @@ export async function swapHostedHandle(
 	// a different feature wearing this one's clothes. Changing which `anthers.social` name you
 	// hold is not the same as leaving the suffix behind, and conflating them would let somebody
 	// take a second issued name through a door built for domains they own.
-	const suffix = hostedHandleSuffix();
+	const suffix = await hostedHandleSuffix({ fetchImpl: doFetch });
 	if (suffix && (wanted === suffix || wanted.endsWith(`.${suffix}`))) {
 		return {
 			status: "refused",
@@ -806,6 +848,8 @@ export async function purgeHostedIdentity(
 		if (emptied) return emptied;
 	}
 
+	const suffix = await hostedHandleSuffix({ fetchImpl: doFetch });
+	if (!suffix) return { status: "unreachable", reason: "describeServer named no handle domain" };
 	const mark = purgeToken();
 	// The handle before the address, because a failure between them leaves the address — which
 	// is the piece that matters — still to be dealt with by the retry rather than already done.
@@ -814,7 +858,7 @@ export async function purgeHostedIdentity(
 		{
 			method: "POST",
 			token,
-			body: JSON.stringify({ handle: `deleted-${mark}.${hostedHandleSuffix()}` }),
+			body: JSON.stringify({ handle: `deleted-${mark}.${suffix}` }),
 		},
 		doFetch,
 	);
@@ -827,7 +871,7 @@ export async function purgeHostedIdentity(
 		{
 			method: "POST",
 			token,
-			body: JSON.stringify({ email: `deleted-${mark}@${hostedHandleSuffix()}` }),
+			body: JSON.stringify({ email: `deleted-${mark}@${suffix}` }),
 		},
 		doFetch,
 	);

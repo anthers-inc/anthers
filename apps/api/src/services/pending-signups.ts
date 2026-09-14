@@ -532,7 +532,7 @@ export async function establishSignupIdentity(
 	if (row.hostedHandle) {
 		const { createHostedAccount, HostedAccountError, hostedIdentityOffered, hostedPdsUrl } =
 			await import("./hosted-accounts.js");
-		if (!hostedIdentityOffered()) {
+		if (!(await hostedIdentityOffered())) {
 			return {
 				refusal: {
 					reason: "identity_unavailable",
@@ -603,6 +603,70 @@ export async function completePendingSignup(
 	}
 
 	return row ? { picks: picksOf(row), next: row.next } : null;
+}
+
+/**
+ * Create the account a proved address and its pending signup describe, holding its identity.
+ *
+ * 🚨 **This is the ONE place an account row comes into existence.** The signup routes call it once
+ * the address is proved, and so does the test fixture that makes accounts, which is what keeps a
+ * test account the same shape as a real one: the identity is settled first, the row is written
+ * with its DID, and the pending signup is spent — see `establishSignupIdentity` for why that order
+ * is the rule.
+ *
+ * A refusal leaves the signup where it was with its address marked proved, so finishing later
+ * needs no second code. The caller decides what signing in means, since a route sets a cookie and
+ * a fixture does not.
+ *
+ * A created account is `emailVerified: true` from the first instant: the code just typed IS the
+ * verification. `username` stays null, which is what routes it to `/welcome` — the only place the
+ * terms and the 13+ assertion are ever presented.
+ */
+export async function createAccountFromSignup(
+	row: PendingSignup,
+	email: string,
+): Promise<
+	| { refusal: SignupRefusal }
+	| { user: typeof users.$inferSelect; spent: { picks: SignupPicks; next: string } | null }
+> {
+	await markAddressProved(row.token, email);
+	const settled = await establishSignupIdentity(row, email);
+	if ("refusal" in settled) return settled;
+
+	const { identity } = settled;
+	const fields =
+		identity.kind === "hosted"
+			? { did: identity.account.did, handle: identity.account.handle, pdsUrl: identity.pdsUrl }
+			: { did: identity.did, handle: identity.handle, pdsUrl: identity.pdsUrl };
+
+	let user: typeof users.$inferSelect;
+	try {
+		[user] = await db
+			.insert(users)
+			.values({
+				email,
+				emailVerified: true,
+				atprotoDid: fields.did,
+				atprotoHandle: fields.handle,
+				atprotoPdsUrl: fields.pdsUrl,
+			})
+			.returning();
+	} catch (err) {
+		// ⚠️ **An identity the node has just created now belongs to nobody**, which is the one
+		// outcome here nobody can repair from inside Anthers — so it is logged with the DID. The
+		// realistic cause is two browsers finishing one signup at the same moment.
+		if (identity.kind === "hosted") {
+			console.error(
+				`[signup] created ${fields.did} (${fields.handle}) on the node but could not create ` +
+					"its account; the identity is unowned:",
+				err,
+			);
+		}
+		throw err;
+	}
+
+	const spent = await completePendingSignup(row.token, user.id, identity);
+	return { user, spent };
 }
 
 /**

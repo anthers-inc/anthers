@@ -1,0 +1,10 @@
+{
+	"name": "anthers-atproto-network",
+	"private": true,
+	"license": "Apache-2.0",
+	"type": "module",
+	"description": "Bluesky's own test network, run under Node. The one place its version is pinned: the container and CI both install from this lockfile.",
+	"dependencies": {
+		"@atproto/dev-env": "0.6.7"
+	}
+}

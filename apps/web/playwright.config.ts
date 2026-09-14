@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
@@ -177,31 +176,15 @@ export default defineConfig({
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
 			/*
-			 * 🚨 **The handle door is pinned here, or the suite tests the environment instead of
-			 * the code.** It needs three variables, because `hostedIdentityOffered` is a claim
-			 * that everything hosting needs is present — so a spec covering the door would pass
-			 * locally, where `.env` sets them, and fail in CI, where nothing does.
-			 *
-			 * All three are deliberately fake:
-			 *
-			 * 🚨 **The server is `.invalid`, which RFC 2606 reserves so it can never resolve.**
-			 * A suite pointed at the real node would create accounts on it, and an availability
-			 * check that reached production would make the tests depend on which names people
-			 * had taken that week. Specs intercept the check in the browser; anything that does
-			 * not simply gets `unknown`, which is the correct answer about a server nobody can
-			 * reach.
-			 *
-			 * ⚠️ **The sealing key is generated here rather than written down.** It has to be 32
-			 * real bytes to satisfy `secretBoxConfigured`, and any 32-byte constant in this file
-			 * would be a credential-shaped string in the repository — a thing worth avoiding
-			 * even when it is invented, because nothing downstream can tell the difference. A
-			 * throwaway per run is also what a test key should be.
+			 * 🚨 **The handle door is the session's real one.** Hosting reads four variables —
+			 * the server, its invite, the key that seals credentials, and the domain the server
+			 * says it issues under — and the browser session (or `scripts/ci-network.ts` in CI)
+			 * supplies a real server for all of them, private to this run. So a spec that walks
+			 * the door walks it against an identity server that answers, and the write guard in
+			 * `lib/atproto-network.ts` refuses anything that is not local. Only the port is set here.
 			 */
 			env: {
 				PORT: String(API_PORT),
-				HOSTED_PDS_URL: "https://node.invalid",
-				HOSTED_PDS_INVITE_CODE: "e2e-no-such-invite",
-				HOSTED_ACCOUNT_KEY: randomBytes(32).toString("hex"),
 			},
 			reuseExistingServer: false,
 			timeout: 180_000,

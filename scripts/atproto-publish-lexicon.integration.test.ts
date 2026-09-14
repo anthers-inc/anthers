@@ -32,7 +32,14 @@ import { type SessionWriter, sessionWriter } from "./atproto-writer.js";
 import { publishedPath } from "./lexicon-evolution.js";
 
 const SERVICE = process.env.ATPROTO_TEST_PDS;
-const handle = `lex-${Date.now().toString(36)}.test`;
+const handle = `lex-${Date.now().toString(36)}${SERVICE ? await offeredDomain(SERVICE) : ""}`;
+
+/** The first handle domain a server offers, with its leading dot. */
+async function offeredDomain(service: string): Promise<string> {
+	const res = await fetch(`${service}/xrpc/com.atproto.server.describeServer`);
+	const { availableUserDomains } = (await res.json()) as { availableUserDomains: string[] };
+	return availableUserDomains[0];
+}
 const password = `EXAMPLE-${crypto.randomUUID()}`;
 const plans = collectPlans();
 

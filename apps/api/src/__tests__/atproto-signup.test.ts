@@ -21,7 +21,6 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -34,6 +33,10 @@ import {
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
 import { issueSignupCode } from "../services/signup-codes.js";
+import { createAccount } from "./account-fixture";
+import { purgeAccountsCreatedHere } from "./cleanup";
+
+purgeAccountsCreatedHere();
 
 const RUN = `su${Date.now().toString(36)}`;
 const did = (tag: string) => `did:plc:${RUN}${tag}`;
@@ -331,10 +334,11 @@ describe("no answer a PDS can give creates an account", () => {
 		// The interesting one. The PDS says this address is confirmed — but its claim is
 		// somebody else's assertion, and taking over an existing account on the strength of
 		// it would be a takeover. The emailed code settles it instead.
-		const ownDid = fixtureDid();
-		await db
-			.insert(users)
-			.values({ email: addr("taken"), emailVerified: true, atprotoDid: ownDid });
+		const { did: ownDid } = await createAccount(null, {
+			email: addr("taken"),
+			emailVerified: true,
+			identity: "brought",
+		});
 		pds.body = { email: addr("taken"), emailConfirmed: true };
 
 		const { url } = await runCallback({ did: did("taken") });
@@ -555,10 +559,11 @@ describe("finishing a parked signup through the emailed code", () => {
 		// 🚨 The collision case. A code we sent and they read proves the mailbox, so they are
 		// signed in to the account it belongs to — but that account already holds its one
 		// identity, and attaching a second would silently swap who it is on the network.
-		const ownDid = fixtureDid();
-		await db
-			.insert(users)
-			.values({ email: addr("returning"), emailVerified: true, atprotoDid: ownDid });
+		const { did: ownDid } = await createAccount(null, {
+			email: addr("returning"),
+			emailVerified: true,
+			identity: "brought",
+		});
 		pds.body = { email: addr("returning"), emailConfirmed: true };
 		const { cookies } = await runCallback({ did: did("returning") });
 		const token = pendingCookie(cookies);

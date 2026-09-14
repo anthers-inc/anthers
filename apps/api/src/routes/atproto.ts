@@ -479,10 +479,10 @@ const atprotoRoutes = new Hono()
 	// and shows only the Bluesky door when hosting is off. The suffix travels with the answer so
 	// the browser can show a handle in full without a second copy of `anthers.social` living in
 	// the front end.
-	.get("/config", (c) =>
+	.get("/config", async (c) =>
 		c.json({
-			hostedIdentityOffered: hostedIdentityOffered(),
-			hostedHandleSuffix: hostedHandleSuffix(),
+			hostedIdentityOffered: await hostedIdentityOffered(),
+			hostedHandleSuffix: await hostedHandleSuffix(),
 		}),
 	)
 
@@ -501,13 +501,13 @@ const atprotoRoutes = new Hono()
 	// ⭐ **This browser's own reservation reads as available**, so somebody who pressed the
 	// button and came back to the same name is told it is theirs.
 	.get("/handle-available", zValidator("query", handleQuerySchema), async (c) => {
-		if (!hostedIdentityOffered()) {
+		if (!(await hostedIdentityOffered())) {
 			return c.json({ status: "unknown" as const, handle: "" });
 		}
-		const name = normalizeHandleName(c.req.valid("query").name);
+		const name = await normalizeHandleName(c.req.valid("query").name);
 		const held = await handleReservedElsewhere(name, getCookie(c, PENDING_SIGNUP_COOKIE));
 		const result = held ? { status: "taken" as const } : await checkHandleAvailability(name);
-		return c.json({ ...result, handle: hostedHandleFor(name) });
+		return c.json({ ...result, handle: await hostedHandleFor(name) });
 	})
 
 	// ── Take a domain you own as your handle ─────────────────────────────────

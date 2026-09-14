@@ -31,7 +31,14 @@ const PDS_PORT = Number(process.env.PDS_PORT ?? 2583);
 
 const network = await TestNetworkNoAppView.create({
 	plc: { port: PLC_PORT },
-	pds: { port: PDS_PORT },
+	pds: {
+		port: PDS_PORT,
+		// ⚠️ **One two-label domain, shaped like production's `anthers.social`**, rather than dev-env's
+		// default `.test` and `.example`. The hub issues handles under the first domain the server
+		// offers, and erasing an account readdresses it to `deleted-…@` that domain — which the server
+		// refuses as an address when the domain is a bare `test`.
+		serviceHandleDomains: [".anthers.test"],
+	},
 });
 
 const directory = network.pds.ctx.cfg.identity.plcUrl;

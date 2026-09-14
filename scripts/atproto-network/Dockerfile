@@ -6,11 +6,10 @@
 FROM node:24
 
 WORKDIR /network
-# Pinned exactly, so the network a test run gets does not change underneath it between builds.
-RUN npm init -y >/dev/null \
-	&& npm pkg set type=module \
-	&& npm install --no-audit --no-fund @atproto/dev-env@0.6.7
+# Installed from the lockfile beside this file, which CI installs from too — so the network a test
+# run gets is the same everywhere and changes only when that lockfile does.
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 COPY network.mjs ./
-EXPOSE 2582 2583
 CMD ["node", "network.mjs"]

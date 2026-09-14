@@ -12,20 +12,19 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	accounts,
 	attentionEvents,
 	poolDistributions,
 	seedAllocations,
 	stickers,
-	users,
 } from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import { distributePool } from "../jobs/distribute-pool";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -40,16 +39,8 @@ const PERIOD_END = new Date("2031-04-01T00:00:00Z");
 let n = 0;
 async function makeUser(tag: string): Promise<number> {
 	n += 1;
-	const [row] = await db
-		.insert(users)
-		.values({
-			username: `dp_${tag}_${n}_${Date.now().toString(36)}`,
-			email: `dp_${tag}_${n}_${Date.now().toString(36)}@example.com`,
-			passwordHash: "x",
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
-	return row.id;
+	const name = `dp_${tag}_${n}_${Date.now().toString(36)}`;
+	return (await createAccount(name, { email: `${name}@example.com` })).userId;
 }
 
 /** A viewer giving Anthers `anthersSupport`, with `directed` dollars at each creator. */

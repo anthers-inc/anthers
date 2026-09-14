@@ -108,24 +108,20 @@ export function sessionPorts(kind: SessionKind, freePort: () => number): Session
 /**
  * The environment a session hands to what runs inside it.
  *
- * The hosting credentials are real enough for signup to use the session's own server: its
- * invite requirement is off, so any invite string is accepted, and the sealing key is drawn fresh
- * because nothing it seals survives the session anyway.
+ * The hosting credentials are real ones for the session's own server, so signup runs against it
+ * exactly as it runs against production's: the invite code is minted on that server when the
+ * session starts, and the sealing key is drawn fresh because nothing it seals survives the session.
  */
 export function sessionEnvironment(
 	id: string,
 	ports: SessionPorts,
 	contentDir: string,
-	accountKey: string,
+	hosting: { inviteCode: string; accountKey: string },
 ): Record<string, string> {
 	const env: Record<string, string> = {
 		ANTHERS_SESSION: id,
 		DATABASE_URL: `postgres://anthers:anthers@localhost:${ports.postgres}/anthers`,
-		ATPROTO_PLC_URL: `http://localhost:${ports.plc}`,
-		HOSTED_PDS_URL: `http://localhost:${ports.pds}`,
-		HOSTED_PDS_INVITE_CODE: "session-network-requires-no-invite",
-		HOSTED_ACCOUNT_KEY: accountKey,
-		ATPROTO_TEST_PDS: `http://localhost:${ports.pds}`,
+		...networkEnvironment(ports, hosting),
 		LOCAL_CONTENT_DIR: contentDir,
 	};
 	if (ports.api !== undefined && ports.preview !== undefined) {
@@ -134,6 +130,20 @@ export function sessionEnvironment(
 		env.BASE_URL = `http://localhost:${ports.api}`;
 	}
 	return env;
+}
+
+/** The part of a session's environment that points at its AT Protocol network. */
+export function networkEnvironment(
+	ports: Pick<SessionPorts, "plc" | "pds">,
+	hosting: { inviteCode: string; accountKey: string },
+): Record<string, string> {
+	return {
+		ATPROTO_PLC_URL: `http://localhost:${ports.plc}`,
+		HOSTED_PDS_URL: `http://localhost:${ports.pds}`,
+		HOSTED_PDS_INVITE_CODE: hosting.inviteCode,
+		HOSTED_ACCOUNT_KEY: hosting.accountKey,
+		ATPROTO_TEST_PDS: `http://localhost:${ports.pds}`,
+	};
 }
 
 /**
@@ -344,7 +354,7 @@ async function startPostgres(id: string, port: number): Promise<string> {
 	return name;
 }
 
-async function answers(url: string): Promise<boolean> {
+export async function answers(url: string): Promise<boolean> {
 	try {
 		const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
 		return res.ok;
@@ -383,6 +393,35 @@ async function startNetwork(id: string, plc: number, pds: number): Promise<strin
 			(await answers(`http://localhost:${plc}/_health`)),
 	);
 	return name;
+}
+
+/**
+ * The administrator password `@atproto/dev-env` gives every server it starts — its own published
+ * constant, for a server that exists only in this session's memory and answers only on loopback.
+ */
+const NETWORK_ADMIN_PASSWORD = "admin-pass";
+
+/**
+ * Mint an invite code on the session's server, as production's is minted by hand on its node.
+ *
+ * ⚠️ **A made-up code is refused even though this server does not require one**: it checks any
+ * code it is given. Minting a real one keeps signup on the same path it takes in production, where
+ * the node does require one.
+ */
+export async function mintInviteCode(pds: number): Promise<string> {
+	const res = await fetch(`http://localhost:${pds}/xrpc/com.atproto.server.createInviteCode`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Basic ${Buffer.from(`admin:${NETWORK_ADMIN_PASSWORD}`).toString("base64")}`,
+		},
+		body: JSON.stringify({ useCount: 1_000_000 }),
+	});
+	const body = (await res.json().catch(() => ({}))) as { code?: string };
+	if (!res.ok || !body.code) {
+		throw new Error(`the session's server would not mint an invite code (${res.status})`);
+	}
+	return body.code;
 }
 
 async function migrate(env: Record<string, string>): Promise<void> {
@@ -438,11 +477,15 @@ export async function startSession(
 		rmSync(dir, { recursive: true, force: true });
 	};
 
-	const env = sessionEnvironment(id, ports, contentDir, randomBytes(32).toString("hex"));
-	writeFileSync(join(dir, "env.json"), JSON.stringify(env), { mode: 0o600 });
+	let env: Record<string, string>;
 	try {
 		const started = Date.now();
 		await Promise.all([startPostgres(id, ports.postgres), startNetwork(id, ports.plc, ports.pds)]);
+		env = sessionEnvironment(id, ports, contentDir, {
+			inviteCode: await mintInviteCode(ports.pds),
+			accountKey: randomBytes(32).toString("hex"),
+		});
+		writeFileSync(join(dir, "env.json"), JSON.stringify(env), { mode: 0o600 });
 		await migrate(env);
 		log(
 			`[session] ${id} ready in ${((Date.now() - started) / 1000).toFixed(1)}s — database :${ports.postgres}, ` +
@@ -456,7 +499,7 @@ export async function startSession(
 }
 
 /** Run a command with `env` laid over this process's environment, until it exits. */
-function runCommand(
+export function runCommand(
 	command: string[],
 	env: Record<string, string>,
 	detached: boolean,
@@ -469,7 +512,7 @@ function runCommand(
 	});
 }
 
-function exitCodeOf(child: ChildProcess, command: string[]): Promise<number> {
+export function exitCodeOf(child: ChildProcess, command: string[]): Promise<number> {
 	return new Promise<number>((resolve) => {
 		child.on("exit", (exitCode, signal) => resolve(exitCode ?? (signal ? 130 : 1)));
 		child.on("error", (err) => {

@@ -161,6 +161,27 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # 🚨 **Every fixture account is a real identity now, so the suites need the session's AT
+      # Protocol network.** It has to answer on `localhost` at the port it writes into every
+      # identity it creates, and a job running in a container reaches a service container by name
+      # instead — so in every job alike, `network.mjs` runs under Node inside the job
+      # (`scripts/ci-network.ts`), installed from the same lockfile the network's container uses.
+      - uses: actions/setup-node@v4
+        with:
+          # The major the network's Dockerfile runs on (`FROM node:24`).
+          node-version: 24
+
+      - name: Cache the AT Protocol network's dependencies
+        id: atproto-network-cache
+        uses: actions/cache@v4
+        with:
+          path: scripts/atproto-network/node_modules
+          key: atproto-network-${{ runner.os }}-${{ hashFiles('scripts/atproto-network/package-lock.json') }}
+
+      - name: Install the AT Protocol network
+        if: steps.atproto-network-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefix scripts/atproto-network --no-audit --no-fund
+
       # Typecheck was previously enforced only by the App Platform build, which means
       # a type error surfaced at deploy time rather than on the PR that caused it.
       - name: Typecheck
@@ -196,9 +217,10 @@ jobs:
       - name: Apply database migrations
         run: bun run db:migrate
 
-      # The suites drive the Hono app through `app.fetch` against this real Postgres.
+      # The suites drive the Hono app through `app.fetch` against this real Postgres, with the
+      # network running beside them for as long as they do.
       - name: Run test suites
-        run: bun test
+        run: bun run scripts/ci-network.ts -- bun test
 
   # The two Docker images App Platform builds at deploy time. Nothing else in CI
   # exercises them, and that gap is exactly how `bcd212e` shipped: adding
@@ -350,6 +372,27 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install chromium
 
+      # 🚨 **Every fixture account is a real identity now, so the suites need the session's AT
+      # Protocol network.** It has to answer on `localhost` at the port it writes into every
+      # identity it creates, and a job running in a container reaches a service container by name
+      # instead — so in every job alike, `network.mjs` runs under Node inside the job
+      # (`scripts/ci-network.ts`), installed from the same lockfile the network's container uses.
+      - uses: actions/setup-node@v4
+        with:
+          # The major the network's Dockerfile runs on (`FROM node:24`).
+          node-version: 24
+
+      - name: Cache the AT Protocol network's dependencies
+        id: atproto-network-cache
+        uses: actions/cache@v4
+        with:
+          path: scripts/atproto-network/node_modules
+          key: atproto-network-${{ runner.os }}-${{ hashFiles('scripts/atproto-network/package-lock.json') }}
+
+      - name: Install the AT Protocol network
+        if: steps.atproto-network-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefix scripts/atproto-network --no-audit --no-fund
+
       - name: Apply database migrations
         run: bun run db:migrate
 
@@ -357,7 +400,7 @@ jobs:
         working-directory: apps/web
         env:
           CI: "true"
-        run: bunx playwright test $(bun run scripts/e2e-projects.ts hermetic)
+        run: bun run ../../scripts/ci-network.ts -- bunx playwright test $(bun run scripts/e2e-projects.ts hermetic)
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
@@ -440,6 +483,27 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install chromium
 
+      # 🚨 **Every fixture account is a real identity now, so the suites need the session's AT
+      # Protocol network.** It has to answer on `localhost` at the port it writes into every
+      # identity it creates, and a job running in a container reaches a service container by name
+      # instead — so in every job alike, `network.mjs` runs under Node inside the job
+      # (`scripts/ci-network.ts`), installed from the same lockfile the network's container uses.
+      - uses: actions/setup-node@v4
+        with:
+          # The major the network's Dockerfile runs on (`FROM node:24`).
+          node-version: 24
+
+      - name: Cache the AT Protocol network's dependencies
+        id: atproto-network-cache
+        uses: actions/cache@v4
+        with:
+          path: scripts/atproto-network/node_modules
+          key: atproto-network-${{ runner.os }}-${{ hashFiles('scripts/atproto-network/package-lock.json') }}
+
+      - name: Install the AT Protocol network
+        if: steps.atproto-network-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefix scripts/atproto-network --no-audit --no-fund
+
       # What the image is FOR. If either of these is ever missing, the fixture no-ops and
       # the byte assertions skip **silently** — a quiet coverage loss rather than a red run,
       # which is exactly what the gauntlet exists to prevent. So assert them rather than
@@ -457,7 +521,7 @@ jobs:
         working-directory: apps/web
         env:
           CI: "true"
-        run: bunx playwright test $(bun run scripts/e2e-projects.ts media)
+        run: bun run ../../scripts/ci-network.ts -- bunx playwright test $(bun run scripts/e2e-projects.ts media)
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

@@ -22,16 +22,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import {
-	comments,
-	follows,
-	hostedAccounts,
-	posts,
-	reviews,
-	users,
-	votes,
-	works,
-} from "@anthers/db/schema";
+import { comments, follows, posts, reviews, users, votes, works } from "@anthers/db/schema";
 import { eq, inArray, like } from "drizzle-orm";
 import {
 	COMMENT_COLLECTION,
@@ -49,6 +40,7 @@ import {
 	syncVoteRecord,
 } from "../services/reader-record-listing.js";
 import { syncWorkListing } from "../services/work-listing.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { insertWork, testPublicId } from "./work-fixtures";
 
@@ -57,7 +49,6 @@ const SERVICE = process.env.ATPROTO_TEST_PDS;
 purgeAccountsCreatedHere();
 
 const RUN = `rr${Date.now().toString(36)}`;
-const STAMP = Date.now().toString(36);
 
 const before = { url: process.env.HOSTED_PDS_URL, key: process.env.HOSTED_ACCOUNT_KEY };
 
@@ -92,7 +83,6 @@ afterAll(async () => {
 	if (made.reviews.length) await db.delete(reviews).where(inArray(reviews.id, made.reviews));
 	await db.delete(posts).where(like(posts.slug, `${RUN}%`));
 	await db.delete(works).where(like(works.slug, `${RUN}%`));
-	await db.delete(hostedAccounts).where(like(hostedAccounts.handle, `%${STAMP}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
 });
 
@@ -101,34 +91,16 @@ interface Account {
 	did: string;
 }
 
-/** A real account on the server, sealed into `hosted_accounts` the way signup does it. */
+/** A real account on the server, with its credential sealed the way signup seals it. */
 async function hostedAccount(tag: string): Promise<Account> {
-	const handle = `${tag}-${STAMP}.test`;
-	const password = `probe-${crypto.randomUUID()}`;
-	const res = await fetch(`${SERVICE}/xrpc/com.atproto.server.createAccount`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ handle, email: `${handle}@example.invalid`, password }),
+	const account = await createAccount(`${RUN}${tag}`, {
+		email: `${RUN}${tag}@example.test`,
+		emailVerified: true,
 	});
-	expect(res.ok).toBe(true);
-	const { did } = (await res.json()) as { did: string };
-
-	const [user] = await db
-		.insert(users)
-		.values({
-			username: `${RUN}${tag}`,
-			email: `${RUN}${tag}@example.test`,
-			emailVerified: true,
-			isCreator: tag === "creator",
-			atprotoDid: did,
-			atprotoHandle: handle,
-		})
-		.returning();
-	const { seal } = await import("../services/secret-box.js");
-	await db
-		.insert(hostedAccounts)
-		.values({ did, userId: user.id, handle, sealedPassword: seal(password) });
-	return { id: user.id, did };
+	if (tag === "creator") {
+		await db.update(users).set({ isCreator: true }).where(eq(users.id, account.userId));
+	}
+	return { id: account.userId, did: account.did };
 }
 
 /** The record at an address, or null once it has gone. */

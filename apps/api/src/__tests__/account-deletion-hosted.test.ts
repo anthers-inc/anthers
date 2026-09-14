@@ -14,9 +14,9 @@
  * sweep tries again — and a credential nobody can open must NOT, because retrying never opens
  * it and a person blocked from leaving forever is worse than a shell left on a server.
  *
- * ⚠️ **Nothing here reaches the real node.** The unreachable case points at a `.invalid` host,
- * which RFC 2606 guarantees can never resolve, and the unusable case is refused before any
- * request is made.
+ * ⚠️ **Nothing here reaches the real node.** The identities are real ones on the test session's own
+ * server; the unreachable case then points the hub at a `.invalid` host, which RFC 2606 guarantees
+ * can never resolve, and the unusable case is refused before any request is made.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -54,45 +54,35 @@ function restore(key: string, value: string | undefined) {
 }
 
 const { eraseAccount, deletionPreview } = await import("../services/account-deletion.js");
-const { seal } = await import("../services/secret-box.js");
 
 const suffix = crypto.randomUUID().slice(0, 8);
 const unreachableName = `hd_defer_${suffix}`;
 const strandedName = `hd_strand_${suffix}`;
 
-async function signUp(username: string): Promise<number> {
-	return (await createAccount(username)).userId;
-}
-
 let deferId: number;
 let strandId: number;
-const deferDid = `did:plc:testdefer${suffix}`;
-const strandDid = `did:plc:teststrand${suffix}`;
+let deferDid: string;
+let deferHandle: string;
+let strandDid: string;
 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username IN (${unreachableName}, ${strandedName})`);
-	await db.execute(sql`DELETE FROM hosted_accounts WHERE did IN (${deferDid}, ${strandDid})`);
-	deferId = await signUp(unreachableName);
-	strandId = await signUp(strandedName);
+	// Real identities on the session's server, sealed under the key this file set — so the one
+	// that is meant to be openable is.
+	const defer = await createAccount(unreachableName);
+	const strand = await createAccount(strandedName);
+	deferId = defer.userId;
+	deferDid = defer.did;
+	deferHandle = defer.handle;
+	strandId = strand.userId;
+	strandDid = strand.did;
 
-	await db.insert(hostedAccounts).values([
-		{
-			did: deferDid,
-			userId: deferId,
-			handle: `${unreachableName}.anthers.social`,
-			// A real sealed value, so the credential is not what stops this one.
-			sealedPassword: seal("a-generated-password"),
-		},
-		{
-			did: strandDid,
-			userId: strandId,
-			handle: `${strandedName}.anthers.social`,
-			// 🚨 Sealed under a key this process does not have. `open` refuses it, which is the
-			// state the runbook describes for `signup-probe` and the one that must not block
-			// somebody's erasure.
-			sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj",
-		},
-	]);
+	// 🚨 Resealed under a key this process does not have. `open` refuses it, which is the state
+	// the runbook describes for `signup-probe` and the one that must not block somebody's erasure.
+	await db
+		.update(hostedAccounts)
+		.set({ sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj" })
+		.where(eq(hostedAccounts.did, strandDid));
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
@@ -102,12 +92,12 @@ afterAll(async () => {
 describe("an account holding a handle Anthers issued", () => {
 	it("names the handle in the preview, so nobody finds out afterwards", async () => {
 		const preview = await deletionPreview(deferId);
-		expect(preview.hostedHandles).toEqual([`${unreachableName}.anthers.social`]);
+		expect(preview.hostedHandles).toEqual([deferHandle]);
 	});
 
 	it("says nothing about handles for an account that has none", async () => {
-		const plain = await signUp(`hd_none_${suffix}`);
-		expect((await deletionPreview(plain)).hostedHandles).toEqual([]);
+		const plain = await createAccount(`hd_none_${suffix}`, { identity: "brought" });
+		expect((await deletionPreview(plain.userId)).hostedHandles).toEqual([]);
 	});
 
 	// 🚨 The whole point. An unreachable identity server is Anthers failing to finish its own
