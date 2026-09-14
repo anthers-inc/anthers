@@ -47,11 +47,9 @@ import {
 import {
 	chooseHostedHandle,
 	clearPendingSignup,
-	completePendingSignup,
-	establishSignupIdentity,
+	createAccountFromSignup,
 	HandleReservedError,
 	handleReservedElsewhere,
-	markAddressProved,
 	markCodeSent,
 	picksOf,
 	readPendingSignup,
@@ -286,26 +284,17 @@ async function handleRefusal(
  * Turn a proved address into a signed-in account, spending whatever pending signup this
  * browser is carrying.
  *
- * 🚨 **This is the ONE place an account comes into existence**, and both routes that can do it
- * call it rather than repeating it. The two of them differ only in what proved the address — a
- * code spent here, or a code spent at `/signin/verify` on a signup being resumed in another
- * browser — and that difference must not turn into two descriptions of what a new account looks
- * like.
+ * Both routes that can create an account call this rather than repeating it. The two of them
+ * differ only in what proved the address — a code spent here, or a code spent at `/signin/verify`
+ * on a signup being resumed in another browser — and that difference must not turn into two
+ * descriptions of what a new account looks like. The account itself is made by
+ * `createAccountFromSignup`, which settles its identity before writing the row; this adds what
+ * only a browser has, the session cookie.
  *
- * 🚨 **The identity is settled before the account row is written, and the row is written with
- * its DID.** Every account is an ATProto identity, so nothing here may create one that lacks
- * it: no pending signup means nothing to create, and a signup whose identity cannot be settled
- * yet — no identity chosen, a Bluesky identity that already has an account, a name the node will
- * not issue, a node that is down — is refused with the address marked proved, so finishing later
- * needs no second code. See `establishSignupIdentity`.
- *
- * An address that already has an account signs that account in, and the pending signup is spent
- * without attaching anything, because that account already holds its identity.
- *
- * A created account is `emailVerified: true` from the first instant and gets no verification
- * mail: the code just typed IS the verification. `username` stays null, which is what makes the
- * account `needsOnboarding` and routes it to `/welcome` — the only place the terms and the 13+
- * assertion are ever presented.
+ * No pending signup means nothing to create. An address that already has an account signs that
+ * account in, and the pending signup is spent without attaching anything, because that account
+ * already holds its identity. A created account gets no verification mail, because the code just
+ * typed IS the verification.
  */
 async function mintFromProvedAddress(
 	c: Parameters<typeof setSessionCookie>[0] & {
@@ -354,52 +343,19 @@ async function mintFromProvedAddress(
 		};
 	}
 
-	await markAddressProved(row.token, email);
-	const settled = await establishSignupIdentity(row, email);
-	if ("refusal" in settled) {
+	const created = await createAccountFromSignup(row, email);
+	if ("refusal" in created) {
 		return {
-			status: settled.refusal.status,
+			status: created.refusal.status,
 			body: {
-				error: settled.refusal.message,
-				reason: settled.refusal.reason,
+				error: created.refusal.message,
+				reason: created.refusal.reason,
 				pending: await serializePendingSignup(await readPendingSignup(row.token)),
 			},
 		};
 	}
 
-	const { identity } = settled;
-	const fields =
-		identity.kind === "hosted"
-			? { did: identity.account.did, handle: identity.account.handle, pdsUrl: identity.pdsUrl }
-			: { did: identity.did, handle: identity.handle, pdsUrl: identity.pdsUrl };
-
-	let user: typeof users.$inferSelect;
-	try {
-		[user] = await db
-			.insert(users)
-			.values({
-				email,
-				emailVerified: true,
-				atprotoDid: fields.did,
-				atprotoHandle: fields.handle,
-				atprotoPdsUrl: fields.pdsUrl,
-			})
-			.returning();
-	} catch (err) {
-		// ⚠️ **An identity the node has just created now belongs to nobody**, which is the one
-		// outcome here nobody can repair from inside Anthers — so it is logged with the DID. The
-		// realistic cause is two browsers finishing one signup at the same moment.
-		if (identity.kind === "hosted") {
-			console.error(
-				`[signup] created ${fields.did} (${fields.handle}) on the node but could not create ` +
-					"its account; the identity is unowned:",
-				err,
-			);
-		}
-		throw err;
-	}
-
-	const spent = await completePendingSignup(row.token, user.id, identity);
+	const { user, spent } = created;
 	await signIn(user.id);
 	clearPendingSignupCookie(c);
 

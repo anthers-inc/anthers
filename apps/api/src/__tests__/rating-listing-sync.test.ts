@@ -13,8 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
-import { moderationActions, users } from "@anthers/db/schema";
+import { moderationActions } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { QUEUES, queue } from "../jobs/queue";
 import {
@@ -23,6 +22,7 @@ import {
 	fileRatingAppeal,
 	resolveRatingAppeal,
 } from "../services/content-rating.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { insertWork } from "./work-fixtures.js";
 
@@ -47,25 +47,8 @@ function listingSyncs(): unknown[] {
 }
 
 beforeAll(async () => {
-	const [creator] = await db
-		.insert(users)
-		.values({
-			username: `rls_c_${run}`,
-			email: `rls_c_${run}@example.com`,
-			isCreator: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning();
-	const [operator] = await db
-		.insert(users)
-		.values({
-			username: `rls_o_${run}`,
-			email: `rls_o_${run}@example.com`,
-			atprotoDid: fixtureDid(),
-		})
-		.returning();
-	creatorId = creator.id;
-	operatorId = operator.id;
+	creatorId = (await createAccount(`rls_c_${run}`, { fields: { isCreator: true } })).userId;
+	operatorId = (await createAccount(`rls_o_${run}`)).userId;
 
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });

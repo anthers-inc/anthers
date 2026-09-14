@@ -57,13 +57,14 @@ describe("the environment a session hands its command", () => {
 			"test-abc",
 			{ postgres: 40000, plc: 40001, pds: 40002 },
 			"/tmp/s/content",
-			"k".repeat(64),
+			{ inviteCode: "localhost-abcde-fghij", accountKey: "k".repeat(64) },
 		);
 		expect(env).toMatchObject({
 			ANTHERS_SESSION: "test-abc",
 			DATABASE_URL: "postgres://anthers:anthers@localhost:40000/anthers",
 			ATPROTO_PLC_URL: "http://localhost:40001",
 			HOSTED_PDS_URL: "http://localhost:40002",
+			HOSTED_PDS_INVITE_CODE: "localhost-abcde-fghij",
 			LOCAL_CONTENT_DIR: "/tmp/s/content",
 		});
 		expect(env.API_PORT).toBeUndefined();
@@ -74,7 +75,7 @@ describe("the environment a session hands its command", () => {
 			"browser-abc",
 			{ postgres: 1, plc: 2, pds: 3, api: 40003, preview: 40004 },
 			"/tmp/s",
-			"k",
+			{ inviteCode: "i", accountKey: "k" },
 		);
 		expect(env).toMatchObject({
 			API_PORT: "40003",

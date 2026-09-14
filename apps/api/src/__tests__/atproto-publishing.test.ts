@@ -17,7 +17,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { atprotoSessions, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -38,13 +37,19 @@ import { WORK_COLLECTION } from "../services/atproto-repo.js";
 import { createSession } from "../services/auth.js";
 import { oauthWriterFor } from "../services/oauth-repo-writer.js";
 import { stopPublishingFor } from "../services/work-listing.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { insertWork } from "./work-fixtures";
 
 purgeAccountsCreatedHere();
 
 const RUN = `pb${Date.now().toString(36)}`;
-const did = (tag: string) => `did:plc:${RUN}${tag}`;
+/**
+ * The DID of the account made under `tag`, which the session's server issued. A tag no account was
+ * made for — the stranger authorizing as somebody else — gets an identity nobody holds.
+ */
+const dids = new Map<string, string>();
+const did = (tag: string) => dids.get(tag) ?? `did:plc:${RUN}${tag}`;
 
 /** The full grant, spelled the way an authorization server answers it — see `atproto-scope`. */
 const GRANTED = `atproto ${USER_SCOPE_EXPANDED} ${CREATOR_SCOPE_EXPANDED}`;
@@ -113,18 +118,21 @@ afterAll(async () => {
 	await db.delete(users).where(like(users.email, `${RUN}%`));
 });
 
-async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> = {}) {
-	const [user] = await db
-		.insert(users)
-		.values({
-			username: `${RUN}${tag}`,
-			email: `${RUN}${tag}@example.test`,
-			emailVerified: true,
-			isCreator: true,
-			atprotoDid: fixtureDid(),
-			...values,
-		})
-		.returning();
+/**
+ * An account holding an identity on the session's server. Brought unless a case asks otherwise,
+ * because nearly every case here is about a grant over an identity Anthers holds no credential for.
+ */
+async function makeUser(
+	tag: string,
+	opts: { identity?: "hosted" | "brought"; isCreator?: boolean } = {},
+) {
+	const { user } = await createAccount(`${RUN}${tag}`, {
+		email: `${RUN}${tag}@example.test`,
+		emailVerified: true,
+		identity: opts.identity ?? "brought",
+		fields: { isCreator: opts.isCreator ?? true },
+	});
+	dids.set(tag, user.atprotoDid);
 	return user;
 }
 
@@ -218,7 +226,7 @@ describe("what the client is allowed to ask for", () => {
 
 describe("asking for the permission", () => {
 	it("authorizes against the DID on the account, never the handle in the request", async () => {
-		const user = await makeUser("sub", { atprotoDid: did("sub"), atprotoHandle: "me.bsky.social" });
+		const user = await makeUser("sub");
 		const token = await createSession(user.id, undefined, undefined);
 
 		const res = await startAuth(
@@ -239,7 +247,7 @@ describe("asking for the permission", () => {
 	// for identity alone would throw away a permission this creator had already granted — and
 	// the first sign anybody would get is a listing that stopped updating.
 	it("carries the creator permission through a later sign-in", async () => {
-		const user = await makeUser("back", { atprotoDid: did("back"), isCreator: true });
+		const user = await makeUser("back", { isCreator: true });
 		await seedSession(did("back"), user.id);
 
 		await startAuth({ handle: did("back"), intent: "login" });
@@ -251,7 +259,7 @@ describe("asking for the permission", () => {
 	// A reader's own records are Anthers working, so every reader is asked for them — and never
 	// for the creator set, over records they will not make.
 	it("asks a reader for their own records and not for the creator permission", async () => {
-		const user = await makeUser("read", { atprotoDid: did("read"), isCreator: false });
+		const user = await makeUser("read", { isCreator: false });
 		await seedSession(did("read"), user.id);
 
 		await startAuth({ handle: did("read"), intent: "login" });
@@ -264,7 +272,7 @@ describe("asking for the permission", () => {
 	});
 
 	it("needs no handle at all, and still requires one from every other intent", async () => {
-		const user = await makeUser("nohandle", { atprotoDid: did("nohandle"), isCreator: true });
+		const user = await makeUser("nohandle", { isCreator: true });
 		const token = await createSession(user.id, undefined, undefined);
 
 		expect((await startAuth({ intent: "publish" }, token)).status).toBe(200);
@@ -275,7 +283,7 @@ describe("asking for the permission", () => {
 	});
 
 	it("refuses while the door is shut, without sending anybody to Bluesky first", async () => {
-		const user = await makeUser("shut", { atprotoDid: did("shut") });
+		const user = await makeUser("shut");
 		const token = await createSession(user.id, undefined, undefined);
 		delete process.env.ATPROTO_PUBLISH_ENABLED;
 		try {
@@ -289,7 +297,7 @@ describe("asking for the permission", () => {
 
 describe("coming back from the consent screen", () => {
 	it("records the grant and reports it", async () => {
-		const user = await makeUser("yes", { atprotoDid: did("yes") });
+		const user = await makeUser("yes");
 		await seedSession(did("yes"), user.id);
 
 		const url = await runCallback({
@@ -305,7 +313,7 @@ describe("coming back from the consent screen", () => {
 	});
 
 	it("treats a decline as an answer, and records what actually came back", async () => {
-		const user = await makeUser("no", { atprotoDid: did("no") });
+		const user = await makeUser("no");
 		await seedSession(did("no"), user.id);
 
 		const url = await runCallback({
@@ -324,7 +332,7 @@ describe("coming back from the consent screen", () => {
 	// publishing being on would leave every post and project quietly unwritten, so it reads as the
 	// state a creator can act on: asked again.
 	it("treats a grant under the retired catalog set as needing to be asked again", async () => {
-		const user = await makeUser("old", { atprotoDid: did("old") });
+		const user = await makeUser("old");
 		await seedSession(did("old"), user.id);
 
 		const url = await runCallback({
@@ -339,7 +347,7 @@ describe("coming back from the consent screen", () => {
 	it("refuses an identity that is not the one linked to the account", async () => {
 		// 🚨 Somebody signed in as themselves who authorizes as a different Bluesky account.
 		// Granting anyway would point this creator's catalog at that account's repository.
-		const user = await makeUser("mix", { atprotoDid: did("mix") });
+		const user = await makeUser("mix");
 		await seedSession(did("stranger"));
 
 		const url = await runCallback({
@@ -352,18 +360,8 @@ describe("coming back from the consent screen", () => {
 	});
 
 	it("refuses an account whose identity Anthers hosts", async () => {
-		const user = await makeUser("host", { atprotoDid: did("host") });
+		const user = await makeUser("host", { identity: "hosted" });
 		await seedSession(did("host"), user.id);
-		const { hostedAccounts } = await import("@anthers/db/schema");
-		await db
-			.insert(hostedAccounts)
-			.values({
-				userId: user.id,
-				did: did("host"),
-				handle: "h.anthers.social",
-				sealedPassword: "x",
-			})
-			.onConflictDoNothing();
 
 		const url = await runCallback({
 			did: did("host"),
@@ -371,12 +369,11 @@ describe("coming back from the consent screen", () => {
 			state: JSON.stringify({ intent: "publish", userId: user.id }),
 		});
 		expect(url.searchParams.get("error")).toBe("hosted");
-		await db.delete(hostedAccounts).where(eq(hostedAccounts.userId, user.id));
 	});
 
 	// 🚨 The quiet one. Nothing else in the system would notice this happening.
 	it("narrows the record when a later sign-in replaces the session", async () => {
-		const user = await makeUser("nar", { atprotoDid: did("nar") });
+		const user = await makeUser("nar");
 		await seedSession(did("nar"), user.id);
 
 		await runCallback({
@@ -400,7 +397,7 @@ describe("coming back from the consent screen", () => {
 
 describe("opening a writer over a creator's own grant", () => {
 	it("is quiet about an identity that has granted nothing", async () => {
-		const user = await makeUser("ung", { atprotoDid: did("ung") });
+		const user = await makeUser("ung");
 		await seedSession(did("ung"), user.id);
 		expect(await oauthWriterFor(user.id, [WORK_COLLECTION])).toEqual({
 			writer: null,
@@ -411,7 +408,7 @@ describe("opening a writer over a creator's own grant", () => {
 	it("is quiet about a grant that covers only some of the actions", async () => {
 		// ⚠️ Create and delete but not update — the probe's own scope. A listing could go up
 		// and come down and could never be corrected, so this is not a usable grant.
-		const user = await makeUser("half", { atprotoDid: did("half") });
+		const user = await makeUser("half");
 		await seedSession(did("half"), user.id);
 		await db
 			.update(atprotoSessions)
@@ -427,7 +424,7 @@ describe("opening a writer over a creator's own grant", () => {
 	// granted only that got a writer for their posts too — which their own server then refused, and
 	// the refusal read as a permission withdrawn that had never been given.
 	it("does not open a writer for posts on the strength of a grant over Work listings", async () => {
-		const user = await makeUser("percol", { atprotoDid: did("percol") });
+		const user = await makeUser("percol");
 		await seedSession(did("percol"), user.id);
 		await db
 			.update(atprotoSessions)
@@ -448,7 +445,7 @@ describe("opening a writer over a creator's own grant", () => {
 
 describe("handing the permission back", () => {
 	it("revokes when there is nothing on the network to take down", async () => {
-		const user = await makeUser("quit", { atprotoDid: did("quit") });
+		const user = await makeUser("quit");
 		await seedSession(did("quit"), user.id);
 
 		const result = await stopPublishingFor(user.id);
@@ -461,7 +458,7 @@ describe("handing the permission back", () => {
 	// handed back, so a revocation that ran anyway would leave this listing advertising a Work
 	// to a network Anthers could no longer reach — for good, with nothing anybody could press.
 	it("keeps the permission when a listing could not be taken down", async () => {
-		const user = await makeUser("strand", { atprotoDid: did("strand") });
+		const user = await makeUser("strand");
 		await seedSession(did("strand"), user.id);
 		const work = await insertWork({ creatorId: user.id, type: "game" });
 		await db
@@ -491,7 +488,7 @@ describe("handing the permission back", () => {
 	// were posts and projects took that branch, revoked cleanly, and left every one of them up —
 	// answering "stop writing on my behalf" by handing back the only credential that could.
 	it("takes posts and projects down too, and strands them rather than revoking", async () => {
-		const user = await makeUser("prj", { atprotoDid: did("prj") });
+		const user = await makeUser("prj");
 		await seedSession(did("prj"), user.id);
 
 		const { posts, projects } = await import("@anthers/db/schema");

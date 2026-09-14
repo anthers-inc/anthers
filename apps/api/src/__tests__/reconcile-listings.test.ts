@@ -13,7 +13,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	comments,
 	follows,
@@ -25,17 +24,21 @@ import {
 	votes,
 	works,
 } from "@anthers/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { reconcileListings } from "../jobs/reconcile-listings.js";
 import { setPublishedLexiconsForTesting } from "../services/published-lexicons.js";
 import type { RecordSyncKind } from "../services/record-sync.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { insertWork, testPublicId } from "./work-fixtures";
 
 purgeAccountsCreatedHere();
 
 const RUN = `rl${Date.now().toString(36)}`;
-const DID = `did:plc:${RUN}creator`;
+/** The creator's identity, as the session's server issued it. */
+let DID = "";
+/** The reader's, likewise. */
+let READER_DID = "";
 
 const made = {
 	users: [] as number[],
@@ -51,31 +54,27 @@ const made = {
 /** The rows each rule is about, by name, so a failure says which rule broke. */
 const ids: Record<string, number> = {};
 
-async function user(tag: string, values: Partial<typeof users.$inferInsert> = {}) {
-	const [row] = await db
-		.insert(users)
-		.values({
-			username: `${RUN}${tag}`,
-			email: `${RUN}${tag}@example.test`,
-			emailVerified: true,
-			atprotoDid: fixtureDid(),
-			...values,
-		})
-		.returning();
+async function user(
+	tag: string,
+	opts: { isCreator?: boolean; identity?: "hosted" | "brought" } = {},
+) {
+	const { user: row } = await createAccount(`${RUN}${tag}`, {
+		email: `${RUN}${tag}@example.test`,
+		emailVerified: true,
+		identity: opts.identity,
+		fields: { isCreator: opts.isCreator ?? false },
+	});
 	made.users.push(row.id);
 	return row;
 }
 
 beforeAll(async () => {
 	const reader = await user("reader");
-	await db.insert(hostedAccounts).values({
-		did: `did:plc:${RUN}reader`,
-		userId: reader.id,
-		handle: `${RUN}reader.test`,
-		sealedPassword: "not-opened-by-this-suite",
-	});
-	const plain = await user("plain");
-	const creator = await user("creator", { isCreator: true, atprotoDid: DID });
+	READER_DID = reader.atprotoDid;
+	// Not hosted here: an identity Anthers holds no credential for.
+	const plain = await user("plain", { identity: "brought" });
+	const creator = await user("creator", { isCreator: true });
+	DID = creator.atprotoDid;
 
 	const listed = await insertWork({ creatorId: creator.id, type: "game" });
 	const unlisted = await insertWork({ creatorId: creator.id, type: "game" });
@@ -104,7 +103,7 @@ beforeAll(async () => {
 	await comment("unhostedComment", { userId: plain.id });
 	await comment("subjectUnlistedComment", { subjectId: unlisted.id });
 	await comment("alreadyWrittenComment", {
-		atprotoUri: `at://did:plc:${RUN}reader/org.anthers.comment/x`,
+		atprotoUri: `at://${READER_DID}/org.anthers.comment/x`,
 	});
 
 	const [vote] = await db
@@ -179,7 +178,7 @@ afterAll(async () => {
 	if (made.works.length) await db.delete(works).where(inArray(works.id, made.works));
 	// By DID rather than by owner: the account purge can run first and null `user_id`, which would
 	// leave this credential matching nothing.
-	await db.delete(hostedAccounts).where(eq(hostedAccounts.did, `did:plc:${RUN}reader`));
+	await db.delete(hostedAccounts).where(inArray(hostedAccounts.did, [READER_DID, DID]));
 	if (made.users.length) await db.delete(users).where(inArray(users.id, made.users));
 });
 

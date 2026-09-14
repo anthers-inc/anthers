@@ -21,7 +21,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	accountCycles,
 	accounts,
@@ -38,6 +37,7 @@ import Decimal from "decimal.js";
 import { and, eq, like } from "drizzle-orm";
 import { distributePool } from "../jobs/distribute-pool";
 import { settleCycle } from "../jobs/settle-cycle";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -60,17 +60,9 @@ const tag = `sc_${Date.now().toString(36)}`;
 let n = 0;
 async function makeUser(kind: string): Promise<number> {
 	n += 1;
-	const [row] = await db
-		.insert(users)
-		.values({
-			username: `${tag}_${kind}_${n}`,
-			email: `${tag}_${kind}_${n}@example.com`,
-			passwordHash: "x",
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
-	madeUserIds.push(row.id);
-	return row.id;
+	const { userId } = await createAccount(`${tag}_${kind}_${n}`);
+	madeUserIds.push(userId);
+	return userId;
 }
 
 /** A viewer giving Anthers `anthersSupport` a month, with their period on the cycle. */

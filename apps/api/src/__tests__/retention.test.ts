@@ -21,14 +21,12 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import {
 	type DmcaNoticeStatus,
 	dmcaNotices,
 	legalHolds,
 	moderationActions,
 	moderationReports,
-	users,
 	works,
 } from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
@@ -40,6 +38,7 @@ import {
 	redactSettledDmcaNotices,
 	runRetentionSweep,
 } from "../services/retention";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -153,29 +152,10 @@ async function reloadReport(id: number) {
 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${reporterName})`);
-	const [creator] = await db
-		.insert(users)
-		.values({
-			username: creatorName,
-			email: `${creatorName}@example.com`,
-			passwordHash: "x",
-			emailVerified: true,
-			isCreator: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
-	creatorId = creator.id;
-	const [reporter] = await db
-		.insert(users)
-		.values({
-			username: reporterName,
-			email: `${reporterName}@example.com`,
-			passwordHash: "x",
-			emailVerified: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
-	reporterId = reporter.id;
+	creatorId = (
+		await createAccount(creatorName, { emailVerified: true, fields: { isCreator: true } })
+	).userId;
+	reporterId = (await createAccount(reporterName, { emailVerified: true })).userId;
 
 	const work = await insertWork({ creatorId, type: "game", title: `Retention fixture ${run}` });
 	workId = work.id;

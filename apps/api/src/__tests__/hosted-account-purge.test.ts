@@ -26,7 +26,8 @@ const before = {
 	key: process.env.HOSTED_ACCOUNT_KEY,
 };
 
-beforeAll(() => {
+beforeAll(async () => {
+	await learnHandleDomain(PDS_URL, "anthers.test");
 	process.env.HOSTED_PDS_URL = PDS_URL;
 	// A key generated here rather than a constant, so nothing in this repository is ever a
 	// string shaped like a credential.
@@ -47,6 +48,7 @@ function restore(key: string, value: string | undefined) {
 
 const { purgeHostedIdentity } = await import("../services/hosted-accounts.js");
 const { seal } = await import("../services/secret-box.js");
+const { learnHandleDomain } = await import("./node-fixture.js");
 
 const DID = "did:plc:examplehostedidentity";
 

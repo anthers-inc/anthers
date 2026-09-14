@@ -209,12 +209,12 @@ describe("the identity server Anthers hosts", () => {
 				.from(users)
 				.where(eq(users.id, account.userId));
 			dids.push(user.did);
-			await db.insert(hostedAccounts).values({
-				did: user.did,
-				userId: account.userId,
-				handle: `${RUN}${tag}.anthers.social`,
-				sealedPassword: seal("EXAMPLE-not-a-real-password"),
-			});
+			// The fixture's own credential, resealed under the key this suite set, so the writer can
+			// open it and the refusal under test is about the server rather than the seal.
+			await db
+				.update(hostedAccounts)
+				.set({ sealedPassword: seal("EXAMPLE-not-a-real-password") })
+				.where(eq(hostedAccounts.did, user.did));
 			return account.userId;
 		}
 
@@ -276,7 +276,7 @@ describe("a repository somebody granted Anthers permission over", () => {
 	});
 
 	async function grantingCreator(tag: string): Promise<number> {
-		const account = await createAccount(`${RUN}${tag}`);
+		const account = await createAccount(`${RUN}${tag}`, { identity: "brought" });
 		const [user] = await db
 			.select({ did: users.atprotoDid })
 			.from(users)

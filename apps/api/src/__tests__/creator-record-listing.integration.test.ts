@@ -26,13 +26,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { fixtureDid } from "@anthers/db/fixture-did";
-import { hostedAccounts, posts, projects, users } from "@anthers/db/schema";
+import { posts, projects, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { POST_COLLECTION, PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
 import { removeAtprotoRecord } from "../services/atproto-record-removal.js";
 import { syncPostRecord, syncProjectRecord } from "../services/creator-record-listing.js";
 import { setPublishedLexiconsForTesting } from "../services/published-lexicons.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 const SERVICE = process.env.ATPROTO_TEST_PDS;
@@ -40,10 +40,6 @@ const SERVICE = process.env.ATPROTO_TEST_PDS;
 purgeAccountsCreatedHere();
 
 const RUN = `cr${Date.now().toString(36)}`;
-// Base 36 rather than a plain timestamp: the server refuses a long first segment outright, and
-// `.test` is the domain a development PDS offers.
-const handle = `probe-${Date.now().toString(36)}c.test`;
-const password = `probe-${crypto.randomUUID()}`;
 
 const before = { url: process.env.HOSTED_PDS_URL, key: process.env.HOSTED_ACCOUNT_KEY };
 
@@ -70,7 +66,6 @@ afterAll(async () => {
 	restore("HOSTED_ACCOUNT_KEY", before.key);
 	await db.delete(posts).where(like(posts.slug, `${RUN}%`));
 	await db.delete(projects).where(like(projects.slug, `${RUN}%`));
-	await db.delete(hostedAccounts).where(like(hostedAccounts.did, `%${RUN}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
 });
 
@@ -104,32 +99,13 @@ async function projectUri(): Promise<string | null> {
 
 describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", () => {
 	it("sets up an account on the server and seals its credential the way signup does", async () => {
-		const res = await fetch(`${SERVICE}/xrpc/com.atproto.server.createAccount`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ handle, email: `${handle}@example.invalid`, password }),
+		const account = await createAccount(`${RUN}creator`, {
+			email: `${RUN}creator@example.test`,
+			emailVerified: true,
 		});
-		expect(res.ok).toBe(true);
-		const account = (await res.json()) as { did: string };
+		await db.update(users).set({ isCreator: true }).where(eq(users.id, account.userId));
+		creatorId = account.userId;
 		did = account.did;
-
-		const [user] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}creator`,
-				email: `${RUN}creator@example.test`,
-				emailVerified: true,
-				isCreator: true,
-				atprotoDid: did,
-				atprotoHandle: handle,
-			})
-			.returning();
-		creatorId = user.id;
-
-		const { seal } = await import("../services/secret-box.js");
-		await db
-			.insert(hostedAccounts)
-			.values({ did, userId: creatorId, handle, sealedPassword: seal(password) });
 	}, 60_000);
 
 	it("writes a record into the creator's own repository when a post is published", async () => {
@@ -287,16 +263,13 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 	// ⚠️ The ordinary case, and the one that must never change: a creator whose identity lives
 	// elsewhere and who has granted nothing publishes exactly as everybody else does.
 	it("does nothing at all for a creator whose identity is neither hosted nor granted", async () => {
-		const [plain] = await db
-			.insert(users)
-			.values({
-				username: `${RUN}plain`,
-				email: `${RUN}plain@example.test`,
-				emailVerified: true,
-				isCreator: true,
-				atprotoDid: fixtureDid(),
-			})
-			.returning();
+		const plainAccount = await createAccount(`${RUN}plain`, {
+			email: `${RUN}plain@example.test`,
+			emailVerified: true,
+			identity: "brought",
+		});
+		await db.update(users).set({ isCreator: true }).where(eq(users.id, plainAccount.userId));
+		const plain = { id: plainAccount.userId };
 		const [post] = await db
 			.insert(posts)
 			.values({

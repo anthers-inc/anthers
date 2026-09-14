@@ -19,11 +19,11 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { mediaScans, users, works } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { scanStoredVideo, worstOutcome } from "../services/safety-scan";
 import { storage } from "../services/storage/index.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -154,16 +154,7 @@ describe("scanStoredVideo — object in, rows out", () => {
 		await db
 			.execute(`DELETE FROM users WHERE username = '${creatorName}'` as unknown as never)
 			.catch(() => {});
-		const [creator] = await db
-			.insert(users)
-			.values({
-				username: creatorName,
-				email: `${creatorName}@example.com`,
-				isCreator: true,
-				atprotoDid: fixtureDid(),
-			})
-			.returning({ id: users.id });
-		creatorId = creator.id;
+		creatorId = (await createAccount(creatorName, { fields: { isCreator: true } })).userId;
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {

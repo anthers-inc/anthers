@@ -31,10 +31,10 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { fixtureDid } from "@anthers/db/fixture-did";
 import { posts, projectPosts, projects, users } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -77,19 +77,13 @@ async function realPostCount(projectId: number): Promise<number> {
 }
 
 beforeAll(async () => {
-	const [u] = await db
-		.insert(users)
-		.values({
-			username: `counts_${SUFFIX}`,
-			email: `counts_${SUFFIX}@example.test`,
-			passwordHash: "x",
-			emailVerified: true,
-			isCreator: true,
-			atprotoDid: fixtureDid(),
-		})
-		.returning({ id: users.id });
-	creatorId = u.id;
-	madeUsers.push(u.id);
+	const { userId } = await createAccount(`counts_${SUFFIX}`, {
+		email: `counts_${SUFFIX}@example.test`,
+		emailVerified: true,
+		fields: { isCreator: true },
+	});
+	creatorId = userId;
+	madeUsers.push(userId);
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {

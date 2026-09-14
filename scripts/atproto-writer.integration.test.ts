@@ -37,13 +37,20 @@ const SERVICE = process.env.ATPROTO_TEST_PDS;
 const BASE = "https://anthers.org";
 
 /**
- * Handles must sit under a domain the server offers; a dev PDS offers `.test`.
+ * Handles must sit under a domain the server offers, so the server is asked which.
  *
  * ⚠️ Base-36 rather than a plain timestamp because the server rejects a long first segment
  * outright — `InvalidHandle: Handle too long` — and a spelled-out `anthers-probe-<millis>`
  * is over the limit.
  */
-const handle = `probe-${Date.now().toString(36)}.test`;
+const handle = `probe-${Date.now().toString(36)}${SERVICE ? await offeredDomain(SERVICE) : ""}`;
+
+/** The first handle domain a server offers, with its leading dot. */
+async function offeredDomain(service: string): Promise<string> {
+	const res = await fetch(`${service}/xrpc/com.atproto.server.describeServer`);
+	const { availableUserDomains } = (await res.json()) as { availableUserDomains: string[] };
+	return availableUserDomains[0];
+}
 const password = `probe-${crypto.randomUUID()}`;
 
 function releasedWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
