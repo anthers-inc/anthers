@@ -32,6 +32,13 @@ const CSRF_EXEMPT_PATHS = new Set([
 ]);
 
 /**
+ * Paths whose routes are mounted behind `adminHostOnly` in `middleware/admin.ts`, which does the
+ * Origin check for them. A prefix belongs here only if every route under it has that middleware,
+ * and `admin-auth.test.ts` proves a cross-origin request is still refused.
+ */
+const ADMIN_CSRF_PREFIXES = ["/api/admin/auth/"];
+
+/**
  * CSRF protection via Origin header checking.
  * Only checks mutating requests (POST, PUT, PATCH, DELETE).
  * Combined with SameSite=Lax cookies, this prevents CSRF attacks.
@@ -47,6 +54,13 @@ export const csrfProtection = createMiddleware(async (c, next) => {
 	}
 
 	if (CSRF_EXEMPT_PATHS.has(c.req.path)) {
+		return next();
+	}
+
+	// The admin routes carry a stricter check of their own in `adminHostOnly`, which admits only
+	// the admin origin and refuses a bearer token outright. Running this one first would admit the
+	// site and the desktop Studio before that check ever saw the request.
+	if (ADMIN_CSRF_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) {
 		return next();
 	}
 

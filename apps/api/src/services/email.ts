@@ -270,6 +270,27 @@ export async function sendSignInCodeEmail(to: string, code: string): Promise<voi
 	if (!sent) console.info(`[email] sign-in code for ${to}: ${code}`);
 }
 
+/**
+ * A sign-in code for the admin app, to an admin account's own address.
+ *
+ * Says *admin* in the subject and the body, so a code for the console is never mistaken for an
+ * ordinary Anthers sign-in, and so somebody who did not ask for one knows what was attempted.
+ */
+export async function sendAdminSignInCodeEmail(to: string, code: string): Promise<void> {
+	const html = shell(
+		"Your Anthers admin sign-in code",
+		`<p style="margin:0 0 18px;">Enter this code to sign in to the Anthers admin app:</p>
+		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:#ffffff;">${escapeHtml(code)}</p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in to the admin app, somebody else tried to with your address, and nothing has changed.</p>`,
+	);
+	const { sent } = await sendEmail({
+		to,
+		subject: `${code} is your Anthers admin sign-in code`,
+		html,
+	});
+	if (!sent) console.info(`[email] admin sign-in code for ${to}: ${code}`);
+}
+
 /** Standalone re-send of the verification email. */
 export async function sendVerificationEmail(
 	to: string,

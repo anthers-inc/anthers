@@ -11,6 +11,10 @@ import "../dev-spec-env.js";
 
 import { runAbuseEscalationSweep } from "../services/abuse-reports.js";
 import { runDueDeletions } from "../services/account-deletion.js";
+import {
+	deleteExpiredAdminSessions,
+	deleteExpiredAdminSignInCodes,
+} from "../services/admin-accounts.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
 import {
 	finalizeNotice,
@@ -153,14 +157,17 @@ async function start() {
 
 	await queue.work(QUEUES.PRUNE_CREDENTIALS, async (jobs) => {
 		for (const job of jobs) {
-			const [sessionsGone, tokensGone, codesGone] = await Promise.all([
-				deleteExpiredSessions(),
-				deleteExpiredTokens(),
-				deleteExpiredSignupCodes(),
-			]);
-			if (sessionsGone > 0 || tokensGone > 0 || codesGone > 0) {
+			const [sessionsGone, tokensGone, codesGone, adminSessionsGone, adminCodesGone] =
+				await Promise.all([
+					deleteExpiredSessions(),
+					deleteExpiredTokens(),
+					deleteExpiredSignupCodes(),
+					deleteExpiredAdminSessions(),
+					deleteExpiredAdminSignInCodes(),
+				]);
+			if (sessionsGone + tokensGone + codesGone + adminSessionsGone + adminCodesGone > 0) {
 				console.log(
-					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${tokensGone} expired token(s), ${codesGone} expired signup code(s)`,
+					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${tokensGone} expired token(s), ${codesGone} expired signup code(s), ${adminSessionsGone} expired admin session(s), ${adminCodesGone} expired admin sign-in code(s)`,
 				);
 			}
 		}
