@@ -36,6 +36,7 @@
  * this page.
  */
 
+import anthersMark from "@anthers/brand/logo/web/mark-60.png";
 import { amountLabel, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { EMPTY_PICKS, type SignupPicks, supportTotal } from "@anthers/shared/signup";
@@ -45,7 +46,6 @@ import { useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import anthersMark from "@anthers/brand/logo/web/mark-60.png";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeForm from "../components/auth/EmailCodeForm";
