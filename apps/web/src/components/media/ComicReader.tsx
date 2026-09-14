@@ -191,11 +191,9 @@ export default function ComicReader({
 	}
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: the container IS the reader —
-		// focusable, carrying the keymap, and the element fullscreen is requested on. The
-		// controls inside it are ordinary named buttons.
 		<section
 			ref={containerRef}
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: the container IS the reader — focusable, carrying the keymap, and the element fullscreen is requested on. The controls inside it are ordinary named buttons.
 			tabIndex={0}
 			onKeyDown={onKeyDown}
 			aria-label={`Reader: ${title}`}

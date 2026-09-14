@@ -68,7 +68,10 @@ async function load(): Promise<void> {
 
 /** Re-read the shelf. Call after anything that changes it outside this module. */
 export function refreshShelf(): void {
-	inFlight ??= load().finally(() => {
+	// An explicit read rather than `??=`, which Biome counts as a write only and so reports
+	// this guard as unused — and its suggested fix would delete it.
+	if (inFlight) return;
+	inFlight = load().finally(() => {
 		inFlight = null;
 	});
 }

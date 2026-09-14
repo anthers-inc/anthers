@@ -19,6 +19,7 @@
  * look between Chrome and Safari.
  */
 import { PlayIcon } from "@heroicons/react/24/solid";
+import type HlsInstance from "hls.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
@@ -59,7 +60,7 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
-	const hlsRef = useRef<any>(null);
+	const hlsRef = useRef<HlsInstance | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [position, setPosition] = useState(0);
 	const [duration, setDuration] = useState(0);
@@ -202,7 +203,7 @@ export default function VideoPlayer({
 						// player finds out. hls.js does not expose the status as anything
 						// richer than a number on the response, so read it directly rather
 						// than trying to classify the error.
-						hls.on(Hls.Events.ERROR, (_evt: unknown, data: any) => {
+						hls.on(Hls.Events.ERROR, (_evt, data) => {
 							if (data?.response?.code === 402) {
 								setRefused(true);
 								refreshBudget();
@@ -217,7 +218,7 @@ export default function VideoPlayer({
 						hls.on(Hls.Events.MANIFEST_PARSED, () => {
 							setLevels(
 								hls.levels
-									.map((l: any, index: number) => ({
+									.map((l, index) => ({
 										index,
 										height: l.height ?? 0,
 										bitrate: l.bitrate ?? 0,
@@ -227,7 +228,7 @@ export default function VideoPlayer({
 							setCurrentLevel(hls.currentLevel);
 						});
 						// What automatic is actually doing right now, so "Auto" can say so.
-						hls.on(Hls.Events.LEVEL_SWITCHED, (_e: unknown, data: any) => {
+						hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
 							setActiveLevelHeight(hls.levels[data.level]?.height ?? null);
 						});
 
@@ -322,7 +323,7 @@ export default function VideoPlayer({
 			// iPhone Safari refuses fullscreen on anything but the video element itself, so
 			// there it genuinely is the native player — the one platform where that is not
 			// our choice to make.
-			(video as any).webkitEnterFullscreen();
+			(video as HTMLVideoElement & { webkitEnterFullscreen: () => void }).webkitEnterFullscreen();
 		}
 	}, []);
 
@@ -384,6 +385,7 @@ export default function VideoPlayer({
 			 */}
 			<section
 				ref={containerRef}
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: the container is the player, per the comment above.
 				tabIndex={0}
 				onKeyDown={onKeyDown}
 				onPointerMove={wakeControls}
@@ -393,6 +395,7 @@ export default function VideoPlayer({
 					isPlaying && !controlsVisible ? "cursor-none" : ""
 				}`}
 			>
+				{/* biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. */}
 				<video
 					ref={videoRef}
 					poster={poster}

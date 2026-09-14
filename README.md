@@ -1,7 +1,7 @@
 <p align="left">
 	<picture>
 		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/logo/web/lockup-tagline-dark.png">
-		<img alt="Anthers" src="./packages/brand/logo/web/lockup-tagline-light.png" width="420">
+		<img alt="Anthers" src="./packages/brand/logo/web/lockup-tagline-light.png" width="600">
 	</picture>
 </p>
 

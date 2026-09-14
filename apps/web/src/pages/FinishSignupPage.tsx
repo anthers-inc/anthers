@@ -629,6 +629,7 @@ export default function FinishSignupPage() {
 						type="email"
 						required
 						autoComplete="email"
+						// biome-ignore lint/a11y/noAutofocus: this step's one field, so arriving here is the intent to fill it in.
 						autoFocus
 						placeholder="you@example.com"
 						className="input input-bordered w-full"

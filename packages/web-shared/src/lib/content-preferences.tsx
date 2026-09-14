@@ -21,7 +21,7 @@ import {
 	maturityLabel,
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { apiFetch } from "./rpc";
 
 export interface ContentPreferences {
@@ -63,7 +63,7 @@ const PreferencesContext = createContext<{
 export function ContentPreferencesProvider({ children }: { children: ReactNode }) {
 	const [prefs, setPrefs] = useState<ContentPreferences>(DEFAULT_PREFERENCES);
 
-	const refresh = async () => {
+	const refresh = useCallback(async () => {
 		try {
 			const res = await apiFetch("/api/accounts/me/content-preferences");
 			if (!res.ok) return;
@@ -72,11 +72,11 @@ export function ContentPreferencesProvider({ children }: { children: ReactNode }
 			// Leave the cautious defaults in place. A failed fetch must not un-blur
 			// anything, which is why nothing is cleared here.
 		}
-	};
+	}, []);
 
 	useEffect(() => {
 		void refresh();
-	}, []);
+	}, [refresh]);
 
 	return (
 		<PreferencesContext.Provider value={{ prefs, refresh }}>{children}</PreferencesContext.Provider>

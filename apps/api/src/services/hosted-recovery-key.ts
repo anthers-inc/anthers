@@ -75,7 +75,7 @@ export function isSecp256k1DidKey(didKey: string): boolean {
 	if (!didKey.startsWith("did:key:z")) return false;
 	const decoded = base58Decode(didKey.slice("did:key:z".length));
 	// 2 bytes of multicodec prefix plus a 33-byte compressed point.
-	if (!decoded || decoded.length !== 35) return false;
+	if (decoded?.length !== 35) return false;
 	if (decoded[0] !== 0xe7 || decoded[1] !== 0x01) return false;
 	try {
 		// Throws for a point that is not on the curve, which is the check a regex cannot make.

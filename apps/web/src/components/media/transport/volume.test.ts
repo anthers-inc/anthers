@@ -18,7 +18,7 @@ import { effectiveVolume, readStoredVolume } from "./volume";
 
 function stub(initial: Record<string, string> = {}) {
 	const store = new Map(Object.entries(initial));
-	(globalThis as any).localStorage = {
+	(globalThis as { localStorage?: unknown }).localStorage = {
 		getItem: (k: string) => store.get(k) ?? null,
 		setItem: (k: string, v: string) => store.set(k, v),
 		removeItem: (k: string) => store.delete(k),
@@ -51,7 +51,7 @@ describe("what a visitor starts at", () => {
 	});
 
 	test("unreadable storage is the same as a first visit", () => {
-		(globalThis as any).localStorage = {
+		(globalThis as { localStorage?: unknown }).localStorage = {
 			getItem: () => {
 				throw new Error("denied");
 			},

@@ -52,7 +52,6 @@ import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import sharp from "sharp";
 import type Stripe from "stripe";
@@ -66,7 +65,6 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { validateSession } from "../services/auth.js";
 import {
 	createOneTimeCharge,
 	ensureAnthersProduct,

@@ -287,6 +287,7 @@ export default function BadgeLadderEditor() {
 			.finally(() => setLoading(false));
 	};
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the first load only. A save refetches by calling `fetchGates` directly, and depending on `gates.length` would refetch every time a rung is added.
 	useEffect(fetchGates, []);
 
 	const handleAdd = async (e: React.FormEvent) => {

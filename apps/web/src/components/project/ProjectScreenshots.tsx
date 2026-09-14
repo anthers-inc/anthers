@@ -55,14 +55,20 @@ export default function ProjectScreenshots({ images }: ProjectScreenshotsProps) 
 
 			{/* Lightbox */}
 			{lightboxIndex !== null && (
+				// biome-ignore lint/a11y/useKeyWithClickEvents: a click on the backdrop is the pointer's shortcut for Close; the keyboard has Escape and the Close button.
+				// biome-ignore lint/a11y/noStaticElementInteractions: see above.
 				<div
 					className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-					onClick={close}
+					// Only a click on the backdrop itself closes — not one on the image or a button.
+					onClick={(e) => {
+						if (e.target === e.currentTarget) close();
+					}}
 				>
 					<button
 						type="button"
 						className="absolute top-4 right-4 btn btn-circle btn-ghost text-white"
 						onClick={close}
+						aria-label="Close"
 					>
 						<XMarkIcon className="w-6 h-6" />
 					</button>
@@ -72,27 +78,23 @@ export default function ProjectScreenshots({ images }: ProjectScreenshotsProps) 
 							<button
 								type="button"
 								className="absolute left-4 btn btn-circle btn-ghost text-white"
-								onClick={(e) => {
-									e.stopPropagation();
-									prev();
-								}}
+								onClick={prev}
+								aria-label="Previous"
 							>
 								<ChevronLeftIcon className="w-6 h-6" />
 							</button>
 							<button
 								type="button"
 								className="absolute right-4 btn btn-circle btn-ghost text-white"
-								onClick={(e) => {
-									e.stopPropagation();
-									next();
-								}}
+								onClick={next}
+								aria-label="Next"
 							>
 								<ChevronRightIcon className="w-6 h-6" />
 							</button>
 						</>
 					)}
 
-					<div className="max-w-5xl max-h-[85vh] p-4" onClick={(e) => e.stopPropagation()}>
+					<div className="max-w-5xl max-h-[85vh] p-4">
 						<img
 							src={images[lightboxIndex]}
 							alt="Gallery"

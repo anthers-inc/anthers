@@ -234,6 +234,7 @@ export default function WelcomePage() {
 						value={username}
 						onChange={(e) => setUsername(e.target.value)}
 						autoComplete="username"
+						// biome-ignore lint/a11y/noAutofocus: this step's one field, so arriving here is the intent to fill it in.
 						autoFocus
 						maxLength={150}
 						placeholder="yourname"

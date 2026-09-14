@@ -37,7 +37,6 @@ import {
 	projects,
 	purchases,
 	reviews,
-	stripeAccounts,
 	transcodingJobs,
 	users,
 	votes,
@@ -93,7 +92,6 @@ import {
 	sql,
 } from "drizzle-orm";
 import { Hono } from "hono";
-import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
@@ -113,7 +111,6 @@ import {
 	VOTE_COLLECTION,
 } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
-import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
 import { adultVisibility, maturityHiddenFrom } from "../services/content-preferences.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";

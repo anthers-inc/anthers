@@ -53,7 +53,7 @@ import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panel
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { deleteCookie, getCookie } from "hono/cookie";
+import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { type ClaimedUser, embedCreator, hasHandle } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
@@ -66,7 +66,6 @@ import {
 } from "../services/account-deletion.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
-import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import {
 	adultAccessFor,
@@ -281,7 +280,7 @@ const accountRoutes = new Hono()
 		}
 
 		// Filter out undefined values
-		const updates: Record<string, any> = {};
+		const updates: Partial<typeof users.$inferInsert> = {};
 		if (data.displayName !== undefined) updates.displayName = data.displayName;
 		if (data.bio !== undefined) updates.bio = data.bio;
 		if (data.isCreator !== undefined) updates.isCreator = data.isCreator;
@@ -557,7 +556,7 @@ const accountRoutes = new Hono()
 							serializePublicUser(row.user, {
 								followerCount: Number(row.followerCount),
 								projectCount: Number(row.projectCount),
-								isFollowing: currentUserId ? Boolean((row as any).isFollowing) : false,
+								isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
 								mediums: row.mediums ?? [],
 							}),
 						]
@@ -614,7 +613,7 @@ const accountRoutes = new Hono()
 			user: serializePublicUser(row.user, {
 				followerCount: Number(row.followerCount),
 				projectCount: Number(row.projectCount),
-				isFollowing: currentUserId ? Boolean((row as any).isFollowing) : false,
+				isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
 			}),
 		});
 	})

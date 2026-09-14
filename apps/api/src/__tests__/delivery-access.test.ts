@@ -303,7 +303,12 @@ describe("Delivery-layer access", () => {
 		});
 		expect(res.status).toBe(200);
 		const { jobs } = await res.json();
-		expect(jobs.flatMap((j: any) => [j.outputFileUrl, j.hlsManifestUrl])).toContain(HLS_URL);
+		expect(
+			jobs.flatMap((j: { outputFileUrl: string | null; hlsManifestUrl: string | null }) => [
+				j.outputFileUrl,
+				j.hlsManifestUrl,
+			]),
+		).toContain(HLS_URL);
 	});
 
 	// ── The audio endpoint ─────────────────────────────────────────────────────
@@ -352,7 +357,7 @@ describe("Delivery-layer access", () => {
 		});
 		expect(res.status).toBe(200);
 		const { works: listed } = await res.json();
-		const locked = listed.filter((w: any) => !w.access.canAccess);
+		const locked = listed.filter((w: { access: { canAccess: boolean } }) => !w.access.canAccess);
 		expect(locked.length).toBeGreaterThan(0);
 		for (const w of locked) {
 			expect(w.sourceKey).toBe("");
@@ -368,8 +373,8 @@ describe("Delivery-layer access", () => {
 		const ownerView = await req(`/api/content/catalog/${creatorName}`, {
 			headers: { Cookie: creatorCookie },
 		});
-		const pub = (await publicView.json()).works as any[];
-		const own = (await ownerView.json()).works as any[];
+		const pub = (await publicView.json()).works as { visibility: string }[];
+		const own = (await ownerView.json()).works as { visibility: string }[];
 		expect(pub.every((w) => w.visibility === "released")).toBe(true);
 		expect(own.length).toBeGreaterThan(pub.length);
 	});

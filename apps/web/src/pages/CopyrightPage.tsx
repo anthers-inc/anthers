@@ -244,8 +244,8 @@ export default function CopyrightPage() {
 					missing and how to fix it.
 				</p>
 				<ol className="list-decimal space-y-2 pl-6">
-					{SIX_ELEMENTS.map((el, i) => (
-						<li key={i}>
+					{SIX_ELEMENTS.map((el) => (
+						<li key={el.label}>
 							<strong>{el.label}.</strong> {el.hint}
 						</li>
 					))}

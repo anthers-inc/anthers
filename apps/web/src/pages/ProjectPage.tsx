@@ -7,7 +7,7 @@ import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { LockClosedIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
+import { PencilSquareIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,7 +15,6 @@ import { useReportVisit } from "@/lib/attention";
 import WorkCard from "../components/cards/WorkCard";
 import SaveButton from "../components/library/SaveButton";
 import AlbumView from "../components/media/AlbumView";
-import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import { studioUrl } from "../lib/studio";
 import { isAlbum, tracksFrom } from "../lib/tracks";
 

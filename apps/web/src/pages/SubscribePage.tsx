@@ -102,7 +102,7 @@ import {
 	timePoolFor,
 	WITHDRAWN_RESCUE_DAYS,
 } from "@anthers/shared/constants";
-import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
+import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import {
 	EMPTY_PICKS,
@@ -111,9 +111,8 @@ import {
 	supportTotal,
 } from "@anthers/shared/signup";
 import { useAuth } from "@anthers/web-shared/auth";
-import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
-import { AnthersBadgeMark, BADGE_ART } from "@anthers/web-shared/economics";
+import { AnthersBadgeMark } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
@@ -128,14 +127,7 @@ import {
 	ShieldCheckIcon,
 	SparklesIcon,
 } from "@heroicons/react/24/outline";
-import React, {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	useSyncExternalStore,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import {
 	BlueskyHandleField,
@@ -1157,7 +1149,11 @@ function CreatorFinder({
 			<div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
 				{loading ? (
 					Array.from({ length: 3 }, (_, i) => (
-						<div key={`c-skeleton-${i}`} className="h-28 animate-pulse rounded-xl bg-base-200" />
+						<div
+							// biome-ignore lint/suspicious/noArrayIndexKey: placeholders with no identity of their own, replaced wholesale when the list loads.
+							key={`c-skeleton-${i}`}
+							className="h-28 animate-pulse rounded-xl bg-base-200"
+						/>
 					))
 				) : shown.length === 0 ? (
 					<p className="col-span-full rounded-xl border border-dashed border-base-content/15 p-5 text-center text-sm text-base-content/50">
@@ -2509,7 +2505,7 @@ export default function SubscribePage() {
 		} finally {
 			setBusy(false);
 		}
-	}, [directed, total, leave, next, picks]);
+	}, [directed, total, leave, next, picks, byUsername]);
 
 	/**
 	 * Ask for the account — the pending one — and hand the visitor to the page that

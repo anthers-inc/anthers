@@ -11,7 +11,6 @@
 // (~6.5%) is the ONLY thing added on top, because a government-imposed tax is the
 // sole carve-out mandatory-fee disclosure law allows. Anthers keeps $0.
 
-import type { BrandIconName } from "@anthers/brand";
 import {
 	BADGE_ORDER,
 	type Badge,
@@ -25,7 +24,6 @@ import {
 import { InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
 import { FONTS } from "../../styles/fonts";
-import { BrandGlyph } from "../decor/BrandGlyph";
 import { BadgeMark } from "./BadgeMark";
 
 // Re-exported because `./economics` is this area's entry point in the package exports map.

@@ -2,35 +2,24 @@
 interface WaveformDisplayProps {
 	peaks: number[];
 	progress: number; // 0 to 1
-	onSeek?: (progress: number) => void;
 	height?: number;
 }
 
-export default function WaveformDisplay({
-	peaks,
-	progress,
-	onSeek,
-	height = 48,
-}: WaveformDisplayProps) {
+/**
+ * Draws the peaks and nothing else. Seeking belongs to the `SeekBar` this renders inside, which
+ * is what gives the waveform the same keyboard and pointer handling as every other track.
+ */
+export default function WaveformDisplay({ peaks, progress, height = 48 }: WaveformDisplayProps) {
 	const barWidth = 3;
 	const gap = 1;
 	const totalWidth = peaks.length * (barWidth + gap);
-
-	const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
-		if (!onSeek) return;
-		const rect = e.currentTarget.getBoundingClientRect();
-		const x = e.clientX - rect.left;
-		const percent = Math.max(0, Math.min(1, x / rect.width));
-		onSeek(percent);
-	};
 
 	return (
 		<svg
 			role="img"
 			viewBox={`0 0 ${totalWidth} ${height}`}
-			className={`w-full ${onSeek ? "cursor-pointer" : ""}`}
+			className="w-full"
 			style={{ height }}
-			onClick={handleClick}
 			preserveAspectRatio="none"
 		>
 			<title>Audio waveform</title>
@@ -43,6 +32,7 @@ export default function WaveformDisplay({
 
 				return (
 					<rect
+						// biome-ignore lint/suspicious/noArrayIndexKey: one bar per precomputed peak, so position is the sample.
 						key={i}
 						x={x}
 						y={y}

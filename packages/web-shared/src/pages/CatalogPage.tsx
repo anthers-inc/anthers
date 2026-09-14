@@ -21,7 +21,7 @@ import {
 	RectangleStackIcon,
 	TrashIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import WorkCard from "../components/content/WorkCard";
 import { processingState } from "../components/content/works";
 import EmptyState from "../components/ui/EmptyState";
@@ -66,15 +66,18 @@ export default function CatalogPage() {
 	/** A refused release, kept beside the grid — the server's reason, not a generic one. */
 	const [releaseError, setReleaseError] = useState<string | null>(null);
 
-	const fetchItems = () =>
-		client.api.content.works
-			.$get()
-			.then(async (res) => {
-				if (!res.ok) return { works: [] as Work[] };
-				return (await res.json()) as unknown as { works: Work[] };
-			})
-			.then((data) => setItems(data.works))
-			.catch(() => setItems([]));
+	const fetchItems = useCallback(
+		() =>
+			client.api.content.works
+				.$get()
+				.then(async (res) => {
+					if (!res.ok) return { works: [] as Work[] };
+					return (await res.json()) as unknown as { works: Work[] };
+				})
+				.then((data) => setItems(data.works))
+				.catch(() => setItems([])),
+		[],
+	);
 
 	useEffect(() => {
 		let live = true;
@@ -92,7 +95,7 @@ export default function CatalogPage() {
 
 	useEffect(() => {
 		fetchItems().finally(() => setLoading(false));
-	}, []);
+	}, [fetchItems]);
 
 	const confirmDeleteProject = async () => {
 		if (!projectDeleteTarget) return;

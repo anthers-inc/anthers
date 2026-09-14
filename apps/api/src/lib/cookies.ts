@@ -16,6 +16,7 @@
  * security attributes are decided once, here. See `lib/deployment.ts` for why the decision is
  * `isPublicDeployment()` and not a `NODE_ENV` label.
  */
+import type { Context } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
 import { isPublicDeployment } from "./deployment.js";
 
@@ -33,7 +34,7 @@ export const SESSION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
  * signup — has to survive the redirect back from an authorization server on another origin,
  * and a session cookie that vanished on any inbound link would be worse than useless.
  */
-export function setSecureCookie(c: any, name: string, value: string, maxAge: number): void {
+export function setSecureCookie(c: Context, name: string, value: string, maxAge: number): void {
 	setCookie(c, name, value, {
 		httpOnly: true,
 		secure: isPublicDeployment(),
@@ -44,7 +45,7 @@ export function setSecureCookie(c: any, name: string, value: string, maxAge: num
 	});
 }
 
-export function setSessionCookie(c: any, token: string): void {
+export function setSessionCookie(c: Context, token: string): void {
 	setSecureCookie(c, "session", token, SESSION_COOKIE_MAX_AGE);
 }
 
@@ -62,7 +63,7 @@ export const PENDING_SIGNUP_COOKIE = "signup_pending";
 /** The pending signup's own lifetime, in seconds. Mirrors `PENDING_SIGNUP_TTL_MS`. */
 export const PENDING_SIGNUP_COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
 
-export function setPendingSignupCookie(c: any, token: string): void {
+export function setPendingSignupCookie(c: Context, token: string): void {
 	setSecureCookie(c, PENDING_SIGNUP_COOKIE, token, PENDING_SIGNUP_COOKIE_MAX_AGE);
 }
 
@@ -75,7 +76,7 @@ export function setPendingSignupCookie(c: any, token: string): void {
  * keep doing so on the path that has not changed, so callers pass the token they actually
  * found rather than clearing on the way past.
  */
-export function clearPendingSignupCookie(c: any): void {
+export function clearPendingSignupCookie(c: Context): void {
 	deleteCookie(c, PENDING_SIGNUP_COOKIE, {
 		path: "/",
 		...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
