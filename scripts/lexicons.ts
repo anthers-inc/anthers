@@ -17,6 +17,7 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { repositoryEvolutionProblems } from "./lexicon-evolution.js";
 
 const LEXICONS = "lexicons";
 const OUT = "packages/shared/src/generated/lexicons";
@@ -99,6 +100,19 @@ if (!check) {
 	const written = await readTree(OUT);
 	console.log(`lexicons: generated ${written.size} file(s) from ${LEXICONS}/ ✓`);
 	process.exit(0);
+}
+
+// 🛑 Before the types: an edit that breaks a published schema is the worse failure of the two, and
+// regenerating would only make it compile. The rules are in `lexicon-evolution.ts`.
+const breaking = repositoryEvolutionProblems();
+if (breaking.length > 0) {
+	console.error(
+		`lexicons: ${breaking.length} change(s) break a schema that is already published.\n` +
+			"A published field may only be added if it is optional; nothing may be renamed, retyped,\n" +
+			"made required or removed. Revert the change, or publish the new shape under a new NSID.\n",
+	);
+	for (const problem of breaking) console.error(`  ✗ ${problem}`);
+	process.exit(1);
 }
 
 const tmp = join(process.env.XDG_RUNTIME_DIR ?? "/tmp", `anthers-lex-check-${process.pid}`);

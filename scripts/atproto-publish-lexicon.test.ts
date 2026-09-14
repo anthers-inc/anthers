@@ -14,8 +14,13 @@ import {
 	isRefusal,
 	lexiconAuthorityDomain,
 	type PublishPlan,
+	type PublishTarget,
+	publishPlan,
 	retireRefusal,
+	retireSchema,
+	SCHEMA_COLLECTION,
 } from "./atproto-publish-lexicon.js";
+import type { LexiconDoc } from "./lexicon-evolution.js";
 
 const plans: PublishPlan[] = [
 	{
@@ -23,6 +28,7 @@ const plans: PublishPlan[] = [
 		rkey: "org.anthers.work",
 		authorityDomain: "_lexicon.anthers.org",
 		record: { $type: "com.atproto.lexicon.schema", lexicon: 1, id: "org.anthers.work", defs: {} },
+		sourcePath: "lexicons/org/anthers/work.json",
 	},
 ];
 const tty = { hasTty: true, plans };
@@ -154,5 +160,178 @@ describe("retiring a schema from the network", () => {
 
 	it("allows one that has already left the repository", () => {
 		expect(retireRefusal("org.anthers.somethingRetired", plans)).toBeNull();
+	});
+});
+
+describe("the write path, against an in-memory repository", () => {
+	const DID = "did:plc:publisher";
+	const WORK = collectPlans().find((p) => p.nsid === "org.anthers.work") as PublishPlan;
+	const { $type: _type, ...WORK_DOC } = WORK.record;
+	const doc = WORK_DOC as LexiconDoc;
+
+	/** The same plan with its document edited. */
+	function planWith(edit: (record: Record<string, Record<string, unknown>>) => void): PublishPlan {
+		const plan = structuredClone(WORK);
+		const main = (plan.record.defs as Record<string, Record<string, unknown>>).main;
+		edit((main.record as Record<string, Record<string, unknown>>).properties as never);
+		return plan;
+	}
+
+	function target(opts: {
+		live?: LexiconDoc;
+		copy?: LexiconDoc;
+		txt?: string[];
+		rehearsal?: boolean;
+		storesSomethingElse?: boolean;
+	}) {
+		const records = new Map<string, Record<string, unknown>>();
+		if (opts.live) records.set(WORK.nsid, { $type: SCHEMA_COLLECTION, ...opts.live });
+		const copies = new Map<string, LexiconDoc>();
+		if (opts.copy) copies.set(WORK.nsid, opts.copy);
+		const writes: string[] = [];
+		const copyWrites: string[] = [];
+		const lookups: string[] = [];
+		const t: PublishTarget = {
+			rehearsal: opts.rehearsal ?? false,
+			resolveTxt: async (domain) => {
+				lookups.push(domain);
+				return opts.txt ?? [`did=${DID}`];
+			},
+			copies: {
+				read: (nsid) => copies.get(nsid) ?? null,
+				write: (nsid) => void copyWrites.push(`write ${nsid}`),
+				remove: (nsid) => void copyWrites.push(`remove ${nsid}`),
+			},
+			writer: {
+				did: DID,
+				createRecord: async () => {
+					throw new Error("a schema is never created, only put at its NSID");
+				},
+				putRecord: async (_collection, rkey, record) => {
+					writes.push(`put ${rkey}`);
+					const stored = opts.storesSomethingElse ? { ...record, lexicon: 2 } : record;
+					records.set(rkey, stored as Record<string, unknown>);
+					return { uri: `at://${DID}/${SCHEMA_COLLECTION}/${rkey}`, cid: "bafyEXAMPLE" };
+				},
+				deleteRecord: async (_collection, rkey) => {
+					writes.push(`delete ${rkey}`);
+					records.delete(rkey);
+				},
+				getRecord: async (_collection, rkey) => records.get(rkey) ?? null,
+			},
+		};
+		return { t, writes, copyWrites, lookups };
+	}
+
+	it("publishes a schema for the first time and records the copy", async () => {
+		const { t, writes, copyWrites } = target({});
+		expect(await publishPlan(WORK, t)).toMatchObject({ status: "published" });
+		expect(writes).toEqual([`put ${WORK.nsid}`]);
+		expect(copyWrites).toEqual([`write ${WORK.nsid}`]);
+	});
+
+	it("leaves a schema published exactly as it stands alone", async () => {
+		const { t, writes, copyWrites } = target({ live: doc, copy: doc });
+		expect(await publishPlan(WORK, t)).toEqual({ nsid: WORK.nsid, status: "unchanged" });
+		expect(writes).toEqual([]);
+		expect(copyWrites).toEqual([]);
+	});
+
+	it("publishes a compatible change", async () => {
+		const plan = planWith((props) => {
+			props.subtitle = { type: "string" };
+		});
+		const { t, writes } = target({ live: doc, copy: doc });
+		expect(await publishPlan(plan, t)).toMatchObject({ status: "published" });
+		expect(writes).toEqual([`put ${WORK.nsid}`]);
+	});
+
+	const refusals: [string, Parameters<typeof target>[0], PublishPlan, string][] = [
+		[
+			"a change that breaks what is published",
+			{ live: doc, copy: doc },
+			planWith((props) => {
+				delete props.description;
+			}),
+			"breaks what is published",
+		],
+		[
+			"an account the authority does not name",
+			{ txt: ["did=did:plc:someoneelse"] },
+			WORK,
+			"does not name",
+		],
+		["a copy the network has no record of", { copy: doc }, WORK, "the network has no record"],
+		["a published schema with no copy", { live: doc }, WORK, "without this script"],
+		[
+			"a copy that has drifted from what is published",
+			{ live: { ...doc, lexicon: 2 }, copy: doc },
+			planWith((props) => {
+				props.subtitle = { type: "string" };
+			}),
+			"no longer matches",
+		],
+	];
+
+	for (const [name, opts, plan, reason] of refusals) {
+		it(`refuses ${name}, and writes nothing`, async () => {
+			const { t, writes, copyWrites } = target(opts);
+			const outcome = await publishPlan(plan, t);
+			expect(outcome.status).toBe("refused");
+			expect((outcome as { reason: string }).reason).toContain(reason);
+			expect(writes).toEqual([]);
+			expect(copyWrites).toEqual([]);
+		});
+	}
+
+	it("does not record a copy of something the server stored differently", async () => {
+		const { t, copyWrites } = target({ storesSomethingElse: true });
+		const outcome = await publishPlan(WORK, t);
+		expect((outcome as { reason: string }).reason).toContain("stored something other");
+		expect(copyWrites).toEqual([]);
+	});
+
+	describe("as a rehearsal against a local server", () => {
+		it("writes without consulting DNS or touching the committed copies", async () => {
+			const { t, writes, copyWrites, lookups } = target({
+				rehearsal: true,
+				txt: ["did=did:plc:someoneelse"],
+				copy: doc,
+			});
+			expect(await publishPlan(WORK, t)).toMatchObject({ status: "published" });
+			expect(writes).toEqual([`put ${WORK.nsid}`]);
+			expect(lookups).toEqual([]);
+			expect(copyWrites).toEqual([]);
+		});
+
+		it("still refuses a change that would break what is published", async () => {
+			const plan = planWith((props) => {
+				delete props.description;
+			});
+			const { t, writes } = target({ rehearsal: true, copy: doc });
+			expect(await publishPlan(plan, t)).toMatchObject({ status: "refused" });
+			expect(writes).toEqual([]);
+		});
+	});
+
+	describe("retiring", () => {
+		it("deletes the record and its copy", async () => {
+			const { t, writes, copyWrites } = target({ live: doc, copy: doc });
+			expect(await retireSchema(WORK.nsid, t)).toEqual({ nsid: WORK.nsid, status: "retired" });
+			expect(writes).toEqual([`delete ${WORK.nsid}`]);
+			expect(copyWrites).toEqual([`remove ${WORK.nsid}`]);
+		});
+
+		it("refuses an account the authority does not name", async () => {
+			const { t, writes } = target({ live: doc, txt: [] });
+			expect(await retireSchema(WORK.nsid, t)).toMatchObject({ status: "refused" });
+			expect(writes).toEqual([]);
+		});
+
+		it("leaves the copy alone in a rehearsal", async () => {
+			const { t, copyWrites } = target({ rehearsal: true, live: doc, copy: doc });
+			await retireSchema(WORK.nsid, t);
+			expect(copyWrites).toEqual([]);
+		});
 	});
 });

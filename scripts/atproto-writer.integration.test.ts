@@ -16,9 +16,9 @@
  *   make pds-up && make pds-test
  *
  * ⚠️ **The account this creates is deactivated rather than deleted.** Deleting an account
- * needs a token the server emails, which a throwaway PDS has nowhere to send. The records
- * are removed properly in `afterAll`, which is the part that matters, and `compose.pds.yaml`
- * keeps its data in a tmpfs so the account dies with the container anyway.
+ * needs a token the server emails, which the local network has nowhere to send. The records
+ * are removed properly in `afterAll`, which is the part that matters, and the network holds
+ * everything in memory, so the account is gone when `make pds-down` stops it anyway.
  */
 import { afterAll, describe, expect, it } from "bun:test";
 import { AtpAgent } from "@atproto/api";
