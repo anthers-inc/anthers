@@ -299,10 +299,30 @@ ingress:
       component:
         name: api
         preserve_path_prefix: true
-    # The admin app's host gets the admin site for everything but the two API prefixes above,
-    # which answer on every host — its pages call `/api` on their own origin. Listed before the
-    # site's catch-all so the host match is not shadowed by it; the API itself refuses operator
-    # routes on any other host, so a routing mistake here fails closed.
+    # 🚨 The admin host's API rules have to name the host themselves. A rule that matches on
+    # authority outranks one that matches on path alone, so without these the admin site's
+    # catch-all below took `/api` on admin.anthers.org as well: a GET came back as the app's own
+    # index.html with a 200 and a POST as a storage error, and the app could not sign anybody in.
+    # The admin app's pages call `/api` on their own origin, which is what these route.
+    - match:
+        authority:
+          exact: admin.anthers.org
+        path:
+          prefix: /api
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        authority:
+          exact: admin.anthers.org
+        path:
+          prefix: /health
+      component:
+        name: api
+        preserve_path_prefix: true
+    # Everything else on the admin host is the admin site. Listed before the site's catch-all so
+    # the host match is not shadowed by it. The API itself refuses operator routes on any other
+    # host, so a routing mistake between the two sites fails closed.
     - match:
         authority:
           exact: admin.anthers.org
