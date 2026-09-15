@@ -23,10 +23,12 @@ import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
 import { hideSubject, restoreSubject } from "../services/moderation.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 const id = crypto.randomUUID().slice(0, 8);
@@ -67,6 +69,8 @@ function to(queueName: string): Record<string, unknown>[] {
 let host: { cookie: string; id: number };
 let abe: { cookie: string; id: number };
 let bee: { cookie: string; id: number };
+/** The admin account that hides and restores, since moderating is an operator's act. */
+let operatorId = 0;
 let postSlug = "";
 let commentId = 0;
 
@@ -76,6 +80,7 @@ beforeAll(async () => {
 	abe = await signUp(abeName);
 	bee = await signUp(beeName);
 	await enablePayouts(hostName);
+	operatorId = (await createAdminFixture("rq-operator")).id;
 
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });
@@ -116,10 +121,10 @@ describe("what each route asks for", () => {
 		await hideSubject({
 			subjectType: "comment",
 			subjectId: commentId,
-			actorId: host.id,
+			adminId: operatorId,
 			reason: "spam",
 		});
-		await restoreSubject({ subjectType: "comment", subjectId: commentId, actorId: host.id });
+		await restoreSubject({ subjectType: "comment", subjectId: commentId, adminId: operatorId });
 		expect(to(QUEUES.SYNC_ATPROTO_RECORD)).toEqual([
 			{ kind: "comment", id: commentId },
 			{ kind: "comment", id: commentId },

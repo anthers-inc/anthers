@@ -45,7 +45,14 @@ const FORBIDDEN = ["app.bsky.feed.post", "app.bsky.feed.repost", "app.bsky.actor
  * *publish when the thing is ready* is idiomatic there in a way it is not in a route
  * handler, and a workflow runs with repository secrets in scope.
  */
-const ROOTS = ["apps/api/src", "apps/web/src", "packages", "scripts", ".github"] as const;
+const ROOTS = [
+	"apps/api/src",
+	"apps/web/src",
+	"apps/admin/src",
+	"packages",
+	"scripts",
+	".github",
+] as const;
 const SELF = "social-posting-guard.test.ts";
 
 /**

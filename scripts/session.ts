@@ -72,9 +72,10 @@ export interface SessionPorts {
 	pds: number;
 	/** The server standing in for `bsky.social`, where identities Anthers does not host live. */
 	bluesky: number;
-	/** The API and the static preview server, which only a browser run starts. */
+	/** The API and the static preview servers — the site's and the admin app's — which only a browser run starts. */
 	api?: number;
 	preview?: number;
+	adminPreview?: number;
 	/**
 	 * The mail catcher's API and inbox, which only sessions that run the API start: a test run
 	 * never sends, because `sendEmail` refuses under the test runner.
@@ -110,6 +111,7 @@ export function sessionPorts(kind: SessionKind, freePort: () => number): Session
 	if (kind === "browser") {
 		ports.api = next();
 		ports.preview = next();
+		ports.adminPreview = next();
 		ports.mail = next();
 	}
 	return ports;
@@ -138,6 +140,7 @@ export function sessionEnvironment(
 	if (ports.api !== undefined && ports.preview !== undefined) {
 		env.API_PORT = String(ports.api);
 		env.PREVIEW_PORT = String(ports.preview);
+		if (ports.adminPreview !== undefined) env.ADMIN_PREVIEW_PORT = String(ports.adminPreview);
 		env.BASE_URL = `http://localhost:${ports.api}`;
 	}
 	return env;

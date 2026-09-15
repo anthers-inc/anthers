@@ -45,13 +45,15 @@ import {
 	noticesReadyForRestore,
 } from "../services/dmca";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -166,7 +168,6 @@ function fakeStripe() {
 const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `fin_creator_${run}`;
 const buyerName = `fin_buyer_${run}`;
-const adminName = `fin_admin_${run}`;
 
 const PRICE = "5.00";
 const fees = calculateFees(new Decimal(PRICE), { type: "digital" });
@@ -177,6 +178,8 @@ let creatorId: number;
 let buyerId: number;
 let creatorCookie: string;
 let buyerCookie: string;
+/** The admin account every console request below is made as. */
+let adminId: number;
 let adminCookie: string;
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
@@ -261,24 +264,21 @@ async function reloadPurchase(purchaseId: number) {
 const createdWorks: number[] = [];
 
 beforeAll(async () => {
-	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName}, ${adminName})`,
-	);
+	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName})`);
 	realClient = getStripe();
 	fake = fakeStripe();
 	setStripeClient(fake.client);
 
 	({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 	({ cookie: buyerCookie, id: buyerId } = await signUp(buyerName));
-	({ cookie: adminCookie } = await signUp(adminName));
-	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+	({ id: adminId, cookie: adminCookie } = await createAdminFixture("fin-operator"));
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
 	// 🚨 Reports first, and explicitly: `moderation_reports.reporter_id` is `set null`
 	// rather than `cascade`, because a moderation record has to outlive the account it
 	// concerns — so deleting these users leaves every report this suite filed behind.
-	await purgeFixtureAccounts([creatorName, buyerName, adminName]);
+	await purgeFixtureAccounts([creatorName, buyerName]);
 	setStripeClient(realClient);
 	// Notices first, then works, then users. `dmca_notices.work_id` is `set null`,
 	// so a Work delete no longer takes its notices with it; and `works.creator_id`
@@ -288,9 +288,7 @@ afterAll(async () => {
 		await db.delete(dmcaNotices).where(eq(dmcaNotices.workId, id));
 		await db.delete(works).where(eq(works.id, id));
 	}
-	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName}, ${adminName})`,
-	);
+	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName})`);
 });
 
 // ── The sweeps ───────────────────────────────────────────────────────────────
@@ -342,6 +340,7 @@ describe("the restore sweep query", () => {
 
 		const suit = await post(`/api/admin/dmca/${noticeId}/suit`, adminCookie, {});
 		expect(suit.status).toBe(200);
+		expect((await reloadNotice(noticeId))?.suitRecordedBy).toBe(adminId);
 
 		const ready = await noticesReadyForRestore();
 		expect(ready.some((n) => n.noticeId === noticeId)).toBe(false);

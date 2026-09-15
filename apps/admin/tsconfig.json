@@ -1,0 +1,14 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"jsx": "react-jsx",
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		// Bun types for typecheck only, for the same reason as apps/web: the type-only import of
+		// `AppType` from apps/api reaches Bun-only files transitively.
+		"types": ["bun"]
+	},
+	"include": ["src"]
+}

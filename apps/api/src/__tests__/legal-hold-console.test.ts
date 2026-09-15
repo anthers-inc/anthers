@@ -25,15 +25,16 @@ import { legalHolds, users } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { type AdminFixture, createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 const RUN = crypto.randomUUID().slice(0, 8);
-const adminName = `holdop_admin_${RUN}`;
 const plainName = `holdop_plain_${RUN}`;
 const subjectName = `holdop_subject_${RUN}`;
 
@@ -71,6 +72,7 @@ interface HoldRow {
 	state: string;
 	expiresAt: string | null;
 	placedBy: string | null;
+	liftedBy: string | null;
 }
 
 async function listHolds(cookie: string): Promise<HoldRow[]> {
@@ -79,34 +81,41 @@ async function listHolds(cookie: string): Promise<HoldRow[]> {
 	return ((await res.json()) as { holds: HoldRow[] }).holds;
 }
 
+let operator: AdminFixture;
 let adminCookie: string;
 let plainCookie: string;
+let plainToken: string;
 let subjectId: number;
 /** An id no row can have, for the case the whole surface exists to prevent. */
 const MISSING_ID = 2_100_000_000;
 
 describe("the legal hold console", () => {
 	beforeAll(async () => {
-		adminCookie = await signUp(adminName);
-		plainCookie = await signUp(plainName);
+		const plain = await createAccount(plainName);
+		plainCookie = plain.cookie;
+		plainToken = plain.token;
 		await signUp(subjectName);
 		subjectId = await userId(subjectName);
-		// Admin is an out-of-band flag, never self-serve.
-		await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+		// An operator is an admin account, which no Anthers account can become.
+		operator = await createAdminFixture("holdop");
+		adminCookie = operator.cookie;
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
 		await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
-		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${adminName}, ${plainName}, ${subjectName})`,
-		);
+		await db.execute(sql`DELETE FROM users WHERE username IN (${plainName}, ${subjectName})`);
 	});
 
-	it("is not advertised to anyone who is not an operator", async () => {
+	it("admits no one who is not an operator, and is not advertised to a bearer credential", async () => {
 		expect((await req("/api/admin/legal-holds")).status).toBe(401);
+		// An Anthers account's session is not an admin session, however signed in it is.
 		expect((await req("/api/admin/legal-holds", { headers: { Cookie: plainCookie } })).status).toBe(
-			404,
+			401,
 		);
+		expect(
+			(await req("/api/admin/legal-holds", { headers: { Authorization: `Bearer ${plainToken}` } }))
+				.status,
+		).toBe(404);
 	});
 
 	it("🚨 refuses a hold on an id that names nothing, and writes no row", async () => {
@@ -168,8 +177,8 @@ describe("the legal hold console", () => {
 		const years = (row.expiresAt!.getTime() - Date.now()) / (365 * 24 * 60 * 60 * 1000);
 		expect(years).toBeGreaterThan(0.9);
 		expect(years).toBeLessThan(1.1);
-		// A hand-placed hold names the person who placed it; only a job leaves this null.
-		expect(row.placedBy).toBe(await userId(adminName));
+		// A hand-placed hold names the admin account that placed it; only a job leaves this null.
+		expect(row.placedBy).toBe(operator.id);
 	});
 
 	it("shows it as active, attributed, and labeled", async () => {
@@ -177,7 +186,8 @@ describe("the legal hold console", () => {
 		expect(hold).toBeDefined();
 		expect(hold!.state).toBe("active");
 		expect(hold!.subjectLabel).toBe(`@${subjectName}`);
-		expect(hold!.placedBy).toBe(adminName);
+		expect(hold!.placedBy).toBe(operator.displayName);
+		expect(hold!.liftedBy).toBeNull();
 	});
 
 	it("⭐ keeps a lifted hold in the list, because the record outlives the preservation", async () => {
@@ -192,6 +202,7 @@ describe("the legal hold console", () => {
 		expect(after, "a lifted hold must still be listed").toBeDefined();
 		expect(after!.state).toBe("lifted");
 		expect(after!.reason).toBe(before.reason);
+		expect(after!.liftedBy).toBe(operator.displayName);
 	});
 
 	it("refuses to lift the same hold twice, so the stamp is never rewritten", async () => {

@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+@import "tailwindcss";
+/* The brand theme the site uses, from @anthers/web-shared, so the admin app reads as Anthers. */
+@import "../../../../packages/web-shared/src/styles/theme.css";
+@plugin "daisyui" {
+	themes:
+		dark --default,
+		light;
+}
+
+/* @anthers/web-shared lives outside this app, so Tailwind has to be told to scan it. */
+@source "../../../../packages/web-shared/src";

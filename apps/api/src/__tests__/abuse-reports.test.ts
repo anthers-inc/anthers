@@ -31,12 +31,14 @@ import {
 import { placeHold } from "../services/legal-hold.js";
 import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -71,6 +73,8 @@ function report(body: Record<string, unknown>) {
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `abuse_creator_${id}`;
 let creatorId: number;
+/** The admin account that closes reports, which is who a closed report records. */
+let operatorId: number;
 let workPublicId: number;
 let workId: number;
 
@@ -89,6 +93,7 @@ beforeAll(async () => {
 		.from(users)
 		.where(eq(users.username, creatorName));
 	creatorId = row.id;
+	operatorId = (await createAdminFixture("abuse-operator")).id;
 
 	const work = await insertWork({ creatorId, type: "video", title: `Abuse fixture ${id}` });
 	workId = work.id;
@@ -302,16 +307,16 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Closing one", () => {
 		expect(res.status).toBe(201);
 		const reportId = (await res.json()).reportId;
 
-		expect(await closeAbuseReport({ reportId, actorId: creatorId, outcome: "dismissed" })).toBe(
+		expect(await closeAbuseReport({ reportId, adminId: operatorId, outcome: "dismissed" })).toBe(
 			true,
 		);
 		const [row] = await db.select().from(abuseReports).where(eq(abuseReports.id, reportId));
 		expect(row.status).toBe("dismissed");
-		expect(row.resolvedBy).toBe(creatorId);
+		expect(row.resolvedBy).toBe(operatorId);
 
 		// A second close would rewrite `resolved_at` and lose when the decision was
 		// actually taken — the same reason `liftHold` refuses a double lift.
-		expect(await closeAbuseReport({ reportId, actorId: creatorId, outcome: "resolved" })).toBe(
+		expect(await closeAbuseReport({ reportId, adminId: operatorId, outcome: "resolved" })).toBe(
 			false,
 		);
 	});
@@ -329,7 +334,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Closing one", () => {
 		const reportId = (await res.json()).reportId;
 		expect(await pendingAbuseEscalations()).toContain(reportId);
 
-		await closeAbuseReport({ reportId, actorId: creatorId, outcome: "dismissed" });
+		await closeAbuseReport({ reportId, adminId: operatorId, outcome: "dismissed" });
 
 		expect(await pendingAbuseEscalations()).toContain(reportId);
 	});

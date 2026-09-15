@@ -20,7 +20,7 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-const ROOTS = ["apps/api/src", "apps/web/src", "packages", "scripts"] as const;
+const ROOTS = ["apps/api/src", "apps/web/src", "apps/admin/src", "packages", "scripts"] as const;
 const SELF = "node-env-guard.test.ts";
 
 /**

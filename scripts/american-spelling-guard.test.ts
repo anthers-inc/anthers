@@ -143,7 +143,14 @@ const IGNORE_MARKER = /lint-spelling:\s*ignore/;
  */
 const PROPER_NOUNS = [/Canadian Centre for Child Protection/gi, /\bCentre\b/g];
 
-const ROOTS = ["apps/api/src", "apps/web/src", "apps/web/tests", "packages", "scripts"] as const;
+const ROOTS = [
+	"apps/api/src",
+	"apps/web/src",
+	"apps/web/tests",
+	"apps/admin/src",
+	"packages",
+	"scripts",
+] as const;
 const EXTENSIONS = "**/*.{ts,tsx,css,md}";
 const SELF = "american-spelling-guard.test.ts";
 

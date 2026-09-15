@@ -49,10 +49,13 @@ export function allowedOrigins(): string[] {
 			"http://127.0.0.1:3000",
 			"http://127.0.0.1:3001",
 			"http://127.0.0.1:4173",
+			"http://127.0.0.1:4174",
 			"http://127.0.0.1:8000",
 			// The Playwright e2e preview (apps/web build + serve) — the SPA client targets
 			// localhost:8000 from any localhost page, so e2e needs CORS/CSRF passage too.
 			"http://localhost:4173",
+			// The admin app's preview, beside the site's in a browser run without a session.
+			"http://localhost:4174",
 			// The API itself serves spike test pages that make credentialed requests back
 			// to the API. Dev-only — no production page is served from the API origin.
 			"http://localhost:8000",
@@ -68,7 +71,8 @@ export function allowedOrigins(): string[] {
  * whatever else a developer has running.
  */
 function sessionPreviewOrigins(): string[] {
-	const port = process.env.PREVIEW_PORT;
-	if (!port || !/^\d{2,5}$/.test(port)) return [];
-	return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+	// The site's preview and the admin app's, which a browser run starts side by side.
+	return [process.env.PREVIEW_PORT, process.env.ADMIN_PREVIEW_PORT]
+		.filter((port): port is string => !!port && /^\d{2,5}$/.test(port))
+		.flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
 }

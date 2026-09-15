@@ -40,7 +40,7 @@ describe("the ports a session takes", () => {
 		expect(Object.values(ports)).not.toContain(5432);
 	});
 
-	it("also takes the API, preview and mail ports for a browser run", () => {
+	it("also takes the API, both previews and the mail port for a browser run", () => {
 		expect(sessionPorts("browser", counter(40000))).toEqual({
 			postgres: 40000,
 			plc: 40001,
@@ -48,7 +48,8 @@ describe("the ports a session takes", () => {
 			bluesky: 40003,
 			api: 40004,
 			preview: 40005,
-			mail: 40006,
+			adminPreview: 40006,
+			mail: 40007,
 		});
 	});
 

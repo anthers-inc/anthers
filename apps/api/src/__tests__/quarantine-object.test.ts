@@ -35,13 +35,15 @@ import { scanInlineUpload, scanStoredImage } from "../services/safety-scan.js";
 import { QUARANTINE_PREFIX, scannedObjectKind } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { artworkBytes, stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
 const RUN = crypto.randomUUID().slice(0, 8);
@@ -49,6 +51,8 @@ const creatorName = `qo_creator_${RUN}`;
 
 let creatorCookie: string;
 let creatorId = 0;
+/** The admin account that clears findings, which is who a cleared finding records. */
+let operatorId = 0;
 
 function req(path: string, options?: RequestInit) {
 	return app.fetch(new Request(`http://localhost${path}`, options));
@@ -80,6 +84,7 @@ beforeAll(async () => {
 		.from(users)
 		.where(eq(users.username, creatorName));
 	creatorId = row.id;
+	operatorId = (await createAdminFixture("qo-operator")).id;
 }, DB_SETUP_TIMEOUT);
 
 describe("An object with no Work behind it", () => {
@@ -414,7 +419,7 @@ describe("Clearing a Work-less finding", () => {
 
 		const result = await clearObjectQuarantine({
 			findingId: findingId!,
-			actorId: creatorId,
+			adminId: operatorId,
 			note: "mistake",
 		});
 		expect(result.cleared).toBe(true);
@@ -423,13 +428,15 @@ describe("Clearing a Work-less finding", () => {
 		// tick — the same lesson the legal-hold console learned about acting on an id.
 		expect(result.storageKey).toBe(key);
 		expect(await storage.exists(key)).toBe(true);
+		const [row] = await findingFor(key);
+		expect(row.clearedBy).toBe(operatorId);
 	});
 
 	it("🚨 refuses a finding id that matches nothing instead of reporting success", async () => {
 		// Every integer is a plausible finding id. A clear that quietly does nothing and
 		// answers `objectsRestored: 0` is indistinguishable from one that worked on an object
 		// storage had already lost, and that is precisely how a hold on a typo used to look.
-		const result = await clearObjectQuarantine({ findingId: 2_000_000_000, actorId: creatorId });
+		const result = await clearObjectQuarantine({ findingId: 2_000_000_000, adminId: operatorId });
 		expect(result.cleared).toBe(false);
 		expect(result.storageKey).toBe("");
 	});
@@ -447,7 +454,7 @@ describe("Clearing a Work-less finding", () => {
 		const [row] = await findingFor(key);
 		expect(row, "the fixture must actually have produced a Work finding").toBeDefined();
 
-		const result = await clearObjectQuarantine({ findingId: row.id, actorId: creatorId });
+		const result = await clearObjectQuarantine({ findingId: row.id, adminId: operatorId });
 		expect(result.cleared).toBe(false);
 		// And the finding is still open, so the right door can still close it.
 		const [after] = await db

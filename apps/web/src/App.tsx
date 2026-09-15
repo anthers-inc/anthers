@@ -7,7 +7,6 @@ import LoggedInLayout from "./components/layout/LoggedInLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
 import PublicShell from "./components/layout/PublicShell";
 import RouteSuspense from "./components/layout/RouteSuspense";
-import AdminRoute from "./components/ui/AdminRoute";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
@@ -63,8 +62,8 @@ function StudioLayout() {
  *
  * Measured before this change: a cold visitor landing on `/` downloaded 3306 KB, of which
  * ~1.4 MB belonged to two pages they were not looking at — `WikiPage` dragging in the MDX
- * pipeline (refractor 433 KB, acorn 230 KB, parse5 125 KB, katex 265 KB) and `AdminPage`
- * dragging in recharts (257 KB). A static import in this file is the whole reason: it puts
+ * pipeline (refractor 433 KB, acorn 230 KB, parse5 125 KB, katex 265 KB) and the operator
+ * console dragging in recharts (257 KB). A static import in this file is the whole reason: it puts
  * the module in the entry graph no matter which route renders.
  *
  * 🚨 So DON'T add a static page import here — that is the mistake this comment exists to
@@ -73,7 +72,6 @@ function StudioLayout() {
  * navigation to that route.
  */
 const AboutPage = lazy(() => import("./pages/AboutPage"));
-const AdminPage = lazy(() => import("./pages/AdminPage"));
 const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
 const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
@@ -295,16 +293,6 @@ export default function App() {
 					code over its anthers:// scheme. Handles its own auth bounce so the
 					sign-in round trip returns to this exact URL (challenge intact). */}
 					<Route path="/desktop/authorize" element={<DesktopAuthorizePage />} />
-					{/* Admin / operations console — platform operators only (AdminRoute
-					mirrors the API's requireAdmin; non-admins are bounced home). */}
-					<Route
-						path="/admin"
-						element={
-							<AdminRoute>
-								<AdminPage />
-							</AdminRoute>
-						}
-					/>
 				</Route>
 
 				{/*

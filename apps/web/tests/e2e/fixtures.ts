@@ -9,6 +9,8 @@ import { type BrowserContext, test as base, expect, type Page } from "@playwrigh
  * browser session picked. Every run takes free ports, so two runs and a `make dev` coexist.
  */
 export const WEB_ORIGIN = `http://localhost:${process.env.PREVIEW_PORT ?? 4173}`;
+/** The admin app's preview, a separate origin from the site, as admin.anthers.org is in production. */
+export const ADMIN_ORIGIN = `http://localhost:${process.env.ADMIN_PREVIEW_PORT ?? 4174}`;
 /**
  * The real API (webServer #2). The preview server tells the page which port this is, so pages
  * reach it directly with no proxy — see `rpc.ts`.

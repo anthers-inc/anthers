@@ -33,11 +33,13 @@ import { deleteExpiredSessions } from "../services/auth.js";
 import { isUnderHold, liftHold, placeHold, preservationExpiry } from "../services/legal-hold.js";
 import { redactClosedModerationReports } from "../services/retention.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 async function signUp(username: string): Promise<number> {
 	return (await createAccount(username)).userId;
@@ -48,6 +50,8 @@ const names = ["held", "free", "sess", "rep", "attc", "attfree", "attheld"].map(
 	(s) => `hold_${s}_${id}`,
 );
 const userIds: number[] = [];
+/** The admin account that lifts holds, which is who a lifted hold records. */
+let operatorId: number;
 
 /**
  * Two UTC days well outside the window any other suite seeds into.
@@ -135,6 +139,7 @@ async function seedRedactableReport(reporterId: number, subjectId: number): Prom
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username LIKE ${`hold_%_${id}`}`);
 	for (const name of names) userIds.push(await signUp(name));
+	operatorId = (await createAdminFixture("hold-operator")).id;
 }, DB_SETUP_TIMEOUT);
 
 describe("The hold itself", () => {
@@ -146,16 +151,17 @@ describe("The hold itself", () => {
 		});
 		expect(await isUnderHold("user", userIds[1])).toBe(true);
 
-		expect(await liftHold(holdId)).toBe(true);
+		expect(await liftHold(holdId, operatorId)).toBe(true);
 		expect(await isUnderHold("user", userIds[1])).toBe(false);
 
 		const [row] = await db.select().from(legalHolds).where(eq(legalHolds.id, holdId));
 		expect(row).toBeDefined();
 		expect(row.liftedAt).not.toBeNull();
+		expect(row.liftedBy).toBe(operatorId);
 		expect(row.reason).toBe("fixture");
 
 		// Lifting twice must not rewrite when the preservation actually ended.
-		expect(await liftHold(holdId)).toBe(false);
+		expect(await liftHold(holdId, operatorId)).toBe(false);
 	});
 
 	it("refuses a hold nobody can explain", async () => {

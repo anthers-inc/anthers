@@ -2,18 +2,16 @@
 /**
  * The admin app's API: platform telemetry and every operator queue.
  *
- * Every route answers only on the admin host and only to a signed-in admin account (see
- * `middleware/admin.ts`), and 404s anywhere else, so the main site does not advertise it. An
- * Anthers account opens none of it, whatever it is signed in with. Data comes from our own Postgres: activity
- * counts + a 14-day series, media transcode state, and pg-boss queue health
- * (the `pgboss` schema). Live-log tailing and DigitalOcean spend deliberately
- * live in the DO dashboard, deep-linked from the frontend rather than proxied
- * here — a thin console over DO's own monitoring, per the task's steer.
+ * Every route answers only on the admin host, where it needs a signed-in admin account and answers
+ * 401 without one, and 404s on every other host so the main site does not advertise it (see
+ * `middleware/admin.ts`). An Anthers account opens none of it, whatever it is signed in with.
  *
- * The telemetry half is read-only by design; job retry/cancel and alerting are
- * still follow-ons. The MODERATION half below is this console's first mutating
- * surface, and it stays inside the same gate rather than growing a second router with
- * a second answer to "who is an operator?".
+ * Telemetry comes from our own Postgres: activity counts and a 14-day series, media transcode
+ * state, and pg-boss queue health (the `pgboss` schema). Live logs and spend stay in the
+ * DigitalOcean and Cloudflare dashboards, linked from the app rather than proxied here. The
+ * telemetry is read-only; job retry, cancel and alerting are follow-ons. The queues below are
+ * the mutating half, and they stay behind the same gate rather than growing a second router
+ * with a second answer to "who is an operator?".
  */
 
 import { db } from "@anthers/db/client";

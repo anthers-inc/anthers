@@ -23,10 +23,12 @@ import {
 	resolveRatingAppeal,
 } from "../services/content-rating.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const run = crypto.randomUUID().slice(0, 8);
 let sent: { name: string; data: Record<string, unknown> }[] = [];
@@ -48,7 +50,7 @@ function listingSyncs(): unknown[] {
 
 beforeAll(async () => {
 	creatorId = (await createAccount(`rls_c_${run}`, { fields: { isCreator: true } })).userId;
-	operatorId = (await createAccount(`rls_o_${run}`)).userId;
+	operatorId = (await createAdminFixture(`rls-o-${run}`)).id;
 
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });
@@ -76,7 +78,7 @@ describe("a rating change asks for the listing to be re-synced", () => {
 	it("🚨 when an operator corrects a Work into Adult", async () => {
 		const w = await work();
 		sent = [];
-		await correctRating({ workId: w.id, maturity: "adult", actorId: operatorId });
+		await correctRating({ workId: w.id, maturity: "adult", adminId: operatorId });
 		expect(listingSyncs()).toContainEqual({ workId: w.id });
 	});
 
@@ -89,7 +91,7 @@ describe("a rating change asks for the listing to be re-synced", () => {
 
 	it("when an appeal against a correction is granted", async () => {
 		const w = await work();
-		const corrected = await correctRating({ workId: w.id, maturity: "adult", actorId: operatorId });
+		const corrected = await correctRating({ workId: w.id, maturity: "adult", adminId: operatorId });
 		const appeal = await fileRatingAppeal({
 			work: corrected!,
 			creatorId,
@@ -99,13 +101,13 @@ describe("a rating change asks for the listing to be re-synced", () => {
 		if (typeof appeal === "string") throw new Error(`appeal refused: ${appeal}`);
 
 		sent = [];
-		await resolveRatingAppeal({ appealId: appeal.id, actorId: operatorId, outcome: "granted" });
+		await resolveRatingAppeal({ appealId: appeal.id, adminId: operatorId, outcome: "granted" });
 		expect(listingSyncs()).toContainEqual({ workId: w.id });
 	});
 
 	it("asks for nothing when an appeal is upheld, because nothing about the Work changed", async () => {
 		const w = await work();
-		const corrected = await correctRating({ workId: w.id, maturity: "adult", actorId: operatorId });
+		const corrected = await correctRating({ workId: w.id, maturity: "adult", adminId: operatorId });
 		const appeal = await fileRatingAppeal({
 			work: corrected!,
 			creatorId,
@@ -115,7 +117,7 @@ describe("a rating change asks for the listing to be re-synced", () => {
 		if (typeof appeal === "string") throw new Error(`appeal refused: ${appeal}`);
 
 		sent = [];
-		await resolveRatingAppeal({ appealId: appeal.id, actorId: operatorId, outcome: "upheld" });
+		await resolveRatingAppeal({ appealId: appeal.id, adminId: operatorId, outcome: "upheld" });
 		expect(listingSyncs()).toEqual([]);
 	});
 });

@@ -22,7 +22,6 @@
  */
 
 import type { HoldSubjectType } from "@anthers/shared/moderation";
-import { displayHandle } from "@anthers/web-shared/profile";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
@@ -40,6 +39,7 @@ interface Hold {
 	placedAt: string;
 	expiresAt: string | null;
 	liftedAt: string | null;
+	liftedBy: string | null;
 	state: "active" | "lifted" | "expired";
 }
 
@@ -174,7 +174,7 @@ export default function LegalHolds() {
 		<section>
 			<div className="flex items-center justify-between gap-4 mb-3">
 				<div>
-					<h2 className="text-lg font-semibold">Legal holds</h2>
+					<h1 className="text-2xl font-bold">Legal Holds</h1>
 					<p className="text-sm text-base-content/60">
 						A hold stops every scheduled deletion from touching what it names. It is not a
 						suspension — the account is served, signs in and is moderated exactly as before.
@@ -335,7 +335,7 @@ export default function LegalHolds() {
 									<td className="whitespace-nowrap">
 										<div>{shortDate(hold.placedAt)}</div>
 										<div className="text-xs text-base-content/60">
-											{hold.placedBy ? displayHandle(hold.placedBy) : "by a job"}
+											{hold.placedBy ?? "by a job"}
 										</div>
 									</td>
 									<td className="whitespace-nowrap">
@@ -354,7 +354,10 @@ export default function LegalHolds() {
 											{hold.state}
 										</span>
 										{hold.liftedAt && (
-											<div className="text-xs text-base-content/60">{shortDate(hold.liftedAt)}</div>
+											<div className="text-xs text-base-content/60">
+												{shortDate(hold.liftedAt)}
+												{hold.liftedBy && ` by ${hold.liftedBy}`}
+											</div>
 										)}
 									</td>
 									<td className="text-right">
