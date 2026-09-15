@@ -202,7 +202,6 @@ function LoggedInLayoutInner() {
 									</NavLink>
 								</>
 							)}
-
 						</nav>
 
 						{/* Page-specific sidebar content */}
