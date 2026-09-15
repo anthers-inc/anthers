@@ -449,6 +449,14 @@ export const ROADMAP: RoadmapGroup[] = [
 						doc: { id: "22.03", title: "What Owning It Means Elsewhere" },
 					},
 					{
+						id: "conversation",
+						title: "Comments, Replies and Reviews",
+						blurb:
+							"Comment on a post and reply beneath a comment, vote on either, and review a Work you can open.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+					},
+					{
 						id: "accessibility",
 						title: "Accessibility Worth the Name",
 						blurb:
@@ -636,9 +644,11 @@ export const ROADMAP: RoadmapGroup[] = [
 					{
 						id: "operator-console",
 						title: "An Operator Console Worth Using",
-						blurb: "Every moderation control reachable from a screen rather than by hand.",
-						bucket: "active",
-						note: "Moderation, rating appeals and legal holds have screens. The rest are API calls.",
+						blurb:
+							"A separate admin app with its own accounts, where reports, appeals, copyright notices, quarantines and legal holds are handled from a screen.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						note: "Passing a report on to the copyright process is the one action without a screen.",
 						doc: { id: "51.02", title: "How Removal Works" },
 					},
 				],
@@ -653,6 +663,7 @@ export const ROADMAP: RoadmapGroup[] = [
 							"A registered agent, a public notice form, counter-notices, clocks on a timer, and every buyer refunded if a notice becomes final.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
+						note: "A counter-notice is not yet forwarded to whoever filed the notice.",
 						doc: { id: "54.01", title: "Filing a Notice" },
 					},
 					{
