@@ -25,7 +25,13 @@ const args = process.argv.slice(2);
 
 // `script` supplies the pty. Bun has no pty binding, and util-linux `script` is the
 // portable way to give a child one while keeping its stdin reachable from here.
-const inner = ["bunx", "drizzle-kit", "generate", ...args].join(" ");
+//
+// 🚨 `--bun` is required, not a preference. Without it `bunx` runs drizzle-kit's `bin.cjs` under
+// Node whenever a `node` can be found, and Node cannot resolve the schema's `./auth.js`-style
+// imports to their `.ts` files, so generate fails with `Cannot find module './auth.js'` on any
+// machine where Node is installed — and succeeds on one where it is not, which is why the failure
+// looks like somebody else's environment.
+const inner = ["bunx", "--bun", "drizzle-kit", "generate", ...args].join(" ");
 const proc = Bun.spawn(["script", "-qec", inner, "/dev/null"], {
 	stdin: "pipe",
 	stdout: "pipe",

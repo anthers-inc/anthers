@@ -38,7 +38,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { pendingSignups, signupCodes, users } from "@anthers/db/schema";
+import { type adminSignInCodes, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth.js";
 
@@ -134,14 +134,40 @@ export async function issueSignupCode(rawEmail: string, now = new Date()): Promi
 		.limit(1);
 	const existingAccount = !!existing;
 
+	const { code, throttled } = await mintEmailedCode(signupCodes, email, now);
+	return { code, throttled, existingAccount };
+}
+
+/**
+ * The tables an emailed code can live in: the main site's, and the admin app's.
+ *
+ * 🚨 **Two tables sharing one set of rules, never one table shared by two doors.** Each verify
+ * route accepts any live code for an address, so a code minted at one door must not be spendable
+ * at the other — which only separate tables guarantee. The rules themselves are written once,
+ * below, so that the throttle, the attempt cap and the order of the checks cannot drift apart
+ * between the door people use and the door that operates the platform.
+ */
+export type EmailedCodeTable = typeof signupCodes | typeof adminSignInCodes;
+
+/**
+ * Mint a code for an already-normalized address, or decline because one was just sent.
+ *
+ * Decides nothing about *whether* the address should get a code — each door answers that
+ * itself before calling this, and a door that calls it has already decided yes.
+ */
+export async function mintEmailedCode(
+	table: EmailedCodeTable,
+	email: string,
+	now = new Date(),
+): Promise<{ code: string | null; throttled: boolean }> {
 	const [live] = await db
-		.select({ lastSentAt: signupCodes.lastSentAt })
-		.from(signupCodes)
-		.where(eq(signupCodes.email, email))
+		.select({ lastSentAt: table.lastSentAt })
+		.from(table)
+		.where(eq(table.email, email))
 		.limit(1);
 
 	if (live && now.getTime() - live.lastSentAt.getTime() < SIGNUP_CODE_RESEND_MS) {
-		return { code: null, throttled: true, existingAccount };
+		return { code: null, throttled: true };
 	}
 
 	const code = generateSignupCode();
@@ -151,14 +177,14 @@ export async function issueSignupCode(rawEmail: string, now = new Date()): Promi
 	// Upsert on the address: a re-request replaces the live code rather than adding a
 	// second one, and resets `attempts` — the new code has not been guessed at.
 	await db
-		.insert(signupCodes)
+		.insert(table)
 		.values({ email, codeHash, expiresAt, lastSentAt: now, attempts: 0 })
 		.onConflictDoUpdate({
-			target: signupCodes.email,
+			target: table.email,
 			set: { codeHash, expiresAt, lastSentAt: now, attempts: 0 },
 		});
 
-	return { code, throttled: false, existingAccount };
+	return { code, throttled: false };
 }
 
 /**
@@ -247,14 +273,33 @@ export async function checkSignupCode(
 	rawCode: string,
 	now = new Date(),
 ): Promise<CodeCheck> {
+	return spendEmailedCode(signupCodes, rawEmail, rawCode, now);
+}
+
+/** `checkSignupCode`'s rules, against either code table. */
+export async function spendEmailedCode(
+	table: EmailedCodeTable,
+	rawEmail: string,
+	rawCode: string,
+	now = new Date(),
+): Promise<CodeCheck> {
 	const email = normalizeEmail(rawEmail);
 	const code = rawCode.trim().toUpperCase();
 
-	const [row] = await db.select().from(signupCodes).where(eq(signupCodes.email, email)).limit(1);
+	const [row] = await db
+		.select({
+			id: table.id,
+			codeHash: table.codeHash,
+			attempts: table.attempts,
+			expiresAt: table.expiresAt,
+		})
+		.from(table)
+		.where(eq(table.email, email))
+		.limit(1);
 	if (!row) return { ok: false, reason: "no_code" };
 
 	if (row.expiresAt.getTime() <= now.getTime()) {
-		await db.delete(signupCodes).where(eq(signupCodes.id, row.id));
+		await db.delete(table).where(eq(table.id, row.id));
 		return { ok: false, reason: "expired" };
 	}
 
@@ -266,14 +311,14 @@ export async function checkSignupCode(
 	// here and the comparison, the guess is still spent — the failure mode of the other
 	// order is an attacker who gets unlimited tries by killing the connection.
 	await db
-		.update(signupCodes)
-		.set({ attempts: sql`${signupCodes.attempts} + 1` })
-		.where(eq(signupCodes.id, row.id));
+		.update(table)
+		.set({ attempts: sql`${table.attempts} + 1` })
+		.where(eq(table.id, row.id));
 
 	const matches = await verifyPassword(code, row.codeHash);
 	if (!matches) return { ok: false, reason: "wrong_code" };
 
-	await db.delete(signupCodes).where(eq(signupCodes.id, row.id));
+	await db.delete(table).where(eq(table.id, row.id));
 	return { ok: true, email };
 }
 
@@ -287,9 +332,14 @@ export async function checkSignupCode(
  * `deleteExpiredSessions`.
  */
 export async function deleteExpiredSignupCodes(now = new Date()): Promise<number> {
-	const gone = await db
-		.delete(signupCodes)
-		.where(lt(signupCodes.expiresAt, now))
-		.returning({ id: signupCodes.id });
+	return deleteExpiredEmailedCodes(signupCodes, now);
+}
+
+/** `deleteExpiredSignupCodes`, against either code table. */
+export async function deleteExpiredEmailedCodes(
+	table: EmailedCodeTable,
+	now = new Date(),
+): Promise<number> {
+	const gone = await db.delete(table).where(lt(table.expiresAt, now)).returning({ id: table.id });
 	return gone.length;
 }

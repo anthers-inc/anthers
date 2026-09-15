@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+export * from "./admin.js";
 export * from "./auth.js";
 export * from "./content.js";
 export * from "./dmca.js";

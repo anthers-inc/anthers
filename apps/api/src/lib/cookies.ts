@@ -17,7 +17,7 @@
  * `isPublicDeployment()` and not a `NODE_ENV` label.
  */
 import type { Context } from "hono";
-import { deleteCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { isPublicDeployment } from "./deployment.js";
 
 // Scope cookies to the parent domain (e.g. ".anthers.org") in prod so they're shared with
@@ -47,6 +47,45 @@ export function setSecureCookie(c: Context, name: string, value: string, maxAge:
 
 export function setSessionCookie(c: Context, token: string): void {
 	setSecureCookie(c, "session", token, SESSION_COOKIE_MAX_AGE);
+}
+
+/**
+ * The admin app's session cookie, written as `__Host-admin_session`.
+ *
+ * 🚨 **It shares none of the site cookie's attributes, and each difference is load-bearing.** The
+ * site's `session` cookie carries `Domain=.anthers.org` so that `www` works, which means a browser
+ * sends it to `admin.anthers.org` too. The admin cookie therefore has to be the one that does not
+ * travel:
+ *
+ *   • **`__Host-`**, which the browser only accepts with `Secure`, `Path=/` and no `Domain`, so it
+ *     is bound to the exact host that set it and no other page on `anthers.org` can read or
+ *     overwrite it.
+ *   • **`SameSite=Strict`**, because nothing about operating Anthers needs to survive a navigation
+ *     from another site, unlike the site cookie, which must survive the OAuth redirect back.
+ *   • **`Secure` everywhere, never only on a public deployment.** Browsers treat `localhost` as a
+ *     secure context, so development gets the same cookie as production rather than a second
+ *     spelling of it that no test would cover.
+ */
+export const ADMIN_SESSION_COOKIE = "admin_session";
+
+/** `maxAgeSeconds` comes from the session's own lifetime, so the cookie cannot outlive the row. */
+export function setAdminSessionCookie(c: Context, token: string, maxAgeSeconds: number): void {
+	setCookie(c, ADMIN_SESSION_COOKIE, token, {
+		httpOnly: true,
+		secure: true,
+		sameSite: "Strict",
+		path: "/",
+		maxAge: maxAgeSeconds,
+		prefix: "host",
+	});
+}
+
+export function readAdminSessionCookie(c: Context): string | undefined {
+	return getCookie(c, ADMIN_SESSION_COOKIE, "host");
+}
+
+export function clearAdminSessionCookie(c: Context): void {
+	deleteCookie(c, ADMIN_SESSION_COOKIE, { path: "/", secure: true, prefix: "host" });
 }
 
 /**
