@@ -270,7 +270,7 @@ const CREATOR_TERMS: LegalDocument = {
 
 		"## Tax",
 		"**You are responsible for your own taxes on what you earn here.** We are not your employer, and nothing in this relationship makes you an employee of Anthers. Stripe issues the US tax forms it is required to issue for the accounts it manages, and we report what we are required to report.",
-		"**Sales tax on your sales is ours to handle, not yours.** Where tax is owed on something sold through Anthers, we collect it from the buyer and remit it. This follows from marketplace-facilitator law and is unaffected by Anthers being a nonprofit — a charitable exemption covers what an organization buys, not what it sells.",
+		"**Sales tax on your sales is ours to handle, not yours.** We collect and remit the sales tax owed on everything sold through Anthers, both the Works you sell and the monthly support people give you, wherever we are registered to collect it. Whether tax applies depends on where the buyer is and on what they receive, so when a Badge carries something beyond access to your work, such as a service or a physical item, we ask you to say which. If you are unsure how to describe something, write to support@anthers.org and we will work it out with you.",
 
 		"## If you remove work someone bought",
 		"You can remove your work from Anthers at any time. **What you cannot do is take back something a person has already paid for**, and you should read this section before you price anything, because it binds you as much as it binds us.",
