@@ -52,7 +52,14 @@ const RETIRED = [
 	/\bbandwidth (?:allowance|wallet|floor|line|term)\b/i,
 ];
 
-const ROOTS = ["apps/api/src", "apps/web/src", "apps/web/tests", "packages", "scripts"] as const;
+const ROOTS = [
+	"apps/api/src",
+	"apps/web/src",
+	"apps/web/tests",
+	"apps/admin/src",
+	"packages",
+	"scripts",
+] as const;
 const SELF = "retired-vocabulary-guard.test.ts";
 
 /**

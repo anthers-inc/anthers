@@ -291,6 +291,28 @@ export async function sendAdminSignInCodeEmail(to: string, code: string): Promis
 	if (!sent) console.info(`[email] admin sign-in code for ${to}: ${code}`);
 }
 
+/**
+ * Telling somebody they have been given an admin account.
+ *
+ * There is no link to accept and nothing to set up, because the account already exists and signing in
+ * with a code sent to this address is all joining takes. The message names who added them, so an
+ * invitation nobody expected is recognizable as one.
+ */
+export async function sendAdminInvitationEmail(
+	to: string,
+	invitedBy: string,
+	adminUrl: string,
+): Promise<void> {
+	const html = shell(
+		"You have an Anthers admin account",
+		`<p style="margin:0 0 18px;">${escapeHtml(invitedBy)} has given you an admin account for running Anthers. Sign in with this address at:</p>
+		<p style="margin:0 0 22px;"><a href="${escapeHtml(adminUrl)}" style="color:${BRAND};">${escapeHtml(adminUrl)}</a></p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">You'll be sent a code each time you sign in. If you weren't expecting this, tell ${escapeHtml(invitedBy)} or reply to this email.</p>`,
+	);
+	const { sent } = await sendEmail({ to, subject: "You have an Anthers admin account", html });
+	if (!sent) console.info(`[email] admin invitation for ${to}: ${adminUrl}`);
+}
+
 /** Standalone re-send of the verification email. */
 export async function sendVerificationEmail(
 	to: string,

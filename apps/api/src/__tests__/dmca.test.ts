@@ -20,12 +20,14 @@ import { dmcaNotices, moderationActions, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { type AdminFixture, createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -63,10 +65,13 @@ async function signUp(username: string): Promise<string> {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `dmca_creator_${id}`;
-const adminName = `dmca_admin_${id}`;
 const otherCreatorName = `dmca_other_${id}`;
 
 let creator: string;
+/** The creator's session token, sent as the desktop Studio would send it. */
+let creatorToken: string;
+let operator: AdminFixture;
+/** The admin session cookie every console request below is made with. */
 let admin: string;
 let otherCreator: string;
 let workId: number;
@@ -90,16 +95,15 @@ function noticeBody(targetWorkId: number, overrides: Partial<Record<string, unkn
 }
 
 beforeAll(async () => {
-	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${adminName}, ${otherCreatorName})`,
-	);
-	creator = await signUp(creatorName);
+	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherCreatorName})`);
+	const creatorAccount = await createAccount(creatorName);
+	creator = creatorAccount.cookie;
+	creatorToken = creatorAccount.token;
 	await enablePayouts(creatorName);
-	admin = await signUp(adminName);
-	await enablePayouts(adminName);
 	otherCreator = await signUp(otherCreatorName);
 	await enablePayouts(otherCreatorName);
-	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+	operator = await createAdminFixture("dmca-operator");
+	admin = operator.cookie;
 
 	// Create two Works by two different creators, both released and free.
 	const w1 = await post("/api/content/works", creator, {
@@ -152,9 +156,7 @@ afterAll(async () => {
 	);
 	await db.execute(sql`DELETE FROM dmca_notices WHERE work_id IN (${workId}, ${otherWorkId})`);
 	await db.execute(sql`DELETE FROM works WHERE id IN (${workId}, ${otherWorkId})`);
-	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${adminName}, ${otherCreatorName})`,
-	);
+	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherCreatorName})`);
 });
 
 describe("DMCA notice intake", () => {
@@ -237,6 +239,7 @@ describe("DMCA takedown — the access denial", () => {
 			.limit(1);
 		expect(rows.length).toBe(1);
 		expect(rows[0].reason).toBe("dmca");
+		expect(rows[0].adminActorId).toBe(operator.id);
 	});
 
 	it("one notice never removes more than the material it identified", async () => {
@@ -345,8 +348,15 @@ describe("DMCA reject — a first-class outcome", () => {
 });
 
 describe("DMCA admin gate", () => {
-	it("a non-admin gets 404, not 403 — the surface is not advertised", async () => {
+	it("an Anthers account gets 401, because its session is not an admin session", async () => {
 		const res = await req("/api/admin/dmca", { headers: { Cookie: creator } });
+		expect(res.status).toBe(401);
+	});
+
+	it("a bearer credential gets 404, not 401 — the surface is not advertised", async () => {
+		const res = await req("/api/admin/dmca", {
+			headers: { Authorization: `Bearer ${creatorToken}` },
+		});
 		expect(res.status).toBe(404);
 	});
 });

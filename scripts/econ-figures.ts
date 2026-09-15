@@ -1202,7 +1202,7 @@ const BLOCKS: Block[] = [
  * and every `RETIRED_COPY` pattern matches the word as prose rather than as an
  * identifier. Adding the root found one line and no false positives.
  */
-const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"];
+const APP_ROOTS = ["apps/web/src", "apps/admin/src", "packages/web-shared/src", "packages/db/src"];
 
 /**
  * Markdown in this repo that is read by outsiders, and so is held to the same standard

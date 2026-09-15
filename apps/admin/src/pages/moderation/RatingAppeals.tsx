@@ -26,6 +26,7 @@ import { maturityLabel, RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "../../lib/session";
 
 interface Appeal {
 	id: number;
@@ -39,7 +40,8 @@ interface Appeal {
 	workPublicId: number;
 }
 
-export default function RatingAppealsQueue() {
+export default function RatingAppeals() {
+	const { siteLink } = useSession();
 	const [appeals, setAppeals] = useState<Appeal[] | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [notes, setNotes] = useState<Record<number, string>>({});
@@ -92,7 +94,7 @@ export default function RatingAppealsQueue() {
 	return (
 		<section>
 			<div className="mb-3 flex items-center justify-between">
-				<h2 className="text-xl font-bold">Rating Appeals</h2>
+				<h1 className="text-2xl font-bold">Rating Appeals</h1>
 				<button type="button" className="btn btn-ghost btn-sm" onClick={load} disabled={loading}>
 					<ArrowPathIcon className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
 					Refresh
@@ -125,7 +127,7 @@ export default function RatingAppealsQueue() {
 						<div className="flex flex-wrap items-baseline gap-2">
 							<a
 								className="link font-semibold"
-								href={`/works/${appeal.workSlug}-${appeal.workPublicId}`}
+								href={siteLink(`/works/${appeal.workSlug}-${appeal.workPublicId}`)}
 								rel="noreferrer noopener"
 								target="_blank"
 							>
@@ -170,7 +172,7 @@ export default function RatingAppealsQueue() {
 										: "Say why before leaving the rating as it is"
 								}
 							>
-								Leave it as it is
+								Leave It as It Is
 							</button>
 						</div>
 					</li>

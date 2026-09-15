@@ -9,8 +9,8 @@
  * pass just as happily against a `DELETE`, and that implementation would cost a
  * migration to undo.
  *
- * Also covered: the gate (a non-admin gets 404, not 403, same as the rest of the
- * console), that hiding reaches every public read of the content — the comment
+ * Also covered: the gate (an Anthers account gets 401, because only an admin session
+ * opens the console, and a bearer credential gets 404, same as the rest of it), that hiding reaches every public read of the content — the comment
  * list, the reviews endpoint's aggregate, and the aggregate embedded in post
  * detail — that re-rating can't resurrect a hidden rating, and that a restore is
  * a NEW log row rather than an edit to the hide it reverses.
@@ -21,13 +21,15 @@ import { comments, moderationActions, moderationReports, reviews, users } from "
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { type AdminFixture, createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -74,15 +76,18 @@ async function queue(cookie: string, filter: string) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `mod_creator_${id}`;
-const adminName = `mod_admin_${id}`;
 const viewerAName = `mod_a_${id}`;
 const viewerBName = `mod_b_${id}`;
 const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 
 let creator: string;
+/** The admin session cookie every console request below is made with. */
 let admin: string;
+let operator: AdminFixture;
 let viewerA: string;
 let viewerB: string;
+/** viewerB's session token, sent as the desktop Studio would send it. */
+let viewerBToken: string;
 let slug: string;
 let workId: number;
 /** viewerA's comment — the one we report and hide. */
@@ -93,17 +98,18 @@ let ratingId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${adminName}, ${viewerAName}, ${viewerBName})`,
+		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
-	admin = await signUp(adminName);
-	await enablePayouts(adminName);
 	viewerA = await signUp(viewerAName);
 	await enablePayouts(viewerAName);
-	viewerB = await signUp(viewerBName);
+	const b = await createAccount(viewerBName);
+	viewerB = b.cookie;
+	viewerBToken = b.token;
 	await enablePayouts(viewerBName);
-	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
+	operator = await createAdminFixture("mod-operator");
+	admin = operator.cookie;
 	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
 
 	const itemRes = await post("/api/content/works", creator, {
@@ -241,7 +247,7 @@ describe("Filing a report", () => {
  * In `afterAll` rather than a closing test, so it runs whether the suite passed or bailed.
  */
 afterAll(async () => {
-	await purgeFixtureAccounts([creatorName, adminName, viewerAName, viewerBName]);
+	await purgeFixtureAccounts([creatorName, viewerAName, viewerBName]);
 });
 
 describe("Queue gating", () => {
@@ -249,16 +255,23 @@ describe("Queue gating", () => {
 		expect((await req("/api/admin/moderation")).status).toBe(401);
 	});
 
-	it("404s a signed-in non-admin — the surface isn't advertised", async () => {
+	it("401s a signed-in Anthers account, whose session is not an admin session", async () => {
 		const res = await req("/api/admin/moderation", { headers: { Cookie: viewerB } });
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(401);
 	});
 
-	it("404s a non-admin on the mutating routes too", async () => {
+	it("401s an Anthers account on the mutating routes too", async () => {
 		const res = await post("/api/admin/moderation/hide", viewerB, {
 			subjectType: "comment",
 			subjectId: commentId,
 			reason: "spam",
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it("404s a bearer credential — the surface isn't advertised", async () => {
+		const res = await req("/api/admin/moderation", {
+			headers: { Authorization: `Bearer ${viewerBToken}` },
 		});
 		expect(res.status).toBe(404);
 	});
@@ -369,7 +382,10 @@ describe("Hiding a comment", () => {
 		expect(actions[0].reason).toBe("spam");
 		expect(actions[0].note).toBe("follower farm");
 		expect(actions[0].actorRole).toBe("operator");
-		expect(actions[0].actorId).toBeGreaterThan(0);
+		expect(actions[0].adminActorId).toBe(operator.id);
+		// `actor_id` names an Anthers account and is kept for Keepers, so an operator's
+		// decision must not land there.
+		expect(actions[0].actorId).toBeNull();
 	});
 
 	// The load-bearing assertion. Everything else in this file would also pass
@@ -414,6 +430,7 @@ describe("Hiding a comment", () => {
 			);
 		expect(report.status).toBe("resolved");
 		expect(report.resolvedAt).toBeInstanceOf(Date);
+		expect(report.resolvedByAdminId).toBe(operator.id);
 	});
 
 	it("surfaces it under the hidden filter, with who hid it and why", async () => {
@@ -422,7 +439,7 @@ describe("Hiding a comment", () => {
 		expect(entry).toBeDefined();
 		expect(entry?.lastAction?.action).toBe("hide");
 		expect(entry?.lastAction?.reason).toBe("spam");
-		expect(entry?.lastAction?.actor).toBe(adminName);
+		expect(entry?.lastAction?.actor).toBe(operator.displayName);
 		expect(summary.hiddenComments).toBeGreaterThanOrEqual(1);
 	});
 });

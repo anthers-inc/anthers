@@ -222,7 +222,7 @@ describe("Post delete is guarded before it is anything else", () => {
 		const slug = (await create.json()).post.slug;
 
 		// 404 rather than 403 on purpose: a 403 would confirm the post exists to someone
-		// with no business knowing, which is the same reasoning `requireAdmin` follows.
+		// with no business knowing, which is the same reasoning `adminHostOnly` follows.
 		const asStranger = await req(`/api/content/posts/${slug}`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: stranger },

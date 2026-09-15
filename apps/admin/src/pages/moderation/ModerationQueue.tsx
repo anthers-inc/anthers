@@ -45,6 +45,7 @@ import { profileUrl } from "@anthers/web-shared/profile";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "../../lib/session";
 
 // ── Response shapes (mirror apps/api/src/services/moderation.ts) ─────────────
 interface QueueItem {
@@ -120,6 +121,7 @@ function SummaryChip({ label, value, alert }: { label: string; value: number; al
 }
 
 export default function ModerationQueue() {
+	const { siteLink } = useSession();
 	const [filter, setFilter] = useState<Filter>("reported");
 	const [data, setData] = useState<QueueResponse | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -233,7 +235,7 @@ export default function ModerationQueue() {
 	return (
 		<section>
 			<div className="mb-3 flex items-center justify-between gap-4">
-				<h2 className="text-lg font-semibold">Moderation</h2>
+				<h1 className="text-2xl font-bold">Moderation Queue</h1>
 				<button
 					type="button"
 					className="btn btn-sm btn-ghost gap-2"
@@ -251,11 +253,11 @@ export default function ModerationQueue() {
 			    it separately to know it is there at all. */}
 			{data && (
 				<div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-					<SummaryChip label="Open reports" value={data.summary.openReports} alert />
-					<SummaryChip label="Items reported" value={data.summary.reportedSubjects} alert />
-					<SummaryChip label="People reported" value={data.summary.reportedPeople} alert />
-					<SummaryChip label="Hidden comments" value={data.summary.hiddenComments} />
-					<SummaryChip label="Hidden reviews" value={data.summary.hiddenReviews} />
+					<SummaryChip label="Open Reports" value={data.summary.openReports} alert />
+					<SummaryChip label="Items Reported" value={data.summary.reportedSubjects} alert />
+					<SummaryChip label="People Reported" value={data.summary.reportedPeople} alert />
+					<SummaryChip label="Hidden Comments" value={data.summary.hiddenComments} />
+					<SummaryChip label="Hidden Reviews" value={data.summary.hiddenReviews} />
 				</div>
 			)}
 
@@ -314,7 +316,7 @@ export default function ModerationQueue() {
 										<div className="mt-1 text-sm break-words">{item.excerpt}</div>
 										{item.context && (
 											<a
-												href={contextHref(item.context)}
+												href={siteLink(contextHref(item.context))}
 												target="_blank"
 												rel="noopener noreferrer"
 												className="link link-hover text-xs text-base-content/50"

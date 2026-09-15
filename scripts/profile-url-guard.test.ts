@@ -28,7 +28,7 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-const ROOTS = ["apps/web/src", "packages/web-shared/src"] as const;
+const ROOTS = ["apps/web/src", "apps/admin/src", "packages/web-shared/src"] as const;
 
 /** The module that is allowed to write the prefix, and this file, which has to quote it. */
 const EXEMPT = ["packages/web-shared/src/lib/profile.ts", "profile-url-guard.test.ts"];

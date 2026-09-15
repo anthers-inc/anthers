@@ -16,6 +16,9 @@ const apiDir = fileURLToPath(new URL("../api", import.meta.url));
  */
 const PORT = Number(process.env.PREVIEW_PORT ?? 4173);
 const API_PORT = Number(process.env.API_PORT ?? 8000);
+/** The admin app's preview, which `scripts/session.ts` starts beside the site's. */
+const ADMIN_PORT = Number(process.env.ADMIN_PREVIEW_PORT ?? 4174);
+const adminDir = fileURLToPath(new URL("../admin", import.meta.url));
 
 /**
  * Refuses to start a server outside a session. A bare `bunx playwright test` would otherwise bring
@@ -140,6 +143,16 @@ export default defineConfig({
 			command: `${REQUIRE_SESSION} && bun run build.ts && PORT=${PORT} API_PORT=${API_PORT} bun run serve.ts`,
 			cwd: here,
 			url: `http://localhost:${PORT}`,
+			reuseExistingServer: false,
+			timeout: 120_000,
+		},
+		// The admin app, built and served the same way and never reused, for the same reason. It is a
+		// separate app on a separate origin, which is what its specs need to prove the admin session
+		// holds up across origins the way it will on admin.anthers.org.
+		{
+			command: `${REQUIRE_SESSION} && bun run build.ts && PORT=${ADMIN_PORT} API_PORT=${API_PORT} bun run serve.ts`,
+			cwd: adminDir,
+			url: `http://localhost:${ADMIN_PORT}`,
 			reuseExistingServer: false,
 			timeout: 120_000,
 		},

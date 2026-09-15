@@ -32,7 +32,6 @@
 		"db:bluesky-identity": "bun run apps/api/src/scripts/seed-bluesky-identity.ts",
 		"db:dev-account": "bun run apps/api/src/scripts/ensure-dev-account.ts",
 		"db:local-account": "bun run apps/api/src/scripts/local-accounts.ts",
-		"db:admin": "bun run packages/db/src/set-admin.ts",
 		"admin:account": "bun run apps/api/src/scripts/admin-account.ts",
 		"db:gauntlet": "bun run apps/api/src/scripts/seed-gauntlet.ts",
 		"db:gauntlet:clean": "bun run apps/api/src/scripts/seed-gauntlet.ts --clean",

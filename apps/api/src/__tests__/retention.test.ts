@@ -39,12 +39,14 @@ import {
 	runRetentionSweep,
 } from "../services/retention";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `ret_creator_${run}`;
@@ -52,6 +54,8 @@ const reporterName = `ret_reporter_${run}`;
 
 let creatorId: number;
 let reporterId: number;
+/** The admin account standing in for the operator who lifts a hold and writes the log. */
+let operatorId: number;
 let workId: number;
 const createdNotices: number[] = [];
 const createdReports: number[] = [];
@@ -156,6 +160,7 @@ beforeAll(async () => {
 		await createAccount(creatorName, { emailVerified: true, fields: { isCreator: true } })
 	).userId;
 	reporterId = (await createAccount(reporterName, { emailVerified: true })).userId;
+	operatorId = (await createAdminFixture("ret-operator")).id;
 
 	const work = await insertWork({ creatorId, type: "game", title: `Retention fixture ${run}` });
 	workId = work.id;
@@ -265,7 +270,7 @@ describe("DMCA notices past the clock", () => {
 		expect(held?.counterNotice?.subscriberAddress).toBe("1 Creator Way, Anytown, US");
 		expect(held?.redactedAt).toBeNull();
 
-		await liftHold(holdId);
+		await liftHold(holdId, operatorId);
 		await redactSettledDmcaNotices();
 		const lifted = await reloadNotice(before.id);
 		expect(lifted?.complainantAddress).toBe("");
@@ -369,7 +374,7 @@ describe("what the sweep does not touch", () => {
 				subjectType: "work",
 				subjectId: workId,
 				action: "hide",
-				actorId: creatorId,
+				adminActorId: operatorId,
 				actorRole: "operator",
 				reason: "dmca",
 				note: "An operator's note from long ago.",
@@ -385,7 +390,7 @@ describe("what the sweep does not touch", () => {
 			.where(eq(moderationActions.id, action.id))
 			.limit(1);
 		expect(after?.note).toBe("An operator's note from long ago.");
-		expect(after?.actorId).toBe(creatorId);
+		expect(after?.adminActorId).toBe(operatorId);
 
 		await db.delete(moderationActions).where(eq(moderationActions.id, action.id));
 	});

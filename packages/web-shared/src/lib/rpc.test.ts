@@ -30,7 +30,7 @@ import { devApiPort } from "./rpc.js";
 const REPO = resolve(import.meta.dir, "../../../..");
 
 /** Client source trees. The API and scripts legitimately talk about ports. */
-const ROOTS = ["apps/web/src", "packages/web-shared/src"];
+const ROOTS = ["apps/web/src", "apps/admin/src", "packages/web-shared/src"];
 
 /** The single legitimate resolver. */
 const ALLOWED = new Set(["packages/web-shared/src/lib/rpc.ts"]);

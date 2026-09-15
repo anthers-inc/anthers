@@ -29,13 +29,15 @@ import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUE_LIMIT } from "../services/moderation.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -78,12 +80,14 @@ async function queue(cookie: string, filter: string) {
 }
 
 const id = crypto.randomUUID().slice(0, 8);
-const adminName = `pr_admin_${id}`;
+/** The account whose post the subject comments under. */
+const hostName = `pr_host_${id}`;
 const reporterName = `pr_reporter_${id}`;
 const subjectName = `pr_subject_${id}`;
 /** Reported, then deleted — the orphan case. */
 const ghostName = `pr_ghost_${id}`;
 
+/** The admin session cookie every console request below is made with. */
 let admin: string;
 let reporter: string;
 let subjectId: number;
@@ -93,14 +97,14 @@ let commentId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${adminName}, ${reporterName}, ${subjectName}, ${ghostName})`,
+		sql`DELETE FROM users WHERE username IN (${hostName}, ${reporterName}, ${subjectName}, ${ghostName})`,
 	);
-	admin = await signUp(adminName);
+	const host = await signUp(hostName);
 	reporter = await signUp(reporterName);
 	const subject = await signUp(subjectName);
 	await signUp(ghostName);
-	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
-	await enablePayouts(adminName);
+	await enablePayouts(hostName);
+	admin = (await createAdminFixture("pr-operator")).cookie;
 	await db.execute(
 		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE username = ${subjectName}`,
 	);
@@ -110,7 +114,7 @@ beforeAll(async () => {
 	subjectId = s.id;
 	ghostId = g.id;
 
-	const postRes = await post("/api/content/posts", admin, {
+	const postRes = await post("/api/content/posts", host, {
 		title: `Person report fixture ${id}`,
 		isPublished: true,
 	});
@@ -210,7 +214,7 @@ describe("filing a report about a person", () => {
  * *about* these accounts, whose subject id has no foreign key at all.
  */
 afterAll(async () => {
-	await purgeFixtureAccounts([adminName, reporterName, subjectName, ghostName]);
+	await purgeFixtureAccounts([hostName, reporterName, subjectName, ghostName]);
 });
 
 describe("the person report in the operator queue", () => {

@@ -27,6 +27,7 @@
 
 import { db } from "@anthers/db/client";
 import {
+	adminAccounts,
 	comments,
 	moderationActions,
 	moderationReports,
@@ -180,7 +181,14 @@ export async function fileReport(input: {
 			],
 			// Re-reporting reopens: an operator dismissed the earlier reason, not
 			// every future one, and the reporter is telling us something changed.
-			set: { reason: input.reason, details, status: "open", resolvedAt: null, resolvedBy: null },
+			set: {
+				reason: input.reason,
+				details,
+				status: "open",
+				resolvedAt: null,
+				resolvedBy: null,
+				resolvedByAdminId: null,
+			},
 		})
 		.returning({ id: moderationReports.id });
 
@@ -317,7 +325,8 @@ function escapeHtml(value: string): string {
 export async function hideSubject(input: {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	actorRole?: ModerationActorRole;
 	reason: string;
 	note?: string;
@@ -337,7 +346,7 @@ export async function hideSubject(input: {
 			subjectType: input.subjectType,
 			subjectId: input.subjectId,
 			action: "hide" satisfies ModerationActionType,
-			actorId: input.actorId,
+			adminActorId: input.adminId,
 			actorRole: input.actorRole ?? "operator",
 			reason: input.reason,
 			note,
@@ -345,7 +354,7 @@ export async function hideSubject(input: {
 
 		await tx
 			.update(moderationReports)
-			.set({ status: "resolved", resolvedAt: new Date(), resolvedBy: input.actorId })
+			.set({ status: "resolved", resolvedAt: new Date(), resolvedByAdminId: input.adminId })
 			.where(
 				and(
 					eq(moderationReports.subjectType, input.subjectType),
@@ -375,7 +384,8 @@ export async function hideSubject(input: {
 export async function restoreSubject(input: {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	actorRole?: ModerationActorRole;
 	note?: string;
 }): Promise<{ status: "visible" } | "not_moderatable" | null> {
@@ -400,7 +410,7 @@ export async function restoreSubject(input: {
 			subjectType: input.subjectType,
 			subjectId: input.subjectId,
 			action: "restore" satisfies ModerationActionType,
-			actorId: input.actorId,
+			adminActorId: input.adminId,
 			actorRole: input.actorRole ?? "operator",
 			reason: "",
 			note,
@@ -437,11 +447,12 @@ export async function restoreSubject(input: {
 export async function routeToCopyright(input: {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 }): Promise<{ dismissed: number; reportersNotified: number }> {
 	const rows = await db
 		.update(moderationReports)
-		.set({ status: "dismissed", resolvedAt: new Date(), resolvedBy: input.actorId })
+		.set({ status: "dismissed", resolvedAt: new Date(), resolvedByAdminId: input.adminId })
 		.where(
 			and(
 				eq(moderationReports.subjectType, input.subjectType),
@@ -474,11 +485,12 @@ export async function routeToCopyright(input: {
 export async function dismissReports(input: {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 }): Promise<{ dismissed: number }> {
 	const dismissed = await db
 		.update(moderationReports)
-		.set({ status: "dismissed", resolvedAt: new Date(), resolvedBy: input.actorId })
+		.set({ status: "dismissed", resolvedAt: new Date(), resolvedByAdminId: input.adminId })
 		.where(
 			and(
 				eq(moderationReports.subjectType, input.subjectType),
@@ -966,10 +978,10 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			reason: moderationActions.reason,
 			note: moderationActions.note,
 			createdAt: moderationActions.createdAt,
-			actor: users.username,
+			actor: adminAccounts.displayName,
 		})
 		.from(moderationActions)
-		.leftJoin(users, eq(moderationActions.actorId, users.id))
+		.leftJoin(adminAccounts, eq(moderationActions.adminActorId, adminAccounts.id))
 		.where(
 			inArray(
 				moderationActions.subjectId,

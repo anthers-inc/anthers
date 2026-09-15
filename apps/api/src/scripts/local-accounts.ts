@@ -8,7 +8,7 @@
  * path that does either went untested wherever one was used. The test fixture
  * (`__tests__/account-fixture.ts`) wraps this; the seeds `make dev` runs call it directly.
  *
- *   bun run db:local-account --username e2e_op --email e2e_op@example.com --admin --session
+ *   bun run db:local-account --username e2e_reader --email e2e_reader@example.com --session
  *
  * The command line prints the account as JSON, for a browser spec that cannot import the API.
  *
@@ -160,14 +160,13 @@ async function main(): Promise<void> {
 	const username = flag("username");
 	if (!username)
 		throw new Error(
-			"usage: bun run db:local-account --username <name> [--email <address>] [--admin] [--creator] [--session]",
+			"usage: bun run db:local-account --username <name> [--email <address>] [--creator] [--session]",
 		);
 	const user = await createLocalAccount({
 		username,
 		email: flag("email") ?? `${username}@example.com`,
 		handleName: username,
 		fields: {
-			isAdmin: process.argv.includes("--admin"),
 			isCreator: process.argv.includes("--creator"),
 		},
 	});

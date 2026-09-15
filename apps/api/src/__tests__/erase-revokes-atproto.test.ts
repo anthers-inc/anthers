@@ -25,12 +25,14 @@ import { eq, like } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import { liftHold, placeHold } from "../services/legal-hold.js";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const RUN = Date.now().toString(36);
 
@@ -205,6 +207,7 @@ describe("eraseAccount revokes the ATProto grant", () => {
 		// before that guard would break the identity link of an account that is still very
 		// much alive — and the daily sweep would re-select it and do it again tomorrow.
 		const { userId, did } = await makeLinkedUser();
+		const operator = await createAdminFixture("erase-hold");
 		const { holdId } = await placeHold({
 			subjectType: "user",
 			subjectId: userId,
@@ -218,7 +221,7 @@ describe("eraseAccount revokes the ATProto grant", () => {
 			expect(await userExists(userId)).toBe(true);
 			expect(await sessionExists(did)).toBe(true);
 		} finally {
-			await liftHold(holdId);
+			await liftHold(holdId, operator.id);
 			await db.delete(legalHolds).where(eq(legalHolds.id, holdId));
 			await db.delete(atprotoSessions).where(eq(atprotoSessions.did, did));
 			await db.delete(users).where(eq(users.id, userId));

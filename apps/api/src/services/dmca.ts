@@ -149,7 +149,8 @@ export async function fileNotice(input: {
  */
 export async function takeDownWork(input: {
 	noticeId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	actorRole?: string;
 	note?: string;
 }): Promise<{ status: "taken_down" } | "already_taken_down" | null> {
@@ -195,7 +196,7 @@ export async function takeDownWork(input: {
 				status: "actioned" satisfies DmcaNoticeStatus,
 				actionedAt: now,
 				counterNoticeDueBy,
-				actorId: input.actorId,
+				actorId: input.adminId,
 				note,
 			})
 			.where(eq(dmcaNotices.id, input.noticeId));
@@ -206,7 +207,7 @@ export async function takeDownWork(input: {
 			subjectType: "work",
 			subjectId: work.id,
 			action: "hide",
-			actorId: input.actorId,
+			adminActorId: input.adminId,
 			actorRole: input.actorRole ?? "operator",
 			reason: "dmca",
 			note,
@@ -251,7 +252,8 @@ export async function takeDownWork(input: {
  */
 export async function rejectNotice(input: {
 	noticeId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	note?: string;
 }): Promise<{ status: "rejected" } | null> {
 	const [notice] = await db
@@ -267,7 +269,7 @@ export async function rejectNotice(input: {
 		.set({
 			status: "rejected" satisfies DmcaNoticeStatus,
 			rejectedAt: new Date(),
-			actorId: input.actorId,
+			actorId: input.adminId,
 			note,
 		})
 		.where(eq(dmcaNotices.id, input.noticeId));
@@ -340,7 +342,8 @@ export async function fileCounterNotice(input: {
  */
 export async function restoreWork(input: {
 	noticeId: number;
-	actorId?: number;
+	/** The admin account acting, or absent when the scheduled sweep restores. */
+	adminId?: number;
 	note?: string;
 }): Promise<{ status: "restored" } | null> {
 	const [notice] = await db
@@ -374,8 +377,8 @@ export async function restoreWork(input: {
 			subjectType: "work",
 			subjectId: work.id,
 			action: "restore",
-			actorId: input.actorId ?? null,
-			actorRole: input.actorId != null ? "operator" : "automated",
+			adminActorId: input.adminId ?? null,
+			actorRole: input.adminId != null ? "operator" : "automated",
 			reason: "",
 			note,
 		});
@@ -399,7 +402,8 @@ export async function restoreWork(input: {
  */
 export async function recordSuit(input: {
 	noticeId: number;
-	actorId: number;
+	/** The admin account recording it. */
+	adminId: number;
 }): Promise<{ status: "suit_filed" } | null> {
 	const [notice] = await db
 		.select()
@@ -410,7 +414,7 @@ export async function recordSuit(input: {
 
 	await db
 		.update(dmcaNotices)
-		.set({ suitFiledAt: new Date() })
+		.set({ suitFiledAt: new Date(), suitRecordedBy: input.adminId })
 		.where(eq(dmcaNotices.id, input.noticeId));
 
 	return { status: "suit_filed" };

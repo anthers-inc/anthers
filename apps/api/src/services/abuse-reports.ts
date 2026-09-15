@@ -237,7 +237,8 @@ export async function redactClosedAbuseReports(
  */
 export async function closeAbuseReport(input: {
 	reportId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	outcome: "resolved" | "dismissed";
 }): Promise<boolean> {
 	const rows = await db
@@ -245,7 +246,7 @@ export async function closeAbuseReport(input: {
 		.set({
 			status: input.outcome,
 			resolvedAt: new Date(),
-			resolvedBy: input.actorId,
+			resolvedBy: input.adminId,
 		})
 		.where(and(eq(abuseReports.id, input.reportId), eq(abuseReports.status, "open")))
 		.returning({ id: abuseReports.id });

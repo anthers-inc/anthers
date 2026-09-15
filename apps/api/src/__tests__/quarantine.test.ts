@@ -40,13 +40,15 @@ import { clearQuarantine, loadQuarantineFindings, quarantineWork } from "../serv
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -72,6 +74,8 @@ let creatorCookie: string;
 let buyerCookie: string;
 let creatorId: number;
 let buyerId: number;
+/** The admin account that quarantines and clears, which is who a finding records. */
+let operatorId: number;
 
 /** Locked and priced: the only way in is a purchase, which is the viewer under test. */
 const SOLD = { seedAccess: [{ threshold: 0, allow: true, price: "5.00" }] };
@@ -135,6 +139,7 @@ beforeAll(async () => {
 	buyerCookie = await signUp(buyerName);
 	creatorId = await idOf(creatorName);
 	buyerId = await idOf(buyerName);
+	operatorId = (await createAdminFixture("quar-operator")).id;
 	await db.execute(sql`UPDATE users SET is_creator = true WHERE id = ${creatorId}`);
 }, DB_SETUP_TIMEOUT);
 
@@ -153,7 +158,7 @@ describe("A purchaser is refused", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		const after = await download(work.id, asset.id, buyerCookie);
@@ -173,7 +178,7 @@ describe("A purchaser is refused", () => {
 			workId: work.id,
 			source: "scan",
 			classification: "csam",
-			actorId: null,
+			adminId: null,
 		});
 
 		const after = await download(work.id, asset.id, creatorCookie);
@@ -191,7 +196,7 @@ describe("The object itself", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 		expect(result.objectsMoved).toBeGreaterThan(0);
 
@@ -208,7 +213,7 @@ describe("The object itself", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		// This is the storage-layer half of the denial, exercised the way a forgotten
@@ -224,7 +229,7 @@ describe("The object itself", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		// In local mode `/content` serves CONTENT_ROOT unsigned, so the directory is a
@@ -255,7 +260,7 @@ describe("Our determination and the vendor's are kept apart", () => {
 				matchType: "near",
 				receivedAt: new Date("2026-08-26T03:00:00.000Z").toISOString(),
 			},
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		const [row] = await db
@@ -303,7 +308,7 @@ describe("Our determination and the vendor's are kept apart", () => {
 				matchType: "exact",
 				receivedAt: new Date().toISOString(),
 			},
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 		const actions = await db
 			.select({ note: moderationActions.note, reason: moderationActions.reason })
@@ -348,7 +353,7 @@ describe("The record and the hold", () => {
 			workId: work.id,
 			source: "report",
 			classification: "sexual",
-			actorId: creatorId,
+			adminId: operatorId,
 			reportId: report.id,
 			note: "fixture",
 		});
@@ -362,6 +367,7 @@ describe("The record and the hold", () => {
 		expect(row.source).toBe("report");
 		expect(row.uploaderId).toBe(creatorId);
 		expect(row.reportId).toBe(report.id);
+		expect(row.placedBy).toBe(operatorId);
 		// What the creator had chosen, kept so a cleared finding can restore it.
 		expect(row.priorVisibility).toBe("released");
 		// 🚨 A record, never a rendering. There is no column here that could hold one, and
@@ -408,7 +414,7 @@ describe("The record and the hold", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		const [row] = await db
@@ -426,7 +432,7 @@ describe("The creator cannot reach around it", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		const res = await req(`/api/content/works/${work.id}`, {
@@ -449,7 +455,7 @@ describe("The creator cannot reach around it", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 
 		const res = await req(`/api/content/works/${work.id}?force=true`, {
@@ -473,11 +479,11 @@ describe("Clearing a finding", () => {
 			workId: work.id,
 			source: "scan",
 			classification: "no-known-match",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
 		expect(await storage.exists(key)).toBe(false);
 
-		const result = await clearQuarantine({ workId: work.id, actorId: creatorId, note: "mistake" });
+		const result = await clearQuarantine({ workId: work.id, adminId: operatorId, note: "mistake" });
 		expect(result.objectsRestored).toBeGreaterThan(0);
 		expect(result.visibility).toBe("released");
 		expect(await storage.exists(key)).toBe(true);
@@ -493,9 +499,9 @@ describe("Clearing a finding", () => {
 			workId: work.id,
 			source: "operator",
 			classification: "csam",
-			actorId: creatorId,
+			adminId: operatorId,
 		});
-		await clearQuarantine({ workId: work.id, actorId: creatorId });
+		await clearQuarantine({ workId: work.id, adminId: operatorId });
 
 		// 🚨 Clearing says "the finding was wrong". Lifting a hold says "the obligation to
 		// preserve has ended". Coupling them would make the first silently do the second,

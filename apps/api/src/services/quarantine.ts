@@ -41,15 +41,18 @@
 import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
 import {
+	adminAccounts,
 	assets,
 	mediaQuarantine,
 	moderationActions,
 	moderationReports,
 	transcodingJobs,
+	users,
 	works,
 } from "@anthers/db/schema";
 import type { ModerationActionType } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { placeHold, preservationExpiry } from "./legal-hold.js";
 import { urlToKey } from "./media-purge.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
@@ -99,7 +102,8 @@ export interface QuarantineInput {
 	/** What a detection vendor returned, when one did. See the schema note before reading it. */
 	vendorMatch?: VendorMatch | null;
 	/** The operator who acted, or null when a job did. */
-	actorId?: number | null;
+	/** The admin account acting, or null when a scan did. */
+	adminId?: number | null;
 	/** The report that triggered this, when one did. */
 	reportId?: number | null;
 	note?: string;
@@ -290,7 +294,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					vendorMatch: input.vendorMatch ?? null,
 					reportId: input.reportId ?? null,
 					priorVisibility,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					note: input.note ?? "",
 				})),
 			);
@@ -309,8 +313,8 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 			subjectType: "work",
 			subjectId: input.workId,
 			action: "hide" satisfies ModerationActionType,
-			actorId: input.actorId ?? null,
-			actorRole: input.actorId == null ? "automated" : "operator",
+			adminActorId: input.adminId ?? null,
+			actorRole: input.adminId == null ? "automated" : "operator",
 			reason: "quarantine",
 			// Our determination only. A vendor's classification is Match Data and must not be
 			// copied into the append-only log, which is permanent and read by agents.
@@ -324,7 +328,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 			.set({
 				status: "resolved",
 				resolvedAt: new Date(),
-				resolvedBy: input.actorId ?? null,
+				resolvedByAdminId: input.adminId ?? null,
 			})
 			.where(
 				and(
@@ -348,7 +352,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 				subjectType: "work",
 				subjectId: input.workId,
 				reason,
-				placedBy: input.actorId ?? null,
+				placedBy: input.adminId ?? null,
 				expiresAt,
 			})
 		).holdId,
@@ -360,7 +364,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					subjectType: "user",
 					subjectId: work.creatorId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -373,7 +377,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					subjectType: "report",
 					subjectId: input.reportId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -401,7 +405,8 @@ export interface QuarantineObjectInput {
 	/** **Our own determination.** Never a vendor's — see {@link QuarantineInput}. */
 	classification: string;
 	vendorMatch?: VendorMatch | null;
-	actorId?: number | null;
+	/** The admin account acting, or null when a scan did. */
+	adminId?: number | null;
 	reportId?: number | null;
 	note?: string;
 }
@@ -478,7 +483,7 @@ export async function quarantineObject(
 			// published on its own. Empty, which is what `clearQuarantine` already reads as
 			// "nothing was recorded here".
 			priorVisibility: "",
-			placedBy: input.actorId ?? null,
+			placedBy: input.adminId ?? null,
 			note: input.note ?? "",
 		})
 		.returning({ id: mediaQuarantine.id });
@@ -496,7 +501,7 @@ export async function quarantineObject(
 					subjectType: "user",
 					subjectId: input.uploaderId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -509,7 +514,7 @@ export async function quarantineObject(
 					subjectType: "report",
 					subjectId: input.reportId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -534,7 +539,8 @@ export async function quarantineObject(
  */
 export async function clearObjectQuarantine(input: {
 	findingId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	note?: string;
 }): Promise<{ cleared: boolean; objectsRestored: number; storageKey: string }> {
 	const [row] = await db
@@ -558,7 +564,7 @@ export async function clearObjectQuarantine(input: {
 
 	await db
 		.update(mediaQuarantine)
-		.set({ clearedAt: new Date(), clearedBy: input.actorId, note: input.note ?? "" })
+		.set({ clearedAt: new Date(), clearedBy: input.adminId, note: input.note ?? "" })
 		.where(eq(mediaQuarantine.id, row.id));
 
 	// 🚨 **`cleared` and `objectsRestored` are two different facts and the caller needs
@@ -581,7 +587,8 @@ export async function clearObjectQuarantine(input: {
  */
 export async function clearQuarantine(input: {
 	workId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	note?: string;
 }): Promise<{ objectsRestored: number; visibility: string }> {
 	const rows = await db
@@ -615,7 +622,7 @@ export async function clearQuarantine(input: {
 
 		await tx
 			.update(mediaQuarantine)
-			.set({ clearedAt: new Date(), clearedBy: input.actorId, note: input.note ?? "" })
+			.set({ clearedAt: new Date(), clearedBy: input.adminId, note: input.note ?? "" })
 			.where(
 				inArray(
 					mediaQuarantine.id,
@@ -627,7 +634,7 @@ export async function clearQuarantine(input: {
 			subjectType: "work",
 			subjectId: input.workId,
 			action: "restore" satisfies ModerationActionType,
-			actorId: input.actorId,
+			adminActorId: input.adminId,
 			actorRole: "operator",
 			reason: "",
 			note: ["quarantine cleared", input.note].filter(Boolean).join(": "),
@@ -643,13 +650,18 @@ export interface QuarantineFinding {
 	workId: number | null;
 	workTitle: string;
 	uploaderId: number | null;
+	/** The uploader's handle, or null when the account is gone. */
+	uploaderName: string | null;
 	originalKey: string;
 	objectKind: string;
 	source: string;
 	classification: string;
 	reportId: number | null;
 	placedAt: string;
+	/** The admin account that quarantined it, or null when a scan did. */
+	placedBy: string | null;
 	clearedAt: string | null;
+	clearedBy: string | null;
 	note: string;
 }
 
@@ -671,23 +683,31 @@ export interface QuarantineFinding {
 export async function loadQuarantineFindings(
 	opts: { includeCleared?: boolean; limit?: number } = {},
 ): Promise<QuarantineFinding[]> {
+	const placer = alias(adminAccounts, "placer");
+	const clearer = alias(adminAccounts, "clearer");
 	const rows = await db
 		.select({
 			id: mediaQuarantine.id,
 			workId: mediaQuarantine.workId,
 			workTitle: works.title,
 			uploaderId: mediaQuarantine.uploaderId,
+			uploaderName: users.username,
 			originalKey: mediaQuarantine.originalKey,
 			objectKind: mediaQuarantine.objectKind,
 			source: mediaQuarantine.source,
 			classification: mediaQuarantine.classification,
 			reportId: mediaQuarantine.reportId,
 			placedAt: mediaQuarantine.placedAt,
+			placedBy: placer.displayName,
 			clearedAt: mediaQuarantine.clearedAt,
+			clearedBy: clearer.displayName,
 			note: mediaQuarantine.note,
 		})
 		.from(mediaQuarantine)
 		.leftJoin(works, eq(mediaQuarantine.workId, works.id))
+		.leftJoin(users, eq(mediaQuarantine.uploaderId, users.id))
+		.leftJoin(placer, eq(mediaQuarantine.placedBy, placer.id))
+		.leftJoin(clearer, eq(mediaQuarantine.clearedBy, clearer.id))
 		.where(opts.includeCleared ? undefined : isNull(mediaQuarantine.clearedAt))
 		.orderBy(desc(mediaQuarantine.placedAt))
 		.limit(opts.limit ?? 200);
@@ -697,13 +717,16 @@ export async function loadQuarantineFindings(
 		workId: r.workId,
 		workTitle: r.workTitle ?? "",
 		uploaderId: r.uploaderId,
+		uploaderName: r.uploaderName,
 		originalKey: r.originalKey,
 		objectKind: r.objectKind,
 		source: r.source,
 		classification: r.classification,
 		reportId: r.reportId,
 		placedAt: r.placedAt.toISOString(),
+		placedBy: r.placedBy,
 		clearedAt: r.clearedAt?.toISOString() ?? null,
+		clearedBy: r.clearedBy,
 		note: r.note,
 	}));
 }

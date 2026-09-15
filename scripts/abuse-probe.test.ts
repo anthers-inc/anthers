@@ -51,16 +51,25 @@ describe("a password may not arrive on the command line", () => {
 		if (isRefusal(result)) expect(result.refuse).toContain("--admin-password");
 	});
 
-	it("still accepts the login, which is not a secret", () => {
-		const result = plan([...ATTENDED.argv, "--admin-login", "someone@example.com"]);
+	it("still accepts the logins, which are not secrets", () => {
+		const result = plan([...ATTENDED.argv, "--login", "someone", "--admin", "op@example.com"]);
 		expect(isRefusal(result)).toBe(false);
-		if (!isRefusal(result)) expect(result.adminLogin).toBe("someone@example.com");
+		if (isRefusal(result)) return;
+		expect(result.login).toBe("someone");
+		expect(result.adminEmail).toBe("op@example.com");
 	});
 
-	it("takes --admin-email as the same field, because it is the obvious thing to type", () => {
-		const result = plan([...ATTENDED.argv, "--admin-email", "someone@example.com"]);
-		if (!isRefusal(result)) expect(result.adminLogin).toBe("someone@example.com");
-	});
+	for (const flag of ["--admin-login", "--admin-email"]) {
+		it(`refuses ${flag}, which named one account for two jobs that now need two`, () => {
+			// An admin account is not an Anthers account any more, so reading the old flag as
+			// either one would sign the wrong kind of account in to the wrong half of the run.
+			const result = plan([...ATTENDED.argv, flag, "someone@example.com"]);
+			expect(isRefusal(result)).toBe(true);
+			if (!isRefusal(result)) return;
+			expect(result.refuse).toContain("--login");
+			expect(result.refuse).toContain("--admin");
+		});
+	}
 });
 
 describe("nobody here, nothing runs", () => {
@@ -98,17 +107,17 @@ describe("one report per run", () => {
 		// two reports, because `path` is one value rather than two booleans — two alerts prove
 		// nothing the first did not, and each extra one teaches whoever reads that mailbox to
 		// skim it.
-		const result = plan([...ATTENDED.argv, "--path", "in-app", "--admin-login", "op"]);
+		const result = plan([...ATTENDED.argv, "--path", "in-app", "--login", "op"]);
 		expect(isRefusal(result)).toBe(false);
 		if (!isRefusal(result)) expect(result.path).toBe("in-app");
 	});
 
-	it("refuses the in-app path without an operator to file it from", () => {
-		// There is no probe account to mint any more, so the report comes from the operator's
-		// own session; without one the run could only fail halfway, after asking for nothing.
+	it("refuses the in-app path without an account to file it from", () => {
+		// There is no probe account to mint, so the report comes from the person's own session;
+		// without one the run could only fail halfway, after asking for nothing.
 		const result = plan([...ATTENDED.argv, "--path", "in-app"]);
 		expect(isRefusal(result)).toBe(true);
-		if (isRefusal(result)) expect(result.refuse).toContain("--admin-login");
+		if (isRefusal(result)) expect(result.refuse).toContain("--login");
 	});
 
 	it("refuses a path it does not recognize rather than falling back to one", () => {
@@ -133,6 +142,20 @@ describe("the rest of the plan", () => {
 	it("strips trailing slashes off the base, so the URLs it builds are not doubled", () => {
 		const result = plan(["--base", "https://anthers.org///"]);
 		if (!isRefusal(result)) expect(result.base).toBe("https://anthers.org");
+	});
+
+	it("calls the admin routes on --admin-base, and on the base when none is given", () => {
+		// Locally the API answers the admin routes on any host; a deployment answers them only on
+		// the admin host, so a readback sent to the site would 404.
+		const local = plan(["--base", "http://localhost:8000"]);
+		if (!isRefusal(local)) expect(local.adminBase).toBe("http://localhost:8000");
+		const deployed = plan([
+			"--base",
+			"https://anthers.org",
+			"--admin-base",
+			"https://admin.anthers.org/",
+		]);
+		if (!isRefusal(deployed)) expect(deployed.adminBase).toBe("https://admin.anthers.org");
 	});
 
 	it("waits long enough for the five-minute retry sweep by default", () => {

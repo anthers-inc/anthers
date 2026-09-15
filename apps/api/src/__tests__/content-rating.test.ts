@@ -33,13 +33,15 @@ import {
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { createAdminFixture } from "./admin-fixture";
+import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeAdminAccountsCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -50,7 +52,6 @@ function req(path: string, options?: RequestInit) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `rate_${id}`;
-const operatorName = `rateop_${id}`;
 const strangerName = `rateoth_${id}`;
 
 async function signUp(username: string): Promise<string> {
@@ -59,24 +60,26 @@ async function signUp(username: string): Promise<string> {
 
 describe("content ratings", () => {
 	let creator: string;
+	/** The admin session cookie every operator request below is made with. */
 	let operator: string;
+	let operatorId: number;
 	let stranger: string;
+	/** The stranger's session token, sent as the desktop Studio would send it. */
+	let strangerToken: string;
 	// Needed to read back the notification a correction sends. Notifications cascade with
 	// the user, so the existing teardown already covers them.
 	let creatorId: number;
 	const created: number[] = [];
 
 	beforeAll(async () => {
-		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${creatorName}, ${operatorName}, ${strangerName})`,
-		);
+		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${strangerName})`);
 		creator = await signUp(creatorName);
 		await enablePayouts(creatorName);
-		operator = await signUp(operatorName);
-		await enablePayouts(operatorName);
-		stranger = await signUp(strangerName);
+		const strangerAccount = await createAccount(strangerName);
+		stranger = strangerAccount.cookie;
+		strangerToken = strangerAccount.token;
 		await enablePayouts(strangerName);
-		await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${operatorName}`);
+		({ id: operatorId, cookie: operator } = await createAdminFixture("rate-operator"));
 		const [row] = await db
 			.select({ id: users.id })
 			.from(users)
@@ -99,7 +102,7 @@ describe("content ratings", () => {
 				);
 			await db.delete(works).where(inArray(works.id, created));
 		}
-		await purgeFixtureAccounts([creatorName, operatorName, strangerName]);
+		await purgeFixtureAccounts([creatorName, strangerName]);
 	});
 
 	/** A private text Work — nothing here needs media, and media needs pg-boss. */
@@ -244,16 +247,25 @@ describe("content ratings", () => {
 			// `reclassify` rather than a reused `hide`/`restore`: nothing became more or
 			// less reachable, and recording it as either would make the log lie.
 			expect(log[0]!.action).toBe("reclassify");
+			expect(log[0]!.adminActorId).toBe(operatorId);
 		});
 
-		it("is not reachable by an ordinary account, and 404s rather than 403s", async () => {
+		it("is not reachable by an ordinary account, and is not advertised to a bearer credential", async () => {
 			const workId = await makeWork({ maturity: "general" });
-			const res = await req("/api/admin/works/rating", {
+			const body = JSON.stringify({ workId, maturity: "mature" });
+			// An Anthers account's session is not an admin session.
+			const withCookie = await req("/api/admin/works/rating", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: stranger },
-				body: JSON.stringify({ workId, maturity: "mature" }),
+				body,
 			});
-			expect(res.status).toBe(404);
+			expect(withCookie.status).toBe(401);
+			const withBearer = await req("/api/admin/works/rating", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${strangerToken}` },
+				body,
+			});
+			expect(withBearer.status).toBe(404);
 			expect((await reload(workId)).maturity).toBe("general");
 		});
 
@@ -513,6 +525,7 @@ describe("content ratings", () => {
 				.from(workRatingAppeals)
 				.where(eq(workRatingAppeals.id, row.id));
 			expect(stored.status).toBe("upheld");
+			expect(stored.resolvedBy).toBe(operatorId);
 			// An appeal refused with no answer is the version of this that teaches creators
 			// not to file one.
 			expect(stored.resolutionNote).toContain("depiction");

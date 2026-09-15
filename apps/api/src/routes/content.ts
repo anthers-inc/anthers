@@ -3562,8 +3562,8 @@ const contentRoutes = new Hono()
 		// nothing here could put it back — but a creator who could still rename it, re-gate
 		// it or flip it back to `released` would be operating on material under a
 		// preservation hold, and telling them *why* the Work has become untouchable hands a
-		// signal to exactly the account we would least like to have one. `requireAdmin`
-		// 404s rather than 403s for the same reason.
+		// signal to exactly the account we would least like to have one. The admin routes
+		// 404 rather than 403 off the admin host for the same reason.
 		if (work.quarantineStatus === "quarantined") {
 			return c.json({ error: "Work not found" }, 404);
 		}

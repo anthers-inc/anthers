@@ -68,6 +68,17 @@ describe("fixture hygiene", () => {
 		expect(creators.length).toBeGreaterThan(40);
 	});
 
+	it("🚨 removes every admin account it creates", () => {
+		const leaking = testFiles().filter((f) => {
+			const src = readFileSync(`${HERE}/${f}`, "utf8");
+			return /createAdminFixture\(/.test(src) && !/purgeAdminAccountsCreatedHere\(\)/.test(src);
+		});
+		expect(
+			leaking,
+			"a suite that creates admin accounts must call purgeAdminAccountsCreatedHere() at its top level; see cleanup.ts",
+		).toEqual([]);
+	});
+
 	it("🚨 removes every account it creates", () => {
 		const leaking = testFiles().filter((f) => {
 			const src = readFileSync(`${HERE}/${f}`, "utf8");

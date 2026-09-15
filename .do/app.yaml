@@ -73,6 +73,10 @@ domains:
     type: PRIMARY
   - domain: www.anthers.org
     type: ALIAS
+  # The admin app. On this app rather than its own, because it is a second static site over the
+  # same API and database; the ingress rule below is what sends its host to the admin site.
+  - domain: admin.anthers.org
+    type: ALIAS
 
 databases:
   # `anthersdb`, not `anthers-db` — this is the component name the LIVE app uses, and
@@ -295,6 +299,17 @@ ingress:
       component:
         name: api
         preserve_path_prefix: true
+    # The admin app's host gets the admin site for everything but the two API prefixes above,
+    # which answer on every host — its pages call `/api` on their own origin. Listed before the
+    # site's catch-all so the host match is not shadowed by it; the API itself refuses operator
+    # routes on any other host, so a routing mistake here fails closed.
+    - match:
+        authority:
+          exact: admin.anthers.org
+        path:
+          prefix: /
+      component:
+        name: admin
     - match:
         path:
           prefix: /
@@ -331,6 +346,12 @@ services:
       - key: FRONTEND_URL
         scope: RUN_TIME
         value: ${APP_URL}
+      # The admin app's origin. The operator routes answer only on this host and accept changes only
+      # from this origin (`lib/admin-host.ts`), and with it unset on a public deployment they answer
+      # nowhere — so this is what turns the admin app on, not a hint.
+      - key: ADMIN_URL
+        scope: RUN_TIME
+        value: https://admin.anthers.org
       # Session-cookie domain, read by routes/auth.ts on set AND on delete.
       #
       # `.anthers.org` — DOT-PREFIXED, so the cookie is sent to the apex and to every
@@ -437,4 +458,16 @@ static_sites:
     # out the full repo, so it can typecheck both workspaces.
     build_command: bun install && bun run typecheck && bun run --cwd apps/web build
     output_dir: apps/web/dist
+    catchall_document: index.html
+  # The admin app, served at admin.anthers.org by the ingress rule above. Not typechecked here:
+  # the site's build above typechecks the whole monorepo at the same commit, and doing it twice
+  # would only double the deploy.
+  - name: admin
+    source_dir: /
+    github:
+      repo: anthers-inc/anthers
+      branch: release
+      deploy_on_push: false
+    build_command: bun install && bun run --cwd apps/admin build
+    output_dir: apps/admin/dist
     catchall_document: index.html

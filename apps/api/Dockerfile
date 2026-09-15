@@ -25,6 +25,7 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/web-shared/package.json packages/web-shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/admin/package.json apps/admin/
 COPY scripts/package.json scripts/
 # EVERY workspace listed in bun.lock must have its manifest here, even ones this image
 # never builds: `--frozen-lockfile` compares the lockfile against the workspaces it can

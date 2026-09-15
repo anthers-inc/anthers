@@ -36,6 +36,9 @@ import { afterAll, beforeAll } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	abuseReports,
+	adminAccountEvents,
+	adminAccounts,
+	adminSessions,
 	comments,
 	dmcaNotices,
 	legalHolds,
@@ -198,6 +201,43 @@ export function purgeAccountsCreatedHere(): void {
 	afterAll(async () => {
 		const created = await db.select({ id: users.id }).from(users).where(gt(users.id, highWater));
 		await purgeAccountIds(created.map((r) => r.id));
+	});
+}
+
+/**
+ * Take back every admin account a suite created, on success or failure.
+ *
+ * The same high-water shape as `purgeAccountsCreatedHere`, for the same reason: a suite that makes an
+ * admin account through `createAdminFixture` has no list of what it made. Every column that names an
+ * operator is `set null`, so the records an admin account acted on survive it, which is what they
+ * are for; the account's own sessions and the record of changes to it go with it.
+ */
+export function purgeAdminAccountsCreatedHere(): void {
+	let highWater = 0;
+
+	beforeAll(async () => {
+		const [row] = await db
+			.select({ id: adminAccounts.id })
+			.from(adminAccounts)
+			.orderBy(desc(adminAccounts.id))
+			.limit(1);
+		highWater = row?.id ?? 0;
+	});
+
+	afterAll(async () => {
+		const created = await db
+			.select({ id: adminAccounts.id })
+			.from(adminAccounts)
+			.where(gt(adminAccounts.id, highWater));
+		const ids = created.map((r) => r.id);
+		if (ids.length === 0) return;
+		await db
+			.delete(adminAccountEvents)
+			.where(
+				or(inArray(adminAccountEvents.accountId, ids), inArray(adminAccountEvents.actorId, ids)),
+			);
+		await db.delete(adminSessions).where(inArray(adminSessions.accountId, ids));
+		await db.delete(adminAccounts).where(inArray(adminAccounts.id, ids));
 	});
 }
 
