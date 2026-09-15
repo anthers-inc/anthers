@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Admin / operations console API — read-only platform telemetry for operators.
+ * The admin app's API: platform telemetry and every operator queue.
  *
- * Every route is gated by requireAuth + requireAdmin (a 404 to non-admins, so
- * the surface isn't advertised). Data comes from our own Postgres: activity
+ * Every route answers only on the admin host and only to a signed-in admin account (see
+ * `middleware/admin.ts`), and 404s anywhere else, so the main site does not advertise it. An
+ * Anthers account opens none of it, whatever it is signed in with. Data comes from our own Postgres: activity
  * counts + a 14-day series, media transcode state, and pg-boss queue health
  * (the `pgboss` schema). Live-log tailing and DigitalOcean spend deliberately
  * live in the DO dashboard, deep-linked from the frontend rather than proxied
@@ -11,12 +12,12 @@
  *
  * The telemetry half is read-only by design; job retry/cancel and alerting are
  * still follow-ons. The MODERATION half below is this console's first mutating
- * surface, and it stays inside the same `requireAdmin` gate rather than growing
- * a second admin router with a second answer to "who is an operator?".
+ * surface, and it stays inside the same gate rather than growing a second router with
+ * a second answer to "who is an operator?".
  */
 
 import { db } from "@anthers/db/client";
-import { rightsRequests } from "@anthers/db/schema";
+import { adminAccounts, rightsRequests } from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
 	HOLD_SUBJECT_TYPES,
@@ -25,11 +26,11 @@ import {
 	MODERATION_NOTE_MAX,
 } from "@anthers/shared/moderation";
 import { zValidator } from "@hono/zod-validator";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
-import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
@@ -66,6 +67,9 @@ import {
 	quarantineSummary,
 	quarantineWork,
 } from "../services/quarantine.js";
+
+import { adminAccountRoutes } from "./admin-accounts.js";
+import { adminAuthRoutes } from "./admin-auth.js";
 
 const QUEUE_FILTERS: readonly QueueFilter[] = [
 	"reported",
@@ -192,9 +196,12 @@ function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
 	return Array.isArray(maybe) ? maybe : [];
 }
 
-const adminRoutes = new Hono()
-	.use("*", requireAuth)
-	.use("*", requireAdmin)
+const adminRoutes = new Hono<AdminEnv>()
+	.use("*", adminHostOnly)
+	// Signing in is the one part of this router that answers without a session.
+	.route("/auth", adminAuthRoutes)
+	.use("*", requireAdminSession)
+	.route("/accounts", adminAccountRoutes)
 
 	// ── Activity ────────────────────────────────────────────────────────────
 	// Platform counts + a 14-day sign-up/post series for the chart. One round
@@ -204,7 +211,6 @@ const adminRoutes = new Hono()
 			SELECT
 				(SELECT count(*) FROM users)::int AS users_total,
 				(SELECT count(*) FROM users WHERE is_creator)::int AS users_creators,
-				(SELECT count(*) FROM users WHERE is_admin)::int AS users_admins,
 				(SELECT count(*) FROM users WHERE created_at >= now() - interval '24 hours')::int AS users_new_24h,
 				(SELECT count(*) FROM users WHERE created_at >= now() - interval '7 days')::int AS users_new_7d,
 				(SELECT count(*) FROM posts)::int AS posts_total,
@@ -216,6 +222,10 @@ const adminRoutes = new Hono()
 				(SELECT count(*) FROM works)::int AS uploads_total
 		`);
 		const s = rowsOf<Record<string, number>>(summaryRes)[0] ?? {};
+		const [{ admins }] = await db
+			.select({ admins: sql<number>`count(*)::int` })
+			.from(adminAccounts)
+			.where(isNull(adminAccounts.deactivatedAt));
 
 		const seriesRes = await db.execute(sql`
 			SELECT
@@ -230,10 +240,11 @@ const adminRoutes = new Hono()
 		const series = rowsOf<{ date: string; signups: number; posts: number }>(seriesRes);
 
 		return c.json({
+			// Active admin accounts, which are not Anthers accounts and so sit beside `users`.
+			admins,
 			users: {
 				total: s.users_total ?? 0,
 				creators: s.users_creators ?? 0,
-				admins: s.users_admins ?? 0,
 				new24h: s.users_new_24h ?? 0,
 				new7d: s.users_new_7d ?? 0,
 			},
@@ -380,6 +391,7 @@ const adminRoutes = new Hono()
 				.set({
 					status: "resolved",
 					resolvedAt: new Date(),
+					resolvedBy: c.get("admin").id,
 					resolutionNote: (c.req.valid("json").note ?? "").trim(),
 				})
 				.where(and(eq(rightsRequests.id, id), eq(rightsRequests.status, "open")))
@@ -424,12 +436,12 @@ const adminRoutes = new Hono()
 	// console reads `moderatable` off the queue item and doesn't offer the button —
 	// this is the backstop for a client that does anyway.
 	.post("/moderation/hide", zValidator("json", hideSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { subjectType, subjectId, reason, note } = c.req.valid("json");
 		const result = await hideSubject({
 			subjectType,
 			subjectId,
-			actorId: user.id,
+			adminId: admin.id,
 			reason,
 			note,
 		});
@@ -444,9 +456,9 @@ const adminRoutes = new Hono()
 	})
 
 	.post("/moderation/restore", zValidator("json", subjectSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { subjectType, subjectId, note } = c.req.valid("json");
-		const result = await restoreSubject({ subjectType, subjectId, actorId: user.id, note });
+		const result = await restoreSubject({ subjectType, subjectId, adminId: admin.id, note });
 		if (result === "not_moderatable") {
 			return c.json(
 				{ error: "An account can't be restored — it was never hideable.", code: "not_moderatable" },
@@ -461,9 +473,9 @@ const adminRoutes = new Hono()
 	// fine" outcome. Distinct from hiding, and it has to be, or the only way to
 	// empty the queue would be to take things down.
 	.post("/moderation/dismiss", zValidator("json", subjectSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { subjectType, subjectId } = c.req.valid("json");
-		const result = await dismissReports({ subjectType, subjectId, actorId: user.id });
+		const result = await dismissReports({ subjectType, subjectId, adminId: admin.id });
 		return c.json(result);
 	})
 
@@ -472,9 +484,9 @@ const adminRoutes = new Hono()
 	// action on the content, because a bare user report is not a DMCA notice and
 	// must never cause a removal. See `routeToCopyright`.
 	.post("/moderation/route-to-copyright", zValidator("json", subjectSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { subjectType, subjectId } = c.req.valid("json");
-		const result = await routeToCopyright({ subjectType, subjectId, actorId: user.id });
+		const result = await routeToCopyright({ subjectType, subjectId, adminId: admin.id });
 		return c.json(result);
 	})
 
@@ -507,14 +519,14 @@ const adminRoutes = new Hono()
 	// make. What this does is take the material out of reach and preserve it, which is
 	// what has to be true *before* that person starts.
 	.post("/quarantine", zValidator("json", quarantineSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { workId, classification, reportId, note } = c.req.valid("json");
 		try {
 			const result = await quarantineWork({
 				workId,
 				source: "operator",
 				classification,
-				actorId: user.id,
+				adminId: admin.id,
 				reportId: reportId ?? null,
 				note,
 			});
@@ -530,9 +542,9 @@ const adminRoutes = new Hono()
 	// cleared because somebody looked and the finding was mistaken; a preservation
 	// obligation ends on a statutory clock, decided separately. See `clearQuarantine`.
 	.post("/quarantine/clear", zValidator("json", clearQuarantineSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { workId, note } = c.req.valid("json");
-		const result = await clearQuarantine({ workId, actorId: user.id, note });
+		const result = await clearQuarantine({ workId, adminId: admin.id, note });
 		if (result.objectsRestored === 0 && !result.visibility) {
 			return c.json({ error: "No open quarantine for that Work" }, 404);
 		}
@@ -547,9 +559,9 @@ const adminRoutes = new Hono()
 	// one handler branching on which half of its own input arrived. `clearObjectQuarantine`
 	// refuses a finding that names a Work for the same reason.
 	.post("/quarantine/clear-object", zValidator("json", clearObjectQuarantineSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { findingId, note } = c.req.valid("json");
-		const result = await clearObjectQuarantine({ findingId, actorId: user.id, note });
+		const result = await clearObjectQuarantine({ findingId, adminId: admin.id, note });
 		// 404 rather than a cheerful zero: a finding id that matches nothing, or one that
 		// names a Work and belongs to the route above, must not read as a successful clear.
 		if (!result.cleared) {
@@ -575,13 +587,13 @@ const adminRoutes = new Hono()
 	// reach a Work, never what its creator may charge or earn. A correction that re-priced
 	// somebody's work would make the rating a penalty, which it is not.
 	.post("/works/rating", zValidator("json", correctRatingSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { workId, maturity, notes, note } = c.req.valid("json");
 		const updated = await correctRating({
 			workId,
 			maturity,
 			notes,
-			actorId: user.id,
+			adminId: admin.id,
 			note,
 		});
 		if (!updated) return c.json({ error: "Work not found" }, 404);
@@ -598,9 +610,9 @@ const adminRoutes = new Hono()
 	// point and keeping the restriction would be neither. Upholding it changes nothing
 	// about the Work and closes the appeal — with a note, which the creator reads.
 	.post("/rating-appeals/resolve", zValidator("json", resolveAppealSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { appealId, outcome, note } = c.req.valid("json");
-		const result = await resolveRatingAppeal({ appealId, actorId: user.id, outcome, note });
+		const result = await resolveRatingAppeal({ appealId, adminId: admin.id, outcome, note });
 		if (!result) return c.json({ error: "No open appeal with that id" }, 404);
 		return c.json({
 			appealId: result.appeal.id,
@@ -623,9 +635,9 @@ const adminRoutes = new Hono()
 	// Close one. `resolved` means something was done about what it named; `dismissed`
 	// means it was read and needed nothing. Without this the list could only ever grow.
 	.post("/abuse-reports/close", zValidator("json", closeAbuseSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { reportId, outcome } = c.req.valid("json");
-		const closed = await closeAbuseReport({ reportId, actorId: user.id, outcome });
+		const closed = await closeAbuseReport({ reportId, adminId: admin.id, outcome });
 		if (!closed) return c.json({ error: "No open report with that id" }, 404);
 		return c.json({ closed: true, outcome });
 	})
@@ -657,9 +669,8 @@ const adminRoutes = new Hono()
 	// ── DMCA ────────────────────────────────────────────────────────────────────
 	// The operator's DMCA queue, separate from the moderation queue. Different
 	// clocks, different record, and — per the Keepers model — non-delegable floor
-	// work. Behind `requireAdmin` today; the capability is named `floor` in a
-	// comment on the service so the Keepers migration is a rename rather than a
-	// redesign.
+	// work. Open to every admin account today, under the admin app's Legal section, so
+	// a later split by capability is one check per section.
 	//
 	// 🚨 A user report is NOT a DMCA notice. The moderation queue carries `illegal`
 	// and `other` reasons, and an operator seeing a copyright complaint filed that
@@ -686,11 +697,11 @@ const adminRoutes = new Hono()
 		"/dmca/:id/act",
 		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
 		async (c) => {
-			const user = c.get("user");
+			const admin = c.get("admin");
 			const { note } = c.req.valid("json");
 			const result = await takeDownWork({
 				noticeId: Number(c.req.param("id")),
-				actorId: user.id,
+				adminId: admin.id,
 				note,
 			});
 			if (result === "already_taken_down") {
@@ -711,11 +722,11 @@ const adminRoutes = new Hono()
 		"/dmca/:id/reject",
 		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
 		async (c) => {
-			const user = c.get("user");
+			const admin = c.get("admin");
 			const { note } = c.req.valid("json");
 			const result = await rejectNotice({
 				noticeId: Number(c.req.param("id")),
-				actorId: user.id,
+				adminId: admin.id,
 				note,
 			});
 			if (!result) return c.json({ error: "Notice not found" }, 404);
@@ -730,11 +741,11 @@ const adminRoutes = new Hono()
 		"/dmca/:id/restore",
 		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
 		async (c) => {
-			const user = c.get("user");
+			const admin = c.get("admin");
 			const { note } = c.req.valid("json");
 			const result = await restoreWork({
 				noticeId: Number(c.req.param("id")),
-				actorId: user.id,
+				adminId: admin.id,
 				note,
 			});
 			if (!result) return c.json({ error: "Notice or Work not found" }, 404);
@@ -745,10 +756,10 @@ const adminRoutes = new Hono()
 	// Record that the complainant filed a court action (§ 512(g)(2)(C)). This
 	// prevents the restore timer from firing — the sweep checks `suitFiledAt`.
 	.post("/dmca/:id/suit", async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const result = await recordSuit({
 			noticeId: Number(c.req.param("id")),
-			actorId: user.id,
+			adminId: admin.id,
 		});
 		if (!result) return c.json({ error: "Notice not found" }, 404);
 		return c.json(result);
@@ -763,16 +774,15 @@ const adminRoutes = new Hono()
 	// arrives. § 6.4 of the Legal Request and Preservation Policy names placing a
 	// hold as a step in the procedure; this is the step.
 	//
-	// Non-delegable floor work under the Keepers model, like the DMCA queue above:
-	// behind `requireAdmin` today, and the capability is named `floor` so that the
-	// migration is a rename rather than a redesign.
+	// Non-delegable floor work under the Keepers model, like the DMCA queue above: open to
+	// every admin account today, under the admin app's Legal section.
 	.get("/legal-holds", async (c) => c.json({ holds: await loadHolds() }))
 
 	// Place one. The subject is resolved to a label BEFORE the write, because a
 	// hold on an id that names nothing preserves nothing and is indistinguishable
 	// from one that works — see `describeSubject`.
 	.post("/legal-holds", zValidator("json", placeHoldSchema), async (c) => {
-		const user = c.get("user");
+		const admin = c.get("admin");
 		const { subjectType, subjectId, reason, note, duration } = c.req.valid("json");
 
 		const subjectLabel = await describeSubject(subjectType, subjectId);
@@ -798,7 +808,7 @@ const adminRoutes = new Hono()
 			subjectId,
 			reason,
 			note,
-			placedBy: user.id,
+			placedBy: admin.id,
 			expiresAt,
 		});
 		return c.json({ holdId, subjectLabel }, 201);
@@ -806,7 +816,7 @@ const adminRoutes = new Hono()
 
 	// Lift one. Stamps `liftedAt`; the row stays and keeps showing in the list.
 	.post("/legal-holds/:id/lift", async (c) => {
-		const lifted = await liftHold(Number(c.req.param("id")));
+		const lifted = await liftHold(Number(c.req.param("id")), c.get("admin").id);
 		// False means no such hold OR one already lifted, and the two are the same
 		// answer to the operator: there is nothing here left to lift.
 		if (!lifted) return c.json({ error: "No active hold with that id", code: "not_active" }, 404);

@@ -99,7 +99,8 @@ export interface QuarantineInput {
 	/** What a detection vendor returned, when one did. See the schema note before reading it. */
 	vendorMatch?: VendorMatch | null;
 	/** The operator who acted, or null when a job did. */
-	actorId?: number | null;
+	/** The admin account acting, or null when a scan did. */
+	adminId?: number | null;
 	/** The report that triggered this, when one did. */
 	reportId?: number | null;
 	note?: string;
@@ -290,7 +291,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					vendorMatch: input.vendorMatch ?? null,
 					reportId: input.reportId ?? null,
 					priorVisibility,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					note: input.note ?? "",
 				})),
 			);
@@ -309,8 +310,8 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 			subjectType: "work",
 			subjectId: input.workId,
 			action: "hide" satisfies ModerationActionType,
-			actorId: input.actorId ?? null,
-			actorRole: input.actorId == null ? "automated" : "operator",
+			adminActorId: input.adminId ?? null,
+			actorRole: input.adminId == null ? "automated" : "operator",
 			reason: "quarantine",
 			// Our determination only. A vendor's classification is Match Data and must not be
 			// copied into the append-only log, which is permanent and read by agents.
@@ -324,7 +325,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 			.set({
 				status: "resolved",
 				resolvedAt: new Date(),
-				resolvedBy: input.actorId ?? null,
+				resolvedByAdminId: input.adminId ?? null,
 			})
 			.where(
 				and(
@@ -348,7 +349,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 				subjectType: "work",
 				subjectId: input.workId,
 				reason,
-				placedBy: input.actorId ?? null,
+				placedBy: input.adminId ?? null,
 				expiresAt,
 			})
 		).holdId,
@@ -360,7 +361,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					subjectType: "user",
 					subjectId: work.creatorId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -373,7 +374,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					subjectType: "report",
 					subjectId: input.reportId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -401,7 +402,8 @@ export interface QuarantineObjectInput {
 	/** **Our own determination.** Never a vendor's — see {@link QuarantineInput}. */
 	classification: string;
 	vendorMatch?: VendorMatch | null;
-	actorId?: number | null;
+	/** The admin account acting, or null when a scan did. */
+	adminId?: number | null;
 	reportId?: number | null;
 	note?: string;
 }
@@ -478,7 +480,7 @@ export async function quarantineObject(
 			// published on its own. Empty, which is what `clearQuarantine` already reads as
 			// "nothing was recorded here".
 			priorVisibility: "",
-			placedBy: input.actorId ?? null,
+			placedBy: input.adminId ?? null,
 			note: input.note ?? "",
 		})
 		.returning({ id: mediaQuarantine.id });
@@ -496,7 +498,7 @@ export async function quarantineObject(
 					subjectType: "user",
 					subjectId: input.uploaderId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -509,7 +511,7 @@ export async function quarantineObject(
 					subjectType: "report",
 					subjectId: input.reportId,
 					reason,
-					placedBy: input.actorId ?? null,
+					placedBy: input.adminId ?? null,
 					expiresAt,
 				})
 			).holdId,
@@ -534,7 +536,8 @@ export async function quarantineObject(
  */
 export async function clearObjectQuarantine(input: {
 	findingId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	note?: string;
 }): Promise<{ cleared: boolean; objectsRestored: number; storageKey: string }> {
 	const [row] = await db
@@ -558,7 +561,7 @@ export async function clearObjectQuarantine(input: {
 
 	await db
 		.update(mediaQuarantine)
-		.set({ clearedAt: new Date(), clearedBy: input.actorId, note: input.note ?? "" })
+		.set({ clearedAt: new Date(), clearedBy: input.adminId, note: input.note ?? "" })
 		.where(eq(mediaQuarantine.id, row.id));
 
 	// 🚨 **`cleared` and `objectsRestored` are two different facts and the caller needs
@@ -581,7 +584,8 @@ export async function clearObjectQuarantine(input: {
  */
 export async function clearQuarantine(input: {
 	workId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	note?: string;
 }): Promise<{ objectsRestored: number; visibility: string }> {
 	const rows = await db
@@ -615,7 +619,7 @@ export async function clearQuarantine(input: {
 
 		await tx
 			.update(mediaQuarantine)
-			.set({ clearedAt: new Date(), clearedBy: input.actorId, note: input.note ?? "" })
+			.set({ clearedAt: new Date(), clearedBy: input.adminId, note: input.note ?? "" })
 			.where(
 				inArray(
 					mediaQuarantine.id,
@@ -627,7 +631,7 @@ export async function clearQuarantine(input: {
 			subjectType: "work",
 			subjectId: input.workId,
 			action: "restore" satisfies ModerationActionType,
-			actorId: input.actorId,
+			adminActorId: input.adminId,
 			actorRole: "operator",
 			reason: "",
 			note: ["quarantine cleared", input.note].filter(Boolean).join(": "),

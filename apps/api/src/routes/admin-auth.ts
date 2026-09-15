@@ -4,7 +4,8 @@
  *
  * The same ceremony as `/api/auth/signin/*` on the main site, against separate tables. It never
  * creates an account — admin accounts are invited from the app's Accounts section or created by
- * `scripts/admin-account.ts` — and it answers only on the admin host (see `middleware/admin.ts`).
+ * `scripts/admin-account.ts`. It is mounted inside `routes/admin.ts`, behind `adminHostOnly`, so it
+ * answers only on the admin host and only to the admin origin (see `middleware/admin.ts`).
  */
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
@@ -14,7 +15,7 @@ import {
 	readAdminSessionCookie,
 	setAdminSessionCookie,
 } from "../lib/cookies.js";
-import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
+import { type AdminEnv, requireAdminSession } from "../middleware/admin.js";
 import { invalidBody } from "../middleware/validate.js";
 import {
 	ADMIN_SESSION_TTL_MS,
@@ -37,7 +38,6 @@ const verifySchema = z.object({
 });
 
 export const adminAuthRoutes = new Hono<AdminEnv>()
-	.use("*", adminHostOnly)
 
 	// Step 1 — issue a code to an active admin account's address. ALWAYS 200, with an identical
 	// body whether or not the address belongs to anybody.
@@ -91,5 +91,12 @@ export const adminAuthRoutes = new Hono<AdminEnv>()
 	})
 
 	.get("/me", requireAdminSession, (c) => {
-		return c.json({ account: serializeAdminAccount(c.get("admin")) });
+		// The site's origin travels with the account so the app can link to a Work or a profile on the
+		// main site without guessing it from its own host name.
+		return c.json({ account: serializeAdminAccount(c.get("admin")), siteUrl: siteOrigin() });
 	});
+
+/** The main site's origin, from `FRONTEND_URL`, for links out of the admin app. */
+function siteOrigin(): string {
+	return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+}

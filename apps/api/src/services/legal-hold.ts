@@ -27,6 +27,7 @@
 import { db } from "@anthers/db/client";
 import {
 	abuseReports,
+	adminAccounts,
 	dmcaNotices,
 	legalHolds,
 	moderationReports,
@@ -36,6 +37,7 @@ import {
 import { PRESERVATION_HOLD_YEARS } from "@anthers/shared/constants";
 import type { HoldSubjectType } from "@anthers/shared/moderation";
 import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 /** What a hold can name — the list and the reason it is one list are in `@anthers/shared/moderation`. */
 export type { HoldSubjectType };
@@ -89,10 +91,10 @@ export async function placeHold(input: PlaceHoldInput): Promise<{ holdId: number
  * lift is a no-op rather than a second, later `liftedAt` that rewrites when the
  * preservation actually ended.
  */
-export async function liftHold(holdId: number): Promise<boolean> {
+export async function liftHold(holdId: number, adminId: number): Promise<boolean> {
 	const rows = await db
 		.update(legalHolds)
-		.set({ liftedAt: new Date() })
+		.set({ liftedAt: new Date(), liftedBy: adminId })
 		.where(and(eq(legalHolds.id, holdId), isNull(legalHolds.liftedAt)))
 		.returning({ id: legalHolds.id });
 	return rows.length > 0;
@@ -231,10 +233,13 @@ export interface HoldListing {
 	subjectLabel: string | null;
 	reason: string;
 	note: string;
+	/** The display name of the admin account that placed it, or null for a hold a job placed. */
 	placedBy: string | null;
 	placedAt: string;
 	expiresAt: string | null;
 	liftedAt: string | null;
+	/** The display name of the admin account that lifted it. */
+	liftedBy: string | null;
 	state: "active" | "lifted" | "expired";
 }
 
@@ -248,6 +253,8 @@ export interface HoldListing {
  * stamped rows would undo that at the only place anybody looks.
  */
 export async function loadHolds(now: Date = new Date()): Promise<HoldListing[]> {
+	const placer = alias(adminAccounts, "placer");
+	const lifter = alias(adminAccounts, "lifter");
 	const rows = await db
 		.select({
 			id: legalHolds.id,
@@ -255,13 +262,15 @@ export async function loadHolds(now: Date = new Date()): Promise<HoldListing[]> 
 			subjectId: legalHolds.subjectId,
 			reason: legalHolds.reason,
 			note: legalHolds.note,
-			placedBy: users.username,
+			placedBy: placer.displayName,
 			placedAt: legalHolds.placedAt,
 			expiresAt: legalHolds.expiresAt,
 			liftedAt: legalHolds.liftedAt,
+			liftedBy: lifter.displayName,
 		})
 		.from(legalHolds)
-		.leftJoin(users, eq(users.id, legalHolds.placedBy))
+		.leftJoin(placer, eq(placer.id, legalHolds.placedBy))
+		.leftJoin(lifter, eq(lifter.id, legalHolds.liftedBy))
 		.orderBy(desc(legalHolds.placedAt));
 
 	return Promise.all(
@@ -275,6 +284,7 @@ export async function loadHolds(now: Date = new Date()): Promise<HoldListing[]> 
 				reason: row.reason,
 				note: row.note,
 				placedBy: row.placedBy,
+				liftedBy: row.liftedBy,
 				placedAt: row.placedAt.toISOString(),
 				expiresAt: row.expiresAt?.toISOString() ?? null,
 				liftedAt: row.liftedAt?.toISOString() ?? null,

@@ -3,8 +3,8 @@
  * Moderation — the user-facing half. One endpoint: report a comment, a review, or a
  * **person**.
  *
- * The operator half lives in `routes/admin.ts`, behind `requireAdmin`, because
- * the console is where it belongs and that router is already gated. Both halves
+ * The operator half lives in `routes/admin.ts`, behind the admin host and an admin account's
+ * session, because the admin app is where it belongs and that router is already gated. Both halves
  * call `services/moderation.ts`, which is where the rules actually are.
  *
  * Reporting requires a session but NOT a verified email. `requireVerified` gates

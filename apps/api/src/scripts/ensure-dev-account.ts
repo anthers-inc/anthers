@@ -22,7 +22,8 @@
  *   DEV_ACCOUNT_EMAIL      your prod email
  *   DEV_ACCOUNT_PASSWORD   your prod password
  *   DEV_ACCOUNT_CREATOR    optional, "true"/"false" (default true)
- *   DEV_ACCOUNT_ADMIN      optional, "true"/"false" (default false) — ops console + moderation queue
+ *   DEV_ACCOUNT_ADMIN      optional, "true"/"false" (default false) — also give DEV_ACCOUNT_EMAIL a
+ *                          super-admin account in the admin app, signed into by emailed code
  *
  * If any of the three required vars are unset, this is a silent no-op so a fresh clone without them
  * still runs `make dev` cleanly. It never fails the session: an unexpected error is logged as a
@@ -36,12 +37,13 @@ import { db } from "@anthers/db/client";
 import { devCheckoutRoot } from "@anthers/db/dev-only";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { createAdminAccount, findAdminAccountByEmail } from "../services/admin-accounts.js";
 import { createLocalAccount } from "./local-accounts.js";
 
 const TAG = "[dev-account]";
 
 async function main() {
-	// This can grant admin, so it must never run against a deployed database. The guard is the
+	// This can create an admin account, so it must never run against a deployed database. The guard is the
 	// deployment's SHAPE — a checkout's root files, which the API image does not copy — rather than
 	// a label somebody has to remember to set; `dev-only.ts` has the reasoning.
 	if (!devCheckoutRoot()) {
@@ -64,6 +66,13 @@ async function main() {
 		return;
 	}
 
+	// An admin account is its own identity, so it is made beside the Anthers account rather than as a
+	// flag on it, and signing in to the admin app is by a code sent to the same address.
+	if (isAdmin && !(await findAdminAccountByEmail(email))) {
+		await createAdminAccount({ email, displayName: username, isSuperAdmin: true }, null);
+		console.log(`${TAG} created a super-admin account for ${email} in the admin app.`);
+	}
+
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
@@ -80,10 +89,10 @@ async function main() {
 		handleName: username,
 		passwordHash: await Bun.password.hash(password, { algorithm: "argon2id" }),
 		emailVerified: true,
-		fields: { displayName: username, isCreator, isAdmin },
+		fields: { displayName: username, isCreator },
 	});
 	console.log(
-		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${isCreator}, admin=${isAdmin}.`,
+		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${isCreator}.`,
 	);
 }
 

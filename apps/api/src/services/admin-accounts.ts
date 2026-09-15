@@ -21,7 +21,8 @@ import {
 	adminSessions,
 	adminSignInCodes,
 } from "@anthers/db/schema";
-import { and, eq, gt, isNull, lt, ne } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { generateToken, hashPassword } from "./auth.js";
 import {
 	type CodeCheck,
@@ -369,6 +370,27 @@ export async function deleteExpiredAdminSessions(now = new Date()): Promise<numb
 	return gone.length;
 }
 
+/** The most recent changes to admin accounts, newest first, with both parties named. */
+export async function listAdminAccountEvents(limit = 50) {
+	const subject = alias(adminAccounts, "subject");
+	const actor = alias(adminAccounts, "actor");
+	const rows = await db
+		.select({
+			id: adminAccountEvents.id,
+			kind: adminAccountEvents.kind,
+			detail: adminAccountEvents.detail,
+			createdAt: adminAccountEvents.createdAt,
+			account: subject.displayName,
+			actor: actor.displayName,
+		})
+		.from(adminAccountEvents)
+		.innerJoin(subject, eq(subject.id, adminAccountEvents.accountId))
+		.leftJoin(actor, eq(actor.id, adminAccountEvents.actorId))
+		.orderBy(desc(adminAccountEvents.createdAt))
+		.limit(limit);
+	return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
+}
+
 /** The shape an admin account is sent to the admin app in. */
 export function serializeAdminAccount(account: AdminAccount) {
 	return {
@@ -376,5 +398,14 @@ export function serializeAdminAccount(account: AdminAccount) {
 		email: account.email,
 		displayName: account.displayName,
 		isSuperAdmin: account.isSuperAdmin,
+	};
+}
+
+/** The fuller shape the Accounts section lists, which includes an account's state. */
+export function serializeAdminAccountListing(account: AdminAccount) {
+	return {
+		...serializeAdminAccount(account),
+		deactivatedAt: account.deactivatedAt?.toISOString() ?? null,
+		createdAt: account.createdAt.toISOString(),
 	};
 }

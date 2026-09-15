@@ -72,10 +72,10 @@ export function isDevCheckout(startDir?: string): boolean {
  * belonging to its creator and `db:gauntlet:state` rewrites a person's support. Each was one
  * `DATABASE_URL` away from doing that to production.
  *
- * ⚠️ **`db:admin` is deliberately NOT guarded.** It exists to promote an account *in
- * production* over `DATABASE_URL` — running against a deployed database is its purpose, not
- * its failure mode. The line is whether the script writes fixture data or performs an
- * operation somebody meant to perform.
+ * ⚠️ **`admin:account` is deliberately NOT guarded.** It exists to create or recover an admin
+ * account *in production* over `DATABASE_URL` — running against a deployed database is its
+ * purpose, not its failure mode. The line is whether the script writes fixture data or performs
+ * an operation somebody meant to perform.
  *
  * It throws rather than exiting, because every one of these scripts already ends in a
  * `catch` that prints and exits 1 — so the refusal arrives through the path the script

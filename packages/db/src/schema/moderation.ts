@@ -55,6 +55,7 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { adminAccounts } from "./admin.js";
 import { users } from "./auth.js";
 import { works } from "./content.js";
 
@@ -82,7 +83,16 @@ export const moderationReports = pgTable(
 		details: text("details").notNull().default(""),
 		status: text("status").notNull().default("open"), // open | resolved | dismissed
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		/**
+		 * The Anthers account that resolved the report. Reserved for a creator's Keepers, who
+		 * moderate their community from their own accounts; nothing writes it until Keeper
+		 * appointments are built, because every resolution today is made by an admin account.
+		 */
 		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+		/** The admin account that resolved the report — every resolution Anthers' own staff make. */
+		resolvedByAdminId: integer("resolved_by_admin_id").references(() => adminAccounts.id, {
+			onDelete: "set null",
+		}),
 		/**
 		 * When the reporter's own words and their identity were dropped — see
 		 * `services/retention.ts`. `details` is `notNull` and defaults to `""`, so
@@ -175,7 +185,15 @@ export const moderationActions = pgTable(
 		action: text("action").notNull(), // hide | restore
 		// Nullable + set null for the same reason as reporterId: the decision
 		// outlives the account that made it.
+		//
+		// Two actor columns, for the two holders of authority. `actor_id` is an Anthers account and is
+		// reserved for a creator's Keepers, who act on the main site as themselves; nothing writes it
+		// until Keeper appointments are built. `admin_actor_id` is an admin account, which is who acts
+		// for Anthers. Both null means the action was automated.
 		actorId: integer("actor_id").references(() => users.id, { onDelete: "set null" }),
+		adminActorId: integer("admin_actor_id").references(() => adminAccounts.id, {
+			onDelete: "set null",
+		}),
 		// Which authority decided. One operator today; comments carry atproto_uri,
 		// so "the authority is always us" is exactly the assumption not to bake in.
 		actorRole: text("actor_role").notNull().default("operator"),
@@ -281,7 +299,8 @@ export const abuseReports = pgTable(
 		/** When that event happened, per the provider. Null until one arrives. */
 		escalationDeliveryAt: timestamp("escalation_delivery_at", { withTimezone: true }),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+		/** The admin account that closed it. A public report is only ever answered by Anthers. */
+		resolvedBy: integer("resolved_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		/** When the reporter's own words and contact address were dropped. See above. */
 		redactedAt: timestamp("redacted_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -337,13 +356,15 @@ export const legalHolds = pgTable(
 		subjectId: integer("subject_id").notNull(),
 		/** Why, in the operator's words. Never blank: a hold nobody can explain is a bug. */
 		reason: text("reason").notNull(),
-		/** Null for a hold placed by a job rather than a person. */
-		placedBy: integer("placed_by").references(() => users.id, { onDelete: "set null" }),
+		/** The admin account that placed it, or null for a hold placed by a job rather than a person. */
+		placedBy: integer("placed_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		placedAt: timestamp("placed_at", { withTimezone: true }).defaultNow().notNull(),
 		/** When the hold stops applying on its own. Null = indefinite, lifted by hand. */
 		expiresAt: timestamp("expires_at", { withTimezone: true }),
 		/** Set when a human lifts it. The row stays; this is what makes it inactive. */
 		liftedAt: timestamp("lifted_at", { withTimezone: true }),
+		/** The admin account that lifted it. A hold's end is a decision somebody is answerable for. */
+		liftedBy: integer("lifted_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		note: text("note").notNull().default(""),
 	},
 	(table) => [
@@ -355,7 +376,7 @@ export const legalHolds = pgTable(
 );
 
 export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
-	placer: one(users, { fields: [legalHolds.placedBy], references: [users.id] }),
+	placer: one(adminAccounts, { fields: [legalHolds.placedBy], references: [adminAccounts.id] }),
 }));
 
 /**
@@ -556,14 +577,15 @@ export const mediaQuarantine = pgTable(
 		 * and for this material the thumbnail may BE the finding.
 		 */
 		priorVisibility: text("prior_visibility").notNull().default(""),
-		placedBy: integer("placed_by").references(() => users.id, { onDelete: "set null" }),
+		/** The admin account that quarantined it, or null when a scan did. */
+		placedBy: integer("placed_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		placedAt: timestamp("placed_at", { withTimezone: true }).defaultNow().notNull(),
 		/**
 		 * When the object was put back. Set on a cleared finding; the row stays either way,
 		 * so "why did this come back?" has an answer years later.
 		 */
 		clearedAt: timestamp("cleared_at", { withTimezone: true }),
-		clearedBy: integer("cleared_by").references(() => users.id, { onDelete: "set null" }),
+		clearedBy: integer("cleared_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		note: text("note").notNull().default(""),
 	},
 	(table) => [
@@ -609,7 +631,8 @@ export const workRatingAppeals = pgTable(
 		statement: text("statement").notNull(),
 		/** `open` | `granted` | `upheld`. */
 		status: text("status").notNull().default("open"),
-		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+		/** The admin account that heard the appeal. */
+		resolvedBy: integer("resolved_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		/** The operator's answer, shown to the creator. Their appeal deserves a reply. */
 		resolutionNote: text("resolution_note").notNull().default(""),
@@ -626,13 +649,19 @@ export const workRatingAppeals = pgTable(
 export const workRatingAppealsRelations = relations(workRatingAppeals, ({ one }) => ({
 	work: one(works, { fields: [workRatingAppeals.workId], references: [works.id] }),
 	creator: one(users, { fields: [workRatingAppeals.creatorId], references: [users.id] }),
-	resolver: one(users, { fields: [workRatingAppeals.resolvedBy], references: [users.id] }),
+	resolver: one(adminAccounts, {
+		fields: [workRatingAppeals.resolvedBy],
+		references: [adminAccounts.id],
+	}),
 }));
 
 export const mediaQuarantineRelations = relations(mediaQuarantine, ({ one }) => ({
 	work: one(works, { fields: [mediaQuarantine.workId], references: [works.id] }),
 	uploader: one(users, { fields: [mediaQuarantine.uploaderId], references: [users.id] }),
-	placer: one(users, { fields: [mediaQuarantine.placedBy], references: [users.id] }),
+	placer: one(adminAccounts, {
+		fields: [mediaQuarantine.placedBy],
+		references: [adminAccounts.id],
+	}),
 }));
 
 // Only the `one` sides are declared. There is no `many()` counterpart on `users`
@@ -642,8 +671,16 @@ export const mediaQuarantineRelations = relations(mediaQuarantine, ({ one }) => 
 export const moderationReportsRelations = relations(moderationReports, ({ one }) => ({
 	reporter: one(users, { fields: [moderationReports.reporterId], references: [users.id] }),
 	resolver: one(users, { fields: [moderationReports.resolvedBy], references: [users.id] }),
+	adminResolver: one(adminAccounts, {
+		fields: [moderationReports.resolvedByAdminId],
+		references: [adminAccounts.id],
+	}),
 }));
 
 export const moderationActionsRelations = relations(moderationActions, ({ one }) => ({
 	actor: one(users, { fields: [moderationActions.actorId], references: [users.id] }),
+	adminActor: one(adminAccounts, {
+		fields: [moderationActions.adminActorId],
+		references: [adminAccounts.id],
+	}),
 }));

@@ -15,8 +15,8 @@
  *   filling anything in.
  *
  * The operator half (the DMCA queue, act-on-notice, reject) lives in
- * `routes/admin.ts`, behind `requireAdmin` — the same gate as the moderation
- * console. Both halves call `services/dmca.ts`, which is where the rules are.
+ * `routes/admin.ts`, behind the admin host and an admin account's session — the same gate
+ * as the moderation queue. Both halves call `services/dmca.ts`, which is where the rules are.
  *
  * 🚨 A user report is NOT a DMCA notice, and the two intakes must not merge.
  * The moderation report route (`routes/moderation.ts`) carries `illegal` and

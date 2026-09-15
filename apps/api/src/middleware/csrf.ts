@@ -36,7 +36,7 @@ const CSRF_EXEMPT_PATHS = new Set([
  * Origin check for them. A prefix belongs here only if every route under it has that middleware,
  * and `admin-auth.test.ts` proves a cross-origin request is still refused.
  */
-const ADMIN_CSRF_PREFIXES = ["/api/admin/auth/"];
+const ADMIN_CSRF_PREFIXES = ["/api/admin/"];
 
 /**
  * CSRF protection via Origin header checking.

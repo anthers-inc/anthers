@@ -26,9 +26,10 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { adminAccounts } from "./admin.js";
 
 // node — a person's identity. Node-canonical (boundary table: "Identity lives on the creator
-// node / ATProto-native"). `isAdmin` and `emailVerified` are org-imposed annotations on
+// node / ATProto-native"). `emailVerified` and `isCreator` are org-imposed annotations on
 // the row, which is why this is `node` rather than `both`: the row's owner is the person,
 // not the org, and the org's flags are columns on someone else's record.
 export const users = pgTable("users", {
@@ -65,9 +66,6 @@ export const users = pgTable("users", {
 	displayName: text("display_name").default(""),
 	bio: text("bio").default(""),
 	isCreator: boolean("is_creator").default(false),
-	// Platform operator flag — gates the admin/ops console (requireAdmin). Set out
-	// of band (db:admin CLI or DEV_ACCOUNT_ADMIN), never self-serve at sign-up.
-	isAdmin: boolean("is_admin").default(false),
 	avatar: text("avatar").default(""),
 	headerImage: text("header_image").default(""),
 	websiteUrl: text("website_url").default(""),
@@ -155,6 +153,8 @@ export const rightsRequests = pgTable(
 		/** Stamped at creation — the commitment is fixed when it is made. */
 		dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		/** The admin account that answered it. */
+		resolvedBy: integer("resolved_by").references(() => adminAccounts.id, { onDelete: "set null" }),
 		resolutionNote: text("resolution_note").notNull().default(""),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},

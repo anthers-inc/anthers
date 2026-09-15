@@ -28,7 +28,7 @@
  * rejected / withdrawn), which is a different clock from "what did the operator
  * do about the content."
  *
- * The two `users` references are `set null`, matching `moderation_actions`:
+ * The admin-account references are `set null`, matching `moderation_actions`:
  * a decision outlives the account that made it, and a notice outlives the
  * complainant's relationship with us. The Work FK is `cascade` — a deleted Work
  * takes its notices with it, which is correct because the notice is about that
@@ -46,7 +46,7 @@ import {
 	text,
 	timestamp,
 } from "drizzle-orm/pg-core";
-import { users } from "./auth.js";
+import { adminAccounts } from "./admin.js";
 import { works } from "./content.js";
 
 /**
@@ -133,8 +133,8 @@ export const DMCA_NOTICE_STATUSES: readonly DmcaNoticeStatus[] = [
  */
 // org — a DMCA notice is a statutory claim the org must process under § 512. The
 // Work is node content (referenced by id, set-null); the notice itself is the org's
-// legal record, with clocks and finality the org owns. Both `users` FKs are set-null:
-// the notice outlives the complainant's and operator's accounts.
+// legal record, with clocks and finality the org owns. Its admin-account FKs are set-null:
+// the notice outlives the operator's account.
 export const dmcaNotices = pgTable(
 	"dmca_notices",
 	{
@@ -199,6 +199,10 @@ export const dmcaNotices = pgTable(
 		// (§ 512(g)(2)(C)), recording this prevents the restore timer from
 		// firing. Set separately from the notice status.
 		suitFiledAt: timestamp("suit_filed_at", { withTimezone: true }),
+		/** The admin account that recorded the suit, which is what stops the restore clock. */
+		suitRecordedBy: integer("suit_recorded_by").references(() => adminAccounts.id, {
+			onDelete: "set null",
+		}),
 		// ── Finality, and why it is a timestamp rather than a status ──────────
 		// A takedown becomes FINAL when the creator has had a fair chance to
 		// counter-notice and hasn't (`counterNoticeDueBy` passes), or when they
@@ -226,8 +230,8 @@ export const dmcaNotices = pgTable(
 		 * the same reason `moderation_actions` exists beside `moderation_status`.
 		 */
 		buyersRefunded: integer("buyers_refunded").notNull().default(0),
-		// Operator who acted — set null, same as moderation_actions.actorId.
-		actorId: integer("actor_id").references(() => users.id, { onDelete: "set null" }),
+		// The admin account that decided the notice — set null, same as moderation_actions.
+		actorId: integer("actor_id").references(() => adminAccounts.id, { onDelete: "set null" }),
 		actorRole: text("actor_role").notNull().default("operator"),
 		note: text("note").notNull().default(""),
 		/**
@@ -261,5 +265,5 @@ export const dmcaNotices = pgTable(
 
 export const dmcaNoticesRelations = relations(dmcaNotices, ({ one }) => ({
 	work: one(works, { fields: [dmcaNotices.workId], references: [works.id] }),
-	actor: one(users, { fields: [dmcaNotices.actorId], references: [users.id] }),
+	actor: one(adminAccounts, { fields: [dmcaNotices.actorId], references: [adminAccounts.id] }),
 }));

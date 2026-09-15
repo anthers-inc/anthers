@@ -127,7 +127,8 @@ export async function correctRating(input: {
 	workId: number;
 	maturity: MaturityRating;
 	notes?: readonly string[];
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	note?: string;
 	now?: Date;
 }): Promise<WorkRow | null> {
@@ -154,7 +155,7 @@ export async function correctRating(input: {
 		subjectType: "work",
 		subjectId: input.workId,
 		action: "reclassify",
-		actorId: input.actorId,
+		adminActorId: input.adminId,
 		// The reason column carries a moderation reason code elsewhere, and a reclassification
 		// has none — what it is *about* is the rating, which is in the note.
 		reason: "",
@@ -244,7 +245,8 @@ export async function fileRatingAppeal(input: {
  */
 export async function resolveRatingAppeal(input: {
 	appealId: number;
-	actorId: number;
+	/** The admin account acting. */
+	adminId: number;
 	outcome: "granted" | "upheld";
 	note?: string;
 	now?: Date;
@@ -260,7 +262,7 @@ export async function resolveRatingAppeal(input: {
 		.update(workRatingAppeals)
 		.set({
 			status: input.outcome,
-			resolvedBy: input.actorId,
+			resolvedBy: input.adminId,
 			resolvedAt: now,
 			resolutionNote: (input.note ?? "").slice(0, 1000),
 		})
@@ -286,7 +288,7 @@ export async function resolveRatingAppeal(input: {
 			subjectType: "work",
 			subjectId: appeal.workId,
 			action: "reclassify",
-			actorId: input.actorId,
+			adminActorId: input.adminId,
 			reason: "",
 			note: `appeal granted — rated ${appeal.requestedMaturity}`,
 			createdAt: now,

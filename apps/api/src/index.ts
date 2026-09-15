@@ -12,7 +12,6 @@ import { csrfProtection } from "./middleware/csrf.js";
 import { allowedOrigins } from "./origins.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { adminRoutes } from "./routes/admin.js";
-import { adminAuthRoutes } from "./routes/admin-auth.js";
 import { atprotoRoutes } from "./routes/atproto.js";
 import { authRoutes } from "./routes/auth.js";
 import { contentRoutes } from "./routes/content.js";
@@ -77,9 +76,6 @@ const app = new Hono()
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/moderation", moderationRoutes)
 	.route("/api/dmca", dmcaRoutes)
-	// Before `/api/admin`, whose routes all sit behind the main site's session: these are how an
-	// admin account signs in, and they must answer before that gate is reached.
-	.route("/api/admin/auth", adminAuthRoutes)
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 
