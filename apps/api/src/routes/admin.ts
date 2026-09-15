@@ -29,6 +29,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
+import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
@@ -364,9 +365,11 @@ const adminRoutes = new Hono<AdminEnv>()
 	// cannot go stale.
 	.get("/rights-requests", async (c) => {
 		const rows = await db
-			.select()
+			.select({ request: rightsRequests, resolvedByName: adminAccounts.displayName })
 			.from(rightsRequests)
-			.orderBy(rightsRequests.status, rightsRequests.dueAt);
+			.leftJoin(adminAccounts, eq(rightsRequests.resolvedBy, adminAccounts.id))
+			.orderBy(rightsRequests.status, rightsRequests.dueAt)
+			.then((joined) => joined.map((j) => ({ ...j.request, resolvedByName: j.resolvedByName })));
 		const now = Date.now();
 		return c.json({
 			requests: rows.map((r) => ({
@@ -381,7 +384,7 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	.post(
 		"/rights-requests/:id/resolve",
-		zValidator("json", z.object({ note: z.string().max(2000).optional() })),
+		zValidator("json", z.object({ note: z.string().max(2000).optional() }), invalidBody),
 		async (c) => {
 			const id = Number(c.req.param("id"));
 			const [row] = await db
@@ -433,7 +436,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// exist as an action: hiding an account is suspension, which is not built. The
 	// console reads `moderatable` off the queue item and doesn't offer the button —
 	// this is the backstop for a client that does anyway.
-	.post("/moderation/hide", zValidator("json", hideSchema), async (c) => {
+	.post("/moderation/hide", zValidator("json", hideSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { subjectType, subjectId, reason, note } = c.req.valid("json");
 		const result = await hideSubject({
@@ -453,7 +456,7 @@ const adminRoutes = new Hono<AdminEnv>()
 		return c.json(result);
 	})
 
-	.post("/moderation/restore", zValidator("json", subjectSchema), async (c) => {
+	.post("/moderation/restore", zValidator("json", subjectSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { subjectType, subjectId, note } = c.req.valid("json");
 		const result = await restoreSubject({ subjectType, subjectId, adminId: admin.id, note });
@@ -470,7 +473,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// Clear a subject's reports without touching the content — the "I looked, it's
 	// fine" outcome. Distinct from hiding, and it has to be, or the only way to
 	// empty the queue would be to take things down.
-	.post("/moderation/dismiss", zValidator("json", subjectSchema), async (c) => {
+	.post("/moderation/dismiss", zValidator("json", subjectSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { subjectType, subjectId } = c.req.valid("json");
 		const result = await dismissReports({ subjectType, subjectId, adminId: admin.id });
@@ -481,12 +484,16 @@ const adminRoutes = new Hono<AdminEnv>()
 	// and answers the reporter with the path that can handle it — and takes NO
 	// action on the content, because a bare user report is not a DMCA notice and
 	// must never cause a removal. See `routeToCopyright`.
-	.post("/moderation/route-to-copyright", zValidator("json", subjectSchema), async (c) => {
-		const admin = c.get("admin");
-		const { subjectType, subjectId } = c.req.valid("json");
-		const result = await routeToCopyright({ subjectType, subjectId, adminId: admin.id });
-		return c.json(result);
-	})
+	.post(
+		"/moderation/route-to-copyright",
+		zValidator("json", subjectSchema, invalidBody),
+		async (c) => {
+			const admin = c.get("admin");
+			const { subjectType, subjectId } = c.req.valid("json");
+			const result = await routeToCopyright({ subjectType, subjectId, adminId: admin.id });
+			return c.json(result);
+		},
+	)
 
 	// ── Quarantine ──────────────────────────────────────────────────────────────
 	// Child-safety quarantine: material taken out of reach of everybody, purchasers
@@ -516,7 +523,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// is a reporting trigger and a report filed by a route is one nobody decided to
 	// make. What this does is take the material out of reach and preserve it, which is
 	// what has to be true *before* that person starts.
-	.post("/quarantine", zValidator("json", quarantineSchema), async (c) => {
+	.post("/quarantine", zValidator("json", quarantineSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { workId, classification, reportId, note } = c.req.valid("json");
 		try {
@@ -539,7 +546,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// 🚨 The preservation hold is deliberately NOT lifted by this. A quarantine is
 	// cleared because somebody looked and the finding was mistaken; a preservation
 	// obligation ends on a statutory clock, decided separately. See `clearQuarantine`.
-	.post("/quarantine/clear", zValidator("json", clearQuarantineSchema), async (c) => {
+	.post("/quarantine/clear", zValidator("json", clearQuarantineSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { workId, note } = c.req.valid("json");
 		const result = await clearQuarantine({ workId, adminId: admin.id, note });
@@ -556,17 +563,21 @@ const adminRoutes = new Hono<AdminEnv>()
 	// creator had chosen; there is no such thing here, and folding them together would mean
 	// one handler branching on which half of its own input arrived. `clearObjectQuarantine`
 	// refuses a finding that names a Work for the same reason.
-	.post("/quarantine/clear-object", zValidator("json", clearObjectQuarantineSchema), async (c) => {
-		const admin = c.get("admin");
-		const { findingId, note } = c.req.valid("json");
-		const result = await clearObjectQuarantine({ findingId, adminId: admin.id, note });
-		// 404 rather than a cheerful zero: a finding id that matches nothing, or one that
-		// names a Work and belongs to the route above, must not read as a successful clear.
-		if (!result.cleared) {
-			return c.json({ error: "No open object quarantine with that finding id" }, 404);
-		}
-		return c.json(result);
-	})
+	.post(
+		"/quarantine/clear-object",
+		zValidator("json", clearObjectQuarantineSchema, invalidBody),
+		async (c) => {
+			const admin = c.get("admin");
+			const { findingId, note } = c.req.valid("json");
+			const result = await clearObjectQuarantine({ findingId, adminId: admin.id, note });
+			// 404 rather than a cheerful zero: a finding id that matches nothing, or one that
+			// names a Work and belongs to the route above, must not read as a successful clear.
+			if (!result.cleared) {
+				return c.json({ error: "No open object quarantine with that finding id" }, 404);
+			}
+			return c.json(result);
+		},
+	)
 
 	// ── Content ratings ─────────────────────────────────────────────────────────
 	// 🚨 **The correction and the appeal ship together, and the appeal is not the
@@ -584,7 +595,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// Public Access and earns the Time Pool like anything else — the rung restricts who may
 	// reach a Work, never what its creator may charge or earn. A correction that re-priced
 	// somebody's work would make the rating a penalty, which it is not.
-	.post("/works/rating", zValidator("json", correctRatingSchema), async (c) => {
+	.post("/works/rating", zValidator("json", correctRatingSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { workId, maturity, notes, note } = c.req.valid("json");
 		const updated = await correctRating({
@@ -607,17 +618,21 @@ const adminRoutes = new Hono<AdminEnv>()
 	// Granting an appeal hands the rating back to the creator, because conceding the
 	// point and keeping the restriction would be neither. Upholding it changes nothing
 	// about the Work and closes the appeal — with a note, which the creator reads.
-	.post("/rating-appeals/resolve", zValidator("json", resolveAppealSchema), async (c) => {
-		const admin = c.get("admin");
-		const { appealId, outcome, note } = c.req.valid("json");
-		const result = await resolveRatingAppeal({ appealId, adminId: admin.id, outcome, note });
-		if (!result) return c.json({ error: "No open appeal with that id" }, 404);
-		return c.json({
-			appealId: result.appeal.id,
-			outcome,
-			maturity: result.work?.maturity ?? null,
-		});
-	})
+	.post(
+		"/rating-appeals/resolve",
+		zValidator("json", resolveAppealSchema, invalidBody),
+		async (c) => {
+			const admin = c.get("admin");
+			const { appealId, outcome, note } = c.req.valid("json");
+			const result = await resolveRatingAppeal({ appealId, adminId: admin.id, outcome, note });
+			if (!result) return c.json({ error: "No open appeal with that id" }, 404);
+			return c.json({
+				appealId: result.appeal.id,
+				outcome,
+				maturity: result.work?.maturity ?? null,
+			});
+		},
+	)
 
 	// ── Public illegal-content reports ──────────────────────────────────────────
 	// The no-account intake's queue. Separate from `/moderation` above because the
@@ -632,7 +647,7 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// Close one. `resolved` means something was done about what it named; `dismissed`
 	// means it was read and needed nothing. Without this the list could only ever grow.
-	.post("/abuse-reports/close", zValidator("json", closeAbuseSchema), async (c) => {
+	.post("/abuse-reports/close", zValidator("json", closeAbuseSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { reportId, outcome } = c.req.valid("json");
 		const closed = await closeAbuseReport({ reportId, adminId: admin.id, outcome });
@@ -650,7 +665,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// ⚠️ `delivered` means the receiving server took it, NOT that a person saw it. A
 	// message filed into spam is `delivered` here and is still a failure of the thing we
 	// care about, which is why the probe stops short of claiming success on this alone.
-	.get("/escalation-delivery", zValidator("query", deliveryQuerySchema), async (c) => {
+	.get("/escalation-delivery", zValidator("query", deliveryQuerySchema, invalidBody), async (c) => {
 		const { kind, id } = c.req.valid("query");
 		// Read from what the provider PUSHED to us, never by asking it. The production
 		// Resend key is send-only and broadening it to answer this would widen the blast
@@ -693,7 +708,11 @@ const adminRoutes = new Hono<AdminEnv>()
 	// complainant. No automated removal — the operator decided.
 	.post(
 		"/dmca/:id/act",
-		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
+		zValidator(
+			"json",
+			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			invalidBody,
+		),
 		async (c) => {
 			const admin = c.get("admin");
 			const { note } = c.req.valid("json");
@@ -718,7 +737,11 @@ const adminRoutes = new Hono<AdminEnv>()
 	// and the service records the reach-back.
 	.post(
 		"/dmca/:id/reject",
-		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
+		zValidator(
+			"json",
+			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			invalidBody,
+		),
 		async (c) => {
 			const admin = c.get("admin");
 			const { note } = c.req.valid("json");
@@ -737,7 +760,11 @@ const adminRoutes = new Hono<AdminEnv>()
 	// early (e.g., the complainant withdrew the notice).
 	.post(
 		"/dmca/:id/restore",
-		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
+		zValidator(
+			"json",
+			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			invalidBody,
+		),
 		async (c) => {
 			const admin = c.get("admin");
 			const { note } = c.req.valid("json");
@@ -779,7 +806,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// Place one. The subject is resolved to a label BEFORE the write, because a
 	// hold on an id that names nothing preserves nothing and is indistinguishable
 	// from one that works — see `describeSubject`.
-	.post("/legal-holds", zValidator("json", placeHoldSchema), async (c) => {
+	.post("/legal-holds", zValidator("json", placeHoldSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { subjectType, subjectId, reason, note, duration } = c.req.valid("json");
 

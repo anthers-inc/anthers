@@ -46,8 +46,8 @@ interface Hold {
 const SUBJECT_LABELS: Record<SubjectType, string> = {
 	user: "Account",
 	work: "Work",
-	report: "Moderation report",
-	abuse_report: "Abuse report",
+	report: "Moderation Report",
+	abuse_report: "Abuse Report",
 	dmca_notice: "DMCA notice",
 };
 
@@ -204,10 +204,10 @@ export default function LegalHolds() {
 
 			<div className="card bg-base-200 mb-6">
 				<div className="card-body gap-4">
-					<h3 className="font-medium">Place a hold</h3>
+					<h3 className="font-medium">Place a Hold</h3>
 					<div className="grid gap-3 sm:grid-cols-3">
 						<label className="block">
-							<span className="block text-sm font-medium mb-1">What kind</span>
+							<span className="block text-sm font-medium mb-1">What Kind</span>
 							<select
 								className="select select-bordered select-sm w-full"
 								value={subjectType}
@@ -221,7 +221,7 @@ export default function LegalHolds() {
 							</select>
 						</label>
 						<label className="block">
-							<span className="block text-sm font-medium mb-1">Its id</span>
+							<span className="block text-sm font-medium mb-1">Its ID</span>
 							<input
 								type="number"
 								min={1}
@@ -231,7 +231,7 @@ export default function LegalHolds() {
 							/>
 						</label>
 						<label className="block">
-							<span className="block text-sm font-medium mb-1">How long</span>
+							<span className="block text-sm font-medium mb-1">How Long</span>
 							<select
 								className="select select-bordered select-sm w-full"
 								value={duration}
@@ -248,7 +248,7 @@ export default function LegalHolds() {
 
 					{duration === "date" && (
 						<label className="block max-w-xs">
-							<span className="block text-sm font-medium mb-1">Held until</span>
+							<span className="block text-sm font-medium mb-1">Held Until</span>
 							<input
 								type="date"
 								className="input input-bordered input-sm w-full"
@@ -276,7 +276,7 @@ export default function LegalHolds() {
 					</label>
 
 					<label className="block">
-						<span className="block text-sm font-medium mb-1">Anything else (optional)</span>
+						<span className="block text-sm font-medium mb-1">Anything Else (Optional)</span>
 						<input
 							type="text"
 							className="input input-bordered input-sm w-full"
@@ -292,7 +292,7 @@ export default function LegalHolds() {
 							onClick={place}
 							disabled={!canPlace}
 						>
-							Place hold
+							Place Hold
 						</button>
 					</div>
 				</div>
@@ -369,7 +369,7 @@ export default function LegalHolds() {
 													onClick={() => lift(hold)}
 													disabled={busy}
 												>
-													Confirm lift
+													Confirm Lift
 												</button>
 											) : (
 												<button

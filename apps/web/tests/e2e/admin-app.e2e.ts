@@ -95,10 +95,10 @@ test("an operator signs in by emailed code, places a hold and lifts it", async (
 		.first();
 	await expect(holds).toBeVisible();
 
-	await holds.getByLabel("What kind").selectOption("user");
-	await holds.getByLabel("Its id").fill(String(subjectId));
+	await holds.getByLabel("What Kind").selectOption("user");
+	await holds.getByLabel("Its ID").fill(String(subjectId));
 	await holds.getByLabel(/^Why/).fill(`E2E preservation, run ${RUN}`);
-	await holds.getByRole("button", { name: /^Place hold$/i }).click();
+	await holds.getByRole("button", { name: "Place Hold" }).click();
 
 	// The label, not a tick: it is what tells an operator they held the account they meant.
 	await expect(page.getByText(`Held @${SUBJECT}.`)).toBeVisible();
@@ -115,7 +115,7 @@ test("an operator signs in by emailed code, places a hold and lifts it", async (
 
 	// Two clicks on purpose: lifting ends a preservation.
 	await row.getByRole("button", { name: "Lift", exact: true }).click();
-	await row.getByRole("button", { name: /^Confirm lift$/i }).click();
+	await row.getByRole("button", { name: "Confirm Lift" }).click();
 
 	const lifted = holds.locator("tr", { hasText: `E2E preservation, run ${RUN}` }).first();
 	await expect(lifted, "a lifted hold must stay on the page").toBeVisible();

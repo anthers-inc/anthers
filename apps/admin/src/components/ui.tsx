@@ -22,7 +22,12 @@ export function PageHeader({
 				{description && <p className="mt-1 text-sm text-base-content/60">{description}</p>}
 			</div>
 			{onRefresh && (
-				<button type="button" className="btn btn-ghost btn-sm gap-2" onClick={onRefresh} disabled={loading}>
+				<button
+					type="button"
+					className="btn btn-ghost btn-sm gap-2"
+					onClick={onRefresh}
+					disabled={loading}
+				>
 					<ArrowPathIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
 					Refresh
 				</button>

@@ -86,7 +86,10 @@ export default function Infrastructure() {
 							<SectionHeading>Job Queues</SectionHeading>
 							{!jobs.pgboss.available ? (
 								<div className="alert">
-									<span>The job queue has no schema yet, because the worker has not run against this database.</span>
+									<span>
+										The job queue has no schema yet, because the worker has not run against this
+										database.
+									</span>
 								</div>
 							) : (
 								<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
@@ -110,7 +113,11 @@ export default function Infrastructure() {
 														{q.retry ? <span className="text-warning">{q.retry}</span> : "—"}
 													</td>
 													<td className="text-right tabular-nums">
-														{q.failed ? <span className="font-semibold text-error">{q.failed}</span> : "—"}
+														{q.failed ? (
+															<span className="font-semibold text-error">{q.failed}</span>
+														) : (
+															"—"
+														)}
 													</td>
 												</tr>
 											))}
@@ -121,7 +128,9 @@ export default function Infrastructure() {
 
 							{jobs.pgboss.available && (
 								<div className="mt-4">
-									<div className="mb-2 text-xs uppercase tracking-wide text-base-content/50">Recent Failures</div>
+									<div className="mb-2 text-xs uppercase tracking-wide text-base-content/50">
+										Recent Failures
+									</div>
 									{jobs.pgboss.failures.length === 0 ? (
 										<p className="text-sm text-success">No job has failed recently.</p>
 									) : (
@@ -140,9 +149,13 @@ export default function Infrastructure() {
 														<tr key={`${f.queue}-${f.createdOn}`}>
 															<td className="font-mono text-xs">{f.queue}</td>
 															<td>
-																<span className="badge badge-sm badge-error badge-outline">{f.state}</span>
+																<span className="badge badge-sm badge-error badge-outline">
+																	{f.state}
+																</span>
 															</td>
-															<td className="whitespace-nowrap text-xs">{new Date(f.createdOn).toLocaleString()}</td>
+															<td className="whitespace-nowrap text-xs">
+																{new Date(f.createdOn).toLocaleString()}
+															</td>
 															<td className="max-w-md truncate text-xs" title={f.error}>
 																{f.error || "—"}
 															</td>
@@ -190,14 +203,18 @@ export default function Infrastructure() {
 													<td className="tabular-nums">#{p.id}</td>
 													<td>{p.mediaType}</td>
 													<td>
-														<span className={`badge badge-sm ${p.stuck ? "badge-warning" : "badge-error"}`}>
+														<span
+															className={`badge badge-sm ${p.stuck ? "badge-warning" : "badge-error"}`}
+														>
 															{p.stuck ? "stuck" : p.status}
 														</span>
 													</td>
 													<td className="max-w-xs truncate text-xs" title={p.error}>
 														{p.error || "—"}
 													</td>
-													<td className="whitespace-nowrap text-xs">{new Date(p.updatedAt).toLocaleString()}</td>
+													<td className="whitespace-nowrap text-xs">
+														{new Date(p.updatedAt).toLocaleString()}
+													</td>
 												</tr>
 											))}
 										</tbody>

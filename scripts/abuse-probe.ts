@@ -30,10 +30,13 @@
  * silently ignoring the flag would leave the secret in the history anyway and teach nobody.
  * Nothing here writes the password to disk, to an environment variable, or to the log.
  *
- * ⚠️ **Admin is needed for exactly one thing — reading the escalation state back** over
- * `/api/admin/*`, which is operator information by design, since the report route
- * deliberately tells a reporter nothing about what happens next. Without it the report is
- * still filed; what is lost is the answer.
+ * ⚠️ **An admin account is needed for exactly one thing — reading the escalation state back**,
+ * and closing the report afterwards, over `/api/admin/*`, which is operator information by
+ * design, since the report route deliberately tells a reporter nothing about what happens next.
+ * Without it the report is still filed; what is lost is the answer. The admin account is a
+ * separate identity from the Anthers account the in-app report is filed from, so the two are
+ * signed in separately: the Anthers account with its password, and the admin account with a
+ * code emailed to it, at the host the admin routes answer on.
  *
  * 🚨 **What this can and cannot settle, because the boundary is the whole point.** It can
  * prove a report was accepted, that the right row was written, and that `escalated_at` was
@@ -56,17 +59,22 @@
  * safe, rather than a guard that reads as though it would.
  *
  * Usage:
- *   bun run scripts/abuse-probe.ts --base https://anthers.org --admin-login you@example.com
+ *   bun run scripts/abuse-probe.ts --base https://anthers.org \
+ *     --admin you@example.com --admin-base https://admin.anthers.org
  *
- *   --path      which single report to file: `public` (the no-account form, the default) or
- *               `in-app` (the authenticated route, which needs --admin-login and creates a
- *               draft post and a comment from that account to report, removing them
- *               afterwards).
+ *   --path        which single report to file: `public` (the no-account form, the default) or
+ *                 `in-app` (the authenticated route, which needs --login and creates a draft
+ *                 post and a comment from that account to report, removing them afterwards).
+ *   --login       the Anthers account the in-app report is filed from, by username or email.
+ *   --admin       the admin account that reads the escalation back and closes the report.
+ *   --admin-base  where the admin routes answer. Defaults to --base, which is right for a local
+ *                 API; a deployment needs the admin host.
  *   --wait      seconds to wait for the retry sweep before giving up (default 360; the
  *               cron runs every five minutes, so anything under 300 can report a false
  *               "never escalated").
  *
- * The password is asked for on the terminal. There is no flag for it.
+ * The Anthers account's password and the admin account's emailed code are both asked for on the
+ * terminal. There is no flag for either.
  */
 
 /** Which single report this run files. There is deliberately no way to ask for both. */
@@ -74,13 +82,18 @@ export type ProbePath = "public" | "in-app";
 
 export interface ProbePlan {
 	base: string;
+	/** Where the admin routes answer: the admin host on a deployment, the API itself locally. */
+	adminBase: string;
 	path: ProbePath;
 	/**
-	 * `/api/auth/sign-in` takes `{ login, password }` and resolves a username **or** an
-	 * email against it, so this is a LOGIN rather than an email. Sending `{ email }` gets a
-	 * 400 from the schema, which reads as bad credentials and is not.
+	 * The Anthers account the in-app report is filed from. `/api/auth/sign-in` takes
+	 * `{ login, password }` and resolves a username **or** an email against it, so this is a
+	 * LOGIN rather than an email. Sending `{ email }` gets a 400 from the schema, which reads as
+	 * bad credentials and is not.
 	 */
-	adminLogin?: string;
+	login?: string;
+	/** The admin account the readback signs in as, by the address its codes go to. */
+	adminEmail?: string;
 	waitSeconds: number;
 }
 
@@ -148,28 +161,44 @@ export function probePlan(
 		};
 	}
 
+	// Refused rather than reinterpreted. These named ONE account that did both jobs, and the two
+	// jobs now belong to two different identities, so guessing which one somebody meant would
+	// sign the wrong kind of account in to the wrong half.
+	for (const flag of ["--admin-login", "--admin-email"]) {
+		if (argv.includes(flag)) {
+			return {
+				refuse:
+					`${flag} is gone, because an admin account is no longer an Anthers account. Pass ` +
+					"--login for the Anthers account the in-app report is filed from, and --admin for the " +
+					"admin account that reads the escalation back.",
+			};
+		}
+	}
+
 	const rawPath = get("path") ?? "public";
 	if (rawPath !== "public" && rawPath !== "in-app") {
 		return { refuse: `Unknown --path "${rawPath}". It is either "public" or "in-app".` };
 	}
 
-	// The in-app report is filed from a signed-in account, and the only account the probe can
-	// sign in is the operator's: accounts are made by an emailed-code ceremony nobody can
-	// script, so there is no probe account to mint.
-	const adminLogin = get("admin-login") ?? get("admin-email");
-	if (rawPath === "in-app" && !adminLogin) {
+	// The in-app report is filed from a signed-in account, and the only one the probe can sign in
+	// is your own: accounts are made by an emailed-code ceremony nobody can script, so there is no
+	// probe account to mint.
+	const login = get("login");
+	if (rawPath === "in-app" && !login) {
 		return {
 			refuse:
-				"--path in-app needs --admin-login. The report is filed from your own signed-in account, " +
+				"--path in-app needs --login. The report is filed from your own signed-in Anthers account, " +
 				"because the probe cannot create one of its own.",
 		};
 	}
 
+	const base = (get("base") ?? "http://localhost:8000").replace(/\/+$/, "");
 	return {
-		base: (get("base") ?? "http://localhost:8000").replace(/\/+$/, ""),
+		base,
+		adminBase: (get("admin-base") ?? base).replace(/\/+$/, ""),
 		path: rawPath,
-		// `--admin-email` stays accepted because it is the obvious thing to type.
-		adminLogin,
+		login,
+		adminEmail: get("admin"),
 		waitSeconds: Number(get("wait") ?? 360),
 	};
 }
@@ -225,6 +254,7 @@ async function promptHidden(label: string): Promise<string> {
  */
 let args!: ProbePlan;
 let ORIGIN!: string;
+let ADMIN_ORIGIN!: string;
 
 function log(line: string) {
 	console.log(line);
@@ -236,14 +266,16 @@ function log(line: string) {
  */
 async function call<T = unknown>(
 	path: string,
-	init: RequestInit & { cookie?: string } = {},
+	init: RequestInit & { cookie?: string; admin?: boolean } = {},
 ): Promise<{ status: number; body: T; setCookie: string | null }> {
-	const { cookie, ...rest } = init;
-	const res = await fetch(`${args.base}${path}`, {
+	const { cookie, admin, ...rest } = init;
+	// The admin routes answer only on their own host and only from their own origin, so a call to
+	// them goes there rather than to the site.
+	const res = await fetch(`${admin ? args.adminBase : args.base}${path}`, {
 		...rest,
 		headers: {
 			"Content-Type": "application/json",
-			Origin: ORIGIN,
+			Origin: admin ? ADMIN_ORIGIN : ORIGIN,
 			...(cookie ? { Cookie: cookie } : {}),
 			...(rest.headers ?? {}),
 		},
@@ -270,31 +302,65 @@ const RUN = new Date()
 const TAG = `abuse-probe-${RUN}`;
 
 /**
- * Sign in as the operator, with a password that exists only as an argument.
+ * Sign in to your Anthers account, with a password that exists only as an argument.
  *
  * It is passed in rather than read off `args` so there is no field anywhere holding it —
  * the value is prompted for in `main`, handed here, and goes out of scope when this
  * returns. Nothing writes it to disk, to the environment, or to the log.
  */
-async function signInAdmin(login: string, password: string): Promise<string | null> {
+async function signInAccount(login: string, password: string): Promise<string | null> {
 	const res = await call("/api/auth/sign-in", {
 		method: "POST",
 		body: JSON.stringify({ login, password }),
 	});
 	if (res.status !== 200) {
-		log(`  ! admin sign-in failed (${res.status}) — the readback will be skipped`);
+		log(`  ! sign-in to ${login} failed (${res.status}) — the in-app report cannot be filed`);
 		return null;
 	}
 	return sessionCookie(res.setCookie);
 }
 
 /**
- * A draft post and a comment on it, made by the operator — the minimum an in-app report needs.
+ * Sign in to an admin account: ask for a code to be sent to it, then ask the person for the code.
  *
- * Made from the operator's own session, because no other account can be signed in from here:
+ * The code is read from the terminal without echoing, for the same reason the password is, and is
+ * useless ten minutes later anyway.
+ */
+async function signInAdminAccount(email: string): Promise<string | null> {
+	const start = await call("/api/admin/auth/signin/start", {
+		method: "POST",
+		admin: true,
+		body: JSON.stringify({ email }),
+	});
+	if (start.status !== 200) {
+		log(
+			`  ! could not ask for an admin sign-in code (${start.status}) — the readback will be skipped`,
+		);
+		if (start.status === 404)
+			log("    404 means --admin-base is not the host the admin routes answer on.");
+		return null;
+	}
+	const code = await promptHidden(`  code emailed to ${email}: `);
+	if (!code) return null;
+	const verify = await call("/api/admin/auth/signin/verify", {
+		method: "POST",
+		admin: true,
+		body: JSON.stringify({ email, code }),
+	});
+	if (verify.status !== 200) {
+		log(`  ! admin sign-in failed (${verify.status}) — the readback will be skipped`);
+		return null;
+	}
+	return sessionCookie(verify.setCookie);
+}
+
+/**
+ * A draft post and a comment on it, made from your own account — the minimum an in-app report needs.
+ *
+ * Made from your own session, because no other account can be signed in from here:
  * accounts come from an emailed-code ceremony. A post rather than a Work because only posts
  * take comments. It stays a draft, so nobody else ever sees the fixture, and drafting a post
- * needs only creator mode on the operator's account. The comment is reported by the same
+ * needs only creator mode on that account. The comment is reported by the same
  * account that wrote it, which the moderation service allows on purpose for content.
  */
 async function createFixture(cookie: string): Promise<{
@@ -309,7 +375,7 @@ async function createFixture(cookie: string): Promise<{
 	});
 	if (draft.status !== 201) {
 		log(`  ! could not create the fixture post (${draft.status}): ${JSON.stringify(draft.body)}`);
-		if (draft.status === 403) log("    403 means the operator account is not in creator mode.");
+		if (draft.status === 403) log("    403 means that account is not in creator mode.");
 		return null;
 	}
 	const postSlug = draft.body.post.slug;
@@ -369,16 +435,20 @@ async function main() {
 	log(`  run tag: ${TAG}`);
 	log(`  filing ONE report on the ${args.path} path`);
 
-	// Asked for here and nowhere else. `signInAdmin` takes it as an argument so no field
-	// holds it, and the readback is the only thing it is for — without an admin session the
-	// report is still filed and only the answer is lost.
-	let adminCookie: string | null = null;
-	if (args.adminLogin) {
-		const password = await promptHidden(`  password for ${args.adminLogin}: `);
-		adminCookie = password ? await signInAdmin(args.adminLogin, password) : null;
+	// Asked for here and nowhere else. `signInAccount` takes the password as an argument so no
+	// field holds it, and the Anthers account is only needed to file the in-app report.
+	let accountCookie: string | null = null;
+	if (args.login && args.path === "in-app") {
+		const password = await promptHidden(`  password for ${args.login}: `);
+		accountCookie = password ? await signInAccount(args.login, password) : null;
 	}
+
+	// The admin account is what reads the answer back. Without it the report is still filed and
+	// only the answer is lost.
+	let adminCookie: string | null = null;
+	if (args.adminEmail) adminCookie = await signInAdminAccount(args.adminEmail);
 	state.adminCookie = adminCookie;
-	if (adminCookie) log("  · signed in as admin — readback enabled");
+	if (adminCookie) log("  · signed in to the admin account — readback enabled");
 	else log("  · no admin session — the report will be filed but not read back");
 
 	const probes: Probe[] = [];
@@ -413,10 +483,10 @@ async function main() {
 	// ── The in-app, authenticated report ─────────────────────────────────────
 	if (args.path === "in-app") {
 		log("\nCreating the fixture content…");
-		// `probePlan` refuses in-app without an admin login, so a missing session here is a
-		// sign-in that failed rather than one nobody asked for.
-		fixture = adminCookie ? await createFixture(adminCookie) : null;
-		if (!adminCookie) log("  ! the admin sign-in failed, so there is no account to report from");
+		// `probePlan` refuses in-app without a login, so a missing session here is a sign-in that
+		// failed rather than one nobody asked for.
+		fixture = accountCookie ? await createFixture(accountCookie) : null;
+		if (!accountCookie) log("  ! the sign-in failed, so there is no account to report from");
 		state.fixture = fixture;
 		// A fixture with no comment still comes back, so the cleanup can remove its draft post.
 		if (fixture && fixture.commentId > 0) {
@@ -526,6 +596,7 @@ async function readDelivery(probe: Probe, adminCookie: string): Promise<Probe["d
 		`/api/admin/escalation-delivery?kind=${kind}&id=${probe.reportId}`,
 		{
 			cookie: adminCookie,
+			admin: true,
 		},
 	);
 	if (res.status !== 200) return null;
@@ -541,7 +612,7 @@ async function readEscalated(
 	if (probe.kind === "public") {
 		const res = await call<{ reports?: { id: number; escalatedAt: string | null }[] }>(
 			"/api/admin/abuse-reports?closed=1",
-			{ cookie: adminCookie },
+			{ cookie: adminCookie, admin: true },
 		);
 		if (res.status !== 200) return null;
 		const row = (res.body.reports ?? []).find((r) => r.id === probe.reportId);
@@ -552,7 +623,7 @@ async function readEscalated(
 	// is still unescalated, which is exactly the question being asked.
 	const res = await call<{
 		items?: { subjectType: string; subjectId: number; floorAlerted: boolean }[];
-	}>("/api/admin/moderation?filter=reported", { cookie: adminCookie });
+	}>("/api/admin/moderation?filter=reported", { cookie: adminCookie, admin: true });
 	if (res.status !== 200) return null;
 	const item = (res.body.items ?? []).find(
 		(i) => i.subjectType === "comment" && i.subjectId === commentId,
@@ -597,6 +668,7 @@ async function cleanup(
 			const res = await call("/api/admin/abuse-reports/close", {
 				method: "POST",
 				cookie: adminCookie,
+				admin: true,
 				body: JSON.stringify({ reportId: probe.reportId, outcome: "dismissed" }),
 			});
 			log(
@@ -608,6 +680,7 @@ async function cleanup(
 			const res = await call("/api/admin/moderation/dismiss", {
 				method: "POST",
 				cookie: adminCookie,
+				admin: true,
 				body: JSON.stringify({ subjectType: "comment", subjectId: fixture.commentId }),
 			});
 			log(
@@ -639,6 +712,7 @@ function run(): void {
 	// refused on a mutating route. Derived from `--base` rather than hard-coded, so pointing
 	// the probe at a preview deployment does not silently fail CSRF and read as a code fault.
 	ORIGIN = new URL(args.base).origin;
+	ADMIN_ORIGIN = new URL(args.adminBase).origin;
 
 	let exitCode = 0;
 	main()

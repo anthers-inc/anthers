@@ -253,11 +253,11 @@ export default function ModerationQueue() {
 			    it separately to know it is there at all. */}
 			{data && (
 				<div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-					<SummaryChip label="Open reports" value={data.summary.openReports} alert />
-					<SummaryChip label="Items reported" value={data.summary.reportedSubjects} alert />
-					<SummaryChip label="People reported" value={data.summary.reportedPeople} alert />
-					<SummaryChip label="Hidden comments" value={data.summary.hiddenComments} />
-					<SummaryChip label="Hidden reviews" value={data.summary.hiddenReviews} />
+					<SummaryChip label="Open Reports" value={data.summary.openReports} alert />
+					<SummaryChip label="Items Reported" value={data.summary.reportedSubjects} alert />
+					<SummaryChip label="People Reported" value={data.summary.reportedPeople} alert />
+					<SummaryChip label="Hidden Comments" value={data.summary.hiddenComments} />
+					<SummaryChip label="Hidden Reviews" value={data.summary.hiddenReviews} />
 				</div>
 			)}
 

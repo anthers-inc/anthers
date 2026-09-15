@@ -172,7 +172,7 @@ export default function RatingAppeals() {
 										: "Say why before leaving the rating as it is"
 								}
 							>
-								Leave it as it is
+								Leave It as It Is
 							</button>
 						</div>
 					</li>

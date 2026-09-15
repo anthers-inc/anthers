@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import type { AdminEnv } from "../middleware/admin.js";
+import { invalidBody } from "../middleware/validate.js";
 import {
 	AdminAccountError,
 	type AdminAccountRefusal,
@@ -89,7 +90,7 @@ export const adminAccountRoutes = new Hono<AdminEnv>()
 	// Inviting creates the account and tells its owner where to sign in. There is nothing to accept:
 	// the account exists from this moment, and signing in with a code sent to the address is the
 	// whole of joining.
-	.post("/", zValidator("json", inviteSchema), async (c) => {
+	.post("/", zValidator("json", inviteSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const input = c.req.valid("json");
 		const result = await change(() => createAdminAccount(input, admin.id));
@@ -125,7 +126,7 @@ export const adminAccountRoutes = new Hono<AdminEnv>()
 		return c.json({ account: serializeAdminAccountListing(result.value) });
 	})
 
-	.post("/:id/email", zValidator("json", emailSchema), async (c) => {
+	.post("/:id/email", zValidator("json", emailSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
 		const result = await change(() =>
 			changeAdminEmail(Number(c.req.param("id")), email, c.get("admin").id),
@@ -137,7 +138,7 @@ export const adminAccountRoutes = new Hono<AdminEnv>()
 		return c.json({ account: serializeAdminAccountListing(result.value) });
 	})
 
-	.post("/:id/super-admin", zValidator("json", superAdminSchema), async (c) => {
+	.post("/:id/super-admin", zValidator("json", superAdminSchema, invalidBody), async (c) => {
 		const { isSuperAdmin } = c.req.valid("json");
 		const result = await change(() =>
 			setSuperAdmin(Number(c.req.param("id")), isSuperAdmin, c.get("admin").id),

@@ -7,7 +7,15 @@
  * the rest.
  */
 import { Link } from "react-router-dom";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+	CartesianGrid,
+	Line,
+	LineChart,
+	ResponsiveContainer,
+	Tooltip,
+	XAxis,
+	YAxis,
+} from "recharts";
 import { ErrorAlert, Loading, PageHeader, SectionHeading, StatCard } from "../components/ui";
 import { useAdminData } from "../lib/load";
 
@@ -56,9 +64,9 @@ export default function Home() {
 	const appeals = useAdminData<{ appeals: unknown[] }>("/api/admin/rating-appeals");
 	const quarantine = useAdminData<{ summary: { openFindings: number } }>("/api/admin/quarantine");
 	const abuse = useAdminData<{ reports: unknown[] }>("/api/admin/abuse-reports");
-	const dmca = useAdminData<{ summary: { received: number; screening: number; counterNoticed: number } }>(
-		"/api/admin/dmca",
-	);
+	const dmca = useAdminData<{
+		summary: { received: number; screening: number; counterNoticed: number };
+	}>("/api/admin/dmca");
 
 	const a = activity.data;
 	const dmcaOpen = dmca.data
@@ -67,7 +75,10 @@ export default function Home() {
 
 	return (
 		<div>
-			<PageHeader title="Home" description="What is waiting on somebody, and how the platform is growing." />
+			<PageHeader
+				title="Home"
+				description="What is waiting on somebody, and how the platform is growing."
+			/>
 
 			<section className="mb-10">
 				<SectionHeading>Needs Attention</SectionHeading>
@@ -85,15 +96,27 @@ export default function Home() {
 						count={quarantine.data?.summary.openFindings ?? null}
 						urgent={(quarantine.data?.summary.openFindings ?? 0) > 0}
 					/>
-					<AttentionCard to="/legal/abuse-reports" title="Open Abuse Reports" count={abuse.data?.reports.length ?? null} />
+					<AttentionCard
+						to="/legal/abuse-reports"
+						title="Open Abuse Reports"
+						count={abuse.data?.reports.length ?? null}
+					/>
 					<AttentionCard to="/legal/dmca" title="DMCA Notices in Progress" count={dmcaOpen} />
 					<AttentionCard
 						to="/moderation"
 						title="Open Reports"
 						count={moderation.data?.summary.openReports ?? null}
-						detail={moderation.data ? `about ${moderation.data.summary.reportedSubjects} things` : undefined}
+						detail={
+							moderation.data
+								? `about ${moderation.data.summary.reportedSubjects} things`
+								: undefined
+						}
 					/>
-					<AttentionCard to="/moderation/appeals" title="Rating Appeals" count={appeals.data?.appeals.length ?? null} />
+					<AttentionCard
+						to="/moderation/appeals"
+						title="Rating Appeals"
+						count={appeals.data?.appeals.length ?? null}
+					/>
 				</div>
 			</section>
 
@@ -148,8 +171,22 @@ export default function Home() {
 												fontSize: 12,
 											}}
 										/>
-										<Line type="monotone" dataKey="signups" name="Sign-ups" stroke="#22c55e" strokeWidth={2} dot={false} />
-										<Line type="monotone" dataKey="posts" name="Posts" stroke="#f59e0b" strokeWidth={2} dot={false} />
+										<Line
+											type="monotone"
+											dataKey="signups"
+											name="Sign-ups"
+											stroke="#22c55e"
+											strokeWidth={2}
+											dot={false}
+										/>
+										<Line
+											type="monotone"
+											dataKey="posts"
+											name="Posts"
+											stroke="#f59e0b"
+											strokeWidth={2}
+											dot={false}
+										/>
 									</LineChart>
 								</ResponsiveContainer>
 							</div>

@@ -38,7 +38,11 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 		],
 	},
 	{ title: "Infrastructure", items: [{ to: "/infrastructure", label: "Jobs and Services" }] },
-	{ title: "Accounts", items: [{ to: "/accounts", label: "Admin Accounts" }], superAdminOnly: true },
+	{
+		title: "Accounts",
+		items: [{ to: "/accounts", label: "Admin Accounts" }],
+		superAdminOnly: true,
+	},
 ];
 
 export default function Layout() {
@@ -84,7 +88,9 @@ export default function Layout() {
 				<header className="flex items-center justify-end gap-3 border-b border-base-300 bg-base-100 px-6 py-3 text-sm">
 					<span className="text-base-content/70">
 						{account?.displayName}
-						{account?.isSuperAdmin && <span className="badge badge-sm badge-ghost ml-2">Super-Admin</span>}
+						{account?.isSuperAdmin && (
+							<span className="badge badge-sm badge-ghost ml-2">Super-Admin</span>
+						)}
 					</span>
 					<button
 						type="button"

@@ -41,15 +41,18 @@
 import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
 import {
+	adminAccounts,
 	assets,
 	mediaQuarantine,
 	moderationActions,
 	moderationReports,
 	transcodingJobs,
+	users,
 	works,
 } from "@anthers/db/schema";
 import type { ModerationActionType } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { placeHold, preservationExpiry } from "./legal-hold.js";
 import { urlToKey } from "./media-purge.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
@@ -647,13 +650,18 @@ export interface QuarantineFinding {
 	workId: number | null;
 	workTitle: string;
 	uploaderId: number | null;
+	/** The uploader's handle, or null when the account is gone. */
+	uploaderName: string | null;
 	originalKey: string;
 	objectKind: string;
 	source: string;
 	classification: string;
 	reportId: number | null;
 	placedAt: string;
+	/** The admin account that quarantined it, or null when a scan did. */
+	placedBy: string | null;
 	clearedAt: string | null;
+	clearedBy: string | null;
 	note: string;
 }
 
@@ -675,23 +683,31 @@ export interface QuarantineFinding {
 export async function loadQuarantineFindings(
 	opts: { includeCleared?: boolean; limit?: number } = {},
 ): Promise<QuarantineFinding[]> {
+	const placer = alias(adminAccounts, "placer");
+	const clearer = alias(adminAccounts, "clearer");
 	const rows = await db
 		.select({
 			id: mediaQuarantine.id,
 			workId: mediaQuarantine.workId,
 			workTitle: works.title,
 			uploaderId: mediaQuarantine.uploaderId,
+			uploaderName: users.username,
 			originalKey: mediaQuarantine.originalKey,
 			objectKind: mediaQuarantine.objectKind,
 			source: mediaQuarantine.source,
 			classification: mediaQuarantine.classification,
 			reportId: mediaQuarantine.reportId,
 			placedAt: mediaQuarantine.placedAt,
+			placedBy: placer.displayName,
 			clearedAt: mediaQuarantine.clearedAt,
+			clearedBy: clearer.displayName,
 			note: mediaQuarantine.note,
 		})
 		.from(mediaQuarantine)
 		.leftJoin(works, eq(mediaQuarantine.workId, works.id))
+		.leftJoin(users, eq(mediaQuarantine.uploaderId, users.id))
+		.leftJoin(placer, eq(mediaQuarantine.placedBy, placer.id))
+		.leftJoin(clearer, eq(mediaQuarantine.clearedBy, clearer.id))
 		.where(opts.includeCleared ? undefined : isNull(mediaQuarantine.clearedAt))
 		.orderBy(desc(mediaQuarantine.placedAt))
 		.limit(opts.limit ?? 200);
@@ -701,13 +717,16 @@ export async function loadQuarantineFindings(
 		workId: r.workId,
 		workTitle: r.workTitle ?? "",
 		uploaderId: r.uploaderId,
+		uploaderName: r.uploaderName,
 		originalKey: r.originalKey,
 		objectKind: r.objectKind,
 		source: r.source,
 		classification: r.classification,
 		reportId: r.reportId,
 		placedAt: r.placedAt.toISOString(),
+		placedBy: r.placedBy,
 		clearedAt: r.clearedAt?.toISOString() ?? null,
+		clearedBy: r.clearedBy,
 		note: r.note,
 	}));
 }

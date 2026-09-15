@@ -71,12 +71,13 @@ Sales tax is the only thing ever added on top of a displayed price. The full mod
 
 ## What's in here
 
-A Bun workspace monorepo. Four packages, two apps, one deployment. (The desktop app lives in [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) — it consumes this app's *build*, not its packages.)
+A Bun workspace monorepo. Four packages, three apps, one deployment. (The desktop app lives in [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) — it consumes this app's *build*, not its packages.)
 
 | Directory | What it is |
 |---|---|
 | `apps/api` | The hub: a Hono HTTP API on Bun, plus a separate background worker process. Owns auth, content, payments, access resolution, moderation, and every scheduled job. |
 | `apps/web` | The React SPA — the public site, the reader/viewer/player surfaces, and the creator **Studio** at `/studio`. |
+| `apps/admin` | The admin app at `admin.anthers.org`: the legal and moderation queues, job health and admin accounts, signed into with a separate admin account by emailed code. |
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
@@ -94,7 +95,7 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 
 **Money.** Stripe Connect onboarding and payouts, direct purchases at an all-in list price, itemized monthly support subscriptions, per-item refunds that reconcile identically whether the buyer or the Stripe dashboard starts them, monthly cycle settlement, and daily Time Pool distribution across the creators each person actually spent time with.
 
-**Operations.** An admin console with activity and job-queue telemetry, a moderation queue with the reporting taxonomy behind it, account export and deletion, analytics for creators, cross-publishing, and an itch.io importer.
+**Operations.** A separate admin app, with its own accounts and sign-in, for activity and job-queue telemetry, the legal queues (data-rights requests, quarantine, public abuse reports, DMCA notices and legal holds) and a moderation queue with the reporting taxonomy behind it, plus account export and deletion, analytics for creators, cross-publishing, and an itch.io importer.
 
 **Identity.** Sessions are cookie-based, with argon2id password hashing and an emailed-code path for accounts that never set a password. Signing in, signing up and linking all work over ATProto OAuth (DPoP + PKCE + PAR), and signup issues an identity on Anthers' own Personal Data Server whose holder can seat their own recovery key above Anthers'. The `org.anthers.work` Lexicon is published, and releasing a Work writes its public listing into the creator's own repository — over a held credential for an identity Anthers hosts, or over a narrow `repo:` permission the creator grants for one held elsewhere.
 
@@ -132,7 +133,7 @@ make install
 make dev
 ```
 
-`make dev` starts a fresh session — its own Postgres and a private AT Protocol network — applies migrations, seeds a dev account and a small catalog, and starts the API, the worker and the web dev server. The API listens on `:8000` and the frontend on `:3000`. **Nothing persists between sessions**: stopping `make dev` removes the database, the network and anything uploaded, and the next one starts clean.
+`make dev` starts a fresh session — its own Postgres and a private AT Protocol network — applies migrations, seeds a dev account and a small catalog, and starts the API, the worker, the web dev server and the admin app. The API listens on `:8000`, the site on `:3000` and the admin app on `:3001`. Setting `DEV_ACCOUNT_ADMIN=true` gives your dev address an admin account, whose sign-in code arrives in the session's mail catcher. **Nothing persists between sessions**: stopping `make dev` removes the database, the network and anything uploaded, and the next one starts clean.
 
 | Command | What it does |
 |---|---|
