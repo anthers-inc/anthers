@@ -115,6 +115,49 @@ describe("giving a Sticker", () => {
 		expect((await res.json()).code).toBe("not_yours");
 	});
 
+	// 🚨 A reply's subject is another comment, so reading its `subject_id` as a post's id goes
+	// looking for whichever post shares the parent comment's number — nothing, usually, and a
+	// stranger's post on a bad day.
+	it("🚨 pays the creator of the post at the top of the thread for a Sticker on your own reply", async () => {
+		const [post] = await db
+			.insert(posts)
+			.values({
+				creatorId,
+				publicId: testPublicId(),
+				slug: `stk-thread-${RUN}`,
+				title: "Thread",
+				isPublished: true,
+				publishedAt: new Date(),
+			})
+			.returning({ id: posts.id });
+		try {
+			const [parent] = await db
+				.insert(comments)
+				.values({ userId: strangerId, subjectType: "post", subjectId: post.id, body: `q ${RUN}` })
+				.returning({ id: comments.id });
+			const [reply] = await db
+				.insert(comments)
+				.values({
+					userId: giverId,
+					subjectType: "comment",
+					subjectId: parent.id,
+					body: `a ${RUN}`,
+				})
+				.returning({ id: comments.id });
+
+			const res = await give(giverCookie, {
+				subjectType: "comment",
+				subjectId: reply.id,
+				artKey: "butterfly-small",
+			});
+			expect(res.status).toBe(201);
+			const { sticker } = (await res.json()) as { sticker: { creatorId: number } };
+			expect(sticker.creatorId).toBe(creatorId);
+		} finally {
+			await db.delete(posts).where(eq(posts.id, post.id));
+		}
+	});
+
 	it("🚨 finds nothing to sticker on a Work that is not released, or a post that is a draft", async () => {
 		const privateWork = await insertWork({
 			creatorId,

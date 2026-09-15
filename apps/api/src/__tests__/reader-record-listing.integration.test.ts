@@ -179,6 +179,38 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 		expect(record?.text).toBe("Worth the time.");
 	}, 60_000);
 
+	// ⭐ A reply is the same record with a comment for its subject, so it needs nothing new — and
+	// it lands in the REPLIER's repository, naming the comment by the address its author gave it.
+	it("writes a reply into the replier's repository, naming the comment it answers", async () => {
+		const [parent] = await db
+			.select({ id: comments.id, uri: comments.atprotoUri })
+			.from(comments)
+			.where(eq(comments.id, made.comments[0]));
+		const [reply] = await db
+			.insert(comments)
+			.values({
+				userId: creator.id,
+				subjectType: "comment",
+				subjectId: parent.id,
+				body: "Glad it landed.",
+			})
+			.returning();
+		made.comments.push(reply.id);
+
+		expect(await syncCommentRecord(reply.id)).toMatchObject({
+			status: "synced",
+			plan: { action: "create" },
+		});
+		const [row] = await db
+			.select({ uri: comments.atprotoUri })
+			.from(comments)
+			.where(eq(comments.id, reply.id));
+		expect(row.uri).toStartWith(`at://${creator.did}/${COMMENT_COLLECTION}/`);
+		const record = await readRecord(row.uri);
+		expect(record?.subject).toEqual({ uri: parent.uri });
+		expect(record?.text).toBe("Glad it landed.");
+	}, 60_000);
+
 	// 🚨 The ruling the planner used to get backwards.
 	it("leaves a hidden comment's record exactly where its author put it", async () => {
 		const id = made.comments[0];
