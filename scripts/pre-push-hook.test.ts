@@ -31,10 +31,26 @@ let repo: string;
 let stubBin: string;
 let makeLog: string;
 
+/**
+ * The environment every git command and hook run in this file gets: this process's, minus git's own
+ * variables.
+ *
+ * 🚨 **Without this the suite rewrites the real repository whenever it runs inside a git hook from a
+ * worktree.** Git exports `GIT_DIR` to a hook, and in a worktree that is an absolute path to the real
+ * repository, so the `cwd` below stops mattering: `git init` sets `core.bare = true` on the real repo,
+ * the identity lands in its config, `origin/main` is overwritten and every branch and commit here is
+ * made in it. A push from a worktree runs `make verify`, which runs this file, which is exactly that
+ * case. In an ordinary checkout `GIT_DIR` is the relative `.git`, which resolves inside the sandbox and
+ * does no harm — which is why it went unnoticed.
+ */
+const SANDBOX_ENV = Object.fromEntries(
+	Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+);
+
 function git(...args: string[]): string {
 	const res = Bun.spawnSync(
 		["git", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args],
-		{ cwd: repo, stdout: "pipe", stderr: "pipe" },
+		{ cwd: repo, stdout: "pipe", stderr: "pipe", env: SANDBOX_ENV },
 	);
 	if (res.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${res.stderr.toString()}`);
 	return res.stdout.toString().trim();
@@ -62,7 +78,7 @@ function push(stdin: string, makeExit = 0): { exitCode: number; target: string |
 		stdout: "pipe",
 		stderr: "pipe",
 		env: {
-			...process.env,
+			...SANDBOX_ENV,
 			PATH: `${stubBin}:${process.env.PATH}`,
 			STUB_MAKE_EXIT: String(makeExit),
 		},
@@ -87,6 +103,20 @@ beforeAll(() => {
 		`#!/bin/sh\nprintf '%s' "$*" > "${makeLog}"\nexit "$STUB_MAKE_EXIT"\n`,
 	);
 	chmodSync(join(stubBin, "make"), 0o755);
+
+	// Before anything writes: an empty temporary directory is not a repository, so if git finds one
+	// here, something is pointing it at a real repository and every write below would land there.
+	const probe = Bun.spawnSync(["git", "rev-parse", "--absolute-git-dir"], {
+		cwd: repo,
+		stdout: "pipe",
+		stderr: "pipe",
+		env: SANDBOX_ENV,
+	});
+	if (probe.exitCode === 0) {
+		throw new Error(
+			`refusing to build the sandbox: git resolves ${repo} to ${probe.stdout.toString().trim()}, so its writes would land in a real repository`,
+		);
+	}
 
 	git("init", "-q", "-b", "main");
 	git("config", "user.email", "hook-test@example.invalid");
@@ -188,7 +218,7 @@ describe("make verify-docs", () => {
 	});
 
 	it("includes every guard under scripts/ that reads the repository's markdown", async () => {
-		const tracked = Bun.spawnSync(["git", "ls-files", "*.md"], { cwd: REPO_ROOT })
+		const tracked = Bun.spawnSync(["git", "ls-files", "*.md"], { cwd: REPO_ROOT, env: SANDBOX_ENV })
 			.stdout.toString()
 			.trim()
 			.split("\n");
