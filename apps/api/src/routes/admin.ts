@@ -34,7 +34,9 @@ import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
+	counterNoticeRestoreWindow,
 	dmcaSummary,
+	forwardCounterNotice,
 	loadDmcaQueue,
 	loadNotice,
 	recordSuit,
@@ -710,13 +712,63 @@ const adminRoutes = new Hono<AdminEnv>()
 	.get("/dmca/:id", async (c) => {
 		const notice = await loadNotice(Number(c.req.param("id")));
 		if (!notice) return c.json({ error: "Not found" }, 404);
-		return c.json(notice);
+		// While a counter-notice copy is unsent, the restore window a copy sent right now would give,
+		// so an operator emailing it by hand quotes the dates the restore will actually keep.
+		const { counterNoticeFiledAt, counterNoticeForwardedAt } = notice.notice;
+		const copyWindowIfSentNow =
+			counterNoticeFiledAt && !counterNoticeForwardedAt
+				? counterNoticeRestoreWindow(counterNoticeFiledAt, new Date())
+				: null;
+		return c.json({ ...notice, copyWindowIfSentNow });
 	})
 
-	// Act on a notice — does four things in one transaction (via the service):
-	// disable the material, append to the audit log, notify the creator (with
-	// the counter-notice route + the exposure stated), and acknowledge the
-	// complainant. No automated removal — the operator decided.
+	// Send a counter-notice copy that did not go when the creator filed, or record that an operator
+	// emailed it by hand. The restore waits for one of the two.
+	.post(
+		"/dmca/:id/forward",
+		zValidator("json", z.object({ sentByHand: z.boolean().optional() }), invalidBody),
+		async (c) => {
+			const result = await forwardCounterNotice({
+				noticeId: Number(c.req.param("id")),
+				sentByHand: c.req.valid("json").sentByHand,
+			});
+			if (result === "no_counter_notice") {
+				return c.json(
+					{ error: "This notice has no counter-notice to forward.", code: "no_counter_notice" },
+					409,
+				);
+			}
+			if (result === "already_forwarded") {
+				return c.json(
+					{
+						error: "The counter-notice copy has already been sent.",
+						code: "already_forwarded",
+					},
+					409,
+				);
+			}
+			if (!result) return c.json({ error: "Notice not found" }, 404);
+			if (!result.forwarded) {
+				return c.json(
+					{
+						error:
+							"The email was not accepted this time either. Send the copy yourself and record that you did.",
+						code: "not_sent",
+					},
+					502,
+				);
+			}
+			return c.json({
+				forwarded: true,
+				restoreNoEarlierThan: result.restoreNoEarlierThan.toISOString(),
+			});
+		},
+	)
+
+	// Act on a notice — the service disables the material and appends to the audit
+	// log in one transaction, then notifies the creator (with the counter-notice route
+	// and the exposure stated) and emails the complainant that it was acted on. No
+	// automated removal — the operator decided.
 	.post(
 		"/dmca/:id/act",
 		zValidator(
@@ -744,13 +796,19 @@ const adminRoutes = new Hono<AdminEnv>()
 	)
 
 	// Reject a notice — a first-class outcome with the § 512(c)(3)(B)(ii)
-	// reach-back. The rejection copy (in the note) names which element failed,
-	// and the service records the reach-back.
+	// reach-back. The note names what the notice lacked and is emailed to the
+	// complainant as the reason, so it is required.
 	.post(
 		"/dmca/:id/reject",
 		zValidator(
 			"json",
-			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			z.object({
+				note: z
+					.string()
+					.trim()
+					.min(1, "Say what the notice lacked. The complainant is emailed this as the reason.")
+					.max(MODERATION_NOTE_MAX),
+			}),
 			invalidBody,
 		),
 		async (c) => {
@@ -761,6 +819,15 @@ const adminRoutes = new Hono<AdminEnv>()
 				adminId: admin.id,
 				note,
 			});
+			if (result === "reason_required") {
+				return c.json(
+					{
+						error: "Say what the notice lacked. The complainant is emailed this as the reason.",
+						code: "reason_required",
+					},
+					400,
+				);
+			}
 			if (!result) return c.json({ error: "Notice not found" }, 404);
 			return c.json(result);
 		},

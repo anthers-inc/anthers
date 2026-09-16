@@ -239,7 +239,7 @@ const dmcaRoutes = new Hono()
 				// The exposure the creator just agreed to, restated so it cannot be missed:
 				// their name, address, and phone are now forwarded to the complainant.
 				exposure:
-					"Your name, postal address, and telephone number have been forwarded to the complainant. If they file a court action, the material stays down; otherwise it will be restored on or after the date above.",
+					"Your name, postal address, and telephone number are forwarded to the complainant. If they file a court action, the material stays down; otherwise it will be restored on or after the date above.",
 			},
 			201,
 		);
