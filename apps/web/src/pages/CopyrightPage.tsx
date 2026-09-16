@@ -86,12 +86,10 @@ interface MyNotice {
 /** Aggregate notice counts — see `dmcaSummary` in the API for what is and isn't published. */
 interface DmcaCounts {
 	received: number;
-	screening: number;
 	actioned: number;
 	rejected: number;
 	counterNoticed: number;
 	restored: number;
-	withdrawn: number;
 	total: number;
 }
 
@@ -670,11 +668,6 @@ function TransparencySection({ counts }: { counts: DmcaCounts | null }) {
 			hint: "The creator answered under § 512(g)(3).",
 		},
 		{ label: "Restored", value: counts.restored, hint: "The work went back up." },
-		{
-			label: "Withdrawn",
-			value: counts.withdrawn,
-			hint: "The complainant withdrew the notice.",
-		},
 	];
 
 	return (

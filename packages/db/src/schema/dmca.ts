@@ -24,15 +24,14 @@
  * tables: the append-only `moderation_actions` log gains a `work` subject type
  * entry on every takedown/restore, so the audit trail reads as the sequence of
  * decisions actually taken. The `dmca_notices` table carries the notice's own
- * lifecycle (received → screening → actioned → counter_noticed → restored /
- * rejected / withdrawn), which is a different clock from "what did the operator
- * do about the content."
+ * lifecycle (received → actioned → counter_noticed → restored, or received →
+ * rejected), which is a different clock from "what did the operator do about the
+ * content."
  *
  * The admin-account references are `set null`, matching `moderation_actions`:
  * a decision outlives the account that made it, and a notice outlives the
- * complainant's relationship with us. The Work FK is `cascade` — a deleted Work
- * takes its notices with it, which is correct because the notice is about that
- * Work specifically.
+ * complainant's relationship with us. The Work FK is `set null` too, so deleting
+ * a Work cannot erase the notices against it; the column comment says why.
  */
 
 import { relations } from "drizzle-orm";
@@ -85,13 +84,16 @@ export interface CounterNotice {
  * (which is about the Work) and from `moderation_actions` (which is about what
  * an operator did to the content). A notice carries its own clock.
  *
- * `received` → `screening` → `actioned` (the Work is taken down)
- *                  ↘ `rejected` (a facially defective notice; the reach-back
- *                                 under § 512(c)(3)(B)(ii) is recorded)
+ * `received` → `actioned` (the Work is taken down)
+ *           ↘ `rejected` (the notice could not be acted on; the complainant is
+ *                          emailed the reason, which is the § 512(c)(3)(B)(ii) reach-back)
  * `actioned` → `counter_noticed` (the creator filed a counter-notice)
- *                   → `restored` (the 10–14 business day window closed, or the
- *                                   creator conceded, and the Work is back up)
- *                   ↘ `withdrawn` (the complainant withdrew the notice)
+ * `actioned` or `counter_noticed` → `restored` (the 10–14 business day window closed with
+ *                                    no suit recorded, or an operator restored the Work)
+ *
+ * `DMCA_ACTION_STATUSES` in `services/dmca.ts` is which of these each action may start from.
+ * A status belongs here only once something writes it: a complainant withdrawing a notice is
+ * handled today by an operator restoring the Work, so it has no status of its own.
  *
  * `suitFiledAt` is set separately — a court action to restrain the subscriber
  * prevents the restore timer from firing, regardless of the notice's status.
@@ -102,21 +104,18 @@ export interface CounterNotice {
  */
 export type DmcaNoticeStatus =
 	| "received"
-	| "screening"
 	| "actioned"
 	| "rejected"
 	| "counter_noticed"
-	| "restored"
-	| "withdrawn";
+	| "restored";
 
+/** Every status, in lifecycle order — which is also the order the operator queue lists them in. */
 export const DMCA_NOTICE_STATUSES: readonly DmcaNoticeStatus[] = [
 	"received",
-	"screening",
 	"actioned",
-	"rejected",
 	"counter_noticed",
 	"restored",
-	"withdrawn",
+	"rejected",
 ];
 
 /**

@@ -64,10 +64,10 @@ export function redactionCutoff(now = new Date()): Date {
  * subscriber's on any counter-notice attached to them.
  *
  * **Scoped to SETTLED notices.** A notice still working its way through — received,
- * screening, actioned-but-not-final, counter-noticed and awaiting its restore — is
- * live work, and blanking the address of someone we may still need to write to
- * would break the process rather than tidy it. So the sweep takes only notices
- * that reached an end: finalized, or rejected, restored or withdrawn.
+ * actioned-but-not-final, counter-noticed and awaiting its restore — is live work,
+ * and blanking the address of someone we may still need to write to would break the
+ * process rather than tidy it. So the sweep takes only notices that reached an end:
+ * finalized, rejected or restored.
  *
  * The clock runs from the **last thing that happened** rather than from receipt,
  * which is both easier to state in the policy and impossible to game by letting a
@@ -118,7 +118,7 @@ export async function redactSettledDmcaNotices(now = new Date()): Promise<{ reda
 				// Settled only — see the note above.
 				or(
 					sql`${dmcaNotices.finalizedAt} IS NOT NULL`,
-					inArray(dmcaNotices.status, ["rejected", "restored", "withdrawn"]),
+					inArray(dmcaNotices.status, ["rejected", "restored"]),
 				),
 				lastActivity,
 			),

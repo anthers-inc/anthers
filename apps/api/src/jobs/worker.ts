@@ -18,6 +18,7 @@ import {
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
 import {
 	finalizeNotice,
+	isNoticeStatusRefusal,
 	noticesReadyForFinality,
 	noticesReadyForRestore,
 	restoreWork,
@@ -192,9 +193,15 @@ async function start() {
 			const ready = await noticesReadyForRestore();
 			for (const notice of ready) {
 				const result = await restoreWork({ noticeId: notice.noticeId });
-				if (result) {
+				if (result && typeof result === "object" && !isNoticeStatusRefusal(result)) {
 					console.log(
 						`[dmca-restore] job ${job.id}: restored work ${notice.workId} (notice #${notice.noticeId})`,
+					);
+				} else if (result) {
+					// A refusal is not a restore. The sweep selects only notices it may restore, so this
+					// means the notice changed between the select and the restore.
+					console.warn(
+						`[dmca-restore] job ${job.id}: did not restore notice #${notice.noticeId}: ${JSON.stringify(result)}`,
 					);
 				}
 			}

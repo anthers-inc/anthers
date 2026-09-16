@@ -26,6 +26,7 @@
 import { db } from "@anthers/db/client";
 import {
 	type CounterNotice,
+	DMCA_NOTICE_STATUSES,
 	type DmcaNoticeStatus,
 	dmcaNotices,
 	moderationActions,
@@ -143,6 +144,45 @@ export async function fileNotice(input: {
 }
 
 /**
+ * Which statuses each operator action may act on. The admin app offers each action only where it
+ * applies, but that is one client's courtesy, and these are the rule: an action on a notice anywhere
+ * else in its lifecycle is refused, so a notice cannot be rejected after its Work came down, taken
+ * down after it was rejected, or restored before anything was removed.
+ *
+ * `recordSuit` accepts only a counter-noticed notice because a court action matters to § 512(g) only
+ * as the thing that stops a restore, and nothing is scheduled to restore until a counter-notice is
+ * filed.
+ */
+export const DMCA_ACTION_STATUSES = {
+	takeDown: ["received"],
+	reject: ["received"],
+	restore: ["actioned", "counter_noticed"],
+	recordSuit: ["counter_noticed"],
+} as const satisfies Record<string, readonly DmcaNoticeStatus[]>;
+
+/** An operator action refused because of where the notice is in its lifecycle. */
+export interface NoticeStatusRefusal {
+	refused: "notice_status";
+	/** Named apart from a success's `status`, which a refusal must never be mistaken for. */
+	noticeStatus: DmcaNoticeStatus;
+	allowed: readonly DmcaNoticeStatus[];
+}
+
+export function isNoticeStatusRefusal(result: unknown): result is NoticeStatusRefusal {
+	return typeof result === "object" && result !== null && "refused" in result;
+}
+
+function refusalFor(
+	action: keyof typeof DMCA_ACTION_STATUSES,
+	status: DmcaNoticeStatus,
+): NoticeStatusRefusal | null {
+	const allowed: readonly DmcaNoticeStatus[] = DMCA_ACTION_STATUSES[action];
+	return allowed.includes(status)
+		? null
+		: { refused: "notice_status", noticeStatus: status, allowed };
+}
+
+/**
  * Take down a Work. Sets `works.takedown_status = "taken_down"`, marks the
  * notice `actioned`, and appends to `moderation_actions` (the audit trail) in one
  * transaction — a hidden row with no record of who hid it is exactly the state the
@@ -160,14 +200,20 @@ export async function takeDownWork(input: {
 	adminId: number;
 	actorRole?: string;
 	note?: string;
-}): Promise<{ status: "taken_down"; complainantNotified: boolean } | "already_taken_down" | null> {
+}): Promise<
+	| { status: "taken_down"; complainantNotified: boolean }
+	| NoticeStatusRefusal
+	| "already_taken_down"
+	| null
+> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
 		.where(eq(dmcaNotices.id, input.noticeId))
 		.limit(1);
 	if (!notice) return null;
-	if (notice.status === "actioned") return "already_taken_down";
+	const refusal = refusalFor("takeDown", notice.status);
+	if (refusal) return refusal;
 	if (!notice.workId) return null;
 
 	const [work] = await db
@@ -267,13 +313,20 @@ export async function rejectNotice(input: {
 	adminId: number;
 	/** What the notice lacked, written to the complainant, who is sent it. */
 	note: string;
-}): Promise<{ status: "rejected"; complainantNotified: boolean } | "reason_required" | null> {
+}): Promise<
+	| { status: "rejected"; complainantNotified: boolean }
+	| NoticeStatusRefusal
+	| "reason_required"
+	| null
+> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
 		.where(eq(dmcaNotices.id, input.noticeId))
 		.limit(1);
 	if (!notice) return null;
+	const refusal = refusalFor("reject", notice.status);
+	if (refusal) return refusal;
 
 	const note = input.note.trim();
 	if (!note) return "reason_required";
@@ -414,13 +467,22 @@ export async function restoreWork(input: {
 	/** The admin account acting, or absent when the scheduled sweep restores. */
 	adminId?: number;
 	note?: string;
-}): Promise<{ status: "restored" } | null> {
+	/**
+	 * Restore even though a court action is recorded. An operator may need to — the suit was
+	 * dismissed, or the complainant withdrew it — but it undoes the one thing that stops a restore,
+	 * so it has to be said on purpose rather than happen because the caller did not look.
+	 */
+	overrideSuit?: boolean;
+}): Promise<{ status: "restored" } | NoticeStatusRefusal | "suit_recorded" | null> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
 		.where(eq(dmcaNotices.id, input.noticeId))
 		.limit(1);
 	if (!notice) return null;
+	const refusal = refusalFor("restore", notice.status);
+	if (refusal) return refusal;
+	if (notice.suitFiledAt && !input.overrideSuit) return "suit_recorded";
 	if (!notice.workId) return null;
 
 	const [work] = await db
@@ -473,13 +535,17 @@ export async function recordSuit(input: {
 	noticeId: number;
 	/** The admin account recording it. */
 	adminId: number;
-}): Promise<{ status: "suit_filed" } | null> {
+}): Promise<{ status: "suit_filed" } | NoticeStatusRefusal | "suit_already_recorded" | null> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
 		.where(eq(dmcaNotices.id, input.noticeId))
 		.limit(1);
 	if (!notice) return null;
+	const refusal = refusalFor("recordSuit", notice.status);
+	if (refusal) return refusal;
+	// Recording it again would move the date the restore was stopped, and nothing un-records one.
+	if (notice.suitFiledAt) return "suit_already_recorded";
 
 	await db
 		.update(dmcaNotices)
@@ -519,8 +585,8 @@ export async function noticesReadyForRestore(): Promise<
  * filed. Used by the scheduled finality sweep (`QUEUES.DMCA_FINALIZE`) to
  * release the buyer refunds.
  *
- * Scoped to `actioned` — a notice that was counter-noticed, restored, rejected
- * or withdrawn is not a final takedown, and `finalizedAt IS NULL` keeps an
+ * Scoped to `actioned` — a notice that was counter-noticed, restored or rejected
+ * is not a final takedown, and `finalizedAt IS NULL` keeps an
  * already-settled notice out of the sweep.
  */
 export async function noticesReadyForFinality(): Promise<{ noticeId: number }[]> {
@@ -718,14 +784,14 @@ export async function noticesForCreator(userId: number) {
 			})
 			.from(dmcaNotices)
 			.innerJoin(works, eq(dmcaNotices.workId, works.id))
-			// Only notices that actually did something. A notice still being screened,
+			// Only notices that actually did something. A notice still awaiting a decision,
 			// or one we rejected as defective, never touched the creator's work — and
 			// telling someone "you were accused and we threw it out" is a chilling
 			// message about an event that had no effect on them.
 			.where(
 				and(
 					eq(works.creatorId, userId),
-					inArray(dmcaNotices.status, ["actioned", "counter_noticed", "restored", "withdrawn"]),
+					inArray(dmcaNotices.status, ["actioned", "counter_noticed", "restored"]),
 				),
 			)
 			.orderBy(desc(dmcaNotices.receivedAt))
@@ -734,7 +800,7 @@ export async function noticesForCreator(userId: number) {
 }
 
 /**
- * The operator's DMCA queue. Ordered by status then recency, with the Work
+ * The operator's DMCA queue. Ordered by where each notice is in its lifecycle, then by recency, with the Work
  * details hydrated.
  */
 export async function loadDmcaQueue(limit = 100) {
@@ -762,7 +828,15 @@ export async function loadDmcaQueue(limit = 100) {
 		})
 		.from(dmcaNotices)
 		.leftJoin(works, eq(dmcaNotices.workId, works.id))
-		.orderBy(dmcaNotices.status, desc(dmcaNotices.receivedAt))
+		// Lifecycle order, not alphabetical: sorting the status as text puts `actioned` above
+		// `received`, below which the notices waiting for a decision would sink.
+		.orderBy(
+			sql`case ${dmcaNotices.status} ${sql.join(
+				DMCA_NOTICE_STATUSES.map((status, i) => sql`when ${status} then ${sql.raw(String(i))}`),
+				sql` `,
+			)} end`,
+			desc(dmcaNotices.receivedAt),
+		)
 		.limit(limit);
 	return rows;
 }
@@ -794,12 +868,10 @@ export async function dmcaSummary() {
 	for (const r of rows) counts[r.status] = Number(r.n);
 	return {
 		received: counts.received ?? 0,
-		screening: counts.screening ?? 0,
 		actioned: counts.actioned ?? 0,
 		rejected: counts.rejected ?? 0,
 		counterNoticed: counts.counter_noticed ?? 0,
 		restored: counts.restored ?? 0,
-		withdrawn: counts.withdrawn ?? 0,
 		total: Object.values(counts).reduce((a, b) => a + b, 0),
 	};
 }

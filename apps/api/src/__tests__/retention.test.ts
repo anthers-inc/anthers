@@ -278,7 +278,7 @@ describe("DMCA notices past the clock", () => {
 	});
 
 	it("never redacts a notice still working through the process", async () => {
-		for (const status of ["received", "screening", "actioned", "counter_noticed"] as const) {
+		for (const status of ["received", "actioned", "counter_noticed"] as const) {
 			const before = await makeNotice({ status, receivedAt: longAgo() });
 			await redactSettledDmcaNotices();
 			const after = await reloadNotice(before.id);
@@ -313,7 +313,7 @@ describe("DMCA notices past the clock", () => {
 	});
 
 	it("is idempotent — a redacted row is not swept again", async () => {
-		await makeNotice({ status: "withdrawn", receivedAt: longAgo(), finalizedAt: longAgo() });
+		await makeNotice({ status: "rejected", receivedAt: longAgo(), finalizedAt: longAgo() });
 		const first = await redactSettledDmcaNotices();
 		expect(first.redacted).toBeGreaterThanOrEqual(1);
 		const second = await redactSettledDmcaNotices();

@@ -15,7 +15,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { adminAccounts, rightsRequests } from "@anthers/db/schema";
+import { adminAccounts, type DmcaNoticeStatus, rightsRequests } from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
 	HOLD_SUBJECT_TYPES,
@@ -35,8 +35,10 @@ import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
 	dmcaSummary,
+	isNoticeStatusRefusal,
 	loadDmcaQueue,
 	loadNotice,
+	type NoticeStatusRefusal,
 	recordSuit,
 	rejectNotice,
 	restoreWork,
@@ -69,6 +71,28 @@ import {
 
 import { adminAccountRoutes } from "./admin-accounts.js";
 import { adminAuthRoutes } from "./admin-auth.js";
+
+/** A notice's status as an operator reads it in a refusal. */
+const NOTICE_STATUS_WORDS: Record<DmcaNoticeStatus, string> = {
+	received: "waiting for a decision",
+	actioned: "taken down",
+	counter_noticed: "counter-noticed",
+	restored: "restored",
+	rejected: "rejected",
+};
+
+/**
+ * The 409 body for an operator action on a notice whose status does not allow it. The code is the
+ * same for every action, and `noticeStatus` and `allowed` say which rule refused it.
+ */
+function noticeStatusRefusal(refusal: NoticeStatusRefusal, why: string) {
+	return {
+		error: `This notice is ${NOTICE_STATUS_WORDS[refusal.noticeStatus]}, and ${why}.`,
+		code: "notice_status",
+		noticeStatus: refusal.noticeStatus,
+		allowed: refusal.allowed,
+	};
+}
 
 const QUEUE_FILTERS: readonly QueueFilter[] = [
 	"reported",
@@ -721,6 +745,12 @@ const adminRoutes = new Hono<AdminEnv>()
 				adminId: admin.id,
 				note,
 			});
+			if (isNoticeStatusRefusal(result)) {
+				return c.json(
+					noticeStatusRefusal(result, "only a notice waiting for a decision can be acted on"),
+					409,
+				);
+			}
 			if (result === "already_taken_down") {
 				return c.json(
 					{ error: "This Work is already taken down.", code: "already_taken_down" },
@@ -756,6 +786,12 @@ const adminRoutes = new Hono<AdminEnv>()
 				adminId: admin.id,
 				note,
 			});
+			if (isNoticeStatusRefusal(result)) {
+				return c.json(
+					noticeStatusRefusal(result, "only a notice waiting for a decision can be rejected"),
+					409,
+				);
+			}
 			if (result === "reason_required") {
 				return c.json(
 					{
@@ -772,22 +808,43 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// Restore a Work manually. The scheduled sweep restores automatically at the
 	// 10–14 business day window; this is for an operator who decides to restore
-	// early (e.g., the complainant withdrew the notice).
+	// early (e.g., the complainant withdrew the notice). A recorded suit refuses
+	// the restore unless `overrideSuit` says the operator means to undo it.
 	.post(
 		"/dmca/:id/restore",
 		zValidator(
 			"json",
-			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			z.object({
+				note: z.string().max(MODERATION_NOTE_MAX).optional(),
+				overrideSuit: z.boolean().optional(),
+			}),
 			invalidBody,
 		),
 		async (c) => {
 			const admin = c.get("admin");
-			const { note } = c.req.valid("json");
+			const { note, overrideSuit } = c.req.valid("json");
 			const result = await restoreWork({
 				noticeId: Number(c.req.param("id")),
 				adminId: admin.id,
 				note,
+				overrideSuit,
 			});
+			if (isNoticeStatusRefusal(result)) {
+				return c.json(
+					noticeStatusRefusal(result, "only a notice whose Work is taken down can be restored"),
+					409,
+				);
+			}
+			if (result === "suit_recorded") {
+				return c.json(
+					{
+						error:
+							"A suit is recorded on this notice, which stops the restore. Restoring anyway has to be asked for with overrideSuit.",
+						code: "suit_recorded",
+					},
+					409,
+				);
+			}
 			if (!result) return c.json({ error: "Notice or Work not found" }, 404);
 			return c.json(result);
 		},
@@ -801,6 +858,21 @@ const adminRoutes = new Hono<AdminEnv>()
 			noticeId: Number(c.req.param("id")),
 			adminId: admin.id,
 		});
+		if (isNoticeStatusRefusal(result)) {
+			return c.json(
+				noticeStatusRefusal(
+					result,
+					"a suit matters only once a counter-notice is filed, because that is what schedules a restore",
+				),
+				409,
+			);
+		}
+		if (result === "suit_already_recorded") {
+			return c.json(
+				{ error: "A suit is already recorded on this notice.", code: "suit_already_recorded" },
+				409,
+			);
+		}
 		if (!result) return c.json({ error: "Notice not found" }, 404);
 		return c.json(result);
 	})
