@@ -23,6 +23,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
 import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
@@ -549,8 +550,10 @@ const paymentRoutes = new Hono()
 		const conditions = [eq(purchases.buyerId, user.id), eq(purchases.status, "completed")];
 
 		if (month) {
-			const start = new Date(`${month}-01T00:00:00`);
-			const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+			// `new Date("YYYY-MM-01T00:00:00")` with no zone is parsed as LOCAL midnight, so
+			// this window was offset from the UTC timestamps it filters by.
+			const start = cycleStart(`${month}-01`);
+			const end = cycleEnd(`${month}-01`);
 			conditions.push(gte(purchases.createdAt, start));
 			conditions.push(lte(purchases.createdAt, end));
 		}

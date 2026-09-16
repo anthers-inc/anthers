@@ -27,6 +27,7 @@
 
 import { db } from "@anthers/db/client";
 import { accounts, attentionEvents } from "@anthers/db/schema";
+import { cycleEnd, cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
 import { supportAmount } from "@anthers/shared/constants";
 import {
 	NO_PUBLIC_ACCESS_ALLOWANCE,
@@ -37,14 +38,21 @@ import {
 } from "@anthers/shared/public-access";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
-/** First instant of the current calendar month, in server time. */
+/**
+ * The window a free account's ten hours are counted over.
+ *
+ * ⚠️ **The same month the billing cycle means, and not "in server time".** These read the
+ * machine's local calendar until 2026-09-16, so the meter's month and the cycle key every
+ * other part of the model uses could start hours apart — which decides whether the seconds
+ * either side of a month boundary are charged to the allowance that is ending or the one
+ * that is beginning.
+ */
 function monthStart(now: Date = new Date()): Date {
-	return new Date(now.getFullYear(), now.getMonth(), 1);
+	return cycleStart(cycleKeyFor(now));
 }
 
-/** First instant of the next calendar month. */
 function monthEnd(now: Date = new Date()): Date {
-	return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+	return cycleEnd(cycleKeyFor(now));
 }
 
 /**

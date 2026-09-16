@@ -30,17 +30,18 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { estimateStorageCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, count, eq, sql, sum } from "drizzle-orm";
 
-/** Returns the first day of the current month as YYYY-MM-DD for Drizzle date columns. */
-function getCycleDate(): string {
-	const now = new Date();
-	const y = now.getFullYear();
-	const m = String(now.getMonth() + 1).padStart(2, "0");
-	return `${y}-${m}-01`;
-}
+/**
+ * The current cycle key, for Drizzle date columns.
+ *
+ * A fifth hand-rolled copy of this lived here, named differently enough to survive the
+ * 2026-09-15 sweep that unified the other four. It read local time like all of them.
+ */
+const getCycleDate = currentCycleKey;
 
 async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise<Decimal> {
 	// Pool + Seed distributions

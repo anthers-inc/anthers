@@ -56,6 +56,20 @@ export function nextCycleKey(key: CycleKey): CycleKey {
 	return cycleKeyFor(cycleEnd(key));
 }
 
+/**
+ * The cycle before this one — what a settlement run reaches back to.
+ *
+ * ⚠️ **Built by stepping back from the 1st rather than by `setMonth(m - 1)`**, which is the
+ * shape that goes wrong on the 31st: `setMonth` keeps the day-of-month and overflows, so 31
+ * March minus one month is 3 March. Every key here is already the 1st, so there is no day to
+ * preserve and no overflow to hit — but the arithmetic is written this way so that stays true
+ * if somebody passes a date rather than a key.
+ */
+export function previousCycleKey(key: CycleKey): CycleKey {
+	const start = cycleStart(key);
+	return cycleKeyFor(new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1)));
+}
+
 /** How many days this particular month has — 28 through 31, never an average. */
 export function daysInCycle(key: CycleKey): number {
 	return (cycleEnd(key).getTime() - cycleStart(key).getTime()) / 86_400_000;
