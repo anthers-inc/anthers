@@ -15,10 +15,10 @@
  * distribution on its own. The test below watches the creator's payout, not a ledger entry.
  */
 
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, poolDistributions, stickers } from "@anthers/db/schema";
-import { and, eq } from "drizzle-orm";
+import { accounts, monthSettlements, poolDistributions, stickers } from "@anthers/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "../services/sticker-void";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -29,6 +29,12 @@ purgeAccountsCreatedHere();
 
 const RUN = crypto.randomUUID().slice(0, 8);
 const CYCLE = "2032-04-01";
+const SETTLED_CYCLE = "2032-05-01";
+
+// The month marker references nothing, so no account purge reaches it.
+afterAll(async () => {
+	await db.delete(monthSettlements).where(inArray(monthSettlements.billingCycle, [SETTLED_CYCLE]));
+});
 
 async function signUp(username: string) {
 	return (await createAccount(username)).userId;
@@ -88,21 +94,10 @@ describe("reverting a Sticker when Anthers removes what it sits on", () => {
 		expect(await voidStickersOnSubject("work", work.id)).toEqual({ voided: 0, dollars: 0 });
 	});
 
-	it("🚨 leaves a SETTLED cycle alone — a takedown does not reach into a month already paid", async () => {
+	it("🚨 leaves a SETTLED month alone — a takedown does not reach into a month already credited", async () => {
 		const work = await insertWork({ creatorId, type: "text", title: `V3 ${RUN}` });
-		const settledCycle = "2032-05-01";
-		await giveOne(work.id, settledCycle);
-		// A payout row for that cycle is what "settled" means: the money is somewhere else.
-		await db
-			.insert(poolDistributions)
-			.values({
-				subscriberId: giverId,
-				creatorId,
-				billingCycle: settledCycle,
-				poolAmount: "1.00",
-				stickerAmount: "1.00",
-			})
-			.onConflictDoNothing();
+		await giveOne(work.id, SETTLED_CYCLE);
+		await db.insert(monthSettlements).values({ billingCycle: SETTLED_CYCLE });
 
 		expect(await voidStickersOnSubject("work", work.id)).toEqual({ voided: 0, dollars: 0 });
 		const [row] = await db
@@ -110,6 +105,25 @@ describe("reverting a Sticker when Anthers removes what it sits on", () => {
 			.from(stickers)
 			.where(and(eq(stickers.subjectType, "work"), eq(stickers.subjectId, work.id)));
 		expect(row.voidedAt).toBeNull();
+	});
+
+	it("🚨 still voids in a month the nightly estimate has written rows for", async () => {
+		// The estimate writes a month's distribution rows from its first night. Reading one as
+		// "settled" is what made every takedown after a month's first day void nothing.
+		const work = await insertWork({ creatorId, type: "text", title: `V3b ${RUN}` });
+		await giveOne(work.id);
+		await db
+			.insert(poolDistributions)
+			.values({
+				subscriberId: giverId,
+				creatorId,
+				billingCycle: CYCLE,
+				poolAmount: "1.00",
+				stickerAmount: "1.00",
+			})
+			.onConflictDoNothing();
+
+		expect(await voidStickersOnSubject("work", work.id)).toEqual({ voided: 1, dollars: 1 });
 	});
 
 	it("⭐ puts an unsettled Sticker back when the takedown is undone", async () => {

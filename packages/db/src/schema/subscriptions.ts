@@ -933,9 +933,9 @@ export const stickers = pgTable(
 		 * 2026-09-04). They broke no rule, and a creator has to stay free to take a Work
 		 * out of circulation without it costing them money already given.
 		 *
-		 * ⚠️ **Only ever set on a cycle that has not settled.** Once `distribute-pool` has
-		 * written the payouts, the money is somewhere else and this becomes a claim about
-		 * the past rather than a routing instruction.
+		 * ⚠️ **Only ever set on a month that has not settled** — `month_settlements` says which
+		 * have. Once settlement has credited the month, the money is owed to somebody and this
+		 * becomes a claim about the past rather than a routing instruction.
 		 */
 		voidedAt: timestamp("voided_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
