@@ -104,6 +104,8 @@ interface NoticeDetail {
 	workTitle: string | null;
 	workSlug: string | null;
 	workPublicId: number | null;
+	/** The restore window a counter-notice copy sent now would give, while one is unsent. */
+	copyWindowIfSentNow: { from: string; by: string } | null;
 }
 
 const STATUS_NAMES: Record<NoticeStatus, string> = {
@@ -239,6 +241,75 @@ const CONFIRM_COPY: Record<Action, { title: string; body: string; button: string
 			tone: "btn-warning",
 		},
 	};
+
+/**
+ * A counter-notice whose copy has not reached the complainant. The restore sweep holds the Work
+ * down until it has, so this offers the two ways to settle it: another attempt through the email
+ * provider, or recording a copy the operator sent from their own mailbox.
+ */
+function UnsentCopy({
+	noticeId,
+	complainantEmail,
+	copyWindow,
+	onSent,
+}: {
+	noticeId: number;
+	complainantEmail: string;
+	copyWindow: { from: string; by: string } | null;
+	onSent: () => Promise<void>;
+}) {
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	async function forward(sentByHand: boolean) {
+		setBusy(true);
+		setError(null);
+		const result = await adminPost(`/api/admin/dmca/${noticeId}/forward`, { sentByHand });
+		setBusy(false);
+		if (!result.ok) {
+			setError(result.error);
+			return;
+		}
+		await onSent();
+	}
+
+	return (
+		<div className="rounded-box border border-error bg-base-100 p-4 text-sm">
+			<p className="text-error">
+				The counter-notice has not been forwarded to the complainant, because the email was not
+				accepted. § 512(g)(2)(B) requires sending them a copy promptly, and the Work will not be
+				restored until they have one.
+			</p>
+			{copyWindow && (
+				<p className="mt-2">
+					A copy sent today should say the material will be restored between{" "}
+					{shortDate(copyWindow.from)} and {shortDate(copyWindow.by)}, unless they notify the
+					designated agent of a court action first. Send it to{" "}
+					{complainantEmail || "the complainant"}.
+				</p>
+			)}
+			{error && <p className="mt-2 text-error">{error}</p>}
+			<div className="mt-3 flex flex-wrap gap-2">
+				<button
+					type="button"
+					className="btn btn-sm btn-primary"
+					onClick={() => forward(false)}
+					disabled={busy}
+				>
+					Send the Copy Again
+				</button>
+				<button
+					type="button"
+					className="btn btn-sm btn-outline"
+					onClick={() => forward(true)}
+					disabled={busy}
+				>
+					I Sent the Copy Myself
+				</button>
+			</div>
+		</div>
+	);
+}
 
 function Detail({
 	id,
@@ -451,12 +522,15 @@ function Detail({
 						</details>
 
 						{n.counterNotice && !n.counterNoticeForwardedAt && (
-							<p className="rounded-box border border-error bg-base-100 p-4 text-sm text-error">
-								The counter-notice has not been forwarded to the complainant, because the email was
-								not accepted. § 512(g)(2)(B) requires sending them a copy promptly, with the restore
-								window, before the Work is restored. Email it to{" "}
-								{n.complainantEmail || "the complainant"} by hand.
-							</p>
+							<UnsentCopy
+								noticeId={n.id}
+								complainantEmail={n.complainantEmail}
+								copyWindow={data.copyWindowIfSentNow}
+								onSent={async () => {
+									await reload();
+									onChanged();
+								}}
+							/>
 						)}
 						{(n.status === "actioned" || n.status === "rejected") && !n.complainantNotifiedAt && (
 							<p className="rounded-box border border-warning bg-base-100 p-4 text-sm text-warning">
