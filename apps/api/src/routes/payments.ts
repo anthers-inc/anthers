@@ -33,13 +33,14 @@ import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
-import { applyCreditForPurchase, syncSubscriptionToAccount } from "../services/billing.js";
+import { syncSubscriptionToAccount } from "../services/billing.js";
 import { saveOnPurchase } from "../services/library.js";
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
 	settleRefundedPurchase,
 } from "../services/refunds.js";
+import { applyReductionsToInvoice } from "../services/support-reductions.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the Work, confirm it's
@@ -758,17 +759,19 @@ const paymentRoutes = new Hono()
 				// an entitlement.
 				await saveOnPurchase(completed);
 
-				if (completed.type === "seeds") {
-					// A support top-up → credit the account (not a post purchase).
-					await applyCreditForPurchase(completed);
-				} else {
-					// Post purchase → record the (now always zero) purchase fee to the ledger.
-					await db.insert(crfLedger).values({
-						amount: completed.crfFee,
-						purchaseId: completed.id,
-						description: `Purchase fee (retired, always $0) — purchase #${completed.id}`,
-					});
-				}
+				// Record the (now always zero) purchase fee to the ledger.
+				//
+				// ⚠️ A `type === "seeds"` branch sat here and credited the one-off support
+				// top-up. Nothing creates a row of that type since the top-up retired on
+				// 2026-09-15 — support is the subscription and only the subscription — so a
+				// completed purchase is always a Work purchase now. Rows of the old type can
+				// still be read, which is why `services/refunds.ts` and `services/dmca.ts`
+				// still know the value; nothing can still be written.
+				await db.insert(crfLedger).values({
+					amount: completed.crfFee,
+					purchaseId: completed.id,
+					description: `Purchase fee (retired, always $0) — purchase #${completed.id}`,
+				});
 			}
 		} else if (event.type === "payment_intent.payment_failed") {
 			const pi = event.data.object as Stripe.PaymentIntent;
@@ -837,6 +840,26 @@ const paymentRoutes = new Hono()
 			event.type === "customer.subscription.deleted"
 		) {
 			await syncSubscriptionToAccount(event.data.object as Stripe.Subscription);
+		} else if (event.type === "invoice.created") {
+			/**
+			 * 🚨 **The one window in which a renewal invoice can still be changed.** Stripe
+			 * creates it as a draft and finalizes it about an hour later, and the day-exact
+			 * reduction owed to anybody who started or raised mid-month is applied in between —
+			 * as a one-off coupon per line, from rows Anthers recorded itself.
+			 *
+			 * ⚠️ **A coupon attached to the subscription in advance does not work**, which is
+			 * why this handler exists rather than something simpler: it is consumed by whichever
+			 * invoice comes next, and for a mid-month raise that is the immediate invoice — so
+			 * the discount would land on the very charge it exists to compensate for.
+			 *
+			 * The handler is deliberately narrow and everything it does not recognize is a
+			 * silent no-op: `applyReductionsToInvoice` refuses anything that is not a draft
+			 * renewal, and refuses an account with nothing owed, which is nearly every invoice.
+			 */
+			const applied = await applyReductionsToInvoice(event.data.object as Stripe.Invoice);
+			if (applied > 0) {
+				console.info(`support reductions: discounted ${applied} line(s) on a renewal invoice`);
+			}
 		}
 
 		return c.json({ received: true });

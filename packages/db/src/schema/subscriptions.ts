@@ -178,6 +178,80 @@ export const accountCycles = pgTable(
 	(table) => [uniqueIndex("uq_account_cycles_user_cycle").on(table.userId, table.billingCycle)],
 );
 
+/**
+ * What Anthers owes back on a line that started or was raised part-way into a month.
+ *
+ * Anything begun mid-month is charged **in full** that day, so the days before it began come
+ * off the next charge on the 1st. This table is the memory between those two moments: one row
+ * per (user, cycle the discount applies to, destination), holding dollars that have been
+ * charged and not yet given back.
+ *
+ * 🚨 **Anthers records these rather than Stripe holding them**, and the reason is a failure
+ * rather than a preference: a coupon attached to the subscription line in advance is consumed
+ * by whichever invoice comes next, and for a mid-month raise that is the *immediate* invoice
+ * rather than the renewal — so the discount lands on the charge it was supposed to be
+ * compensating for. The coupon is therefore created and applied to the renewal invoice while
+ * Stripe is still holding it as a draft, from these rows.
+ *
+ * ⚠️ **A row survives being partly spent.** A discount may not take an invoice below
+ * `STRIPE_MIN_CHARGE`, so what it could not spend is written forward as a new row against
+ * the following cycle rather than dropped — which is why `applied_at` marks a row settled and
+ * `amount` is never edited down. The audit trail is that a row was applied in full, or applied
+ * in part with its remainder named in the row that carries it forward.
+ *
+ * 🚨 **In the books this is a PRICE REDUCTION, never a liability**, and the word "owed" above
+ * is loose English rather than an accounting claim. Parker's 2026-09-15 bookkeeping decision
+ * settles it: a mid-month charge buys that same month, so nothing is deferred across a period
+ * boundary and the monthly close carries no deferred revenue schedule — the reduction simply
+ * lowers the following month's revenue when it is applied. **Booking these rows as a liability
+ * at the moment they are written would double-count them**, once as a payable and again as
+ * reduced revenue, which is a mistake the close package is in a position to make because this
+ * table looks so much like a payable.
+ */
+// org — a price reduction held against a future charge Anthers will make. The treasury rule:
+// "Payments, pools, payouts → Org only. Money cannot federate." The user FK cascades because a
+// reduction is a promise about a future charge to that account, and there is no future charge
+// once the account is gone — unlike `pool_distributions`, which is a record of money that
+// already moved and therefore has to outlive both accounts.
+export const supportReductions = pgTable(
+	"support_reductions",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** The cycle whose invoice this reduces — `YYYY-MM-01`, never the cycle that earned it. */
+		billingCycle: text("billing_cycle").notNull(),
+		/**
+		 * Which line it comes off, in the same vocabulary as the subscription item's
+		 * `metadata.destination`: `anthers`, or a creator's user id as a string.
+		 *
+		 * 🚨 **Text rather than a nullable `creator_id`, matching the stamp it has to be
+		 * compared against.** `itemsFromSub` reads that stamp back out of Stripe as a string and
+		 * treats anything unparseable as the Anthers line; a reduction keyed a second way would
+		 * have to reproduce that fallback to line the two up, and reproducing it is how the two
+		 * come to disagree. No FK for the same reason — the value is a Stripe-side label, and a
+		 * creator's account going away does not make a discount already owed stop being owed.
+		 */
+		destination: text("destination").notNull(),
+		/** Dollars owed. Never edited down — see the note on the table about partial spends. */
+		amount: numeric("amount").notNull(),
+		/** When it was spent against an invoice, or null while it is still owed. */
+		appliedAt: timestamp("applied_at", { withTimezone: true }),
+		/** The invoice it was spent against, for the audit trail back into Stripe. */
+		appliedInvoiceId: text("applied_invoice_id"),
+		/** The row this one carries the unspent remainder of, when it is a carry-forward. */
+		carriedFromId: integer("carried_from_id"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The read is always "what does this account have owed against this cycle", across every
+		// destination at once, because a renewal invoice discounts all of its lines in one pass.
+		index("idx_support_reductions_user_cycle").on(table.userId, table.billingCycle),
+	],
+);
+
 // both — the table the boundary map predicts will resist classification, and does. Org-role by
 // volume (the highest-write table, "Time-event ingestion → Org") and by being
 // pool-accounting input. Node-role by being about *one creator's* work (`workId`,

@@ -589,6 +589,13 @@
       "when": 1789436952956,
       "tag": "0083_admin_operators",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1789526241767,
+      "tag": "0084_renew_every_account_on_the_1st",
+      "breakpoints": true
     }
   ]
 }

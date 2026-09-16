@@ -130,6 +130,14 @@ export const PUBLIC_ACCESS_PRICE = 3;
  * ⚠️ **Named for the vendor because that is whose rule it is.** It is not ours to choose, it
  * is USD-specific, and if Anthers ever charges in another currency this constant is the
  * thing that has to grow a dimension rather than the call sites.
+ *
+ * ⭐ **It is also the floor a DISCOUNTED renewal stops at**, which is a second job worth
+ * naming because the obvious instinct is to give that one a higher, Anthers-chosen number.
+ * Somebody who started late in the month has nearly a whole month coming back, so the
+ * day-exact reduction has to stop somewhere and carry the rest — and it stops here, because
+ * the floor on an *undiscounted* monthly charge is this same figure. Holding a discounted
+ * invoice to a stricter bar than an undiscounted one would be the two floors disagreeing
+ * about the same question. See the carry in `services/support-reductions.ts`.
  */
 export const STRIPE_MIN_CHARGE = 0.5;
 
@@ -154,6 +162,7 @@ export function isChargeableAmount(dollars: number): boolean {
 
 /** What to tell somebody who set an amount between zero and the floor. */
 export const CHARGEABLE_AMOUNT_MESSAGE = `An amount has to be $0 or at least $${STRIPE_MIN_CHARGE.toFixed(2)} — Stripe will not process a charge below that, so anything in between is a price nobody can pay.`;
+
 /**
  * Share of what a user gives Anthers that funds the Time Pool, paid to creators by time.
  *

@@ -405,17 +405,6 @@ describe("Payments not configured — every guarded route refuses", () => {
 		});
 	});
 
-	it("refuses buying directed Seeds", async () => {
-		await withoutStripe(async () => {
-			const res = await req("/api/subscriptions/seeds/buy", {
-				method: "POST",
-				headers: { ...json, Cookie: subscriberCookie },
-				body: JSON.stringify({ amount: 6 }),
-			});
-			expect(res.status).toBe(503);
-		});
-	});
-
 	it("refuses the billing portal", async () => {
 		await withoutStripe(async () => {
 			const res = await req("/api/subscriptions/billing-portal", {
@@ -638,49 +627,6 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect((await sendWebhook(event)).status).toBe(200);
 		const after = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
 		expect(after).toHaveLength(1);
-	});
-
-	it("credits a Seed buy to the account exactly once", async () => {
-		await db
-			.insert(accounts)
-			.values({ userId: buyerId, creatorSupportTotal: "0.00" })
-			.onConflictDoUpdate({ target: accounts.userId, set: { creatorSupportTotal: "0.00" } });
-
-		const piId = `pi_${uid()}`;
-		const [pending] = await db
-			.insert(purchases)
-			.values({
-				buyerId,
-				// A support top-up unlocks nothing, so it names no Work.
-				workId: null,
-				type: "seeds",
-				amount: "9.00",
-				processingFee: "0.56",
-				crfFee: "0.00",
-				creatorEarnings: "0.00",
-				stripePaymentIntentId: piId,
-				status: "pending",
-			})
-			.returning();
-
-		const event = stripeEvent("payment_intent.succeeded", { id: piId, object: "payment_intent" });
-		expect((await sendWebhook(event)).status).toBe(200);
-
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, buyerId));
-		expect(new Decimal(acct.creatorSupportTotal).toFixed(2)).toBe("9.00");
-
-		// A support top-up is not a post purchase — it must not touch the charitable ledger.
-		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
-		expect(ledger).toHaveLength(0);
-
-		// …and the cycle snapshot exists, which is what the account page reads back.
-		const cycles = await db.select().from(accountCycles).where(eq(accountCycles.userId, buyerId));
-		expect(cycles.length).toBeGreaterThan(0);
-
-		// Redelivery must not double-credit: $9 stays $9, it does not become $18.
-		expect((await sendWebhook(event)).status).toBe(200);
-		const [again] = await db.select().from(accounts).where(eq(accounts.userId, buyerId));
-		expect(new Decimal(again.creatorSupportTotal).toFixed(2)).toBe("9.00");
 	});
 
 	it("ignores a PaymentIntent it has no purchase row for", async () => {
@@ -1202,66 +1148,6 @@ describe("Checkout — destination charge construction", () => {
 		const { res, body } = await checkout();
 		expect(res.status).toBe(400);
 		expect(body.error).toBe("You already have access to this work");
-	});
-});
-
-/**
- * The support top-up was the one charge the 2026-08-03 revamp missed: it still added the card
- * fee **on top** (`base + processing`) after every other path moved it inside the price.
- * Nothing in the UI calls the route, so no buyer was overcharged — which is exactly why
- * it survived, and why it needs a test rather than a second reading of the code.
- */
-describe("Support top-up — the price is all-in", () => {
-	const TOPUP_AMOUNT = 6;
-	const base = new Decimal(TOPUP_AMOUNT);
-
-	async function buySeeds() {
-		fake.reset();
-		const res = await req("/api/subscriptions/seeds/buy", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: subscriberCookie },
-			body: JSON.stringify({ amount: TOPUP_AMOUNT }),
-		});
-		return { res, body: await res.json() };
-	}
-
-	it("charges the requested amount exactly, with processing taken out of it", async () => {
-		const { res, body } = await buySeeds();
-		expect(res.status).toBe(200);
-
-		// The buyer pays the amount they asked for and nothing more — the at-cost
-		// card fee is a deduction from that charge, never an addition to it.
-		expect(body.buyerTotal).toBe(base.toFixed(2));
-		expect(body.processingFee).toBe(cardFee(base).toFixed(2));
-		expect(new Decimal(body.processingFee).greaterThan(0)).toBe(true);
-
-		// The assertion that would have caught the old behavior: the amount actually sent
-		// to Stripe, not the number in the response body.
-		const params = fake.lastCall("paymentIntents.create")?.args[0] as
-			| Stripe.PaymentIntentCreateParams
-			| undefined;
-		expect(params?.amount).toBe(Math.round(base.toNumber() * 100));
-	});
-
-	it("records the pending purchase with the fee inside the price", async () => {
-		const { res, body } = await buySeeds();
-		expect(res.status).toBe(200);
-
-		const intentId = String(body.clientSecret).replace(/_secret_test$/, "");
-		const [row] = await db
-			.select()
-			.from(purchases)
-			.where(eq(purchases.stripePaymentIntentId, intentId))
-			.limit(1);
-
-		expect(row).toBeDefined();
-		expect(row.type).toBe("seeds");
-		// `amount` is what gets credited to the creator-support balance, so it must stay the
-		// full amount — the fee coming out of the charge must not shrink what the user bought.
-		expect(new Decimal(row.amount).toFixed(2)).toBe(base.toFixed(2));
-		expect(new Decimal(row.processingFee).toFixed(2)).toBe(cardFee(base).toFixed(2));
-		// A support top-up collects no sales tax; recorded as zero rather than left unset.
-		expect(new Decimal(row.salesTax).toFixed(2)).toBe("0.00");
 	});
 });
 

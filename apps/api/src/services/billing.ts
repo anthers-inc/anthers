@@ -22,18 +22,13 @@
  * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { supportAmount } from "@anthers/shared/constants";
-import { anthersSupportBreakdown, cardFee } from "@anthers/shared/fees";
+import { accountCycles, accounts, seedAllocations } from "@anthers/db/schema";
+import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
+import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
-
-function currentBillingCycle(): string {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-}
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
@@ -50,7 +45,7 @@ async function snapshotCycle(
 	};
 	await db
 		.insert(accountCycles)
-		.values({ userId, billingCycle: currentBillingCycle(), ...values })
+		.values({ userId, billingCycle: currentCycleKey(), ...values })
 		.onConflictDoUpdate({
 			target: [accountCycles.userId, accountCycles.billingCycle],
 			set: { ...values, updatedAt: new Date() },
@@ -198,6 +193,20 @@ export function periodEndFromSub(sub: Stripe.Subscription): number | null {
 }
 
 /**
+ * The billing period start, read the same way and for the same reason.
+ *
+ * 🚨 **Nothing wrote `accounts.current_period_start` after the row was created**, so it held
+ * whatever `ensureAccount` stamped on the day somebody first paid and never moved again. Every
+ * job that keys a cycle from it therefore keyed the same month forever — which is the frozen
+ * key the settlement defects all sit downstream of. The **earliest** item is taken rather than
+ * the latest, because a period runs from when it opened.
+ */
+export function periodStartFromSub(sub: Stripe.Subscription): number | null {
+	const starts = sub.items.data.map((i) => i.current_period_start).filter((n): n is number => !!n);
+	return starts.length > 0 ? Math.min(...starts) : null;
+}
+
+/**
  * The Stripe Product a creator's line is billed against, created on first use.
  *
  * `price_data` on a subscription item takes a Product **id**, not a name — so without one
@@ -256,6 +265,110 @@ export function supportItems(
 	return items;
 }
 
+/** A destination's desired monthly amount, with the Product its line is billed against. */
+export interface DesiredLine {
+	/** `null` for the Anthers line, a creator's user id otherwise. */
+	creatorId: number | null;
+	product: string;
+	amount: number;
+}
+
+/** What a change to an existing subscription splits into. */
+export interface ItemChange {
+	/** Items to send under `always_invoice` — charged in full today. */
+	raises: Stripe.SubscriptionUpdateParams.Item[];
+	/** Items to send under `proration_behavior: "none"` — they take effect on the 1st. */
+	drops: Stripe.SubscriptionUpdateParams.Item[];
+	/** What began or grew today, and is therefore owed the days before it. */
+	started: { creatorId: number | null; amount: number }[];
+}
+
+/**
+ * Split a requested change into the half that is charged now and the half that waits.
+ *
+ * 🚨 **Which half a destination lands in is decided per destination, never for the request.**
+ * Somebody raising Anthers from $3 to $9 while dropping a creator is doing both things at
+ * once, and a single `proration_behavior` for the whole update would either credit the drop
+ * back immediately or fail to charge for the raise. Nothing about the request as a whole says
+ * which it is.
+ *
+ * ⭐ **`started` carries the DELTA on a raise, not the new amount.** Somebody moving a line
+ * from $3 to $10 on the 20th has been paying for the $3 all month and is charged $7 today, so
+ * $7 is what the days before the 20th are owed against. Reading the new amount instead would
+ * hand back nineteen days of a line that ran all month.
+ */
+export function planItemChange(
+	sub: Stripe.Subscription,
+	anthersProduct: string,
+	anthersDollars: number,
+	directed: { creatorId: number; product: string; amount: number }[],
+): ItemChange {
+	const key = (creatorId: number | null) => (creatorId === null ? "anthers" : String(creatorId));
+
+	const desired = new Map<string, DesiredLine>();
+	if (anthersDollars > 0) {
+		desired.set("anthers", { creatorId: null, product: anthersProduct, amount: anthersDollars });
+	}
+	for (const d of directed) {
+		if (d.amount > 0) {
+			desired.set(key(d.creatorId), {
+				creatorId: d.creatorId,
+				product: d.product,
+				amount: d.amount,
+			});
+		}
+	}
+
+	const current = new Map<string, SupportItem>();
+	for (const item of itemsFromSub(sub)) {
+		const k = key(item.creatorId);
+		// Two lines pointed at one destination is not a shape this writes, but an older
+		// subscription can carry one — sum them so the comparison is against everything that
+		// destination is actually being charged, and keep the first id to update.
+		const existing = current.get(k);
+		current.set(k, existing ? { ...existing, amount: existing.amount + item.amount } : item);
+	}
+
+	const line = (id: string | undefined, d: DesiredLine): Stripe.SubscriptionUpdateParams.Item => ({
+		...(id ? { id } : {}),
+		price_data: {
+			currency: "usd",
+			product: d.product,
+			unit_amount: Math.round(d.amount * 100),
+			recurring: { interval: "month" as const },
+		},
+		quantity: 1,
+		// 🚨 The stamp is what says whose money this line is — `itemsFromSub` reads it back,
+		// and an unstamped item is credited to Anthers. Never build an item without it.
+		metadata: { destination: key(d.creatorId) },
+	});
+
+	const change: ItemChange = { raises: [], drops: [], started: [] };
+
+	for (const [k, want] of desired) {
+		const have = current.get(k);
+		if (!have) {
+			change.raises.push(line(undefined, want));
+			change.started.push({ creatorId: want.creatorId, amount: want.amount });
+		} else if (want.amount > have.amount) {
+			change.raises.push(line(have.itemId, want));
+			change.started.push({ creatorId: want.creatorId, amount: want.amount - have.amount });
+		} else if (want.amount < have.amount) {
+			change.drops.push(line(have.itemId, want));
+		}
+		// Equal — untouched. Sending it anyway would prorate a line that has not moved.
+	}
+
+	for (const [k, have] of current) {
+		// ⚠️ Stripe does NOT remove an item you simply omit, so a creator somebody stopped
+		// supporting keeps being charged for unless it is deleted explicitly. That was true of
+		// the rebuild-everything version too, and is the one property of it worth keeping.
+		if (!desired.has(k)) change.drops.push({ id: have.itemId, deleted: true });
+	}
+
+	return change;
+}
+
 /** Create (once) and persist the user's Stripe customer id. */
 export async function ensureStripeCustomer(userId: number, email: string): Promise<string> {
 	const stripe = getStripe();
@@ -292,91 +405,14 @@ export async function savedCardFor(
 	return pm?.card ? { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 } : null;
 }
 
-/**
- * Create a one-time charge to top up the budget a user directs at creators. **The
- * advertised amount is all-in**, so the buyer is charged exactly `base` and the at-cost
- * card fee comes **out** of it —
- * this path charged `base + processing` until 2026-08-04, which is the posture the
- * 2026-08-03 revamp retired everywhere else and missed here (mandatory-fee disclosure
- * law requires the advertised price to contain every mandatory fee). Nothing consumed
- * the route from the UI, so no buyer was ever overcharged; it was the API contradicting
- * the model. `cardFee` owns the arithmetic — don't restate it.
- *
- * A pending `purchases` row is keyed by the PaymentIntent so the webhook credits exactly
- * once on success. Returns the client secret to confirm inline.
- */
-export async function createOneTimeCharge(opts: {
-	userId: number;
-	customerId: string;
-	type: "seeds";
-	base: number;
-}): Promise<{ clientSecret: string | null; buyerTotal: string; processingFee: string }> {
-	const stripe = getStripe();
-	if (!stripe) throw new Error("Stripe not configured");
-	const base = new Decimal(opts.base);
-	const processing = cardFee(base); // at cost, out of the price — never added to it
-	const buyerTotal = base;
-	const pi = await stripe.paymentIntents.create({
-		amount: Math.round(buyerTotal.toNumber() * 100),
-		currency: "usd",
-		customer: opts.customerId,
-		payment_method_types: ["card"],
-		metadata: { kind: opts.type, userId: String(opts.userId) },
-	});
-	await db.insert(purchases).values({
-		buyerId: opts.userId,
-		// A support top-up is not a Work purchase — nothing to unlock, and no creator side to
-		// record. Both stated explicitly so the nulls read as "this charge has no such
-		// thing" rather than "nobody filled these in".
-		workId: null,
-		creatorId: null,
-		type: opts.type,
-		amount: base.toFixed(2),
-		processingFee: processing.toFixed(2),
-		crfFee: "0.00",
-		// A support top-up carries no sales tax today; recorded explicitly so the column
-		// means "no tax was collected" rather than "nobody filled this in".
-		salesTax: "0.00",
-		creatorEarnings: "0.00",
-		stripePaymentIntentId: pi.id,
-		status: "pending",
-	});
-	return {
-		clientSecret: pi.client_secret,
-		buyerTotal: buyerTotal.toFixed(2),
-		processingFee: processing.toFixed(2),
-	};
-}
-
-/**
- * Credit a completed support top-up to the account's creator-support balance.
- * Called from the webhook after the pending purchase flips to completed, so it runs
- * exactly once per PaymentIntent.
- */
-export async function applyCreditForPurchase(purchase: {
-	// Null once the buyer has deleted their account. The credit is applied at
-	// purchase time, long before any deletion could land, so in practice this is never
-	// null here — it is typed honestly and guarded rather than asserted away.
-	buyerId: number | null;
-	type: string;
-	amount: string;
-}): Promise<void> {
-	if (purchase.type !== "seeds") return;
-	// Nothing to credit if there is no longer an account to credit it to.
-	if (purchase.buyerId == null) return;
-	const [acct] = await db
-		.select()
-		.from(accounts)
-		.where(eq(accounts.userId, purchase.buyerId))
-		.limit(1);
-	if (!acct) return;
-	const next = (Number(acct.creatorSupportTotal) + Number(purchase.amount)).toFixed(2);
-	await db
-		.update(accounts)
-		.set({ creatorSupportTotal: next, updatedAt: new Date() })
-		.where(eq(accounts.id, acct.id));
-	await snapshotCycle(purchase.buyerId, supportAmount(acct.anthersSupport), Number(next));
-}
+// 🚨 **A one-off support top-up used to live here** (`createOneTimeCharge`, behind
+// `POST /subscriptions/seeds/buy`), and it is named here only because `purchases.type` still
+// has `"seeds"` in it and rows of that type can still be read. Nothing creates one: the
+// charge paid the fixed $0.30 by itself — the exact cost the monthly subscription exists to
+// amortize — and the credit it wrote to `creator_support_total` was overwritten by the next
+// subscription update, because that column is SET from the subscription rather than
+// accumulated. `services/refunds.ts` and `services/dmca.ts` still branch on the type, which
+// is about data that exists rather than a path that runs.
 
 /**
  * Reconcile the account row to a subscription's current state — called from the
@@ -410,24 +446,49 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	}
 
 	const active = sub.status === "active" || sub.status === "trialing";
-	const anthersSupport = anthersSupportFromSub(sub);
-	// The paid-for directed balance is the rest of the same charge. It is set from the
-	// subscription rather than accumulated, so a user who lowers what they give next month
-	// cannot keep directing support they have stopped paying for.
-	const directedTotal = directedSupportFromSub(sub);
+	const periodStartUnix = periodStartFromSub(sub);
 	const periodEndUnix = periodEndFromSub(sub);
+
+	/**
+	 * 🚨 **An in-force amount never falls within a cycle**, because a decrease takes effect on
+	 * the 1st and the month it was lowered in has already been paid for in full.
+	 *
+	 * The Stripe side of a decrease is `proration_behavior: "none"` — the price changes, no
+	 * money moves, and the next invoice on the 1st is the only thing that differs. That is
+	 * correct billing and it is also the trap: the *items* say $3 the instant somebody lowers
+	 * from $12, so reading them straight through would take away a Blossom Badge they had
+	 * already bought, eight days into the month, with nothing refunded.
+	 *
+	 * So within a cycle the higher of the two wins, and the new value is taken outright once
+	 * the cycle turns. A raise is unaffected, since a raise is charged in full today and is
+	 * therefore genuinely in force today. ⭐ **This is the rule `applyDirectedSupportFromSub`
+	 * already applies per creator with its `GREATEST` upsert** — allocation is add-only within
+	 * a cycle — rather than a new idea; what was missing was the account-level half.
+	 */
+	const heldOver =
+		acct.currentPeriodStart != null &&
+		periodStartUnix != null &&
+		cycleKeyFor(acct.currentPeriodStart) === cycleKeyFor(new Date(periodStartUnix * 1000));
+	const inForce = (fromSub: number, stored: string) =>
+		heldOver ? Decimal.max(fromSub, stored) : new Decimal(fromSub);
+
+	const anthersSupport = inForce(anthersSupportFromSub(sub), acct.anthersSupport);
+	// The paid-for directed balance is the rest of the same charge, held over the same way —
+	// a supporter who drops a creator on the 10th has already paid that creator for the month.
+	const directedTotal = inForce(directedSupportFromSub(sub), acct.creatorSupportTotal);
 
 	await db
 		.update(accounts)
 		.set({
 			...(active
 				? {
-						anthersSupport: new Decimal(anthersSupport).toFixed(2),
-						creatorSupportTotal: new Decimal(directedTotal).toFixed(2),
+						anthersSupport: anthersSupport.toFixed(2),
+						creatorSupportTotal: directedTotal.toFixed(2),
 					}
 				: {}),
 			stripeSubscriptionId: sub.id,
 			isActive: active,
+			...(periodStartUnix ? { currentPeriodStart: new Date(periodStartUnix * 1000) } : {}),
 			...(periodEndUnix ? { currentPeriodEnd: new Date(periodEndUnix * 1000) } : {}),
 			canceledAt: sub.cancel_at_period_end ? new Date() : null,
 			updatedAt: new Date(),
@@ -436,7 +497,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 
 	if (active) {
 		await applyDirectedSupportFromSub(acct.userId, sub);
-		await snapshotCycle(acct.userId, anthersSupport, directedTotal);
+		await snapshotCycle(acct.userId, anthersSupport.toNumber(), directedTotal.toNumber());
 	}
 }
 
@@ -464,7 +525,7 @@ async function applyDirectedSupportFromSub(
 	const picks = directedPicksFromSub(sub);
 	if (picks.length === 0) return;
 
-	const cycle = currentBillingCycle();
+	const cycle = currentCycleKey();
 	for (const pick of picks) {
 		const amount = new Decimal(pick.amount).toFixed(2);
 		await db

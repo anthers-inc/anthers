@@ -44,6 +44,7 @@
 import { db } from "@anthers/db/client";
 import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
+import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import {
@@ -317,11 +318,14 @@ export interface AccessResult {
 	downloadEnabled: boolean;
 }
 
-/** First day of the current month, `YYYY-MM-DD` — the billing-cycle key used across the app. */
-export function currentBillingCycle(): string {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-}
+/**
+ * First day of the current month, `YYYY-MM-01` — the billing-cycle key used across the app.
+ *
+ * Re-exported rather than computed, so this module's callers keep the name they have always
+ * imported while there is only one implementation behind it. `@anthers/shared/billing-cycle`
+ * is that implementation and carries the reasoning, including why it is pinned to UTC.
+ */
+export const currentBillingCycle = currentCycleKey;
 
 /**
  * Monthly dollars a user currently gives Anthers.

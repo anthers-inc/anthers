@@ -81,9 +81,8 @@
 //     into a quantity**: a quantity can only express whole multiples of one price, and
 //     amounts are free to the cent. The split rides in subscription metadata; see
 //     `anthersSupportFromSub` in services/billing.ts.
-//     (`POST /subscriptions/seeds/buy` also exists as a one-off top-up of the creator
-//     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
-//     nothing in the UI calls it.)
+//   • Support is the subscription and only the subscription — there is no second, one-off
+//     way to top the creator balance up, so this page is the whole of how money is given.
 
 import anthersMark from "@anthers/brand/logo/web/mark-60.png";
 import type { Badge, BadgeKey } from "@anthers/shared/constants";

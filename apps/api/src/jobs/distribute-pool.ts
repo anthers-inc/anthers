@@ -46,6 +46,7 @@ import {
 	seedAllocations,
 	stickers,
 } from "@anthers/db/schema";
+import { currentCycleKey, cycleEnd, cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
 import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
@@ -69,25 +70,20 @@ function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodE
 	if (acct.currentPeriodStart && acct.currentPeriodEnd) {
 		return { start: acct.currentPeriodStart, end: acct.currentPeriodEnd };
 	}
-	// Fallback to current calendar month
-	const now = new Date();
-	const start = new Date(now.getFullYear(), now.getMonth(), 1);
-	const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-	return { start, end };
+	// An account with no period yet — it has never paid — falls back to the calendar month,
+	// which since every account renews on the 1st is what its period would be anyway.
+	const key = currentCycleKey();
+	return { start: cycleStart(key), end: cycleEnd(key) };
 }
 
 /**
- * Returns YYYY-MM-01 string for Drizzle date columns.
+ * Which cycle key a period writes to.
  *
- * Exported for `settle-cycle.ts`, which has to ask the same question this job answers —
- * which cycle key an account's period writes to — before it can decide whether that cycle
- * is closed enough to book an undistributed pool against.
+ * Re-exported from `@anthers/shared/billing-cycle` under the name `settle-cycle.ts` already
+ * imports, so the two jobs cannot disagree about which month a period belongs to. It computed
+ * the key here in local time until 2026-09-15, while the cron that calls it runs in UTC.
  */
-export function billingCycleDate(cycleStart: Date): string {
-	const y = cycleStart.getFullYear();
-	const m = String(cycleStart.getMonth() + 1).padStart(2, "0");
-	return `${y}-${m}-01`;
-}
+export const billingCycleDate = cycleKeyFor;
 
 interface Dist {
 	poolAmount: Decimal;
