@@ -22,14 +22,7 @@ import { ErrorAlert, Loading, PageHeader, SectionHeading, StatCard } from "../..
 import { adminPost, useAdminData } from "../../lib/load";
 import { useSession } from "../../lib/session";
 
-type NoticeStatus =
-	| "received"
-	| "screening"
-	| "actioned"
-	| "rejected"
-	| "counter_noticed"
-	| "restored"
-	| "withdrawn";
+type NoticeStatus = "received" | "actioned" | "rejected" | "counter_noticed" | "restored";
 
 interface QueueItem {
 	id: number;
@@ -56,12 +49,10 @@ interface QueueResponse {
 	items: QueueItem[];
 	summary: {
 		received: number;
-		screening: number;
 		actioned: number;
 		rejected: number;
 		counterNoticed: number;
 		restored: number;
-		withdrawn: number;
 		total: number;
 	};
 }
@@ -119,29 +110,25 @@ interface NoticeDetail {
 
 const STATUS_NAMES: Record<NoticeStatus, string> = {
 	received: "Received",
-	screening: "Screening",
 	actioned: "Taken Down",
 	rejected: "Rejected",
 	counter_noticed: "Counter-Noticed",
 	restored: "Restored",
-	withdrawn: "Withdrawn",
 };
 
 const STATUS_BADGES: Record<NoticeStatus, string> = {
 	received: "badge-warning",
-	screening: "badge-warning",
 	actioned: "badge-error",
 	rejected: "badge-ghost",
 	counter_noticed: "badge-info",
 	restored: "badge-success",
-	withdrawn: "badge-ghost",
 };
 
 const TABS: { value: string; label: string; statuses: NoticeStatus[] | null }[] = [
-	{ value: "decide", label: "Needs a Decision", statuses: ["received", "screening"] },
+	{ value: "decide", label: "Needs a Decision", statuses: ["received"] },
 	{ value: "down", label: "Taken Down", statuses: ["actioned"] },
 	{ value: "counter", label: "Counter-Noticed", statuses: ["counter_noticed"] },
-	{ value: "closed", label: "Closed", statuses: ["rejected", "restored", "withdrawn"] },
+	{ value: "closed", label: "Closed", statuses: ["rejected", "restored"] },
 	{ value: "all", label: "All", statuses: null },
 ];
 
@@ -345,7 +332,12 @@ function Detail({
 		const result =
 			action === "suit"
 				? await adminPost(`/api/admin/dmca/${id}/suit`)
-				: await adminPost(`/api/admin/dmca/${id}/${action}`, { note: note.trim() || undefined });
+				: await adminPost(`/api/admin/dmca/${id}/${action}`, {
+						note: note.trim() || undefined,
+						// The confirmation above has already warned that restoring overrides a recorded
+						// suit, so confirming it is the deliberate override the API asks for.
+						...(action === "restore" && data?.notice.suitFiledAt ? { overrideSuit: true } : {}),
+					});
 		setBusy(false);
 		if (!result.ok) {
 			setActionError(result.error);
@@ -358,7 +350,7 @@ function Detail({
 	}
 
 	const n = data?.notice;
-	const undecided = n?.status === "received" || n?.status === "screening";
+	const undecided = n?.status === "received";
 	const down = n?.status === "actioned" || n?.status === "counter_noticed";
 	const clock = n ? clockLine(n) : null;
 
@@ -470,7 +462,7 @@ function Detail({
 											Restore Work
 										</button>
 									)}
-									{down && !n.suitFiledAt && (
+									{n.status === "counter_noticed" && !n.suitFiledAt && (
 										<button
 											type="button"
 											className="btn btn-sm btn-outline"
@@ -626,10 +618,7 @@ export default function Dmca() {
 
 			{data && (
 				<div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-					<StatCard
-						title="Needs a Decision"
-						value={String(data.summary.received + data.summary.screening)}
-					/>
+					<StatCard title="Needs a Decision" value={String(data.summary.received)} />
 					<StatCard title="Taken Down" value={String(data.summary.actioned)} />
 					<StatCard title="Counter-Noticed" value={String(data.summary.counterNoticed)} />
 					<StatCard title="Restored" value={String(data.summary.restored)} />
