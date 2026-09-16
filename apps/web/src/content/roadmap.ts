@@ -930,6 +930,15 @@ export const ROADMAP: RoadmapGroup[] = [
 						doc: { id: "71.03", title: "The Anthers PDS and Creator Nodes" },
 					},
 					{
+						id: "gated-records",
+						title: "Gated Work on the Network",
+						blurb:
+							"Your gated work reaching other apps as records only the people who cleared its gate can read.",
+						bucket: "planned",
+						note: "Waiting on a protocol still in alpha, so it follows launch rather than delaying it.",
+						doc: { id: "71.01", title: "Creator Records in the Atmosphere" },
+					},
+					{
 						id: "creator-hosted",
 						title: "Creators Serving Their Own Files",
 						blurb:
