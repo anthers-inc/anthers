@@ -103,6 +103,10 @@ describe("published legal documents", () => {
 		 * scanner published nothing, and the policy named four providers while a fifth
 		 * party was receiving a hash of every uploaded image. **A marker withholding a
 		 * disclosure is worse than a marker annotating a draft**, and nothing failed.
+		 *
+		 * The National Center for Missing & Exploited Children receives far more than a hash:
+		 * a report carries the account's registration details, session network information
+		 * and payment identifiers. It went unnamed here while the reporting route existed.
 		 */
 		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
 		for (const recipient of [
@@ -111,6 +115,7 @@ describe("published legal documents", () => {
 			"Stripe",
 			"Resend",
 			"Canadian Centre for Child Protection",
+			"National Center for Missing & Exploited Children",
 		]) {
 			expect(text, `${recipient} receives user data and the policy must name it`).toContain(
 				recipient,
@@ -133,6 +138,40 @@ describe("published legal documents", () => {
 		 */
 		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
 		expect(text).toContain("Audio is not covered");
+	});
+
+	it("🚨 tells users and creators that child sexual abuse material is reported", () => {
+		/*
+		 * Reporting is a federal duty, and the terms are where a person is told the rules they
+		 * agreed to. Terms that only said nothing may "sexualize minors" left the duty and what
+		 * follows from it — the report and the year-long preservation — unstated.
+		 */
+		for (const slug of ["terms", "creator-terms"]) {
+			const text = LEGAL_DOCUMENTS[slug].blocks.join("\n");
+			expect(text, `${slug} must say the material is reported`).toContain(
+				"National Center for Missing & Exploited Children",
+			);
+			expect(text, `${slug} must say the material is preserved`).toContain("preserved");
+		}
+	});
+
+	it("🚨 says a legal hold postpones deletion, wherever deletion is promised", () => {
+		/*
+		 * `eraseAccount` defers an account under hold, because destroying preserved records is
+		 * a federal crime. A policy promising deletion after seven days without saying so would
+		 * be promising something the code refuses, and a 2258A(h) hold arrives with every report.
+		 */
+		const privacy = LEGAL_DOCUMENTS.privacy.blocks;
+		const section = (heading: string) => {
+			const start = privacy.indexOf(`## ${heading}`);
+			expect(start, `no "${heading}" section`).toBeGreaterThan(-1);
+			const end = privacy.findIndex((block, i) => i > start && block.startsWith("## "));
+			return privacy.slice(start, end === -1 ? undefined : end).join("\n");
+		};
+		expect(section("How long we keep it")).toContain("A legal hold suspends every period above");
+		expect(section("What happens when you delete your account")).toContain(
+			"A legal hold is the one thing that postpones a deletion",
+		);
 	});
 
 	it("makes no claim Anthers is a 501(c)(3)", () => {
