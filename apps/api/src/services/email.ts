@@ -313,6 +313,30 @@ export async function sendAdminInvitationEmail(
 	if (!sent) console.info(`[email] admin invitation for ${to}: ${adminUrl}`);
 }
 
+/**
+ * The answer to a data-rights request, sent to the address the request came from, when the
+ * account that made it no longer exists.
+ *
+ * A requester who still has an account is told through `notify`, which keeps the in-app record
+ * and emails the account's address, so this is only the other case. It is a likely one: somebody
+ * who asks what Anthers holds about them and then deletes their account. The Privacy Policy's
+ * promise to answer does not lapse with the account, and `rights_requests.email` is captured at
+ * request time for exactly this. With no account to link to and no in-app copy, the message
+ * carries the whole answer, and it is returned rather than swallowed so the operator can be told
+ * when it did not go.
+ */
+export async function sendRightsRequestAnswerEmail(to: string, note: string): Promise<SendResult> {
+	const answer = note
+		? escapeHtml(note).replace(/\n/g, "<br>")
+		: "We've responded to the request you made.";
+	const html = shell(
+		"Your data request has been answered",
+		`<p style="margin:0 0 18px;">${answer}</p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">You're receiving this because a data-rights request was made to Anthers from this address. The account that made it has since been deleted, so this email is the only copy of the answer. If anything in it is wrong or incomplete, write to privacy@anthers.org.</p>`,
+	);
+	return sendEmail({ to, subject: "Your data request has been answered", html });
+}
+
 /** Standalone re-send of the verification email. */
 export async function sendVerificationEmail(
 	to: string,
