@@ -760,6 +760,8 @@ export interface CreatorEarnings {
 	total: string;
 	subscriberCount: number;
 	cycle: string;
+	/** False while the month is the nightly estimate; true once settlement has credited it. */
+	settled: boolean;
 }
 
 export interface SeedAllocation {

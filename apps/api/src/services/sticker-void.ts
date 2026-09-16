@@ -29,13 +29,14 @@
  * only what was *not* directed, so leaving a voided Sticker out of that sum is the entire
  * mechanism. No money is moved, created or held anywhere; it simply stops being carved out.
  *
- * 🚨 **Only ever on a cycle that has not settled.** Once the payouts are written the money
- * is somewhere else, and voiding then would be a claim about the past rather than a routing
- * instruction. A takedown does not reach backwards into cycles already paid.
+ * 🚨 **Only ever on a month that has not settled.** Once settlement has credited it the money
+ * is owed to somebody, and voiding then would be a claim about the past rather than a routing
+ * instruction. A takedown does not reach backwards into months already credited; withholding a
+ * transfer in the hold after settlement is the payouts build's to do.
  */
 
 import { db } from "@anthers/db/client";
-import { comments, poolDistributions, stickers, works } from "@anthers/db/schema";
+import { comments, monthSettlements, stickers, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, isNull, or, type SQL } from "drizzle-orm";
 import { commentRoots, threadCommentIds } from "./comment-thread.js";
 
@@ -53,13 +54,20 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  */
 export type StickerExecutor = typeof db | Tx;
 
-/** Cycles that `distribute-pool` has already written payouts for, of those asked about. */
+/**
+ * The months settlement has closed, of those asked about.
+ *
+ * 🚨 **Read from `month_settlements` and from nothing else.** A distribution row is the nightly
+ * estimate and exists from a month's first night, so treating one as settled made every takedown
+ * after the first day void nothing. One marker per month is right because every account renews
+ * on the 1st, so a month means the same window for every giver.
+ */
 async function settledCycles(cycles: string[]): Promise<Set<string>> {
 	if (cycles.length === 0) return new Set();
 	const rows = await db
-		.selectDistinct({ cycle: poolDistributions.billingCycle })
-		.from(poolDistributions)
-		.where(inArray(poolDistributions.billingCycle, cycles));
+		.select({ cycle: monthSettlements.billingCycle })
+		.from(monthSettlements)
+		.where(inArray(monthSettlements.billingCycle, cycles));
 	return new Set(rows.map((r) => r.cycle));
 }
 

@@ -14,7 +14,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, supportReductions, users } from "@anthers/db/schema";
+import { accounts, invoices, seedAllocations, supportReductions, users } from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -527,6 +527,100 @@ describe("what is in force does not drop until the cycle turns", () => {
 		);
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
 		expect(cycleKeyFor(acct.currentPeriodStart as Date)).toBe("2026-10-01");
+	});
+});
+
+// ── A renewal that fails ─────────────────────────────────────────────────────
+
+describe("a renewal that fails", () => {
+	const monthStart = Math.floor(new Date(`${currentCycleKey()}T00:00:00.000Z`).getTime() / 1000);
+	const monthEnd = Math.floor(
+		new Date(`${nextCycleKey(currentCycleKey())}T00:00:00.000Z`).getTime() / 1000,
+	);
+	const thisMonth = (status: string) =>
+		subscription({
+			anthers: 12,
+			directed: { [creatorId]: 5 },
+			status,
+			periodStart: monthStart,
+			periodEnd: monthEnd,
+		});
+
+	beforeEach(async () => {
+		await withSubscription();
+		await db
+			.update(accounts)
+			.set({
+				anthersSupport: "12.00",
+				creatorSupportTotal: "5.00",
+				currentPeriodStart: new Date(monthStart * 1000),
+				isActive: true,
+			})
+			.where(eq(accounts.userId, supporterId));
+		await db
+			.insert(seedAllocations)
+			.values({ userId: supporterId, creatorId, amount: "5.00", billingCycle: currentCycleKey() })
+			.onConflictDoNothing();
+		await db.delete(invoices).where(eq(invoices.userId, supporterId));
+	});
+
+	afterAll(() => {
+		delete fake.responses["subscriptions.retrieve"];
+	});
+
+	const gatesThisMonth = () =>
+		db
+			.select()
+			.from(seedAllocations)
+			.where(
+				and(
+					eq(seedAllocations.userId, supporterId),
+					eq(seedAllocations.billingCycle, currentCycleKey()),
+				),
+			);
+
+	it("🚨 refuses a change while the last payment failed, rather than opening a second subscription", async () => {
+		fake.responses["subscriptions.retrieve"] = thisMonth("past_due");
+
+		const res = await setSupport({ anthersSupport: 24 });
+
+		expect(res.status).toBe(409);
+		expect(((await res.json()) as { code: string }).code).toBe("payment_past_due");
+		expect(fake.callsTo("subscriptions.create")).toHaveLength(0);
+		expect(fake.callsTo("subscriptions.update")).toHaveLength(0);
+	});
+
+	it("keeps the Badge and this month's gates through Stripe's retries", async () => {
+		await syncSubscriptionToAccount(thisMonth("past_due"));
+
+		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
+		expect(Number(acct.anthersSupport)).toBe(12);
+		expect(await gatesThisMonth()).toHaveLength(1);
+	});
+
+	it("🚨 takes the Badge and this month's gates away once Stripe marks it unpaid", async () => {
+		await syncSubscriptionToAccount(thisMonth("unpaid"));
+
+		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
+		expect(Number(acct.anthersSupport)).toBe(0);
+		expect(Number(acct.creatorSupportTotal)).toBe(0);
+		expect(await gatesThisMonth()).toHaveLength(0);
+		// Kept, so that paying what is owed makes the same subscription active again.
+		expect(acct.stripeSubscriptionId).toBe(SUB_ID);
+	});
+
+	it("keeps the gates of a month that was paid for when the subscription is canceled", async () => {
+		await db.insert(invoices).values({
+			userId: supporterId,
+			stripeInvoiceId: `in_EXAMPLE_${uid()}`,
+			billingCycle: currentCycleKey(),
+			subtotal: "17.00",
+			total: "17.00",
+		});
+
+		await syncSubscriptionToAccount(thisMonth("canceled"));
+
+		expect(await gatesThisMonth()).toHaveLength(1);
 	});
 });
 

@@ -802,6 +802,22 @@ const subscriptionRoutes = new Hono()
 			 */
 			if (acct.stripeSubscriptionId) {
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
+				/**
+				 * 🚨 **A subscription whose renewal failed is refused, never replaced.** Falling
+				 * through to the create path below opened a second subscription beside the first,
+				 * which Stripe would go on retrying — two charges for one person's support. The
+				 * remedy is paying what is owed, which the card update in Manage Billing does.
+				 */
+				if (sub.status === "past_due" || sub.status === "unpaid") {
+					return c.json(
+						{
+							error:
+								"Your last payment didn't go through. Update your card in Manage Billing, and you can change your support once it has.",
+							code: "payment_past_due",
+						},
+						409,
+					);
+				}
 				if (sub.status === "active" || sub.status === "trialing") {
 					const change = planItemChange(sub, product, anthersSupport, picks);
 
@@ -1238,6 +1254,7 @@ const subscriptionRoutes = new Hono()
 				poolTotal: sql<string>`COALESCE(SUM(CAST(pool_amount AS numeric)), 0)`,
 				seedTotal: sql<string>`COALESCE(SUM(CAST(seed_amount AS numeric)), 0)`,
 				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)::int`,
+				estimateRows: sql<number>`COUNT(*) FILTER (WHERE settled_at IS NULL)::int`,
 			})
 			.from(poolDistributions)
 			.where(
@@ -1252,6 +1269,12 @@ const subscriptionRoutes = new Hono()
 			total,
 			subscriberCount: Number(earnings.subscriberCount),
 			cycle,
+			/**
+			 * 🚨 **Whether these figures are money or an estimate.** A month is estimated nightly
+			 * from what supporters give today and credited once it ends from what they actually
+			 * paid, so the two can differ; a page showing the running month must say which it is.
+			 */
+			settled: Number(earnings.estimateRows) === 0 && Number(earnings.subscriberCount) > 0,
 		});
 	})
 

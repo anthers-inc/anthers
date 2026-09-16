@@ -35,6 +35,7 @@ import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
+import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import {
 	refundPurchase,
@@ -794,6 +795,8 @@ const paymentRoutes = new Hono()
 					typeof charge.payment_intent === "string"
 						? charge.payment_intent
 						: charge.payment_intent.id;
+				// A support charge refunded in full is never credited, or is netted if it already was.
+				await markInvoiceMoneyReturned(intentId, "refunded");
 				// 🚨 Every purchase on the charge, not the first — the `.limit(1)` here was
 				// correct only while a charge could carry one purchase.
 				//
@@ -826,6 +829,17 @@ const paymentRoutes = new Hono()
 							typeof charge.refunds?.data?.[0]?.id === "string" ? charge.refunds.data[0].id : null,
 					});
 			}
+		} else if (event.type === "charge.dispute.created") {
+			/**
+			 * A chargeback on a support charge. Anthers does not contest one, so the money is treated
+			 * as gone from the moment it is disputed rather than when the dispute closes.
+			 */
+			const dispute = event.data.object as Stripe.Dispute;
+			const intentId =
+				typeof dispute.payment_intent === "string"
+					? dispute.payment_intent
+					: (dispute.payment_intent?.id ?? null);
+			if (intentId) await markInvoiceMoneyReturned(intentId, "disputed");
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db
@@ -863,6 +877,19 @@ const paymentRoutes = new Hono()
 			if (applied > 0) {
 				console.info(`support reductions: discounted ${applied} line(s) on a renewal invoice`);
 			}
+		} else if (event.type === "invoice.paid") {
+			/**
+			 * 🚨 **The moment money is known to have arrived, and the only thing that creates a
+			 * creditable record.** Nothing is credited to a creator from an invoice that has not
+			 * been paid — the defect this replaces had `distribute-pool` crediting a whole
+			 * period's Time Pool from its first night whether or not the renewal was ever
+			 * collected, and nothing recorded an invoice at all.
+			 *
+			 * ⚠️ **A renewal in Stripe's retry window deliberately produces nothing here**, and
+			 * that is what lets a late payment be credited against the month it paid for rather
+			 * than the month it arrived in.
+			 */
+			await recordPaidInvoice(event.data.object as Stripe.Invoice);
 		}
 
 		return c.json({ received: true });

@@ -12,6 +12,7 @@ import {
 	UsersIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
+import { EarningsBasis } from "../components/economics/EarningsBasis";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
@@ -317,11 +318,7 @@ function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 				</div>
 				{earnings.cycle && (
 					<p className="text-xs text-base-content/40 mt-2">
-						Current cycle:{" "}
-						{new Date(earnings.cycle).toLocaleDateString("en-US", {
-							month: "long",
-							year: "numeric",
-						})}
+						<EarningsBasis earnings={earnings} />
 					</p>
 				)}
 			</div>
