@@ -35,6 +35,7 @@ import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
+import { recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import {
 	refundPurchase,
@@ -863,6 +864,19 @@ const paymentRoutes = new Hono()
 			if (applied > 0) {
 				console.info(`support reductions: discounted ${applied} line(s) on a renewal invoice`);
 			}
+		} else if (event.type === "invoice.paid") {
+			/**
+			 * 🚨 **The moment money is known to have arrived, and the only thing that creates a
+			 * creditable record.** Nothing is credited to a creator from an invoice that has not
+			 * been paid — the defect this replaces had `distribute-pool` crediting a whole
+			 * period's Time Pool from its first night whether or not the renewal was ever
+			 * collected, and nothing recorded an invoice at all.
+			 *
+			 * ⚠️ **A renewal in Stripe's retry window deliberately produces nothing here**, and
+			 * that is what lets a late payment be credited against the month it paid for rather
+			 * than the month it arrived in.
+			 */
+			await recordPaidInvoice(event.data.object as Stripe.Invoice);
 		}
 
 		return c.json({ received: true });
