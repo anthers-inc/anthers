@@ -55,6 +55,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { placeHold, preservationExpiry } from "./legal-hold.js";
 import { urlToKey } from "./media-purge.js";
+import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
 import { storage } from "./storage/index.js";
 import { queueWorkListingSync } from "./work-listing.js";
@@ -320,6 +321,10 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 			// copied into the append-only log, which is permanent and read by agents.
 			note: [input.source, input.classification, input.note].filter(Boolean).join(": "),
 		});
+
+		// Anthers removed this, so the Stickers on it and on its comments stop paying its creator
+		// and go back to time-based distribution, in any cycle that has not settled.
+		await voidStickersOnSubject("work", input.workId, tx);
 
 		// Acting on the material answers any open report about it. Left open, the queue
 		// would keep re-serving work that is done.
@@ -639,6 +644,10 @@ export async function clearQuarantine(input: {
 			reason: "",
 			note: ["quarantine cleared", input.note].filter(Boolean).join(": "),
 		});
+
+		// Through `tx`, which is the only place the Work already reads as cleared. A takedown that
+		// still stands keeps its Stickers voided.
+		await restoreStickersOnSubject("work", input.workId, tx);
 	});
 
 	return { objectsRestored: restored, visibility: prior };
