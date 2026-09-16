@@ -573,9 +573,9 @@ export const workPages = pgTable(
 // both — a transcoding job is node media processing (the creator's source → derived
 // renditions), but it runs on org infrastructure (ffmpeg, the worker) and the org's
 // delivery layer reads it. The row is node-owned (it is about one creator's Work); the
-// org runs it. This is one of the boundary table's "Media originals + renditions; transcoding →
-// Creator node" entries, classified `both` because the *compute* is org while the
-// *record* is node — the node owns the result, the org owns the execution.
+// org runs it. Media originals, their renditions and transcoding belong to the creator, and this
+// is classified `both` because the *compute* is org while the *record* is node — the node
+// owns the result, the org owns the execution.
 export const transcodingJobs = pgTable(
 	"transcoding_jobs",
 	{
@@ -706,10 +706,9 @@ export const comments = pgTable(
  */
 // org — the Library is a *viewer's* shelf, not the creator's content. A viewer's
 // account is org-side in the current topology (there is no viewer node; viewers are
-// org accounts), so their saved items are org records. This is a disagreement with
-// the boundary table, which lists "Content records" under the creator node — a
-// library item is not a content record, it is a viewer's pointer to one, and the
-// viewer has no node.
+// org accounts), so their saved items are org records. Content records belong to the
+// creator's node, but a library item is not a content record — it is a viewer's pointer
+// to one, and the viewer has no node.
 export const libraryItems = pgTable(
 	"library_items",
 	{
@@ -879,7 +878,7 @@ export const reviews = pgTable(
 // viewer's. A share link is not a content record: it is one account's pointer at somebody
 // else's Work, and what it actually conveys is an *allowance* drawn from the sharer's own
 // org-side balance. The Work is node content, referenced by id; the quantity being spent is
-// pool accounting, which is org by the boundary table and cannot move to a node without
+// pool accounting, which is org by the treasury rule and cannot move to a node without
 // moving the ledger with it.
 export const shareLinks = pgTable(
 	"share_links",

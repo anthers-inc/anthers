@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Payments schema — see auth.ts for the role-classification legend. All four tables
- * are `org` by the treasury rule (boundary table: "Payments, pools, payouts, KYC → Org only.
- * Money cannot federate"). No exceptions.
+ * are `org` by the treasury rule: payments, pools, payouts and KYC stay with the org, because a
+ * treasury cannot be spread across machines other people run. No exceptions.
  */
 import {
 	bigint,
