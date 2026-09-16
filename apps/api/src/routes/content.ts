@@ -51,6 +51,7 @@ import {
 import {
 	COMMENT_MAX,
 	type CommentSubjectType,
+	embedUrlProblem,
 	isReviewVerdict,
 	REVIEW_MAX,
 	REVIEW_MIN,
@@ -97,6 +98,7 @@ import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { embedCreator } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
+import { invalidBody } from "../middleware/validate.js";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -703,7 +705,14 @@ const workBaseSchema = z
 		description: z.string().max(50000).optional().default(""),
 		thumbnail: z.string().max(500).optional().default(""),
 		sourceKey: z.string().max(500).optional().default(""),
-		embedUrl: z.string().max(500).optional().default(""),
+		embedUrl: z
+			.string()
+			.superRefine((value, ctx) => {
+				const problem = embedUrlProblem(value);
+				if (problem) ctx.addIssue({ code: "custom", message: problem });
+			})
+			.optional()
+			.default(""),
 		durationSeconds: z.number().int().optional(),
 		// type = "text": the prose itself.
 		body: z.string().optional().default(""),
@@ -759,6 +768,14 @@ const createWorkSchema = workBaseSchema
 	});
 
 const updateWorkSchema = workBaseSchema.partial();
+
+/**
+ * The two Work bodies, validated so that a refused field answers with a sentence a creator can read
+ * rather than a serialized `ZodError`, which reaches a form as "[object Object]". The embed address
+ * is the refusal that made this matter; see `invalidBody`.
+ */
+const createWorkBody = zValidator("json", createWorkSchema, invalidBody);
+const updateWorkBody = zValidator("json", updateWorkSchema, invalidBody);
 
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
@@ -1011,7 +1028,9 @@ function serializeWork(
 		description: item.description,
 		thumbnail: item.thumbnail,
 		sourceKey: item.sourceKey,
-		embedUrl: item.embedUrl,
+		// The owner's own shape is also what the Work page renders for them, so a stored address the
+		// check refuses is withheld here too rather than framed in the creator's own session.
+		embedUrl: embedUrlProblem(item.embedUrl ?? "") ? "" : item.embedUrl,
 		durationSeconds: item.durationSeconds,
 		body: item.body,
 		bodyHtml: item.bodyHtml,
@@ -1730,7 +1749,10 @@ function serializeWorkForViewer(
 		bodyHtml: deliverable ? work.bodyHtml : "",
 		body: deliverable ? work.body : "",
 		sourceKey: deliverable ? work.sourceKey : "",
-		embedUrl: deliverable ? work.embedUrl : "",
+		// A row written before the address was checked, or by any path that skipped the check,
+		// still never reaches the iframe: the address is refused here as well as on the way in.
+		// `embedUrlProblem` in `@anthers/shared/content` carries the reasons.
+		embedUrl: deliverable && !embedUrlProblem(work.embedUrl ?? "") ? work.embedUrl : "",
 		// 🚨 Lyrics ride WITH the payload, not with the blurb. A gated track's words are as
 		// much the deliverable as its audio, and the two failure directions are not
 		// symmetric: a creator who wants them public can put them in `description`, which
@@ -3004,7 +3026,7 @@ const contentRoutes = new Hono()
 	 * Create a library content item owned by the caller. Media items with a source that
 	 * needs processing are queued here (once, in the library) — never on post save.
 	 */
-	.post("/works", requireAuth, zValidator("json", createWorkSchema), async (c) => {
+	.post("/works", requireAuth, createWorkBody, async (c) => {
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
@@ -3531,7 +3553,7 @@ const contentRoutes = new Hono()
 	 * check that used to sit on post-publish now lives, because readiness was always a
 	 * property of the media and the media belongs to the Work.
 	 */
-	.patch("/works/:id", requireAuth, zValidator("json", updateWorkSchema), async (c) => {
+	.patch("/works/:id", requireAuth, updateWorkBody, async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		// Reassigned below when the rating service rewrites the row, so the rest of the

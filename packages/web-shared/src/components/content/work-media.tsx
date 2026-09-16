@@ -17,6 +17,7 @@
  * here like any other file. Don't reintroduce an encode in the browser.
  */
 
+import { embedUrlProblem } from "@anthers/shared/content";
 import { type ReactNode, useState } from "react";
 import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
 import { uploadMediaFile } from "../../lib/upload";
@@ -34,8 +35,9 @@ export interface WorkMedia {
 	/** This type's own media control, ready to drop into a form. */
 	slot: ReactNode;
 	/**
-	 * Whether the type's required media is present. Video, audio and image cannot be
-	 * created without a file; the other four have nothing to wait for.
+	 * Whether the type's required media is present and usable. Video, audio and image cannot
+	 * be created without a file, a game or software Work waits only on an embed address it has
+	 * been given being one the server will accept, and the other two have nothing to wait for.
 	 */
 	ready: boolean;
 	/** True while a file is going up, so a form can refuse to save mid-upload. */
@@ -129,12 +131,14 @@ export function useWorkMedia(type: UploadableWorkType, editing: Work | null): Wo
 		}
 	};
 
+	// The server refuses the same addresses; saying so here means a creator hears it beside the field.
+	const embedError = embedUrlProblem(embedUrl.trim());
+
 	const ready =
 		(type === "video" && !!videoKey) ||
 		(type === "audio" && !!audioKey) ||
 		(type === "image" && !!imageKey) ||
-		type === "game" ||
-		type === "software" ||
+		((type === "game" || type === "software") && !embedError) ||
 		type === "physical" ||
 		type === "service";
 
@@ -188,7 +192,8 @@ export function useWorkMedia(type: UploadableWorkType, editing: Work | null): Wo
 		slot = (
 			<FormField
 				label="Embed URL (optional)"
-				hint="For an HTML5 or WebGL build that runs in the browser. Downloadable builds are added on the Work's own page."
+				hint="For an HTML5 or WebGL build that runs in the browser, hosted on another site at an https:// address. Downloadable builds are added on the Work's own page."
+				error={embedError ?? undefined}
 			>
 				<input
 					type="url"

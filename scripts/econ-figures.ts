@@ -1442,7 +1442,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// guidelines"*. All three must stay silent, and all three do, because none of them
 		// uses the adjective. Verified by sabotage against each.
 		pattern: new RegExp(`${NOT_NEGATED}\\bfederated\\b`, "gi"),
-		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (the wiki's *How Anthers Talks About Itself*; wiki: Federation and Creator Nodes)",
+		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (the wiki's *How Anthers Talks About Itself*; wiki: The Anthers PDS and Creator Nodes § Where This Stands)",
 	},
 	{
 		// The second mechanism the code never had, and the one that had spread furthest: a
@@ -1515,7 +1515,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// true now is open-source and no lock-in, which is what the canonical intro says
 		// instead.
 		pattern: new RegExp(`${NOT_NEGATED}open,?\\s+(?:and\\s+)?distributed network`, "gi"),
-		why: "Anthers is centralized-first — federation is coming, not here (the wiki's *How Anthers Talks About Itself*; wiki: Federation and Creator Nodes)",
+		why: "Anthers is centralized-first — federation is coming, not here (the wiki's *How Anthers Talks About Itself*; wiki: The Anthers PDS and Creator Nodes § Where This Stands)",
 	},
 	{
 		// Not a retired *mechanism* like the two above — a retired *word* for a live one,

@@ -7,9 +7,11 @@
  * cannot be read past, because a deadline nobody can see is not a mechanism. Days left and overdue
  * come from the API rather than being worked out here, so this screen and the Home count agree.
  *
- * Resolving notifies the requester with the note as the message body — but only when the account
- * that asked still exists. The address is captured at request time for exactly the case where it
- * does not, and the row says so, since otherwise resolving would close the request in silence.
+ * Resolving tells the requester, with the note as the message body. While the account that asked
+ * still exists that is an in-app notice, which also emails the account's address; once the account is
+ * gone it is an email to the address captured with the request, which is why the address was
+ * captured. That email is the only copy the requester will ever get, so a send the provider refused
+ * is shown and kept on screen until the operator has seen it, rather than vanishing with the reload.
  */
 import {
 	RIGHTS_DETAILS_MAX,
@@ -82,19 +84,42 @@ function OpenRequest({ request, onResolved }: { request: RightsRequest; onResolv
 	const [note, setNote] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [unsent, setUnsent] = useState(false);
 
 	async function resolve() {
 		setBusy(true);
 		setError(null);
-		const result = await adminPost(`/api/admin/rights-requests/${request.id}/resolve`, {
-			note: note.trim() || undefined,
-		});
+		const result = await adminPost<{ resolved: boolean; emailed: boolean }>(
+			`/api/admin/rights-requests/${request.id}/resolve`,
+			{ note: note.trim() || undefined },
+		);
 		setBusy(false);
 		if (!result.ok) {
 			setError(result.error);
 			return;
 		}
+		if (request.userId == null && !result.data.emailed) {
+			setUnsent(true);
+			return;
+		}
 		onResolved();
+	}
+
+	if (unsent) {
+		return (
+			<li className="rounded-box border border-error bg-base-100 p-4">
+				<p className="text-sm text-error">
+					This request is resolved, but the answer could not be emailed to {request.email}. Reply to
+					that address directly, since the account that asked no longer exists and nothing else will
+					reach them.
+				</p>
+				<div className="mt-2">
+					<button type="button" className="btn btn-sm" onClick={onResolved}>
+						Done
+					</button>
+				</div>
+			</li>
+		);
 	}
 
 	return (
@@ -122,8 +147,8 @@ function OpenRequest({ request, onResolved }: { request: RightsRequest; onResolv
 
 			{request.userId == null && (
 				<p className="mt-3 text-sm text-warning">
-					The account that made this request no longer exists, so resolving it notifies nobody.
-					Reply to {request.email} directly before resolving it.
+					The account that made this request no longer exists, so resolving it emails the note to{" "}
+					{request.email}, and that email is the only answer they will receive.
 				</p>
 			)}
 
@@ -133,7 +158,7 @@ function OpenRequest({ request, onResolved }: { request: RightsRequest; onResolv
 				className="textarea textarea-bordered mt-3 w-full"
 				rows={2}
 				maxLength={RIGHTS_DETAILS_MAX}
-				placeholder="What was done. The requester reads this note as the body of the notification."
+				placeholder="What was done. The requester reads this note as the body of the message."
 				value={note}
 				onChange={(e) => setNote(e.target.value)}
 			/>
