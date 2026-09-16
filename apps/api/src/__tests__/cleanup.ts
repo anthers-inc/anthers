@@ -40,7 +40,9 @@ import {
 	adminAccounts,
 	adminSessions,
 	comments,
+	creatorCredits,
 	dmcaNotices,
+	invoices,
 	legalHolds,
 	mediaQuarantine,
 	moderationActions,
@@ -155,6 +157,14 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			.where(
 				or(inArray(poolDistributions.subscriberId, ids), inArray(poolDistributions.creatorId, ids)),
 			);
+
+		// Settlement's records name their people through `set null` columns for the same reason:
+		// an invoice and a credit are the books, and the books outlive the account. An invoice's
+		// lines go with it.
+		await db
+			.delete(creatorCredits)
+			.where(or(inArray(creatorCredits.creatorId, ids), inArray(creatorCredits.subscriberId, ids)));
+		await db.delete(invoices).where(inArray(invoices.userId, ids));
 
 		// A Sticker names its giver and its creator through `set null` columns, for the same reason
 		// a distribution does, so it outlives both unless it is taken here.

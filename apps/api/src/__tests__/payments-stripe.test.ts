@@ -21,22 +21,12 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import {
-	accountCycles,
-	accounts,
-	assets,
-	attentionEvents,
-	crfLedger,
-	purchases,
-	stripeAccounts,
-	users,
-} from "@anthers/db/schema";
+import { accounts, assets, crfLedger, purchases, stripeAccounts, users } from "@anthers/db/schema";
 import { calculateFees, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
 import Stripe from "stripe";
 import app from "../index";
-import { settleCycle } from "../jobs/settle-cycle";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -1148,93 +1138,6 @@ describe("Checkout — destination charge construction", () => {
 		const { res, body } = await checkout();
 		expect(res.status).toBe(400);
 		expect(body.error).toBe("You already have access to this work");
-	});
-});
-
-describe("remainder — a heavy streamer costs the mission nothing", () => {
-	/**
-	 * This block used to pin the *clamp*: bandwidth was a term in the Seed
-	 * decomposition, so ~120 hours of watch-time drove the remainder to −$0.54 and
-	 * `settle-cycle.ts`'s `Decimal.max(0, …)` was what kept a negative amount out of a
-	 * ledger whose amounts mean "what the remainder received".
-	 *
-	 * **Retiring the per-GiB charge on 2026-08-12 made that unreachable**, and the
-	 * honest replacement is the inverse claim rather than a contrived input: the same
-	 * heavy account now books its *full* remainder, because nothing a user watches
-	 * enters settlement any more. The clamp stays as documented-defensive code (its
-	 * no-floor contract is still pinned in `economics.test.ts`), but this is the
-	 * behavior worth guarding — a future cost term added back here would fail it
-	 * first, which is exactly when someone should be made to think about it.
-	 *
-	 * The 120 hours of attention are deliberately kept in the fixture. They are what
-	 * makes the assertion mean "attention does not move this" rather than
-	 * "attention was absent".
-	 */
-	const heavyName = `pay_heavy_${run}`;
-	let heavyId: number;
-	let heavyAccountId: number;
-	let cycle: string;
-
-	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username = ${heavyName}`);
-		({ id: heavyId } = await signUp(heavyName));
-
-		const [acct] = await db
-			.insert(accounts)
-			.values({ userId: heavyId, anthersSupport: "3.00", isActive: true })
-			.returning();
-		heavyAccountId = acct.id;
-
-		await db.insert(attentionEvents).values({
-			userId: heavyId,
-			creatorId,
-			workId: paidWorkId,
-			eventType: "watch",
-			durationSeconds: 120 * 3600,
-		});
-
-		const now = new Date();
-		cycle = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-	}, DB_SETUP_TIMEOUT);
-
-	afterAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username = ${heavyName}`);
-	});
-
-	it("books the FULL remainder for a 120-hour month — watch-time does not enter settlement", async () => {
-		// Hand-computed: $3.00 charge − $1.50 Time Pool − $0.39 card fee = $1.11, and the
-		// 204 GiB this account streamed changes none of the three.
-		expect(await settleCycle({ accountId: heavyAccountId, cycle })).toBe(1);
-
-		const [ledger] = await db
-			.select()
-			.from(crfLedger)
-			.where(sql`${crfLedger.description} LIKE ${`[settle u${heavyId} ${cycle}]%`}`)
-			.limit(1);
-		expect(ledger).toBeDefined();
-		expect(new Decimal(ledger.amount).toFixed(2)).toBe("1.11");
-		// And the description says nothing about an allowance or an overage any more.
-		expect(ledger.description).not.toMatch(/bandwidth|allowance/i);
-
-		const [snapshot] = await db
-			.select()
-			.from(accountCycles)
-			.where(and(eq(accountCycles.userId, heavyId), eq(accountCycles.billingCycle, cycle)));
-		expect(new Decimal(snapshot.foundation).toFixed(2)).toBe("1.11");
-		// The creators this user watched are paid the same as anyone's: the Time Pool is a
-		// fixed share of what the user gives Anthers.
-		expect(new Decimal(snapshot.timePool).toFixed(2)).toBe("1.50");
-	});
-
-	it("settles a cycle only once", async () => {
-		// The marker row in the ledger is the whole idempotency mechanism; a second run
-		// double-booking the charitable ledger would be silent and permanent.
-		expect(await settleCycle({ accountId: heavyAccountId, cycle })).toBe(0);
-		const rows = await db
-			.select()
-			.from(crfLedger)
-			.where(sql`${crfLedger.description} LIKE ${`[settle u${heavyId} ${cycle}]%`}`);
-		expect(rows).toHaveLength(1);
 	});
 });
 

@@ -176,7 +176,7 @@ export const QUEUES = {
 	PROCESS_AUDIO: "process-audio",
 	RASTERIZE_EBOOK: "rasterize-ebook", // Render an uploaded PDF to private per-page images
 	DISTRIBUTE_POOL: "distribute-pool",
-	SETTLE_CYCLE: "settle-cycle", // Month-end allowance draw + remainder inflows
+	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
 	// Write, replace or remove a Work's public listing on the AT Protocol network. Carries only
 	// a Work id: the handler re-reads the Work and decides from its current state, so a
@@ -377,7 +377,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	readonly [(typeof QUEUES)[keyof typeof QUEUES], string]
 > = [
 	[QUEUES.DISTRIBUTE_POOL, "0 0 * * *"], // midnight daily
-	[QUEUES.SETTLE_CYCLE, "0 2 1 * *"], // 2 AM on the 1st — settles the prior cycle
+	[QUEUES.SETTLE_CYCLE, "0 2 2 * *"], // 2 AM on the 2nd, clear of the renewals on the 1st
 	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts

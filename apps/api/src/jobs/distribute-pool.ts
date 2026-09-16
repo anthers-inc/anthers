@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Pool distribution job: distribute the Time Pool and directed support to creators.
+ * Pool distribution job: estimate each account's month for its creators, nightly.
+ *
+ * 🚨 **What this writes is an estimate, never money.** A month's money is credited once, after
+ * the month ends, from the invoices actually paid for it — `settle-cycle.ts` does that, through
+ * {@link computeMonth} below, and stamps the rows it makes final. This job keeps the running
+ * month visible to creators and never touches a row settlement has stamped.
  *
  * For each active account:
  * 1. Sum **Public Access** time-spent seconds per creator during the billing cycle.
@@ -85,7 +90,7 @@ function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodE
  */
 export const billingCycleDate = cycleKeyFor;
 
-interface Dist {
+export interface Dist {
 	poolAmount: Decimal;
 	seedAmount: Decimal;
 	/** What this viewer directed at this creator by hand, out of their own Time Pool. */
@@ -93,15 +98,54 @@ interface Dist {
 	attentionSeconds: number;
 }
 
-async function distributeForAccount(acct: {
-	id: number;
+/** One charge's worth of support: what it gave Anthers, and what it directed at each creator. */
+export interface MonthCharge {
+	/** Dollars to Anthers on this charge. */
+	anthers: Decimal;
+	/** GROSS dollars directed at each creator on this charge, before its card fee. */
+	directed: Map<number, Decimal>;
+}
+
+/** A supporter's month, split among creators. */
+export interface MonthDistribution {
+	distributions: Map<number, Dist>;
+	/** The Time Pool the month funds — a fixed share of what was given to Anthers, or the free one. */
+	timePool: Decimal;
+	/** What of the Time Pool reached creators by time, after rounding is conserved. */
+	distributedByTime: Decimal;
+	/** What the supporter directed by hand, as Stickers. */
+	stickerTotal: Decimal;
+}
+
+/**
+ * Split one supporter's month among creators: directed support net of its card fee, the Time
+ * Pool by Public Access time, and Stickers.
+ *
+ * 🚨 **The one computation of a month, shared by the nightly estimate and by settlement.** The two
+ * differ only in what they feed it — the estimate uses the account's amounts as they stand today,
+ * and settlement uses the invoices actually paid for the month — so a creator's estimate and their
+ * settled credit cannot come apart for any reason other than what was paid.
+ *
+ * ⚠️ **Each charge bears its own card fee.** A mid-month raise is a second charge, and the fixed
+ * part of the processor's fee is paid again on it, so directed support is netted charge by charge
+ * rather than once on the month's total. The nightly estimate passes the account's amounts as one
+ * charge, which is what a renewal on the 1st is.
+ */
+export async function computeMonth(input: {
 	userId: number;
-	anthersSupport: string;
-	currentPeriodStart: Date | null;
-	currentPeriodEnd: Date | null;
-}) {
-	const { start, end } = getBillingCycle(acct);
-	const cycleDate = billingCycleDate(start);
+	cycle: string;
+	start: Date;
+	end: Date;
+	/** What the month gave Anthers. Zero funds the free Time Pool. */
+	anthersDollars: number;
+	charges: MonthCharge[];
+	/**
+	 * Whether the supporter's Stickers are paid. A month with no paid invoice funds only the free
+	 * Time Pool, which carries no Sticker allowance, so settlement passes `false` for it.
+	 */
+	includeStickers: boolean;
+}): Promise<MonthDistribution> {
+	const { start, end } = input;
 
 	// 1. Aggregate **Public Access** attention seconds per creator.
 	//
@@ -130,7 +174,7 @@ async function distributeForAccount(acct: {
 		.from(attentionEvents)
 		.where(
 			and(
-				eq(attentionEvents.userId, acct.userId),
+				eq(attentionEvents.userId, input.userId),
 				eq(attentionEvents.publicAccess, true),
 				gte(attentionEvents.createdAt, start),
 				lt(attentionEvents.createdAt, end),
@@ -165,59 +209,53 @@ async function distributeForAccount(acct: {
 	const ensure = (creatorId: number): Dist => {
 		let d = distributions.get(creatorId);
 		if (!d) {
-			d = {
-				poolAmount: new Decimal(0),
-				seedAmount: new Decimal(0),
-				stickerAmount: new Decimal(0),
-				attentionSeconds: 0,
-			};
+			d = newDist();
 			distributions.set(creatorId, d);
 		}
 		return d;
 	};
 
 	// 2. Directed support → credited NET of the creator side's share of the at-cost card
-	//    fee. (Undirected support is NOT distributed here — the user must direct it;
-	//    the remainder is settled to the subsidy pool in settle-cycle.ts.)
-	const directed = await db
-		.select()
-		.from(seedAllocations)
-		.where(
-			and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycleDate)),
-		);
+	//    fee, charge by charge. (Undirected support is NOT distributed here — the user must
+	//    direct it; the remainder is settled to the subsidy pool in settle-cycle.ts.)
+	for (const charge of input.charges) {
+		const onCharge = new Map<number, Dist>();
+		let grossDirected = new Decimal(0);
+		for (const [creatorId, gross] of charge.directed) {
+			if (gross.lte(0)) continue;
+			onCharge.set(creatorId, { ...newDist(), seedAmount: gross });
+			grossDirected = grossDirected.plus(gross);
+		}
 
-	let grossDirected = new Decimal(0);
-	for (const seed of directed) {
-		const gross = new Decimal(seed.amount);
-		ensure(seed.creatorId).seedAmount = gross;
-		grossDirected = grossDirected.plus(gross);
-	}
-
-	// The card fee is charged once on the WHOLE batched monthly charge and split
-	// pro-rata, so a user who also gives to Anthers amortizes the fixed $0.30
-	// and every creator on that charge is paid more. Worst case is a lone directed
-	// $3 on its own charge: $3.00 gross → $2.61 net.
-	if (grossDirected.gt(0)) {
-		const creatorFee = paymentsSplit(
-			supportAmount(acct.anthersSupport),
-			grossDirected.toNumber(),
-		).creator;
-		if (creatorFee.gt(0)) {
-			for (const d of distributions.values()) {
-				if (d.seedAmount.lte(0)) continue;
-				// Each creator bears the fee in proportion to what was directed at them.
-				const share = CENTS(creatorFee.mul(d.seedAmount).div(grossDirected));
-				d.seedAmount = Decimal.max(0, d.seedAmount.minus(share));
+		// The card fee is charged once on the WHOLE batched charge and split pro-rata, so a
+		// user who also gives to Anthers amortizes the fixed $0.30 and every creator on that
+		// charge is paid more. Worst case is a lone directed $3 on its own charge: $3.00 gross
+		// → $2.61 net.
+		if (grossDirected.gt(0)) {
+			const creatorFee = paymentsSplit(
+				supportAmount(Decimal.max(0, charge.anthers).toNumber()),
+				grossDirected.toNumber(),
+			).creator;
+			if (creatorFee.gt(0)) {
+				for (const d of onCharge.values()) {
+					// Each creator bears the fee in proportion to what was directed at them.
+					const share = CENTS(creatorFee.mul(d.seedAmount).div(grossDirected));
+					d.seedAmount = Decimal.max(0, d.seedAmount.minus(share));
+				}
+				// Conserve exactly: rounding must not leave Anthers over- or under-paying.
+				correctDrift(
+					onCharge,
+					grossDirected.minus(creatorFee),
+					(d) => d.seedAmount,
+					(d, v) => {
+						d.seedAmount = v;
+					},
+				);
 			}
-			// Conserve exactly: rounding must not leave Anthers over- or under-paying.
-			correctDrift(
-				distributions,
-				grossDirected.minus(creatorFee),
-				(d) => d.seedAmount,
-				(d, v) => {
-					d.seedAmount = v;
-				},
-			);
+		}
+
+		for (const [creatorId, d] of onCharge) {
+			ensure(creatorId).seedAmount = ensure(creatorId).seedAmount.plus(d.seedAmount);
 		}
 	}
 
@@ -235,10 +273,10 @@ async function distributeForAccount(acct: {
 	//
 	// ⭐ **What happens to that leftover is settled: it falls to the remainder**, along with
 	// the whole pool of a viewer who streamed no Public Access at all (Parker, 2026-08-26;
-	// built 2026-08-29). `settle-cycle.ts` books it, by measuring what this job actually wrote
-	// against the budget — so leaving money undistributed here is a decision about *creators*
-	// and never a decision to lose it.
-	const timePool = computeTimePoolAmount(supportAmount(acct.anthersSupport));
+	// built 2026-08-29). `settle-cycle.ts` books it, by measuring what this computation
+	// distributed against the budget — so leaving money undistributed here is a decision about
+	// *creators* and never a decision to lose it.
+	const timePool = computeTimePoolAmount(input.anthersDollars);
 
 	// 3a. Stickers — the part of this viewer's Time Pool they directed themselves.
 	//
@@ -250,20 +288,22 @@ async function distributeForAccount(acct: {
 	// 🚨 **Read `amount` and never `removed_at`.** Taking a Sticker off the page returns no
 	// money — the giver is told so before they do it — because a Sticker may buy standing, and
 	// standing must not be rentable by giving one and withdrawing it before the cycle settles.
-	const stickerRows = await db
-		.select({ creatorId: stickers.creatorId, amount: stickers.amount })
-		.from(stickers)
-		// ⚠️ A voided Sticker is one Anthers reverted after taking the Work down. Leaving it
-		// out here is the whole mechanism: the amount never leaves `directable`, so it flows
-		// straight back into time-based distribution — exactly where it would have gone had
-		// nobody directed it. Same direction as a deleted recipient, one line below.
-		.where(
-			and(
-				eq(stickers.giverId, acct.userId),
-				eq(stickers.billingCycle, cycleDate),
-				isNull(stickers.voidedAt),
-			),
-		);
+	const stickerRows = input.includeStickers
+		? await db
+				.select({ creatorId: stickers.creatorId, amount: stickers.amount })
+				.from(stickers)
+				// ⚠️ A voided Sticker is one Anthers reverted after removing what it sat on. Leaving
+				// it out here is the whole mechanism: the amount never leaves `directable`, so it
+				// flows straight back into time-based distribution — exactly where it would have
+				// gone had nobody directed it. Same direction as a deleted recipient, one line below.
+				.where(
+					and(
+						eq(stickers.giverId, input.userId),
+						eq(stickers.billingCycle, input.cycle),
+						isNull(stickers.voidedAt),
+					),
+				)
+		: [];
 
 	let stickerTotal = new Decimal(0);
 	for (const row of stickerRows) {
@@ -287,6 +327,7 @@ async function distributeForAccount(acct: {
 		totalShared > 0 ? CENTS(directable.mul(SHARE_LINK_POOL_FRACTION)) : new Decimal(0);
 	const ownPool = totalOwn > 0 ? directable.minus(sharedPool) : new Decimal(0);
 
+	let distributedByTime = new Decimal(0);
 	if (directable.gt(0)) {
 		for (const [pot, byCreator, total] of [
 			[ownPool, own, totalOwn],
@@ -305,11 +346,11 @@ async function distributeForAccount(acct: {
 		// Against the sum of the two slices, not the whole pool: when only one of them was
 		// distributed the other is genuinely undistributed, and correcting to `timePool`
 		// would silently pay it out anyway — which is exactly the ceiling being lost.
-		const distributed = ownPool.plus(sharedPool);
-		if (distributed.gt(0)) {
+		distributedByTime = ownPool.plus(sharedPool);
+		if (distributedByTime.gt(0)) {
 			correctDrift(
 				distributions,
-				distributed,
+				distributedByTime,
 				(d) => d.poolAmount,
 				(d, v) => {
 					d.poolAmount = v;
@@ -329,7 +370,52 @@ async function distributeForAccount(acct: {
 		ensure(creatorId).attentionSeconds = seconds;
 	}
 
-	// 4. Write PoolDistribution ledger entries
+	return { distributions, timePool, distributedByTime, stickerTotal };
+}
+
+function newDist(): Dist {
+	return {
+		poolAmount: new Decimal(0),
+		seedAmount: new Decimal(0),
+		stickerAmount: new Decimal(0),
+		attentionSeconds: 0,
+	};
+}
+
+async function distributeForAccount(acct: {
+	id: number;
+	userId: number;
+	anthersSupport: string;
+	currentPeriodStart: Date | null;
+	currentPeriodEnd: Date | null;
+}) {
+	const { start, end } = getBillingCycle(acct);
+	const cycleDate = billingCycleDate(start);
+
+	const directed = await db
+		.select()
+		.from(seedAllocations)
+		.where(
+			and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycleDate)),
+		);
+
+	const { distributions } = await computeMonth({
+		userId: acct.userId,
+		cycle: cycleDate,
+		start,
+		end,
+		anthersDollars: supportAmount(acct.anthersSupport),
+		// The estimate reads the month as one renewal on the 1st at today's amounts.
+		charges: [
+			{
+				anthers: new Decimal(supportAmount(acct.anthersSupport)),
+				directed: new Map(directed.map((seed) => [seed.creatorId, new Decimal(seed.amount)])),
+			},
+		],
+		includeStickers: true,
+	});
+
+	// 4. Write the estimate.
 	for (const [creatorId, data] of distributions) {
 		// A creator the viewer never watched but did hand a Sticker to still needs a row —
 		// without `stickerAmount` in this guard their payment would be computed and dropped.
@@ -357,6 +443,10 @@ async function distributeForAccount(acct: {
 					stickerAmount: data.stickerAmount.toString(),
 					attentionSeconds: data.attentionSeconds,
 				},
+				// 🚨 A settled row is final. An account whose period has not advanced — a renewal
+				// still in Stripe's retries — keeps pointing this job at a month settlement has
+				// already closed, and an estimate must never write over what was credited.
+				setWhere: isNull(poolDistributions.settledAt),
 			});
 	}
 }

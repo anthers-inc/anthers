@@ -284,6 +284,11 @@ export const invoices = pgTable(
 		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 		/** Stripe's own id, and the tie point for any reconciliation against their records. */
 		stripeInvoiceId: text("stripe_invoice_id").notNull().unique(),
+		/**
+		 * The payment intent that paid it, which is how a refund or a dispute finds its invoice.
+		 * Neither event names an invoice, and both name a payment intent.
+		 */
+		stripePaymentIntentId: text("stripe_payment_intent_id"),
 		/** The month this invoice pays for — `YYYY-MM-01`. See the note above. */
 		billingCycle: text("billing_cycle").notNull(),
 		/**
@@ -388,6 +393,54 @@ export const monthSettlements = pgTable("month_settlements", {
 	invoiceCount: integer("invoice_count").notNull().default(0),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * What settlement owes each creator — the money, as an append-only ledger.
+ *
+ * 🚨 **Rows are added and never changed.** A settlement run writes the difference between what a
+ * supporter's month now entitles each creator to and what earlier runs already credited, so an
+ * invoice paid late adds its own rows in a later run rather than rewriting the month. That is
+ * what lets each credit carry its own hold: the transfer fourteen days after settlement counts
+ * from this row's `settled_at`, and a late payment's money must not restart the clock on money
+ * credited weeks before it.
+ *
+ * ⚠️ **An amount can be negative.** A late invoice can move a month from the free Time Pool to a
+ * paid one, and rounding a larger pot can move a cent between creators; both arrive as
+ * corrections beside what they correct rather than as edits to it.
+ *
+ * ⭐ **`funded_by` separates two kinds of money that settle identically.** A supporter's Time Pool
+ * and directed support are money they paid and Anthers passes on; a free account's Time Pool is
+ * Anthers' own money spent on their behalf. The books treat those differently, so the row says
+ * which it is rather than leaving it to be inferred from whether an invoice existed.
+ */
+// org — money owed to creators. Money cannot federate.
+export const creatorCredits = pgTable(
+	"creator_credits",
+	{
+		id: serial("id").primaryKey(),
+		/** Who is owed. Set null on delete, because the record outlives the account. */
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** Whose month it came from. Set null on delete, for the same reason. */
+		subscriberId: integer("subscriber_id").references(() => users.id, { onDelete: "set null" }),
+		/** The month the money is for, `YYYY-MM-01`. */
+		billingCycle: text("billing_cycle").notNull(),
+		/** `support` · `time_pool` · `sticker`. */
+		kind: text("kind").notNull(),
+		/** `supporter` for money a supporter paid, `anthers` for a free account's Time Pool. */
+		fundedBy: text("funded_by").notNull(),
+		/** Dollars, net of the creator's share of card processing. Negative for a correction. */
+		amount: numeric("amount").notNull(),
+		/** The settlement run that wrote it, which is when its hold starts. */
+		settledAt: timestamp("settled_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// A transfer's read: what each creator is owed, by when it settled.
+		index("idx_creator_credits_creator_settled").on(table.creatorId, table.settledAt),
+		// Settlement's own read: what a supporter's month has already credited.
+		index("idx_creator_credits_subscriber_cycle").on(table.subscriberId, table.billingCycle),
+	],
+);
 
 // both — the table the boundary map predicts will resist classification, and does. Org-role by
 // volume (the highest-write table, "Time-event ingestion → Org") and by being
@@ -653,6 +706,16 @@ export const poolDistributions = pgTable(
 		// Total time with a creator is a different question, answered by
 		// `GET /api/subscriptions/attention/summary`.
 		attentionSeconds: integer("attention_seconds").default(0),
+		/**
+		 * When settlement made this row final, or null while it is the nightly estimate.
+		 *
+		 * 🚨 **A null row is an estimate and is never money.** `distribute-pool` writes the month
+		 * as it goes, from the account's current amounts and whether or not anything was paid;
+		 * settlement rewrites the row from the month's paid invoices and stamps this. The nightly
+		 * job never touches a stamped row again. What is owed to a creator is `creator_credits`,
+		 * of which a settled row here is the per-month view.
+		 */
+		settledAt: timestamp("settled_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

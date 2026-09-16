@@ -1,237 +1,456 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Cycle settlement job — the money that moves at month-end, per account:
+ * Settlement — a month's money, credited once, after the month ends, from what was paid for it.
  *
- * 1. **remainder inflow.** The **remainder** of what this account gives Anthers —
- *    what's left after its Time Pool (`TIME_POOL_RATE`, half) and its pro-rata share of
- *    the at-cost Payments line. Users who also direct support at creators leave more for
- *    the mission, because the fixed card fee is charged once on the whole batched
- *    monthly charge. Free accounts (giving $0) contribute nothing — their
- *    `FREE_TIME_POOL` is subsidized. The remainder is the shock absorber: Time Pool
- *    is a fixed share and never moves against it, so cost swings land here, never on
- *    creator pay.
+ * 🚨 **Nothing is credited to a creator from an invoice that has not been paid** (Parker,
+ * 2026-09-14). `distribute-pool` estimates each month as it goes; this job is where the money
+ * actually lands. It runs on the 2nd — the 1st is every renewal's day, and keeping the two apart
+ * makes both easier to reason about — and each run settles every month that has ended and still
+ * has something unsettled in it.
  *
- *    ⚠️ **This read "each $3 after its Time Pool ($1.50)" and "their $0.05 Time Pool"
- *    until 2026-08-19.** The first describes the retired unit; the second was simply a
- *    **wrong number** — `FREE_TIME_POOL` is `0.25`, and has been since 2026-08-12. Both
- *    dials are named rather than quoted here so this cannot drift again.
- * 2. **Undistributed Time Pool → the remainder.** A viewer's pool is a fixed half of what
- *    they give Anthers, and since the Public Access fix it reaches only creators whose work
- *    they streamed ungated — so a viewer with no Public Access seconds funds a pool that
- *    reaches nobody. Until 2026-08-29 that money landed nowhere at all: the budget was
- *    recorded, the remainder was computed net of it, and no `pool_distributions` row was
- *    written, so the amount was booked to neither a creator nor the mission. Parker settled
- *    it on 2026-08-26 — **it falls to the remainder**, on the footing that unallocated
- *    Anthers money goes there anyway.
+ * For each supporter with an unsettled month:
  *
- *    ⚠️ **Two situations produce it and the second is not rare.** One is a viewer who
- *    consumed no Public Access in the cycle. The other is a sharer who watched nothing
- *    themselves: `distribute-pool` treats the share-link slice as a ceiling rather than a
- *    reservation, so the rest of their pool stays undistributed by design. Neither requires
- *    the viewer to have logged zero attention — hours of purchased or Badge-cleared work draw
- *    nothing here — so do not size this from the older "truly zero attention time" framing.
- * 3. **Record** the cycle snapshot.
+ * 1. **Their month, from its paid invoices.** What they gave Anthers funds the Time Pool, split by
+ *    that month's Public Access time; what they directed at creators is credited net of each
+ *    charge's card fee; their Stickers are paid out of the pool. A supporter with no paid invoice
+ *    for the month is credited the free Time Pool, which is Anthers' own money spent on their
+ *    behalf, and no Stickers, since the free pool carries no allowance.
+ * 2. **The difference, into `creator_credits`.** What the month now entitles each creator to, less
+ *    what earlier runs credited. An invoice paid late in Stripe's retries is settled by a later run
+ *    against the month it paid for, and adds only its own share — with its own hold, counted from
+ *    the run that credited it.
+ * 3. **The remainder, into the charitable ledger.** What the supporter gave Anthers, less the Time
+ *    Pool and Anthers' side of card processing, plus any of the pool that reached nobody.
+ * 4. **The month's distribution rows, made final**, so every page reading them shows what was
+ *    credited rather than what was estimated.
  *
- * A first step used to sit above these: draw the cycle's stream consumption against
- * the account's allowance (15 GiB floor + 60 GiB per Anthers-Seed) and charge it at
- * $0.01/GiB. **Retired 2026-08-12** — R2 charges $0 egress at any volume, so it
- * metered a cost nobody pays, and the whole rate was a pass-through of the vendor
- * Anthers had just left. Nothing writes `bandwidth_used_gib` any more; the columns
- * remain because dropping them is a migration of its own.
+ * ⚠️ **Card processing is split by the model and absorbed by the remainder.** A creator bears the
+ * share of the fee `paymentsSplit` says they do, which is the figure every take-home display shows
+ * them before they set an amount. Whatever Stripe actually charged beyond that — the fee on the
+ * sales tax, a rate that moved — is Anthers' to absorb, because the remainder is the shock
+ * absorber and creator pay is not.
  *
- * Idempotent per (user, cycle) via a marker row in the charitable ledger.
+ * ⭐ **Idempotent by construction rather than by marker.** A run writes only differences, so a
+ * second run over a settled month finds nothing to add, and a run interrupted halfway resumes by
+ * recomputing what is still owed.
  */
 
 import { db } from "@anthers/db";
 import {
 	accountCycles,
-	accounts,
+	creatorCredits,
 	crfLedger,
+	invoiceLines,
+	invoices,
+	monthSettlements,
 	poolDistributions,
-	seedAllocations,
 } from "@anthers/db/schema";
-import { currentCycleKey, previousCycleKey } from "@anthers/shared/billing-cycle";
+import {
+	currentCycleKey,
+	cycleEnd,
+	cycleStart,
+	previousCycleKey,
+} from "@anthers/shared/billing-cycle";
 import { supportAmount } from "@anthers/shared/constants";
-import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
+import { cardFee, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { and, eq, sql } from "drizzle-orm";
-import { billingCycleDate } from "./distribute-pool.js";
+import { and, eq, inArray, isNotNull, isNull, like, lt, sql } from "drizzle-orm";
+import { computeMonth, type MonthCharge } from "./distribute-pool.js";
 
 export interface SettleCycleData {
-	/** If set, settle a single account. Otherwise all active accounts. */
-	accountId?: number;
-	/** Cycle to settle (YYYY-MM-01). Defaults to the current calendar month. */
-	cycle?: string;
-}
-
-/** The cycle a scheduled run settles by default: the just-ended (previous) month. */
-function defaultCycle(): string {
-	return previousCycleKey(currentCycleKey());
-}
-
-/**
- * Can `distribute-pool` still write to this cycle for this account?
- *
- * 🚨 **This is the whole safety of booking a shortfall, because the two jobs run on
- * different clocks.** `distribute-pool` runs daily and upserts rows keyed by the account's
- * own billing period; `settle-cycle` runs monthly and books the difference once. Take that
- * difference while the pool job can still pay some of it out and the same dollars land in the
- * remainder *and* in a creator's ledger — the one failure this change must not create.
- *
- * So the question is not whether the calendar month is over, it is **which cycle key the pool
- * job would write to for this account right now** — and the answer is a mirror of
- * `getBillingCycle`, fallback included: the account's period start, or the current calendar
- * month when it has none. The ordinary sequence is the pool job running through the month, the
- * period advancing, and settlement then finding the cycle closed; a period that has not
- * advanced keeps the cycle open long after the month has ended, which is exactly when a
- * shortfall would be wrong.
- *
- * ⭐ **An open cycle books nothing rather than deferring.** The marker makes settlement
- * once-per-cycle and `defaultCycle()` never looks back further than a month, so a deferred
- * account would simply never settle. Booking zero leaves the remainder exactly as it was
- * before any of this existed, which is the conservative direction: money stays unbooked rather
- * than being booked twice.
- */
-function cycleStillOpen(acct: { currentPeriodStart: Date | null }, cycle: string): boolean {
-	const openCycle = acct.currentPeriodStart
-		? billingCycleDate(acct.currentPeriodStart)
-		: currentCycleKey();
-	return openCycle === cycle;
+	/**
+	 * The moment the run counts as. Defaults to now; a test passes one so that "the month has
+	 * ended" is a date rather than a wait. A job payload arrives as JSON, so a string is accepted.
+	 */
+	now?: Date | string;
+	/**
+	 * Settle one supporter only — an operator re-running an account whose settlement failed, and
+	 * a test that must not settle whatever else the database holds. A scoped run never marks a
+	 * month settled, because it has not looked at everybody in it.
+	 */
+	userId?: number;
 }
 
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-async function settleAccount(
-	acct: {
-		id: number;
-		userId: number;
-		anthersSupport: string;
-		creatorSupportTotal: string;
-		currentPeriodStart: Date | null;
-	},
-	cycle: string,
-): Promise<boolean> {
-	// Idempotency: a marker row in the charitable ledger per (user, cycle).
-	const marker = `[settle u${acct.userId} ${cycle}]`;
-	const [already] = await db
-		.select({ id: crfLedger.id })
-		.from(crfLedger)
-		.where(sql`${crfLedger.description} LIKE ${`${marker}%`}`)
-		.limit(1);
-	if (already) return false;
+/** What a credit is for. */
+export type CreditKind = "support" | "time_pool" | "sticker";
 
-	const n = supportAmount(acct.anthersSupport);
+/** Whose money a credit is: a supporter's, passed on, or Anthers' own. */
+export type CreditFunding = "supporter" | "anthers";
 
-	// Directed creator support this cycle. Needed BEFORE the remainder inflow, because
-	// the at-cost card fee is charged on the whole batched monthly charge and split
-	// pro-rata — so directed support amortizes the fixed $0.30 and leaves a fatter
-	// remainder. Anthers takes no cut of these; they are recorded, not an inflow.
-	const [dir] = await db
-		.select({ total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)` })
-		.from(seedAllocations)
-		.where(and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycle)));
-	const directedSeeds = new Decimal(dir?.total ?? 0);
-
-	// 1. remainder inflow: the remainder of what this account gives Anthers, after their
-	//    Time Pool and their share of the at-cost Payments line (a bigger basket
-	//    leaves more, because the fixed $0.30 is per charge). Passing `payments` here
-	//    is load-bearing — omit it and the charitable ledger is over-credited by the
-	//    card fee, which typechecks fine because the option is optional.
-	const split = paymentsSplit(n, directedSeeds.toNumber());
-	const bd = anthersSupportBreakdown(n, { payments: split.anthers });
-
-	// 2. Whatever this account's Time Pool did NOT reach a creator with.
-	//
-	// Measured against what `distribute-pool` actually wrote rather than against what it was
-	// budgeted, because the budget is the promise and the rows are the payment. A viewer with
-	// no Public Access seconds has no rows at all and the whole pool is the shortfall; a
-	// sharer who watched nothing themselves has rows for the share-link slice only, and the
-	// rest of their pool is the shortfall.
-	//
-	// ⚠️ **Clamped at zero rather than trusted to be non-negative.** `pool_amount` is corrected
-	// for rounding drift against the distributed pots, so a cent of drift the other way is
-	// possible in principle — and a negative shortfall would quietly take money *out* of the
-	// remainder, which is a worse error than the one this fixes.
-	const [distributedRow] = cycleStillOpen(acct, cycle)
-		? [undefined]
-		: await db
-				// 🚨 **Stickers count as distributed, and leaving them out would book money a
-				// user aimed at a creator to Anthers' own remainder instead.** A Sticker is an
-				// override of the Time Pool: `distribute-pool` distributes by time only what was
-				// not directed, so the directed part is missing from `pool_amount` by design and
-				// would read as a shortfall. That is the failure this file exists to prevent,
-				// pointed the wrong way — silently cutting creator earnings while every total
-				// still adds up.
-				.select({
-					total: sql<string>`COALESCE(SUM(${poolDistributions.poolAmount} + ${poolDistributions.stickerAmount}), 0)`,
-				})
-				.from(poolDistributions)
-				.where(
-					and(
-						eq(poolDistributions.subscriberId, acct.userId),
-						eq(poolDistributions.billingCycle, cycle),
-					),
-				);
-	const undistributed = distributedRow
-		? CENTS(Decimal.max(0, bd.timePool.minus(new Decimal(distributedRow.total ?? 0))))
-		: new Decimal(0);
-
-	// 3. remainder inflow: the account's own remainder, plus any pool that reached nobody.
-	const remainder = CENTS(Decimal.max(0, bd.foundation));
-	const inflow = CENTS(remainder.plus(undistributed));
-
-	const poolNote = undistributed.gt(0)
-		? `, undistributed Time Pool $${undistributed.toFixed(2)}`
-		: "";
-	await db.insert(crfLedger).values({
-		amount: inflow.toFixed(2),
-		description: inflow.gt(0)
-			? `${marker} remainder $${remainder.toFixed(2)}${poolNote} from $${n.toFixed(2)} to Anthers (Time Pool $${bd.timePool.toFixed(2)}, Payments $${bd.payments.toFixed(2)})`
-			: `${marker} no remainder inflow (free rank)`,
-	});
-
-	// 4. Record the cycle snapshot.
-	const snapshot = {
-		anthersSupport: new Decimal(n).toFixed(2),
-		creatorSupportTotal: directedSeeds.toFixed(2),
-		timePool: bd.timePool.toFixed(2),
-		timePoolUndistributed: undistributed.toFixed(2),
-		foundation: inflow.toFixed(2),
-	};
-	await db
-		.insert(accountCycles)
-		.values({ userId: acct.userId, billingCycle: cycle, ...snapshot })
-		.onConflictDoUpdate({
-			target: [accountCycles.userId, accountCycles.billingCycle],
-			set: {
-				foundation: snapshot.foundation,
-				timePool: snapshot.timePool,
-				timePoolUndistributed: snapshot.timePoolUndistributed,
-				updatedAt: new Date(),
-			},
-		});
-
-	return true;
+/**
+ * Every month that has ended and still has something unsettled in it: a paid invoice not yet
+ * credited, or an estimate not yet made final. The month just ended is always included, so that
+ * it is marked settled even when nothing in it earned anything.
+ */
+async function monthsToSettle(current: string, userId?: number): Promise<string[]> {
+	const [fromInvoices, fromEstimates] = await Promise.all([
+		db
+			.selectDistinct({ cycle: invoices.billingCycle })
+			.from(invoices)
+			.where(
+				and(
+					eq(invoices.status, "paid"),
+					isNull(invoices.settledAt),
+					lt(invoices.billingCycle, current),
+					userId == null ? undefined : eq(invoices.userId, userId),
+				),
+			),
+		db
+			.selectDistinct({ cycle: poolDistributions.billingCycle })
+			.from(poolDistributions)
+			.where(
+				and(
+					isNull(poolDistributions.settledAt),
+					lt(poolDistributions.billingCycle, current),
+					userId == null ? undefined : eq(poolDistributions.subscriberId, userId),
+				),
+			),
+	]);
+	const months = new Set([
+		previousCycleKey(current),
+		...fromInvoices.map((r) => r.cycle),
+		...fromEstimates.map((r) => r.cycle),
+	]);
+	return [...months].sort();
 }
 
-export async function settleCycle(data: SettleCycleData) {
-	const cycle = data.cycle ?? defaultCycle();
-	const accts = data.accountId
-		? await db
-				.select()
-				.from(accounts)
-				.where(and(eq(accounts.id, data.accountId), eq(accounts.isActive, true)))
-		: await db.select().from(accounts).where(eq(accounts.isActive, true));
+/** The supporters with something unsettled in this month. */
+async function supportersIn(month: string, only?: number): Promise<number[]> {
+	const [paid, estimated] = await Promise.all([
+		db
+			.selectDistinct({ userId: invoices.userId })
+			.from(invoices)
+			.where(
+				and(
+					eq(invoices.billingCycle, month),
+					eq(invoices.status, "paid"),
+					isNull(invoices.settledAt),
+					isNotNull(invoices.userId),
+				),
+			),
+		db
+			.selectDistinct({ userId: poolDistributions.subscriberId })
+			.from(poolDistributions)
+			.where(
+				and(
+					eq(poolDistributions.billingCycle, month),
+					isNull(poolDistributions.settledAt),
+					isNotNull(poolDistributions.subscriberId),
+				),
+			),
+	]);
+	const ids = new Set<number>();
+	for (const row of [...paid, ...estimated]) if (row.userId != null) ids.add(row.userId);
+	if (only != null) return ids.has(only) ? [only] : [];
+	return [...ids].sort((a, b) => a - b);
+}
 
-	let settled = 0;
-	for (const acct of accts) {
-		try {
-			if (await settleAccount(acct, cycle)) settled++;
-		} catch (error) {
-			console.error(`Cycle settlement failed for user ${acct.userId}:`, error);
+/** A paid invoice for the month, as the charges `computeMonth` splits. */
+interface PaidCharge extends MonthCharge {
+	invoiceId: number;
+	/** What Stripe actually took, or zero where it could not be read. */
+	processingFee: Decimal;
+}
+
+async function paidChargesFor(userId: number, month: string): Promise<PaidCharge[]> {
+	const rows = await db
+		.select({
+			invoiceId: invoices.id,
+			processingFee: invoices.processingFee,
+			creatorId: invoiceLines.creatorId,
+			amount: invoiceLines.amount,
+		})
+		.from(invoices)
+		.leftJoin(invoiceLines, eq(invoiceLines.invoiceId, invoices.id))
+		.where(
+			and(
+				eq(invoices.userId, userId),
+				eq(invoices.billingCycle, month),
+				eq(invoices.status, "paid"),
+			),
+		)
+		.orderBy(invoices.id);
+
+	const byInvoice = new Map<number, PaidCharge>();
+	for (const row of rows) {
+		let charge = byInvoice.get(row.invoiceId);
+		if (!charge) {
+			charge = {
+				invoiceId: row.invoiceId,
+				processingFee: new Decimal(row.processingFee),
+				anthers: new Decimal(0),
+				directed: new Map(),
+			};
+			byInvoice.set(row.invoiceId, charge);
+		}
+		if (row.amount == null) continue;
+		const amount = new Decimal(row.amount);
+		if (row.creatorId == null) charge.anthers = charge.anthers.plus(amount);
+		else
+			charge.directed.set(
+				row.creatorId,
+				(charge.directed.get(row.creatorId) ?? new Decimal(0)).plus(amount),
+			);
+	}
+	return [...byInvoice.values()];
+}
+
+/**
+ * Anthers' side of the card fees on these charges: what Stripe took, less what creators bear.
+ *
+ * Where Stripe's own figure could not be read the model's is used instead, so a missing fee does
+ * not quietly inflate the remainder, and the gap is said out loud.
+ */
+function anthersFeeShare(charges: PaidCharge[]): Decimal {
+	let total = new Decimal(0);
+	for (const charge of charges) {
+		const anthers = supportAmount(Decimal.max(0, charge.anthers).toNumber());
+		const directed = [...charge.directed.values()].reduce(
+			(sum, d) => sum.plus(Decimal.max(0, d)),
+			new Decimal(0),
+		);
+		const model = paymentsSplit(anthers, directed.toNumber());
+		let actual = charge.processingFee;
+		if (actual.lte(0) && model.total.gt(0)) {
+			console.warn(
+				`settle: invoice ${charge.invoiceId} has no recorded processing fee; using the model's $${cardFee(new Decimal(anthers).plus(directed)).toFixed(2)}`,
+			);
+			actual = model.total;
+		}
+		total = total.plus(actual.minus(model.creator));
+	}
+	return total;
+}
+
+/** What a supporter's month entitles each creator to, by kind. */
+type Entitlement = Map<string, { creatorId: number; kind: CreditKind; amount: Decimal }>;
+
+const keyOf = (creatorId: number, kind: CreditKind) => `${creatorId}:${kind}`;
+
+/**
+ * Settle one supporter's month. Returns whether anything was written.
+ *
+ * 🚨 **One transaction per supporter-month.** The credits, the remainder, the final distribution
+ * rows and the invoices' settled stamps describe one decision, and a run that died between them
+ * would leave a month credited and its invoices unsettled — which the next run would credit again.
+ */
+async function settleSupporterMonth(userId: number, month: string, now: Date): Promise<boolean> {
+	const charges = await paidChargesFor(userId, month);
+	const paid = charges.length > 0;
+	const anthersDollars = supportAmount(
+		Decimal.max(
+			0,
+			charges.reduce((sum, c) => sum.plus(c.anthers), new Decimal(0)),
+		).toNumber(),
+	);
+
+	const month$ = await computeMonth({
+		userId,
+		cycle: month,
+		start: cycleStart(month),
+		end: cycleEnd(month),
+		anthersDollars,
+		charges,
+		includeStickers: paid,
+	});
+
+	// A supporter who paid nothing to Anthers — free, or giving only to creators — draws the free
+	// Time Pool, which Anthers funds.
+	const poolFunding: CreditFunding = anthersDollars > 0 ? "supporter" : "anthers";
+
+	const entitled: Entitlement = new Map();
+	for (const [creatorId, d] of month$.distributions) {
+		for (const [kind, amount] of [
+			["support", d.seedAmount],
+			["time_pool", d.poolAmount],
+			["sticker", d.stickerAmount],
+		] as const) {
+			if (!amount.isZero()) entitled.set(keyOf(creatorId, kind), { creatorId, kind, amount });
 		}
 	}
 
-	console.log(`Cycle settlement complete for ${cycle}: ${settled} accounts settled`);
-	return settled;
+	return db.transaction(async (tx) => {
+		// 2. The difference between what the month now entitles and what was already credited.
+		const already = await tx
+			.select({
+				creatorId: creatorCredits.creatorId,
+				kind: creatorCredits.kind,
+				total: sql<string>`COALESCE(SUM(${creatorCredits.amount}), 0)`,
+			})
+			.from(creatorCredits)
+			.where(and(eq(creatorCredits.subscriberId, userId), eq(creatorCredits.billingCycle, month)))
+			.groupBy(creatorCredits.creatorId, creatorCredits.kind);
+
+		const credited = new Map<string, Decimal>();
+		for (const row of already) {
+			if (row.creatorId == null) continue;
+			credited.set(keyOf(row.creatorId, row.kind as CreditKind), new Decimal(row.total));
+		}
+
+		const keys = new Set([...entitled.keys(), ...credited.keys()]);
+		const deltas: (typeof creatorCredits.$inferInsert)[] = [];
+		for (const key of keys) {
+			const owed = entitled.get(key)?.amount ?? new Decimal(0);
+			const delta = CENTS(owed.minus(credited.get(key) ?? new Decimal(0)));
+			if (delta.isZero()) continue;
+			const [creatorId, kind] = key.split(":") as [string, CreditKind];
+			deltas.push({
+				creatorId: Number(creatorId),
+				subscriberId: userId,
+				billingCycle: month,
+				kind,
+				fundedBy: kind === "time_pool" ? poolFunding : "supporter",
+				amount: delta.toFixed(2),
+				settledAt: now,
+			});
+		}
+		if (deltas.length > 0) await tx.insert(creatorCredits).values(deltas);
+
+		// 3. The remainder. Only paid money has one: the free pool is Anthers' own, and a free
+		// account's unspent pool is money nobody paid, so it is never booked as income.
+		let inflow = new Decimal(0);
+		let undistributed = new Decimal(0);
+		if (anthersDollars > 0) {
+			const given = new Decimal(anthersDollars);
+			const own = Decimal.max(0, given.minus(month$.timePool).minus(anthersFeeShare(charges)));
+			// Stickers are paid out of the pool, so they count as distributed — leaving them out
+			// would book money a supporter aimed at a named creator to Anthers' own remainder.
+			undistributed = CENTS(
+				Decimal.max(0, month$.timePool.minus(month$.distributedByTime).minus(month$.stickerTotal)),
+			);
+			inflow = CENTS(own.plus(undistributed));
+		}
+		const marker = `[settle u${userId} ${month}]`;
+		const [booked] = await tx
+			.select({ total: sql<string>`COALESCE(SUM(${crfLedger.amount}), 0)` })
+			.from(crfLedger)
+			.where(like(crfLedger.description, `${marker}%`));
+		const inflowDelta = CENTS(inflow.minus(new Decimal(booked?.total ?? 0)));
+		if (!inflowDelta.isZero()) {
+			await tx.insert(crfLedger).values({
+				amount: inflowDelta.toFixed(2),
+				description: `${marker} remainder from $${anthersDollars.toFixed(2)} to Anthers (Time Pool $${month$.timePool.toFixed(2)}, undistributed $${undistributed.toFixed(2)})`,
+			});
+		}
+
+		// 4. The month's rows, made final. A creator the estimate named and the paid month does not
+		// is written to zero rather than left standing as an estimate nobody will settle.
+		await tx
+			.update(poolDistributions)
+			.set({
+				poolAmount: "0.00",
+				seedAmount: "0.00",
+				stickerAmount: "0.00",
+				settledAt: now,
+				updatedAt: now,
+			})
+			.where(
+				and(eq(poolDistributions.subscriberId, userId), eq(poolDistributions.billingCycle, month)),
+			);
+		for (const [creatorId, d] of month$.distributions) {
+			// Seconds that earned nothing — gated time, a pool that reached zero — make no row, as
+			// in the estimate; the reset above already zeroed any row the estimate had made.
+			if (d.poolAmount.isZero() && d.seedAmount.isZero() && d.stickerAmount.isZero()) continue;
+			const values = {
+				poolAmount: d.poolAmount.toFixed(2),
+				seedAmount: d.seedAmount.toFixed(2),
+				stickerAmount: d.stickerAmount.toFixed(2),
+				attentionSeconds: d.attentionSeconds,
+				settledAt: now,
+			};
+			await tx
+				.insert(poolDistributions)
+				.values({ subscriberId: userId, creatorId, billingCycle: month, ...values })
+				.onConflictDoUpdate({
+					target: [
+						poolDistributions.subscriberId,
+						poolDistributions.creatorId,
+						poolDistributions.billingCycle,
+					],
+					set: { ...values, updatedAt: now },
+				});
+		}
+
+		const directedGross = charges.reduce(
+			(sum, c) => [...c.directed.values()].reduce((s, d) => s.plus(d), sum),
+			new Decimal(0),
+		);
+		const snapshot = {
+			anthersSupport: new Decimal(anthersDollars).toFixed(2),
+			creatorSupportTotal: directedGross.toFixed(2),
+			timePool: month$.timePool.toFixed(2),
+			timePoolUndistributed: undistributed.toFixed(2),
+			foundation: inflow.toFixed(2),
+		};
+		await tx
+			.insert(accountCycles)
+			.values({ userId, billingCycle: month, ...snapshot })
+			.onConflictDoUpdate({
+				target: [accountCycles.userId, accountCycles.billingCycle],
+				set: { ...snapshot, updatedAt: now },
+			});
+
+		if (paid) {
+			await tx
+				.update(invoices)
+				.set({ settledAt: now, updatedAt: now })
+				.where(
+					and(
+						inArray(
+							invoices.id,
+							charges.map((c) => c.invoiceId),
+						),
+						isNull(invoices.settledAt),
+					),
+				);
+		}
+
+		return deltas.length > 0 || !inflowDelta.isZero();
+	});
+}
+
+/**
+ * Settle every month that has ended and has something unsettled in it.
+ *
+ * Marks each month settled once its supporters are done, which is the moment a takedown stops
+ * being able to void a Sticker funded by it. A later run that settles a late invoice for a marked
+ * month leaves the marker as it was.
+ */
+export async function settleCycle(
+	input: SettleCycleData | null = {},
+): Promise<{ months: string[]; supporters: number }> {
+	// A scheduled job arrives with no data at all.
+	const data = input ?? {};
+	const now = data.now ? new Date(data.now) : new Date();
+	const months = await monthsToSettle(currentCycleKey(now), data.userId);
+
+	let supporters = 0;
+	for (const month of months) {
+		let failed = false;
+		for (const userId of await supportersIn(month, data.userId)) {
+			try {
+				if (await settleSupporterMonth(userId, month, now)) supporters++;
+			} catch (error) {
+				failed = true;
+				console.error(`settle: month ${month} failed for user ${userId}:`, error);
+			}
+		}
+		// ⚠️ **Not marked while any supporter in it failed.** The next run settles what is left,
+		// and marks it then; marking now would stop a takedown voiding Stickers that no credit has
+		// yet paid out.
+		if (failed || data.userId != null) continue;
+		const [{ count }] = await db
+			.select({ count: sql<number>`COUNT(*)::int` })
+			.from(invoices)
+			.where(and(eq(invoices.billingCycle, month), eq(invoices.settledAt, now)));
+		await db
+			.insert(monthSettlements)
+			.values({ billingCycle: month, settledAt: now, invoiceCount: count })
+			.onConflictDoNothing({ target: monthSettlements.billingCycle });
+	}
+
+	console.log(`settle: ${months.join(", ")} — ${supporters} supporter month(s) credited`);
+	return { months, supporters };
 }
