@@ -35,9 +35,11 @@ import {
 import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import {
 	type ComplainantNotice,
+	escapeHtml,
 	sendCounterNoticeCopy,
 	sendDmcaRejection,
 	sendDmcaTakedownAcknowledgment,
+	sendOperationalAlert,
 } from "./email.js";
 import { notify } from "./notifications.js";
 import { refundPurchase } from "./refunds.js";
@@ -346,28 +348,149 @@ export async function fileCounterNotice(input: {
 		.where(eq(dmcaNotices.id, input.noticeId));
 
 	// Forward a copy to the complainant — § 512(g)(2)(B). Nobody at Anthers is watching when a
-	// creator files, so whether it went is stamped on the notice rather than only returned: a
-	// null beside a counter-notice is what the admin app shows a person, who sends it by hand.
-	const { sent: forwarded } = await sendCounterNoticeCopy(
-		complainantNotice(notice),
-		counterNotice,
-		{
-			from: restoreNoEarlierThan,
-			by: addBusinessDays(now, 14),
-		},
-	);
-	if (forwarded) {
-		await db
-			.update(dmcaNotices)
-			.set({ counterNoticeForwardedAt: new Date() })
-			.where(eq(dmcaNotices.id, input.noticeId));
+	// creator files, so a copy that did not go raises an alert, and the restore waits for it.
+	const forward = await forwardCounterNotice({ noticeId: input.noticeId, now });
+	const forwarded = forward !== null && typeof forward === "object" && forward.forwarded;
+	if (!forwarded) {
+		await alertUnsentCounterNotice(notice, "filed");
 	}
 
 	return {
 		status: "counter_noticed",
-		restoreNoEarlierThan: restoreNoEarlierThan.toISOString(),
+		restoreNoEarlierThan:
+			forward && typeof forward === "object"
+				? forward.restoreNoEarlierThan.toISOString()
+				: restoreNoEarlierThan.toISOString(),
 		forwarded,
 	};
+}
+
+/**
+ * When the restore may happen for a counter-notice copy sent at `sentAt`: 10 business days after
+ * the counter-notice arrived, or 10 business days after the copy went if that is later.
+ *
+ * 🚨 **The complainant gets the whole window the copy promises, even when that runs past the
+ * 14th business day.** § 512(g)(4) shields Anthers from infringement liability for putting the
+ * material back only if all of § 512(g)(2) was followed, including sending the copy, while a
+ * restore after the 14th day costs only the § 512(g)(1) protection against the creator's claims
+ * about the takedown. Of the two ways to be late, the second is far cheaper (Parker, 2026-09-16).
+ * A copy sent the day the counter-notice arrives changes nothing, which is nearly every case.
+ */
+export function counterNoticeRestoreWindow(filedAt: Date, sentAt: Date): { from: Date; by: Date } {
+	const fromFiling = addBusinessDays(filedAt, 10);
+	const fromCopy = addBusinessDays(sentAt, 10);
+	const from = fromCopy > fromFiling ? fromCopy : fromFiling;
+	return { from, by: addBusinessDays(from, 4) };
+}
+
+/**
+ * Send the complainant their copy of a counter-notice, or record that an operator sent it by hand,
+ * and move the restore date to the window that copy gives them. The restore sweep will not restore
+ * a counter-noticed Work until this has succeeded.
+ */
+export async function forwardCounterNotice(input: {
+	noticeId: number;
+	now?: Date;
+	/** Record a copy an operator emailed themselves, rather than sending one. */
+	sentByHand?: boolean;
+}): Promise<{ forwarded: boolean; restoreNoEarlierThan: Date } | NoticeForwardRefusal | null> {
+	const now = input.now ?? new Date();
+	const [notice] = await db
+		.select()
+		.from(dmcaNotices)
+		.where(eq(dmcaNotices.id, input.noticeId))
+		.limit(1);
+	if (!notice) return null;
+	if (
+		notice.status !== "counter_noticed" ||
+		!notice.counterNotice ||
+		!notice.counterNoticeFiledAt
+	) {
+		return "no_counter_notice";
+	}
+	if (notice.counterNoticeForwardedAt) return "already_forwarded";
+
+	const window = counterNoticeRestoreWindow(notice.counterNoticeFiledAt, now);
+	const sent = input.sentByHand
+		? true
+		: (await sendCounterNoticeCopy(complainantNotice(notice), notice.counterNotice, window)).sent;
+	if (!sent) {
+		return { forwarded: false, restoreNoEarlierThan: notice.restoreNoEarlierThan ?? window.from };
+	}
+
+	await db
+		.update(dmcaNotices)
+		.set({ counterNoticeForwardedAt: now, restoreNoEarlierThan: window.from })
+		.where(eq(dmcaNotices.id, input.noticeId));
+	return { forwarded: true, restoreNoEarlierThan: window.from };
+}
+
+/** Why a counter-notice copy could not be forwarded, before any attempt to send it. */
+export type NoticeForwardRefusal = "no_counter_notice" | "already_forwarded";
+
+/**
+ * Retry every counter-notice copy that has not gone yet. The restore sweep runs this first, so a
+ * copy that goes out today moves today's restore rather than tomorrow's.
+ *
+ * An alert goes out when the 14th business day after the counter-notice is one business day away
+ * or past, and again on each daily run after that while the copy is still unsent. A deadline this
+ * close is a person's to handle, and repeating the alert is the point.
+ */
+export async function retryUnsentCounterNotices(
+	now = new Date(),
+): Promise<{ forwarded: number; stillUnsent: number; alerted: number }> {
+	const rows = await db
+		.select()
+		.from(dmcaNotices)
+		.where(
+			and(
+				eq(dmcaNotices.status, "counter_noticed"),
+				isNull(dmcaNotices.counterNoticeForwardedAt),
+				isNotNull(dmcaNotices.counterNoticeFiledAt),
+			),
+		);
+
+	let forwarded = 0;
+	let stillUnsent = 0;
+	let alerted = 0;
+	for (const notice of rows) {
+		const result = await forwardCounterNotice({ noticeId: notice.id, now });
+		if (result && typeof result === "object" && result.forwarded) {
+			forwarded++;
+			continue;
+		}
+		stillUnsent++;
+		const deadline = addBusinessDays(notice.counterNoticeFiledAt as Date, 14);
+		if (addBusinessDays(now, 1) >= deadline) {
+			await alertUnsentCounterNotice(notice, "deadline");
+			alerted++;
+		}
+	}
+	return { forwarded, stillUnsent, alerted };
+}
+
+/**
+ * Tell the operator a counter-notice copy has not reached the complainant. Sent when the copy fails
+ * at filing, and daily once the 14th business day is near.
+ */
+async function alertUnsentCounterNotice(
+	notice: typeof dmcaNotices.$inferSelect,
+	when: "filed" | "deadline",
+): Promise<void> {
+	const opening =
+		when === "filed"
+			? `A creator filed a counter-notice on DMCA notice #${notice.id}, and the email carrying the complainant's copy was not accepted.`
+			: `The complainant's copy of the counter-notice on DMCA notice #${notice.id} has still not been sent, and the 14th business day since the counter-notice arrived is at most one business day away.`;
+	const { sent } = await sendOperationalAlert({
+		subject: `DMCA notice #${notice.id}: the counter-notice copy has not been sent`,
+		html: `<p>${escapeHtml(opening)}</p>
+<p>The Work stays down until the copy is sent, because restoring it without the copy would give up the § 512(g)(4) protection. The daily restore sweep retries the email. To settle it now, open the notice in the admin app and either send the copy again or email it to ${escapeHtml(notice.complainantEmail || "the complainant")} yourself and record that you did.</p>`,
+	});
+	if (!sent) {
+		console.error(
+			`[dmca] notice #${notice.id}: the counter-notice copy is unsent and the operator alert did not go either`,
+		);
+	}
 }
 
 /** The fields of a notice the complainant emails are addressed and headed with. */
@@ -490,9 +613,9 @@ export async function recordSuit(input: {
 }
 
 /**
- * The notices whose restore timer has arrived and no suit was filed. Used by
- * the scheduled sweep job (`QUEUES.DMCA_RESTORE`) to restore Works at the
- * 10–14 business day window.
+ * The notices whose restore timer has arrived, whose counter-notice copy has reached the
+ * complainant, and on which no suit was recorded. Used by the scheduled sweep job
+ * (`QUEUES.DMCA_RESTORE`) to restore Works at the 10–14 business day window.
  */
 export async function noticesReadyForRestore(): Promise<
 	{ noticeId: number; workId: number | null }[]
@@ -509,6 +632,8 @@ export async function noticesReadyForRestore(): Promise<
 				isNotNull(dmcaNotices.restoreNoEarlierThan),
 				lte(dmcaNotices.restoreNoEarlierThan, new Date()),
 				isNull(dmcaNotices.suitFiledAt),
+				// Never before the complainant has their copy — see `counterNoticeRestoreWindow`.
+				isNotNull(dmcaNotices.counterNoticeForwardedAt),
 			),
 		);
 	return rows.map((r) => ({ noticeId: r.id, workId: r.workId }));

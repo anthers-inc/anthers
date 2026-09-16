@@ -308,9 +308,14 @@ describe("the restore sweep query", () => {
 			goodFaithStatement: "Removed by mistake.",
 		});
 		expect(countered.status).toBe(201);
+		// The complainant's copy is marked sent as well, because the sweep restores nothing before
+		// it has gone (`dmca-counter-notice-hold.test.ts`), and email does not send under the runner.
 		await db
 			.update(dmcaNotices)
-			.set({ restoreNoEarlierThan: new Date(Date.now() - 86_400_000) })
+			.set({
+				restoreNoEarlierThan: new Date(Date.now() - 86_400_000),
+				counterNoticeForwardedAt: new Date(),
+			})
 			.where(eq(dmcaNotices.id, noticeId));
 
 		// 🚨 This call is the regression test. It threw `zero-length delimited
@@ -333,9 +338,13 @@ describe("the restore sweep query", () => {
 			goodFaithStatement: "Removed by mistake.",
 		});
 		expect(countered.status).toBe(201);
+		// Copy marked sent, so that the suit is the only thing left that could exclude this notice.
 		await db
 			.update(dmcaNotices)
-			.set({ restoreNoEarlierThan: new Date(Date.now() - 86_400_000) })
+			.set({
+				restoreNoEarlierThan: new Date(Date.now() - 86_400_000),
+				counterNoticeForwardedAt: new Date(),
+			})
 			.where(eq(dmcaNotices.id, noticeId));
 
 		const suit = await post(`/api/admin/dmca/${noticeId}/suit`, adminCookie, {});
