@@ -3,13 +3,14 @@
  * Support-model economics schema — see auth.ts for the role-classification legend.
  *
  * 🚨 This file is where the node/org boundary is *hardest* to draw, and most of it is
- * `org` by the treasury rule: the boundary table says "Payments, pools, payouts, KYC, charitable
- * accounting → Org only. Money cannot federate." A creator's *gates* (what they charge
- * for access) are the exception — those are the creator's own pricing, node-owned.
+ * `org` by the treasury rule: payments, pools, payouts, KYC and charitable accounting stay with
+ * the org, because a treasury cannot be spread across machines other people run. A creator's
+ * *gates* (what they charge for access) are the exception — those are the creator's own
+ * pricing, node-owned.
  *
- * `attentionEvents` is the table the boundary table predicts will be hardest to classify, and it
- * is: org-role by volume and by being pool-accounting input, node-role by being about
- * one creator's work. See the per-table comment, which is where that finding lives.
+ * `attentionEvents` is the hardest table here to classify: org-role by volume and by being
+ * pool-accounting input, node-role by being about one creator's work. See the per-table
+ * comment, which is where that finding lives.
  */
 import { sql } from "drizzle-orm";
 import {
@@ -37,8 +38,8 @@ import { works } from "./content.js";
  * it is a migration of its own.
  */
 // org — a user's support account carries the billing relationship (Stripe customer,
-// subscription, period). Boundary table: "Payments, pools, payouts → Org only. Money cannot
-// federate." The `isSelfHosting` flag is a creator-side claim but the org prices it.
+// subscription, period), and money stays with the org by the treasury rule. The
+// `isSelfHosting` flag is a creator-side claim but the org prices it.
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
@@ -424,7 +425,7 @@ export const attentionDaily = pgTable(
 // sum of these. (The table name `seed_allocations` stays: it is a schema identifier whose
 // meaning did not change, per the copy-rules-not-schema-rules norm.)
 // org — a user's directed support to a creator, this cycle. The billing contract is
-// org-side (boundary table: "Subscriber relationships: Both; Billing contract org-side"). The
+// org-side. The
 // `atprotoUri` column is for the day `org.anthers.support` exists — the fact that somebody
 // supports a creator is theirs to assert, and belongs in their repository. ⚠️ **The money
 // never follows it.** A treasury cannot be spread across machines other people run, so the

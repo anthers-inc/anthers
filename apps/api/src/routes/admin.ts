@@ -46,6 +46,7 @@ import {
 	restoreWork,
 	takeDownWork,
 } from "../services/dmca.js";
+import { sendRightsRequestAnswerEmail } from "../services/email.js";
 import {
 	describeSubject,
 	liftHold,
@@ -427,8 +428,15 @@ const adminRoutes = new Hono<AdminEnv>()
 
 			// The requester is told it was answered. Closing a ticket silently is how a
 			// 30-day promise becomes a 30-day silence.
+			//
+			// Exactly one email either way. An account that still exists is told in-app, and an
+			// essential notice always emails the account's address as well, so sending to the
+			// stored address too would tell the same person twice. An account that is gone leaves
+			// no in-app record to write and no account address to read, and the address captured
+			// with the request is the one way left to reach them.
+			let emailed: boolean;
 			if (row.userId != null) {
-				await notify({
+				const told = await notify({
 					userId: row.userId,
 					category: "essential",
 					kind: "rights_request_resolved",
@@ -437,8 +445,11 @@ const adminRoutes = new Hono<AdminEnv>()
 					linkPath: "/settings",
 					dedupeKey: `rights-request-resolved:${row.id}`,
 				});
+				emailed = told.emailed;
+			} else {
+				emailed = (await sendRightsRequestAnswerEmail(row.email, row.resolutionNote)).sent;
 			}
-			return c.json({ resolved: true });
+			return c.json({ resolved: true, emailed });
 		},
 	)
 

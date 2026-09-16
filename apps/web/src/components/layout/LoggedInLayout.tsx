@@ -33,7 +33,7 @@ const NAV_LINKS = [
 function LoggedInLayoutInner() {
 	const { user, signOut } = useAuth();
 	const { currentTrack } = useMediaPlayer();
-	const { sidebarOpen, toggleSidebar, pageContent } = useSidebar();
+	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent } = useSidebar();
 	const navigate = useNavigate();
 	const { count: basketCount } = useBasket();
 
@@ -164,10 +164,13 @@ function LoggedInLayoutInner() {
 			<VerificationBanner />
 
 			{/* Body: sidebar + main content */}
-			<div className="flex flex-1 overflow-hidden">
-				{/* Persistent sidebar */}
+			<div className="relative flex flex-1 overflow-hidden">
+				{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
+				    lifted out of the flex row and laid over the page, so opening it on a phone
+				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
+				    is also what decides that a phone starts with it closed. */}
 				<aside
-					className={`${sidebarOpen ? "w-64" : "w-0"} shrink-0 transition-all duration-200 overflow-hidden border-r border-base-300/50 bg-base-100`}
+					className={`${sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
 				>
 					<div className="w-64 h-full flex flex-col overflow-y-auto">
 						{/* Persistent nav section */}
@@ -213,6 +216,16 @@ function LoggedInLayoutInner() {
 						)}
 					</div>
 				</aside>
+
+				{/* The drawer's backdrop on a phone: a tap on the covered page closes it. */}
+				{sidebarOpen && (
+					<button
+						type="button"
+						aria-label="Close sidebar"
+						className="absolute inset-0 z-20 bg-base-content/20 md:hidden"
+						onClick={closeSidebar}
+					/>
+				)}
 
 				{/* Main content area — reserve the scrollbar gutter so short and tall pages
 					keep the same width (no content shift when the scrollbar appears).
