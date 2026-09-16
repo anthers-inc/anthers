@@ -36,6 +36,11 @@ export default function ProjectEmbed({ embedUrl, title }: ProjectEmbedProps) {
 					Close
 				</button>
 			</div>
+			{/* The sandbox keeps `allow-same-origin` beside `allow-scripts` on purpose: a web build keeps
+			    its saves in its own origin's storage and breaks without it. The pair is only safe while
+			    the build's origin differs from this page's, which is why `embedUrlProblem` in
+			    `@anthers/shared/content` refuses anything on Anthers' own domain. Change the two
+			    together. */}
 			<iframe
 				src={embedUrl}
 				title={title}
