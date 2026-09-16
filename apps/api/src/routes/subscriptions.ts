@@ -802,6 +802,22 @@ const subscriptionRoutes = new Hono()
 			 */
 			if (acct.stripeSubscriptionId) {
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
+				/**
+				 * 🚨 **A subscription whose renewal failed is refused, never replaced.** Falling
+				 * through to the create path below opened a second subscription beside the first,
+				 * which Stripe would go on retrying — two charges for one person's support. The
+				 * remedy is paying what is owed, which the card update in Manage Billing does.
+				 */
+				if (sub.status === "past_due" || sub.status === "unpaid") {
+					return c.json(
+						{
+							error:
+								"Your last payment didn't go through. Update your card in Manage Billing, and you can change your support once it has.",
+							code: "payment_past_due",
+						},
+						409,
+					);
+				}
 				if (sub.status === "active" || sub.status === "trialing") {
 					const change = planItemChange(sub, product, anthersSupport, picks);
 

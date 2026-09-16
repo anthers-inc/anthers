@@ -22,11 +22,11 @@
  * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, seedAllocations } from "@anthers/db/schema";
+import { accountCycles, accounts, invoices, seedAllocations } from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 
@@ -436,12 +436,36 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 			.update(accounts)
 			.set({
 				anthersSupport: "0.00",
+				creatorSupportTotal: "0.00",
 				stripeSubscriptionId: "",
 				isActive: true,
 				canceledAt: null,
 				updatedAt: new Date(),
 			})
 			.where(eq(accounts.id, acct.id));
+		await lapseUnpaidMonth(acct.userId);
+		return;
+	}
+
+	/**
+	 * 🚨 **Retries exhausted: the benefits lapse** (Parker, 2026-09-14). A renewal that fails keeps
+	 * the account's Badge and cleared gates through Stripe's retry window — `past_due` changes
+	 * nothing here — and they end when Stripe gives up and marks the subscription unpaid. The
+	 * subscription itself is kept, so paying what is owed makes it active again and the amounts
+	 * are read back off its items.
+	 */
+	if (sub.status === "unpaid") {
+		if (acct.stripeSubscriptionId && acct.stripeSubscriptionId !== sub.id) return;
+		await db
+			.update(accounts)
+			.set({
+				anthersSupport: "0.00",
+				creatorSupportTotal: "0.00",
+				isActive: false,
+				updatedAt: new Date(),
+			})
+			.where(eq(accounts.id, acct.id));
+		await lapseUnpaidMonth(acct.userId);
 		return;
 	}
 
@@ -499,6 +523,34 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		await applyDirectedSupportFromSub(acct.userId, sub);
 		await snapshotCycle(acct.userId, anthersSupport.toNumber(), directedTotal.toNumber());
 	}
+}
+
+/**
+ * Take away the creator gates this month cleared, unless the month was paid for.
+ *
+ * ⚠️ **The allocations are written before the renewal is collected.** The subscription moves to
+ * the new month on the 1st, still active, a moment before its charge is attempted, so a renewal
+ * that then fails has already cleared that month's gates. When the benefits lapse those have to
+ * go. A month with a paid invoice keeps them: somebody who cancels partway through a month they
+ * paid for still has it.
+ */
+async function lapseUnpaidMonth(userId: number): Promise<void> {
+	const cycle = currentCycleKey();
+	const [paid] = await db
+		.select({ id: invoices.id })
+		.from(invoices)
+		.where(
+			and(
+				eq(invoices.userId, userId),
+				eq(invoices.billingCycle, cycle),
+				eq(invoices.status, "paid"),
+			),
+		)
+		.limit(1);
+	if (paid) return;
+	await db
+		.delete(seedAllocations)
+		.where(and(eq(seedAllocations.userId, userId), eq(seedAllocations.billingCycle, cycle)));
 }
 
 /**
