@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
-        spec-diff spec-apply deploy-status webhook-check dev-local \
+        spec-diff spec-apply deploy-status webhook-check stripe-walk dev-local \
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -318,6 +318,13 @@ deploy-status: ## Assert the live deployment's commit matches release (DOCTL_CON
 # reaches the network, so it is not part of `verify` — same reasoning as spec-diff.
 webhook-check: ## Assert Stripe's webhook endpoints and that prod's signing secrets work
 	bun run scripts/webhook-check.ts
+
+# Support from signup through settlement against test-mode Stripe, on a test clock. Needs `bws`
+# (the Anthers Dev key) and the network, and takes a few minutes, so it is not part of `verify`.
+# Run it after changing how invoices are read, discounted, recorded or settled — hand-built
+# invoices cannot tell a right reading of Stripe's fields from a wrong one.
+stripe-walk: ## Walk support through test-mode Stripe: charge, discount, record, settle
+	bun run scripts/stripe-walk.ts
 
 # Deliberately NOT part of `verify`. It needs the Obsidian vault, which only Parker has —
 # so CI took the skip path on every run it ever had, and the only thing it reliably did

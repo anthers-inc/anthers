@@ -15,12 +15,12 @@
  */
 import { db } from "@anthers/db/client";
 import { accounts, invoiceLines, invoices } from "@anthers/db/schema";
-import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 import { itemsFromSub } from "./billing.js";
+import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
 /** Cents as Stripe reports them, in the dollars the columns hold. */
 const dollars = (cents: number) => new Decimal(cents).dividedBy(100).toDecimalPlaces(2);
@@ -46,11 +46,11 @@ export async function recordPaidInvoice(invoice: Stripe.Invoice): Promise<number
 		.limit(1);
 	if (!acct) return null;
 
-	// 🚨 The month this invoice PAYS FOR, read from the period it covers. A mid-month start is
-	// charged in full for the month it joins and its reduced renewal pays for the next one, so
-	// keying this by payment date would credit the wrong month's viewing — for every account
-	// that ever started mid-month, silently, with every total still adding up.
-	const billingCycle = cycleKeyFor(new Date((invoice.period_start ?? 0) * 1000));
+	// 🚨 The month this invoice PAYS FOR, read from its lines. A mid-month start is charged in
+	// full for the month it joins and its reduced renewal pays for the next one, so keying this
+	// by payment date — or by `invoice.period_start`, which on a renewal is the month before —
+	// would credit the wrong month's viewing, silently, with every total still adding up.
+	const billingCycle = cycleInvoicePaysFor(invoice);
 
 	const discount = dollars(
 		(invoice.total_discount_amounts ?? []).reduce((sum, d) => sum + (d.amount ?? 0), 0),
@@ -111,12 +111,17 @@ async function recordLines(
 	}
 
 	const byCreator = new Map<number | null, Decimal>();
-	for (const line of invoice.lines?.data ?? []) {
+	for (const line of await allInvoiceLines(invoice)) {
 		const itemId = line.parent?.subscription_item_details?.subscription_item;
 		// An unmapped line is credited to Anthers, which is `itemsFromSub`'s documented
 		// fallback for an unstamped item and the migration path for an older subscription.
 		const creatorId = itemId ? (creatorOfItem.get(itemId) ?? null) : null;
-		const amount = dollars(line.amount ?? 0);
+		// 🚨 **Net of its discounts.** A line's `amount` is what it came to BEFORE the day-exact
+		// reduction was spent on it; what was actually charged for it is that less its
+		// `discount_amounts`. Crediting `amount` alone pays a creator the reduction the supporter
+		// was given back.
+		const discounted = (line.discount_amounts ?? []).reduce((sum, d) => sum + (d.amount ?? 0), 0);
+		const amount = dollars((line.amount ?? 0) - discounted);
 		byCreator.set(creatorId, (byCreator.get(creatorId) ?? new Decimal(0)).plus(amount));
 	}
 

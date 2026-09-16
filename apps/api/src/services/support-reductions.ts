@@ -29,6 +29,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 import { itemsFromSub } from "./billing.js";
+import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
 /** Money in the shape the columns hold it. */
 const money = (d: Decimal.Value) => new Decimal(d).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
@@ -119,10 +120,10 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 		.limit(1);
 	if (!acct) return 0;
 
-	// The cycle this invoice PAYS FOR, read from the period it covers rather than from
-	// today's date. A renewal invoice is created a little before the period opens, so
-	// "now" is still the previous month when this runs.
-	const cycle = cycleKeyFor(new Date((invoice.period_start ?? 0) * 1000));
+	// The cycle this invoice PAYS FOR, read from its lines rather than from today's date or from
+	// `invoice.period_start` — see `cycleInvoicePaysFor` for why the invoice-level field names
+	// the month before.
+	const cycle = cycleInvoicePaysFor(invoice);
 
 	const owed = await db
 		.select()
@@ -142,7 +143,7 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 		itemsFromSub(sub).map((i) => [i.itemId, destinationLabel(i.creatorId)]),
 	);
 
-	const lines = spendableLines(invoice, destinationOfItem);
+	const lines = spendableLines(await allInvoiceLines(invoice), destinationOfItem);
 	if (lines.length === 0) return 0;
 
 	const plan = allocate(
@@ -225,11 +226,11 @@ interface SpendableLine {
  * the reduction has nothing to say about.
  */
 function spendableLines(
-	invoice: Stripe.Invoice,
+	invoiceLines: Stripe.InvoiceLineItem[],
 	destinationOfItem: Map<string, string>,
 ): SpendableLine[] {
 	const lines: SpendableLine[] = [];
-	for (const line of invoice.lines?.data ?? []) {
+	for (const line of invoiceLines) {
 		const details = line.parent?.subscription_item_details;
 		if (!details || details.proration) continue;
 		const destination = destinationOfItem.get(details.subscription_item);

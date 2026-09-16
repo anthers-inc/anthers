@@ -26,6 +26,8 @@ const run = crypto.randomUUID().slice(0, 8);
 const CUSTOMER = `cus_invoice_${run}`;
 const SUB_ID = `sub_invoice_${run}`;
 const PAYMENT_INTENT = `pi_EXAMPLE_${run}`;
+/** What the fake Stripe lists when an invoice says it has more lines than it embeds. */
+let listedLines: unknown[] = [];
 
 let realClient: Stripe | null;
 let supporterId: number;
@@ -65,17 +67,38 @@ function fakeStripe(feeCents = 59) {
 				data: [{ payment: { type: "payment_intent", payment_intent: PAYMENT_INTENT } }],
 			}),
 		},
+		invoices: {
+			listLineItems: () => ({
+				async *[Symbol.asyncIterator]() {
+					yield* listedLines;
+				},
+			}),
+		},
 		paymentIntents: {
 			retrieve: async () => ({ latest_charge: { balance_transaction: { fee: feeCents } } }),
 		},
 	} as unknown as Stripe;
 }
 
-/** A paid invoice in the shape the recorder reads. */
+/** One month before a unix time, as Stripe dates a renewal invoice's own period. */
+const monthBefore = (unix: number) => {
+	const d = new Date(unix * 1000);
+	return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1) / 1000);
+};
+
+/**
+ * A paid invoice in the shape Stripe sends it.
+ *
+ * 🚨 **The invoice's own `period_start` is the month BEFORE the one it pays for**, as Stripe sets
+ * it on every renewal, and only the lines' `period` names the month paid for. A fixture putting
+ * the paid-for month on `period_start` is how a recorder reading that field passed every test
+ * here and credited real renewals to the wrong month.
+ */
 function paidInvoice(opts: {
 	id?: string;
-	periodStart?: number;
-	lines?: { item: string; dollars: number }[];
+	/** The month the invoice pays for, which only its lines say. */
+	paysFor?: number;
+	lines?: { item: string; dollars: number; discountCents?: number }[];
 	taxCents?: number;
 	discountCents?: number;
 	totalCents?: number;
@@ -86,13 +109,18 @@ function paidInvoice(opts: {
 		{ item: "si_creator", dollars: 4 },
 	];
 	const taxCents = opts.taxCents ?? 0;
-	const lineCents = lines.reduce((s, l) => s + Math.round(l.dollars * 100), 0);
+	const lineCents = lines.reduce(
+		(s, l) => s + Math.round(l.dollars * 100) - (l.discountCents ?? 0),
+		0,
+	);
+	const paysFor = opts.paysFor ?? Math.floor(Date.UTC(2026, 9, 1) / 1000);
 	return {
 		id: opts.id ?? `in_${uid()}`,
 		object: "invoice",
 		status: opts.status ?? "paid",
 		customer: CUSTOMER,
-		period_start: opts.periodStart ?? Math.floor(Date.UTC(2026, 9, 1) / 1000),
+		period_start: monthBefore(paysFor),
+		period_end: paysFor,
 		created: Math.floor(Date.UTC(2026, 9, 1) / 1000),
 		status_transitions: { paid_at: Math.floor(Date.UTC(2026, 9, 1, 3) / 1000) },
 		total: opts.totalCents ?? lineCents + taxCents,
@@ -102,12 +130,18 @@ function paidInvoice(opts: {
 		lines: {
 			data: lines.map((l) => ({
 				id: `il_${l.item}`,
+				// Before its discount, as Stripe reports a line; the discount is beside it.
 				amount: Math.round(l.dollars * 100),
+				discount_amounts: l.discountCents
+					? [{ amount: l.discountCents, discount: "di_EXAMPLE" }]
+					: [],
+				period: { start: paysFor, end: paysFor + 30 * 86400 },
 				parent: {
 					type: "subscription_item_details",
 					subscription_item_details: { subscription_item: l.item, proration: false },
 				},
 			})),
+			has_more: false,
 		},
 		// biome-ignore lint/suspicious/noExplicitAny: a hand-built subset of Stripe's type
 	} as any;
@@ -154,7 +188,9 @@ describe("recording a paid invoice", () => {
 		// Period opens 1 October; the charge clears in the small hours of 1 October UTC. Both
 		// point at October here, which is the ordinary case — the next test is the one that
 		// separates them.
-		const invoice = paidInvoice({ periodStart: Math.floor(Date.UTC(2026, 9, 1) / 1000) });
+		const invoice = paidInvoice({ paysFor: Math.floor(Date.UTC(2026, 9, 1) / 1000) });
+		// The invoice's own period says September, exactly as Stripe dates an October renewal.
+		expect(new Date(invoice.period_start * 1000).getUTCMonth()).toBe(8);
 		await recordPaidInvoice(invoice);
 		expect((await rowFor(invoice.id)).billingCycle).toBe("2026-10-01");
 	});
@@ -164,13 +200,49 @@ describe("recording a paid invoice", () => {
 		// against September's recorded time. Keying by payment date would pay October's
 		// creators with September's money.
 		const invoice = paidInvoice({
-			periodStart: Math.floor(Date.UTC(2026, 8, 1) / 1000),
+			paysFor: Math.floor(Date.UTC(2026, 8, 1) / 1000),
 		});
 		invoice.status_transitions = { paid_at: Math.floor(Date.UTC(2026, 9, 12) / 1000) };
 		await recordPaidInvoice(invoice);
 		const row = await rowFor(invoice.id);
 		expect(row.billingCycle).toBe("2026-09-01");
 		expect(new Date(row.paidAt as Date).getUTCMonth()).toBe(9); // October
+	});
+
+	it("🚨 credits each line what was charged for it, net of its discount", async () => {
+		// A renewal carrying the day-exact reduction: each line's `amount` is still the full
+		// price, and its discount sits beside it. Crediting the amount pays a creator the money
+		// the supporter was given back.
+		const invoice = paidInvoice({
+			lines: [
+				{ item: "si_anthers", dollars: 6, discountCents: 300 },
+				{ item: "si_creator", dollars: 4, discountCents: 200 },
+			],
+		});
+		const id = await recordPaidInvoice(invoice);
+		const lines = await db
+			.select()
+			.from(invoiceLines)
+			.where(eq(invoiceLines.invoiceId, id ?? 0));
+		const byCreator = Object.fromEntries(
+			lines.map((l) => [l.creatorId === null ? "anthers" : String(l.creatorId), Number(l.amount)]),
+		);
+		expect(byCreator).toEqual({ anthers: 3, [String(creatorId)]: 2 });
+		expect(Number((await rowFor(invoice.id)).subtotal)).toBe(5);
+	});
+
+	it("reads every line, beyond the ten an invoice carries", async () => {
+		const invoice = paidInvoice({});
+		// Stripe embeds the first lines and says there are more; the rest are listed.
+		listedLines = invoice.lines.data;
+		invoice.lines = { data: invoice.lines.data.slice(0, 1), has_more: true };
+		const id = await recordPaidInvoice(invoice);
+		listedLines = [];
+		const lines = await db
+			.select()
+			.from(invoiceLines)
+			.where(eq(invoiceLines.invoiceId, id ?? 0));
+		expect(lines).toHaveLength(2);
 	});
 
 	it("splits the charge by destination, so a creator's credit is legible", async () => {
