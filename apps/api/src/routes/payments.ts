@@ -35,7 +35,7 @@ import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
-import { recordPaidInvoice } from "../services/invoices.js";
+import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import {
 	refundPurchase,
@@ -795,6 +795,8 @@ const paymentRoutes = new Hono()
 					typeof charge.payment_intent === "string"
 						? charge.payment_intent
 						: charge.payment_intent.id;
+				// A support charge refunded in full is never credited, or is netted if it already was.
+				await markInvoiceMoneyReturned(intentId, "refunded");
 				// 🚨 Every purchase on the charge, not the first — the `.limit(1)` here was
 				// correct only while a charge could carry one purchase.
 				//
@@ -827,6 +829,17 @@ const paymentRoutes = new Hono()
 							typeof charge.refunds?.data?.[0]?.id === "string" ? charge.refunds.data[0].id : null,
 					});
 			}
+		} else if (event.type === "charge.dispute.created") {
+			/**
+			 * A chargeback on a support charge. Anthers does not contest one, so the money is treated
+			 * as gone from the moment it is disputed rather than when the dispute closes.
+			 */
+			const dispute = event.data.object as Stripe.Dispute;
+			const intentId =
+				typeof dispute.payment_intent === "string"
+					? dispute.payment_intent
+					: (dispute.payment_intent?.id ?? null);
+			if (intentId) await markInvoiceMoneyReturned(intentId, "disputed");
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db

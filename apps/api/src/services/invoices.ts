@@ -17,7 +17,7 @@ import { db } from "@anthers/db/client";
 import { accounts, invoiceLines, invoices } from "@anthers/db/schema";
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 import { itemsFromSub } from "./billing.js";
@@ -61,18 +61,21 @@ export async function recordPaidInvoice(invoice: Stripe.Invoice): Promise<number
 	// top of it, which is the one thing added on top (the wiki's *The Support Model*).
 	const subtotal = total.minus(tax);
 
+	const payment = await paymentOf(invoice.id);
+
 	const [row] = await db
 		.insert(invoices)
 		.values({
 			userId: acct.userId,
 			stripeInvoiceId: invoice.id,
+			stripePaymentIntentId: payment.paymentIntentId,
 			billingCycle,
 			status: "paid",
 			subtotal: subtotal.toFixed(2),
 			discount: discount.toFixed(2),
 			tax: tax.toFixed(2),
 			total: total.toFixed(2),
-			processingFee: (await processingFeeFor(invoice)).toFixed(2),
+			processingFee: (await processingFeeFor(invoice.id, payment)).toFixed(2),
 			paidAt: new Date((invoice.status_transitions?.paid_at ?? invoice.created) * 1000),
 		})
 		// A redelivered event finds the row already there and changes nothing.
@@ -138,6 +141,41 @@ async function recordLines(
 	}
 }
 
+/** How an invoice was paid, as the ids a fee lookup, a refund and a dispute each need. */
+interface InvoicePaymentRef {
+	paymentIntentId: string | null;
+	chargeId: string | null;
+}
+
+/**
+ * The payment that paid an invoice, asked of Stripe rather than read off the event.
+ *
+ * 🚨 **`invoice.payments` is not in a webhook's payload.** Stripe documents it as an *includable*
+ * property, present only when a request asks for it, so an `invoice.paid` event arrives without it
+ * and a fee read from it is zero on every real invoice while a hand-built test invoice carrying the
+ * field passes. The invoice's payments are listed instead.
+ */
+async function paymentOf(invoiceId: string): Promise<InvoicePaymentRef> {
+	const none = { paymentIntentId: null, chargeId: null };
+	const stripe = getStripe();
+	if (!stripe) return none;
+	try {
+		const list = await stripe.invoicePayments.list({
+			invoice: invoiceId,
+			status: "paid",
+			limit: 1,
+		});
+		const payment = list.data[0]?.payment;
+		if (!payment) return none;
+		const idOf = (ref: string | { id: string } | undefined) =>
+			ref == null ? null : typeof ref === "string" ? ref : ref.id;
+		return { paymentIntentId: idOf(payment.payment_intent), chargeId: idOf(payment.charge) };
+	} catch (error) {
+		console.error(`invoice ${invoiceId}: could not read its payment:`, error);
+		return none;
+	}
+}
+
 /**
  * What Stripe actually took, read from the balance transaction.
  *
@@ -149,23 +187,56 @@ async function recordLines(
  * time the rate moved.
  *
  * Falls back to zero rather than to an estimate when the charge cannot be read: a zero is
- * visibly missing in a reconciliation, where a plausible estimate is not.
+ * visibly missing in a reconciliation, where a plausible estimate is not. Settlement says so
+ * out loud when it meets one.
  */
-async function processingFeeFor(invoice: Stripe.Invoice): Promise<Decimal> {
+async function processingFeeFor(invoiceId: string, payment: InvoicePaymentRef): Promise<Decimal> {
 	const stripe = getStripe();
 	if (!stripe) return new Decimal(0);
-	const payment = invoice.payments?.data?.[0]?.payment;
-	const chargeId =
-		typeof payment?.charge === "string" ? payment.charge : (payment?.charge?.id ?? null);
-	if (!chargeId) return new Decimal(0);
 	try {
-		const charge = await stripe.charges.retrieve(chargeId, { expand: ["balance_transaction"] });
-		const bt = charge.balance_transaction;
+		let bt: string | Stripe.BalanceTransaction | null | undefined;
+		if (payment.paymentIntentId) {
+			const intent = await stripe.paymentIntents.retrieve(payment.paymentIntentId, {
+				expand: ["latest_charge.balance_transaction"],
+			});
+			const charge = intent.latest_charge;
+			bt = charge && typeof charge !== "string" ? charge.balance_transaction : null;
+		} else if (payment.chargeId) {
+			const charge = await stripe.charges.retrieve(payment.chargeId, {
+				expand: ["balance_transaction"],
+			});
+			bt = charge.balance_transaction;
+		}
 		if (bt && typeof bt !== "string") return dollars(bt.fee ?? 0);
 	} catch (error) {
-		console.error(`invoice ${invoice.id}: could not read the processing fee:`, error);
+		console.error(`invoice ${invoiceId}: could not read the processing fee:`, error);
 	}
 	return new Decimal(0);
+}
+
+/**
+ * Record that a paid invoice's money went back — a full refund or a dispute. Returns how many
+ * invoices changed.
+ *
+ * 🚨 **Before settlement this is the whole of what a refund needs**, because settlement credits
+ * only `paid` invoices and a month that has not settled simply never credits this one. After
+ * settlement the credits already exist, and reversing or netting them is the netting build's to do;
+ * the status is what it reads.
+ *
+ * ⚠️ **Keyed on the payment intent**, because neither a refunded charge nor a dispute names the
+ * invoice it paid. A payment intent Anthers recorded no invoice for — a Work purchase — changes
+ * nothing here.
+ */
+export async function markInvoiceMoneyReturned(
+	paymentIntentId: string,
+	status: "refunded" | "disputed",
+): Promise<number> {
+	const rows = await db
+		.update(invoices)
+		.set({ status, updatedAt: new Date() })
+		.where(and(eq(invoices.stripePaymentIntentId, paymentIntentId), eq(invoices.status, "paid")))
+		.returning({ id: invoices.id });
+	return rows.length;
 }
 
 /**

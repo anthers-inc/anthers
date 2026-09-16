@@ -15,7 +15,7 @@ import { accounts, invoiceLines, invoices, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe, setStripeClient } from "../lib/stripe";
-import { recordPaidInvoice } from "../services/invoices";
+import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -25,6 +25,7 @@ purgeAccountsCreatedHere();
 const run = crypto.randomUUID().slice(0, 8);
 const CUSTOMER = `cus_invoice_${run}`;
 const SUB_ID = `sub_invoice_${run}`;
+const PAYMENT_INTENT = `pi_EXAMPLE_${run}`;
 
 let realClient: Stripe | null;
 let supporterId: number;
@@ -58,8 +59,14 @@ function fakeStripe(feeCents = 59) {
 				},
 			}),
 		},
-		charges: {
-			retrieve: async () => ({ balance_transaction: { fee: feeCents } }),
+		// The invoice's payment is listed rather than read off the event, which never carries it.
+		invoicePayments: {
+			list: async () => ({
+				data: [{ payment: { type: "payment_intent", payment_intent: PAYMENT_INTENT } }],
+			}),
+		},
+		paymentIntents: {
+			retrieve: async () => ({ latest_charge: { balance_transaction: { fee: feeCents } } }),
 		},
 	} as unknown as Stripe;
 }
@@ -92,7 +99,6 @@ function paidInvoice(opts: {
 		total_taxes: taxCents > 0 ? [{ amount: taxCents }] : [],
 		total_discount_amounts: opts.discountCents ? [{ amount: opts.discountCents }] : [],
 		parent: { subscription_details: { subscription: SUB_ID } },
-		payments: { data: [{ payment: { charge: `ch_${uid()}` } }] },
 		lines: {
 			data: lines.map((l) => ({
 				id: `il_${l.item}`,
@@ -197,11 +203,15 @@ describe("recording a paid invoice", () => {
 	 * control is that Stripe clearing in the general ledger equals Stripe's reported balance,
 	 * and that only holds if the expense booked is the expense charged.
 	 */
-	it("records what Stripe actually took, read from the balance transaction", async () => {
+	it("records what Stripe actually took, from a payment the webhook's invoice does not carry", async () => {
+		// The invoice here has no `payments`, exactly as an `invoice.paid` event delivers it.
 		setStripeClient(fakeStripe(59));
 		const invoice = paidInvoice({});
 		await recordPaidInvoice(invoice);
-		expect(Number((await rowFor(invoice.id)).processingFee)).toBeCloseTo(0.59, 2);
+		const row = await rowFor(invoice.id);
+		expect(Number(row.processingFee)).toBeCloseTo(0.59, 2);
+		// And the payment intent a refund or a dispute will name, since neither names the invoice.
+		expect(row.stripePaymentIntentId).toBe(PAYMENT_INTENT);
 	});
 
 	it("is idempotent, because Stripe retries a webhook", async () => {
@@ -232,5 +242,24 @@ describe("recording a paid invoice", () => {
 		const invoice = paidInvoice({});
 		await recordPaidInvoice(invoice);
 		expect((await rowFor(invoice.id)).settledAt).toBeNull();
+	});
+});
+
+describe("money that goes back after an invoice was paid", () => {
+	it("marks the invoice a refund or a dispute names, so settlement never credits it", async () => {
+		const invoice = paidInvoice({});
+		await recordPaidInvoice(invoice);
+
+		expect(await markInvoiceMoneyReturned(PAYMENT_INTENT, "disputed")).toBe(1);
+		expect((await rowFor(invoice.id)).status).toBe("disputed");
+	});
+
+	it("changes nothing for a payment intent that paid no invoice", async () => {
+		const invoice = paidInvoice({});
+		await recordPaidInvoice(invoice);
+
+		// A Work purchase's refund arrives through the same event, and is not an invoice's.
+		expect(await markInvoiceMoneyReturned("pi_EXAMPLE_a_purchase", "refunded")).toBe(0);
+		expect((await rowFor(invoice.id)).status).toBe("paid");
 	});
 });
