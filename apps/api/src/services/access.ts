@@ -28,9 +28,11 @@
  * everyone. `ANTHERS_BADGES` does not participate in resolution at all, and a Badge is
  * standing. Reasoning: `30.01 Creator Content Gates` § 4.1b.
  *
- * ⚠️ The OR *within* this table survives and is the interesting one: a creator may gate on
- * **another creator's** support level, which is the seed of collabs and bundles. There is
- * still no AND.
+ * ⚠️ The OR *within* this table survives and is the interesting one: the cheapest qualifying
+ * row wins, and there is still no AND. **Every row is measured against this Work's own
+ * creator** — a row carries a threshold, an allow flag and a price, and nothing that could
+ * name a second creator, so gating on another creator's support level (the seed of collabs
+ * and bundles) is a shape the model leaves room for rather than one it resolves today.
  *
  * Resolution reads two viewer facts — per-creator dollars this cycle and prior purchases —
  * which `buildAccessContext` loads once so a batch (a Catalog page) resolves without an N+1.
