@@ -53,6 +53,7 @@ import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { notify } from "./notifications.js";
 import { queueRecordSync } from "./record-sync.js";
+import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 
 /**
  * Subject type → the table it lives in. The only place the mapping is written down.
@@ -362,6 +363,11 @@ export async function hideSubject(input: {
 					eq(moderationReports.status, "open"),
 				),
 			);
+
+		// A Sticker can ride a comment, and one Anthers hid stops paying the thread's creator.
+		if (input.subjectType === "comment") {
+			await voidStickersOnSubject("comment", input.subjectId, tx);
+		}
 	});
 
 	// ⚠️ Hiding writes nothing to the network — the record stays where its author put it, and the
@@ -415,6 +421,12 @@ export async function restoreSubject(input: {
 			reason: "",
 			note,
 		});
+
+		// Through `tx`, where the comment already reads as visible. A Sticker stays voided while
+		// the Work its thread hangs off is still removed.
+		if (input.subjectType === "comment") {
+			await restoreStickersOnSubject("comment", input.subjectId, tx);
+		}
 	});
 
 	// A comment hidden before its record was ever written gets one now, since it is visible again.

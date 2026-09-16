@@ -50,6 +50,7 @@ import {
 	purchases,
 	reviews,
 	rightsRequests,
+	stickers,
 	users,
 	votes,
 	workRatingAppeals,
@@ -154,6 +155,12 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			.where(
 				or(inArray(poolDistributions.subscriberId, ids), inArray(poolDistributions.creatorId, ids)),
 			);
+
+		// A Sticker names its giver and its creator through `set null` columns, for the same reason
+		// a distribution does, so it outlives both unless it is taken here.
+		await db
+			.delete(stickers)
+			.where(or(inArray(stickers.giverId, ids), inArray(stickers.creatorId, ids)));
 
 		// Anything still pointing at a Work this account owns, before the Work itself goes.
 		if (workIds.length > 0) {
