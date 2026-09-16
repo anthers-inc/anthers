@@ -702,10 +702,10 @@ const adminRoutes = new Hono<AdminEnv>()
 		return c.json(notice);
 	})
 
-	// Act on a notice — does four things in one transaction (via the service):
-	// disable the material, append to the audit log, notify the creator (with
-	// the counter-notice route + the exposure stated), and acknowledge the
-	// complainant. No automated removal — the operator decided.
+	// Act on a notice — the service disables the material and appends to the audit
+	// log in one transaction, then notifies the creator (with the counter-notice route
+	// and the exposure stated) and emails the complainant that it was acted on. No
+	// automated removal — the operator decided.
 	.post(
 		"/dmca/:id/act",
 		zValidator(
@@ -733,13 +733,19 @@ const adminRoutes = new Hono<AdminEnv>()
 	)
 
 	// Reject a notice — a first-class outcome with the § 512(c)(3)(B)(ii)
-	// reach-back. The rejection copy (in the note) names which element failed,
-	// and the service records the reach-back.
+	// reach-back. The note names what the notice lacked and is emailed to the
+	// complainant as the reason, so it is required.
 	.post(
 		"/dmca/:id/reject",
 		zValidator(
 			"json",
-			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			z.object({
+				note: z
+					.string()
+					.trim()
+					.min(1, "Say what the notice lacked. The complainant is emailed this as the reason.")
+					.max(MODERATION_NOTE_MAX),
+			}),
 			invalidBody,
 		),
 		async (c) => {
@@ -750,6 +756,15 @@ const adminRoutes = new Hono<AdminEnv>()
 				adminId: admin.id,
 				note,
 			});
+			if (result === "reason_required") {
+				return c.json(
+					{
+						error: "Say what the notice lacked. The complainant is emailed this as the reason.",
+						code: "reason_required",
+					},
+					400,
+				);
+			}
 			if (!result) return c.json({ error: "Notice not found" }, 404);
 			return c.json(result);
 		},

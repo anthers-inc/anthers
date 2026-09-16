@@ -33,7 +33,13 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
-import { notify } from "../services/notifications.js";
+import {
+	type ComplainantNotice,
+	sendCounterNoticeCopy,
+	sendDmcaRejection,
+	sendDmcaTakedownAcknowledgment,
+} from "./email.js";
+import { notify } from "./notifications.js";
 import { refundPurchase } from "./refunds.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void";
 import { queueWorkListingSync } from "./work-listing.js";
@@ -138,10 +144,11 @@ export async function fileNotice(input: {
 
 /**
  * Take down a Work. Sets `works.takedown_status = "taken_down"`, marks the
- * notice `actioned`, appends to `moderation_actions` (the audit trail), and
- * notifies the creator with the counter-notice route. One transaction — a hidden
- * row with no record of who hid it is exactly the state the moderation invariant
- * exists to prevent, and the same applies here.
+ * notice `actioned`, and appends to `moderation_actions` (the audit trail) in one
+ * transaction — a hidden row with no record of who hid it is exactly the state the
+ * moderation invariant exists to prevent, and the same applies here. Afterwards it
+ * notifies the creator with the counter-notice route and emails the complainant
+ * that their notice was acted on.
  *
  * The creator notification carries the counter-notice route and a plain statement
  * of what counter-noticing exposes. Most creators never counter-notice because
@@ -153,7 +160,7 @@ export async function takeDownWork(input: {
 	adminId: number;
 	actorRole?: string;
 	note?: string;
-}): Promise<{ status: "taken_down" } | "already_taken_down" | null> {
+}): Promise<{ status: "taken_down"; complainantNotified: boolean } | "already_taken_down" | null> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
@@ -240,7 +247,10 @@ export async function takeDownWork(input: {
 		});
 	}
 
-	return { status: "taken_down" };
+	const complainantNotified = await tellComplainant(notice.id, () =>
+		sendDmcaTakedownAcknowledgment(complainantNotice(notice)),
+	);
+	return { status: "taken_down", complainantNotified };
 }
 
 /**
@@ -248,14 +258,16 @@ export async function takeDownWork(input: {
  * console. § 512(c)(3)(B)(ii) requires a reach-back rather than a discard: if the
  * notice substantially complies on (ii), (iii) and (iv), the rejection must
  * "promptly attempt to contact the complainant or take other reasonable steps to
- * assist in receiving a compliant notice." The note records the reach-back.
+ * assist in receiving a compliant notice." So the note is required, and it is
+ * emailed to the complainant as the reason — which is the reach-back.
  */
 export async function rejectNotice(input: {
 	noticeId: number;
 	/** The admin account acting. */
 	adminId: number;
-	note?: string;
-}): Promise<{ status: "rejected" } | null> {
+	/** What the notice lacked, written to the complainant, who is sent it. */
+	note: string;
+}): Promise<{ status: "rejected"; complainantNotified: boolean } | "reason_required" | null> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
@@ -263,7 +275,8 @@ export async function rejectNotice(input: {
 		.limit(1);
 	if (!notice) return null;
 
-	const note = (input.note ?? "").trim();
+	const note = input.note.trim();
+	if (!note) return "reason_required";
 	await db
 		.update(dmcaNotices)
 		.set({
@@ -274,13 +287,17 @@ export async function rejectNotice(input: {
 		})
 		.where(eq(dmcaNotices.id, input.noticeId));
 
-	return { status: "rejected" };
+	const complainantNotified = await tellComplainant(notice.id, () =>
+		sendDmcaRejection(complainantNotice(notice), note),
+	);
+	return { status: "rejected", complainantNotified };
 }
 
 /**
  * File a counter-notice on behalf of a creator. Stores the § 512(g)(3) elements,
  * computes the restore window (10–14 business days from now), sets the notice
- * to `counter_noticed`, and forwards a copy to the complainant.
+ * to `counter_noticed`, and emails a copy to the complainant with that window, as
+ * § 512(g)(2)(B) requires. `counterNoticeForwardedAt` records that it went.
  *
  * The restore timer is `restoreNoEarlierThan` — 10 business days from now, the
  * earliest § 512(g)(2)(C) allows. The sweep job restores at that point unless a
@@ -293,7 +310,11 @@ export async function fileCounterNotice(input: {
 	subscriberPhone: string;
 	jurisdictionConsent: string;
 	goodFaithStatement: string;
-}): Promise<{ status: "counter_noticed"; restoreNoEarlierThan: string } | null> {
+}): Promise<{
+	status: "counter_noticed";
+	restoreNoEarlierThan: string;
+	forwarded: boolean;
+} | null> {
 	const [notice] = await db
 		.select()
 		.from(dmcaNotices)
@@ -324,11 +345,59 @@ export async function fileCounterNotice(input: {
 		})
 		.where(eq(dmcaNotices.id, input.noticeId));
 
-	// Forward a copy to the complainant — § 512(g)(2)(B). The email tells them the
-	// material goes back in 10 business days unless they file a court action.
-	// (The email itself is sent by the notification path; this records the intent.)
+	// Forward a copy to the complainant — § 512(g)(2)(B). Nobody at Anthers is watching when a
+	// creator files, so whether it went is stamped on the notice rather than only returned: a
+	// null beside a counter-notice is what the admin app shows a person, who sends it by hand.
+	const { sent: forwarded } = await sendCounterNoticeCopy(
+		complainantNotice(notice),
+		counterNotice,
+		{
+			from: restoreNoEarlierThan,
+			by: addBusinessDays(now, 14),
+		},
+	);
+	if (forwarded) {
+		await db
+			.update(dmcaNotices)
+			.set({ counterNoticeForwardedAt: new Date() })
+			.where(eq(dmcaNotices.id, input.noticeId));
+	}
 
-	return { status: "counter_noticed", restoreNoEarlierThan: restoreNoEarlierThan.toISOString() };
+	return {
+		status: "counter_noticed",
+		restoreNoEarlierThan: restoreNoEarlierThan.toISOString(),
+		forwarded,
+	};
+}
+
+/** The fields of a notice the complainant emails are addressed and headed with. */
+function complainantNotice(notice: typeof dmcaNotices.$inferSelect): ComplainantNotice {
+	return {
+		id: notice.id,
+		complainantName: notice.complainantName,
+		complainantEmail: notice.complainantEmail,
+		workTitle: notice.workTitle,
+		receivedAt: notice.receivedAt,
+	};
+}
+
+/**
+ * Email the complainant the decision on their notice, and stamp `complainantNotifiedAt` when the
+ * provider accepted it. Sent after the decision is stored rather than inside its transaction, so a
+ * slow or failing email can never undo a takedown; the stamp is how a failure stays visible.
+ */
+async function tellComplainant(
+	noticeId: number,
+	send: () => Promise<{ sent: boolean }>,
+): Promise<boolean> {
+	const { sent } = await send();
+	if (sent) {
+		await db
+			.update(dmcaNotices)
+			.set({ complainantNotifiedAt: new Date() })
+			.where(eq(dmcaNotices.id, noticeId));
+	}
+	return sent;
 }
 
 /**

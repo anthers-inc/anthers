@@ -95,8 +95,12 @@ interface NoticeDetail {
 		receivedAt: string;
 		actionedAt: string | null;
 		rejectedAt: string | null;
+		/** When the complainant was emailed the decision. Null on a decided notice means it did not go. */
+		complainantNotifiedAt: string | null;
 		counterNotice: CounterNotice | null;
 		counterNoticeFiledAt: string | null;
+		/** When the counter-notice copy reached the provider. Null beside a counter-notice is a step not taken. */
+		counterNoticeForwardedAt: string | null;
 		restoreNoEarlierThan: string | null;
 		suitFiledAt: string | null;
 		counterNoticeDueBy: string | null;
@@ -225,13 +229,13 @@ const CONFIRM_COPY: Record<Action, { title: string; body: string; button: string
 	{
 		act: {
 			title: "Take Down This Work?",
-			body: "The Work stops being delivered to anybody, buyers included, and the creator is notified with the counter-notice route and what counter-noticing exposes. The creator's counter-notice window starts now, and buyers are refunded only if it closes without a counter-notice.",
+			body: "The Work stops being delivered to anybody, buyers included, and the creator is notified with the counter-notice route and what counter-noticing exposes. The complainant is emailed that their notice was acted on. The creator's counter-notice window starts now, and buyers are refunded only if it closes without a counter-notice.",
 			button: "Take Down Work",
 			tone: "btn-error",
 		},
 		reject: {
 			title: "Reject This Notice?",
-			body: "Rejecting leaves the Work untouched and does not contact the complainant. If the notice substantially complies on elements (ii), (iii) and (iv), § 512(c)(3)(B)(ii) requires reaching back to the complainant, and the note is where that reach-back is recorded.",
+			body: "Rejecting leaves the Work untouched and emails the complainant the note below as the reason. Name what the notice lacked in words they can act on, since that email is the reach-back § 512(c)(3)(B)(ii) asks for when a notice substantially complies on elements (ii), (iii) and (iv).",
 			button: "Reject Notice",
 			tone: "btn-warning",
 		},
@@ -329,7 +333,7 @@ function Detail({
 											maxLength={MODERATION_NOTE_MAX}
 											placeholder={
 												pending === "reject"
-													? "Name the § 512(c)(3) element that failed, and any reach-back made."
+													? "What the notice lacked. The complainant is emailed this as the reason."
 													: "Note for the record (optional)"
 											}
 											value={note}
@@ -454,6 +458,21 @@ function Detail({
 							</p>
 						</details>
 
+						{n.counterNotice && !n.counterNoticeForwardedAt && (
+							<p className="rounded-box border border-error bg-base-100 p-4 text-sm text-error">
+								The counter-notice has not been forwarded to the complainant, because the email was
+								not accepted. § 512(g)(2)(B) requires sending them a copy promptly, with the restore
+								window, before the Work is restored. Email it to{" "}
+								{n.complainantEmail || "the complainant"} by hand.
+							</p>
+						)}
+						{(n.status === "actioned" || n.status === "rejected") && !n.complainantNotifiedAt && (
+							<p className="rounded-box border border-warning bg-base-100 p-4 text-sm text-warning">
+								The complainant was not emailed this decision, because the email was not accepted.
+								Tell {n.complainantEmail || "them"} the outcome another way.
+							</p>
+						)}
+
 						{n.counterNotice && (
 							<section className="grid gap-4 rounded-box border border-base-300 bg-base-100 p-4 sm:grid-cols-2">
 								<div className="sm:col-span-2">
@@ -474,11 +493,20 @@ function Detail({
 								<li>Received {shortDate(n.receivedAt)}</li>
 								{n.rejectedAt && <li>Rejected {shortDate(n.rejectedAt)}</li>}
 								{n.actionedAt && <li>Taken down {shortDate(n.actionedAt)}</li>}
+								{n.complainantNotifiedAt && (
+									<li>Complainant emailed the decision {shortDate(n.complainantNotifiedAt)}</li>
+								)}
 								{n.counterNoticeDueBy && (
 									<li>Counter-notice window closes {shortDate(n.counterNoticeDueBy)}</li>
 								)}
 								{n.counterNoticeFiledAt && (
 									<li>Counter-notice filed {shortDate(n.counterNoticeFiledAt)}</li>
+								)}
+								{n.counterNoticeForwardedAt && (
+									<li>
+										Counter-notice forwarded to the complainant{" "}
+										{shortDate(n.counterNoticeForwardedAt)}
+									</li>
 								)}
 								{n.restoreNoEarlierThan && (
 									<li>Automatic restore no earlier than {shortDate(n.restoreNoEarlierThan)}</li>

@@ -188,9 +188,26 @@ export const dmcaNotices = pgTable(
 		receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
 		actionedAt: timestamp("actioned_at", { withTimezone: true }),
 		rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+		/**
+		 * When the complainant was emailed the decision on their notice: that the Work was taken
+		 * down, or that the notice was rejected and what it lacked. Null on a decided notice means
+		 * no email was accepted, and the admin app says so, because the operator is then the only
+		 * way the complainant hears the outcome.
+		 */
+		complainantNotifiedAt: timestamp("complainant_notified_at", { withTimezone: true }),
 		// Counter-notice (§ 512(g)(3)) — null until filed.
 		counterNotice: jsonb("counter_notice").$type<CounterNotice | null>(),
 		counterNoticeFiledAt: timestamp("counter_notice_filed_at", { withTimezone: true }),
+		/**
+		 * When a copy of the counter-notice was emailed to the complainant, as § 512(g)(2)(B)
+		 * requires, along with the restore window and how to stop it with a court action.
+		 *
+		 * 🚨 **A null here beside a filed counter-notice is a statutory step not taken.** The
+		 * creator files the counter-notice with no operator watching, so a refused email would
+		 * otherwise go unnoticed while the restore clock ran toward a restore the safe harbor
+		 * does not cover. The admin app shows it on the notice so a person sends the copy.
+		 */
+		counterNoticeForwardedAt: timestamp("counter_notice_forwarded_at", { withTimezone: true }),
 		// When the restore timer may fire — 10–14 business days after the
 		// counter-notice was filed, per § 512(g)(2)(C). Null until a counter-notice
 		// is filed.

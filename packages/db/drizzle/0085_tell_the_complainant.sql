@@ -1,0 +1,2 @@
+ALTER TABLE "dmca_notices" ADD COLUMN "complainant_notified_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "dmca_notices" ADD COLUMN "counter_notice_forwarded_at" timestamp with time zone;
