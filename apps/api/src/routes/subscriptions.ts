@@ -1254,6 +1254,7 @@ const subscriptionRoutes = new Hono()
 				poolTotal: sql<string>`COALESCE(SUM(CAST(pool_amount AS numeric)), 0)`,
 				seedTotal: sql<string>`COALESCE(SUM(CAST(seed_amount AS numeric)), 0)`,
 				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)::int`,
+				estimateRows: sql<number>`COUNT(*) FILTER (WHERE settled_at IS NULL)::int`,
 			})
 			.from(poolDistributions)
 			.where(
@@ -1268,6 +1269,12 @@ const subscriptionRoutes = new Hono()
 			total,
 			subscriberCount: Number(earnings.subscriberCount),
 			cycle,
+			/**
+			 * 🚨 **Whether these figures are money or an estimate.** A month is estimated nightly
+			 * from what supporters give today and credited once it ends from what they actually
+			 * paid, so the two can differ; a page showing the running month must say which it is.
+			 */
+			settled: Number(earnings.estimateRows) === 0 && Number(earnings.subscriberCount) > 0,
 		});
 	})
 

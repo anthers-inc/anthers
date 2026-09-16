@@ -33,6 +33,7 @@ import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
 import { and, eq, inArray, like } from "drizzle-orm";
+import app from "../index";
 import { distributePool } from "../jobs/distribute-pool";
 import { settleCycle } from "../jobs/settle-cycle";
 import { createAccount } from "./account-fixture";
@@ -67,10 +68,14 @@ afterAll(async () => {
 });
 
 async function makeUser(kind: string): Promise<number> {
+	return (await makeUserWithCookie(kind)).userId;
+}
+
+async function makeUserWithCookie(kind: string) {
 	n += 1;
-	const { userId } = await createAccount(`${tag}_${kind}_${n}`);
-	madeUserIds.push(userId);
-	return userId;
+	const account = await createAccount(`${tag}_${kind}_${n}`);
+	madeUserIds.push(account.userId);
+	return account;
 }
 
 /**
@@ -417,6 +422,27 @@ describe("the month's rows and its marker", () => {
 			);
 		expect(row.settledAt).not.toBeNull();
 		expect(new Decimal(row.poolAmount).toFixed(2)).toBe(new Decimal(timePoolFor(6)).toFixed(2));
+	});
+
+	it("🚨 tells a creator whether their month is still an estimate", async () => {
+		const creator = await makeUserWithCookie("creator");
+		const { userId, accountId } = await makeSupporter(6);
+		await watch(userId, creator.userId, 1800);
+		await distributePool({ accountId });
+		await paidInvoice(userId, { anthers: 6 });
+
+		const earnings = async () => {
+			const res = await app.fetch(
+				new Request(`http://localhost/api/subscriptions/earnings?cycle=${MONTH}`, {
+					headers: { Cookie: creator.cookie },
+				}),
+			);
+			return (await res.json()) as { settled: boolean; poolTotal: string };
+		};
+
+		expect((await earnings()).settled).toBe(false);
+		await settle(userId);
+		expect(await earnings()).toMatchObject({ settled: true });
 	});
 
 	it("marks a month settled on a full run, and a scoped run marks nothing", async () => {

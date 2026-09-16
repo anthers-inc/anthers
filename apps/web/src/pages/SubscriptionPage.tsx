@@ -15,6 +15,7 @@
 
 import { PUBLIC_ACCESS_PRICE, supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+import { EarningsBasis } from "@anthers/web-shared/economics/EarningsBasis";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
@@ -895,11 +896,7 @@ export default function SubscriptionPage() {
 					</div>
 					{earnings.cycle && (
 						<p className="text-xs text-base-content/50 mt-2">
-							Cycle:{" "}
-							{new Date(earnings.cycle).toLocaleDateString("en-US", {
-								month: "long",
-								year: "numeric",
-							})}
+							<EarningsBasis earnings={earnings} />
 						</p>
 					)}
 				</div>
