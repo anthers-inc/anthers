@@ -15,7 +15,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { adminAccounts, rightsRequests } from "@anthers/db/schema";
+import { adminAccounts, type DmcaNoticeStatus, rightsRequests } from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
 	HOLD_SUBJECT_TYPES,
@@ -34,14 +34,19 @@ import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
+	counterNoticeRestoreWindow,
 	dmcaSummary,
+	forwardCounterNotice,
+	isNoticeStatusRefusal,
 	loadDmcaQueue,
 	loadNotice,
+	type NoticeStatusRefusal,
 	recordSuit,
 	rejectNotice,
 	restoreWork,
 	takeDownWork,
 } from "../services/dmca.js";
+import { sendRightsRequestAnswerEmail } from "../services/email.js";
 import {
 	describeSubject,
 	liftHold,
@@ -69,6 +74,28 @@ import {
 
 import { adminAccountRoutes } from "./admin-accounts.js";
 import { adminAuthRoutes } from "./admin-auth.js";
+
+/** A notice's status as an operator reads it in a refusal. */
+const NOTICE_STATUS_WORDS: Record<DmcaNoticeStatus, string> = {
+	received: "waiting for a decision",
+	actioned: "taken down",
+	counter_noticed: "counter-noticed",
+	restored: "restored",
+	rejected: "rejected",
+};
+
+/**
+ * The 409 body for an operator action on a notice whose status does not allow it. The code is the
+ * same for every action, and `noticeStatus` and `allowed` say which rule refused it.
+ */
+function noticeStatusRefusal(refusal: NoticeStatusRefusal, why: string) {
+	return {
+		error: `This notice is ${NOTICE_STATUS_WORDS[refusal.noticeStatus]}, and ${why}.`,
+		code: "notice_status",
+		noticeStatus: refusal.noticeStatus,
+		allowed: refusal.allowed,
+	};
+}
 
 const QUEUE_FILTERS: readonly QueueFilter[] = [
 	"reported",
@@ -401,8 +428,15 @@ const adminRoutes = new Hono<AdminEnv>()
 
 			// The requester is told it was answered. Closing a ticket silently is how a
 			// 30-day promise becomes a 30-day silence.
+			//
+			// Exactly one email either way. An account that still exists is told in-app, and an
+			// essential notice always emails the account's address as well, so sending to the
+			// stored address too would tell the same person twice. An account that is gone leaves
+			// no in-app record to write and no account address to read, and the address captured
+			// with the request is the one way left to reach them.
+			let emailed: boolean;
 			if (row.userId != null) {
-				await notify({
+				const told = await notify({
 					userId: row.userId,
 					category: "essential",
 					kind: "rights_request_resolved",
@@ -411,8 +445,11 @@ const adminRoutes = new Hono<AdminEnv>()
 					linkPath: "/settings",
 					dedupeKey: `rights-request-resolved:${row.id}`,
 				});
+				emailed = told.emailed;
+			} else {
+				emailed = (await sendRightsRequestAnswerEmail(row.email, row.resolutionNote)).sent;
 			}
-			return c.json({ resolved: true });
+			return c.json({ resolved: true, emailed });
 		},
 	)
 
@@ -699,13 +736,63 @@ const adminRoutes = new Hono<AdminEnv>()
 	.get("/dmca/:id", async (c) => {
 		const notice = await loadNotice(Number(c.req.param("id")));
 		if (!notice) return c.json({ error: "Not found" }, 404);
-		return c.json(notice);
+		// While a counter-notice copy is unsent, the restore window a copy sent right now would give,
+		// so an operator emailing it by hand quotes the dates the restore will actually keep.
+		const { counterNoticeFiledAt, counterNoticeForwardedAt } = notice.notice;
+		const copyWindowIfSentNow =
+			counterNoticeFiledAt && !counterNoticeForwardedAt
+				? counterNoticeRestoreWindow(counterNoticeFiledAt, new Date())
+				: null;
+		return c.json({ ...notice, copyWindowIfSentNow });
 	})
 
-	// Act on a notice — does four things in one transaction (via the service):
-	// disable the material, append to the audit log, notify the creator (with
-	// the counter-notice route + the exposure stated), and acknowledge the
-	// complainant. No automated removal — the operator decided.
+	// Send a counter-notice copy that did not go when the creator filed, or record that an operator
+	// emailed it by hand. The restore waits for one of the two.
+	.post(
+		"/dmca/:id/forward",
+		zValidator("json", z.object({ sentByHand: z.boolean().optional() }), invalidBody),
+		async (c) => {
+			const result = await forwardCounterNotice({
+				noticeId: Number(c.req.param("id")),
+				sentByHand: c.req.valid("json").sentByHand,
+			});
+			if (result === "no_counter_notice") {
+				return c.json(
+					{ error: "This notice has no counter-notice to forward.", code: "no_counter_notice" },
+					409,
+				);
+			}
+			if (result === "already_forwarded") {
+				return c.json(
+					{
+						error: "The counter-notice copy has already been sent.",
+						code: "already_forwarded",
+					},
+					409,
+				);
+			}
+			if (!result) return c.json({ error: "Notice not found" }, 404);
+			if (!result.forwarded) {
+				return c.json(
+					{
+						error:
+							"The email was not accepted this time either. Send the copy yourself and record that you did.",
+						code: "not_sent",
+					},
+					502,
+				);
+			}
+			return c.json({
+				forwarded: true,
+				restoreNoEarlierThan: result.restoreNoEarlierThan.toISOString(),
+			});
+		},
+	)
+
+	// Act on a notice — the service disables the material and appends to the audit
+	// log in one transaction, then notifies the creator (with the counter-notice route
+	// and the exposure stated) and emails the complainant that it was acted on. No
+	// automated removal — the operator decided.
 	.post(
 		"/dmca/:id/act",
 		zValidator(
@@ -721,6 +808,12 @@ const adminRoutes = new Hono<AdminEnv>()
 				adminId: admin.id,
 				note,
 			});
+			if (isNoticeStatusRefusal(result)) {
+				return c.json(
+					noticeStatusRefusal(result, "only a notice waiting for a decision can be acted on"),
+					409,
+				);
+			}
 			if (result === "already_taken_down") {
 				return c.json(
 					{ error: "This Work is already taken down.", code: "already_taken_down" },
@@ -733,13 +826,19 @@ const adminRoutes = new Hono<AdminEnv>()
 	)
 
 	// Reject a notice — a first-class outcome with the § 512(c)(3)(B)(ii)
-	// reach-back. The rejection copy (in the note) names which element failed,
-	// and the service records the reach-back.
+	// reach-back. The note names what the notice lacked and is emailed to the
+	// complainant as the reason, so it is required.
 	.post(
 		"/dmca/:id/reject",
 		zValidator(
 			"json",
-			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			z.object({
+				note: z
+					.string()
+					.trim()
+					.min(1, "Say what the notice lacked. The complainant is emailed this as the reason.")
+					.max(MODERATION_NOTE_MAX),
+			}),
 			invalidBody,
 		),
 		async (c) => {
@@ -750,6 +849,21 @@ const adminRoutes = new Hono<AdminEnv>()
 				adminId: admin.id,
 				note,
 			});
+			if (isNoticeStatusRefusal(result)) {
+				return c.json(
+					noticeStatusRefusal(result, "only a notice waiting for a decision can be rejected"),
+					409,
+				);
+			}
+			if (result === "reason_required") {
+				return c.json(
+					{
+						error: "Say what the notice lacked. The complainant is emailed this as the reason.",
+						code: "reason_required",
+					},
+					400,
+				);
+			}
 			if (!result) return c.json({ error: "Notice not found" }, 404);
 			return c.json(result);
 		},
@@ -757,22 +871,43 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// Restore a Work manually. The scheduled sweep restores automatically at the
 	// 10–14 business day window; this is for an operator who decides to restore
-	// early (e.g., the complainant withdrew the notice).
+	// early (e.g., the complainant withdrew the notice). A recorded suit refuses
+	// the restore unless `overrideSuit` says the operator means to undo it.
 	.post(
 		"/dmca/:id/restore",
 		zValidator(
 			"json",
-			z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() }),
+			z.object({
+				note: z.string().max(MODERATION_NOTE_MAX).optional(),
+				overrideSuit: z.boolean().optional(),
+			}),
 			invalidBody,
 		),
 		async (c) => {
 			const admin = c.get("admin");
-			const { note } = c.req.valid("json");
+			const { note, overrideSuit } = c.req.valid("json");
 			const result = await restoreWork({
 				noticeId: Number(c.req.param("id")),
 				adminId: admin.id,
 				note,
+				overrideSuit,
 			});
+			if (isNoticeStatusRefusal(result)) {
+				return c.json(
+					noticeStatusRefusal(result, "only a notice whose Work is taken down can be restored"),
+					409,
+				);
+			}
+			if (result === "suit_recorded") {
+				return c.json(
+					{
+						error:
+							"A suit is recorded on this notice, which stops the restore. Restoring anyway has to be asked for with overrideSuit.",
+						code: "suit_recorded",
+					},
+					409,
+				);
+			}
 			if (!result) return c.json({ error: "Notice or Work not found" }, 404);
 			return c.json(result);
 		},
@@ -786,6 +921,21 @@ const adminRoutes = new Hono<AdminEnv>()
 			noticeId: Number(c.req.param("id")),
 			adminId: admin.id,
 		});
+		if (isNoticeStatusRefusal(result)) {
+			return c.json(
+				noticeStatusRefusal(
+					result,
+					"a suit matters only once a counter-notice is filed, because that is what schedules a restore",
+				),
+				409,
+			);
+		}
+		if (result === "suit_already_recorded") {
+			return c.json(
+				{ error: "A suit is already recorded on this notice.", code: "suit_already_recorded" },
+				409,
+			);
+		}
 		if (!result) return c.json({ error: "Notice not found" }, 404);
 		return c.json(result);
 	})

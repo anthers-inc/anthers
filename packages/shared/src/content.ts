@@ -100,3 +100,50 @@ export const COMMENT_SUBJECT_TYPES: readonly CommentSubjectType[] = ["post", "wo
 export function isCommentSubjectType(value: string): value is CommentSubjectType {
 	return (COMMENT_SUBJECT_TYPES as readonly string[]).includes(value);
 }
+
+/** The longest embed address a game or software Work may carry. */
+export const EMBED_URL_MAX = 500;
+
+/** The domain Anthers serves itself from. Nothing under it may be embedded as a Work's build. */
+const ANTHERS_DOMAIN = "anthers.org";
+
+/**
+ * Why an embed address for a game or software Work cannot be used, or null when it can. An empty
+ * address is fine and means the Work has no browser build.
+ *
+ * The address becomes the `src` of the Work page's "Play in Browser" iframe, so the server
+ * refuses a bad one on the way in, the serializer refuses to hand one out, and the Studio form
+ * shows the same reason before anybody submits.
+ *
+ * 🚨 **https only, and the check is here rather than trusted to the renderer.** React replaces a
+ * `javascript:` URL in `src` with one that throws, but without this check that would be the only
+ * thing stopping a creator's script from running as Anthers in every viewer's browser, and a
+ * protection that important belongs in code Anthers owns. A plain `http:` build would be blocked
+ * as mixed content on an https page anyway.
+ *
+ * 🚨 **Nothing on Anthers' own domain.** The iframe's sandbox allows both scripts and same-origin
+ * access, because a real web build keeps its saves in its own origin's storage and breaks
+ * without that. That combination is safe only while the framed page has an origin different from
+ * the page framing it: a same-origin page can reach into its parent and remove its own sandbox.
+ * No creator file is served from Anthers' own origin today, so refusing the domain costs nothing
+ * and keeps a future route that serves one from turning into a sandbox escape. Hosting builds on
+ * Anthers will need a separate origin for them rather than an exception here.
+ */
+export function embedUrlProblem(value: string): string | null {
+	if (value === "") return null;
+	if (value.length > EMBED_URL_MAX) {
+		return `The embed address can be at most ${EMBED_URL_MAX} characters.`;
+	}
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		return "Enter the full address of the page that runs the build, starting with https://.";
+	}
+	if (url.protocol !== "https:") return "The embed address has to start with https://.";
+	const host = url.hostname.toLowerCase();
+	if (host === ANTHERS_DOMAIN || host.endsWith(`.${ANTHERS_DOMAIN}`)) {
+		return `The embed has to be hosted on another site, not on ${ANTHERS_DOMAIN}.`;
+	}
+	return null;
+}

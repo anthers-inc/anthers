@@ -65,13 +65,11 @@ export default function Home() {
 	const quarantine = useAdminData<{ summary: { openFindings: number } }>("/api/admin/quarantine");
 	const abuse = useAdminData<{ reports: unknown[] }>("/api/admin/abuse-reports");
 	const dmca = useAdminData<{
-		summary: { received: number; screening: number; counterNoticed: number };
+		summary: { received: number; counterNoticed: number };
 	}>("/api/admin/dmca");
 
 	const a = activity.data;
-	const dmcaOpen = dmca.data
-		? dmca.data.summary.received + dmca.data.summary.screening + dmca.data.summary.counterNoticed
-		: null;
+	const dmcaOpen = dmca.data ? dmca.data.summary.received + dmca.data.summary.counterNoticed : null;
 
 	return (
 		<div>

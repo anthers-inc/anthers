@@ -313,6 +313,163 @@ export async function sendAdminInvitationEmail(
 	if (!sent) console.info(`[email] admin invitation for ${to}: ${adminUrl}`);
 }
 
+// ─── What a DMCA complainant is told ─────────────────────────────────────────
+
+/**
+ * The notice a complainant email is about. Structural rather than the table's row type, so this
+ * module does not depend on the schema package for three fields and a date.
+ */
+export interface ComplainantNotice {
+	id: number;
+	complainantName: string;
+	complainantEmail: string;
+	workTitle: string;
+	receivedAt: Date;
+}
+
+/** The copy of a counter-notice a complainant is sent, as the creator filed it. */
+export interface ForwardedCounterNotice {
+	subscriberName: string;
+	subscriberAddress: string;
+	subscriberPhone: string;
+	jurisdictionConsent: string;
+	goodFaithStatement: string;
+	attestationTextSnapshot: string;
+	filedAt: string;
+}
+
+/**
+ * Where a complainant writes back: the designated agent while one is registered, and otherwise the
+ * address `/copyright` gives for the same purpose, so the email and the page never disagree.
+ */
+function copyrightContact(): string {
+	return process.env.DMCA_AGENT_EMAIL?.trim() || "contact@anthers.org";
+}
+
+/** A date as a person reads it, in UTC so the server's zone never shifts it by a day. */
+function longDate(date: Date | string): string {
+	return new Date(date).toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: "UTC",
+	});
+}
+
+function aboutNotice(notice: ComplainantNotice): string {
+	const title = notice.workTitle ? ` about "${escapeHtml(notice.workTitle)}"` : "";
+	return `your copyright notice #${notice.id}${title}, received on ${longDate(notice.receivedAt)}`;
+}
+
+/** A labeled block of the complainant email, with the value's own line breaks kept. */
+function quoted(label: string, value: string): string {
+	return `<p style="margin:0 0 4px;color:#8f8ba0;font-size:13px;">${label}</p>
+		<p style="margin:0 0 14px;">${escapeHtml(value).replace(/\n/g, "<br>") || "—"}</p>`;
+}
+
+/**
+ * Send one complainant email, or report it unsent when there is no address. Retention blanks the
+ * complainant's contact details after three years, and an empty recipient is a send that cannot
+ * succeed rather than one worth handing to the provider.
+ */
+function toComplainant(notice: ComplainantNotice, subject: string, html: string) {
+	if (!notice.complainantEmail.trim()) {
+		return Promise.resolve<SendResult>({ sent: false, messageId: null });
+	}
+	return sendEmail({ to: notice.complainantEmail, subject, html });
+}
+
+/** Telling a complainant that the material their notice identifies has been taken down. */
+export async function sendDmcaTakedownAcknowledgment(
+	notice: ComplainantNotice,
+): Promise<SendResult> {
+	const html = shell(
+		"We have acted on your copyright notice",
+		`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, we have acted on ${aboutNotice(notice)}. The material it identifies has been removed from Anthers.</p>
+		<p style="margin:0 0 18px;">We have told the person who uploaded it. If they believe it was removed by mistake, they may send a counter-notice, and if they do, we will email you a copy of it along with the date the material will be restored unless you tell us you have filed a court action.</p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">Questions about this notice can go to ${escapeHtml(copyrightContact())}.</p>`,
+	);
+	return toComplainant(
+		notice,
+		`Your copyright notice #${notice.id}: the material has been removed`,
+		html,
+	);
+}
+
+/**
+ * Telling a complainant that their notice could not be acted on, and why. The reason is the
+ * operator's own note, which is what § 512(c)(3)(B)(ii)'s reach-back asks for: the complainant is
+ * told what was missing so that a notice which nearly complied can be sent again complete.
+ */
+export async function sendDmcaRejection(
+	notice: ComplainantNotice,
+	reason: string,
+): Promise<SendResult> {
+	const html = shell(
+		"We could not act on your copyright notice",
+		`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, we have reviewed ${aboutNotice(notice)}, and we could not act on it as it was filed. The material it identifies has not been removed.</p>
+		${quoted("Why", reason)}
+		<p style="margin:0 0 18px;">If you can supply what is missing, you can file a new notice at ${escapeHtml(frontendUrl())}/copyright or write to ${escapeHtml(copyrightContact())}, and we will review it again.</p>`,
+	);
+	return toComplainant(notice, `Your copyright notice #${notice.id}: we could not act on it`, html);
+}
+
+/**
+ * Forwarding a counter-notice to the complainant, as 17 U.S.C. § 512(g)(2)(B) requires: a copy of
+ * it, and the window in which the material will be restored unless they tell the designated agent
+ * they have filed an action seeking a court order against the person who uploaded it. The copy is
+ * the counter-notice as filed, including the attestation text the uploader agreed to.
+ */
+export async function sendCounterNoticeCopy(
+	notice: ComplainantNotice,
+	counterNotice: ForwardedCounterNotice,
+	restoreWindow: { from: Date; by: Date },
+): Promise<SendResult> {
+	const contact = escapeHtml(copyrightContact());
+	const html = shell(
+		"A counter-notice was filed against your copyright notice",
+		`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, the person who uploaded the material identified in ${aboutNotice(notice)} has sent a counter-notice under 17 U.S.C. § 512(g)(3). A copy of it follows.</p>
+		<p style="margin:0 0 18px;">We will restore the material between ${longDate(restoreWindow.from)} and ${longDate(restoreWindow.by)}, unless before then our designated agent receives notice from you that you have filed an action seeking a court order to restrain this person from engaging in infringing activity relating to the material on Anthers. To give that notice, write to ${contact}.</p>
+		<hr style="border:none;border-top:1px solid #34323f;margin:22px 0;">
+		${quoted("Name", counterNotice.subscriberName)}
+		${quoted("Postal address", counterNotice.subscriberAddress)}
+		${quoted("Telephone", counterNotice.subscriberPhone)}
+		${quoted("Consent to jurisdiction", counterNotice.jurisdictionConsent)}
+		${quoted("Statement under penalty of perjury", counterNotice.goodFaithStatement)}
+		${quoted("What they attested to", counterNotice.attestationTextSnapshot)}
+		${quoted("Filed", longDate(counterNotice.filedAt))}`,
+	);
+	return toComplainant(
+		notice,
+		`Your copyright notice #${notice.id}: a counter-notice was filed`,
+		html,
+	);
+}
+
+/**
+ * The answer to a data-rights request, sent to the address the request came from, when the
+ * account that made it no longer exists.
+ *
+ * A requester who still has an account is told through `notify`, which keeps the in-app record
+ * and emails the account's address, so this is only the other case. It is a likely one: somebody
+ * who asks what Anthers holds about them and then deletes their account. The Privacy Policy's
+ * promise to answer does not lapse with the account, and `rights_requests.email` is captured at
+ * request time for exactly this. With no account to link to and no in-app copy, the message
+ * carries the whole answer, and it is returned rather than swallowed so the operator can be told
+ * when it did not go.
+ */
+export async function sendRightsRequestAnswerEmail(to: string, note: string): Promise<SendResult> {
+	const answer = note
+		? escapeHtml(note).replace(/\n/g, "<br>")
+		: "We've responded to the request you made.";
+	const html = shell(
+		"Your data request has been answered",
+		`<p style="margin:0 0 18px;">${answer}</p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">You're receiving this because a data-rights request was made to Anthers from this address. The account that made it has since been deleted, so this email is the only copy of the answer. If anything in it is wrong or incomplete, write to privacy@anthers.org.</p>`,
+	);
+	return sendEmail({ to, subject: "Your data request has been answered", html });
+}
+
 /** Standalone re-send of the verification email. */
 export async function sendVerificationEmail(
 	to: string,
