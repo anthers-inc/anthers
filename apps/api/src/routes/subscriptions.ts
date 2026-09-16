@@ -33,7 +33,13 @@ import {
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
 import { isBadgeColor, isBadgeEmblem, isBadgeShape } from "@anthers/shared/badge-art";
-import { currentCycleKey, cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
+import {
+	currentCycleKey,
+	cycleEnd,
+	cycleKeyFor,
+	cycleStart,
+	nextCycleKey,
+} from "@anthers/shared/billing-cycle";
 import {
 	amountMeets,
 	BADGE_ART_MAX_BYTES,
@@ -157,8 +163,16 @@ async function stickerCycleFor(
 		.limit(1);
 	if (!acct) return null;
 	const start = acct.periodStart ?? new Date();
-	// The same key `distribute-pool` writes, so a Sticker lands in the cycle that pays it.
-	const billingCycle = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-01`;
+	// 🚨 **The same key `distribute-pool` writes, computed by the same function** — which it
+	// was not until 2026-09-16, and the divergence was invisible precisely because both
+	// were local-time readers and therefore always agreed.
+	//
+	// Anchoring every account to the 1st made that unsafe: `period_start` became exactly
+	// midnight UTC on the 1st, which is the one input a local-time reader gets wrong by a
+	// whole month in any zone behind UTC, for every account, every cycle. A Sticker would
+	// then be recorded against a cycle the pool job never pays — money a supporter aimed at
+	// a creator, reaching nobody. Never build this key by hand.
+	const billingCycle = cycleKeyFor(start);
 	return { billingCycle, allowance: round2(stickerBudgetFor(supportAmount(acct.support))) };
 }
 
@@ -624,9 +638,12 @@ const subscriptionRoutes = new Hono()
 			}
 		}
 		if (!isChange) {
-			const next = new Date();
-			next.setMonth(next.getMonth() + 1);
-			nextBillingUnix = Math.floor(next.getTime() / 1000);
+			// 🚨 **The 1st of next month, not a month from today.** Every account renews on the
+			// 1st, so this quoted a date the subscription will not be charged on — and it is the
+			// figure in the confirmation modal, which is the sentence somebody agrees to.
+			// `setMonth(getMonth() + 1)` was also the overflowing form: it keeps the day of the
+			// month, so a quote given on 31 January named 3 March.
+			nextBillingUnix = Math.floor(cycleEnd(currentCycleKey()).getTime() / 1000);
 		}
 
 		return c.json({
@@ -1143,9 +1160,11 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
-		// Compute cycle end (first day of next month)
-		const cycleDate = new Date(`${cycle}T00:00:00`);
-		const cycleEnd = new Date(cycleDate.getFullYear(), cycleDate.getMonth() + 1, 1);
+		// The window this cycle covers. Both ends come from the shared module: a
+		// `new Date("YYYY-MM-01T00:00:00")` with no zone is parsed as LOCAL midnight, so the
+		// window was offset from the UTC-keyed rows it is querying by the machine's offset.
+		const cycleFrom = cycleStart(cycle);
+		const cycleTo = cycleEnd(cycle);
 
 		const [summary] = await db
 			.select({
@@ -1156,8 +1175,8 @@ const subscriptionRoutes = new Hono()
 			.where(
 				and(
 					eq(attentionEvents.userId, user.id),
-					gte(attentionEvents.createdAt, cycleDate),
-					lte(attentionEvents.createdAt, cycleEnd),
+					gte(attentionEvents.createdAt, cycleFrom),
+					lte(attentionEvents.createdAt, cycleTo),
 				),
 			);
 
@@ -1310,10 +1329,8 @@ const subscriptionRoutes = new Hono()
 			const currentCycle = currentCycleKey();
 			const cycle = requestedCycle ?? currentCycle;
 
-			// Only allow editing current or next month
-			const currentDate = new Date(`${currentCycle}T00:00:00`);
-			const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-			const nextCycle = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+			// Only allow editing current or next month.
+			const nextCycle = nextCycleKey(currentCycle);
 
 			if (cycle !== currentCycle && cycle !== nextCycle) {
 				return c.json(

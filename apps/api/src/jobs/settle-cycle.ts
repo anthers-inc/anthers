@@ -50,6 +50,7 @@ import {
 	poolDistributions,
 	seedAllocations,
 } from "@anthers/db/schema";
+import { currentCycleKey, previousCycleKey } from "@anthers/shared/billing-cycle";
 import { supportAmount } from "@anthers/shared/constants";
 import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -65,9 +66,7 @@ export interface SettleCycleData {
 
 /** The cycle a scheduled run settles by default: the just-ended (previous) month. */
 function defaultCycle(): string {
-	const now = new Date();
-	const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+	return previousCycleKey(currentCycleKey());
 }
 
 /**
@@ -94,10 +93,9 @@ function defaultCycle(): string {
  * than being booked twice.
  */
 function cycleStillOpen(acct: { currentPeriodStart: Date | null }, cycle: string): boolean {
-	const now = new Date();
 	const openCycle = acct.currentPeriodStart
 		? billingCycleDate(acct.currentPeriodStart)
-		: billingCycleDate(new Date(now.getFullYear(), now.getMonth(), 1));
+		: currentCycleKey();
 	return openCycle === cycle;
 }
 

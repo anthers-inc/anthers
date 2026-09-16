@@ -257,6 +257,29 @@ describe("a new subscription is anchored to the 1st", () => {
 	});
 });
 
+describe("what a new subscriber is quoted", () => {
+	/**
+	 * 🚨 **The confirmation modal's next-charge date is a sentence somebody agrees to**, so a
+	 * wrong one is worse than a cosmetic defect. This quoted "a month from today" — which the
+	 * 1st-of-the-month anchor made simply untrue — and did it with `setMonth(getMonth() + 1)`,
+	 * the overflowing form that turns a quote given on 31 January into 3 March.
+	 */
+	it("names the 1st of next month, not a month from today", async () => {
+		await clearSubscription();
+		const res = await req("/api/subscriptions/preview/6", {
+			method: "GET",
+			headers: { Cookie: supporterCookie, Origin: ORIGIN },
+		});
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { isChange: boolean; nextBillingUnix: number };
+		expect(body.isChange).toBe(false);
+
+		const quoted = new Date(body.nextBillingUnix * 1000);
+		expect(quoted.getUTCDate()).toBe(1);
+		expect(cycleKeyFor(quoted)).toBe(nextCycleKey(currentCycleKey()));
+	});
+});
+
 // ── The two directions of a change ───────────────────────────────────────────
 
 describe("a change splits by direction, per destination", () => {

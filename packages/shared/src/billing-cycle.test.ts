@@ -19,6 +19,7 @@ import {
 	daysInCycle,
 	isCycleKey,
 	nextCycleKey,
+	previousCycleKey,
 	reductionFor,
 } from "./billing-cycle";
 
@@ -96,6 +97,16 @@ describe("the cycle's bounds", () => {
 	it("rolls the year over", () => {
 		expect(cycleEnd("2026-12-01").toISOString()).toBe("2027-01-01T00:00:00.000Z");
 		expect(nextCycleKey("2026-12-01")).toBe("2027-01-01");
+		expect(previousCycleKey("2026-01-01")).toBe("2025-12-01");
+	});
+
+	it("steps back a month without the day-of-month overflow", () => {
+		// The settlement run reaches back one cycle. `setMonth(m - 1)` keeps the day of the
+		// month and overflows — 31 March minus one month is 3 March — which is the whole
+		// reason this is not written that way.
+		expect(previousCycleKey("2026-03-01")).toBe("2026-02-01");
+		expect(previousCycleKey("2026-05-01")).toBe("2026-04-01");
+		expect(nextCycleKey(previousCycleKey("2026-09-01"))).toBe("2026-09-01");
 	});
 
 	it("counts the days this particular month has, never an average", () => {
