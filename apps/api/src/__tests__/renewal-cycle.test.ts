@@ -610,14 +610,16 @@ describe("the reduction is spent on the draft renewal", () => {
 	 * rather than dropped.
 	 */
 	it("never discounts an invoice below the minimum, and carries what is left", async () => {
-		await owe("anthers", "5.50");
+		// Owing the whole invoice is the case that forces the floor to bite — somebody who
+		// started on the last day of a month is close to this.
+		await owe("anthers", "6.00");
 		await applyReductionsToInvoice(
 			draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }] }),
 		);
 
-		// $6 invoice, $1 floor → $5 spendable, so $0.50 of the $5.50 carries.
+		// $6 invoice against Stripe's $0.50 floor → $5.50 spendable, so $0.50 carries.
 		const coupon = fake.lastCall("coupons.create")?.args[0] as Stripe.CouponCreateParams;
-		expect(coupon.amount_off).toBe(500);
+		expect(coupon.amount_off).toBe(550);
 
 		const carried = await db
 			.select()

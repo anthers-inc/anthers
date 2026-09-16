@@ -23,7 +23,7 @@
 import { db } from "@anthers/db/client";
 import { accounts, supportReductions } from "@anthers/db/schema";
 import { cycleKeyFor, nextCycleKey, reductionFor } from "@anthers/shared/billing-cycle";
-import { MIN_DISCOUNTED_CHARGE } from "@anthers/shared/constants";
+import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -251,7 +251,7 @@ function spendableLines(
  * took for days Alice had not started, and a reduction keyed to a line that no longer exists
  * would otherwise be owed forever.
  *
- * 🚨 **The whole invoice stays at or above `MIN_DISCOUNTED_CHARGE`.** A start late in the
+ * 🚨 **The whole invoice stays at or above `STRIPE_MIN_CHARGE`.** A start late in the
  * month can owe back nearly the whole of the next charge, and an invoice discounted to nothing
  * is one a processor will not take. What cannot be spent is carried, never dropped.
  */
@@ -260,7 +260,7 @@ function allocate(
 	lines: SpendableLine[],
 ): { perLine: Map<string, Decimal>; spentByRow: Map<number, Decimal> } {
 	const subtotal = lines.reduce((sum, l) => sum.plus(l.amount), new Decimal(0));
-	let budget = Decimal.max(0, subtotal.minus(MIN_DISCOUNTED_CHARGE));
+	let budget = Decimal.max(0, subtotal.minus(STRIPE_MIN_CHARGE));
 
 	const perLine = new Map<string, Decimal>();
 	const spentByRow = new Map<number, Decimal>();

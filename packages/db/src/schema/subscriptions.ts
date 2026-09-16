@@ -194,16 +194,25 @@ export const accountCycles = pgTable(
  * Stripe is still holding it as a draft, from these rows.
  *
  * ⚠️ **A row survives being partly spent.** A discount may not take an invoice below
- * `MIN_DISCOUNTED_CHARGE`, so what it could not spend is written forward as a new row against
+ * `STRIPE_MIN_CHARGE`, so what it could not spend is written forward as a new row against
  * the following cycle rather than dropped — which is why `applied_at` marks a row settled and
  * `amount` is never edited down. The audit trail is that a row was applied in full, or applied
  * in part with its remainder named in the row that carries it forward.
+ *
+ * 🚨 **In the books this is a PRICE REDUCTION, never a liability**, and the word "owed" above
+ * is loose English rather than an accounting claim. Parker's 2026-09-15 bookkeeping decision
+ * settles it: a mid-month charge buys that same month, so nothing is deferred across a period
+ * boundary and the monthly close carries no deferred revenue schedule — the reduction simply
+ * lowers the following month's revenue when it is applied. **Booking these rows as a liability
+ * at the moment they are written would double-count them**, once as a payable and again as
+ * reduced revenue, which is a mistake the close package is in a position to make because this
+ * table looks so much like a payable.
  */
-// org — money owed back on a charge Anthers made. The treasury rule: "Payments, pools,
-// payouts → Org only. Money cannot federate." The user FK cascades because a reduction is a
-// promise about a future charge to that account, and there is no future charge once the
-// account is gone — unlike `pool_distributions`, which is a record of money that already moved
-// and therefore has to outlive both accounts.
+// org — a price reduction held against a future charge Anthers will make. The treasury rule:
+// "Payments, pools, payouts → Org only. Money cannot federate." The user FK cascades because a
+// reduction is a promise about a future charge to that account, and there is no future charge
+// once the account is gone — unlike `pool_distributions`, which is a record of money that
+// already moved and therefore has to outlive both accounts.
 export const supportReductions = pgTable(
 	"support_reductions",
 	{
