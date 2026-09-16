@@ -272,7 +272,7 @@ export async function takeDownWork(input: {
 		// distributed by time rather than paid out on content we took down. A creator
 		// WITHDRAWING their own Work does not do this — they broke no rule. Only unsettled
 		// cycles move; a takedown does not reach into a month already paid.
-		const reverted = await voidStickersOnSubject("work", work.id);
+		const reverted = await voidStickersOnSubject("work", work.id, tx);
 		if (reverted.voided > 0) {
 			console.log(
 				`[dmca] takedown of work ${work.id} reverted ${reverted.voided} Sticker(s), $${reverted.dollars.toFixed(2)} back to time-based distribution`,
@@ -638,9 +638,10 @@ export async function restoreWork(input: {
 		});
 
 		// The takedown is undone, so the directions come back — but only for a cycle that has
-		// not settled. A counter-notice can arrive after the month closed, and by then the money
-		// has been distributed by time and paid; restoring the Work does not rewrite that.
-		const back = await restoreStickersOnSubject("work", work.id);
+		// not settled, and not while a quarantine still has the Work removed. A counter-notice can
+		// arrive after the month closed, and by then the money has been distributed by time and
+		// paid; restoring the Work does not rewrite that.
+		const back = await restoreStickersOnSubject("work", work.id, tx);
 		if (back.restored > 0) {
 			console.log(`[dmca] restore of work ${work.id} reinstated ${back.restored} Sticker(s)`);
 		}
