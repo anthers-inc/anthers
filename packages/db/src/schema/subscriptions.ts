@@ -252,6 +252,142 @@ export const supportReductions = pgTable(
 	],
 );
 
+/**
+ * Every charge Anthers makes, as the books' subledger.
+ *
+ * ⭐ **Anthers' own tables are the subledger and QuickBooks Online is the general ledger**
+ * (Parker, 2026-09-15). Nothing syncs transaction by transaction: the admin app produces a
+ * monthly close package of about eight journal lines, and the schedules behind it are read
+ * from here. So this row has to carry every figure that entry needs — what reached Stripe
+ * clearing, the processing expense, the tax payable, and the split between money owed to
+ * creators and Anthers' own revenue — because a figure that is not recorded here has to be
+ * recomputed later from a model that has since moved on.
+ *
+ * 🚨 **`billing_cycle` is the month this invoice PAYS FOR, never the month it was paid in.**
+ * A mid-month start is charged in full for the month it joins, and its reduced renewal on the
+ * 1st pays for the *next* month — so a creator receives exactly what the supporter paid for
+ * that month, and a month's Time Pool share is split by that month's time. Keying this by
+ * payment date instead would credit the wrong month's viewing, silently, for every account
+ * that ever started mid-month.
+ *
+ * ⚠️ **A row outlives the account it concerns**, which is why `user_id` is `set null` rather
+ * than cascading — the same reasoning as `pool_distributions`. A settled month's books cannot
+ * change because somebody later deleted their account.
+ */
+// org — the record of money actually collected. The treasury rule: "Payments, pools, payouts,
+// KYC, charitable accounting → Org only. Money cannot federate."
+export const invoices = pgTable(
+	"invoices",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+		/** Stripe's own id, and the tie point for any reconciliation against their records. */
+		stripeInvoiceId: text("stripe_invoice_id").notNull().unique(),
+		/** The month this invoice pays for — `YYYY-MM-01`. See the note above. */
+		billingCycle: text("billing_cycle").notNull(),
+		/**
+		 * `paid` · `refunded` · `disputed` · `uncollectible`.
+		 *
+		 * A renewal still inside Stripe's retry window has no row here at all, because nothing
+		 * is credited from an invoice that has not been paid — which is the defect this table
+		 * exists to fix. It appears when it is paid, against the month it paid for.
+		 */
+		status: text("status").notNull().default("paid"),
+		/** What the lines came to, after any day-exact reduction and before tax. */
+		subtotal: numeric("subtotal").notNull(),
+		/** The day-exact reduction spent on this invoice, as a positive number. */
+		discount: numeric("discount").notNull().default("0.00"),
+		/** Sales tax, which is the only thing added on top of the advertised price. */
+		tax: numeric("tax").notNull().default("0.00"),
+		/** What the card was actually charged: `subtotal + tax`. */
+		total: numeric("total").notNull(),
+		/**
+		 * At-cost card processing, taken out of the price rather than added to it.
+		 *
+		 * ⚠️ **Recorded per invoice rather than derived at settlement**, because `cardFee` is a
+		 * rate that can change and this is a record of what was actually paid to the processor
+		 * on a particular day. A settlement that recomputed it would restate history every time
+		 * the rate moved.
+		 */
+		processingFee: numeric("processing_fee").notNull().default("0.00"),
+		/** When this invoice's money was credited to creators, or null while it is unsettled. */
+		settledAt: timestamp("settled_at", { withTimezone: true }),
+		paidAt: timestamp("paid_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The settlement run's own read: every unsettled paid invoice for a month that has ended.
+		index("idx_invoices_cycle_settled").on(table.billingCycle, table.settledAt),
+		index("idx_invoices_user").on(table.userId),
+	],
+);
+
+/**
+ * One line per destination on an invoice — who each part of the charge was for.
+ *
+ * 🚨 **This is what makes a creator's credit legible rather than derived.** The whole charge
+ * says nothing about whose money it is; the destination stamp on each Stripe line does, and
+ * `itemsFromSub` is the one place that stamp is read. Settlement credits from these rows, so a
+ * line written against the wrong destination moves a supporter's money to the wrong person
+ * with every total still adding up.
+ *
+ * ⚠️ **`creator_id` is nullable and null means the Anthers line**, resolved from the stamp at
+ * write time rather than stored twice. That differs from `support_reductions.destination`,
+ * which keeps the raw text because its job is to be *compared* against a Stripe stamp; this
+ * one's job is to credit an account, so it holds the thing a credit needs. An unparseable
+ * stamp resolves to null and is credited to Anthers, which is `itemsFromSub`'s documented
+ * fallback and the migration path for any subscription predating the one-item-per-destination
+ * model.
+ */
+// org — the per-destination split of collected money. Money cannot federate.
+export const invoiceLines = pgTable(
+	"invoice_lines",
+	{
+		id: serial("id").primaryKey(),
+		invoiceId: integer("invoice_id")
+			.notNull()
+			.references(() => invoices.id, { onDelete: "cascade" }),
+		/** Null is the Anthers line. Set null on delete, because the record outlives the account. */
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** Dollars on this line, after its share of any day-exact reduction and before tax. */
+		amount: numeric("amount").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_invoice_lines_invoice").on(table.invoiceId)],
+);
+
+/**
+ * Whether a month has settled — the explicit state, rather than an inference.
+ *
+ * 🚨 **Voiding a Sticker depends on this, and inferring it is what was broken.**
+ * `settledCycles()` treated a cycle as settled as soon as *any* `pool_distributions` row
+ * existed for it, and `distribute-pool` upserts those rows every midnight — so from the second
+ * day of a month every takedown voided nothing at all, and the test that covered it inserted a
+ * distribution row to stand for a settled cycle and therefore encoded the same wrong
+ * definition.
+ *
+ * ⭐ **One row per month rather than per account**, which is only correct because every account
+ * now renews on the 1st. Before that a cycle key meant a different window for every supporter,
+ * and the per-account comparison this had to make is what the anchor removed.
+ *
+ * ⚠️ **A late-paying invoice settles after its month is marked**, and that is expected rather
+ * than a contradiction: the month's marker is what a takedown is judged against, while the
+ * money for an invoice still in Stripe's retries is credited when it arrives, carrying its own
+ * hold from that moment. Read this for "may a takedown still void", never for "is every
+ * invoice for this month accounted for".
+ */
+// org — the state of the month's books. Money cannot federate.
+export const monthSettlements = pgTable("month_settlements", {
+	id: serial("id").primaryKey(),
+	/** `YYYY-MM-01`, one row per month. */
+	billingCycle: text("billing_cycle").notNull().unique(),
+	settledAt: timestamp("settled_at", { withTimezone: true }).defaultNow().notNull(),
+	/** How many invoices the run credited, for the close package and for a sanity check. */
+	invoiceCount: integer("invoice_count").notNull().default(0),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // both — the table the boundary map predicts will resist classification, and does. Org-role by
 // volume (the highest-write table, "Time-event ingestion → Org") and by being
 // pool-accounting input. Node-role by being about *one creator's* work (`workId`,
