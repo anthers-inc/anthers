@@ -143,7 +143,16 @@ export const rightsRequests = pgTable(
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
-		/** Captured at request time: the account may be gone before this is answered. */
+		/**
+		 * Captured at request time: the account may be gone before this is answered.
+		 *
+		 * **The answer goes here only when the account is gone.** While the account exists, the
+		 * answer is an in-app notice, and as an `essential` notice it is also emailed to the
+		 * account's current address, so emailing this one as well would tell the same person twice.
+		 * If the two addresses differ, the account's current address wins, since it is where the
+		 * person is now. Parker agreed to this on 2026-09-16; the resolve route in
+		 * `routes/admin.ts` is where it happens.
+		 */
 		email: text("email").notNull(),
 		/** access | rectification | objection | portability | other */
 		kind: text("kind").notNull(),
