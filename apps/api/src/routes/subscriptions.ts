@@ -33,6 +33,7 @@ import {
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
 import { isBadgeColor, isBadgeEmblem, isBadgeShape } from "@anthers/shared/badge-art";
+import { currentCycleKey, cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
 import {
 	amountMeets,
 	BADGE_ART_MAX_BYTES,
@@ -40,6 +41,7 @@ import {
 	CHARGEABLE_AMOUNT_MESSAGE,
 	heldBadgeName,
 	isChargeableAmount,
+	PUBLIC_ACCESS_PRICE,
 	STRIPE_MIN_CHARGE,
 	stickerBudgetFor,
 	supportAmount,
@@ -66,13 +68,13 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import {
-	createOneTimeCharge,
 	ensureAnthersProduct,
 	ensureCreatorProduct,
 	ensureStripeCustomer,
 	itemsFromSub,
 	periodEndFromSub,
-	savedCardFor,
+	periodStartFromSub,
+	planItemChange,
 	supportItems,
 } from "../services/billing.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
@@ -81,6 +83,7 @@ import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-
 import { scanInlineUpload } from "../services/safety-scan.js";
 import { resolveShareToken } from "../services/share-links.js";
 import { storage } from "../services/storage/index.js";
+import { recordReductions } from "../services/support-reductions.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -92,8 +95,8 @@ import { storage } from "../services/storage/index.js";
  * both are true: the ladder genuinely has no top rung (what you give keeps scaling what
  * your time pays creators), while this caps what one request may set. The two read as
  * contradictory, which is why it was filed as drift; the resolution is that "unbounded" is
- * about the ladder and this is about a request. Note `/seeds/buy` uses a different bound
- * again — left alone here, but the roadmap carries a milestone for reconciling them.
+ * about the ladder and this is about a request. It is the only such bound in this file, and
+ * a second one appearing elsewhere is drift rather than a considered difference.
  *
  * ⚠️ **Two docblocks on one declaration is a shape worth noticing**, because this
  * declaration carried a stale second one for months: the compiler takes the nearest and
@@ -305,17 +308,13 @@ function publicGate({ artKey, ...gate }: GateRow) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getCurrentBillingCycle(): string {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-}
+// The cycle key and the period both come from `@anthers/shared/billing-cycle` now. Four
+// functions computed the key independently until 2026-09-15, all of them reading local time
+// while the crons that consume it run in UTC — see that module's header.
 
 function currentPeriod() {
-	const now = new Date();
-	return {
-		start: new Date(now.getFullYear(), now.getMonth(), 1),
-		end: new Date(now.getFullYear(), now.getMonth() + 1, 1),
-	};
+	const key = currentCycleKey();
+	return { start: cycleStart(key), end: cycleEnd(key) };
 }
 
 async function getAccount(userId: number) {
@@ -717,6 +716,27 @@ const subscriptionRoutes = new Hono()
 				);
 			}
 
+			/**
+			 * 🚨 **The Anthers line is $0 or at least $3.** $3 is what unlimited Public Access
+			 * costs and it is the bottom rung of the ladder, so anything between buys a Badge's
+			 * worth of nothing — no rung cleared, no meter lifted, and a supporter with no way
+			 * to find that out except by comparing their account page against `/subscribe`.
+			 *
+			 * ⚠️ **It bounds the Anthers destination only, and must never be allowed to spread
+			 * to `directed`.** A creator sets their own Badge levels to any chargeable amount,
+			 * which is why that array keeps the lower `STRIPE_MIN_CHARGE` floor; applying $3 to
+			 * both would put every creator's ladder back on a $3 step and make a $1 Badge
+			 * unreachable through this route.
+			 */
+			if (anthersSupport > 0 && anthersSupport < PUBLIC_ACCESS_PRICE) {
+				return c.json(
+					{
+						error: `An amount to Anthers is $0 or at least $${PUBLIC_ACCESS_PRICE}, which is what unlimited Public Access costs. Anything between buys nothing.`,
+					},
+					400,
+				);
+			}
+
 			const product = await ensureAnthersProduct();
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
 
@@ -745,22 +765,72 @@ const subscriptionRoutes = new Hono()
 				});
 			}
 			const items = supportItems(product, anthersSupport, picks);
+			const now = new Date();
 
-			// Changing an active subscription → replace the whole item set with proration.
-			//
-			// ⚠️ Every existing item is listed with `deleted: true` alongside the new ones.
-			// Stripe does NOT remove an item you simply omit, so leaving that out would keep
-			// charging for a creator the user just stopped supporting — silently, and
-			// visibly on their next invoice rather than anywhere we would see it.
+			/**
+			 * Changing an active subscription, and **the two directions are separate calls**.
+			 *
+			 * 🚨 A raise or an added creator is charged **in full today**; a decrease or a
+			 * removal waits for the 1st. `proration_behavior` is one setting for a whole
+			 * update, so one call cannot express both — and the previous version made exactly
+			 * that mistake in the other direction, replacing the whole item set under
+			 * `always_invoice` so that lowering an amount mid-month credited the unused days
+			 * back immediately. That is the everyday case of money coming back after it was
+			 * already credited to a creator, which Parker's 2026-09-14 decision exists to
+			 * remove.
+			 *
+			 * ⚠️ **Items are now changed by id rather than deleted and rebuilt.** Rebuilding
+			 * gave every line a new id on every change, and a line's id is what a reduction
+			 * coupon is attached to on the renewal invoice — see `services/support-reductions.ts`.
+			 */
 			if (acct.stripeSubscriptionId) {
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
 				if (sub.status === "active" || sub.status === "trialing") {
-					await stripe.subscriptions.update(sub.id, {
-						items: [...sub.items.data.map((i) => ({ id: i.id, deleted: true as const })), ...items],
-						proration_behavior: "always_invoice",
-						cancel_at_period_end: false,
-						metadata: { ...sub.metadata, userId: String(user.id) },
-					});
+					const change = planItemChange(sub, product, anthersSupport, picks);
+
+					// Up first, because it is the call that takes money and the one a declined
+					// card should stop. A decrease that silently followed a failed raise would
+					// leave somebody paying less than the page told them they had asked for.
+					if (change.raises.length > 0) {
+						// Prorate from the START of the period, so "the part of the month that is
+						// left" is the whole of it and the line is charged in full. The days before
+						// it began come off the 1st instead, recorded below.
+						//
+						// 🚨 **Falling back to the 1st rather than to `undefined`.** Stripe reads a
+						// missing `proration_date` as *now*, which prorates the raise across the
+						// days remaining and charges a sliver — the gate-for-a-day hole, arriving
+						// silently through a subscription whose items happen to carry no period. A
+						// wrong answer here has to fail toward charging in full.
+						const periodStart =
+							periodStartFromSub(sub) ??
+							Math.floor(cycleStart(currentCycleKey(now)).getTime() / 1000);
+						await stripe.subscriptions.update(sub.id, {
+							items: change.raises,
+							proration_behavior: "always_invoice",
+							proration_date: periodStart,
+							cancel_at_period_end: false,
+							metadata: { ...sub.metadata, userId: String(user.id) },
+						});
+					}
+					if (change.drops.length > 0) {
+						await stripe.subscriptions.update(sub.id, {
+							items: change.drops,
+							// No proration and no invoice: the price changes and the next charge
+							// on the 1st is the only thing that moves. What was already paid for
+							// this month stays in force — `syncSubscriptionToAccount` holds the
+							// account's own amounts up to match.
+							proration_behavior: "none",
+							cancel_at_period_end: false,
+							metadata: { ...sub.metadata, userId: String(user.id) },
+						});
+					}
+					if (change.raises.length === 0 && change.drops.length === 0) {
+						// Nothing moved — still clear a pending cancellation, which is the one
+						// thing a no-op change is legitimately used for.
+						await stripe.subscriptions.update(sub.id, { cancel_at_period_end: false });
+					}
+
+					await recordReductions(user.id, now, change.started);
 					return c.json({ pending: false, account: await getAccount(user.id) });
 				}
 			}
@@ -770,6 +840,13 @@ const subscriptionRoutes = new Hono()
 			const sub = await stripe.subscriptions.create({
 				customer: customerId,
 				items,
+				// 🚨 **Backdated to the 1st, which is what puts every account on one calendar
+				// cycle.** The first invoice then covers the whole month, charges in full today,
+				// and lands the renewal on the 1st with no anchor arithmetic anywhere else. A
+				// `billing_cycle_anchor` at the *next* 1st would have been the obvious reach and
+				// is wrong in both available flavors: prorating charges a sliver, and not
+				// prorating charges nothing at all until next month.
+				backdate_start_date: Math.floor(cycleStart(currentCycleKey(now)).getTime() / 1000),
 				payment_behavior: "default_incomplete",
 				payment_settings: { save_default_payment_method: "on_subscription" },
 				expand: ["latest_invoice.confirmation_secret"],
@@ -780,6 +857,15 @@ const subscriptionRoutes = new Hono()
 				.set({ stripeSubscriptionId: sub.id, updatedAt: new Date() })
 				.where(eq(accounts.id, acct.id));
 
+			// Every line on a new subscription started today, so every one of them is owed the
+			// days of the month before it. Recorded now rather than on activation: the charge
+			// has been raised, and a subscription that never activates has its reductions
+			// carried against an invoice that never arrives, which costs nothing.
+			await recordReductions(user.id, now, [
+				{ creatorId: null, amount: anthersSupport },
+				...picks.map((p) => ({ creatorId: p.creatorId, amount: p.amount })),
+			]);
+
 			const invoice = sub.latest_invoice as
 				| (Stripe.Invoice & { confirmation_secret?: { client_secret?: string } })
 				| null;
@@ -788,34 +874,6 @@ const subscriptionRoutes = new Hono()
 				subscriptionId: sub.id,
 				clientSecret: invoice?.confirmation_secret?.client_secret ?? null,
 			});
-		},
-	)
-
-	// ── Top up the directed-support balance (a one-off, not the subscription) ──
-	.post(
-		"/seeds/buy",
-		requireAuth,
-		requireVerified,
-		zValidator("json", z.object({ amount: z.number().min(MIN_INVOICE_TOTAL).max(3000) })),
-		async (c) => {
-			const user = c.get("user");
-			const { amount } = c.req.valid("json");
-			const stripe = getStripe();
-			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
-			await ensureAccount(user.id);
-			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
-			// Charged all-in via Stripe — the card fee comes out of it, not on top; the
-			// webhook credits the balance on success. ⚠️ A one-off charge pays the fixed
-			// $0.30 by itself, which is exactly the cost the monthly subscription exists to
-			// amortize — so this path is genuinely expensive at small amounts, and nothing
-			// in the UI reaches it.
-			const charge = await createOneTimeCharge({
-				userId: user.id,
-				customerId,
-				type: "seeds",
-				base: amount,
-			});
-			return c.json({ ...charge, savedCard: await savedCardFor(customerId) });
 		},
 	)
 
@@ -1083,7 +1141,7 @@ const subscriptionRoutes = new Hono()
 	// ── Time Summary ─────────────────────────────────────────────────────────
 	.get("/attention/summary", requireAuth, async (c) => {
 		const user = c.get("user");
-		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
+		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
 		// Compute cycle end (first day of next month)
 		const cycleDate = new Date(`${cycle}T00:00:00`);
@@ -1113,7 +1171,7 @@ const subscriptionRoutes = new Hono()
 	// ── Pool Distributions (subscriber view) ─────────────────────────────────
 	.get("/distributions", requireAuth, async (c) => {
 		const user = c.get("user");
-		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
+		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
 		const result = await db
 			.select({
@@ -1154,7 +1212,7 @@ const subscriptionRoutes = new Hono()
 	// ── Creator Earnings ─────────────────────────────────────────────────────
 	.get("/earnings", requireAuth, async (c) => {
 		const user = c.get("user");
-		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
+		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
 		const [earnings] = await db
 			.select({
@@ -1193,7 +1251,7 @@ const subscriptionRoutes = new Hono()
 	// predicate left in it at all. Re-read a whole paragraph when a rule under it moves.
 	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
-		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
+		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
 		const result = await db
 			.select({
@@ -1249,7 +1307,7 @@ const subscriptionRoutes = new Hono()
 			const user = c.get("user");
 			const { creatorId, amount, cycle: requestedCycle } = c.req.valid("json");
 			const amountNum = Number(amount);
-			const currentCycle = getCurrentBillingCycle();
+			const currentCycle = currentCycleKey();
 			const cycle = requestedCycle ?? currentCycle;
 
 			// Only allow editing current or next month
@@ -1869,7 +1927,7 @@ const subscriptionRoutes = new Hono()
 		// What the viewer gives Anthers (point-in-time) and what they direct at this creator.
 		const anthersSupport = await heldAnthersSupport(currentUserId);
 		const badge = heldBadgeName(anthersSupport);
-		const cycle = getCurrentBillingCycle();
+		const cycle = currentCycleKey();
 		const [seed] = await db
 			.select({ amount: seedAllocations.amount })
 			.from(seedAllocations)

@@ -9,6 +9,7 @@
 		"./fees": "./src/fees.ts",
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
+		"./billing-cycle": "./src/billing-cycle.ts",
 		"./badge-art": "./src/badge-art.ts",
 		"./votes": "./src/votes.ts",
 		"./stickers": "./src/stickers.ts",

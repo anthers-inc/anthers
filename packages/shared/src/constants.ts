@@ -154,6 +154,24 @@ export function isChargeableAmount(dollars: number): boolean {
 
 /** What to tell somebody who set an amount between zero and the floor. */
 export const CHARGEABLE_AMOUNT_MESSAGE = `An amount has to be $0 or at least $${STRIPE_MIN_CHARGE.toFixed(2)} — Stripe will not process a charge below that, so anything in between is a price nobody can pay.`;
+
+/**
+ * The smallest a **discounted** renewal may come to before the rest of the discount is
+ * carried to the following month.
+ *
+ * Somebody who started on the 30th has almost a whole month coming back, which on a small
+ * amount is nearly the whole of the next charge — so the reduction has to stop somewhere, and
+ * the part it cannot spend is written forward rather than lost. See `reductionFor` in
+ * `@anthers/shared/billing-cycle`, and the carry in `services/support-reductions.ts`.
+ *
+ * ⚠️ **Deliberately NOT `STRIPE_MIN_CHARGE`, and the gap between them is unsettled.** Stripe's
+ * own floor is $0.50 and this is $1, because Parker's 2026-09-14 decision names "Anthers' $1
+ * minimum" twice while the code has only ever had the vendor's. Being the more conservative of
+ * the two costs a few cents carried an extra month and nothing else, which is why it is
+ * resolved this way pending an answer rather than left to a coin toss. **If the two are
+ * reconciled to one number, this constant is what goes.**
+ */
+export const MIN_DISCOUNTED_CHARGE = 1;
 /**
  * Share of what a user gives Anthers that funds the Time Pool, paid to creators by time.
  *

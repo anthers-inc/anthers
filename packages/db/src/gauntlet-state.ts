@@ -4,9 +4,8 @@
  * on an exact rung of the staircase without walking a billing flow.
  *
  * Why this exists: the support model made billing real. Changing what a user gives Anthers
- * (`POST /subscriptions/account`) and topping up their creator budget (`/seeds/buy`) are Stripe
- * charges with webhook-driven sync — they 503 without Stripe configured and need a running
- * `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
+ * (`POST /subscriptions/account`) is a Stripe charge with webhook-driven sync — it 503s
+ * without Stripe configured and needs a running `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
  * hops the *billing* facts here, at the same three columns the webhooks would have written:
  * `accounts.anthersSupport`, `accounts.creatorSupportTotal`, and a completed `purchases` row.
