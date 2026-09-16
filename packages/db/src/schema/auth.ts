@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Schema role classification. The public statement of the topology this serves is the
- * wiki's *How Anthers Is Built -> Federation and Creator Nodes*:
+ * wiki's *How Anthers Is Built -> The Anthers PDS and Creator Nodes*, chiefly its sections
+ * on a node's database and on what the hub keeps:
  *
  *   node = a creator's own — identity, content records, media, personal relationships.
  *   org  = network-wide or money — feeds, pools, payouts, moderation, telemetry.
  *   both = genuinely split by row, where one table serves both roles.
  *
- * The boundary table on that page is the guiding map; disagreements are called out
- * per-table, in the comment on the table that disagrees. There is no separate findings
- * document and there should not be one -- a classification kept anywhere but beside the
- * table drifts within a refactor.
+ * The page states the principle and assigns no table, so each classification is argued in
+ * the comment on its own table, including where a table departs from the obvious reading.
+ * There is no separate findings document and there should not be one -- a classification
+ * kept anywhere but beside the table drifts within a refactor.
  *
  * 🚨 `schema-role-tags.test.ts` requires a tag on every table, because this began as a
  * one-time pass with nothing behind it and had decayed to 43 of 51 by 2026-09-01.
@@ -28,10 +29,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { adminAccounts } from "./admin.js";
 
-// node — a person's identity. Node-canonical (boundary table: "Identity lives on the creator
-// node / ATProto-native"). `emailVerified` and `isCreator` are org-imposed annotations on
-// the row, which is why this is `node` rather than `both`: the row's owner is the person,
-// not the org, and the org's flags are columns on someone else's record.
+// node — a person's identity. Node-canonical, because identity lives in the person's own
+// ATProto repository rather than with Anthers. `emailVerified` and `isCreator` are org-imposed
+// annotations on the row, which is why this is `node` rather than `both`: the row's owner is
+// the person, not the org, and the org's flags are columns on someone else's record.
 export const users = pgTable("users", {
 	id: serial("id").primaryKey(),
 	/**
@@ -369,8 +370,8 @@ export const signupCodes = pgTable(
 	(table) => [index("idx_signup_codes_expires").on(table.expiresAt)],
 );
 
-// node — ATProto DPoP tokens are node identity (boundary table: "Identity lives on the creator
-// node / ATProto-native"). The org holds them to sign requests on the creator's behalf,
+// node — ATProto DPoP tokens are node identity, since identity lives in the person's own
+// repository. The org holds them to sign requests on the creator's behalf,
 // but they are the creator's credentials, not the org's.
 //
 // 🚨 The DID is the key, not the user id, because `@atproto/oauth-client`'s SessionStore
@@ -528,10 +529,9 @@ export const pendingSignups = pgTable(
 	],
 );
 
-// both — a follow is a relationship between two accounts. The boundary table names "Subscriber
-// relationships" as both: the billing contract is org-side, the canonical assertion is
-// in the user's repo. The row's *existence* is node (a creator's followers are their
-// own), but the org's feed/index reads it, so both roles touch it.
+// both — a follow is a relationship between two accounts, and its canonical assertion is in
+// the follower's repo. The row's *existence* is node (a creator's followers are their own),
+// but the org's feed/index reads it, so both roles touch it.
 export const follows = pgTable(
 	"follows",
 	{
