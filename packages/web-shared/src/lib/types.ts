@@ -95,8 +95,9 @@ export interface UnlockRoute {
  * mirror that has grown a field the original lacks is dead code with a compiler's blessing.**
  *
  * It stays an object rather than collapsing to `UnlockRoute | null`, for the same reason the
- * server's does: a creator gating on **another creator's** support level is a live case, and
- * that is where a second route would reappear.
+ * server's does: a creator gating on **another creator's** support level is a shape the
+ * access model leaves room for — nothing resolves it today, since every row is measured
+ * against the Work's own creator — and that is where a second route would reappear.
  */
 export interface UnlockOffer {
 	creator: UnlockRoute | null;
