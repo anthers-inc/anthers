@@ -21,6 +21,7 @@ import {
 	USER_COLLECTIONS,
 } from "./atproto-client.js";
 import { scopeAllowsWriting } from "./atproto-scope.js";
+import { type PdsHealth, pdsHealth } from "./pds-health.js";
 
 export interface AtprotoIdentity {
 	did: string;
@@ -157,6 +158,11 @@ export interface PublishingState {
 	handle: string;
 	/** How many of this creator's Works currently carry a listing on the network. */
 	listed: number;
+	/**
+	 * Whether the server holding an identity Anthers does not host is answering, or null when it
+	 * was not asked — a hosted identity, or a read that did not ask. Informs and never refuses.
+	 */
+	server: PdsHealth | null;
 }
 
 /** Which route each tier of an account's records takes, and the identity they take it into. */
@@ -165,21 +171,25 @@ async function publishingRouteFor(userId: number): Promise<{
 	interactions: PublishingRoute;
 	did: string | null;
 	handle: string;
+	pdsUrl: string;
 }> {
 	const [user] = await db
-		.select({ did: users.atprotoDid, handle: users.atprotoHandle })
+		.select({ did: users.atprotoDid, handle: users.atprotoHandle, pdsUrl: users.atprotoPdsUrl })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
-	if (!user?.did) return { route: "none", interactions: "none", did: null, handle: "" };
+	if (!user?.did) {
+		return { route: "none", interactions: "none", did: null, handle: "", pdsUrl: "" };
+	}
 	const did = user.did;
 	const handle = user.handle ?? "";
+	const pdsUrl = user.pdsUrl ?? "";
 
 	// Imported here rather than at the top: `hosted-accounts.ts` reaches back into this module,
 	// and a static edge in both directions is a cycle.
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
 	if (await isHostedIdentity(did)) {
-		return { route: "hosted", interactions: "hosted", did, handle };
+		return { route: "hosted", interactions: "hosted", did, handle, pdsUrl };
 	}
 
 	const scope = await grantedScopeFor(did);
@@ -188,6 +198,7 @@ async function publishingRouteFor(userId: number): Promise<{
 		interactions: grantCoversUserRecords(scope) ? "granted" : "ungranted",
 		did,
 		handle,
+		pdsUrl,
 	};
 }
 
@@ -203,7 +214,9 @@ async function publishingRouteFor(userId: number): Promise<{
  * ⭐ **`recheck` asks the creator's authorization server whether a grant on file still holds.**
  * The stored scope only changes when something tries to use it, so a creator who took the
  * permission back at their own server would otherwise read as granted until their next release
- * was refused — the frustration the banner exists to head off. See `recheckPublishingGrant`.
+ * was refused — the frustration the banner exists to head off. See `recheckPublishingGrant`. The
+ * same read asks whether an identity's server is answering (`pds-health.ts`), which the banner
+ * shows as a delay rather than a problem to fix.
  */
 export async function publishingStateFor(
 	userId: number,
@@ -223,10 +236,16 @@ export async function publishingStateFor(
 		// change the answer without the recheck reporting it.
 		found = await publishingRouteFor(userId);
 	}
+	const { pdsUrl, ...rest } = found;
+	const server =
+		opts.recheck && found.route !== "hosted" && found.route !== "none" && pdsUrl
+			? await pdsHealth(pdsUrl)
+			: null;
 	return {
-		...found,
+		...rest,
 		offered: atprotoPublishEnabled(),
 		listed: await countListedWorks(userId),
+		server,
 	};
 }
 

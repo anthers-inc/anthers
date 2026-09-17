@@ -15,7 +15,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
-import { atprotoSessions } from "@anthers/db/schema";
+import { atprotoSessions, users } from "@anthers/db/schema";
 import type { Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { emailedCode, expect, test } from "./fixtures";
@@ -153,4 +153,26 @@ test("a reader whose permission lapsed cannot follow until they give it, and com
 	await expect(follow).toBeEnabled();
 	await follow.click();
 	await expect(page.getByRole("button", { name: "Following", exact: true })).toBeVisible();
+});
+
+// 🚨 A delay, never a problem to fix: the banner says what waits and that nothing else does.
+test("somebody whose identity's server is down is told their records are late, and nothing more", async ({
+	page,
+}) => {
+	const { did } = await signUpWithBluesky(page, "pd");
+	// A port nothing listens on, which a ping finds refused at once.
+	await db
+		.update(users)
+		.set({ atprotoPdsUrl: "http://127.0.0.1:9" })
+		.where(eq(users.atprotoDid, did));
+
+	await page.goto(`${ORIGIN}/feed`);
+	const notice = page.getByRole("status").filter({ hasText: "isn't answering right now" });
+	await expect(notice).toBeVisible();
+	await expect(notice).toContainText("reach the network late");
+	await expect(notice).toContainText("Everything on Anthers keeps working");
+	// Not Bluesky's server, so there is no status page to offer, and nothing to press.
+	await expect(notice.getByRole("link")).toHaveCount(0);
+	await expect(notice.getByRole("button")).toHaveCount(0);
+	await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
 });

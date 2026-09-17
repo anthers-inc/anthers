@@ -64,7 +64,7 @@ export default function PublishingPermissionBanner() {
 		<div className="bg-warning/15 border-b border-warning/30 text-sm" role="alert">
 			<div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3 flex-wrap">
 				<ExclamationTriangleIcon className="w-4 h-4 text-warning shrink-0" />
-				<span className="text-base-content/80">
+				<span className="min-w-0 flex-1 text-base-content/80">
 					Anthers doesn't have your permission to write to {where}, so you can't {blocked} until you
 					give it.
 				</span>

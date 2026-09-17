@@ -28,6 +28,11 @@ export interface PublishingState {
 	did: string | null;
 	handle: string;
 	listed: number;
+	/**
+	 * Whether the server holding an identity Anthers does not host is answering, or null when that
+	 * was not asked. A server that is down delays records reaching the network and blocks nothing.
+	 */
+	server: { reachable: boolean; downSince: string | null; statusUrl: string | null } | null;
 }
 
 /** How often a page left open asks again, which matches how often the API will recheck. */
