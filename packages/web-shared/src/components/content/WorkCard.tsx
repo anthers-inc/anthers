@@ -100,6 +100,16 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 						.
 					</p>
 				)}
+				{item.scheduledReleaseAt && !released && (
+					<p className="text-xs text-info">
+						{Date.parse(item.scheduledReleaseAt) <= Date.now()
+							? "Releases as soon as it's ready."
+							: `Releases ${new Date(item.scheduledReleaseAt).toLocaleString(undefined, {
+									dateStyle: "medium",
+									timeStyle: "short",
+								})}.`}
+					</p>
+				)}
 				{noFile && !uploading && !released && (
 					<p className="text-xs text-warning">
 						<Link to={editUrl} className="link">

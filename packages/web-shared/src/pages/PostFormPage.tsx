@@ -15,6 +15,7 @@ import RichTextEditor from "../components/editor/RichTextEditor";
 import PostWorkLinks from "../components/post/PostWorkLinks";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { isoToLocalInput } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
 import { postUrl } from "../lib/postUrl";
 import { Link } from "../lib/router";
@@ -27,15 +28,6 @@ function parseTags(text: string): string[] {
 	const set = new Set<string>();
 	for (const m of text.matchAll(/#([\p{L}0-9_-]+)/gu)) set.add(m[1]);
 	return [...set];
-}
-
-/** ISO datetime → the local value an `<input type="datetime-local">` expects (no seconds). */
-function isoToLocalInput(iso: string | null | undefined): string {
-	if (!iso) return "";
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return "";
-	const pad = (n: number) => String(n).padStart(2, "0");
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** Best-effort extraction of an { error } message from a non-ok JSON response. */

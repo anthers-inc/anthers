@@ -251,6 +251,8 @@ export interface Work {
 	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;
 	// the public sees `authoredAt` (when the work was MADE) and `releasedAt`.
 	visibility?: WorkVisibility;
+	/** When a private Work is due to be released, if its creator scheduled one. Owner-facing. */
+	scheduledReleaseAt?: string | null;
 	releasedAt?: string | null;
 	/** When it left public circulation. Only ever set alongside `visibility: "withdrawn"`. */
 	withdrawnAt?: string | null;
@@ -332,6 +334,8 @@ export interface WorkInput {
 	 * chooses, so it has no place in an input type.
 	 */
 	visibility?: Exclude<WorkVisibility, "withdrawn">;
+	/** A release time for a private Work; null clears it. */
+	scheduledReleaseAt?: string | null;
 	/**
 	 * What a creator may DECLARE. Narrower than `Work["maturity"]` for the same reason
 	 * `visibility` is: `unrated` is the state a Work is born in and leaves, never a value
