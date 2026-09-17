@@ -18,6 +18,10 @@
 
 import { REVIEW_MAX, REVIEW_MIN, verdictLabel } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
+import {
+	INTERACTION_PERMISSION_HINT,
+	useInteractionPermissionMissing,
+} from "@anthers/web-shared/publishing";
 import { client } from "@anthers/web-shared/rpc";
 import type { ReviewAggregate } from "@anthers/web-shared/types";
 import { FlagIcon, HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
@@ -30,6 +34,8 @@ import ReportDialog from "../ui/ReportDialog";
  */
 export default function WorkReviews({ workId }: { workId: number }) {
 	const { isAuthenticated, user } = useAuth();
+	// A review is a record in the reviewer's own repository, refused without the permission.
+	const permissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
 	const [agg, setAgg] = useState<ReviewAggregate | null>(null);
 	const [draftVerdict, setDraftVerdict] = useState<string | null>(null);
 	const [draftBody, setDraftBody] = useState("");
@@ -145,11 +151,14 @@ export default function WorkReviews({ workId }: { workId: number }) {
 								onChange={(e) => setDraftBody(e.target.value)}
 							/>
 							{error && <p className="mt-1 text-sm text-error">{error}</p>}
+							{permissionMissing && (
+								<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
+							)}
 							<div className="mt-2 flex items-center gap-2">
 								<button
 									type="submit"
 									className="btn btn-primary btn-sm"
-									disabled={submitting || tooShort}
+									disabled={submitting || tooShort || permissionMissing}
 								>
 									{submitting ? (
 										<span className="loading loading-spinner loading-sm" />

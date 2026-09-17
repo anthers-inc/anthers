@@ -290,6 +290,22 @@ describe("asking for the permission", () => {
 		expect((await startAuth({ intent: "login" })).status).toBe(400);
 	});
 
+	// A reader giving back the permission for their comments, reviews, votes and follows. The
+	// switch gates asking creators to publish and nothing else, and a reader is asked only for the
+	// reader tier.
+	it("asks a reader for the reader tier alone, whatever the publishing switch says", async () => {
+		const user = await makeUser("rgrant", { isCreator: false });
+		const token = await createSession(user.id, undefined, undefined);
+		delete process.env.ATPROTO_PUBLISH_ENABLED;
+		try {
+			const res = await startAuth({ intent: "publish", next: "/posts/somewhere" }, token);
+			expect(res.status).toBe(200);
+			expect(lastAuthorize?.options.scope).toBe(`atproto ${USER_SCOPES.join(" ")}`);
+		} finally {
+			process.env.ATPROTO_PUBLISH_ENABLED = "true";
+		}
+	});
+
 	it("refuses while the door is shut, without sending anybody to Bluesky first", async () => {
 		const user = await makeUser("shut");
 		const token = await createSession(user.id, undefined, undefined);
@@ -364,6 +380,21 @@ describe("coming back from the consent screen", () => {
 		const login = await denied("login");
 		expect(login.searchParams.get("success")).toBeNull();
 		expect(login.searchParams.get("error")).toBeTruthy();
+	});
+
+	// ⚠️ Judged against the creator tier, every reader's answer would read as a decline.
+	it("records a reader's grant of the reader tier as given, and sends them back where they were", async () => {
+		const user = await makeUser("rback", { isCreator: false });
+		await seedSession(did("rback"), user.id);
+
+		const url = await runCallback({
+			did: did("rback"),
+			scope: `atproto ${USER_SCOPE_EXPANDED}`,
+			state: JSON.stringify({ intent: "publish", userId: user.id, next: "/posts/somewhere" }),
+		});
+		expect(url.searchParams.get("success")).toBe("publishing");
+		expect(url.searchParams.get("next")).toBe("/posts/somewhere");
+		expect((await publishingStateFor(user.id)).interactions).toBe("granted");
 	});
 
 	it("treats a grant under the retired catalog set as needing to be asked again", async () => {

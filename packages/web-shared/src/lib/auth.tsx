@@ -90,7 +90,8 @@ interface AuthContextValue {
 	 * hand over read access to their email address.
 	 */
 	signUpWithBluesky: (handle: string, next?: string | null) => Promise<void>;
-	grantPublishing: () => Promise<void>;
+	/** `next` is where to land afterwards; without it the round trip ends on Studio settings. */
+	grantPublishing: (next?: string) => Promise<void>;
 	refreshUser: () => Promise<void>;
 }
 
@@ -217,9 +218,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	 * ⚠️ **No handle, deliberately.** The API authorizes against the DID already on the account,
 	 * so there is nothing for the browser to supply and nothing an attacker could substitute.
 	 */
-	const grantPublishing = useCallback(async () => {
-		await beginAtprotoAuth({ intent: "publish" }, "Couldn't start the Bluesky permission.");
-	}, [beginAtprotoAuth]);
+	const grantPublishing = useCallback(
+		async (next?: string) => {
+			await beginAtprotoAuth(
+				{ intent: "publish", ...(next ? { next } : {}) },
+				"Couldn't start the Bluesky permission.",
+			);
+		},
+		[beginAtprotoAuth],
+	);
 
 	return (
 		<AuthContext.Provider

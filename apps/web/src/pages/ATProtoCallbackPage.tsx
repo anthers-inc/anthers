@@ -96,11 +96,16 @@ export default function ATProtoCallbackPage() {
 		// rather than a failure.** Somebody who said no at the consent screen cannot publish until
 		// they give the permission, and Studio settings is where that is explained and where the
 		// button to give it is — an apology page would say something went wrong and offer nothing.
+		//
+		// ⚠️ **Unless the round trip named somewhere else.** The banner asks from whatever page the
+		// person was on, and a reader has no Studio to land in, so they go back where they were and
+		// the banner there says whether it worked.
 		if (success === "publishing" || success === "publish_declined") {
 			refreshUser().then(() => {
-				navigate(`/studio/settings?publishing=${success === "publishing" ? "on" : "declined"}`, {
-					replace: true,
-				});
+				navigate(
+					next ?? `/studio/settings?publishing=${success === "publishing" ? "on" : "declined"}`,
+					{ replace: true },
+				);
 			});
 			return;
 		}

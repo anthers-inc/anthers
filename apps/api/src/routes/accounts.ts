@@ -64,6 +64,7 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
+import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
@@ -668,6 +669,10 @@ const accountRoutes = new Hono()
 		if (await isBlocked(sessionUser.id, creator.id)) {
 			return c.json({ error: "User not found" }, 404);
 		}
+
+		// A follow is a record in the follower's own repository. Unfollowing is never refused.
+		const unwritable = await interactionPermissionRefusal(sessionUser.id);
+		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		// Idempotent: insert if not exists
 		await db

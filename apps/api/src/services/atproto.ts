@@ -18,6 +18,7 @@ import {
 	EMAIL_SCOPE,
 	getAtprotoClient,
 	grantedScopeFor,
+	USER_COLLECTIONS,
 } from "./atproto-client.js";
 import { scopeAllowsWriting } from "./atproto-scope.js";
 
@@ -125,7 +126,7 @@ export function atprotoPublishEnabled(): boolean {
 
 // ─── Publishing a creator's listings into their own repository ───────────────
 
-/** How a creator's records reach the network. */
+/** How an account's records of one tier reach the network. */
 export type PublishingRoute =
 	/** Anthers hosts the identity and holds its credential. Nothing to grant. */
 	| "hosted"
@@ -141,7 +142,13 @@ export type PublishingRoute =
 	| "none";
 
 export interface PublishingState {
+	/** The creator tier: Works, posts and projects. */
 	route: PublishingRoute;
+	/**
+	 * The tier every account has: comments, reviews, votes and follows. Asked for at every door
+	 * that establishes an identity, and never behind `ATPROTO_PUBLISH_ENABLED`.
+	 */
+	interactions: PublishingRoute;
 	/** Whether Anthers is asking for the grant at all right now. */
 	offered: boolean;
 	/** The identity a listing would be published into, or null when there is none. */
@@ -152,26 +159,36 @@ export interface PublishingState {
 	listed: number;
 }
 
-/** Which route an account's records take, and the identity they take it into. */
-async function publishingRouteFor(
-	userId: number,
-): Promise<{ route: PublishingRoute; did: string | null; handle: string }> {
+/** Which route each tier of an account's records takes, and the identity they take it into. */
+async function publishingRouteFor(userId: number): Promise<{
+	route: PublishingRoute;
+	interactions: PublishingRoute;
+	did: string | null;
+	handle: string;
+}> {
 	const [user] = await db
 		.select({ did: users.atprotoDid, handle: users.atprotoHandle })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
-	if (!user?.did) return { route: "none", did: null, handle: "" };
+	if (!user?.did) return { route: "none", interactions: "none", did: null, handle: "" };
 	const did = user.did;
 	const handle = user.handle ?? "";
 
 	// Imported here rather than at the top: `hosted-accounts.ts` reaches back into this module,
 	// and a static edge in both directions is a cycle.
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
-	if (await isHostedIdentity(did)) return { route: "hosted", did, handle };
+	if (await isHostedIdentity(did)) {
+		return { route: "hosted", interactions: "hosted", did, handle };
+	}
 
-	const granted = grantCoversCreatorRecords(await grantedScopeFor(did));
-	return { route: granted ? "granted" : "ungranted", did, handle };
+	const scope = await grantedScopeFor(did);
+	return {
+		route: grantCoversCreatorRecords(scope) ? "granted" : "ungranted",
+		interactions: grantCoversUserRecords(scope) ? "granted" : "ungranted",
+		did,
+		handle,
+	};
 }
 
 /**
@@ -193,7 +210,11 @@ export async function publishingStateFor(
 	opts: { recheck?: boolean } = {},
 ): Promise<PublishingState> {
 	let found = await publishingRouteFor(userId);
-	if (opts.recheck && found.route === "granted" && found.did) {
+	if (
+		opts.recheck &&
+		found.did &&
+		(found.route === "granted" || found.interactions === "granted")
+	) {
 		// Imported here for the same cycle reason as `hosted-accounts.ts` above.
 		const { recheckPublishingGrant } = await import("./oauth-repo-writer.js");
 		await recheckPublishingGrant(found.did);
@@ -251,6 +272,42 @@ export async function publishingPermissionRefusal(
 	};
 }
 
+/** Why an account may not comment, review, vote or follow until Anthers can write the record. */
+export interface InteractionPermissionRefusal {
+	status: 409;
+	body: { error: string; code: "interaction_permission_required" };
+}
+
+/**
+ * Whether this account must give Anthers permission over their repository before it creates a
+ * comment, a review, a vote or a follow.
+ *
+ * 🚨 **Each of those is a record in the account's own repository**, and accepting one Anthers
+ * cannot write is "a comment box that accepts words and silently drops them" — the outcome
+ * *User Records in the Atmosphere* names as the reason an identity is not optional. An account
+ * whose permission lapsed keeps everything it can read and stops creating (Parker, 2026-09-12).
+ *
+ * ⚠️ **Not behind `ATPROTO_PUBLISH_ENABLED`**, which gates asking for the creator tier. The
+ * reader tier is asked for at every door that establishes an identity, so it can always be given
+ * again. Like {@link publishingPermissionRefusal} it reads what is on file and calls nobody's
+ * server, so an outage never refuses a comment, and taking something back — withdrawing a vote,
+ * unfollowing, deleting a comment — is never refused.
+ */
+export async function interactionPermissionRefusal(
+	userId: number,
+): Promise<InteractionPermissionRefusal | null> {
+	const { interactions, handle } = await publishingRouteFor(userId);
+	if (interactions !== "ungranted") return null;
+	const where = handle ? `your repository at @${handle}` : "your repository";
+	return {
+		status: 409,
+		body: {
+			error: `Anthers doesn't have your permission to save this to ${where}. Give it from the banner at the top of the page, then try again.`,
+			code: "interaction_permission_required",
+		},
+	};
+}
+
 /**
  * Take in what a creator granted at the consent screen, and act on it.
  *
@@ -274,7 +331,7 @@ export async function recordPublishGrant(
 	grantedScope: string | null,
 ): Promise<PublishGrantResult> {
 	const [user] = await db
-		.select({ did: users.atprotoDid })
+		.select({ did: users.atprotoDid, isCreator: users.isCreator })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
@@ -284,6 +341,14 @@ export async function recordPublishGrant(
 
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
 	if (await isHostedIdentity(user.did)) return { status: "refused", reason: "hosted" };
+
+	// ⚠️ **A reader is asked for the reader tier alone**, so that is what their answer is judged
+	// against; judging it against the creator tier would call every reader's grant a decline.
+	if (user.isCreator !== true) {
+		if (!grantCoversUserRecords(grantedScope)) return { status: "declined" };
+		const { queueAllReaderRecordsFor } = await import("./reader-record-listing.js");
+		return { status: "granted", queued: await queueAllReaderRecordsFor(userId) };
+	}
 
 	if (!grantCoversCreatorRecords(grantedScope)) return { status: "declined" };
 
@@ -464,4 +529,9 @@ export async function readPdsEmail(session: {
  */
 function grantCoversCreatorRecords(scope: string | null | undefined): boolean {
 	return CREATOR_COLLECTIONS.every((collection) => scopeAllowsWriting(scope, collection));
+}
+
+/** Whether a granted scope lets Anthers write an account's comments, reviews, votes and follows. */
+function grantCoversUserRecords(scope: string | null | undefined): boolean {
+	return USER_COLLECTIONS.every((collection) => scopeAllowsWriting(scope, collection));
 }

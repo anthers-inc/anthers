@@ -30,7 +30,7 @@ import type {
 	VoteRecord,
 } from "./atproto-reader-records.js";
 import { COMMENT_KIND, FOLLOW_KIND, REVIEW_KIND, VOTE_KIND } from "./atproto-record-plan.js";
-import { type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
+import { queueRecordSync, type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
 
 /** What syncing one reader record did. */
 export type ReaderRecordSyncResult<R> = RecordSyncResult<R, UnpublishableReaderReason>;
@@ -204,4 +204,26 @@ export async function syncFollowRecord(
 		},
 		fetchImpl: opts.fetchImpl,
 	});
+}
+
+/**
+ * Ask for every one of an account's comments, reviews, votes and follows to be reconsidered.
+ *
+ * ⭐ **Called when a reader gives the permission again**, the reader's counterpart of
+ * `queueAllCreatorRecordsFor`: anything they wrote while the permission was quietly gone went
+ * unwritten, and giving it back should bring those records out rather than only the next one.
+ * Each row still decides for itself. Returns how many rows were queued.
+ */
+export async function queueAllReaderRecordsFor(userId: number): Promise<number> {
+	const [commentRows, reviewRows, voteRows, followRows] = await Promise.all([
+		db.select({ id: comments.id }).from(comments).where(eq(comments.userId, userId)),
+		db.select({ id: reviews.id }).from(reviews).where(eq(reviews.userId, userId)),
+		db.select({ id: votes.id }).from(votes).where(eq(votes.userId, userId)),
+		db.select({ id: follows.id }).from(follows).where(eq(follows.followerId, userId)),
+	]);
+	for (const row of commentRows) await queueRecordSync("comment", row.id);
+	for (const row of reviewRows) await queueRecordSync("review", row.id);
+	for (const row of voteRows) await queueRecordSync("vote", row.id);
+	for (const row of followRows) await queueRecordSync("follow", row.id);
+	return commentRows.length + reviewRows.length + voteRows.length + followRows.length;
 }
