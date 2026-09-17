@@ -1,0 +1,1 @@
+ALTER TABLE "works" ADD COLUMN "scheduled_release_at" timestamp with time zone;

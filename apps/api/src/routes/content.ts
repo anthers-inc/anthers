@@ -56,10 +56,8 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 	recommendedPercent,
-	workNeedsFile,
 } from "@anthers/shared/content";
 import {
-	type MaturityRating,
 	maturityLabel,
 	normalizeContentNotes,
 	RATING_APPEAL_STATEMENT_MAX,
@@ -144,7 +142,7 @@ import { canBePaid, publishRefusal } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
-import { beginScans, scanInlineUpload, scanReleaseGate } from "../services/safety-scan.js";
+import { beginScans, scanInlineUpload } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import {
 	isShareable,
@@ -156,6 +154,7 @@ import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
+import { releaseRefusal } from "../services/work-release.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -629,9 +628,6 @@ const WORK_TYPES = [
 	"service",
 ] as const;
 
-/** Work types whose media is processed asynchronously before the Work can be released. */
-const PROCESSED_WORK_TYPES = new Set(["video", "audio", "ebook"]);
-
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 /**
@@ -727,6 +723,9 @@ const workBaseSchema = z
 
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
 		visibility: z.enum(["private", "released"]).optional(),
+		// When a private Work is to be released; null clears it. Refused on create, like a
+		// release, and checked on a change by the edit route.
+		scheduledReleaseAt: z.string().datetime().nullable().optional(),
 
 		// The content rating. `unrated` is accepted from nobody: it is the state a Work is
 		// born in and leaves, never a value a client sets, and release is refused while it
@@ -1029,6 +1028,7 @@ function serializeWork(
 		title: item.title,
 		description: item.description,
 		thumbnail: item.thumbnail,
+		scheduledReleaseAt: item.scheduledReleaseAt,
 		sourceKey: item.sourceKey,
 		// The owner's own shape is also what the Work page renders for them, so a stored address the
 		// check refuses is withheld here too rather than framed in the creator's own session.
@@ -1082,34 +1082,6 @@ function serializeWork(
 export { urlToKey };
 
 // ─── Publish / edit / delete helpers ────────────────────────────────────────────
-
-/**
- * The release-readiness gate: given Work IDs, return the ones whose latest transcoding job
- * hasn't reached "completed" (still pending/processing, or failed). Works with no
- * transcoding job (text, images, games, software) are always ready and never appear here.
- *
- * This now gates **release**, not publish. Media readiness was always a property of the
- * media, and the media belongs to the Work — a post that merely links a Work has nothing
- * to wait for, and blocking it would be blocking an announcement on someone else's encode.
- */
-async function unreadyWorks(workIds: number[]): Promise<Array<{ workId: number; status: string }>> {
-	if (workIds.length === 0) return [];
-	const jobs = await db
-		.select({
-			workId: transcodingJobs.workId,
-			status: transcodingJobs.status,
-			createdAt: transcodingJobs.createdAt,
-		})
-		.from(transcodingJobs)
-		.where(inArray(transcodingJobs.workId, workIds))
-		.orderBy(desc(transcodingJobs.createdAt));
-	const latest = new Map<number, string>();
-	for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j.status);
-	const unready: Array<{ workId: number; status: string }> = [];
-	for (const [workId, status] of latest)
-		if (status !== "completed") unready.push({ workId, status });
-	return unready;
-}
 
 /**
  * Which content-bearing fields a PATCH actually changed, as human labels — this drives a
@@ -3035,10 +3007,10 @@ const contentRoutes = new Hono()
 		// A Work is born private. Nothing is visible on upload — release is a separate,
 		// deliberate act, which is the whole point of separating the Catalog from posting.
 		const requestedVisibility = data.visibility ?? "private";
-		if (requestedVisibility === "released") {
+		if (requestedVisibility === "released" || data.scheduledReleaseAt) {
 			return c.json(
 				{
-					error: "Create the Work first, then release it once its media is ready.",
+					error: "Create the Work first, then release or schedule it from its page.",
 					code: "release_on_create",
 				},
 				400,
@@ -3680,128 +3652,45 @@ const contentRoutes = new Hono()
 			work = declared;
 		}
 
-		// 🚨 **The first readiness condition, and the only one that is about the CREATOR
-		// rather than the Work.** Releasing takes a fully set-up creator — creator mode and
-		// completed payout setup — and `publishRefusal` carries the reasons: it is what makes
-		// every creator here a verified adult, since Stripe checks identity and Anthers
-		// deliberately checks nothing, and it means no released Work is payout-ineligible,
-		// which matters because ungated work earns from the Time Pool by the time people spend
-		// with it.
-		//
-		// Placed after the rating is written and before the Work-shaped checks: it is the
-		// cheapest to evaluate and the most fundamental, but the "a refusal never costs the
-		// creator their declaration" rule above applies to it exactly as to the others. The
-		// owner check above makes the caller the Work's creator, so the caller is who is asked.
+		// 🚨 **Scheduling a release asks the conditions only the creator can fix, and asks them
+		// now.** The sweep that releases a scheduled Work runs with nobody at the screen, so a
+		// schedule that could only ever be refused should be refused here, where the answer has a
+		// reader. What resolves on its own — the file arriving, processing, the scan — is exactly
+		// what a schedule is for waiting on, so it is not asked. Only a CHANGE to the schedule is
+		// checked, so a Work waiting past its time on processing stays editable.
+		const scheduleSent = data.scheduledReleaseAt;
+		const scheduleChanged =
+			scheduleSent !== undefined &&
+			(scheduleSent ? Date.parse(scheduleSent) : null) !==
+				(work.scheduledReleaseAt?.getTime() ?? null);
+		// Releasing now supersedes any schedule the same request carries, so it is not asked about.
+		if (scheduleSent && scheduleChanged && data.visibility !== "released") {
+			if ((data.visibility ?? work.visibility) !== "private") {
+				return c.json(
+					{
+						error: "Only a private Work can be scheduled for release.",
+						code: "schedule_not_private",
+					},
+					409,
+				);
+			}
+			if (Date.parse(scheduleSent) <= Date.now()) {
+				return c.json(
+					{ error: "Pick a release time in the future.", code: "schedule_in_past" },
+					400,
+				);
+			}
+			const refusal = await releaseRefusal(work, user);
+			if (refusal?.resolves === "creator") return c.json(refusal.body, refusal.status);
+		}
+
+		// 🚨 **Every release condition lives in `services/work-release.ts`**, because this route
+		// and the `release-scheduled` sweep both release Works, and a condition written here alone
+		// would be one the sweep walks straight past. The rating is already stored above, so a
+		// refusal never costs the creator their declaration.
 		if (releasing) {
-			const refusal = await publishRefusal(user, "release");
+			const refusal = await releaseRefusal(work, user);
 			if (refusal) return c.json(refusal.body, refusal.status);
-		}
-
-		// 🚨 **The file has to have arrived before its processing can be waited on.** The Studio
-		// creates a Work the moment its file is picked and uploads into it afterwards, so a
-		// video with no source is an upload in flight or one that never finished — and
-		// `unreadyWorks` reads only transcoding jobs, which a Work with no file never has, so
-		// without this it would read as ready and release as a page with nothing on it.
-		if (releasing && workNeedsFile(work.type) && !work.sourceKey) {
-			return c.json(
-				{
-					error: "Can't release yet — this Work's file hasn't finished uploading.",
-					code: "media_missing",
-				},
-				409,
-			);
-		}
-
-		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
-			const unready = await unreadyWorks([work.id]);
-			if (unready.length > 0) {
-				return c.json(
-					{
-						error: "Can't release yet — the media is still processing.",
-						code: "media_not_ready",
-						unready,
-					},
-					409,
-				);
-			}
-		}
-
-		// The third readiness condition, and the only one a creator can satisfy instantly.
-		// A Work is born `unrated` and release is what makes it somebody else's business,
-		// so this is the moment to have asked. It reads the STORED rating because the block
-		// above has already written whatever this request declared — which is what lets the
-		// refusal keep the creator's answer instead of costing them it.
-		//
-		// 🚨 **It asks two questions rather than one, and the second is not the same
-		// question later.** Whether a rating has been *declared* is about the creator;
-		// whether the declared rung is one Anthers currently *accepts* is about Anthers, and
-		// a Work can fail the second while answering the first perfectly. The wiki's *Rating Standard* §
-		// Classifying a Work Is Not the Same as Accepting It is why they are separate: a
-		// Work at a closed rung is rated correctly and refused, rather than pushed into
-		// under-declaring one rung down.
-		//
-		// ⚠️ **This half asks only about a Work being released NOW**, and the already-live
-		// case is handled above, before anything is written. Refusing every edit to a Work
-		// whose stored rating is `unrated` or at a closed rung would make Works released
-		// before the rating existed — and Works caught by a rung closing — uneditable.
-		const nextRating = work.maturity as MaturityRating;
-		if (releasing) {
-			const refusal = releaseRatingRefusal(nextRating);
-			if (refusal === "undeclared") {
-				return c.json(
-					{
-						error: "Say how this Work is rated before releasing it.",
-						code: "maturity_undeclared",
-					},
-					409,
-				);
-			}
-			if (refusal === "closed") {
-				const rung = maturityLabel(nextRating);
-				return c.json(
-					{
-						// Names the rung, and says the rating is right rather than wrong.
-						// A creator who reads this as an error to retry will lower the
-						// rating until it goes away, which is the one outcome this refusal
-						// exists to prevent. The rating is already stored, so "leave it as
-						// it is" is a description of what just happened rather than a
-						// request.
-						error: `Anthers isn't accepting ${rung} work at the moment, so this Work can't be released. The rating is right and has been saved — you'll be able to release when ${rung} reopens.`,
-						code: "maturity_rung_closed",
-						rung: nextRating,
-					},
-					409,
-				);
-			}
-		}
-
-		// Detection is the second readiness condition, and it is the same kind of thing as
-		// the first: the wiki's *Publishing* settles that publishing is not gated on encoding but release is
-		// gated on readiness, and an image whose scan has not come back is not ready. It is
-		// checked here rather than on the queued job because release is the moment the object
-		// becomes reachable by somebody other than its uploader.
-		//
-		// 🚨 **It gives way rather than blocking, and that is deliberate.** The window is two
-		// minutes from when the scans were queued; past it the creator releases and the scan
-		// stays owed, because a detection vendor's outage must not stop everyone on Anthers
-		// from publishing. `services/safety-scan.ts` carries the full reasoning, including
-		// why quarantine reaching a released Work is what makes the trade honest.
-		if (releasing) {
-			const gate = await scanReleaseGate(work);
-			if (gate.blocked) {
-				return c.json(
-					{
-						error: "Almost — we're still checking this Work's images. Try again in a moment.",
-						code: "scan_pending",
-						// A count rather than the keys. A storage key is not the creator's
-						// business, and neither is which of their objects we are still asking
-						// about.
-						pending: gate.pending.length,
-						retryAfter: gate.waitUntil?.toISOString() ?? null,
-					},
-					409,
-				);
-			}
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -3839,6 +3728,12 @@ const contentRoutes = new Hono()
 		if (data.authoredPrecision !== undefined && data.authoredPrecision !== null) {
 			updates.authoredPrecision = data.authoredPrecision;
 		}
+
+		if (scheduleSent !== undefined) {
+			updates.scheduledReleaseAt = scheduleSent ? new Date(scheduleSent) : null;
+		}
+		// Releasing now supersedes a schedule, whatever the request said about it.
+		if (data.visibility === "released") updates.scheduledReleaseAt = null;
 
 		if (data.visibility !== undefined) {
 			updates.visibility = data.visibility;

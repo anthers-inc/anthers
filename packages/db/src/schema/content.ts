@@ -162,6 +162,11 @@ export const works = pgTable(
 		// A fourth value `unlisted` is anticipated and deliberately not built yet.
 		visibility: text("visibility").notNull().default("private"), // private | released | withdrawn
 		releasedAt: timestamp("released_at", { withTimezone: true }),
+		// When a private Work is due to be released, set by its creator. `release-scheduled`
+		// releases it once the time has come AND every release condition holds, so a Work still
+		// uploading or processing goes out as soon as it is ready rather than on the clock. A
+		// condition only the creator can fix clears it — see `jobs/release-scheduled.ts`.
+		scheduledReleaseAt: timestamp("scheduled_release_at", { withTimezone: true }),
 		// When it left public circulation. Recorded rather than derived because the
 		// retention model gives buyers a *funded rescue window* — notified, with time to
 		// download, after which the Work is removed for real. That sweep is NOT built:

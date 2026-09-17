@@ -59,6 +59,7 @@ import { keyToPreview, uploadImageFile } from "../components/post/mediaUpload";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { isoToLocalInput, localInputToIso } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
@@ -208,6 +209,18 @@ function WorkForm({ editing }: { editing: Work }) {
 		editing.visibility === "released" ? "released" : "private",
 	);
 
+	// A scheduled release, as the datetime input holds it. Sent only when changed, so a Work
+	// waiting past its time on processing still saves: the route checks a changed schedule, and
+	// an unchanged one in the past would read as a new time that has already gone by.
+	const loadedSchedule = isoToLocalInput(editing.scheduledReleaseAt);
+	const [scheduledRelease, setScheduledRelease] = useState(loadedSchedule);
+	const scheduledIso = localInputToIso(scheduledRelease);
+	const scheduleHint = !scheduledIso
+		? "Pick a time and save, and it releases then on its own."
+		: scheduledRelease === loadedSchedule && Date.parse(scheduledIso) <= Date.now()
+			? "Its release time has passed. It goes out as soon as its file has finished uploading, processing and being checked."
+			: "It releases at this time once it's ready, and if its file is still uploading or processing then, as soon as that finishes. If something only you can fix stops it, the schedule is cleared and we'll email you.";
+
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
 
@@ -326,6 +339,9 @@ function WorkForm({ editing }: { editing: Work }) {
 			// Only when changed here: see the header on why a save must not carry what was loaded.
 			...(thumbnailTouched.current ? { thumbnail: thumbnailUrl } : {}),
 			visibility,
+			...(visibility !== "released" && scheduledRelease !== loadedSchedule
+				? { scheduledReleaseAt: scheduledIso }
+				: {}),
 			streamEnabled,
 			downloadEnabled,
 			seedAccess: serializeSeedRows(seedRows),
@@ -699,10 +715,45 @@ function WorkForm({ editing }: { editing: Work }) {
 							disabled={
 								!maturity || payoutsReady === false || (fileMissing && visibility !== "released")
 							}
-							onChange={(e) => setVisibility(e.target.checked ? "released" : "private")}
+							onChange={(e) => {
+								setVisibility(e.target.checked ? "released" : "private");
+								// Releasing now supersedes a schedule, as it does on the server.
+								if (e.target.checked) setScheduledRelease("");
+							}}
 						/>
 						<span className="label-text text-sm">Released to my public Catalog</span>
 					</label>
+					{/*
+					 * Scheduling. It is refused for the things only the creator can fix, exactly as the
+					 * checkbox is, and not for a file still uploading or processing, because waiting on
+					 * those is what a schedule is for. `jobs/release-scheduled.ts` is what happens at
+					 * the time.
+					 */}
+					{visibility !== "released" && (
+						<div className="flex flex-col gap-1">
+							<span className="text-sm">Or release it later</span>
+							<div className="flex flex-wrap items-center gap-2">
+								<input
+									type="datetime-local"
+									className="input input-bordered input-sm"
+									aria-label="Release time"
+									value={scheduledRelease}
+									disabled={!maturity || payoutsReady === false}
+									onChange={(e) => setScheduledRelease(e.target.value)}
+								/>
+								{scheduledRelease && (
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										onClick={() => setScheduledRelease("")}
+									>
+										Clear
+									</button>
+								)}
+							</div>
+							<p className="text-xs text-base-content/50">{scheduleHint}</p>
+						</div>
+					)}
 					{fileMissing && visibility !== "released" && (
 						<p className="text-xs text-warning">
 							{fileUploading

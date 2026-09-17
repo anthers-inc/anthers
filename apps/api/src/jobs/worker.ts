@@ -35,6 +35,7 @@ import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
 import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
 import { reconcileListings } from "./reconcile-listings.js";
+import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
 import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
@@ -186,6 +187,17 @@ async function start() {
 		for (const job of jobs) {
 			const n = await publishScheduled();
 			if (n > 0) console.log(`[publish-scheduled] job ${job.id}: published ${n} scheduled post(s)`);
+		}
+	});
+
+	await queue.work(QUEUES.RELEASE_SCHEDULED, async (jobs) => {
+		for (const job of jobs) {
+			const { released, cleared } = await releaseScheduled();
+			if (released > 0 || cleared > 0) {
+				console.log(
+					`[release-scheduled] job ${job.id}: released ${released}, cleared ${cleared} schedule(s)`,
+				);
+			}
 		}
 	});
 

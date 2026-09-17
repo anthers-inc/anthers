@@ -200,6 +200,8 @@ export const QUEUES = {
 	// changed directly in SQL all leave a record disagreeing with its row and nothing noticing.
 	RECONCILE_LISTINGS: "reconcile-listings",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
+	// Release private Works whose scheduled release time has come, once they are ready.
+	RELEASE_SCHEDULED: "release-scheduled",
 	// Hash a stored object and ask a detection vendor about the hash. Keyed on the storage
 	// key rather than the Work, because that is the only identifier both upload paths share:
 	// the presigned PUT never passes the bytes through the API, so the object exists in R2
@@ -337,6 +339,10 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 5,
 	},
+	[QUEUES.RELEASE_SCHEDULED]: {
+		retryLimit: 1,
+		expireInMinutes: 5,
+	},
 	// Reads two third-party services, so a transient failure is expected rather than
 	// exceptional — but a retry budget is not what covers that. The sweep is idempotent and
 	// runs again in an hour, and an unreadable directory is deliberately not a finding, so
@@ -381,6 +387,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
+	[QUEUES.RELEASE_SCHEDULED, "* * * * *"], // every minute — releases due Works that are ready
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
 	// creators out of these rows, so pruning ahead of it would cost earnings rather
 	// than privacy. The retention window is months wide, so the ordering has enormous
