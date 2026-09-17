@@ -28,6 +28,7 @@ import {
 	type WorkUploadTarget,
 	workUploads,
 } from "../../lib/work-uploads";
+import TranscodingStatus from "../media/TranscodingStatus";
 import { keyToPreview } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
@@ -231,6 +232,18 @@ export function WorkFileSection({
 					<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
 						<span className="flex-1 truncate text-sm">{upload?.fileName ?? "Uploaded file"}</span>
 						<span className="badge badge-success badge-sm">Uploaded</span>
+					</div>
+				)}
+				{/* The processing a landed file starts, with its estimate where there is one. The
+				    page re-reads the row while it runs; the block goes once processing completes. */}
+				{work.transcoding && work.transcoding.status !== "completed" && (
+					<div className="mt-2">
+						<TranscodingStatus
+							status={work.transcoding.status}
+							progress={work.transcoding.progress ?? 0}
+							etaSeconds={work.transcoding.etaSeconds}
+							errorMessage={work.transcoding.errorMessage ?? undefined}
+						/>
 					</div>
 				)}
 			</FormField>

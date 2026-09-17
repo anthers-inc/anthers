@@ -30,6 +30,7 @@
 		"./economics/SupportStepper": "./src/components/economics/SupportStepper.tsx",
 		"./economics/EarningsBasis": "./src/components/economics/EarningsBasis.tsx",
 		"./economics/TakeHome": "./src/components/economics/TakeHome.tsx",
+		"./media/TranscodingStatus": "./src/components/media/TranscodingStatus.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
 		"./ui/ThemeToggle": "./src/components/ui/ThemeToggle.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",

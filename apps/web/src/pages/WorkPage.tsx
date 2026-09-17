@@ -17,6 +17,7 @@
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
+import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -32,7 +33,6 @@ import SaveButton from "../components/library/SaveButton";
 import AudioPlayer from "../components/media/AudioPlayer";
 import ComicReader from "../components/media/ComicReader";
 import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
-import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
 import InlineUnlock from "../components/post/InlineUnlock";
 import StickerBar from "../components/post/StickerBar";

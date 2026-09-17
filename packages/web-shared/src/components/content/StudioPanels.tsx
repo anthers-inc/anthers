@@ -20,11 +20,14 @@ import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XMarkIcon } from "@heroicons/reac
 import type { ReactNode } from "react";
 import { postUrl } from "../../lib/postUrl";
 import { Link } from "../../lib/router";
-import { studioUrl } from "../../lib/studio";
+import { studioEditWorkUrl, studioUrl } from "../../lib/studio";
 import type { CreatorEarnings, PostListItem, Project, Work } from "../../lib/types";
+import type { WorkUpload } from "../../lib/work-uploads";
+import { processingQueue } from "./processing";
 import { accessState } from "./work-state";
 
 export const PANEL_LABELS: Record<StudioPanel, string> = {
+	processing: "Processing",
 	earnings: "Earnings",
 	catalog: "Catalog",
 	projects: "Projects",
@@ -32,6 +35,8 @@ export const PANEL_LABELS: Record<StudioPanel, string> = {
 };
 
 export interface PanelData {
+	/** Files this tab is uploading, which the processing panel lists before anything processes. */
+	uploads: readonly WorkUpload[];
 	earnings: CreatorEarnings | null;
 	works: Work[];
 	projects: Project[];
@@ -59,6 +64,48 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
 
 export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: PanelData }) {
 	switch (panel) {
+		case "processing": {
+			const rows = processingQueue(data.works, data.uploads);
+			return (
+				<Panel title="Processing">
+					{rows.length === 0 ? (
+						<p className="text-sm text-base-content/60">
+							Nothing is uploading or processing. A Work you upload shows its progress here, and
+							stays for a day after it's ready.
+						</p>
+					) : (
+						<ul className="flex flex-col gap-1 text-sm">
+							{rows.map((row) => (
+								<li key={`${row.state}-${row.workId}`} className="flex items-center gap-2">
+									{row.work ? (
+										<Link
+											to={studioEditWorkUrl(row.work.publicId ?? row.work.id)}
+											className="link link-hover flex-1 truncate"
+										>
+											{row.title}
+										</Link>
+									) : (
+										<span className="flex-1 truncate">{row.title}</span>
+									)}
+									<span
+										className={`badge badge-sm whitespace-nowrap ${
+											row.state === "finished"
+												? "badge-success"
+												: row.state === "uploading"
+													? "badge-info"
+													: "badge-warning"
+										}`}
+									>
+										{row.detail}
+									</span>
+								</li>
+							))}
+						</ul>
+					)}
+				</Panel>
+			);
+		}
+
 		case "earnings":
 			return (
 				<Panel title="Earnings">

@@ -23,6 +23,9 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { db } from "@anthers/db/client";
+import { transcodingJobs, works } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const TITLE_PREFIX = "Upload walk ";
@@ -86,6 +89,11 @@ async function sweep(): Promise<void> {
 // In `afterAll`, so a walk that fails halfway still takes its Work back.
 test.afterAll(sweep);
 
+// 🚨 **Serial, because the sweep is by title prefix.** Run in parallel workers, the first walk's
+// `afterAll` deleted the second walk's Work partway through it, and the symptom was a page that
+// stopped updating — every re-read answered 404 — which reads as a polling bug.
+test.describe.configure({ mode: "serial" });
+
 const cardFor = (page: import("@playwright/test").Page) =>
 	page.locator(".card").filter({ hasText: STEM });
 
@@ -144,4 +152,67 @@ test("a video Work is made from its file and edited while the file uploads", asy
 	expect(work.sourceKey, "the save erased the file that had just arrived").toBeTruthy();
 	// Arriving is what starts processing, so a job exists whatever state the worker has it in.
 	expect(work.transcoding).not.toBeNull();
+});
+
+/**
+ * The page a creator lands on after uploading follows the processing it started.
+ *
+ * ⚠️ **The job's progress is written straight to the database, not produced by a worker.** No
+ * worker runs in a browser session, and a real encode of a clip small enough for the suite
+ * finishes before a page could show it moving. What is under test is that the page reads the
+ * job again while it runs and says what it says — the wiring a unit test of the wording cannot
+ * reach — so the walk moves the job itself and watches the page catch up.
+ */
+test("a Work's page and the Dashboard follow its processing", async ({ page, context }) => {
+	session = await signInAsMediaFixture(context);
+
+	const created = await fetch(`${API_URL}/api/content/works`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Cookie: `session=${session}`,
+			Origin: WEB_ORIGIN,
+		},
+		body: JSON.stringify({ type: "video", title: `${STEM} processing` }),
+	});
+	const { work } = (await created.json()) as { work: { id: number; publicId: number } };
+	await db
+		.update(works)
+		.set({ sourceKey: `creators/0/video/upload-walk-${work.id}.mp4` })
+		.where(eq(works.id, work.id));
+	await db.insert(transcodingJobs).values({
+		workId: work.id,
+		mediaType: "video",
+		status: "processing",
+		progress: 43,
+		etaSeconds: 150,
+	});
+
+	await page.goto(`/studio/works/${work.publicId}/edit`);
+	await expect(page.getByText("43%", { exact: true })).toBeVisible();
+	await expect(page.getByText("~2m 30s left")).toBeVisible();
+
+	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page
+	// says nothing about one rather than an empty "left".
+	await db
+		.update(transcodingJobs)
+		.set({ progress: 80, etaSeconds: null })
+		.where(eq(transcodingJobs.workId, work.id));
+	await expect(page.getByText("80%", { exact: true })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByText(/ left$/)).toHaveCount(0);
+
+	await db
+		.update(transcodingJobs)
+		.set({ status: "completed", progress: 100, updatedAt: new Date() })
+		.where(eq(transcodingJobs.workId, work.id));
+	await expect(page.getByText("Processing…")).toHaveCount(0, { timeout: 15_000 });
+
+	// And the Dashboard keeps it for the day, as ready.
+	await page.getByRole("navigation").getByRole("link", { name: "Dashboard", exact: true }).click();
+	const panel = page
+		.locator("section")
+		.filter({ has: page.getByRole("heading", { name: "Processing" }) });
+	await expect(panel.getByRole("listitem").filter({ hasText: `${STEM} processing` })).toContainText(
+		"Ready",
+	);
 });

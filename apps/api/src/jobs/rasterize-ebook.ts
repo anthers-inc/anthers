@@ -93,7 +93,7 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0 })
+		.set({ status: "processing", progress: 0, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
