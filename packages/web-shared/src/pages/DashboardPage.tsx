@@ -61,7 +61,21 @@ export default function DashboardPage() {
 	const uploading = new Set(uploads.filter(isUploading).map((u) => u.workId));
 	const landed = uploads.filter((u) => u.status === "done").length;
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read on each upload that lands
+	// Follow processing while anything is running, so the processing panel's progress moves and a
+	// Work that finishes drops off the worklist's view of it. Skipped while the tab is hidden.
+	const [tick, setTick] = useState(0);
+	const running = works.some(
+		(w) => w.transcoding?.status === "pending" || w.transcoding?.status === "processing",
+	);
+	useEffect(() => {
+		if (!running) return;
+		const interval = setInterval(() => {
+			if (!document.hidden) setTick((t) => t + 1);
+		}, 4000);
+		return () => clearInterval(interval);
+	}, [running]);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read on each upload that lands, and on each tick while processing
 	useEffect(() => {
 		let live = true;
 		client.api.content.works
@@ -77,7 +91,7 @@ export default function DashboardPage() {
 		return () => {
 			live = false;
 		};
-	}, [landed]);
+	}, [landed, tick]);
 
 	// The panels' own data. Fetched whatever the layout says, because a panel turned on while
 	// arranging should fill immediately rather than after a reload — these are two small
@@ -224,7 +238,7 @@ export default function DashboardPage() {
 							<StudioPanelBody
 								key={panel}
 								panel={panel}
-								data={{ earnings, works, projects, posts }}
+								data={{ uploads, earnings, works, projects, posts }}
 							/>
 						))}
 					</div>

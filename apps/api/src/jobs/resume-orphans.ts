@@ -96,7 +96,11 @@ export async function resumeOrphanedTranscodes(
 	if (unsourced.length > 0) {
 		await db
 			.update(transcodingJobs)
-			.set({ status: "failed", errorMessage: "No source file on content item" })
+			.set({
+				status: "failed",
+				errorMessage: "No source file on content item",
+				updatedAt: new Date(),
+			})
 			.where(
 				inArray(
 					transcodingJobs.id,
@@ -121,7 +125,7 @@ export async function resumeOrphanedTranscodes(
 		// same as it being unfinishable, and a later release that knows the type can run it.
 		await db
 			.update(transcodingJobs)
-			.set({ status: "pending", progress: 0 })
+			.set({ status: "pending", progress: 0, updatedAt: new Date() })
 			.where(eq(transcodingJobs.id, job.id));
 		const q = RESUME_QUEUE[job.mediaType];
 		if (!q) {

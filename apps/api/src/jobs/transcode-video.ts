@@ -211,7 +211,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 	// Mark as processing.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0 })
+		.set({ status: "processing", progress: 0, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
@@ -363,6 +363,8 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			.update(transcodingJobs)
 			.set({
 				status: "completed",
+				// When it finished, which is what "recently finished" on the Dashboard reads.
+				updatedAt: new Date(),
 				progress: 100,
 				etaSeconds: null,
 				hlsManifestUrl: manifestUrl,
@@ -374,6 +376,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			.update(transcodingJobs)
 			.set({
 				status: "failed",
+				updatedAt: new Date(),
 				errorMessage: message.slice(0, 1000),
 			})
 			.where(eq(transcodingJobs.id, jobId));

@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * A Work's processing, as a block: waiting, a progress bar with an estimate when one exists, or
+ * the failure. Renders nothing once processing has completed.
+ *
+ * Shared between the public Work page, where a creator opening their own Work sees it in place of
+ * the player, and the Studio's Edit page, where a creator lands straight after uploading. The
+ * wording comes from `processing.ts`, so the badge, this block and the Dashboard say it alike.
+ */
+
+import { etaLeft } from "../content/processing";
+
 interface TranscodingStatusProps {
 	status: string;
 	progress: number;
 	etaSeconds?: number | null;
 	errorMessage?: string;
-}
-
-/** Human ETA, e.g. "~2m 30s remaining". */
-function formatEta(sec: number): string {
-	if (sec < 60) return `~${sec}s remaining`;
-	const m = Math.floor(sec / 60);
-	const s = sec % 60;
-	if (m < 60) return s > 0 ? `~${m}m ${s}s remaining` : `~${m}m remaining`;
-	const h = Math.floor(m / 60);
-	return `~${h}h ${m % 60}m remaining`;
 }
 
 export default function TranscodingStatus({
@@ -23,13 +24,14 @@ export default function TranscodingStatus({
 	errorMessage,
 }: TranscodingStatusProps) {
 	if (status === "completed") return null;
+	const eta = etaLeft(etaSeconds);
 
 	return (
 		<div className="rounded-lg bg-base-200 p-4">
 			{status === "pending" && (
 				<div className="flex items-center gap-3">
 					<span className="loading loading-spinner loading-sm" />
-					<span className="text-sm">Waiting to process...</span>
+					<span className="text-sm">Waiting to process…</span>
 				</div>
 			)}
 
@@ -38,14 +40,12 @@ export default function TranscodingStatus({
 					<div className="flex items-center justify-between text-sm">
 						<span className="flex items-center gap-2">
 							<span className="loading loading-spinner loading-sm" />
-							Processing...
+							Processing…
 						</span>
 						<span className="font-mono">{progress}%</span>
 					</div>
 					<progress className="progress progress-primary w-full" value={progress} max="100" />
-					{etaSeconds != null && etaSeconds > 0 && (
-						<span className="text-xs text-base-content/50 self-end">{formatEta(etaSeconds)}</span>
-					)}
+					{eta && <span className="text-xs text-base-content/50 self-end">{eta}</span>}
 				</div>
 			)}
 

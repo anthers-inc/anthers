@@ -16,18 +16,20 @@
  */
 
 /** Every panel that exists. The stored layout is a subset of these, in the creator's order. */
-export const STUDIO_PANELS = ["earnings", "catalog", "projects", "posts"] as const;
+export const STUDIO_PANELS = ["processing", "earnings", "catalog", "projects", "posts"] as const;
 
 export type StudioPanel = (typeof STUDIO_PANELS)[number];
 
 /**
  * What a creator sees before they have arranged anything.
  *
- * Two, deliberately. The Dashboard's job is to be scannable, and a default that turns
+ * Three, deliberately. The Dashboard's job is to be scannable, and a default that turns
  * everything on makes the page the overview-of-everything it stopped being — the arranging
- * is then damage control rather than a preference.
+ * is then damage control rather than a preference. **Processing leads** (Parker, 2026-09-11):
+ * a creator who has just uploaded comes here to see how far along it is, and when nothing is
+ * running the panel is a single line.
  */
-export const DEFAULT_STUDIO_PANELS: StudioPanel[] = ["earnings", "catalog"];
+export const DEFAULT_STUDIO_PANELS: StudioPanel[] = ["processing", "earnings", "catalog"];
 
 export function isStudioPanel(value: unknown): value is StudioPanel {
 	return typeof value === "string" && (STUDIO_PANELS as readonly string[]).includes(value);

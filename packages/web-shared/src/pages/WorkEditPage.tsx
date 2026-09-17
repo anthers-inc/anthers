@@ -39,7 +39,7 @@ import {
 	normalizeContentNotes,
 } from "@anthers/shared/content-rating";
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RatingAppeal from "../components/content/RatingAppeal";
 import {
@@ -149,8 +149,11 @@ function WorkForm({ editing }: { editing: Work }) {
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		editing.thumbnail ? keyToPreview(editing.thumbnail) : null,
 	);
-	/** Whether the creator changed the thumbnail here, and so whether a save may send it. */
-	const [thumbnailTouched, setThumbnailTouched] = useState(false);
+	/**
+	 * Whether the creator changed the thumbnail here, and so whether a save may send it. A ref,
+	 * because the re-reads below run from timers and must see the answer as it is now.
+	 */
+	const thumbnailTouched = useRef(false);
 
 	const details = useWorkDetails(type, editing);
 
@@ -217,31 +220,45 @@ function WorkForm({ editing }: { editing: Work }) {
 	const [readAfter, setReadAfter] = useState(0);
 	const buildUploads = uploads.filter((u) => u.target.kind === "build" && u.status !== "done");
 	const fileUploading = uploads.some((u) => u.target.kind === "source" && isUploading(u));
+	/**
+	 * Re-read the media half of the row — the file, its processing, the builds, and a thumbnail
+	 * the server set — without touching anything the creator has typed.
+	 */
+	const refreshMedia = async (afterLanded?: number) => {
+		const fresh = await fetchOwnWork(editing.id).catch(() => null);
+		if (!fresh) return;
+		if (afterLanded != null) setReadAfter(afterLanded);
+		setCurrent((prev) => ({
+			...prev,
+			sourceKey: fresh.sourceKey,
+			thumbnail: fresh.thumbnail,
+			assets: fresh.assets,
+			transcoding: fresh.transcoding,
+		}));
+		if (!thumbnailTouched.current && fresh.thumbnail) {
+			setThumbnailUrl(fresh.thumbnail);
+			setThumbnailPreview(keyToPreview(fresh.thumbnail));
+		}
+	};
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read on each upload that lands, and only then
 	useEffect(() => {
-		if (landed === 0) return;
-		let live = true;
-		fetchOwnWork(editing.id)
-			.then((fresh) => {
-				if (!live || !fresh) return;
-				setReadAfter(landed);
-				setCurrent((prev) => ({
-					...prev,
-					sourceKey: fresh.sourceKey,
-					thumbnail: fresh.thumbnail,
-					assets: fresh.assets,
-					transcoding: fresh.transcoding,
-				}));
-				if (!thumbnailTouched && fresh.thumbnail) {
-					setThumbnailUrl(fresh.thumbnail);
-					setThumbnailPreview(keyToPreview(fresh.thumbnail));
-				}
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
+		if (landed > 0) void refreshMedia(landed);
 	}, [landed]);
+
+	// While the file is processing, follow it, so the progress and estimate move on the page a
+	// creator lands on after uploading. Ticks are skipped while the tab is hidden, as the
+	// Catalog's are.
+	const running =
+		current.transcoding?.status === "pending" || current.transcoding?.status === "processing";
+	// biome-ignore lint/correctness/useExhaustiveDependencies: poll while running, and only then
+	useEffect(() => {
+		if (!running) return;
+		const interval = setInterval(() => {
+			if (!document.hidden) void refreshMedia();
+		}, 4000);
+		return () => clearInterval(interval);
+	}, [running]);
 
 	// The creator's own Badge rungs. Best-effort: without them the table still renders its
 	// baseline row, which is the row that decides Public Access and the only one most
@@ -266,7 +283,7 @@ function WorkForm({ editing }: { editing: Work }) {
 	}, []);
 
 	const handleThumbnail = async (file: File) => {
-		setThumbnailTouched(true);
+		thumbnailTouched.current = true;
 		setThumbnailPreview(URL.createObjectURL(file));
 		try {
 			const { url } = await uploadImageFile(file, "thumbnail");
@@ -307,7 +324,7 @@ function WorkForm({ editing }: { editing: Work }) {
 			// is a real edit, and an omitted field cannot express it.
 			...(type === "audio" ? { lyrics } : {}),
 			// Only when changed here: see the header on why a save must not carry what was loaded.
-			...(thumbnailTouched ? { thumbnail: thumbnailUrl } : {}),
+			...(thumbnailTouched.current ? { thumbnail: thumbnailUrl } : {}),
 			visibility,
 			streamEnabled,
 			downloadEnabled,
@@ -493,7 +510,7 @@ function WorkForm({ editing }: { editing: Work }) {
 							compact
 							onFileSelect={handleThumbnail}
 							onClear={() => {
-								setThumbnailTouched(true);
+								thumbnailTouched.current = true;
 								setThumbnailUrl("");
 								setThumbnailPreview(null);
 							}}
