@@ -10,11 +10,13 @@
  * on 2026-09-11 (`scripts/atproto-scope-probe.ts`), so a creator can grant Anthers exactly the
  * right to keep their Work listings and nothing else.
  *
- * 🚨 **Holding no grant is the ORDINARY case and must stay that way.** Nobody is asked for this
- * to publish on Anthers, nothing about releasing a Work changes without it, and a creator who
- * never grants it is never told they are missing anything. `no_identity` and `not_granted`
- * below are both answered quietly for that reason — the day one of them starts reading as a
- * problem is the day Anthers has quietly made a network permission a condition of publishing.
+ * 🚨 **A creator without a grant cannot publish, and this module is not where they hear it.**
+ * An identity Anthers can write to is mandatory (Parker, 2026-09-12), so a missing grant is
+ * refused before anything is published (`publishingPermissionRefusal`) and warned about before
+ * anybody tries (the banner and Studio settings, through `publishingStateFor`). By the time a
+ * writer is asked for, the question has already been put to the creator, so `not_granted` is
+ * answered here quietly — a job skipping a record it cannot write — rather than as a failure to
+ * retry or a log line to page somebody about.
  *
  * ⚠️ **The stored scope is a gate, and the authorization server is the authority.** What the
  * column says is checked first because it costs nothing and skips a round trip for the majority
@@ -137,6 +139,62 @@ export async function oauthWriterFor(
 	}
 
 	return { writer: writerOver(session) };
+}
+
+/** How long one grant's answer stands before `recheckPublishingGrant` asks again. */
+export const GRANT_RECHECK_MS = 15 * 60 * 1000;
+
+/** When each DID's grant was last asked about, by this process. */
+const lastRecheck = new Map<string, number>();
+
+/**
+ * Ask the creator's authorization server whether a grant on file still holds, and forget it if
+ * not. True when the grant turned out to be gone.
+ *
+ * ⭐ **This is what lets a creator be warned before they try something rather than when it is
+ * refused.** The stored scope changes only when a write is attempted, so a permission taken back
+ * at the creator's own server would read as granted until their next release, which is exactly
+ * the moment Parker asked not to be the first they hear of it (2026-09-12). The banner's state
+ * request is what calls this, so signing in and coming back to the site both check.
+ *
+ * ⚠️ **Restoring the session is the check, and it is the same call a write makes.** A token past
+ * its expiry is refreshed, and a refresh is where the server says whether the grant survives —
+ * no request is made against the repository itself.
+ *
+ * 🚨 **Only an answer that the grant is gone forgets it**, for the reason `oauthWriterFor` gives:
+ * a server that is down, slow or answering nonsense is having a bad moment, and treating that as
+ * a withdrawal would turn somebody else's outage into a creator locked out of publishing.
+ *
+ * ⚠️ **At most once per {@link GRANT_RECHECK_MS} per DID, per process.** Several open tabs and
+ * every publish control ask for the state, and none of them should each cost a round trip to
+ * somebody else's server. The memory is per process, so another instance may ask again sooner,
+ * which costs a request and nothing else.
+ */
+export async function recheckPublishingGrant(did: string, now = Date.now()): Promise<boolean> {
+	const last = lastRecheck.get(did);
+	if (last !== undefined && now - last < GRANT_RECHECK_MS) return false;
+	lastRecheck.set(did, now);
+
+	try {
+		const session = await getAtprotoClient().restore(did);
+		const granted = await session.getTokenInfo().then(
+			(info) => info.scope as string | undefined,
+			() => undefined,
+		);
+		if (granted !== undefined) await recordGrantedScope(did, granted);
+		return false;
+	} catch (err) {
+		if (err instanceof TokenRevokedError || err instanceof TokenInvalidError) {
+			await recordGrantedScope(did, null);
+			console.log(`[oauth-repo-writer] ${did}: the grant is gone, so publishing is off`);
+			return true;
+		}
+		console.warn(
+			`[oauth-repo-writer] could not recheck the grant for ${did}: ` +
+				`${err instanceof Error ? err.message : String(err)}`,
+		);
+		return false;
+	}
 }
 
 /** The shape of an XRPC answer, as far as this module cares. */

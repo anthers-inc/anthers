@@ -13,8 +13,9 @@
  * a Work, which is where the media actually is. A post may go live announcing a Work that
  * is still encoding, exactly as it may link one the reader cannot open.
  *
- * 🚨 **Only a fully set-up creator's draft goes live** — creator mode and completed payout
- * setup, the rule `publishRefusal` holds for every publish. This is the one path that
+ * 🚨 **Only a fully set-up creator's draft goes live** — creator mode, a permission Anthers can
+ * write their records with, and completed payout setup, the rule `publishRefusal` holds for
+ * every publish. This is the one path that
  * publishes with nobody making a request, so the route's check cannot cover it: a creator can
  * schedule while set up and lose it before the date. A draft whose author is no longer set up
  * — or whose account is gone, leaving `creator_id` null — has its schedule cleared rather than
@@ -24,7 +25,7 @@
 import { db } from "@anthers/db";
 import { posts, users } from "@anthers/db/schema";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
-import { publishRefusal } from "../services/payouts.js";
+import { publishRefusal } from "../services/publish-refusal.js";
 import { queueRecordSync } from "../services/record-sync.js";
 
 /** Publish every due scheduled draft. Returns how many were published. */

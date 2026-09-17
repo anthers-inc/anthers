@@ -14,10 +14,9 @@
  * look at the hub. The fallthrough happens on one condition only — that there is no hosted
  * identity at all — which is a statement about the account rather than about the machinery.
  *
- * ⚠️ **Every reason a creator gets no writer is ordinary except two.** Most accounts have no
- * hosted identity and have granted nothing, and that is the design rather than a gap: nobody is
- * asked for a network permission in order to publish on Anthers. {@link isOrdinary} is what
- * separates the quiet majority from the two states somebody should actually see.
+ * ⚠️ **Some reasons an account gets no writer are a job's business and some are not.**
+ * {@link isOrdinary} separates them, for what a sync job logs and retries rather than for what a
+ * person is told.
  */
 import type { RepoWriter } from "./atproto-repo.js";
 import { hostedWriterFor, type NoWriterReason } from "./hosted-repo-writer.js";
@@ -31,12 +30,13 @@ export type AccountWriterResult =
 	| { writer: null; reason: NoAccountWriterReason };
 
 /**
- * Whether a missing writer is the ordinary state of affairs rather than something wrong.
+ * Whether a missing writer is nothing for a sync job to report or retry.
  *
  * ⭐ **The point of saying it once is that logging is where this gets quietly inverted.** An
- * identity held elsewhere with no grant is an ordinary state for an account to be in, and a sweep
- * that reported it would train whoever reads its output to skim — at which point the reasons
- * that matter go past unread as well.
+ * identity held elsewhere with no grant cannot publish and is refused and warned about where the
+ * creator will see it — `publishingPermissionRefusal`, and the banner reading `publishingStateFor`
+ * — so a job meeting one has nothing to add, and a sweep that logged every such account would
+ * train whoever reads its output to skim. The reasons that matter would then go past unread too.
  */
 export function isOrdinary(reason: NoAccountWriterReason): boolean {
 	return reason === "no_identity" || reason === "not_granted";

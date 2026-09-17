@@ -18,6 +18,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { isoToLocalInput } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
 import { postUrl } from "../lib/postUrl";
+import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioEditPostUrl, studioUrl } from "../lib/studio";
@@ -64,6 +65,9 @@ export default function PostFormPage() {
 	// post stays editable after payouts lapse.
 	const [wasPublished, setWasPublished] = useState(false);
 	const payoutsReady = usePayoutsReady();
+	const permissionMissing = usePublishingPermissionMissing();
+	/** Going live is refused for either, so neither is offered — but a live post stays editable. */
+	const goLiveBlocked = !wasPublished && (payoutsReady === false || permissionMissing === true);
 
 	// ── UI ──
 	const [loading, setLoading] = useState(true);
@@ -340,6 +344,20 @@ export default function PostFormPage() {
 						</p>
 					</FormField>
 
+					{permissionMissing === true && !wasPublished && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								<strong>Give Anthers permission to publish first.</strong> A post is written into
+								your own repository when it goes out, and Anthers doesn't have your permission to do
+								that. You can keep this as a draft until then.{" "}
+								<Link to={studioUrl("/settings")} className="link">
+									Give it in Studio settings
+								</Link>
+								.
+							</span>
+						</div>
+					)}
+
 					{payoutsReady === false && !wasPublished && (
 						<div className="alert alert-warning text-sm">
 							<span>
@@ -385,7 +403,7 @@ export default function PostFormPage() {
 								type="button"
 								className="btn btn-primary"
 								onClick={() => handleSubmit(false)}
-								disabled={saving || payoutsReady === false}
+								disabled={saving || payoutsReady === false || permissionMissing === true}
 							>
 								{saving ? "Saving..." : "Schedule"}
 							</button>
@@ -394,7 +412,7 @@ export default function PostFormPage() {
 								type="button"
 								className="btn btn-primary"
 								onClick={() => handleSubmit(true)}
-								disabled={saving || (payoutsReady === false && !wasPublished)}
+								disabled={saving || goLiveBlocked}
 							>
 								{saving ? "Saving..." : "Publish Post"}
 							</button>

@@ -1345,16 +1345,17 @@ export default function SettingsPage() {
 	 * already is not asked twice. Both are silent, because the honest answer in each case is
 	 * that publishing already works.
 	 *
-	 * ⚠️ **Every failure here is swallowed on purpose.** Becoming a creator succeeded; a
-	 * permission we could not ask for is a thing to offer again from Studio settings, never a
-	 * reason to tell somebody their setting did not save.
+	 * ⚠️ **Every failure here is swallowed on purpose.** Becoming a creator succeeded, and a
+	 * permission we could not ask for is not a reason to tell somebody their setting did not save.
+	 * They cannot publish without it, and the banner at the top of every page says so and asks
+	 * again.
 	 */
 	const handOverToPublishingGrant = async (): Promise<boolean> => {
 		try {
 			const res = await apiFetch("/api/atproto/publishing");
 			if (!res.ok) return false;
 			const state = (await res.json()) as { route: string; offered: boolean };
-			if (state.route !== "available" || !state.offered) return false;
+			if (state.route !== "ungranted" || !state.offered) return false;
 
 			setRedirecting(true);
 			await grantPublishing();
@@ -1382,8 +1383,9 @@ export default function SettingsPage() {
 			{redirecting && (
 				<div className="alert alert-info mb-4">
 					<span>
-						You're a creator now. Taking you to Bluesky to allow Anthers to publish your catalog
-						listings — it's the one permission publishing needs.
+						You're a creator now. Taking you to the server your identity lives on to give Anthers
+						permission to publish your Works, posts and projects — you need to give it before you
+						can publish anything.
 					</span>
 				</div>
 			)}
