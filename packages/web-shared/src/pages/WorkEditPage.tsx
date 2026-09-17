@@ -61,7 +61,7 @@ import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { isoToLocalInput, localInputToIso } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
-import { usePublishingPermissionMissing } from "../lib/publishing";
+import { publishingPermissionMissing, usePublishingState } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioUrl } from "../lib/studio";
@@ -224,8 +224,14 @@ function WorkForm({ editing }: { editing: Work }) {
 
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
+	const publishing = usePublishingState();
 	/** Whether Anthers lacks the permission to publish this creator's listing, likewise. */
-	const permissionMissing = usePublishingPermissionMissing();
+	const permissionMissing = publishingPermissionMissing(publishing);
+	/**
+	 * Whether the server holding the creator's identity is down. Said here as well as in the
+	 * banner, because this is the moment it touches what they are doing — and it blocks nothing.
+	 */
+	const serverDown = publishing?.server?.reachable === false;
 
 	// Uploads into this Work from this tab — its own file, and any builds started on the Upload
 	// page. When one lands, the row's media half is re-read, so the file section, the builds
@@ -772,6 +778,29 @@ function WorkForm({ editing }: { editing: Work }) {
 							Pick a rating above first. Nothing goes into your public Catalog until somebody has
 							said whether it is General or Mature.
 						</p>
+					)}
+					{serverDown && visibility !== "released" && (
+						<div className="alert alert-info text-sm">
+							<span>
+								The server holding your identity isn't answering right now. You can still release
+								this: it goes out on Anthers straight away, and its listing reaches the network once
+								the server is back.
+								{publishing?.server?.statusUrl && (
+									<>
+										{" "}
+										<a
+											href={publishing.server.statusUrl}
+											target="_blank"
+											rel="noreferrer"
+											className="link"
+										>
+											Check its status
+										</a>
+										.
+									</>
+								)}
+							</span>
+						</div>
 					)}
 					{permissionMissing === true && visibility !== "released" && (
 						<div className="alert alert-warning text-sm">

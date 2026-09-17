@@ -407,3 +407,39 @@ describe("a reader's comments, reviews, votes and follows", () => {
 		expect((await publishingStateFor(granted.id)).interactions).toBe("granted");
 	});
 });
+
+describe("an identity's server that is not answering", () => {
+	// 🚨 A down server delays records and blocks nothing. `pds-health.ts` carries why.
+	it("is reported in the state the banner reads, and never refuses a release", async () => {
+		const down = await makeCreator("pdsdown", "brought");
+		await holdGrant(down.did, down.id, GRANTED);
+		// The authorization server is down with it, which a recheck must read as an outage rather
+		// than as the grant being gone.
+		restore = async () => {
+			throw new Error("fetch failed");
+		};
+		// A port nothing listens on, refused at once.
+		await db
+			.update(users)
+			.set({ atprotoPdsUrl: "http://127.0.0.1:9" })
+			.where(eq(users.id, down.id));
+		try {
+			const res = await call("GET", "/api/atproto/publishing", down.cookie);
+			const state = (await res.json()) as { server: { reachable: boolean } | null };
+			expect(state.server?.reachable).toBe(false);
+
+			const workId = await stage(down.id);
+			const released = await call("PATCH", `/api/content/works/${workId}`, down.cookie, {
+				visibility: "released",
+			});
+			expect(released.status).toBe(200);
+		} finally {
+			await db.delete(atprotoSessions).where(eq(atprotoSessions.did, down.did));
+		}
+	});
+
+	it("is never asked about for an identity Anthers hosts", async () => {
+		const res = await call("GET", "/api/atproto/publishing", hosted.cookie);
+		expect(((await res.json()) as { server: unknown }).server).toBeNull();
+	});
+});
