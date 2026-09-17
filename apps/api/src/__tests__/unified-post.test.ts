@@ -13,7 +13,8 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { sql } from "drizzle-orm";
+import { users } from "@anthers/db/schema";
+import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -40,6 +41,7 @@ const otherName = `viewer_${id}`;
 
 describe("Catalog vertical slice", () => {
 	let creatorCookie: string;
+	let creatorId: number;
 	let otherCookie: string;
 	let oldGameId: number;
 	let recentEssayId: number;
@@ -57,6 +59,11 @@ describe("Catalog vertical slice", () => {
 		async () => {
 			creatorCookie = await signUp(creatorName);
 			await enablePayouts(creatorName);
+			const [creatorRow] = await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.username, creatorName));
+			creatorId = creatorRow.id;
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
 			await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
@@ -93,7 +100,8 @@ describe("Catalog vertical slice", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
-				file: `creators/test/${id}/build.zip`,
+				// Under the creator's own prefix: the route refuses a file another account uploaded.
+				file: `creators/${creatorId}/assets/${id}/build.zip`,
 				filename: "build.zip",
 				fileSize: 1024 * 1024,
 				mimeType: "application/zip",
