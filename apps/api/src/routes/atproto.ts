@@ -11,7 +11,7 @@
  *   GET  /recovery-key         — Has this account taken one, and which key
  *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
  *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
- *   GET  /publishing           — How this account's Work listings reach the network, if at all
+ *   GET  /publishing           — How this account's records reach the network, or why they cannot
  *   POST /publishing/stop      — Take the listings down and hand the permission back
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
@@ -35,6 +35,7 @@
  */
 
 import { sanitizeNextPath } from "@anthers/shared/next-path";
+import { OAuthCallbackError } from "@atproto/oauth-client";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -220,6 +221,27 @@ async function grantedScopeOf(session: {
 	}
 }
 
+/**
+ * The state of a publishing grant somebody refused at their own server's consent screen, or null
+ * when the error is anything else.
+ *
+ * ⚠️ **Only the publishing intent.** A denied sign-in or signup is a round trip that did not
+ * happen, and the error page is the right answer to it; a denied publishing grant is a creator
+ * who is still signed in and has made a choice with a consequence worth explaining.
+ */
+function deniedPublishGrant(err: unknown): { next: string | undefined } | null {
+	if (!(err instanceof OAuthCallbackError) || err.params.get("error") !== "access_denied") {
+		return null;
+	}
+	try {
+		const state = JSON.parse(err.state ?? "") as Partial<AppState>;
+		if (state.intent !== "publish") return null;
+		return { next: sanitizeNextPath(state.next) ?? undefined };
+	} catch {
+		return null;
+	}
+}
+
 function startFailureMessage(err: unknown): string {
 	const raw = err instanceof Error ? err.message : "";
 	if (/resolve identity|resolve handle|not found/i.test(raw)) {
@@ -356,8 +378,9 @@ const atprotoRoutes = new Hono()
 
 				await attachSessionToUser(identity.did, appState.userId);
 
-				// ⚠️ A decline is an answer rather than a failure, and is reported as one of the
-				// two ordinary outcomes. Somebody who said no is exactly where they were before.
+				// ⚠️ A decline is an answer rather than a failure, so it is not logged as a refusal —
+				// but it leaves the creator unable to publish, and Studio settings says so when the
+				// browser lands there.
 				if (result.status === "declined") return back({ success: "publish_declined", next });
 
 				console.log(
@@ -468,6 +491,15 @@ const atprotoRoutes = new Hono()
 				onboarding: user.username === null ? "1" : undefined,
 			});
 		} catch (err) {
+			// 🚨 **Pressing Deny at the consent screen arrives here, as an error, and for the
+			// publishing grant it is not one.** An authorization server answers a denial with
+			// `access_denied` rather than with a narrower grant, so the `declined` branch above
+			// never sees it — and without this a creator who said no was shown "sign-in didn't
+			// work" and a link back to log in, from an account they were already signed in to.
+			// It lands where a narrower grant does, on Studio settings saying what it means.
+			const denied = deniedPublishGrant(err);
+			if (denied) return back({ success: "publish_declined", next: denied.next });
+
 			const message = err instanceof Error ? err.message : "exchange_failed";
 			return fail(message, err);
 		}
@@ -588,16 +620,19 @@ const atprotoRoutes = new Hono()
 	// asks one question — *what am I finishing?* — and the answer must not depend on which
 	// door produced it.
 
-	// ── Publishing a creator's listings into their own repository ────────────
+	// ── Publishing a creator's records into their own repository ─────────────
 	//
-	// ⚠️ **`available` is a state, never a prompt.** Most creators have granted nothing and
-	// never will, and publishing on Anthers has never required a network permission — so
-	// whatever renders this owes an offer somebody can take rather than a gap somebody should
-	// close. The route answers for any signed-in account, because whether somebody is a creator
-	// is not this endpoint's question to ask.
+	// 🚨 **`ungranted` is a warning, never an offer.** A creator in it cannot publish anything
+	// until they give the permission again, and the banner, Studio settings and every publish
+	// control read this to say so before they try. The route answers for any signed-in account,
+	// because whether somebody is a creator is not this endpoint's question to ask.
+	//
+	// ⭐ **It rechecks a grant on file with the creator's own server**, at most once per quarter
+	// hour, which is how a permission taken back somewhere else reaches the banner before it
+	// reaches a refusal. See `recheckPublishingGrant`.
 	.get("/publishing", requireAuth, async (c) => {
 		const user = c.get("user");
-		return c.json(await publishingStateFor(user.id));
+		return c.json(await publishingStateFor(user.id, { recheck: true }));
 	})
 
 	// ── Stop publishing ──────────────────────────────────────────────────────

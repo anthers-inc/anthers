@@ -21,11 +21,13 @@
  * `planWorkRecord`'s and is tested without a network; what this adds is making sure the
  * decision is actually reached whenever the Work moves.
  *
- * ⚠️ **A creator with no repository Anthers may write into is the ordinary case.** Nothing is
- * written, nothing is logged as a problem, and nothing about publishing changes for them.
- * Anthers turns nobody away for lacking a handle and asks nobody for a network permission in
- * order to publish, and this module is one of the places that could quietly make either a
- * requirement if it treated their absence as a failure.
+ * ⚠️ **A creator whose repository Anthers cannot write into is skipped here, not reported.** An
+ * identity Anthers can write to is mandatory, so a creator without the permission is refused
+ * before they release (`publishRefusal`) and warned before they try (`publishingStateFor`). What
+ * reaches this module anyway — a Work released before the permission lapsed, being edited or
+ * withdrawn — is a record that cannot be written until they give it again, and the sync after a
+ * new grant catches it up. Logging or retrying it here would say nothing the creator has not
+ * already been told.
  */
 import { db } from "@anthers/db";
 import { users, works } from "@anthers/db/schema";

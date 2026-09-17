@@ -18,6 +18,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
 import { atprotoSessions, users, works } from "@anthers/db/schema";
+import { OAuthCallbackError } from "@atproto/oauth-client";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import { publishingStateFor } from "../services/atproto.js";
@@ -61,6 +62,8 @@ const CREATOR_SCOPE = CREATOR_SCOPES[0];
 
 let lastAuthorize: { input: string; options: { state?: string; scope?: string } } | undefined;
 let nextCallback: { did: string; state?: string; scope?: string } | undefined;
+/** An authorization server's refusal, thrown by the callback in place of a session. */
+let nextCallbackError: Error | undefined;
 const revoked: string[] = [];
 
 const realFetch = globalThis.fetch;
@@ -75,6 +78,11 @@ beforeAll(() => {
 			return new URL("https://bsky.social/oauth/authorize?fake=1");
 		},
 		callback: async () => {
+			if (nextCallbackError) {
+				const staged = nextCallbackError;
+				nextCallbackError = undefined;
+				throw staged;
+			}
 			if (!nextCallback) throw new Error("no callback staged");
 			const staged = nextCallback;
 			return {
@@ -312,7 +320,7 @@ describe("coming back from the consent screen", () => {
 		expect(state.route).toBe("granted");
 	});
 
-	it("treats a decline as an answer, and records what actually came back", async () => {
+	it("reports a decline as one, and records what actually came back", async () => {
 		const user = await makeUser("no");
 		await seedSession(did("no"), user.id);
 
@@ -325,12 +333,39 @@ describe("coming back from the consent screen", () => {
 		expect(url.searchParams.get("success")).toBe("publish_declined");
 		expect(url.searchParams.get("error")).toBeNull();
 		expect(await grantedScopeFor(did("no"))).toBe("atproto");
-		expect((await publishingStateFor(user.id)).route).toBe("available");
+		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
 	});
 
 	// 🚨 A grant made under the retired catalog set covers Works and nothing else. Reading it as
 	// publishing being on would leave every post and project quietly unwritten, so it reads as the
 	// state a creator can act on: asked again.
+	// 🚨 **Deny is how a real consent screen declines**, and it arrives as an error rather than as
+	// a narrower grant. Reported as an error, it showed a signed-in creator "sign-in didn't work".
+	it("reports pressing Deny as a decline, not as a failed sign-in", async () => {
+		const user = await makeUser("deny");
+		const denied = async (intent: string) => {
+			nextCallbackError = new OAuthCallbackError(
+				new URLSearchParams({ error: "access_denied", state: "x" }),
+				undefined,
+				JSON.stringify({ intent, userId: user.id, next: "/studio/catalog" }),
+			);
+			const res = await app.request("/api/atproto/callback?error=access_denied&state=x");
+			expect(res.status).toBe(302);
+			return new URL(res.headers.get("location") as string);
+		};
+
+		const publish = await denied("publish");
+		expect(publish.searchParams.get("success")).toBe("publish_declined");
+		expect(publish.searchParams.get("error")).toBeNull();
+		expect(publish.searchParams.get("next")).toBe("/studio/catalog");
+		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
+
+		// A denied sign-in is still a round trip that did not happen.
+		const login = await denied("login");
+		expect(login.searchParams.get("success")).toBeNull();
+		expect(login.searchParams.get("error")).toBeTruthy();
+	});
+
 	it("treats a grant under the retired catalog set as needing to be asked again", async () => {
 		const user = await makeUser("old");
 		await seedSession(did("old"), user.id);
@@ -341,7 +376,7 @@ describe("coming back from the consent screen", () => {
 			state: JSON.stringify({ intent: "publish", userId: user.id }),
 		});
 		expect(url.searchParams.get("success")).toBe("publish_declined");
-		expect((await publishingStateFor(user.id)).route).toBe("available");
+		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
 	});
 
 	it("refuses an identity that is not the one linked to the account", async () => {
@@ -356,7 +391,7 @@ describe("coming back from the consent screen", () => {
 			state: JSON.stringify({ intent: "publish", userId: user.id }),
 		});
 		expect(url.searchParams.get("error")).toBe("wrong_identity");
-		expect((await publishingStateFor(user.id)).route).toBe("available");
+		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
 	});
 
 	it("refuses an account whose identity Anthers hosts", async () => {
@@ -391,7 +426,7 @@ describe("coming back from the consent screen", () => {
 			state: JSON.stringify({ intent: "login" }),
 		});
 		expect(await grantedScopeFor(did("nar"))).toBe("atproto");
-		expect((await publishingStateFor(user.id)).route).toBe("available");
+		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
 	});
 });
 
@@ -451,7 +486,7 @@ describe("handing the permission back", () => {
 		const result = await stopPublishingFor(user.id);
 		expect(result).toEqual({ removed: 0, stranded: 0, revoked: true });
 		expect(revoked).toContain(did("quit"));
-		expect((await publishingStateFor(user.id)).route).toBe("available");
+		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
 	});
 
 	// 🚨 The rule the whole ordering exists for. Deleting a record needs the permission being

@@ -93,9 +93,9 @@ export default function ATProtoCallbackPage() {
 		// whose signup was still unfinished — different cause, same destination, because a
 		// page whose only job is finishing can only be about finishing.
 		// ⭐ **Both publishing outcomes land in the same place, because a decline is an answer
-		// rather than a failure.** Somebody who said no at the consent screen is exactly where
-		// they were before, and sending them to an apology page would make an ordinary choice
-		// look like something that went wrong. The Studio's settings say which happened.
+		// rather than a failure.** Somebody who said no at the consent screen cannot publish until
+		// they give the permission, and Studio settings is where that is explained and where the
+		// button to give it is — an apology page would say something went wrong and offer nothing.
 		if (success === "publishing" || success === "publish_declined") {
 			refreshUser().then(() => {
 				navigate(`/studio/settings?publishing=${success === "publishing" ? "on" : "declined"}`, {

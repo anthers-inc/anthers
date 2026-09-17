@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import BadgeLadderEditor from "../components/post/BadgeLadderEditor";
 import { useAuth } from "../lib/auth";
+import type { PublishingState } from "../lib/publishing";
 import { apiFetch, client } from "../lib/rpc";
 import type { StripeAccountStatus } from "../lib/types";
 
@@ -133,28 +134,19 @@ function StripeOnboardingSection() {
 	);
 }
 
-/** What `GET /api/atproto/publishing` answers. Mirrors `PublishingState` in the API. */
-interface PublishingState {
-	route: "hosted" | "granted" | "available" | "none";
-	offered: boolean;
-	did: string | null;
-	handle: string;
-	listed: number;
-}
-
 /**
- * Publishing a creator's Work listings into the repository behind their own identity.
+ * Publishing a creator's records into the repository behind their own identity.
  *
- * 🚨 **`available` is an offer, never a gap, and this component is where that promise is kept
- * or quietly broken.** Publishing on Anthers has never required a network permission: a creator
- * who grants nothing releases, gates, gets paid and is found exactly as anybody else does, and
- * the only difference is that no listing goes out. So there is no warning styling here, no
- * badge, no count of what they are "missing" — the section says what would happen if they said
- * yes, and is silent about them not having.
+ * 🚨 **`ungranted` is a warning, and this card is where it is said most fully.** An identity
+ * Anthers can write to is mandatory (Parker, 2026-09-12), so a creator whose identity is held
+ * elsewhere and who has declined, withdrawn or lost the permission cannot release a Work or
+ * publish a post or a project — the API refuses them. The card says so plainly, says what is
+ * asked for, and carries the one button that fixes it. The banner on every other page points
+ * the same way and stays off this one.
  *
- * ⚠️ **It renders nothing at all unless there is something true to say.** An account with no
- * identity has no repository for a listing to live in, and a section explaining a thing they
- * cannot do is the nagging this design is trying not to be.
+ * ⚠️ **It renders nothing when Anthers is not asking for the permission**, because a warning
+ * with no button is a creator told about a problem they cannot fix, and the API refuses nobody
+ * in that state either.
  */
 function AtmospherePublishingSection() {
 	const { grantPublishing } = useAuth();
@@ -179,8 +171,8 @@ function AtmospherePublishingSection() {
 	if (loading || !state) return null;
 	// No such account — every account holds an identity, so this is a failed read, not a state.
 	if (state.route === "none") return null;
-	// Nothing to offer and nothing granted — say nothing rather than advertise a closed door.
-	if (state.route === "available" && !state.offered) return null;
+	// Nothing granted and no way to ask — say nothing rather than warn about a closed door.
+	if (state.route === "ungranted" && !state.offered) return null;
 
 	const handleGrant = async () => {
 		setBusy(true);
@@ -220,11 +212,6 @@ function AtmospherePublishingSection() {
 						<span>Your records are on their way to your repository.</span>
 					</div>
 				)}
-				{outcome === "declined" && (
-					<div className="alert alert-info text-sm">
-						<span>No permission given, so nothing is published. Everything else is unchanged.</span>
-					</div>
-				)}
 				{error && (
 					<div className="alert alert-error text-sm">
 						<span>{error}</span>
@@ -259,25 +246,39 @@ function AtmospherePublishingSection() {
 								onClick={handleStop}
 								disabled={busy}
 							>
-								{busy ? "Taking them down…" : "Stop publishing"}
+								{busy ? "Taking them down…" : "Stop Publishing"}
 							</button>
 						</div>
 						{/* ⚠️ Said before they press it, not after. Stopping removes the records, and a
 						    deletion cannot be undone by us — it is their repository. */}
 						<p className="text-xs text-base-content/50">
 							Stopping removes the Works, posts and projects already on the network and hands the
-							permission back.
+							permission back, and you won't be able to release or publish anything until you give
+							it again.
 						</p>
 					</>
 				)}
 
-				{state.route === "available" && (
+				{state.route === "ungranted" && (
 					<>
+						<div className="alert alert-warning text-sm">
+							<span>
+								{/* A decline lands here, so the lead says what just happened rather than
+								    stacking a second warning on this one. */}
+								<strong>
+									{outcome === "declined"
+										? "No permission was given."
+										: "Anthers can't publish for you yet."}
+								</strong>{" "}
+								You can't release Works or publish posts and projects until you give Anthers
+								permission to write them into your repository under{" "}
+								<span className="font-medium">@{state.handle}</span>.
+							</span>
+						</div>
 						<p className="text-sm text-base-content/70">
-							Anthers can keep a record for each of your released Works, posts and projects in your
-							own repository, under <span className="font-medium">@{state.handle}</span>, so your
-							catalog is readable by other software on the network and outlives any one service —
-							including this one.
+							Anthers keeps a record for each of your released Works, posts and projects in your own
+							repository, so your catalog is readable by other software on the network and outlives
+							any one service — including this one.
 						</p>
 						<p className="text-sm text-base-content/50">
 							It asks for permission over Anthers' own kinds of record and nothing else: not your
@@ -292,7 +293,7 @@ function AtmospherePublishingSection() {
 								onClick={handleGrant}
 								disabled={busy}
 							>
-								{busy ? "Starting…" : "Publish my catalog"}
+								{busy ? "Starting…" : "Give Permission"}
 							</button>
 						</div>
 					</>
@@ -307,8 +308,8 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Payouts and Badges. Account settings (profile, email, identity) live on your Anthers
-				account.
+				Payouts, publishing and Badges. Account settings (profile, email, identity) live on your
+				Anthers account.
 			</p>
 
 			<div className="flex flex-col gap-6">

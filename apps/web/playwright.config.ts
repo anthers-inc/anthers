@@ -201,6 +201,10 @@ export default defineConfig({
 				// Where the OAuth callback sends the browser back to. CI has no session to name it, and
 				// without it the API falls back to `make dev`'s 3000, where nothing is listening.
 				PREVIEW_PORT: String(PORT),
+				// Open, as it is in production (`.do/app.yaml`). Closed, a creator whose identity is held
+				// elsewhere is never asked for the publishing permission and never refused without it, so
+				// the suite would walk a publishing path production does not have.
+				ATPROTO_PUBLISH_ENABLED: "true",
 			},
 			reuseExistingServer: false,
 			timeout: 180_000,
