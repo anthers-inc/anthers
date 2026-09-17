@@ -9,6 +9,7 @@
 import { workNeedsFile } from "@anthers/shared/content";
 import { contentNoteLabel, maturityLabel } from "@anthers/shared/content-rating";
 import {
+	BookOpenIcon,
 	CommandLineIcon,
 	CubeIcon,
 	FilmIcon,
@@ -25,11 +26,19 @@ import { type AccessState, accessState } from "./work-state";
 
 export { type AccessState, accessState } from "./work-state";
 
-/** The uploadable/processable library content types (text stays post-native). */
+/**
+ * The Work kinds the Studio can make, in the order its type pickers list them.
+ *
+ * ⚠️ **Eight of the nine.** `WORK_TYPES` in `routes/content.ts` is the authority on the list, and
+ * text is the one missing: it is written in place rather than uploaded, and it waits on a
+ * reading layout that makes a text Work look different from a post to the person reading it.
+ */
 export const LIBRARY_TYPE_OPTIONS: { value: UploadableWorkType; label: string }[] = [
 	{ value: "video", label: "Video" },
 	{ value: "audio", label: "Audio" },
 	{ value: "image", label: "Image" },
+	// One PDF, rendered to pages after it lands. A comic is an ebook; see *What You Can Publish*.
+	{ value: "ebook", label: "Ebook" },
 	{ value: "game", label: "Game" },
 	{ value: "software", label: "Software" },
 	{ value: "physical", label: "Physical" },
@@ -40,6 +49,7 @@ const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 	video: FilmIcon,
 	audio: MusicalNoteIcon,
 	image: PhotoIcon,
+	ebook: BookOpenIcon,
 	game: PuzzlePieceIcon,
 	software: CommandLineIcon,
 	physical: CubeIcon,
