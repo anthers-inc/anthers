@@ -86,6 +86,7 @@ import {
 	updateParentalControls,
 } from "../services/parental-controls.js";
 import { queueRecordSync } from "../services/record-sync.js";
+import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -277,6 +278,30 @@ const accountRoutes = new Hono()
 				},
 				403,
 			);
+		}
+
+		// An avatar or header naming another account's object is refused. Only a change is asked
+		// about, as with a Work's file references, so a request repeating the stored value is
+		// never refused for a row written before this check. `storage/keys.ts` carries the
+		// reasons.
+		if (data.avatar !== undefined || data.headerImage !== undefined) {
+			const [stored] = await db
+				.select({ avatar: users.avatar, headerImage: users.headerImage })
+				.from(users)
+				.where(eq(users.id, sessionUser.id))
+				.limit(1);
+			for (const [sent, current] of [
+				[data.avatar, stored?.avatar],
+				[data.headerImage, stored?.headerImage],
+			] as const) {
+				if (
+					sent !== undefined &&
+					sent !== (current ?? "") &&
+					!(await isOwnStorageRef(sent, sessionUser.id))
+				) {
+					return c.json(FOREIGN_FILE_REFUSAL, 400);
+				}
+			}
 		}
 
 		// Filter out undefined values

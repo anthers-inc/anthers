@@ -22,29 +22,11 @@
 import { assets, db, transcodingJobs, works } from "@anthers/db";
 import { and, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
+import { isKeyUnder, urlToKey } from "./storage/keys.js";
 
 type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
-
-/**
- * Normalize a stored URL or key to a storage key. Stored media columns hold whichever
- * the backend produced at write time — a `cdn.anthers.org` URL under S3, a `/content/…`
- * path under local — so every sweep goes through here rather than assuming one shape.
- */
-export function urlToKey(urlOrKey: string): string {
-	let path = urlOrKey;
-	if (/^(https?:)?\/\//.test(urlOrKey)) {
-		try {
-			path = decodeURIComponent(new URL(urlOrKey).pathname);
-		} catch {
-			path = urlOrKey;
-		}
-	}
-	path = path.replace(/^\/+/, "");
-	if (path.startsWith("content/")) path = path.slice("content/".length);
-	return path;
-}
 
 /** Delete a set of prefixes and keys, logging and swallowing every failure. */
 async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): Promise<void> {
@@ -66,8 +48,32 @@ async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): P
 	}
 }
 
-/** Collect every storage key and prefix a Work owns, given its already-loaded rows. */
+/**
+ * Collect every storage key and prefix a Work owns, given its already-loaded rows.
+ *
+ * 🚨 **Only what sits under the Work's own creator's prefix, whatever its columns say.** Those
+ * columns were written by clients, and a Work naming another creator's original used to mean
+ * that deleting the Work deleted the other creator's file. The write routes refuse such a
+ * reference now (`storage/keys.ts`), and this refuses to act on one that got in anyway — a row
+ * written before the check, or by a path that forgot it. A Work whose creator is gone names no
+ * prefix, so it sweeps nothing, which strands objects rather than destroying someone's.
+ */
 function keysForWork(
+	item: WorkRow,
+	workAssets: AssetRow[],
+	jobRows: TranscodingJobRow[],
+): { keys: Set<string>; prefixes: Set<string> } {
+	const all = collectRawKeysForWork(item, workAssets, jobRows);
+	const owner = item.creatorId;
+	const mine = (key: string) => owner != null && isKeyUnder(key, owner);
+	return {
+		keys: new Set([...all.keys].filter(mine)),
+		// A prefix is checked with its trailing slash, so `creators/5` cannot pass as `creators/5/`.
+		prefixes: new Set([...all.prefixes].filter((prefix) => mine(`${prefix}/`))),
+	};
+}
+
+function collectRawKeysForWork(
 	item: WorkRow,
 	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
@@ -151,13 +157,21 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 	return { keys, prefixes };
 }
 
-/** Add a user's own profile images to a collection. They belong to no Work. */
+/**
+ * Add a user's own profile images to a collection. They belong to no Work.
+ *
+ * Only an image under the user's own prefix is added, for the reason `keysForWork` gives: an
+ * avatar column naming somebody else's object must not make erasing this account erase theirs.
+ */
 export function addUserImages(
 	collected: CollectedMedia,
-	user: { avatar?: string | null; headerImage?: string | null },
+	user: { id: number; avatar?: string | null; headerImage?: string | null },
 ): CollectedMedia {
-	if (user.avatar) collected.keys.add(urlToKey(user.avatar));
-	if (user.headerImage) collected.keys.add(urlToKey(user.headerImage));
+	for (const ref of [user.avatar, user.headerImage]) {
+		if (!ref) continue;
+		const key = urlToKey(ref);
+		if (isKeyUnder(key, user.id)) collected.keys.add(key);
+	}
 	return collected;
 }
 

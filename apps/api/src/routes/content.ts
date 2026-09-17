@@ -132,7 +132,7 @@ import {
 	saveWork,
 	setHidden,
 } from "../services/library.js";
-import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
+import { purgeWorkMedia } from "../services/media-purge.js";
 import { notifyMany } from "../services/notifications.js";
 import {
 	consumedSeconds,
@@ -154,6 +154,7 @@ import {
 } from "../services/share-links.js";
 import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
+import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -3044,6 +3045,12 @@ const contentRoutes = new Hono()
 			);
 		}
 
+		// Refused before anything is written. See `storage/keys.ts` for what naming another
+		// account's object would let a Work do.
+		for (const ref of [data.sourceKey, data.thumbnail]) {
+			if (!(await isOwnStorageRef(ref ?? "", user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		}
+
 		let slug: string;
 		if (data.slug) {
 			if (await workSlugExists(data.slug)) {
@@ -3591,6 +3598,23 @@ const contentRoutes = new Hono()
 			return c.json({ error: "Work not found" }, 404);
 		}
 
+		// A file reference is checked when it CHANGES, and before anything is written — the
+		// rating below is stored ahead of the release gates, and a refused request must store
+		// nothing. Only a change is asked about, so a row written before the check stays
+		// editable. `storage/keys.ts` carries the reasons.
+		for (const [sent, stored] of [
+			[data.sourceKey, work.sourceKey],
+			[data.thumbnail, work.thumbnail],
+		] as const) {
+			if (
+				sent !== undefined &&
+				sent !== (stored ?? "") &&
+				!(await isOwnStorageRef(sent, user.id))
+			) {
+				return c.json(FOREIGN_FILE_REFUSAL, 400);
+			}
+		}
+
 		const releasing = data.visibility === "released" && work.visibility !== "released";
 
 		// 🚨 **A LIVE Work may not be moved to a closed rung, and this is checked before the
@@ -4081,6 +4105,9 @@ const contentRoutes = new Hono()
 		if (!item) return c.json({ error: "Work not found" }, 404);
 
 		const data = c.req.valid("json");
+		// The asset route signs this key for the Work's owner, so an asset naming another
+		// creator's private original would hand it over. See `storage/keys.ts`.
+		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
 		const [asset] = await db
 			.insert(assets)
 			.values({ workId: id, ...data })
@@ -4368,6 +4395,10 @@ const contentRoutes = new Hono()
 			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
+		if (!(await isOwnStorageRef(data.coverImage ?? "", user.id))) {
+			return c.json(FOREIGN_FILE_REFUSAL, 400);
+		}
+
 		const [existing] = await db
 			.select({ id: projects.id })
 			.from(projects)
@@ -4515,12 +4546,26 @@ const contentRoutes = new Hono()
 		const data = c.req.valid("json");
 
 		const [existing] = await db
-			.select({ id: projects.id, creatorId: projects.creatorId, isPublished: projects.isPublished })
+			.select({
+				id: projects.id,
+				creatorId: projects.creatorId,
+				isPublished: projects.isPublished,
+				coverImage: projects.coverImage,
+			})
 			.from(projects)
 			.where(eq(projects.slug, slug))
 			.limit(1);
 		if (!existing) return c.json({ error: "Project not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
+
+		// Checked on a change only, like a Work's file references; see `storage/keys.ts`.
+		if (
+			data.coverImage !== undefined &&
+			data.coverImage !== (existing.coverImage ?? "") &&
+			!(await isOwnStorageRef(data.coverImage, user.id))
+		) {
+			return c.json(FOREIGN_FILE_REFUSAL, 400);
+		}
 
 		// Asked only on the transition into published, because the editor sends `isPublished`
 		// with every save and an already-published project must stay editable.
