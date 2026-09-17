@@ -53,6 +53,7 @@ import {
 import type { ModerationActionType } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { safeFailureReason, writingMatchData } from "../lib/match-data.js";
 import { placeHold, preservationExpiry } from "./legal-hold.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
@@ -152,29 +153,11 @@ export class QuarantinePlacementError extends Error {
 		readonly holdIds: number[],
 		failure: unknown,
 	) {
-		// 🚨 **No `cause`, deliberately.** The failure is often a database error, whose message
-		// carries the query's parameters, and on the scan path one of those is the detection
-		// vendor's Match Data — which must never reach a log an agent reads, a job's stored error,
-		// or an operator's screen. Its safe summary goes into the message instead.
+		// 🚨 **No `cause`, deliberately**, for the reason `lib/match-data.ts` gives: the failure is
+		// often a database error quoting a write that carried the vendor's Match Data. Its safe
+		// summary goes into the message instead.
 		super(placementFailureMessage(workId, stage, movedKeys, holdIds, failure));
 	}
-}
-
-/**
- * Why something failed, in a form safe to show and to log.
- *
- * 🚨 **A failed query is described by its SQLSTATE and nothing else.** Drizzle's message quotes
- * the parameters, and even Postgres's own message quotes a value for some refusals, so the code
- * is the only part guaranteed to carry none. Anything else is its first line.
- */
-function safeReason(err: unknown): string {
-	if (!(err instanceof Error)) return "an unknown error";
-	const code = [err, err.cause]
-		.map((e) => (e as { code?: unknown } | undefined)?.code)
-		.find((c): c is string => typeof c === "string" && /^[0-9A-Z]{5}$/.test(c));
-	if (code) return `the database refused it (SQLSTATE ${code})`;
-	if (err.message.startsWith("Failed query")) return "the database refused it";
-	return err.message.split("\n")[0].replace(/\.$/, "");
 }
 
 function placementFailureMessage(
@@ -184,7 +167,7 @@ function placementFailureMessage(
 	holdIds: number[],
 	failure: unknown,
 ): string {
-	const detail = ` The error was: ${safeReason(failure)}.`;
+	const detail = ` The error was: ${safeFailureReason(failure)}.`;
 	if (stage === "holding") {
 		return (
 			`Work ${workId} is quarantined and its finding is recorded, but placing its preservation ` +
@@ -585,29 +568,31 @@ export async function quarantineObject(
 	// place — a re-upload to the same key, say — and adds no second row.
 	if (existing) return { objectsMoved: moved ? 1 : 0, findingId: existing.id, holdIds: [] };
 
-	const [row] = await db
-		.insert(mediaQuarantine)
-		.values({
-			// 🚨 Null on purpose, and the column has always allowed it. A finding about an
-			// avatar is not a finding about a Work, and inventing one to hang it from would
-			// put a Work into `quarantine_status` that no creator can see or clear.
-			workId: null,
-			uploaderId: input.uploaderId,
-			originalKey: input.storageKey,
-			quarantineKey,
-			objectKind: input.objectKind,
-			source: input.source,
-			classification: input.classification,
-			vendorMatch: input.vendorMatch ?? null,
-			reportId: input.reportId ?? null,
-			// There is no visibility to restore: the object is not a Work and was never
-			// published on its own. Empty, which is what `clearQuarantine` already reads as
-			// "nothing was recorded here".
-			priorVisibility: "",
-			placedBy: input.adminId ?? null,
-			note: input.note ?? "",
-		})
-		.returning({ id: mediaQuarantine.id });
+	const [row] = await writingMatchData(`the quarantine finding for ${input.storageKey}`, () =>
+		db
+			.insert(mediaQuarantine)
+			.values({
+				// 🚨 Null on purpose, and the column has always allowed it. A finding about an
+				// avatar is not a finding about a Work, and inventing one to hang it from would
+				// put a Work into `quarantine_status` that no creator can see or clear.
+				workId: null,
+				uploaderId: input.uploaderId,
+				originalKey: input.storageKey,
+				quarantineKey,
+				objectKind: input.objectKind,
+				source: input.source,
+				classification: input.classification,
+				vendorMatch: input.vendorMatch ?? null,
+				reportId: input.reportId ?? null,
+				// There is no visibility to restore: the object is not a Work and was never
+				// published on its own. Empty, which is what `clearQuarantine` already reads as
+				// "nothing was recorded here".
+				priorVisibility: "",
+				placedBy: input.adminId ?? null,
+				note: input.note ?? "",
+			})
+			.returning({ id: mediaQuarantine.id }),
+	);
 
 	// 🚨 Placed after the record and never skipped, exactly as for a Work: material parked
 	// in the quarantine prefix with no hold is material a sweep can still reach, and
