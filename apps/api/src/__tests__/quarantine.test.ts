@@ -22,7 +22,7 @@
  * as sufficient and neither is, so both are exercised — the storage half by asking for a
  * URL directly, which is what a forgotten route would do.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	assets,
@@ -36,7 +36,12 @@ import {
 import { and, eq, isNull, sql } from "drizzle-orm";
 import app from "../index";
 import { isUnderHold } from "../services/legal-hold.js";
-import { clearQuarantine, loadQuarantineFindings, quarantineWork } from "../services/quarantine.js";
+import {
+	clearQuarantine,
+	loadQuarantineFindings,
+	QuarantinePlacementError,
+	quarantineWork,
+} from "../services/quarantine.js";
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
@@ -76,6 +81,8 @@ let creatorId: number;
 let buyerId: number;
 /** The admin account that quarantines and clears, which is who a finding records. */
 let operatorId: number;
+/** The same account's session, for the operator routes. */
+let operatorCookie: string;
 
 /** Locked and priced: the only way in is a purchase, which is the viewer under test. */
 const SOLD = { seedAccess: [{ threshold: 0, allow: true, price: "5.00" }] };
@@ -139,7 +146,9 @@ beforeAll(async () => {
 	buyerCookie = await signUp(buyerName);
 	creatorId = await idOf(creatorName);
 	buyerId = await idOf(buyerName);
-	operatorId = (await createAdminFixture("quar-operator")).id;
+	const operator = await createAdminFixture("quar-operator");
+	operatorId = operator.id;
+	operatorCookie = operator.cookie;
 	await db.execute(sql`UPDATE users SET is_creator = true WHERE id = ${creatorId}`);
 }, DB_SETUP_TIMEOUT);
 
@@ -507,6 +516,180 @@ describe("Clearing a finding", () => {
 		// preserve has ended". Coupling them would make the first silently do the second,
 		// and the record of having checked is what would be destroyed.
 		expect(await isUnderHold("work", work.id)).toBe(true);
+	});
+});
+
+describe("What a finding keeps", () => {
+	// 🚨 A clear used to write its note over the placement note. For a Work the moderation log
+	// still said why, but the finding itself no longer did, and for an object with no Work
+	// nothing else ever did.
+	it("keeps why it was placed when it is cleared, beside why it was cleared", async () => {
+		const { work } = await seedSoldWork("Placed and cleared");
+		await quarantineWork({
+			workId: work.id,
+			source: "operator",
+			classification: "apparent-csam",
+			adminId: operatorId,
+			note: "matched the reported upload",
+		});
+		await clearQuarantine({ workId: work.id, adminId: operatorId, note: "a different file" });
+
+		const rows = await db
+			.select({ note: mediaQuarantine.note, clearedNote: mediaQuarantine.clearedNote })
+			.from(mediaQuarantine)
+			.where(eq(mediaQuarantine.workId, work.id));
+		expect(rows.length).toBeGreaterThan(0);
+		for (const row of rows) {
+			expect(row).toEqual({
+				note: "matched the reported upload",
+				clearedNote: "a different file",
+			});
+		}
+
+		const listed = (await loadQuarantineFindings({ includeCleared: true })).filter(
+			(f) => f.workId === work.id,
+		);
+		expect(listed.map((f) => [f.note, f.clearedNote])).toContainEqual([
+			"matched the reported upload",
+			"a different file",
+		]);
+	});
+});
+
+describe("A quarantine that fails partway", () => {
+	const place = (body: Record<string, unknown>) =>
+		req("/api/admin/quarantine", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: operatorCookie },
+			body: JSON.stringify(body),
+		});
+
+	/** A sold Work owning two objects, the thumbnail first in the order a quarantine moves them. */
+	async function seedTwoObjects(title: string) {
+		const seeded = await seedSoldWork(title);
+		const thumbnail = `creators/${creatorId}/thumbnails/${seeded.work.publicId}-${id}.png`;
+		await storage.upload(thumbnail, Buffer.from("pretend thumbnail"), "image/png");
+		await db.update(works).set({ thumbnail }).where(eq(works.id, seeded.work.id));
+		return { ...seeded, thumbnail };
+	}
+
+	async function findingKeys(workId: number): Promise<string[]> {
+		const rows = await db
+			.select({ originalKey: mediaQuarantine.originalKey })
+			.from(mediaQuarantine)
+			.where(and(eq(mediaQuarantine.workId, workId), isNull(mediaQuarantine.clearedAt)));
+		return rows.map((r) => r.originalKey).sort();
+	}
+
+	it("is still a 404 when the Work does not exist", async () => {
+		const res = await place({ workId: 2_000_000_000, classification: "apparent-csam" });
+		expect(res.status).toBe(404);
+	});
+
+	// 🚨 The case this exists for. "Work not found" told an operator nothing had happened while a
+	// thumbnail sat out of reach with no finding naming it.
+	it("names the objects it moved when moving fails, and a second attempt records them", async () => {
+		const { work, key, thumbnail } = await seedTwoObjects("Fails while moving");
+		const realMove = storage.move.bind(storage);
+		let calls = 0;
+		const moveSpy = spyOn(storage, "move").mockImplementation(async (from, to) => {
+			calls += 1;
+			if (calls === 2) throw new Error("storage went away");
+			return realMove(from, to);
+		});
+		let failed: Response;
+		try {
+			failed = await place({ workId: work.id, classification: "apparent-csam" });
+		} finally {
+			moveSpy.mockRestore();
+		}
+
+		expect(failed.status).toBe(500);
+		const body = (await failed.json()) as { error: string; stage: string; movedKeys: string[] };
+		expect(body.stage).toBe("moving");
+		expect(body.movedKeys).toEqual([thumbnail]);
+		expect(body.error).toContain(thumbnail);
+		expect(body.error).toContain("Quarantine the Work again");
+		expect(await storage.exists(thumbnail)).toBe(false);
+		expect(await findingKeys(work.id)).toEqual([]);
+
+		const retried = await place({ workId: work.id, classification: "apparent-csam" });
+		expect(retried.status).toBe(200);
+		expect(await retried.json()).toMatchObject({ objectsMoved: 1, objectsAlreadyParked: 1 });
+		expect(await findingKeys(work.id)).toEqual([key, thumbnail].sort());
+	});
+
+	it("names the objects it moved when writing the finding fails, and a second attempt records them", async () => {
+		const { work, key, thumbnail } = await seedTwoObjects("Fails while recording");
+		// A report id nothing has, which the finding's foreign key refuses after both moves.
+		const failed = await place({
+			workId: work.id,
+			classification: "apparent-csam",
+			reportId: 2_000_000_000,
+		});
+
+		expect(failed.status).toBe(500);
+		const body = (await failed.json()) as { error: string; stage: string; movedKeys: string[] };
+		expect(body.stage).toBe("recording");
+		expect([...body.movedKeys].sort()).toEqual([key, thumbnail].sort());
+		const [row] = await db
+			.select({ quarantineStatus: works.quarantineStatus })
+			.from(works)
+			.where(eq(works.id, work.id));
+		expect(row.quarantineStatus).not.toBe("quarantined");
+
+		const retried = await place({ workId: work.id, classification: "apparent-csam" });
+		expect(retried.status).toBe(200);
+		expect(await retried.json()).toMatchObject({
+			objectsMoved: 0,
+			objectsAlreadyParked: 2,
+			objectsMissing: 0,
+		});
+		expect(await findingKeys(work.id)).toEqual([key, thumbnail].sort());
+	});
+
+	// 🚨 A database error's message quotes the query's parameters, and a scan's quarantine passes
+	// the vendor's Match Data as one of them. The failure message is logged and shown to an
+	// operator, so it may carry the reason and never the values.
+	it("never quotes the vendor's answer when writing the finding fails", async () => {
+		const { work } = await seedTwoObjects("Fails with a vendor answer");
+		const sentinel = `vendor-sentinel-${id}`;
+		const failure = await quarantineWork({
+			workId: work.id,
+			source: "scan",
+			classification: "apparent-csam",
+			vendorMatch: {
+				vendor: "arachnid-shield",
+				classification: sentinel,
+				matchType: "exact",
+				receivedAt: new Date().toISOString(),
+			},
+			reportId: 2_000_000_000,
+		}).then(
+			() => null,
+			(err: unknown) => err,
+		);
+
+		expect(failure).toBeInstanceOf(QuarantinePlacementError);
+		const error = failure as QuarantinePlacementError;
+		expect(error.message).not.toContain(sentinel);
+		expect(error.message).not.toContain("params");
+		expect(error.message).toContain("SQLSTATE 23503");
+		expect(error.cause).toBeUndefined();
+		expect(String(error.stack)).not.toContain(sentinel);
+	});
+
+	it("counts a second quarantine's objects as already parked rather than missing", async () => {
+		const { work } = await seedTwoObjects("Quarantined twice");
+		await quarantineWork({ workId: work.id, source: "operator", classification: "apparent-csam" });
+		const again = await quarantineWork({
+			workId: work.id,
+			source: "operator",
+			classification: "apparent-csam",
+		});
+		expect(again).toMatchObject({ objectsMoved: 0, objectsAlreadyParked: 2, objectsMissing: 0 });
+		// And no second finding for either object.
+		expect(await findingKeys(work.id)).toHaveLength(2);
 	});
 });
 

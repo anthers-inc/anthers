@@ -586,7 +586,17 @@ export const mediaQuarantine = pgTable(
 		 */
 		clearedAt: timestamp("cleared_at", { withTimezone: true }),
 		clearedBy: integer("cleared_by").references(() => adminAccounts.id, { onDelete: "set null" }),
+		/**
+		 * Why the finding was placed, in the words of whoever placed it. Written once, when it is.
+		 *
+		 * 🚨 **Never overwritten by a clear**, which has {@link clearedNote} for its own reason. For a
+		 * finding with no Work — badge art, an avatar — this column is the only place the reason for
+		 * placing it is kept, so a clear that wrote over it erased half of the record that has to
+		 * outlive the decision.
+		 */
 		note: text("note").notNull().default(""),
+		/** Why the finding was cleared, beside {@link note} rather than over it. Empty until then. */
+		clearedNote: text("cleared_note").notNull().default(""),
 	},
 	(table) => [
 		// The operator list, and the per-Work lookup a clear does.

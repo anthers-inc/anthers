@@ -31,7 +31,12 @@ import {
 	quarantineSummary,
 	quarantineWork,
 } from "../services/quarantine.js";
-import { scanInlineUpload, scanStoredImage } from "../services/safety-scan.js";
+import {
+	recordScan,
+	recordScans,
+	scanInlineUpload,
+	scanStoredImage,
+} from "../services/safety-scan.js";
 import { QUARANTINE_PREFIX, scannedObjectKind } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
@@ -432,6 +437,32 @@ describe("Clearing a Work-less finding", () => {
 		expect(row.clearedBy).toBe(operatorId);
 	});
 
+	// 🚨 For an object with no Work the finding's own note is the only record of why it was placed,
+	// and a clear used to write its note over it.
+	it("keeps why it was placed beside why it was cleared", async () => {
+		const key = await putObject("both-notes", 53);
+		const { findingId } = await quarantineObject({
+			storageKey: key,
+			uploaderId: creatorId,
+			objectKind: "badge",
+			source: "operator",
+			classification: "apparent-csam",
+			adminId: operatorId,
+			note: "reported by two readers",
+		});
+		await clearObjectQuarantine({
+			findingId: findingId!,
+			adminId: operatorId,
+			note: "not a match",
+		});
+
+		const [row] = await db
+			.select({ note: mediaQuarantine.note, clearedNote: mediaQuarantine.clearedNote })
+			.from(mediaQuarantine)
+			.where(eq(mediaQuarantine.id, findingId!));
+		expect(row).toEqual({ note: "reported by two readers", clearedNote: "not a match" });
+	});
+
 	it("🚨 refuses a finding id that matches nothing instead of reporting success", async () => {
 		// Every integer is a plausible finding id. A clear that quietly does nothing and
 		// answers `objectsRestored: 0` is indistinguishable from one that worked on an object
@@ -462,6 +493,81 @@ describe("Clearing a Work-less finding", () => {
 			.from(mediaQuarantine)
 			.where(eq(mediaQuarantine.id, row.id));
 		expect(after.clearedAt).toBeNull();
+	});
+});
+
+// 🛑 A Drizzle error's message quotes the query's parameters, so a failed write carrying the
+// vendor's answer would carry it into a worker log or a job's stored error. `lib/match-data.ts`
+// is what stops that, and each writer of `vendor_match` is checked here with a sentinel.
+describe("A failed write carrying the vendor's answer", () => {
+	const sentinel = `vendor-sentinel-${RUN}`;
+	const outcome = {
+		determination: "apparent-csam" as const,
+		vendorMatch: {
+			vendor: "arachnid-shield",
+			classification: sentinel,
+			matchType: "exact" as const,
+			receivedAt: new Date().toISOString(),
+		},
+		reportable: true,
+		quarantine: true,
+	};
+	const failureOf = (write: Promise<unknown>) =>
+		write.then(
+			() => {
+				throw new Error("the write was expected to fail");
+			},
+			(err: unknown) => err as Error,
+		);
+	const expectNoMatchData = (err: Error) => {
+		expect(err.message).not.toContain(sentinel);
+		expect(err.message).not.toContain("params");
+		expect(err.message).toContain("SQLSTATE");
+		expect(err.cause).toBeUndefined();
+		expect(String(err.stack)).not.toContain(sentinel);
+	};
+
+	it("never quotes it when a scan record is refused", async () => {
+		// A Work nothing has, which the scan record's foreign key refuses.
+		expectNoMatchData(
+			await failureOf(
+				recordScan(
+					`creators/${creatorId}/avatars/${RUN}-refused.png`,
+					2_000_000_000,
+					null,
+					outcome,
+				),
+			),
+		);
+		expectNoMatchData(
+			await failureOf(
+				recordScans([
+					{
+						storageKey: `creators/${creatorId}/avatars/${RUN}-refused-frames.png`,
+						workId: 2_000_000_000,
+						pdq: null,
+						outcome,
+					},
+				]),
+			),
+		);
+	});
+
+	it("never quotes it when an object's finding is refused", async () => {
+		// An uploader nothing has, refused by the finding's foreign key. The key names no stored
+		// object, so nothing is moved and nothing is left parked.
+		expectNoMatchData(
+			await failureOf(
+				quarantineObject({
+					storageKey: `creators/${creatorId}/avatars/${RUN}-never-stored.png`,
+					uploaderId: 2_000_000_000,
+					objectKind: "avatar",
+					source: "scan",
+					classification: "apparent-csam",
+					vendorMatch: outcome.vendorMatch,
+				}),
+			),
+		);
 	});
 });
 

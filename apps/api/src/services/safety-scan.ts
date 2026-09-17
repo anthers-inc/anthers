@@ -31,6 +31,7 @@ import {
 	scanPdqHashes,
 	shieldCredentials,
 } from "../lib/arachnid-shield";
+import { writingMatchData } from "../lib/match-data.js";
 import { MIN_PDQ_QUALITY, type PdqHash, pdqHashImage } from "../lib/pdq";
 import { hashVideoFrames, probeVideo, type SampledFrame } from "../lib/video-frames.js";
 import { type QuarantineObjectKind, quarantineObject, quarantineWork } from "./quarantine.js";
@@ -712,20 +713,22 @@ export async function recordScans(
 		vendorMatch: e.outcome.vendorMatch,
 		scannedAt,
 	}));
-	await db
-		.insert(mediaScans)
-		.values(rows)
-		.onConflictDoUpdate({
-			target: mediaScans.storageKey,
-			set: {
-				workId: sql`excluded.work_id`,
-				pdqHash: sql`excluded.pdq_hash`,
-				pdqQuality: sql`excluded.pdq_quality`,
-				determination: sql`excluded.determination`,
-				vendorMatch: sql`excluded.vendor_match`,
-				scannedAt: sql`excluded.scanned_at`,
-			},
-		});
+	await writingMatchData(`${rows.length} scan records`, () =>
+		db
+			.insert(mediaScans)
+			.values(rows)
+			.onConflictDoUpdate({
+				target: mediaScans.storageKey,
+				set: {
+					workId: sql`excluded.work_id`,
+					pdqHash: sql`excluded.pdq_hash`,
+					pdqQuality: sql`excluded.pdq_quality`,
+					determination: sql`excluded.determination`,
+					vendorMatch: sql`excluded.vendor_match`,
+					scannedAt: sql`excluded.scanned_at`,
+				},
+			}),
+	);
 }
 
 /** The only writer of `media_scans`. A re-scan replaces the row rather than stacking. */
@@ -744,8 +747,10 @@ export async function recordScan(
 		vendorMatch: outcome.vendorMatch,
 		scannedAt: new Date(),
 	};
-	await db
-		.insert(mediaScans)
-		.values(row)
-		.onConflictDoUpdate({ target: mediaScans.storageKey, set: row });
+	await writingMatchData(`the scan record for ${storageKey}`, () =>
+		db
+			.insert(mediaScans)
+			.values(row)
+			.onConflictDoUpdate({ target: mediaScans.storageKey, set: row }),
+	);
 }
