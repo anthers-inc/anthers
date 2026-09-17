@@ -113,9 +113,96 @@ export interface QuarantineInput {
 export interface QuarantineResult {
 	/** How many objects were moved out of reach. Zero is legitimate — see below. */
 	objectsMoved: number;
+	/**
+	 * Objects already out of reach before this call: under an earlier finding, or left parked by
+	 * an earlier quarantine that failed before writing one, which this call then writes. Counted
+	 * apart from `objectsMissing`, because "already parked" and "not in storage at all" send an
+	 * operator in different directions.
+	 */
+	objectsAlreadyParked: number;
 	/** Objects the database named that storage did not have. Recorded, never fatal. */
 	objectsMissing: number;
 	holdIds: number[];
+}
+
+/** The Work a quarantine named does not exist. Nothing was moved or written. */
+export class QuarantineWorkNotFoundError extends Error {
+	constructor(readonly workId: number) {
+		super(`No such Work: ${workId}`);
+	}
+}
+
+/** How far a quarantine got before it failed. */
+export type QuarantineFailureStage = "moving" | "recording" | "holding";
+
+/**
+ * A quarantine that failed partway, carrying what it had already done.
+ *
+ * 🚨 **The keys are the point.** A failure after some objects moved leaves them out of reach
+ * with no finding naming them, and an operator told only "it failed" cannot tell whether the
+ * material is still servable. `message` is written to be shown to that operator as it stands.
+ */
+export class QuarantinePlacementError extends Error {
+	constructor(
+		readonly workId: number,
+		readonly stage: QuarantineFailureStage,
+		/** Objects moved out of reach before the failure, whether or not a finding names them. */
+		readonly movedKeys: string[],
+		/** Holds placed before the failure. */
+		readonly holdIds: number[],
+		failure: unknown,
+	) {
+		// 🚨 **No `cause`, deliberately.** The failure is often a database error, whose message
+		// carries the query's parameters, and on the scan path one of those is the detection
+		// vendor's Match Data — which must never reach a log an agent reads, a job's stored error,
+		// or an operator's screen. Its safe summary goes into the message instead.
+		super(placementFailureMessage(workId, stage, movedKeys, holdIds, failure));
+	}
+}
+
+/**
+ * Why something failed, in a form safe to show and to log.
+ *
+ * 🚨 **A failed query is described by its SQLSTATE and nothing else.** Drizzle's message quotes
+ * the parameters, and even Postgres's own message quotes a value for some refusals, so the code
+ * is the only part guaranteed to carry none. Anything else is its first line.
+ */
+function safeReason(err: unknown): string {
+	if (!(err instanceof Error)) return "an unknown error";
+	const code = [err, err.cause]
+		.map((e) => (e as { code?: unknown } | undefined)?.code)
+		.find((c): c is string => typeof c === "string" && /^[0-9A-Z]{5}$/.test(c));
+	if (code) return `the database refused it (SQLSTATE ${code})`;
+	if (err.message.startsWith("Failed query")) return "the database refused it";
+	return err.message.split("\n")[0].replace(/\.$/, "");
+}
+
+function placementFailureMessage(
+	workId: number,
+	stage: QuarantineFailureStage,
+	movedKeys: string[],
+	holdIds: number[],
+	failure: unknown,
+): string {
+	const detail = ` The error was: ${safeReason(failure)}.`;
+	if (stage === "holding") {
+		return (
+			`Work ${workId} is quarantined and its finding is recorded, but placing its preservation ` +
+			`holds failed after ${holdIds.length} ${holdIds.length === 1 ? "hold" : "holds"}. ` +
+			`Quarantine it again to place them; a second hold on a subject is harmless.${detail}`
+		);
+	}
+	const during = stage === "moving" ? "while moving its objects" : "while writing its finding";
+	if (movedKeys.length === 0) {
+		return `Quarantining Work ${workId} failed ${during}, before any object was moved, so nothing changed.${detail}`;
+	}
+	return (
+		`Quarantining Work ${workId} failed ${during}. ${movedKeys.length} ` +
+		`${movedKeys.length === 1 ? "object was" : "objects were"} already moved out of reach and ` +
+		`no finding names ${movedKeys.length === 1 ? "it" : "them"} yet: ${movedKeys.join(", ")}. ` +
+		`${movedKeys.length === 1 ? "It stays" : "They stay"} out of reach. Quarantine the Work again ` +
+		`to record ${movedKeys.length === 1 ? "it" : "them"} and move anything left behind.${detail}`
+	);
 }
 
 /**
@@ -234,7 +321,12 @@ async function listHlsObjects(masterKey: string): Promise<string[]> {
  * commit followed by a failed move leaves the database saying the material is out of
  * reach while it is still servable, which is the one lie this module cannot tell. Moving
  * first means the failure mode is an object already parked with no row explaining it —
- * unreachable, and visible in the next quarantine of the same Work.
+ * unreachable, and recorded by the next quarantine of the same Work, which finds it parked
+ * with no open finding and writes the finding it is owed.
+ *
+ * ⚠️ **A failure partway throws {@link QuarantinePlacementError}, naming what had moved.**
+ * A missing Work throws {@link QuarantineWorkNotFoundError} before anything happens. Those two
+ * are the only things this throws, so a caller can tell an operator which one they are in.
  */
 export async function quarantineWork(input: QuarantineInput): Promise<QuarantineResult> {
 	const [work] = await db
@@ -247,17 +339,41 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 		.from(works)
 		.where(eq(works.id, input.workId))
 		.limit(1);
-	if (!work) throw new Error(`No such Work: ${input.workId}`);
+	if (!work) throw new QuarantineWorkNotFoundError(input.workId);
 
-	const objects = await objectsFor(input.workId);
+	/** Every object this call will write a finding for: moved now, or parked by a failed run. */
 	const moved: (WorkObject & { quarantineKey: string })[] = [];
+	let objectsMoved = 0;
+	let objectsAlreadyParked = 0;
 	let objectsMissing = 0;
 
-	for (const object of objects) {
-		const quarantineKey = quarantineKeyFor(object.key);
-		const ok = await storage.move(object.key, quarantineKey);
-		if (ok) moved.push({ ...object, quarantineKey });
-		else objectsMissing++;
+	try {
+		const [objects, openRows] = await Promise.all([
+			objectsFor(input.workId),
+			db
+				.select({ originalKey: mediaQuarantine.originalKey })
+				.from(mediaQuarantine)
+				.where(and(eq(mediaQuarantine.workId, input.workId), isNull(mediaQuarantine.clearedAt))),
+		]);
+		const recorded = new Set(openRows.map((r) => r.originalKey));
+
+		for (const object of objects) {
+			const quarantineKey = quarantineKeyFor(object.key);
+			if (await storage.move(object.key, quarantineKey)) {
+				moved.push({ ...object, quarantineKey });
+				objectsMoved++;
+			} else if (await storage.exists(quarantineKey)) {
+				// Already parked. Under an open finding that is an earlier quarantine's work; under
+				// none it is an earlier quarantine that failed after moving it, and this is the
+				// retry that owes it a finding.
+				objectsAlreadyParked++;
+				if (!recorded.has(object.key)) moved.push({ ...object, quarantineKey });
+			} else {
+				objectsMissing++;
+			}
+		}
+	} catch (err) {
+		throw new QuarantinePlacementError(input.workId, "moving", keysOf(moved), [], err);
 	}
 
 	// Only the first quarantine records what the creator had chosen. A second pass on an
@@ -266,6 +382,53 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 	const priorVisibility =
 		work.quarantineStatus === "quarantined" ? "" : (work.visibility ?? "private");
 
+	try {
+		await recordWorkQuarantine(input, work, moved, priorVisibility);
+	} catch (err) {
+		throw new QuarantinePlacementError(input.workId, "recording", keysOf(moved), [], err);
+	}
+
+	// 🚨 Placed AFTER the state is written, and never skipped. Everything quarantined is
+	// under a preservation hold — quarantining without one moves material somewhere a
+	// sweep can still reach, which is worse than leaving it where it was, because nothing
+	// is watching the quarantine prefix.
+	const expiresAt = preservationExpiry();
+	const reason = `Quarantine of Work ${input.workId} (${input.source}), § 2258A(h) preservation`;
+	const subjects: { subjectType: "work" | "user" | "report"; subjectId: number }[] = [
+		{ subjectType: "work", subjectId: input.workId },
+	];
+	if (work.creatorId != null) subjects.push({ subjectType: "user", subjectId: work.creatorId });
+	if (input.reportId != null) subjects.push({ subjectType: "report", subjectId: input.reportId });
+
+	const holdIds: number[] = [];
+	try {
+		for (const subject of subjects) {
+			holdIds.push(
+				(await placeHold({ ...subject, reason, placedBy: input.adminId ?? null, expiresAt }))
+					.holdId,
+			);
+		}
+	} catch (err) {
+		throw new QuarantinePlacementError(input.workId, "holding", keysOf(moved), holdIds, err);
+	}
+
+	return { objectsMoved, objectsAlreadyParked, objectsMissing, holdIds };
+}
+
+function keysOf(objects: { key: string }[]): string[] {
+	return objects.map((o) => o.key);
+}
+
+/**
+ * Delist the Work and write its findings, its log entry and everything that follows from them,
+ * in one transaction.
+ */
+async function recordWorkQuarantine(
+	input: QuarantineInput,
+	work: { creatorId: number | null },
+	moved: (WorkObject & { quarantineKey: string })[],
+	priorVisibility: string,
+): Promise<void> {
 	await db.transaction(async (tx) => {
 		await tx
 			.update(works)
@@ -343,53 +506,6 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 				),
 			);
 	});
-
-	// 🚨 Placed AFTER the state is written, and never skipped. Everything quarantined is
-	// under a preservation hold — quarantining without one moves material somewhere a
-	// sweep can still reach, which is worse than leaving it where it was, because nothing
-	// is watching the quarantine prefix.
-	const expiresAt = preservationExpiry();
-	const reason = `Quarantine of Work ${input.workId} (${input.source}), § 2258A(h) preservation`;
-	const holdIds: number[] = [];
-	holdIds.push(
-		(
-			await placeHold({
-				subjectType: "work",
-				subjectId: input.workId,
-				reason,
-				placedBy: input.adminId ?? null,
-				expiresAt,
-			})
-		).holdId,
-	);
-	if (work.creatorId != null) {
-		holdIds.push(
-			(
-				await placeHold({
-					subjectType: "user",
-					subjectId: work.creatorId,
-					reason,
-					placedBy: input.adminId ?? null,
-					expiresAt,
-				})
-			).holdId,
-		);
-	}
-	if (input.reportId != null) {
-		holdIds.push(
-			(
-				await placeHold({
-					subjectType: "report",
-					subjectId: input.reportId,
-					reason,
-					placedBy: input.adminId ?? null,
-					expiresAt,
-				})
-			).holdId,
-		);
-	}
-
-	return { objectsMoved: moved.length, objectsMissing, holdIds };
 }
 
 export interface QuarantineObjectInput {
@@ -569,7 +685,9 @@ export async function clearObjectQuarantine(input: {
 
 	await db
 		.update(mediaQuarantine)
-		.set({ clearedAt: new Date(), clearedBy: input.adminId, note: input.note ?? "" })
+		// The clearing note beside the placement note, never over it: for an object with no Work,
+		// `note` is the only record of why the finding was placed.
+		.set({ clearedAt: new Date(), clearedBy: input.adminId, clearedNote: input.note ?? "" })
 		.where(eq(mediaQuarantine.id, row.id));
 
 	// 🚨 **`cleared` and `objectsRestored` are two different facts and the caller needs
@@ -627,7 +745,7 @@ export async function clearQuarantine(input: {
 
 		await tx
 			.update(mediaQuarantine)
-			.set({ clearedAt: new Date(), clearedBy: input.adminId, note: input.note ?? "" })
+			.set({ clearedAt: new Date(), clearedBy: input.adminId, clearedNote: input.note ?? "" })
 			.where(
 				inArray(
 					mediaQuarantine.id,
@@ -671,7 +789,10 @@ export interface QuarantineFinding {
 	placedBy: string | null;
 	clearedAt: string | null;
 	clearedBy: string | null;
+	/** Why it was placed. */
 	note: string;
+	/** Why it was cleared, or empty while it is open. */
+	clearedNote: string;
 }
 
 /**
@@ -711,6 +832,7 @@ export async function loadQuarantineFindings(
 			clearedAt: mediaQuarantine.clearedAt,
 			clearedBy: clearer.displayName,
 			note: mediaQuarantine.note,
+			clearedNote: mediaQuarantine.clearedNote,
 		})
 		.from(mediaQuarantine)
 		.leftJoin(works, eq(mediaQuarantine.workId, works.id))
@@ -737,6 +859,7 @@ export async function loadQuarantineFindings(
 		clearedAt: r.clearedAt?.toISOString() ?? null,
 		clearedBy: r.clearedBy,
 		note: r.note,
+		clearedNote: r.clearedNote,
 	}));
 }
 

@@ -432,6 +432,32 @@ describe("Clearing a Work-less finding", () => {
 		expect(row.clearedBy).toBe(operatorId);
 	});
 
+	// 🚨 For an object with no Work the finding's own note is the only record of why it was placed,
+	// and a clear used to write its note over it.
+	it("keeps why it was placed beside why it was cleared", async () => {
+		const key = await putObject("both-notes", 53);
+		const { findingId } = await quarantineObject({
+			storageKey: key,
+			uploaderId: creatorId,
+			objectKind: "badge",
+			source: "operator",
+			classification: "apparent-csam",
+			adminId: operatorId,
+			note: "reported by two readers",
+		});
+		await clearObjectQuarantine({
+			findingId: findingId!,
+			adminId: operatorId,
+			note: "not a match",
+		});
+
+		const [row] = await db
+			.select({ note: mediaQuarantine.note, clearedNote: mediaQuarantine.clearedNote })
+			.from(mediaQuarantine)
+			.where(eq(mediaQuarantine.id, findingId!));
+		expect(row).toEqual({ note: "reported by two readers", clearedNote: "not a match" });
+	});
+
 	it("🚨 refuses a finding id that matches nothing instead of reporting success", async () => {
 		// Every integer is a plausible finding id. A clear that quietly does nothing and
 		// answers `objectsRestored: 0` is indistinguishable from one that worked on an object

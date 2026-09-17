@@ -68,6 +68,8 @@ import {
 	clearObjectQuarantine,
 	clearQuarantine,
 	loadQuarantineFindings,
+	QuarantinePlacementError,
+	QuarantineWorkNotFoundError,
 	quarantineSummary,
 	quarantineWork,
 } from "../services/quarantine.js";
@@ -560,6 +562,12 @@ const adminRoutes = new Hono<AdminEnv>()
 	// is a reporting trigger and a report filed by a route is one nobody decided to
 	// make. What this does is take the material out of reach and preserve it, which is
 	// what has to be true *before* that person starts.
+	//
+	// 🚨 **Only a missing Work is a 404.** A quarantine that fails partway may already have moved
+	// objects out of reach with no finding naming them, and reporting that as "Work not found"
+	// told an operator mid-incident that nothing had happened. It answers 500 with the error's own
+	// message, which names the objects that moved and says to quarantine again, and the keys and
+	// holds as fields beside it.
 	.post("/quarantine", zValidator("json", quarantineSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
 		const { workId, classification, reportId, note } = c.req.valid("json");
@@ -573,8 +581,23 @@ const adminRoutes = new Hono<AdminEnv>()
 				note,
 			});
 			return c.json(result);
-		} catch {
-			return c.json({ error: "Work not found" }, 404);
+		} catch (err) {
+			if (err instanceof QuarantineWorkNotFoundError) {
+				return c.json({ error: "Work not found" }, 404);
+			}
+			if (err instanceof QuarantinePlacementError) {
+				console.error(`[admin/quarantine] ${err.message}`);
+				return c.json(
+					{
+						error: err.message,
+						stage: err.stage,
+						movedKeys: err.movedKeys,
+						holdIds: err.holdIds,
+					},
+					500,
+				);
+			}
+			throw err;
 		}
 	})
 

@@ -1,0 +1,1 @@
+ALTER TABLE "media_quarantine" ADD COLUMN "cleared_note" text DEFAULT '' NOT NULL;

@@ -37,7 +37,10 @@ interface Finding {
 	placedBy: string | null;
 	clearedAt: string | null;
 	clearedBy: string | null;
+	/** Why it was placed. */
 	note: string;
+	/** Why it was cleared, kept beside the placement note. */
+	clearedNote: string;
 }
 
 interface QuarantineResponse {
@@ -92,7 +95,13 @@ function groupFindings(findings: Finding[]): Group[] {
 	return groups;
 }
 
-function PlaceQuarantine({ onPlaced }: { onPlaced: (message: string) => void }) {
+function PlaceQuarantine({
+	onPlaced,
+	onFailed,
+}: {
+	onPlaced: (message: string) => void;
+	onFailed: () => void;
+}) {
 	const [workId, setWorkId] = useState("");
 	const [classification, setClassification] = useState("");
 	const [reportId, setReportId] = useState("");
@@ -108,6 +117,7 @@ function PlaceQuarantine({ onPlaced }: { onPlaced: (message: string) => void }) 
 		setError(null);
 		const result = await adminPost<{
 			objectsMoved: number;
+			objectsAlreadyParked: number;
 			objectsMissing: number;
 			holdIds: number[];
 		}>("/api/admin/quarantine", {
@@ -119,12 +129,19 @@ function PlaceQuarantine({ onPlaced }: { onPlaced: (message: string) => void }) 
 		setBusy(false);
 		setConfirming(false);
 		if (!result.ok) {
+			// The API's own sentence, which for a failure partway names the objects already moved
+			// out of reach. The list is reloaded so whatever finding did get written shows.
 			setError(result.error);
+			onFailed();
 			return;
 		}
-		const { objectsMoved, objectsMissing, holdIds } = result.data;
+		const { objectsMoved, objectsAlreadyParked, objectsMissing, holdIds } = result.data;
+		const parked =
+			objectsAlreadyParked > 0
+				? `${plural(objectsAlreadyParked, "object was", "objects were")} already out of reach, `
+				: "";
 		onPlaced(
-			`Work ${workId} is quarantined: ${plural(objectsMoved, "object", "objects")} moved out of reach, ${plural(objectsMissing, "object", "objects")} named by the database but missing from storage, and ${plural(holdIds.length, "preservation hold", "preservation holds")} placed.`,
+			`Work ${workId} is quarantined: ${plural(objectsMoved, "object", "objects")} moved out of reach, ${parked}${plural(objectsMissing, "object", "objects")} named by the database but missing from storage, and ${plural(holdIds.length, "preservation hold", "preservation holds")} placed.`,
 		);
 		setWorkId("");
 		setClassification("");
@@ -276,7 +293,7 @@ function ClearPanel({
 					? "Clearing moves every object this Work owns back to its original key and restores the visibility the creator had chosen."
 					: "Clearing moves this object back to its original key. Nothing that referenced it is repaired, so the uploader has to upload it again."}{" "}
 				The preservation holds stay in place and are lifted separately under Legal Holds. The note
-				below replaces the note recorded when the finding was placed.
+				below is kept beside the one recorded when the finding was placed.
 			</p>
 			<textarea
 				className="textarea textarea-bordered mt-2 w-full"
@@ -384,6 +401,11 @@ function FindingGroup({
 								<td className="whitespace-nowrap text-xs">
 									{f.clearedAt ? dateTime(f.clearedAt) : "—"}
 									{f.clearedBy && <div className="text-base-content/60">{f.clearedBy}</div>}
+									{f.clearedNote && (
+										<div className="whitespace-normal italic text-base-content/60">
+											“{f.clearedNote}”
+										</div>
+									)}
 								</td>
 							</tr>
 						))}
@@ -437,7 +459,7 @@ export default function Quarantine() {
 
 			<section className="mb-10">
 				<SectionHeading>Quarantine a Work by Hand</SectionHeading>
-				<PlaceQuarantine onPlaced={done} />
+				<PlaceQuarantine onPlaced={done} onFailed={() => void reload()} />
 			</section>
 
 			<section>
