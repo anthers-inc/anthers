@@ -14,6 +14,10 @@
  * the reply chain is still honest because every reply still sits under what it answers.
  */
 import { useAuth } from "@anthers/web-shared/auth";
+import {
+	INTERACTION_PERMISSION_HINT,
+	useInteractionPermissionMissing,
+} from "@anthers/web-shared/publishing";
 import { client } from "@anthers/web-shared/rpc";
 import type { Comment, ThreadComment } from "@anthers/web-shared/types";
 import { FlagIcon } from "@heroicons/react/24/outline";
@@ -139,6 +143,10 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 	// Gaps are not comments, so they are not counted as any.
 	const count = comments.filter((c) => !c.removed).length;
 
+	// A comment is a record in the commenter's own repository; the banner explains, and the form
+	// says so rather than accepting words the server will refuse.
+	const permissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
+
 	const state: ThreadState = {
 		isAuthenticated,
 		repliesTo: thread.repliesTo,
@@ -161,11 +169,15 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 						rows={3}
 						value={body}
 						onChange={(e) => setBody(e.target.value)}
+						disabled={permissionMissing}
 					/>
+					{permissionMissing && (
+						<p className="text-xs text-warning mt-1">{INTERACTION_PERMISSION_HINT}</p>
+					)}
 					<button
 						type="submit"
 						className="btn btn-primary btn-sm mt-2"
-						disabled={submitting || !body.trim()}
+						disabled={submitting || !body.trim() || permissionMissing}
 					>
 						{submitting ? <span className="loading loading-spinner loading-sm" /> : "Post comment"}
 					</button>
@@ -373,6 +385,7 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 
 function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 	const { setReplyingTo, submitReply } = useThread();
+	const permissionMissing = useInteractionPermissionMissing(true) === true;
 	const [body, setBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [refused, setRefused] = useState(false);
@@ -411,11 +424,14 @@ function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 					This comment can no longer be replied to.
 				</p>
 			)}
+			{permissionMissing && (
+				<p className="text-xs text-warning mt-1">{INTERACTION_PERMISSION_HINT}</p>
+			)}
 			<div className="flex gap-2 mt-2">
 				<button
 					type="submit"
 					className="btn btn-primary btn-xs"
-					disabled={submitting || !body.trim()}
+					disabled={submitting || !body.trim() || permissionMissing}
 				>
 					{submitting ? <span className="loading loading-spinner loading-xs" /> : "Post reply"}
 				</button>

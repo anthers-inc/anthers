@@ -4,6 +4,10 @@ import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/cons
 import { useAuth } from "@anthers/web-shared/auth";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { displayHandle, usernameFromHandleParam } from "@anthers/web-shared/profile";
+import {
+	INTERACTION_PERMISSION_HINT,
+	useInteractionPermissionMissing,
+} from "@anthers/web-shared/publishing";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
@@ -349,6 +353,7 @@ export default function CreatorProfilePage() {
 	// turned away a segment without one, so in practice this never falls back.
 	const username = usernameFromHandleParam(handle) ?? undefined;
 	const { isAuthenticated, user: currentUser, refreshUser } = useAuth();
+	const followPermissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
 	const [searchParams, setSearchParams] = useSearchParams();
 
 	const [creator, setCreator] = useState<PublicUser | null>(null);
@@ -581,9 +586,12 @@ export default function CreatorProfilePage() {
 				setIsFollowing(false);
 				setFollowerCount((c) => c - 1);
 			} else {
-				await client.api.accounts.users[":username"].follow.$post({
+				const res = await client.api.accounts.users[":username"].follow.$post({
 					param: { username },
 				});
+				// Only a follow that was kept reads as one. A refusal — no permission to write the
+				// follow's record, say — would otherwise show "Following" for something that is not.
+				if (!res.ok) return;
 				setIsFollowing(true);
 				setFollowerCount((c) => c + 1);
 			}
@@ -844,6 +852,13 @@ export default function CreatorProfilePage() {
 										type="button"
 										className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
 										onClick={handleFollow}
+										// Unfollowing is never blocked; following writes a record.
+										disabled={!isFollowing && followPermissionMissing}
+										title={
+											!isFollowing && followPermissionMissing
+												? INTERACTION_PERMISSION_HINT
+												: undefined
+										}
 									>
 										{isFollowing ? "Following" : "Follow"}
 									</button>

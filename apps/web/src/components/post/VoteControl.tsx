@@ -19,6 +19,10 @@
 
 import type { VoteDirection } from "@anthers/shared/votes";
 import { useAuth } from "@anthers/web-shared/auth";
+import {
+	INTERACTION_PERMISSION_HINT,
+	useInteractionPermissionMissing,
+} from "@anthers/web-shared/publishing";
 import { client } from "@anthers/web-shared/rpc";
 import { HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
 import {
@@ -76,6 +80,7 @@ export default function VoteControl({
 	}) => void;
 }) {
 	const { isAuthenticated } = useAuth();
+	const permissionMissing = useInteractionPermissionMissing(isAuthenticated);
 	const given = score !== undefined;
 	const [mine, setMine] = useState<VoteDirection | null>(viewerVote ?? null);
 	const [shown, setShown] = useState(score ?? 0);
@@ -163,14 +168,17 @@ export default function VoteControl({
 	const Down = mine === "down" ? HandThumbDownSolid : HandThumbDownIcon;
 	const disabled = !isAuthenticated || busy;
 	const hint = isAuthenticated ? undefined : "Log in to react";
+	// ⚠️ **Only the press that writes is blocked.** Pressing the direction already chosen takes the
+	// vote back, which removes a record rather than creating one and is never refused.
+	const blocked = (direction: VoteDirection) => permissionMissing === true && mine !== direction;
 
 	return (
 		<span className="inline-flex items-center gap-1 text-base-content/50">
 			<button
 				type="button"
 				className="hover:text-primary disabled:opacity-40 disabled:hover:text-base-content/50"
-				disabled={disabled}
-				title={hint ?? "Upvote"}
+				disabled={disabled || blocked("up")}
+				title={hint ?? (blocked("up") ? INTERACTION_PERMISSION_HINT : "Upvote")}
 				aria-pressed={mine === "up"}
 				aria-label={`Upvote ${label}`}
 				onClick={() => vote("up")}
@@ -196,8 +204,8 @@ export default function VoteControl({
 			<button
 				type="button"
 				className="hover:text-primary disabled:opacity-40 disabled:hover:text-base-content/50"
-				disabled={disabled}
-				title={hint ?? "Downvote"}
+				disabled={disabled || blocked("down")}
+				title={hint ?? (blocked("down") ? INTERACTION_PERMISSION_HINT : "Downvote")}
 				aria-pressed={mine === "down"}
 				aria-label={`Downvote ${label}`}
 				onClick={() => vote("down")}

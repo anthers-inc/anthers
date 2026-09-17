@@ -46,6 +46,7 @@ import {
 	atprotoPublishEnabled,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
+	isCreatorAccount,
 	isCreatorIdentity,
 	publishingStateFor,
 	readPdsEmail,
@@ -194,7 +195,9 @@ async function scopeForFlow(intent: AppState["intent"], subject: string): Promis
 	// Signing up has no account to read, so it gets the base set plus the address scope.
 	if (intent === "signup") return scopeFor({ email: true });
 	// An explicit ask, from somebody who went looking for it.
-	if (intent === "publish") return scopeFor({ creator: true });
+	// Giving the permission again asks for what the account holds, as a sign-in does: the creator
+	// tier only for a creator, so a reader restoring their comments is not asked about publishing.
+	if (intent === "publish") return scopeFor({ creator: await isCreatorIdentity(subject) });
 	return scopeFor({ creator: await isCreatorIdentity(subject) });
 }
 
@@ -286,7 +289,9 @@ const atprotoRoutes = new Hono()
 			);
 		}
 		if (intent === "publish") {
-			if (!atprotoPublishEnabled()) {
+			// The switch gates asking for the creator tier. A reader giving back the permission for
+			// their comments, reviews, votes and follows is never behind it.
+			if (!atprotoPublishEnabled() && (await isCreatorAccount(userId as number))) {
 				return c.json({ error: "Publishing to your own repository isn't open yet." }, 403);
 			}
 			const state = await publishingStateFor(userId as number);

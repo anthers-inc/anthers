@@ -1,24 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A creator whose identity is held elsewhere says no to the publishing permission at their own
- * server's consent screen, is told what that means everywhere they go, and gives it.
+ * Somebody whose identity is held elsewhere loses the permission Anthers writes their records
+ * with, is told what that means wherever they go, and gives it back from the banner.
  *
  * 🚨 **Deny is walked for real, on the session's Bluesky stand-in**, because a consent screen
  * declines by refusing the whole authorization rather than by granting less — and the API had only
  * ever been tested against the narrower grant, so a real Deny showed a signed-in creator "sign-in
  * didn't work". What the browser proves beyond the API suites is that the refusal, the banner and
- * the Studio settings card all agree, and that the banner is what gets somebody to the fix.
+ * the controls all agree, and that the banner is what gets somebody to the fix.
  *
  * ⚠️ **It runs on `127.0.0.1`**, for the reason `bluesky-door.e2e.ts` gives: a loopback OAuth
  * client's redirect lands on a literal IP, and cookies are host-scoped.
  */
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { db } from "@anthers/db/client";
+import { atprotoSessions } from "@anthers/db/schema";
 import type { Page } from "@playwright/test";
+import { eq } from "drizzle-orm";
 import { emailedCode, expect, test } from "./fixtures";
 
 const ORIGIN = `http://127.0.0.1:${process.env.PREVIEW_PORT ?? 4173}`;
 const API = `http://127.0.0.1:${process.env.API_PORT ?? 8000}`;
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
-const BANNER_TEXT = "doesn't have your permission to publish";
+const BANNER_TEXT = "doesn't have your permission to write";
 
 /** The stand-in's own authorization pages: signing in when it asks, then the consent. */
 async function atConsent(page: Page, password: string): Promise<void> {
@@ -30,13 +36,18 @@ async function atConsent(page: Page, password: string): Promise<void> {
 	}
 }
 
-test("a creator who denies the publishing permission is warned until they give it", async ({
-	page,
-}) => {
+/**
+ * An account holding an identity on the Bluesky stand-in, made the way anybody makes one: the
+ * Bluesky door, its consent, the emailed code and a username.
+ */
+async function signUpWithBluesky(
+	page: Page,
+	prefix: string,
+): Promise<{ name: string; handle: string; password: string; did: string }> {
 	const server = process.env.BLUESKY_STAND_IN_URL;
 	expect(server, "the browser suite runs with the session's Bluesky stand-in").toBeTruthy();
 
-	const name = `pp${Date.now().toString(36)}`;
+	const name = `${prefix}${Date.now().toString(36)}`;
 	const handle = `${name}.bsky.test`;
 	const address = `${name}@example.com`;
 	const password = crypto.randomUUID();
@@ -46,8 +57,8 @@ test("a creator who denies the publishing permission is warned until they give i
 		body: JSON.stringify({ handle, email: address, password }),
 	});
 	expect(created.status).toBe(200);
+	const { did } = (await created.json()) as { did: string };
 
-	// An account holding the brought identity, made the way anybody makes one.
 	await page.goto(`${ORIGIN}/subscribe`);
 	const card = page.locator('[data-signup="top"]');
 	await card.getByRole("tab", { name: "Bluesky", exact: true }).click();
@@ -64,6 +75,13 @@ test("a creator who denies the publishing permission is warned until they give i
 	await page.getByRole("checkbox", { name: /13 or older/i }).check();
 	await page.getByRole("button", { name: "Finish setting up" }).click();
 	await expect(page.getByText(`You're in, @${name}`)).toBeVisible({ timeout: 15_000 });
+	return { name, handle, password, did };
+}
+
+test("a creator who denies the publishing permission is warned until they give it", async ({
+	page,
+}) => {
+	const { handle, password } = await signUpWithBluesky(page, "pp");
 
 	// Becoming a creator asks for the permission at once, and they say no.
 	await page.goto(`${ORIGIN}/settings`);
@@ -101,4 +119,38 @@ test("a creator who denies the publishing permission is warned until they give i
 	await page.goto(`${ORIGIN}/studio`);
 	await page.waitForLoadState("networkidle");
 	await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
+});
+
+test("a reader whose permission lapsed cannot follow until they give it, and comes back to the page", async ({
+	page,
+}) => {
+	const { did, password } = await signUpWithBluesky(page, "pr");
+
+	// Somebody to follow, and a lapse: the stored grant narrowed to identity alone, which is where
+	// a permission withdrawn at the reader's own server leaves it.
+	const creator = `prc${Date.now().toString(36)}`;
+	execFileSync("bun", ["run", "db:local-account", "--username", creator, "--creator"], {
+		cwd: REPO_ROOT,
+		encoding: "utf8",
+	});
+	await db.update(atprotoSessions).set({ scope: "atproto" }).where(eq(atprotoSessions.did, did));
+
+	await page.goto(`${ORIGIN}/@${creator}`);
+	const banner = page.getByRole("alert").filter({ hasText: BANNER_TEXT });
+	await expect(banner).toBeVisible();
+	await expect(banner).toContainText("you can't comment, review, vote or follow");
+	const follow = page.getByRole("button", { name: "Follow", exact: true });
+	await expect(follow).toBeDisabled();
+
+	await banner.getByRole("button", { name: "Give Permission" }).click();
+	await atConsent(page, password);
+	await page.getByRole("button", { name: "Authorize", exact: true }).click();
+
+	// Back where they were rather than in a Studio a reader does not have.
+	await expect(page).toHaveURL(new RegExp(`/@${creator}$`), { timeout: 15_000 });
+	await page.waitForLoadState("networkidle");
+	await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
+	await expect(follow).toBeEnabled();
+	await follow.click();
+	await expect(page.getByRole("button", { name: "Following", exact: true })).toBeVisible();
 });

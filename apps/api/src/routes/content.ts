@@ -106,6 +106,7 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
 	PROJECT_COLLECTION,
@@ -2493,6 +2494,11 @@ const contentRoutes = new Hono()
 				if (refusal) return c.json({ error: refusal }, 404);
 			}
 
+			// A comment is a record in the commenter's own repository, so one Anthers cannot write
+			// is refused rather than kept here and silently never published.
+			const unwritable = await interactionPermissionRefusal(user.id);
+			if (unwritable) return c.json(unwritable.body, unwritable.status);
+
 			const [comment] = await db
 				.insert(comments)
 				.values(
@@ -2557,6 +2563,10 @@ const contentRoutes = new Hono()
 		if (!(await votableExists(subjectType, subjectId))) {
 			return c.json({ error: "Nothing to vote on" }, 404);
 		}
+
+		// Withdrawing a vote is never refused; casting or flipping one writes a record.
+		const unwritable = await interactionPermissionRefusal(user.id);
+		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		// Changing an upvote to a downvote UPDATES the one row. Inserting a second would let
 		// both count, which is the unique index's whole job and is worth doing in one
@@ -2725,6 +2735,9 @@ const contentRoutes = new Hono()
 		// they had never seen.
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		const unwritable = await interactionPermissionRefusal(user.id);
+		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		const { verdict, body } = c.req.valid("json");
 		// The conflict branch sets `verdict` and `body` and nothing else — notably not

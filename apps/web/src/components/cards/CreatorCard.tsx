@@ -2,6 +2,10 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { profileUrl } from "@anthers/web-shared/profile";
+import {
+	INTERACTION_PERMISSION_HINT,
+	useInteractionPermissionMissing,
+} from "@anthers/web-shared/publishing";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
@@ -12,6 +16,7 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
 	const [isFollowing, setIsFollowing] = useState(creator.isFollowing);
 	const [followerCount, setFollowerCount] = useState(creator.followerCount);
 	const isOwnProfile = user?.username === creator.username;
+	const permissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
 
 	const handleFollow = async (e: React.MouseEvent) => {
 		e.preventDefault(); // Prevent link navigation
@@ -24,9 +29,11 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
 				setIsFollowing(false);
 				setFollowerCount((c) => c - 1);
 			} else {
-				await client.api.accounts.users[":username"].follow.$post({
+				const res = await client.api.accounts.users[":username"].follow.$post({
 					param: { username: creator.username },
 				});
+				// Only a follow that was kept reads as one.
+				if (!res.ok) return;
 				setIsFollowing(true);
 				setFollowerCount((c) => c + 1);
 			}
@@ -64,6 +71,9 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
 						type="button"
 						className={`btn btn-sm mt-2 ${isFollowing ? "btn-outline" : "btn-primary"}`}
 						onClick={handleFollow}
+						// Unfollowing is never blocked; following writes a record.
+						disabled={!isFollowing && permissionMissing}
+						title={!isFollowing && permissionMissing ? INTERACTION_PERMISSION_HINT : undefined}
 					>
 						{isFollowing ? "Following" : "Follow"}
 					</button>
