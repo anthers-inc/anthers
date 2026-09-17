@@ -56,6 +56,7 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 	recommendedPercent,
+	workNeedsFile,
 } from "@anthers/shared/content";
 import {
 	type MaturityRating,
@@ -3672,6 +3673,21 @@ const contentRoutes = new Hono()
 			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
+		// 🚨 **The file has to have arrived before its processing can be waited on.** The Studio
+		// creates a Work the moment its file is picked and uploads into it afterwards, so a
+		// video with no source is an upload in flight or one that never finished — and
+		// `unreadyWorks` reads only transcoding jobs, which a Work with no file never has, so
+		// without this it would read as ready and release as a page with nothing on it.
+		if (releasing && workNeedsFile(work.type) && !work.sourceKey) {
+			return c.json(
+				{
+					error: "Can't release yet — this Work's file hasn't finished uploading.",
+					code: "media_missing",
+				},
+				409,
+			);
+		}
+
 		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
 			const unready = await unreadyWorks([work.id]);
 			if (unready.length > 0) {
@@ -3811,6 +3827,18 @@ const contentRoutes = new Hono()
 		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
 		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
 		if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
+		// A single image is its own thumbnail until one is set. Decided here against the STORED
+		// thumbnail rather than by the client, because the file arrives while the creator may be
+		// editing the same Work on its page, and whichever wrote second would otherwise win.
+		if (
+			sourceChanged &&
+			data.sourceKey &&
+			work.type === "image" &&
+			data.thumbnail === undefined &&
+			!work.thumbnail
+		) {
+			updates.thumbnail = data.sourceKey;
+		}
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 

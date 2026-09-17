@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * New / Edit **Work** — the Catalog's authoring surface, and a page rather than a dialog
- * since 2026-09-11.
+ * Edit a **Work** — the Catalog's authoring surface, and the second of the two pages a Work is
+ * made on. `WorkUploadPage` makes the Work from its file and lands here; returning to a Work from
+ * anywhere in the Studio lands here too.
  *
  * 🚨 **The container is the point, and it is about addressability rather than size.** Two
  * controls on this form send the creator somewhere else: the Access table needs Badge rungs
@@ -11,6 +12,14 @@
  * The rest follows from having a URL at all — the Catalog card's Edit is a link, the
  * blocked-release hint is a link, and an e2e walk can reach the form by typing it.
  *
+ * 🚨 **The Work's file may still be uploading while this page is open, and the save is shaped
+ * around that.** The Upload page creates the Work the moment its file is picked (Parker,
+ * 2026-09-16) and `lib/work-uploads` attaches the file when it lands. So this save never sends a
+ * `sourceKey`, and sends a thumbnail only when the creator changed it: the server makes an image
+ * its own thumbnail when its file arrives, and a save carrying the empty thumbnail this page
+ * loaded would erase it. When an upload for this Work finishes, the media half of the row is
+ * re-read without touching anything typed.
+ *
  * The route is keyed on **`publicId`**, the durable public address a Work carries, not on
  * the internal row id. `GET /works/:id` resolves either and short-circuits to the
  * owner-facing serialization for the creator, which is the shape with the editable access
@@ -19,8 +28,7 @@
  *
  * 🚨 **Release is edit-only.** `POST /works` refuses `visibility: "released"` outright
  * (`code: "release_on_create"`) — release is a separate deliberate act, which is the whole
- * point of separating the Catalog from posting. So `/studio/works/new` renders no Release
- * section at all, and creating navigates to the edit route where it appears.
+ * point of separating the Catalog from posting — and the Upload page offers no release control.
  */
 
 import {
@@ -34,9 +42,14 @@ import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RatingAppeal from "../components/content/RatingAppeal";
-import { useWorkMedia } from "../components/content/work-media";
+import {
+	isFileWorkType,
+	UploadProgress,
+	useWorkDetails,
+	WorkFileSection,
+} from "../components/content/work-media";
 import { authoredToIso, isoToAuthoredValue } from "../components/content/work-state";
-import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "../components/content/works";
+import { isBuildType, typeLabel } from "../components/content/works";
 import AccessTables, {
 	buildSeedRows,
 	type SeedRowDraft,
@@ -49,7 +62,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { usePayoutsReady } from "../lib/payouts";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
-import { studioEditWorkUrl, studioUrl } from "../lib/studio";
+import { studioUrl } from "../lib/studio";
 import type {
 	AuthoredPrecision,
 	CreatorGate,
@@ -58,6 +71,7 @@ import type {
 	WorkInput,
 } from "../lib/types";
 import { uploadMediaFile } from "../lib/upload";
+import { isUploading, useWorkUploads, workUploads } from "../lib/work-uploads";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -66,22 +80,23 @@ function formatFileSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export default function WorkFormPage() {
+/** The creator's own view of one Work, or null when it is not theirs or does not exist. */
+async function fetchOwnWork(id: string | number): Promise<Work | null> {
+	const res = await client.api.content.works[":id"].$get({ param: { id: String(id) }, query: {} });
+	if (!res.ok) return null;
+	const { work } = (await res.json()) as unknown as { work: Work };
+	return work;
+}
+
+export default function WorkEditPage() {
 	const { publicId } = useParams<{ publicId: string }>();
-	const isEdit = Boolean(publicId);
-	const [loading, setLoading] = useState(isEdit);
+	const [loading, setLoading] = useState(true);
 	const [loaded, setLoaded] = useState<Work | null>(null);
 
 	useEffect(() => {
-		if (!isEdit || !publicId) return;
+		if (!publicId) return;
 		let live = true;
-		client.api.content.works[":id"]
-			.$get({ param: { id: publicId }, query: {} })
-			.then(async (res) => {
-				if (!res.ok) return null;
-				const { work } = (await res.json()) as unknown as { work: Work };
-				return work;
-			})
+		fetchOwnWork(publicId)
 			.then((work) => {
 				if (live) setLoaded(work);
 			})
@@ -92,7 +107,7 @@ export default function WorkFormPage() {
 		return () => {
 			live = false;
 		};
-	}, [publicId, isEdit]);
+	}, [publicId]);
 
 	if (loading) {
 		return (
@@ -102,7 +117,7 @@ export default function WorkFormPage() {
 		);
 	}
 
-	if (isEdit && !loaded) {
+	if (!loaded) {
 		return (
 			<div className="max-w-3xl mx-auto px-4 py-16 text-center">
 				<h1 className="text-2xl font-bold">We can't find that Work</h1>
@@ -116,45 +131,44 @@ export default function WorkFormPage() {
 		);
 	}
 
-	// Keyed so that navigating from `new` to `:publicId/edit` rebuilds the form against the
-	// Work that now exists, rather than reusing create-time state for an edit.
-	return <WorkForm key={loaded?.id ?? "new"} editing={loaded} />;
+	// Keyed so that moving from one Work's page to another's rebuilds the form rather than
+	// carrying the first Work's typed state into the second.
+	return <WorkForm key={loaded.id} editing={loaded} />;
 }
 
-function WorkForm({ editing }: { editing: Work | null }) {
+function WorkForm({ editing }: { editing: Work }) {
 	const navigate = useNavigate();
 
-	const [current, setCurrent] = useState<Work | null>(editing);
-	const [type, setType] = useState<UploadableWorkType>(
-		(editing?.type as UploadableWorkType) ?? "video",
-	);
-	const hasId = current != null;
+	const [current, setCurrent] = useState<Work>(editing);
+	const type = editing.type as UploadableWorkType;
 
-	const [title, setTitle] = useState(editing?.title ?? "");
-	const [description, setDescription] = useState(editing?.description ?? "");
-	const [lyrics, setLyrics] = useState(editing?.lyrics ?? "");
-	const [thumbnailUrl, setThumbnailUrl] = useState(editing?.thumbnail ?? "");
+	const [title, setTitle] = useState(editing.title ?? "");
+	const [description, setDescription] = useState(editing.description ?? "");
+	const [lyrics, setLyrics] = useState(editing.lyrics ?? "");
+	const [thumbnailUrl, setThumbnailUrl] = useState(editing.thumbnail ?? "");
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
-		editing?.thumbnail ? keyToPreview(editing.thumbnail) : null,
+		editing.thumbnail ? keyToPreview(editing.thumbnail) : null,
 	);
+	/** Whether the creator changed the thumbnail here, and so whether a save may send it. */
+	const [thumbnailTouched, setThumbnailTouched] = useState(false);
 
-	const media = useWorkMedia(type, editing);
+	const details = useWorkDetails(type, editing);
 
 	// Created date — the creator's claim about when the work was MADE, distinct from the
 	// upload date (`createdAt`, creator-facing only) and the release date (ours).
 	const [authoredPrecision, setAuthoredPrecision] = useState<AuthoredPrecision | null>(
-		editing?.authoredAt ? (editing.authoredPrecision ?? "day") : null,
+		editing.authoredAt ? (editing.authoredPrecision ?? "day") : null,
 	);
 	const [authoredValue, setAuthoredValue] = useState(() =>
-		editing?.authoredAt
+		editing.authoredAt
 			? isoToAuthoredValue(editing.authoredAt, editing.authoredPrecision ?? "day")
 			: "",
 	);
 
-	// Delivery. The server's create defaults, mirrored — and a Work must keep at least one
-	// of them on, which the server enforces against the state the edit RESULTS IN.
-	const [streamEnabled, setStreamEnabled] = useState(editing?.streamEnabled ?? true);
-	const [downloadEnabled, setDownloadEnabled] = useState(editing?.downloadEnabled ?? false);
+	// Delivery. A Work must keep at least one of them on, which the server enforces against the
+	// state the edit RESULTS IN.
+	const [streamEnabled, setStreamEnabled] = useState(editing.streamEnabled ?? true);
+	const [downloadEnabled, setDownloadEnabled] = useState(editing.downloadEnabled ?? false);
 
 	// The content rating. Held as `null` until answered rather than pre-selected as General:
 	// a default here would be the editor answering on the creator's behalf, which is the one
@@ -164,14 +178,14 @@ function WorkForm({ editing }: { editing: Work | null }) {
 	// carried into the editor rather than silently falling back to "unanswered" on a Work
 	// that is in fact rated.
 	const [maturity, setMaturity] = useState<Exclude<MaturityRating, "unrated"> | null>(
-		editing?.maturity && editing.maturity !== "unrated" ? editing.maturity : null,
+		editing.maturity && editing.maturity !== "unrated" ? editing.maturity : null,
 	);
 	const [contentNotes, setContentNotes] = useState<ContentNote[]>(() =>
-		normalizeContentNotes(editing?.maturityNotes ?? []),
+		normalizeContentNotes(editing.maturityNotes ?? []),
 	);
 	// An operator's correction. The creator may make it more cautious at any time and may
 	// not make it less, so the control stays live and the appeal is what the copy points at.
-	const maturityLocked = editing?.maturityLocked ?? false;
+	const maturityLocked = editing.maturityLocked ?? false;
 	const toggleNote = (note: ContentNote) =>
 		setContentNotes((prev) =>
 			normalizeContentNotes(prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note]),
@@ -181,26 +195,53 @@ function WorkForm({ editing }: { editing: Work | null }) {
 	// not on the Work — `buildSeedRows` merges the Work's stored rows onto whatever rungs
 	// exist, so the rows are the only state worth holding.
 	const [seedRows, setSeedRows] = useState<SeedRowDraft[]>(() =>
-		// A NEW Work is proposed as Public Access — baseline allowed at $0 — rather than
-		// inheriting the server's "free but fully locked" default. That default is right for
-		// the API (a Work created by any client should reveal nothing until asked) and wrong
-		// for a person: it publishes something nobody can open, silently. Here the choice is
-		// on screen and can be unchecked, so the locked state stays reachable but never
-		// accidental.
-		editing
-			? buildSeedRows([], editing.seedAccess)
-			: [{ threshold: 0, label: "Everyone", allow: true, price: "0" }],
+		buildSeedRows([], editing.seedAccess),
 	);
 
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const [visibility, setVisibility] = useState<"private" | "released">(
-		editing?.visibility === "released" ? "released" : "private",
+		editing.visibility === "released" ? "released" : "private",
 	);
 
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
+
+	// Uploads into this Work from this tab — its own file, and any builds started on the Upload
+	// page. When one lands, the row's media half is re-read, so the file section, the builds
+	// table and an image's new thumbnail catch up without discarding anything typed.
+	const uploads = useWorkUploads().filter((u) => u.workId === editing.id);
+	const landed = uploads.filter((u) => u.status === "done").length;
+	/** How many landed uploads the row has been re-read after — see `WorkFileSection`'s `landing`. */
+	const [readAfter, setReadAfter] = useState(0);
+	const buildUploads = uploads.filter((u) => u.target.kind === "build" && u.status !== "done");
+	const fileUploading = uploads.some((u) => u.target.kind === "source" && isUploading(u));
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read on each upload that lands, and only then
+	useEffect(() => {
+		if (landed === 0) return;
+		let live = true;
+		fetchOwnWork(editing.id)
+			.then((fresh) => {
+				if (!live || !fresh) return;
+				setReadAfter(landed);
+				setCurrent((prev) => ({
+					...prev,
+					sourceKey: fresh.sourceKey,
+					thumbnail: fresh.thumbnail,
+					assets: fresh.assets,
+					transcoding: fresh.transcoding,
+				}));
+				if (!thumbnailTouched && fresh.thumbnail) {
+					setThumbnailUrl(fresh.thumbnail);
+					setThumbnailPreview(keyToPreview(fresh.thumbnail));
+				}
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [landed]);
 
 	// The creator's own Badge rungs. Best-effort: without them the table still renders its
 	// baseline row, which is the row that decides Public Access and the only one most
@@ -225,6 +266,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 	}, []);
 
 	const handleThumbnail = async (file: File) => {
+		setThumbnailTouched(true);
 		setThumbnailPreview(URL.createObjectURL(file));
 		try {
 			const { url } = await uploadImageFile(file, "thumbnail");
@@ -255,52 +297,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 		}
 	};
 
-	const handleCreate = async () => {
-		setSaving(true);
-		setError(null);
-		// `type` is required on create and immutable afterwards, so it is narrowed here
-		// rather than left optional on the shared input type.
-		const input: WorkInput & { type: UploadableWorkType } = { type, ...media.fields() };
-		if (title.trim()) input.title = title.trim();
-		if (description.trim()) input.description = description.trim();
-		if (type === "audio" && lyrics.trim()) input.lyrics = lyrics;
-		if (thumbnailUrl) input.thumbnail = thumbnailUrl;
-		// A single image is its own thumbnail unless one was set explicitly.
-		else if (type === "image" && media.imageKey) input.thumbnail = media.imageKey;
-		input.streamEnabled = streamEnabled;
-		input.downloadEnabled = downloadEnabled;
-		input.seedAccess = serializeSeedRows(seedRows);
-		// Omitted rather than sent as a default when unanswered, so the Work is created
-		// `unrated` and the question is still visibly open on the next save.
-		if (maturity) {
-			input.maturity = maturity;
-			input.maturityNotes = contentNotes;
-		}
-		const authoredAt = authoredToIso(authoredPrecision, authoredValue);
-		if (authoredAt && authoredPrecision) {
-			input.authoredAt = authoredAt;
-			input.authoredPrecision = authoredPrecision;
-		}
-		try {
-			const res = await client.api.content.works.$post({ json: input });
-			if (!res.ok) {
-				await failed(res, "Failed to create this Work.");
-				return;
-			}
-			const { work: created } = await res.json();
-			// Straight to the edit route, which is where Release and the builds section live.
-			// The same two-phase shape the Project form has, handled the same way: a create
-			// that ends on a page with nothing left to do is a creator hunting for the way back.
-			navigate(studioEditWorkUrl((created as Work).publicId ?? (created as Work).id));
-		} catch {
-			setError("Failed to create this Work.");
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	const handleSaveEdit = async () => {
-		if (!current) return;
+	const handleSave = async () => {
 		setSaving(true);
 		setError(null);
 		const json: WorkInput = {
@@ -308,8 +305,9 @@ function WorkForm({ editing }: { editing: Work | null }) {
 			description: description.trim(),
 			// Sent unconditionally on an audio Work, including empty — deleting the lyrics
 			// is a real edit, and an omitted field cannot express it.
-			...(current.type === "audio" ? { lyrics } : {}),
-			thumbnail: thumbnailUrl,
+			...(type === "audio" ? { lyrics } : {}),
+			// Only when changed here: see the header on why a save must not carry what was loaded.
+			...(thumbnailTouched ? { thumbnail: thumbnailUrl } : {}),
 			visibility,
 			streamEnabled,
 			downloadEnabled,
@@ -318,7 +316,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 			// edit, and an omitted field cannot express it. The server clears the precision
 			// alongside it, since a precision without a date claims accuracy about nothing.
 			authoredAt: authoredToIso(authoredPrecision, authoredValue),
-			...media.fields(),
+			...details.fields(),
 		};
 		if (maturity) {
 			json.maturity = maturity;
@@ -346,7 +344,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 
 	// ── Builds (game/software downloadable assets) ──
 
-	const assets = current?.assets ?? [];
+	const assets = current.assets ?? [];
 	const [buildFile, setBuildFile] = useState<File | null>(null);
 	const [buildPlatform, setBuildPlatform] = useState("windows");
 	const [buildVersion, setBuildVersion] = useState("");
@@ -355,7 +353,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 
 	const handleAddBuild = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!buildFile || !current) return;
+		if (!buildFile) return;
 		setBuildUploading(true);
 		setError(null);
 		try {
@@ -374,7 +372,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 			});
 			if (!res.ok) throw new Error("Create failed");
 			const { asset } = await res.json();
-			setCurrent((prev) => (prev ? { ...prev, assets: [asset, ...prev.assets] } : prev));
+			setCurrent((prev) => ({ ...prev, assets: [asset, ...prev.assets] }));
 			setBuildFile(null);
 			setBuildVersion("");
 			setBuildPrimary(false);
@@ -386,21 +384,16 @@ function WorkForm({ editing }: { editing: Work | null }) {
 	};
 
 	const handleDeleteBuild = async (assetId: number) => {
-		if (!current) return;
 		try {
 			const res = await client.api.content.works[":id"].assets[":assetId"].$delete({
 				param: { id: String(current.id), assetId: String(assetId) },
 			});
 			if (!res.ok) throw new Error("Delete failed");
-			setCurrent((prev) =>
-				prev ? { ...prev, assets: prev.assets.filter((a) => a.id !== assetId) } : prev,
-			);
+			setCurrent((prev) => ({ ...prev, assets: prev.assets.filter((a) => a.id !== assetId) }));
 		} catch {
 			setError("Failed to delete build.");
 		}
 	};
-
-	const showBuilds = hasId && isBuildType(type);
 
 	// Mirrors the server's own definition of the commons (`isFree && streamEnabled &&
 	// released`) against the rows as they stand in the form, so the preview answers for what
@@ -408,10 +401,13 @@ function WorkForm({ editing }: { editing: Work | null }) {
 	const anyoneAllowed = seedRows.some((r) => r.allow);
 	const baselineRow = seedRows.find((r) => r.threshold === 0);
 	const publicAccessNow = !!baselineRow?.allow && Number(baselineRow.price) === 0 && streamEnabled;
+	// The server refuses to release a file-kind Work with no file (`media_missing`); don't offer
+	// the click that earns it. An upload in flight from this tab is the same state, sooner.
+	const fileMissing = isFileWorkType(type) && (!current.sourceKey || fileUploading);
 
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-2">{hasId ? `Edit ${typeLabel(type)}` : "New Work"}</h1>
+			<h1 className="text-2xl font-bold mb-2">Edit {typeLabel(type)}</h1>
 			<p className="text-sm text-base-content/60 mb-6">
 				A Work is the thing itself — the file, its access and its price. It stands on its own in
 				your Catalog whether or not you ever write a post about it.
@@ -424,26 +420,13 @@ function WorkForm({ editing }: { editing: Work | null }) {
 			)}
 
 			<div className="flex flex-col gap-4">
-				{/* Type — fixed once the Work exists. */}
-				<FormField label="Type">
-					{hasId ? (
-						<div className="badge badge-neutral">{typeLabel(type)}</div>
-					) : (
-						<select
-							className="select select-bordered w-full"
-							value={type}
-							onChange={(e) => setType(e.target.value as UploadableWorkType)}
-						>
-							{LIBRARY_TYPE_OPTIONS.map((opt) => (
-								<option key={opt.value} value={opt.value}>
-									{opt.label}
-								</option>
-							))}
-						</select>
-					)}
-				</FormField>
-
-				{media.slot}
+				{/* No Type row: the kind is fixed from the moment the Work was uploaded, and the
+				    heading already names it. */}
+				{isFileWorkType(type) ? (
+					<WorkFileSection work={current} landing={landed > readAfter} />
+				) : (
+					details.slot
+				)}
 
 				<FormField label="Title">
 					<input
@@ -510,6 +493,7 @@ function WorkForm({ editing }: { editing: Work | null }) {
 							compact
 							onFileSelect={handleThumbnail}
 							onClear={() => {
+								setThumbnailTouched(true);
 								setThumbnailUrl("");
 								setThumbnailPreview(null);
 							}}
@@ -661,8 +645,8 @@ function WorkForm({ editing }: { editing: Work | null }) {
 							))}
 						</div>
 					</div>
-					{hasId && maturityLocked && (
-						<RatingAppeal workId={current?.id ?? 0} corrected={editing?.maturity ?? "mature"} />
+					{maturityLocked && (
+						<RatingAppeal workId={current.id} corrected={editing.maturity ?? "mature"} />
 					)}
 				</div>
 
@@ -680,76 +664,96 @@ function WorkForm({ editing }: { editing: Work | null }) {
 					)}
 				</div>
 
-				{/* Release. Only once the Work exists — create refuses it by design. */}
-				{hasId && (
-					<div className="border-t border-base-300 pt-4 flex flex-col gap-2">
-						<h2 className="font-semibold text-sm">Release</h2>
-						<label className="label cursor-pointer justify-start gap-2">
-							<input
-								type="checkbox"
-								className="checkbox checkbox-sm checkbox-primary"
-								checked={visibility === "released"}
-								// The server refuses an unrated release with `maturity_undeclared`,
-								// and one with no payout setup with `payouts_required`. Don't offer
-								// the click that fails — the same reasoning as the delivery
-								// switches above. `payoutsReady === false` rather than
-								// `!payoutsReady`, so an unanswered status request leaves the
-								// control alone instead of locking it for a reason nobody stated.
-								disabled={!maturity || payoutsReady === false}
-								onChange={(e) => setVisibility(e.target.checked ? "released" : "private")}
-							/>
-							<span className="label-text text-sm">Released to my public Catalog</span>
-						</label>
-						{!maturity && (
-							<p className="text-xs text-warning">
-								Pick a rating above first. Nothing goes into your public Catalog until somebody has
-								said whether it is General or Mature.
-							</p>
-						)}
-						{payoutsReady === false && (
-							<div className="alert alert-warning text-sm">
-								<span>
-									<strong>Set up payouts before releasing.</strong> It is how you get paid, and it
-									is also what lets us say every creator here is an adult — Stripe checks identity
-									so Anthers never has to ask you for an ID. Anthers takes no cut, so all of it
-									comes to you.{" "}
-									<Link to={studioUrl("/settings")} className="link">
-										Set it up in Studio settings
-									</Link>
-									. Your changes here are saved when you come back.
-								</span>
-							</div>
-						)}
-						{visibility === "released" && !anyoneAllowed && (
-							<div className="alert alert-warning text-sm">
-								<span>
-									Nobody can open this. Released puts it in your Catalog; the Access table above is
-									what lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public
-									Access.
-								</span>
-							</div>
-						)}
-						{visibility === "released" && publicAccessNow && (
-							<p className="text-xs text-success">
-								Public Access — free to everyone, and earning from the Time Pool.
-							</p>
-						)}
-						<p className="text-xs text-base-content/50">
-							Released means listed publicly. It does not mean free — the Access table decides that.
+				<div className="border-t border-base-300 pt-4 flex flex-col gap-2">
+					<h2 className="font-semibold text-sm">Release</h2>
+					<label className="label cursor-pointer justify-start gap-2">
+						<input
+							type="checkbox"
+							className="checkbox checkbox-sm checkbox-primary"
+							checked={visibility === "released"}
+							// The server refuses an unrated release with `maturity_undeclared`, one
+							// with no payout setup with `payouts_required`, and one whose file has not
+							// arrived with `media_missing`. Don't offer the click that fails — the same
+							// reasoning as the delivery switches above. `payoutsReady === false` rather
+							// than `!payoutsReady`, so an unanswered status request leaves the control
+							// alone instead of locking it for a reason nobody stated. The file check
+							// applies only before release, so replacing a released image's file does
+							// not lock the control that would make it private.
+							disabled={
+								!maturity || payoutsReady === false || (fileMissing && visibility !== "released")
+							}
+							onChange={(e) => setVisibility(e.target.checked ? "released" : "private")}
+						/>
+						<span className="label-text text-sm">Released to my public Catalog</span>
+					</label>
+					{fileMissing && visibility !== "released" && (
+						<p className="text-xs text-warning">
+							{fileUploading
+								? "This can be released once its file has finished uploading and processing."
+								: "Upload this Work's file above first. There's nothing to release until it arrives."}
 						</p>
-					</div>
-				)}
-
-				{/* Downloadable builds (games/software) */}
-				{(type === "game" || type === "software") && !hasId && (
+					)}
+					{!maturity && (
+						<p className="text-xs text-warning">
+							Pick a rating above first. Nothing goes into your public Catalog until somebody has
+							said whether it is General or Mature.
+						</p>
+					)}
+					{payoutsReady === false && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								<strong>Set up payouts before releasing.</strong> It is how you get paid, and it is
+								also what lets us say every creator here is an adult — Stripe checks identity so
+								Anthers never has to ask you for an ID. Anthers takes no cut, so all of it comes to
+								you.{" "}
+								<Link to={studioUrl("/settings")} className="link">
+									Set it up in Studio settings
+								</Link>
+								. Your changes here are saved when you come back.
+							</span>
+						</div>
+					)}
+					{visibility === "released" && !anyoneAllowed && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								Nobody can open this. Released puts it in your Catalog; the Access table above is
+								what lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public
+								Access.
+							</span>
+						</div>
+					)}
+					{visibility === "released" && publicAccessNow && (
+						<p className="text-xs text-success">
+							Public Access — free to everyone, and earning from the Time Pool.
+						</p>
+					)}
 					<p className="text-xs text-base-content/50">
-						Create the Work first, then add downloadable builds.
+						Released means listed publicly. It does not mean free — the Access table decides that.
 					</p>
-				)}
+				</div>
 
-				{showBuilds && (
+				{isBuildType(type) && (
 					<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
 						<h2 className="font-semibold text-sm">Downloadable builds</h2>
+
+						{buildUploads.map((upload) => (
+							<div key={upload.id} className="flex flex-col gap-2">
+								{upload.status === "failed" ? (
+									<div className="alert alert-error text-sm">
+										<span className="flex-1">{upload.error}</span>
+										<button
+											type="button"
+											className="btn btn-sm"
+											onClick={() => workUploads.retry(upload.id)}
+										>
+											Try again
+										</button>
+									</div>
+								) : (
+									<UploadProgress upload={upload} />
+								)}
+							</div>
+						))}
 
 						{assets.length > 0 && (
 							<div className="overflow-x-auto">
@@ -859,14 +863,8 @@ function WorkForm({ editing }: { editing: Work | null }) {
 				)}
 
 				<div className="flex flex-wrap gap-2 mt-2 border-t border-base-300 pt-4">
-					<button
-						type="button"
-						className="btn btn-primary"
-						onClick={hasId ? handleSaveEdit : handleCreate}
-						disabled={saving || media.uploading || (!hasId && !media.ready)}
-						title={hasId || media.ready ? undefined : "Add the file for this Work's type first"}
-					>
-						{saving ? "Saving…" : hasId ? "Save Work" : "Create Work"}
+					<button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+						{saving ? "Saving…" : "Save Work"}
 					</button>
 					<Link to={studioUrl("/catalog")} className="btn btn-ghost">
 						Cancel

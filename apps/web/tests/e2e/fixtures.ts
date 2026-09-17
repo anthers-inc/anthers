@@ -2,6 +2,7 @@
 
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_PASSWORD, GAUNTLET_CREATOR_USERNAME } from "@anthers/db/gauntlet";
+import { MEDIA_FIXTURE_PASSWORD, MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { type BrowserContext, test as base, expect, type Page } from "@playwright/test";
 
 /**
@@ -62,28 +63,23 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
 }
 
 /**
- * Sign in as the gauntlet CREATOR and put the session on `context`.
+ * Sign an account in and put the session on `context`.
  *
- * The `authed` project's stored state belongs to the gauntlet *viewer*, who is not a creator —
- * so anything behind the Studio's creator gate needs this instead. Plain `fetch` plus an
- * explicit cookie, exactly as `gauntlet.setup.ts` does it, and deliberately not
- * `page.request.post`: that threw an opaque `"/api/auth/sign-in" cannot be parsed as a URL`
+ * Plain `fetch` plus an explicit cookie, exactly as `gauntlet.setup.ts` does it, and deliberately
+ * not `page.request.post`: that threw an opaque `"/api/auth/sign-in" cannot be parsed as a URL`
  * even when handed an absolute one, and the setup file's approach is the one already proven
  * against this API.
  *
- * Returns the raw token so a test can call the API as the creator — cleanup, mostly — without
+ * Returns the raw token so a test can call the API as that account — cleanup, mostly — without
  * driving the browser.
  */
-export async function signInAsCreator(context: BrowserContext): Promise<string> {
+async function signInAs(context: BrowserContext, login: string, password: string): Promise<string> {
 	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({
-			login: GAUNTLET_CREATOR_USERNAME,
-			password: GAUNTLET_CREATOR_PASSWORD,
-		}),
+		body: JSON.stringify({ login, password }),
 	});
-	expect(res.ok, `creator sign-in failed: ${res.status}`).toBe(true);
+	expect(res.ok, `sign-in as ${login} failed: ${res.status}`).toBe(true);
 
 	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
 	expect(token, "no session cookie returned").toBeTruthy();
@@ -100,6 +96,30 @@ export async function signInAsCreator(context: BrowserContext): Promise<string> 
 		},
 	]);
 	return token as string;
+}
+
+/**
+ * Sign in as the gauntlet CREATOR.
+ *
+ * The `authed` project's stored state belongs to the gauntlet *viewer*, who is not a creator —
+ * so anything behind the Studio's creator gate needs this instead.
+ */
+export function signInAsCreator(context: BrowserContext): Promise<string> {
+	return signInAs(context, GAUNTLET_CREATOR_USERNAME, GAUNTLET_CREATOR_PASSWORD);
+}
+
+/**
+ * Sign in as `media_fixture`, a creator whose Works no other project resets.
+ *
+ * 🚨 **A spec that creates Works and walks them across several pages belongs here rather than on
+ * the gauntlet creator.** The `gauntlet` project's reset deletes every Work the gauntlet creator
+ * owns, matched on the creator, so a Work a walk made there can vanish partway through it and
+ * the failure lands wherever the walk happened to be. `media_fixture` is a creator with verified
+ * email (seeded by `seed-media-fixture.ts` in `setup`) that nothing else resets, which also makes
+ * cleaning up after itself each spec's own job.
+ */
+export function signInAsMediaFixture(context: BrowserContext): Promise<string> {
+	return signInAs(context, MEDIA_FIXTURE_USERNAME, MEDIA_FIXTURE_PASSWORD);
 }
 
 export { expect };

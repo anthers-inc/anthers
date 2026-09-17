@@ -19,6 +19,7 @@
  * creator with nothing wrong is supposed to see.
  */
 
+import { workNeedsFile } from "@anthers/shared/content";
 import type { Work } from "../../lib/types";
 import { accessState } from "./work-state";
 
@@ -26,7 +27,13 @@ import { accessState } from "./work-state";
  * Why an item is on the list. The value is stable and is what a test names, so renaming one
  * is a change to the test rather than to a string a reader sees.
  */
-export type WorklistKind = "locked" | "payouts" | "encode-failed" | "unrated" | "no-delivery";
+export type WorklistKind =
+	| "locked"
+	| "payouts"
+	| "encode-failed"
+	| "no-file"
+	| "unrated"
+	| "no-delivery";
 
 export interface WorklistItem {
 	kind: WorklistKind;
@@ -82,6 +89,11 @@ export interface WorklistInput {
 	editUrl: (work: Work) => string;
 	/** The Studio's Catalog path, for an item covering several Works. */
 	catalogUrl: string;
+	/**
+	 * Works whose file this tab is uploading right now. Such a Work has no file on its row yet
+	 * and is not wrong — it is in progress — so it is left off the list rather than reported.
+	 */
+	uploading?: ReadonlySet<number>;
 }
 
 /**
@@ -97,6 +109,7 @@ export function buildWorklist({
 	payoutsReady,
 	editUrl,
 	catalogUrl,
+	uploading = new Set(),
 }: WorklistInput): WorklistItem[] {
 	const items: WorklistItem[] = [];
 
@@ -130,6 +143,29 @@ export function buildWorklist({
 			action: failed.only ? "Open it" : "Open your Catalog",
 			href: hrefFor(failed, editUrl, catalogUrl),
 			severity: "blocking",
+		});
+	}
+
+	// A Work of a kind that IS its file, with no file, and nothing uploading it from this tab. It
+	// is made the moment its file is picked, so this is an upload that never finished — the tab
+	// closed, or the connection dropped — and release refuses it until the file is uploaded
+	// again. Unreleased only, for the same reason as `unrated` below.
+	const noFile = group(
+		works.filter(
+			(w) =>
+				w.visibility !== "released" &&
+				workNeedsFile(w.type) &&
+				!w.sourceKey &&
+				!uploading.has(w.id),
+		),
+	);
+	if (noFile.count > 0) {
+		items.push({
+			kind: "no-file",
+			message: `${subject(noFile)} ${noFile.only ? "has" : "have"} no file yet, so ${noFile.only ? "it" : "they"} cannot be released.`,
+			action: noFile.only ? "Upload it" : "Open your Catalog",
+			href: hrefFor(noFile, editUrl, catalogUrl),
+			severity: "attention",
 		});
 	}
 

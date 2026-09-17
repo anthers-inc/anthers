@@ -13,10 +13,13 @@
  * say whether this is General or Mature" was an instruction that could not be followed by
  * clicking it while the editor was a modal with no URL. It has one now.
  */
+
+import { workNeedsFile } from "@anthers/shared/content";
 import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
 import { studioEditWorkUrl } from "../../lib/studio";
 import type { Work } from "../../lib/types";
+import { isUploading, useSourceUpload } from "../../lib/work-uploads";
 import {
 	AccessBadge,
 	accessState,
@@ -46,17 +49,26 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 	// with no delivery switch on. Disable rather than let the click earn an error.
 	const processing =
 		item.transcoding?.status === "pending" || item.transcoding?.status === "processing";
+	// And one whose file has not arrived (`media_missing`) — still uploading from this tab, or
+	// never uploaded because the tab that was uploading it closed.
+	const upload = useSourceUpload(item.id);
+	const uploading = isUploading(upload);
+	const noFile = workNeedsFile(item.type) && !item.sourceKey;
 	const noDelivery = !item.streamEnabled && !item.downloadEnabled;
 	// A Work is born `unrated` and the server refuses to release it while it is — so the
 	// card, which is how a back catalog gets released thirty at a time, has to say which
 	// ones still need answering rather than earning thirty identical errors.
 	const unrated = !item.maturity || item.maturity === "unrated";
-	const blocked = !released && (processing || noDelivery || unrated);
-	const blockedWhy = processing
-		? "Still processing — it can be released once the media is ready"
-		: unrated
-			? "Say whether this is General or Mature before releasing"
-			: "Turn on streaming or downloads before releasing";
+	const blocked = !released && (noFile || processing || noDelivery || unrated);
+	const blockedWhy = uploading
+		? "Still uploading — it can be released once its file arrives and is processed"
+		: noFile
+			? "Upload its file before releasing"
+			: processing
+				? "Still processing — it can be released once the media is ready"
+				: unrated
+					? "Say whether this is General or Mature before releasing"
+					: "Turn on streaming or downloads before releasing";
 
 	return (
 		<div className="card bg-base-100 border border-base-300 overflow-hidden">
@@ -86,6 +98,14 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 							set access on this Work
 						</Link>
 						.
+					</p>
+				)}
+				{noFile && !uploading && !released && (
+					<p className="text-xs text-warning">
+						<Link to={editUrl} className="link">
+							Upload its file
+						</Link>{" "}
+						before it can be released.
 					</p>
 				)}
 				{unrated && !released && (

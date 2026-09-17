@@ -22,9 +22,8 @@
  * on pg-boss, and the release-readiness gate (which applies only to processed types) stays
  * out of the way of the thing being tested.
  */
-import { MEDIA_FIXTURE_PASSWORD, MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
-import type { BrowserContext } from "@playwright/test";
-import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
+import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
+import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 /**
  * Unique per run, so a leftover row from a crashed run can never satisfy an assertion.
@@ -85,38 +84,6 @@ test.describe.configure({ mode: "serial" });
  */
 const CREATOR = MEDIA_FIXTURE_USERNAME;
 
-/**
- * Sign in as `media_fixture` and plant the session cookie, the way `gauntlet.setup.ts` and
- * `studio-routes.authed.e2e.ts` both do it. Not `page.request.post` — that throws an
- * opaque `"/api/auth/sign-in" cannot be parsed as a URL` even given an absolute one.
- *
- * The account is seeded by the `setup` project (via `bun run db:media-fixture`) before
- * this project runs, so the sign-in always has an account to reach.
- */
-async function signInAsCreator(context: BrowserContext): Promise<string> {
-	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({ login: CREATOR, password: MEDIA_FIXTURE_PASSWORD }),
-	});
-	expect(res.ok, `creator sign-in failed: ${res.status}`).toBe(true);
-	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
-	expect(token, "no session cookie returned").toBeTruthy();
-	await context.addCookies([
-		{
-			name: "session",
-			value: token as string,
-			domain: "localhost",
-			path: "/",
-			expires: Math.floor(Date.now() / 1000) + 3600,
-			httpOnly: true,
-			secure: false,
-			sameSite: "Lax" as const,
-		},
-	]);
-	return token as string;
-}
-
 /** The card for our Work, found by its unique title rather than by position in the grid. */
 const cardFor = (page: import("@playwright_test").Page) =>
 	page.locator(".card").filter({ hasText: TITLE });
@@ -149,7 +116,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	page,
 	context,
 }) => {
-	const session = await signInAsCreator(context);
+	const session = await signInAsMediaFixture(context);
 
 	// ── Sweep ───────────────────────────────────────────────────────────────
 	// A previous run that crashed after Create leaves a `Release walk %` Work on the shared
@@ -160,12 +127,11 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	// ── Create ──────────────────────────────────────────────────────────────
 	//
-	// ⭐ **A page now, not a modal** (2026-09-11). The Work's authoring surface is
-	// `/studio/works/new` and `/studio/works/:publicId/edit`, which is why this walk asserts
-	// on URLs between the steps: with the editor in a dialog there was no address to check,
-	// so "the form opened" and "the right form opened" were the same assertion. Creating
-	// lands on the edit route because Release lives there — `POST /works` refuses
-	// `visibility: "released"` outright, so it cannot be offered before the Work exists.
+	// ⭐ **Two pages, not one form** (2026-09-16). "New Work" opens the Upload page, which asks
+	// for a type, a title and the file and nothing else, and creating lands on the Work's own
+	// Edit page because everything else lives there — Release included, since `POST /works`
+	// refuses `visibility: "released"` outright. The walk asserts on URLs between the steps
+	// because each step is a page with an address, and "the right page opened" is the claim.
 	await page.goto("/studio/catalog");
 	await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
 
@@ -174,6 +140,13 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		.first()
 		.click();
 	await expect(page).toHaveURL(/\/studio\/works\/new$/);
+	await expect(page.getByRole("heading", { name: "Upload a Work" })).toBeVisible();
+
+	// The Upload page asks for nothing past the three inputs, and this is the assertion for
+	// it: Release, the rating and access are not rendered at all before the Work exists.
+	for (const section of ["Release", "Rating", "Access"]) {
+		await expect(page.getByRole("heading", { name: section })).toHaveCount(0);
+	}
 
 	// ⚠️ Located by position and placeholder, never by label: `FormField` renders its label as
 	// a SIBLING of the input with no `htmlFor`, so `getByLabel` matches nothing on this form
@@ -183,15 +156,6 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.locator("select").first().selectOption("service");
 	await page.getByPlaceholder("Work title").fill(TITLE);
 
-	// The Created date, at year precision. Its whole reason for existing is back-dating a
-	// catalog, which is what a creator arriving with years of work actually does.
-	await page.getByRole("combobox").last().selectOption("year");
-	await page.locator('input[type="number"][min="1900"]').fill("2015");
-
-	// Release cannot be reached on create, and this is the assertion for it — the section is
-	// not rendered at all before the Work has an id.
-	await expect(page.getByRole("heading", { name: "Release" })).toHaveCount(0);
-
 	await page.getByRole("button", { name: /create work/i }).click();
 	// ⚠️ A longer wait than the 5s default, here and at Save below — both are a navigation on
 	// the far side of a write, and this suite shares its Postgres with the unit suites.
@@ -200,8 +164,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// to a loaded machine, which was plausible, unverified and wrong.
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
 
-	// Release appears on the far side of create, on the same form, at a URL that can be
-	// linked to — which is the whole reason the container changed.
+	// Release appears on the far side of create, at a URL that can be linked to.
 	await expect(page.getByRole("heading", { name: "Release" })).toBeVisible();
 
 	// ── Unrated, and therefore unreleasable ─────────────────────────────────
@@ -226,6 +189,12 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await cardFor(page).getByRole("link", { name: "Rate this" }).click();
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
 	await page.getByRole("radio", { name: "General" }).check();
+
+	// The Created date, at year precision, on the same save. Its whole reason for existing is
+	// back-dating a catalog, which is what a creator arriving with years of work actually does.
+	await page.getByRole("combobox").last().selectOption("year");
+	await page.locator('input[type="number"][min="1900"]').fill("2015");
+
 	await page.getByRole("button", { name: /save work/i }).click();
 	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
 

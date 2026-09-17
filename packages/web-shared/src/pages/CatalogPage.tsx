@@ -32,6 +32,7 @@ import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioEditProjectUrl, studioNewProjectUrl, studioNewWorkUrl } from "../lib/studio";
 import type { Project, Work } from "../lib/types";
+import { useWorkUploads } from "../lib/work-uploads";
 
 /** A post referencing a library item, as returned by the 409 `work_in_use` body. */
 interface UsingPost {
@@ -96,6 +97,15 @@ export default function CatalogPage() {
 	useEffect(() => {
 		fetchItems().finally(() => setLoading(false));
 	}, [fetchItems]);
+
+	// Re-read when a file this tab was uploading lands on its Work. The card shows the upload
+	// from the store while it runs, but the processing it starts is only on the row — and the
+	// poll below switches on only once a row says something is processing.
+	const landed = useWorkUploads().filter((u) => u.status === "done").length;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read on each upload that lands, and only then
+	useEffect(() => {
+		if (landed > 0) fetchItems();
+	}, [landed]);
 
 	const confirmDeleteProject = async () => {
 		if (!projectDeleteTarget) return;

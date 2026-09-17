@@ -37,7 +37,8 @@ const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsD
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const PostsPage = lazy(() => import("@anthers/web-shared/PostsPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
-const WorkFormPage = lazy(() => import("@anthers/web-shared/WorkFormPage"));
+const WorkUploadPage = lazy(() => import("@anthers/web-shared/WorkUploadPage"));
+const WorkEditPage = lazy(() => import("@anthers/web-shared/WorkEditPage"));
 // ImportPage lazy import kept commented — the route is hidden (see below) but the
 // component remains so re-enabling is a one-line change when the lane ships.
 // const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
@@ -365,8 +366,8 @@ export default function App() {
 						<Route path="projects/:slug/edit" element={<ProjectFormPage />} />
 						{/* Keyed on the Work's durable `publicId`, matching how a Work is addressed
 						everywhere else it has a URL. */}
-						<Route path="works/new" element={<WorkFormPage />} />
-						<Route path="works/:publicId/edit" element={<WorkFormPage />} />
+						<Route path="works/new" element={<WorkUploadPage />} />
+						<Route path="works/:publicId/edit" element={<WorkEditPage />} />
 						{/* Import route hidden — the itch.io import endpoints all return
 					    "not yet implemented", so a creator who reaches this page finds a
 					    form that always fails. Restore when the itch.io importer's backend
