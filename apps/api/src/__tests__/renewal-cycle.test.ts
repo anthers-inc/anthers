@@ -626,25 +626,38 @@ describe("a renewal that fails", () => {
 
 // ── Spending the reduction against the renewal ───────────────────────────────
 
-/** A draft renewal invoice with one line per destination. */
+/**
+ * A draft renewal invoice with one line per destination, dated the way Stripe dates one.
+ *
+ * 🚨 **The invoice's own `period_start` is the month BEFORE the renewal**, and only its lines'
+ * `period` names the month it pays for. A fixture that put the renewal's month on `period_start`
+ * would pass a reader of that field, which looks for reductions against the wrong month on every
+ * real renewal.
+ */
 function draftInvoice(opts: {
 	lines: { destination: string; dollars: number }[];
 	status?: string;
 	billingReason?: string;
-	periodStart?: number;
+	/** The month the renewal pays for, which only its lines say. */
+	paysFor?: number;
 }) {
+	const paysFor = opts.paysFor ?? Math.floor(Date.UTC(2026, 9, 1) / 1000);
+	const d = new Date(paysFor * 1000);
 	return {
 		id: "in_under_test",
 		object: "invoice",
 		status: opts.status ?? "draft",
 		billing_reason: opts.billingReason ?? "subscription_cycle",
 		customer: "cus_under_test",
-		period_start: opts.periodStart ?? Math.floor(Date.UTC(2026, 9, 1) / 1000),
+		period_start: Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1) / 1000),
+		period_end: paysFor,
 		parent: { subscription_details: { subscription: SUB_ID } },
 		lines: {
+			has_more: false,
 			data: opts.lines.map((l) => ({
 				id: `il_${l.destination}`,
 				amount: Math.round(l.dollars * 100),
+				period: { start: paysFor, end: paysFor + 31 * 86400 },
 				parent: {
 					type: "subscription_item_details",
 					subscription_item_details: { subscription_item: `si_${l.destination}`, proration: false },
@@ -815,18 +828,17 @@ describe("the reduction is spent on the draft renewal", () => {
 		expect(fake.callsTo("coupons.create")).toHaveLength(0);
 	});
 
-	it("reads the cycle off the period the invoice PAYS FOR, not off today", async () => {
-		// A renewal invoice is drafted before its period opens, so "now" is still the
-		// previous month when this runs. Keying it to today would look for reductions
-		// against a cycle nothing was ever recorded against.
+	it("🚨 reads the cycle off the month the lines pay for, not off the invoice's own period or today", async () => {
+		// A renewal is drafted before its period opens, so today is still the previous month,
+		// and Stripe dates the invoice's own period to the previous month as well. Either would
+		// look for reductions against a month nothing was recorded against.
 		await owe("anthers", "1.25", cycleKeyFor(new Date(Date.UTC(2026, 9, 1))));
-		const applied = await applyReductionsToInvoice(
-			draftInvoice({
-				lines: [{ destination: "anthers", dollars: 6 }],
-				periodStart: Math.floor(Date.UTC(2026, 9, 1) / 1000),
-			}),
-		);
-		expect(applied).toBe(1);
+		const invoice = draftInvoice({
+			lines: [{ destination: "anthers", dollars: 6 }],
+			paysFor: Math.floor(Date.UTC(2026, 9, 1) / 1000),
+		});
+		expect(new Date(invoice.period_start * 1000).getUTCMonth()).toBe(8);
+		expect(await applyReductionsToInvoice(invoice)).toBe(1);
 	});
 });
 
