@@ -54,10 +54,10 @@ import type { ModerationActionType } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { placeHold, preservationExpiry } from "./legal-hold.js";
-import { urlToKey } from "./media-purge.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
 import { storage } from "./storage/index.js";
+import { urlToKey } from "./storage/keys.js";
 import { queueWorkListingSync } from "./work-listing.js";
 
 /** How a finding arrived. A hash match and a classifier hunch may never collapse into one. */

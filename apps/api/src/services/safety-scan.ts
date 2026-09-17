@@ -33,9 +33,9 @@ import {
 } from "../lib/arachnid-shield";
 import { MIN_PDQ_QUALITY, type PdqHash, pdqHashImage } from "../lib/pdq";
 import { hashVideoFrames, probeVideo, type SampledFrame } from "../lib/video-frames.js";
-import { urlToKey } from "./media-purge.js";
 import { type QuarantineObjectKind, quarantineObject, quarantineWork } from "./quarantine.js";
 import { storage } from "./storage/index.js";
+import { urlToKey } from "./storage/keys.js";
 
 /** The vendor identifier recorded on every `VendorMatch` this service writes. */
 export const VENDOR = "arachnid-shield";

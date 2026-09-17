@@ -28,10 +28,14 @@ purgeAccountsCreatedHere();
 const ORIGIN = "http://localhost:3000";
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `filearr_${id}`;
-/** Every key this suite writes carries the run id, so teardown can find its own. */
-const KEY = (name: string) => `creators/0/media/filearr-${id}-${name}`;
+/**
+ * Every key this suite writes carries the run id, so teardown can find its own, and sits under
+ * the creator's own prefix, because the routes refuse a file another account uploaded.
+ */
+const KEY = (name: string) => `creators/${creatorId}/media/filearr-${id}-${name}`;
 
 let cookie = "";
+let creatorId = 0;
 const workIds: number[] = [];
 let sent: Array<{ name: string; data: Record<string, unknown> }> = [];
 let sendSpy: ReturnType<typeof spyOn>;
@@ -64,7 +68,9 @@ function release(workId: number) {
 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
-	cookie = (await createAccount(creatorName)).cookie;
+	const account = await createAccount(creatorName);
+	cookie = account.cookie;
+	creatorId = account.userId as number;
 	await enablePayouts(creatorName);
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });
@@ -82,7 +88,8 @@ afterAll(async () => {
 
 describe("a video Work whose file has not arrived", () => {
 	let workId = 0;
-	const sourceKey = KEY("clip.mp4");
+	// Built on use, because the creator — and so the key's prefix — exists only after `beforeAll`.
+	const sourceKey = () => KEY("clip.mp4");
 
 	it("is created private and unrated, with nothing queued", async () => {
 		sent = [];
@@ -105,14 +112,14 @@ describe("a video Work whose file has not arrived", () => {
 
 	it("queues processing and a scan when the file arrives", async () => {
 		sent = [];
-		const res = await call("PATCH", `/api/content/works/${workId}`, { sourceKey });
+		const res = await call("PATCH", `/api/content/works/${workId}`, { sourceKey: sourceKey() });
 		expect(res.status).toBe(200);
 		const { work } = await res.json();
-		expect(work.sourceKey).toBe(sourceKey);
+		expect(work.sourceKey).toBe(sourceKey());
 		expect(work.transcoding?.status).toBe("pending");
 		expect(sent.map((s) => s.name)).toContain(QUEUES.TRANSCODE_VIDEO);
 		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA).map((s) => s.data)).toEqual([
-			{ storageKey: sourceKey, workId, kind: "video" },
+			{ storageKey: sourceKey(), workId, kind: "video" },
 		]);
 	});
 
@@ -129,7 +136,7 @@ describe("a video Work whose file has not arrived", () => {
 			.where(eq(transcodingJobs.workId, workId));
 		await db
 			.insert(mediaScans)
-			.values({ storageKey: sourceKey, workId, determination: "clean", scannedAt: new Date() });
+			.values({ storageKey: sourceKey(), workId, determination: "clean", scannedAt: new Date() });
 		const res = await release(workId);
 		expect(res.status).toBe(200);
 		expect((await res.json()).work.visibility).toBe("released");

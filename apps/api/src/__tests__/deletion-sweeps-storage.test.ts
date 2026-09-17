@@ -81,10 +81,19 @@ describe("account deletion sweeps object storage", () => {
 	it(
 		"deletes the account's avatar, header and unpurchased Work media",
 		async () => {
-			const userId = await makeUser("sweep", {
-				avatar: "https://cdn.anthers.org/creators/9/gallery/avatar.png",
-				headerImage: "https://cdn.anthers.org/creators/9/gallery/header.png",
-			});
+			const userId = await makeUser("sweep");
+			// Under the account's OWN prefix, which is how the upload routes mint them. This named
+			// `creators/9/` until 2026-09-16 and asserted it was deleted — an account erasure
+			// destroying whichever account happened to be 9. The sweep now refuses to delete
+			// outside the owner's prefix (`media-purge.ts`), and `foreign-file-refs.test.ts`
+			// asserts that direction.
+			await db
+				.update(users)
+				.set({
+					avatar: `https://cdn.anthers.org/creators/${userId}/avatars/avatar.png`,
+					headerImage: `https://cdn.anthers.org/creators/${userId}/headers/header.png`,
+				})
+				.where(eq(users.id, userId));
 			const unbought = await insertWork({
 				creatorId: userId,
 				type: "video",
@@ -113,8 +122,8 @@ describe("account deletion sweeps object storage", () => {
 
 			// The avatar is the one that mattered: it lives in the PUBLIC bucket behind
 			// cdn.anthers.org, so leaving it is a deleted person's face still on the internet.
-			expect(deleted).toContain("creators/9/gallery/avatar.png");
-			expect(deleted).toContain("creators/9/gallery/header.png");
+			expect(deleted).toContain(`creators/${userId}/avatars/avatar.png`);
+			expect(deleted).toContain(`creators/${userId}/headers/header.png`);
 			expect(deleted).toContain(`creators/${userId}/videos/source.mp4`);
 			expect(deleted).toContain(`creators/${userId}/gallery/thumb.jpg`);
 		},
