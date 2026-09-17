@@ -33,6 +33,7 @@ import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioNewPostUrl, studioNewWorkUrl, studioUrl } from "../lib/studio";
 import type { CreatorEarnings, PostListItem, Project, Work } from "../lib/types";
+import { isUploading, useWorkUploads } from "../lib/work-uploads";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
@@ -53,6 +54,14 @@ export default function DashboardPage() {
 	const [panels, setPanels] = useState<StudioPanel[]>(() => resolveStudioPanels(null));
 	const [arranging, setArranging] = useState(false);
 
+	// Uploads running in this tab, and how many have landed. A Work whose file is still going up
+	// is in progress rather than wrong, so the worklist leaves it off; when the file lands, the
+	// row is re-read so an item that no longer applies goes away.
+	const uploads = useWorkUploads();
+	const uploading = new Set(uploads.filter(isUploading).map((u) => u.workId));
+	const landed = uploads.filter((u) => u.status === "done").length;
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read on each upload that lands
 	useEffect(() => {
 		let live = true;
 		client.api.content.works
@@ -68,7 +77,7 @@ export default function DashboardPage() {
 		return () => {
 			live = false;
 		};
-	}, []);
+	}, [landed]);
 
 	// The panels' own data. Fetched whatever the layout says, because a panel turned on while
 	// arranging should fill immediately rather than after a reload — these are two small
@@ -155,6 +164,7 @@ export default function DashboardPage() {
 		payoutsReady,
 		editUrl: (w) => studioUrl(`/works/${w.publicId ?? w.id}/edit`),
 		catalogUrl: studioUrl("/catalog"),
+		uploading,
 	});
 
 	return (

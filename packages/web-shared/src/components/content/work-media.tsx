@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The media half of authoring a Work — the per-type upload state, the control that renders
- * it, and the type-specific fields that go into a create or edit payload.
+ * The media half of a Work: the file a video, a track, an image or a book IS, and the fields
+ * the other kinds carry instead of one.
  *
- * Two surfaces need this and only one of them needs the rest: the Work's own page at
- * `/studio/works/new`, and the quick create inside `WorkPicker`, which is deliberately a
- * type, a file and a title. Everything else a Work carries — the access table, the rating,
- * the release, the builds — belongs to the page alone, which is what keeps the quick create
- * from growing back into a second editor.
+ * 🚨 **The file and the fields are written by different requests, and that is the design.** A
+ * Work is created the moment its file is picked (Parker, 2026-09-16) and the file is attached by
+ * `lib/work-uploads` when it arrives, while the creator is editing the same Work on its page. So
+ * `WorkFileSection` reads the upload store and the stored row, and never contributes a
+ * `sourceKey` to the page's save — a whole-form save carrying the key the page loaded, empty,
+ * would erase a file that arrived a moment earlier.
  *
  * 🚨 **Every upload is processed server-side, and there is no choice to offer.** This
  * carried an *Encode on device / Upload & we process* toggle plus a desktop-only native
@@ -17,13 +18,40 @@
  * here like any other file. Don't reintroduce an encode in the browser.
  */
 
-import { embedUrlProblem } from "@anthers/shared/content";
+import { embedUrlProblem, workNeedsFile } from "@anthers/shared/content";
 import { type ReactNode, useState } from "react";
 import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
-import { uploadMediaFile } from "../../lib/upload";
-import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
+import {
+	isUploading,
+	useSourceUpload,
+	type WorkUpload,
+	type WorkUploadTarget,
+	workUploads,
+} from "../../lib/work-uploads";
+import { keyToPreview } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
+
+/** The Work kinds whose file is uploaded into them, as the upload store names them. */
+export type FileWorkType = Extract<WorkUploadTarget, { kind: "source" }>["type"];
+
+export function isFileWorkType(type: string): type is FileWorkType {
+	return workNeedsFile(type);
+}
+
+/** What a file picker for this kind accepts, and how large a file it takes. */
+export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {
+	switch (type) {
+		case "video":
+			return { accept: "video/*", maxSize: 2 * 1024 * 1024 * 1024, noun: "a video file" };
+		case "audio":
+			return { accept: "audio/*", maxSize: 500 * 1024 * 1024, noun: "an audio file" };
+		case "image":
+			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
+		case "ebook":
+			return { accept: "application/pdf", maxSize: 500 * 1024 * 1024, noun: "a PDF" };
+	}
+}
 
 /** The free-text detail a physical good or a service carries, out of `metadata.note`. */
 function metaNote(item: Work | null | undefined): string {
@@ -31,247 +59,196 @@ function metaNote(item: Work | null | undefined): string {
 	return typeof note === "string" ? note : "";
 }
 
-export interface WorkMedia {
-	/** This type's own media control, ready to drop into a form. */
+export interface WorkDetails {
+	/** This kind's own control, or null for a kind whose media is its file. */
 	slot: ReactNode;
-	/**
-	 * Whether the type's required media is present and usable. Video, audio and image cannot
-	 * be created without a file, a game or software Work waits only on an embed address it has
-	 * been given being one the server will accept, and the other two have nothing to wait for.
-	 */
-	ready: boolean;
-	/** True while a file is going up, so a form can refuse to save mid-upload. */
-	uploading: boolean;
-	/** The image type's uploaded key. A single image is its own thumbnail unless one is set. */
-	imageKey: string;
-	/**
-	 * The type-specific fields to merge into a create or edit payload.
-	 *
-	 * ⚠️ `type` is excluded deliberately. `WorkInput.type` is the full `ContentType`, so
-	 * spreading a plain `Partial<WorkInput>` over a narrowed `UploadableWorkType` widens it
-	 * straight back and the create payload stops typechecking. The caller owns the type;
-	 * this owns what the type implies.
-	 */
-	fields: () => Omit<Partial<WorkInput>, "type">;
+	/** The kind's fields, to merge into the page's save. Never a `sourceKey` — see the header. */
+	fields: () => Omit<Partial<WorkInput>, "type" | "sourceKey">;
 }
 
 /**
- * Per-type media state for one Work being authored.
- *
- * The state is initialized from `editing` once and then survives a type change, which is
- * what lets somebody switch from Video to Audio and back without losing the file they
- * already uploaded. `type` is immutable once the Work exists, so that only ever applies
- * while creating.
+ * What a game, a piece of software, a physical good or a service carries in place of a file: an
+ * embed address for the first two, a note for the other two.
  */
-export function useWorkMedia(type: UploadableWorkType, editing: Work | null): WorkMedia {
-	const [videoKey, setVideoKey] = useState(
-		editing?.type === "video" ? (editing.sourceKey ?? "") : "",
-	);
-	const [videoName, setVideoName] = useState<string | null>(
-		editing?.type === "video" && editing.sourceKey ? "Existing video" : null,
-	);
-
-	const [audioKey, setAudioKey] = useState(
-		editing?.type === "audio" ? (editing.sourceKey ?? "") : "",
-	);
-	const [audioName, setAudioName] = useState<string | null>(
-		editing?.type === "audio" && editing.sourceKey ? "Existing audio" : null,
-	);
-
-	const [imageKey, setImageKey] = useState(
-		editing?.type === "image" ? (editing.sourceKey ?? "") : "",
-	);
-	const [imagePreview, setImagePreview] = useState<string | null>(
-		editing?.type === "image" && editing.sourceKey ? keyToPreview(editing.sourceKey) : null,
-	);
-
-	const [embedUrl, setEmbedUrl] = useState(editing?.embedUrl ?? "");
+export function useWorkDetails(type: UploadableWorkType, editing: Work): WorkDetails {
+	const [embedUrl, setEmbedUrl] = useState(editing.embedUrl ?? "");
 	const [detailsNote, setDetailsNote] = useState(metaNote(editing));
-
-	const [uploading, setUploading] = useState(false);
-	const [progress, setProgress] = useState(0);
-
-	const handleVideo = async (file: File) => {
-		setUploading(true);
-		setProgress(0);
-		setVideoName(file.name);
-		try {
-			setVideoKey(await uploadMediaFile(file, "video", setProgress));
-		} catch {
-			setVideoName(null);
-		} finally {
-			setUploading(false);
-		}
-	};
-
-	const handleAudio = async (file: File) => {
-		setUploading(true);
-		setProgress(0);
-		setAudioName(file.name);
-		try {
-			setAudioKey(await uploadMediaFile(file, "audio", setProgress));
-		} catch {
-			setAudioName(null);
-		} finally {
-			setUploading(false);
-		}
-	};
-
-	const handleImage = async (file: File) => {
-		setUploading(true);
-		setImagePreview(URL.createObjectURL(file));
-		try {
-			const { url } = await uploadImageFile(file, "image");
-			setImageKey(url);
-			setImagePreview(url);
-		} catch {
-			setImagePreview(imageKey ? keyToPreview(imageKey) : null);
-		} finally {
-			setUploading(false);
-		}
-	};
 
 	// The server refuses the same addresses; saying so here means a creator hears it beside the field.
 	const embedError = embedUrlProblem(embedUrl.trim());
 
-	const ready =
-		(type === "video" && !!videoKey) ||
-		(type === "audio" && !!audioKey) ||
-		(type === "image" && !!imageKey) ||
-		((type === "game" || type === "software") && !embedError) ||
-		type === "physical" ||
-		type === "service";
+	if (type === "game" || type === "software") {
+		return {
+			slot: (
+				<FormField
+					label="Embed URL (optional)"
+					hint="For an HTML5 or WebGL build that runs in the browser, hosted on another site at an https:// address. Downloadable builds are added below."
+					error={embedError ?? undefined}
+				>
+					<input
+						type="url"
+						className="input input-bordered w-full"
+						value={embedUrl}
+						onChange={(e) => setEmbedUrl(e.target.value)}
+						placeholder="https://example.com/embed"
+					/>
+				</FormField>
+			),
+			fields: () => ({ embedUrl: embedUrl.trim() }),
+		};
+	}
+	if (type === "physical" || type === "service") {
+		return {
+			slot: (
+				<FormField label="Details">
+					<textarea
+						className="textarea textarea-bordered w-full"
+						value={detailsNote}
+						onChange={(e) => setDetailsNote(e.target.value)}
+						rows={3}
+						placeholder={
+							type === "physical"
+								? "Fulfillment notes, dimensions, shipping…"
+								: "What the service includes, turnaround, terms…"
+						}
+					/>
+				</FormField>
+			),
+			fields: () => ({ metadata: { note: detailsNote.trim() } }),
+		};
+	}
+	return { slot: null, fields: () => ({}) };
+}
 
-	const fields = (): Omit<Partial<WorkInput>, "type"> => {
-		switch (type) {
-			case "video":
-				// No `durationSeconds`: the browser never opens the file, so it has no duration
-				// to send. `transcode-video` probes the source with ffprobe and writes it.
-				return { sourceKey: videoKey };
-			case "audio":
-				return { sourceKey: audioKey };
-			case "image":
-				return { sourceKey: imageKey };
-			case "game":
-			case "software":
-				return { embedUrl: embedUrl.trim() };
-			default:
-				return { metadata: { note: detailsNote.trim() } };
-		}
-	};
+/** A progress bar for one upload, or an indeterminate one where the transport reports none. */
+export function UploadProgress({ upload }: { upload: WorkUpload }) {
+	const label =
+		upload.status === "attaching"
+			? "Finishing"
+			: upload.progress == null
+				? "Uploading"
+				: `${upload.progress}%`;
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+				<span className="flex-1 truncate text-sm">{upload.fileName}</span>
+				<span className="font-mono text-xs">{label}</span>
+			</div>
+			{upload.progress == null || upload.status === "attaching" ? (
+				<progress className="progress progress-primary w-full" />
+			) : (
+				<progress className="progress progress-primary w-full" value={upload.progress} max="100" />
+			)}
+		</div>
+	);
+}
 
-	let slot: ReactNode = null;
-	if (type === "video" || type === "audio") {
-		slot = (
-			<MediaSlot
-				kind={type}
-				fileName={type === "video" ? videoName : audioName}
-				hasKey={type === "video" ? !!videoKey : !!audioKey}
-				uploading={uploading}
-				progress={progress}
-				onSelect={type === "video" ? handleVideo : handleAudio}
-			/>
-		);
-	} else if (type === "image") {
-		slot = (
-			<FormField label="Image">
-				<FileUpload
-					accept="image/*"
-					maxSize={20 * 1024 * 1024}
-					preview={imagePreview}
-					label={uploading ? "Uploading…" : "Drop an image or click to browse"}
-					onFileSelect={handleImage}
-					onClear={() => {
-						setImageKey("");
-						setImagePreview(null);
-					}}
-				/>
-			</FormField>
-		);
-	} else if (type === "game" || type === "software") {
-		slot = (
-			<FormField
-				label="Embed URL (optional)"
-				hint="For an HTML5 or WebGL build that runs in the browser, hosted on another site at an https:// address. Downloadable builds are added on the Work's own page."
-				error={embedError ?? undefined}
-			>
-				<input
-					type="url"
-					className="input input-bordered w-full"
-					value={embedUrl}
-					onChange={(e) => setEmbedUrl(e.target.value)}
-					placeholder="https://example.com/embed"
-				/>
-			</FormField>
-		);
-	} else {
-		slot = (
-			<FormField label="Details">
-				<textarea
-					className="textarea textarea-bordered w-full"
-					value={detailsNote}
-					onChange={(e) => setDetailsNote(e.target.value)}
-					rows={3}
-					placeholder={
-						type === "physical"
-							? "Fulfillment notes, dimensions, shipping…"
-							: "What the service includes, turnaround, terms…"
-					}
-				/>
+/**
+ * The file section of a Work's own page, for the kinds that are their file.
+ *
+ * Four states, in the order a creator meets them: still uploading from this tab, failed, arrived,
+ * and never arrived. The last is a real state rather than an error — the tab that was uploading
+ * may have been closed — and it offers the upload again rather than explaining why it happened.
+ */
+export function WorkFileSection({
+	work,
+	landing = false,
+}: {
+	work: Work;
+	/**
+	 * True between an upload from this tab reporting done and the page re-reading the row. The
+	 * row decides after that, so a file attached and then lost again shows as missing rather than
+	 * as uploaded on the strength of an upload that finished earlier.
+	 */
+	landing?: boolean;
+}) {
+	const type = work.type as FileWorkType;
+	const upload = useSourceUpload(work.id);
+	const rules = fileRules(type);
+	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
+
+	const label = type === "image" ? "Image" : type === "ebook" ? "Book file" : "File";
+
+	if (upload && isUploading(upload)) {
+		return (
+			<FormField label={label}>
+				<UploadProgress upload={upload} />
+				<p className="mt-2 text-xs text-base-content/50">
+					You can go on editing and move around the Studio while it uploads. Keep this tab open
+					until it finishes, because closing it stops the upload.
+				</p>
 			</FormField>
 		);
 	}
 
-	return { slot, ready, uploading, imageKey, fields };
-}
-
-// ─── Media slot (video/audio) ───
-
-interface MediaSlotProps {
-	kind: "video" | "audio";
-	fileName: string | null;
-	hasKey: boolean;
-	uploading: boolean;
-	progress: number;
-	onSelect: (file: File) => void;
-}
-
-function MediaSlot({ kind, fileName, hasKey, uploading, progress, onSelect }: MediaSlotProps) {
-	const maxSize = kind === "video" ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024;
-	return (
-		<FormField label={kind === "video" ? "Video file" : "Audio file"}>
-			{fileName || hasKey ? (
-				<div className="flex flex-col gap-2">
-					<div className="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
-						<span className="text-sm truncate flex-1">{fileName || `Existing ${kind}`}</span>
-						{uploading ? (
-							<span className="text-xs font-mono">{progress}%</span>
-						) : (
-							<span className="badge badge-success badge-sm">Uploaded</span>
-						)}
-					</div>
-					{uploading && (
-						<progress className="progress progress-primary w-full" value={progress} max="100" />
-					)}
+	if (upload?.status === "failed") {
+		return (
+			<FormField label={label}>
+				<div className="alert alert-error text-sm">
+					<span className="flex-1">{upload.error}</span>
+					<button type="button" className="btn btn-sm" onClick={() => workUploads.retry(upload.id)}>
+						Try again
+					</button>
 				</div>
-			) : (
-				<div className="flex flex-col gap-3">
+				<div className="mt-2">
 					<FileUpload
-						accept={`${kind}/*`}
-						maxSize={maxSize}
-						onFileSelect={onSelect}
-						label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
+						accept={rules.accept}
+						maxSize={rules.maxSize}
+						compact
+						label="Or choose a different file"
+						onFileSelect={start}
 					/>
-					{/*
-					 * Says what the old encode-mode toggle used to answer by existing: the creator
-					 * is not waiting on their own machine. Worth keeping now that there is no
-					 * choice to make — processing still happens, just not here.
-					 */}
-					<p className="text-xs text-base-content/50">
-						Leave anytime — we process it on our servers once it's uploaded.
-					</p>
 				</div>
-			)}
+			</FormField>
+		);
+	}
+
+	// Arrived: stored on the row, or attached from this tab a moment before the row is re-read.
+	if (work.sourceKey || (landing && upload?.status === "done")) {
+		return (
+			<FormField label={label}>
+				{type === "image" && work.sourceKey ? (
+					<div className="flex flex-col gap-2">
+						<img
+							src={keyToPreview(work.sourceKey)}
+							alt=""
+							className="max-h-64 w-fit rounded-lg border border-base-300"
+						/>
+						{/* An image is replaced in place, as it could be before it had an upload step.
+						    Other kinds are not offered this: a new video re-encodes, and a released
+						    one would be unplayable while it did. */}
+						<div className="max-w-xs">
+							<FileUpload
+								accept={rules.accept}
+								maxSize={rules.maxSize}
+								compact
+								label="Replace the image"
+								onFileSelect={start}
+							/>
+						</div>
+					</div>
+				) : (
+					<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+						<span className="flex-1 truncate text-sm">{upload?.fileName ?? "Uploaded file"}</span>
+						<span className="badge badge-success badge-sm">Uploaded</span>
+					</div>
+				)}
+			</FormField>
+		);
+	}
+
+	return (
+		<FormField label={label}>
+			<p className="mb-2 text-sm text-warning">
+				This Work has no file yet, so it can't be released. If it was uploading in a tab that has
+				since closed, upload it again here.
+			</p>
+			<FileUpload
+				accept={rules.accept}
+				maxSize={rules.maxSize}
+				label={`Drop ${rules.noun} or click to browse`}
+				onFileSelect={start}
+			/>
 		</FormField>
 	);
 }

@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * A Work exists before its file does, and release waits for the file.
+ *
+ * The Studio creates a Work the moment its file is picked and uploads into it while the creator
+ * fills in the rest (Parker, 2026-09-16), so a video with no `sourceKey` is an ordinary state
+ * rather than a malformed one. What makes that safe is the refusal this suite is about:
+ * `unreadyWorks` reads only transcoding jobs, and a Work whose file never arrived has none, so
+ * without `media_missing` it would read as ready and release as a page with nothing on it.
+ *
+ * ⚠️ **`queue.send` is replaced for the duration.** Attaching a file enqueues a transcode and a
+ * scan, pg-boss is not running under the test runner, and what is under test is that the route
+ * asks for them rather than that a worker answers.
+ */
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { db } from "@anthers/db/client";
+import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
+import { eq, inArray, sql } from "drizzle-orm";
+import app from "../index";
+import { QUEUES, queue } from "../jobs/queue";
+import { createAccount } from "./account-fixture";
+import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayouts } from "./payouts-fixture.js";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+
+purgeAccountsCreatedHere();
+
+const ORIGIN = "http://localhost:3000";
+const id = crypto.randomUUID().slice(0, 8);
+const creatorName = `filearr_${id}`;
+/** Every key this suite writes carries the run id, so teardown can find its own. */
+const KEY = (name: string) => `creators/0/media/filearr-${id}-${name}`;
+
+let cookie = "";
+const workIds: number[] = [];
+let sent: Array<{ name: string; data: Record<string, unknown> }> = [];
+let sendSpy: ReturnType<typeof spyOn>;
+
+function call(method: string, path: string, body?: unknown) {
+	return app.fetch(
+		new Request(`http://localhost${path}`, {
+			method,
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: body === undefined ? undefined : JSON.stringify(body),
+		}),
+	);
+}
+
+/** Create a Work the way the Upload page does: a type and a title, and no file yet. */
+async function createWithoutFile(type: string): Promise<number> {
+	const res = await call("POST", "/api/content/works", { type, title: `File arrival ${id}` });
+	expect(res.status).toBe(201);
+	const { work } = await res.json();
+	workIds.push(work.id);
+	return work.id;
+}
+
+function release(workId: number) {
+	return call("PATCH", `/api/content/works/${workId}`, {
+		visibility: "released",
+		maturity: "general",
+	});
+}
+
+beforeAll(async () => {
+	await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
+	cookie = (await createAccount(creatorName)).cookie;
+	await enablePayouts(creatorName);
+	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
+		sent.push({ name, data: data as Record<string, unknown> });
+		return "job";
+	}) as typeof queue.send);
+}, DB_SETUP_TIMEOUT);
+
+// By id rather than by creator: the account purge sets `works.creator_id` null when it runs
+// first, which would leave a creator-scoped delete finding nothing.
+afterAll(async () => {
+	sendSpy.mockRestore();
+	if (workIds.length > 0) await db.delete(works).where(inArray(works.id, workIds));
+	await db.delete(mediaScans).where(sql`${mediaScans.storageKey} LIKE ${`%filearr-${id}-%`}`);
+});
+
+describe("a video Work whose file has not arrived", () => {
+	let workId = 0;
+	const sourceKey = KEY("clip.mp4");
+
+	it("is created private and unrated, with nothing queued", async () => {
+		sent = [];
+		workId = await createWithoutFile("video");
+		const [row] = await db.select().from(works).where(eq(works.id, workId));
+		expect(row.visibility).toBe("private");
+		expect(row.maturity).toBe("unrated");
+		expect(row.sourceKey).toBe("");
+		expect(sent).toEqual([]);
+	});
+
+	it("cannot be released, and keeps the rating declared in the same request", async () => {
+		const res = await release(workId);
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("media_missing");
+		const [row] = await db.select().from(works).where(eq(works.id, workId));
+		expect(row.visibility).toBe("private");
+		expect(row.maturity).toBe("general");
+	});
+
+	it("queues processing and a scan when the file arrives", async () => {
+		sent = [];
+		const res = await call("PATCH", `/api/content/works/${workId}`, { sourceKey });
+		expect(res.status).toBe(200);
+		const { work } = await res.json();
+		expect(work.sourceKey).toBe(sourceKey);
+		expect(work.transcoding?.status).toBe("pending");
+		expect(sent.map((s) => s.name)).toContain(QUEUES.TRANSCODE_VIDEO);
+		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA).map((s) => s.data)).toEqual([
+			{ storageKey: sourceKey, workId, kind: "video" },
+		]);
+	});
+
+	it("then waits on processing rather than on the file", async () => {
+		const res = await release(workId);
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("media_not_ready");
+	});
+
+	it("releases once processing and the scan have answered", async () => {
+		await db
+			.update(transcodingJobs)
+			.set({ status: "completed", progress: 100 })
+			.where(eq(transcodingJobs.workId, workId));
+		await db
+			.insert(mediaScans)
+			.values({ storageKey: sourceKey, workId, determination: "clean", scannedAt: new Date() });
+		const res = await release(workId);
+		expect(res.status).toBe(200);
+		expect((await res.json()).work.visibility).toBe("released");
+	});
+});
+
+describe("the kinds with no file to wait for", () => {
+	it("releases a game that has no file at all", async () => {
+		const workId = await createWithoutFile("game");
+		const res = await release(workId);
+		expect(res.status).toBe(200);
+	});
+});
+
+describe("an image whose file arrives after it was created", () => {
+	it("becomes its own thumbnail", async () => {
+		const workId = await createWithoutFile("image");
+		const key = KEY("picture.png");
+		const res = await call("PATCH", `/api/content/works/${workId}`, { sourceKey: key });
+		expect(res.status).toBe(200);
+		const [row] = await db.select().from(works).where(eq(works.id, workId));
+		expect(row.thumbnail).toBe(key);
+	});
+
+	it("keeps a thumbnail the creator set while it was uploading", async () => {
+		const workId = await createWithoutFile("image");
+		const chosen = KEY("chosen-thumb.png");
+		await call("PATCH", `/api/content/works/${workId}`, { thumbnail: chosen });
+		const res = await call("PATCH", `/api/content/works/${workId}`, {
+			sourceKey: KEY("late.png"),
+		});
+		expect(res.status).toBe(200);
+		const [row] = await db.select().from(works).where(eq(works.id, workId));
+		expect(row.thumbnail).toBe(chosen);
+	});
+});

@@ -19,6 +19,7 @@ function work(over: Partial<Work> = {}): Work {
 		id: 1,
 		publicId: 100001,
 		type: "video",
+		sourceKey: "creators/1/video/tide.mp4",
 		title: "Tide",
 		visibility: "released",
 		maturity: "general",
@@ -31,16 +32,24 @@ function work(over: Partial<Work> = {}): Work {
 	} as unknown as Work;
 }
 
-const build = (works: Work[], payoutsReady: boolean | null = true) =>
+const build = (
+	works: Work[],
+	payoutsReady: boolean | null = true,
+	uploading: ReadonlySet<number> = new Set(),
+) =>
 	buildWorklist({
 		works,
 		payoutsReady,
 		editUrl: (w) => `/studio/works/${w.publicId}/edit`,
 		catalogUrl: "/studio/catalog",
+		uploading,
 	});
 
-const kinds = (works: Work[], payoutsReady: boolean | null = true): WorklistKind[] =>
-	build(works, payoutsReady).map((i) => i.kind);
+const kinds = (
+	works: Work[],
+	payoutsReady: boolean | null = true,
+	uploading: ReadonlySet<number> = new Set(),
+): WorklistKind[] => build(works, payoutsReady, uploading).map((i) => i.kind);
 
 describe("buildWorklist", () => {
 	it("says nothing at all when nothing is wrong", () => {
@@ -119,10 +128,21 @@ describe("buildWorklist", () => {
 		);
 	});
 
+	it("flags a Work whose file never arrived, and not one whose file is on its way", () => {
+		// A Work is made the moment its file is picked, so no file is an ordinary moment in its
+		// life while the upload runs. It is only wrong once nothing is uploading it any more.
+		const empty = work({ id: 9, visibility: "private", sourceKey: "" });
+		expect(kinds([empty])).toEqual(["no-file"]);
+		expect(kinds([empty], true, new Set([9]))).toEqual([]);
+		// A kind that is not its file has nothing to wait for.
+		expect(kinds([work({ visibility: "private", type: "game", sourceKey: "" })])).toEqual([]);
+	});
+
 	it("orders the whole list worst first", () => {
 		const all = [
 			work({ id: 1, publicId: 1, seedAccess: [{ threshold: 0, allow: false, price: "0" }] }),
 			work({ id: 2, publicId: 2, transcoding: { status: "failed" } as Work["transcoding"] }),
+			work({ id: 5, publicId: 5, visibility: "private", sourceKey: "" }),
 			work({ id: 3, publicId: 3, visibility: "private", maturity: "unrated" }),
 			work({
 				id: 4,
@@ -136,6 +156,7 @@ describe("buildWorklist", () => {
 			"locked",
 			"payouts",
 			"encode-failed",
+			"no-file",
 			"unrated",
 			"no-delivery",
 		]);

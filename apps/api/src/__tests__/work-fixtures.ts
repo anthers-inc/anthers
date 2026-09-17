@@ -16,6 +16,7 @@
 import { db } from "@anthers/db/client";
 import type { SeedAccessRow } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * A random starting point for this module instance, and a counter from there.
@@ -113,4 +114,21 @@ export async function insertWork(fixture: WorkFixture) {
 		})
 		.returning();
 	return row;
+}
+
+/**
+ * Give a Work its file, as though the upload landed and processing finished long ago.
+ *
+ * A video, audio, image or ebook Work is created with no file and refused release until one
+ * arrives (`media_missing`), because the Studio creates the Work the moment its file is picked.
+ * A suite whose subject is not the upload writes the key straight onto the row rather than
+ * through `PATCH`: the route would enqueue a transcode and a scan, pg-boss is not running under
+ * the test runner, and a transcode left pending would refuse the release for a second reason
+ * that is not the suite's subject either.
+ */
+export async function giveWorkAFile(workId: number): Promise<void> {
+	await db
+		.update(works)
+		.set({ sourceKey: `creators/0/media/fixture-file-${workId}` })
+		.where(eq(works.id, workId));
 }

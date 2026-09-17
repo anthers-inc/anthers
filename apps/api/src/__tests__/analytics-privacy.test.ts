@@ -35,6 +35,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { giveWorkAFile } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -125,6 +126,7 @@ beforeAll(async () => {
 	});
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;
+	await giveWorkAFile(workId);
 
 	// Released and free, so the attention events are eligible — an ineligible event is
 	// dropped at the write boundary and would leave nothing for analytics to leak.

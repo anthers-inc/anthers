@@ -4,7 +4,7 @@
  *
  * Deliberately NOT modeled on `PostWorkLinks`, which looks like the same component and
  * isn't. That one holds form state and saves with the post; membership here has its own
- * endpoints and **persists immediately**, the way the builds section of `WorkFormPage` does.
+ * endpoints and **persists immediately**, the way the builds section of `WorkEditPage` does.
  * The reason is the Project form: a creator adding twelve tracks should not lose them to a
  * failed save on an unrelated field, and a list that persists per-action can't.
  *

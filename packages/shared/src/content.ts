@@ -101,6 +101,24 @@ export function isCommentSubjectType(value: string): value is CommentSubjectType
 	return (COMMENT_SUBJECT_TYPES as readonly string[]).includes(value);
 }
 
+/**
+ * The Work kinds that ARE their uploaded file: a video, a track, an image and a book have
+ * nothing to deliver until the file arrives, where a game can be an embed, and a physical good
+ * or a service is described rather than uploaded.
+ *
+ * 🚨 **A Work of these kinds exists before its file does, and that is the design** (Parker,
+ * 2026-09-16). The Studio creates the Work the moment a file is picked and uploads into it
+ * while the creator fills in its details, so a Work of one of these kinds with no `sourceKey`
+ * is an upload still in flight or one that never finished. Release refuses it
+ * (`media_missing`), because processing cannot be waited on for a file that is not there.
+ */
+export const FILE_WORK_TYPES = ["video", "audio", "image", "ebook"] as const;
+
+/** Whether a Work of this kind has nothing to deliver until its file is uploaded. */
+export function workNeedsFile(type: string): boolean {
+	return (FILE_WORK_TYPES as readonly string[]).includes(type);
+}
+
 /** The longest embed address a game or software Work may carry. */
 export const EMBED_URL_MAX = 500;
 

@@ -22,6 +22,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { giveWorkAFile } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -66,6 +67,7 @@ async function makeWork(title: string, access: unknown): Promise<number> {
 	});
 	expect(created.status).toBe(201);
 	const workId = (await created.json()).work.id as number;
+	await giveWorkAFile(workId);
 	const patched = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: creatorAuth,

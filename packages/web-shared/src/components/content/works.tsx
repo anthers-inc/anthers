@@ -6,6 +6,7 @@
  * post authoring content picker.
  */
 
+import { workNeedsFile } from "@anthers/shared/content";
 import { contentNoteLabel, maturityLabel } from "@anthers/shared/content-rating";
 import {
 	CommandLineIcon,
@@ -18,6 +19,7 @@ import {
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
 import type { UploadableWorkType, Work } from "../../lib/types";
+import { isUploading, useSourceUpload } from "../../lib/work-uploads";
 import { type AccessState, accessState } from "./work-state";
 
 export { type AccessState, accessState } from "./work-state";
@@ -74,8 +76,32 @@ export function processingState(item: Work): ProcessingState {
 	return "processing"; // pending | processing
 }
 
-/** Small state badge for a library item (null when there is nothing to show). */
+/**
+ * Small state badge for a library item (null when there is nothing to show).
+ *
+ * ⭐ **It reads this tab's uploads before the row.** A Work exists from the moment its file is
+ * picked, so between that moment and the file landing the row says nothing is being processed,
+ * which is true and useless — the creator wants to know the upload is moving. And a Work of a
+ * kind that is its file, with no file and nothing uploading, says so rather than showing nothing.
+ */
 export function ProcessingBadge({ item }: { item: Work }) {
+	const upload = useSourceUpload(item.id);
+	if (upload && isUploading(upload)) {
+		return (
+			<span className="badge badge-info badge-sm gap-1">
+				Uploading
+				{upload.progress == null || upload.status === "attaching" ? "…" : ` ${upload.progress}%`}
+			</span>
+		);
+	}
+	if (upload?.status === "failed") {
+		return <span className="badge badge-error badge-sm">Upload failed</span>;
+	}
+	// The row decides, even straight after an upload from this tab reported done: a file that
+	// was attached and then lost again is exactly the state this badge must not paper over.
+	if (workNeedsFile(item.type) && !item.sourceKey) {
+		return <span className="badge badge-warning badge-sm">No file</span>;
+	}
 	switch (processingState(item)) {
 		case "processing":
 			return <span className="badge badge-warning badge-sm gap-1">Processing…</span>;

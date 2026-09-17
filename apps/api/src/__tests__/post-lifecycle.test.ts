@@ -21,6 +21,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { giveWorkAFile } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -53,6 +54,7 @@ async function makeItem(cookie: string, title: string, type = "game"): Promise<n
 /** Create a Work and release it, so it is publicly reachable. */
 async function makeReleasedWork(cookie: string, title: string, type = "game"): Promise<number> {
 	const workId = await makeItem(cookie, title, type);
+	await giveWorkAFile(workId);
 	const res = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
@@ -105,6 +107,7 @@ describe("Release-readiness gate", () => {
 
 	it("blocks releasing a Work whose media is still transcoding", async () => {
 		workId = await makeItem(owner, "Gated build", "video");
+		await giveWorkAFile(workId);
 		await db
 			.insert(transcodingJobs)
 			.values({ workId, mediaType: "video", status: "pending", progress: 0 });
