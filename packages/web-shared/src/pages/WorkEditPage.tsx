@@ -61,6 +61,7 @@ import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { isoToLocalInput, localInputToIso } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
+import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioUrl } from "../lib/studio";
@@ -223,6 +224,8 @@ function WorkForm({ editing }: { editing: Work }) {
 
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
+	/** Whether Anthers lacks the permission to publish this creator's listing, likewise. */
+	const permissionMissing = usePublishingPermissionMissing();
 
 	// Uploads into this Work from this tab — its own file, and any builds started on the Upload
 	// page. When one lands, the row's media half is re-read, so the file section, the builds
@@ -705,15 +708,18 @@ function WorkForm({ editing }: { editing: Work }) {
 							className="checkbox checkbox-sm checkbox-primary"
 							checked={visibility === "released"}
 							// The server refuses an unrated release with `maturity_undeclared`, one
-							// with no payout setup with `payouts_required`, and one whose file has not
-							// arrived with `media_missing`. Don't offer the click that fails — the same
-							// reasoning as the delivery switches above. `payoutsReady === false` rather
-							// than `!payoutsReady`, so an unanswered status request leaves the control
-							// alone instead of locking it for a reason nobody stated. The file check
-							// applies only before release, so replacing a released image's file does
-							// not lock the control that would make it private.
+							// with no payout setup with `payouts_required`, one Anthers has no
+							// permission to list with `publishing_permission_required`, and one whose
+							// file has not arrived with `media_missing`. Don't offer the click that
+							// fails — the same reasoning as the delivery switches above. `=== false`
+							// and `=== true` rather than truthiness, so an unanswered status request
+							// leaves the control alone instead of locking it for a reason nobody
+							// stated. The file and permission checks apply only before release, so
+							// neither locks the control that would make a released Work private.
 							disabled={
-								!maturity || payoutsReady === false || (fileMissing && visibility !== "released")
+								!maturity ||
+								payoutsReady === false ||
+								((fileMissing || permissionMissing === true) && visibility !== "released")
 							}
 							onChange={(e) => {
 								setVisibility(e.target.checked ? "released" : "private");
@@ -738,7 +744,7 @@ function WorkForm({ editing }: { editing: Work }) {
 									className="input input-bordered input-sm"
 									aria-label="Release time"
 									value={scheduledRelease}
-									disabled={!maturity || payoutsReady === false}
+									disabled={!maturity || payoutsReady === false || permissionMissing === true}
 									onChange={(e) => setScheduledRelease(e.target.value)}
 								/>
 								{scheduledRelease && (
@@ -767,6 +773,19 @@ function WorkForm({ editing }: { editing: Work }) {
 							said whether it is General or Mature.
 						</p>
 					)}
+					{permissionMissing === true && visibility !== "released" && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								<strong>Give Anthers permission to publish before releasing.</strong> A release
+								writes this Work's listing into your own repository, and Anthers doesn't have your
+								permission to do that.{" "}
+								<Link to={studioUrl("/settings")} className="link">
+									Give it in Studio settings
+								</Link>
+								, and save anything you've changed here before you go.
+							</span>
+						</div>
+					)}
 					{payoutsReady === false && (
 						<div className="alert alert-warning text-sm">
 							<span>
@@ -777,7 +796,7 @@ function WorkForm({ editing }: { editing: Work }) {
 								<Link to={studioUrl("/settings")} className="link">
 									Set it up in Studio settings
 								</Link>
-								. Your changes here are saved when you come back.
+								, and save anything you've changed here before you go.
 							</span>
 						</div>
 					)}

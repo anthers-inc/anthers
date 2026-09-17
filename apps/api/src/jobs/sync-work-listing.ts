@@ -14,8 +14,8 @@
  * a job enqueued for the wrong reason costs one read.
  *
  * ⚠️ **It throws on a retryable failure**, because that is how pg-boss is told to try again. A
- * skipped Work — no hosted identity, no creator — is not a failure and must not be retried; it
- * is the ordinary case and returns quietly.
+ * skipped Work — no permission to write, no creator — is not a failure and must not be retried,
+ * because trying again cannot change the answer; it returns quietly.
  */
 import { isOrdinary } from "../services/repo-writer.js";
 import type { ListingSyncResult } from "../services/work-listing.js";
@@ -48,9 +48,9 @@ export async function syncWorkListingJob(data: SyncWorkListingData): Promise<voi
 
 	if (result.status === "skipped") {
 		// ⭐ Logged at all only because a sweep reading these is how somebody would notice the
-		// node being unreachable for everybody at once. The ordinary reason — an identity held
-		// elsewhere with no grant — is deliberately quiet: most such creators never grant one, and
-		// saying anything about them would train whoever reads these to skim.
+		// node being unreachable for everybody at once. An identity held elsewhere with no grant
+		// is deliberately quiet: the creator is already being warned about it where they will
+		// read it, and saying it here too would train whoever reads these to skim.
 		if (!isQuiet(result.reason)) {
 			console.log(`[sync-work-listing] ${data.workId}: skipped (${result.reason})`);
 		}

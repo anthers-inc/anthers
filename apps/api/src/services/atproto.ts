@@ -109,7 +109,9 @@ export function hasReachableEmail(email: string | null | undefined): boolean {
  * 🚨 **It gates asking, never using.** A permission already granted goes on working with this
  * off, because the alternative is that turning a switch off strands every record already on the
  * network — Anthers would be holding a permission it declined to use, on listings it could no
- * longer withdraw. Closing the door is about who walks through it next.
+ * longer withdraw. Closing the door is about who walks through it next, and it is also why a
+ * creator without the permission is only refused while this is open: closed, there is nothing
+ * they could press.
  *
  * ⚠️ **The switch exists because the scope works and is not yet advertised.** bsky.social
  * honors a `repo:` permission today and does not list it in its published metadata, with
@@ -123,14 +125,18 @@ export function atprotoPublishEnabled(): boolean {
 
 // ─── Publishing a creator's listings into their own repository ───────────────
 
-/** How a creator's Work listings reach the network, if they do. */
+/** How a creator's records reach the network. */
 export type PublishingRoute =
 	/** Anthers hosts the identity and holds its credential. Nothing to grant. */
 	| "hosted"
 	/** They hold their identity elsewhere and have granted Anthers permission to publish. */
 	| "granted"
-	/** They hold their identity elsewhere and have granted nothing. Nothing is wrong. */
-	| "available"
+	/**
+	 * They hold their identity elsewhere and Anthers holds no permission covering their records,
+	 * because they declined it, took it back, or it stopped working. Nothing they create can be
+	 * published until they give it again.
+	 */
+	| "ungranted"
 	/** No such account. Every account holds an identity, so this is never a state an account is in. */
 	| "none";
 
@@ -146,35 +152,103 @@ export interface PublishingState {
 	listed: number;
 }
 
-/**
- * What the Studio should say about publishing, for one account.
- *
- * ⚠️ **`available` is a state and not a prompt.** Most creators will sit in it for ever and
- * nothing is wrong with that: publishing on Anthers has never required a network permission and
- * must not start reading as though it does. Whatever renders this owes the same restraint —
- * an offer somebody can take, never a gap somebody should close.
- */
-export async function publishingStateFor(userId: number): Promise<PublishingState> {
+/** Which route an account's records take, and the identity they take it into. */
+async function publishingRouteFor(
+	userId: number,
+): Promise<{ route: PublishingRoute; did: string | null; handle: string }> {
 	const [user] = await db
 		.select({ did: users.atprotoDid, handle: users.atprotoHandle })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
-
-	const listed = await countListedWorks(userId);
-	const offered = atprotoPublishEnabled();
-	const handle = user?.handle ?? "";
-
-	if (!user?.did) return { route: "none", offered, did: null, handle: "", listed };
+	if (!user?.did) return { route: "none", did: null, handle: "" };
 	const did = user.did;
+	const handle = user.handle ?? "";
 
 	// Imported here rather than at the top: `hosted-accounts.ts` reaches back into this module,
 	// and a static edge in both directions is a cycle.
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
-	if (await isHostedIdentity(did)) return { route: "hosted", offered, did, handle, listed };
+	if (await isHostedIdentity(did)) return { route: "hosted", did, handle };
 
 	const granted = grantCoversCreatorRecords(await grantedScopeFor(did));
-	return { route: granted ? "granted" : "available", offered, did, handle, listed };
+	return { route: granted ? "granted" : "ungranted", did, handle };
+}
+
+/**
+ * What the Studio should say about publishing, for one account.
+ *
+ * 🚨 **`ungranted` is a problem to warn about, never an offer.** An identity Anthers can write
+ * to is mandatory (Parker, 2026-09-12), so a creator in this state cannot publish anything, and
+ * {@link publishingPermissionRefusal} refuses them. Everything that renders it owes a warning
+ * and the one button that fixes it — the banner at the top of the site, the Studio settings
+ * card, and the publish controls, which all read this.
+ *
+ * ⭐ **`recheck` asks the creator's authorization server whether a grant on file still holds.**
+ * The stored scope only changes when something tries to use it, so a creator who took the
+ * permission back at their own server would otherwise read as granted until their next release
+ * was refused — the frustration the banner exists to head off. See `recheckPublishingGrant`.
+ */
+export async function publishingStateFor(
+	userId: number,
+	opts: { recheck?: boolean } = {},
+): Promise<PublishingState> {
+	let found = await publishingRouteFor(userId);
+	if (opts.recheck && found.route === "granted" && found.did) {
+		// Imported here for the same cycle reason as `hosted-accounts.ts` above.
+		const { recheckPublishingGrant } = await import("./oauth-repo-writer.js");
+		await recheckPublishingGrant(found.did);
+		// Read again whatever the recheck said. A refused refresh deletes the stored session
+		// inside the SDK, and a narrower grant is recorded without being "gone", so either can
+		// change the answer without the recheck reporting it.
+		found = await publishingRouteFor(userId);
+	}
+	return {
+		...found,
+		offered: atprotoPublishEnabled(),
+		listed: await countListedWorks(userId),
+	};
+}
+
+/** Why a creator may not publish until Anthers can write their records, ready to send. */
+export interface PublishingPermissionRefusal {
+	status: 409;
+	body: { error: string; code: "publishing_permission_required" };
+}
+
+/**
+ * Whether this creator must give Anthers permission over their repository before publishing.
+ *
+ * 🚨 **Releasing a Work, publishing a post and publishing a project all write a record into the
+ * creator's own repository, and with no permission to write it the release is a lie.** The Work
+ * would go out on Anthers and never reach the network, and nothing would say so. An identity
+ * Anthers can write to is mandatory (Parker, 2026-09-12), so this is a refusal beside payout
+ * setup rather than a skipped listing. `publishRefusal` asks it, which is how every publishing
+ * path gets it.
+ *
+ * ⚠️ **Refused only while Anthers is asking for the permission.** With `ATPROTO_PUBLISH_ENABLED`
+ * closed there is no button that could give it, and a refusal nobody can act on is a creator
+ * locked out rather than warned.
+ *
+ * ⚠️ **It reads what is on file and never calls anybody's server.** An authorization server
+ * that is down is not a lapsed grant — the listing waits and retries, and a creator's release
+ * must never depend on the uptime of a machine they may not run. Only an answer that the
+ * permission is gone changes what is on file.
+ */
+export async function publishingPermissionRefusal(
+	userId: number,
+	act: "release" | "publish",
+): Promise<PublishingPermissionRefusal | null> {
+	if (!atprotoPublishEnabled()) return null;
+	const { route, handle } = await publishingRouteFor(userId);
+	if (route !== "ungranted") return null;
+	const where = handle ? `your repository at @${handle}` : "your repository";
+	return {
+		status: 409,
+		body: {
+			error: `Anthers doesn't have your permission to publish to ${where}, so it can't ${act} anything for you. Give it under Studio settings and you'll be able to ${act} straight away.`,
+			code: "publishing_permission_required",
+		},
+	};
 }
 
 /**
@@ -185,9 +259,9 @@ export async function publishingStateFor(userId: number): Promise<PublishingStat
  * account, and accepting that would leave Anthers writing one person's catalog into another
  * person's repository. The DID is the identity; the handle is not.
  *
- * ⚠️ **A decline is an answer rather than an error.** Somebody who opens the screen and grants
- * less than was asked for has done a normal thing, and what they get back is the state they
- * were already in. Nothing is recorded as broken and nothing nags them.
+ * ⚠️ **A decline leaves the creator unable to publish**, exactly as a permission that lapsed
+ * would, and is reported to them as that rather than as an error. Nothing is recorded as
+ * broken, because nothing is: they said no, and the Studio says what that means.
  */
 export type PublishGrantResult =
 	| { status: "granted"; queued: number }

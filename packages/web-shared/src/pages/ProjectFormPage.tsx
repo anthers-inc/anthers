@@ -10,6 +10,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { usePayoutsReady } from "../lib/payouts";
 import { creatorProjectUrl } from "../lib/profile";
+import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
 import { studioEditProjectUrl, studioUrl } from "../lib/studio";
@@ -63,6 +64,7 @@ export default function ProjectFormPage() {
 	// Only going live needs payout setup, so a project already published stays editable.
 	const [wasPublished, setWasPublished] = useState(false);
 	const payoutsReady = usePayoutsReady();
+	const permissionMissing = usePublishingPermissionMissing();
 
 	// UI state.
 	const [loading, setLoading] = useState(isEdit);
@@ -257,7 +259,7 @@ export default function ProjectFormPage() {
 							className="toggle toggle-primary"
 							checked={isPublished}
 							onChange={(e) => setIsPublished(e.target.checked)}
-							disabled={payoutsReady === false && !wasPublished}
+							disabled={!wasPublished && (payoutsReady === false || permissionMissing === true)}
 						/>
 						<div>
 							<span className="label-text font-medium">Publish</span>
@@ -266,6 +268,16 @@ export default function ProjectFormPage() {
 							</p>
 						</div>
 					</label>
+					{permissionMissing === true && !wasPublished && (
+						<p className="text-xs text-warning mt-1">
+							Give Anthers permission to publish in{" "}
+							<Link to={studioUrl("/settings")} className="link">
+								Studio settings
+							</Link>{" "}
+							before publishing, since a project is written into your own repository. You can keep
+							building the project as a draft until then.
+						</p>
+					)}
 					{payoutsReady === false && !wasPublished && (
 						<p className="text-xs text-warning mt-1">
 							Set up payouts in{" "}

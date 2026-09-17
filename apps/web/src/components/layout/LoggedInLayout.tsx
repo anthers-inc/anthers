@@ -18,6 +18,7 @@ import { useBasket } from "../../lib/basket";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
 import PlayerBar from "../media/PlayerBar";
+import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
@@ -162,6 +163,7 @@ function LoggedInLayoutInner() {
 			</header>
 
 			<VerificationBanner />
+			<PublishingPermissionBanner />
 
 			{/* Body: sidebar + main content */}
 			<div className="relative flex flex-1 overflow-hidden">

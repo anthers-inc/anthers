@@ -28,7 +28,7 @@ import {
 	releaseRatingRefusal,
 } from "@anthers/shared/content-rating";
 import { desc, inArray } from "drizzle-orm";
-import { publishRefusal } from "./payouts.js";
+import { publishRefusal } from "./publish-refusal.js";
 import { scanReleaseGate } from "./safety-scan.js";
 
 type WorkRow = typeof works.$inferSelect;
@@ -84,14 +84,13 @@ export async function releaseRefusal(
 	creator: { id: number; isCreator: boolean | null },
 ): Promise<ReleaseRefusal | null> {
 	// 🚨 **The first condition, and the only one that is about the CREATOR rather than the Work.**
-	// Releasing takes a fully set-up creator — creator mode and completed payout setup — and
-	// `publishRefusal` carries the reasons: it is what makes every creator here a verified adult,
-	// since Stripe checks identity and Anthers deliberately checks nothing, and it means no
-	// released Work is payout-ineligible, which matters because ungated work earns from the Time
-	// Pool by the time people spend with it. First because it is the cheapest to evaluate and the
-	// most fundamental.
-	const payouts = await publishRefusal(creator, "release");
-	if (payouts) return { ...payouts, resolves: "creator" };
+	// Releasing takes a fully set-up creator — creator mode, a permission Anthers can write their
+	// listing with, and completed payout setup — and `publishRefusal` carries the reasons: the
+	// listing is what makes the release reach the network at all, and payout setup is what makes
+	// every creator here a verified adult and every released Work payable from the Time Pool.
+	// First because it is the most fundamental, and all three are the creator's to fix.
+	const standing = await publishRefusal(creator, "release");
+	if (standing) return { ...standing, resolves: "creator" };
 
 	// 🚨 **The file has to have arrived before its processing can be waited on.** The Studio
 	// creates a Work the moment its file is picked and uploads into it afterwards, so a video with

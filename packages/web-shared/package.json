@@ -15,6 +15,7 @@
 		"./theme": "./src/lib/theme.ts",
 		"./postUrl": "./src/lib/postUrl.ts",
 		"./payouts": "./src/lib/payouts.ts",
+		"./publishing": "./src/lib/publishing.ts",
 		"./profile": "./src/lib/profile.ts",
 		"./studio": "./src/lib/studio.ts",
 		"./upload": "./src/lib/upload.ts",
