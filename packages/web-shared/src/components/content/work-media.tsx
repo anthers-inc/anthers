@@ -168,7 +168,7 @@ export function WorkFileSection({
 	const rules = fileRules(type);
 	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
 
-	const label = type === "image" ? "Image" : type === "ebook" ? "Book file" : "File";
+	const label = type === "image" ? "Image" : "File";
 
 	if (upload && isUploading(upload)) {
 		return (
