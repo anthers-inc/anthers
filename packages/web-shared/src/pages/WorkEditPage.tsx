@@ -853,9 +853,9 @@ function WorkForm({ editing }: { editing: Work }) {
 						// reason to rate lower or leave Public Access. See `rated-public-access.ts`.
 						<div className="alert alert-info text-sm">
 							<span>
-								Heads up: Mature and Adult Works aren't shown to every reader. Readers and their
-								guardians can hide Mature work, and Adult work is shown only to readers who have
-								opted in and verified that they're adults.{" "}
+								Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents) can
+								choose to hide Mature Works, and Adult work is shown only to users who are 18+ and
+								have opted in.{" "}
 								<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
 									How Ratings Affect Who Sees a Work
 								</Link>

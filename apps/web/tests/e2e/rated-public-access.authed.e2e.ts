@@ -15,7 +15,7 @@ import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtu
 
 const TITLE_PREFIX = "Rated PA walk ";
 const TITLE = `${TITLE_PREFIX}${Date.now()}`;
-const NOTE = "Heads up: Mature and Adult Works aren't shown to every reader.";
+const NOTE = "Heads up: Mature and Adult Works aren't shown to everyone.";
 
 let session = "";
 
