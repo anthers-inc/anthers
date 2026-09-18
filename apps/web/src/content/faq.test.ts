@@ -22,6 +22,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+import { RATED_PUBLIC_ACCESS_HELP } from "@anthers/web-shared/rated-public-access";
 import { isValidElement, type ReactNode } from "react";
 import { ALL_FAQ_ITEMS, type FAQItem, type FAQSurface, faqFor, PAGE_FAQS } from "./faq";
 
@@ -144,5 +145,26 @@ describe("the FAQ pool", () => {
 		const free = faqFor("signup")[0];
 		expect(free.question.toLowerCase()).toContain("card");
 		expect(words(free)).toContain("no.");
+	});
+});
+
+describe("links into the FAQ", () => {
+	// A question's id is its anchor, so a link held by another surface is a route reference
+	// nothing else can follow: it typechecks and lints while pointing at a question renamed
+	// out from under it, and lands a reader at the top of the page instead.
+	it("the Studio's note on rated Public Access opens the answer about reader controls", () => {
+		const [path, anchor] = RATED_PUBLIC_ACCESS_HELP.split("#");
+		expect(path).toBe("/faq");
+		const item = ALL_FAQ_ITEMS.find((i) => i.id === anchor);
+		expect(item).toBeDefined();
+		// The note says readers can hide Mature work and must opt in to Adult, so the answer it
+		// points at has to be the one that explains both.
+		const said = words(item as FAQItem);
+		expect(said).toContain("mature");
+		expect(said).toContain("adult");
+	});
+
+	it("gives every question an id that works as an anchor", () => {
+		for (const item of ALL_FAQ_ITEMS) expect(item.id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 	});
 });

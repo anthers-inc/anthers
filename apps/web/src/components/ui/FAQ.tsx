@@ -30,9 +30,12 @@ import { type FAQItem, type FAQSurface, faqFor } from "../../content/faq";
  * The arrow is drawn here because `list-style` on a summary is the one part of this
  * element browsers still disagree about.
  */
-export function FAQAccordion({ item }: { item: FAQItem }) {
+export function FAQAccordion({ item, open = false }: { item: FAQItem; open?: boolean }) {
 	return (
-		<details className="group rounded-2xl border border-base-content/10 bg-base-100/80 shadow-sm transition-colors open:bg-base-100 hover:border-primary/30">
+		<details
+			open={open}
+			className="group rounded-2xl border border-base-content/10 bg-base-100/80 shadow-sm transition-colors open:bg-base-100 hover:border-primary/30"
+		>
 			<summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left text-sm font-medium marker:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
 				{item.question}
 				<ChevronDownIcon className="h-4 w-4 shrink-0 text-primary/60 transition-transform duration-200 group-open:rotate-180" />
