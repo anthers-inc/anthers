@@ -23,6 +23,7 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
+import { queueScansForWork } from "./scan-media.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
@@ -349,6 +350,21 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
 				await db.update(works).set({ thumbnail: thumbnailUrl }).where(eq(works.id, item.id));
+				// New bytes in the public bucket, so scanned now rather than whenever the hourly
+				// sweep finds them. The video's own scan runs beside this job and normally answered
+				// long before the encode finished, so usually only the thumbnail is sent.
+				//
+				// ⚠️ **A scan that cannot be queued does not fail the encode.** The clock is already
+				// started, so the thumbnail is recorded as owed and `rescan-owed` asks about it within
+				// the hour — the same fallback a vendor outage gets. This also runs where no queue
+				// is started at all, such as the media fixture's seed.
+				try {
+					await queueScansForWork({ ...item, thumbnail: thumbnailUrl });
+				} catch (err) {
+					console.error(
+						`[transcode-video] could not queue a scan of work ${item.id}'s thumbnail; the hourly sweep will: ${err instanceof Error ? err.message : err}`,
+					);
+				}
 			}
 		}
 

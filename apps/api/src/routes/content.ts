@@ -95,6 +95,7 @@ import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { queueScansForWork } from "../jobs/scan-media.js";
 import { embedCreator } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -144,7 +145,7 @@ import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-
 import { publishRefusal } from "../services/publish-refusal.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
-import { beginScans, scanInlineUpload } from "../services/safety-scan.js";
+import { scanInlineUpload } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import {
 	isShareable,
@@ -937,34 +938,6 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * poll-while-processing loop switched off, so a freshly uploaded item sat unlabelled
  * until a manual refresh.
  */
-/**
- * Queue a detection scan for whatever of a Work's objects can be fingerprinted today.
- *
- * ⭐ **Enqueued at the same point as transcoding, deliberately** — the moment a source key
- * or asset key is first attached to a Work is when the object is known to exist and known
- * to belong to somebody, and having one trigger point rather than two is what keeps a new
- * upload route from acquiring transcoding while quietly skipping detection.
- *
- * ⚠️ **Images and videos both, and each key says which it is.** PDQ is an image hash, so a
- * video is sampled into frames and hashed frame by frame — a different job body behind the
- * same queue, dispatched on the `kind` that `scannableKeys` attaches. Audio has no coverage
- * under a perceptual image hash at all, and neither does anything inside an archive. The
- * current coverage map is deliberately not public and stays off the public safety page.
- */
-async function queueScanForWork(item: WorkRow): Promise<void> {
-	// `beginScans` decides which objects are scannable and starts the Work's clock; this
-	// only sends the jobs. The key set has to be the same one the release gate waits on, so
-	// it lives in the service that owns both rather than being computed again here.
-	const objects = await beginScans(item);
-	for (const object of objects) {
-		await queue.send(
-			QUEUES.SCAN_MEDIA,
-			{ storageKey: object.key, workId: item.id, kind: object.kind },
-			JOB_OPTIONS[QUEUES.SCAN_MEDIA],
-		);
-	}
-}
-
 async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow | null> {
 	if (item.type === "video" && item.sourceKey) {
 		const [job] = await db
@@ -3101,7 +3074,7 @@ const contentRoutes = new Hono()
 			.returning();
 
 		const job = await queueTranscodeForWork(work);
-		await queueScanForWork(work);
+		await queueScansForWork(work);
 		await resolveWorkThumbnail(work);
 		return c.json({ work: serializeWork(work, [], job) }, 201);
 	})
@@ -3792,7 +3765,7 @@ const contentRoutes = new Hono()
 
 		// A new source means the old transcode is stale — re-process.
 		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
-		if (sourceChanged || thumbnailChanged) await queueScanForWork(updated);
+		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
 		const [workAssets, jobRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, id)),
