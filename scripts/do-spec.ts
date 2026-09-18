@@ -16,6 +16,7 @@ export type Component = {
 	envs?: EnvEntry[];
 	github?: GitHubSource;
 	instance_count?: number;
+	instance_size_slug?: string;
 };
 export type Domain = { domain?: string; type?: string };
 export type Spec = {
