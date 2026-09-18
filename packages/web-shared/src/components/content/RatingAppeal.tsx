@@ -3,9 +3,10 @@
  * Appealing an operator's correction of a Work's rating.
  *
  * 🚨 **This is part of the rating feature rather than a later refinement.** Because Anthers'
- * Adult rung is payment-gated, an over-cautious call does not merely add a warning
- * to a work — it puts it behind a paywall, and for a queer coming-of-age story wrongly
- * flagged that is exactly the harm the category exists to prevent, produced by the mechanism
+ * Adult rung makes a Work invisible to anyone who has not opted in and verified they are an
+ * adult, an over-cautious call does not merely add a warning to a work — it takes most of its
+ * audience away, and for a queer coming-of-age story wrongly flagged that is exactly the harm
+ * the category exists to prevent, produced by the mechanism
  * meant to prevent it (the wiki's *Content Standards*). A correction surface without a contest would be only the
  * half that can do damage.
  *

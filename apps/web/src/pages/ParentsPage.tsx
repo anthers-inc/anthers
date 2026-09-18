@@ -119,7 +119,8 @@ export default function ParentsPage() {
 					<strong>General</strong> and carries no restriction at all. <strong>Mature</strong> means
 					sustained violence, sexual activity depicted rather than implied, or similar — it's
 					labeled, blurred behind a click by default for everybody, and can be hidden entirely.{" "}
-					<strong>Adult</strong> means explicit sexual content that is central to the work.
+					<strong>Adult</strong> means explicit sexual content that is central to the work, or
+					extreme violence or drug use that is the work's focus.
 				</p>
 				<p>
 					<strong>

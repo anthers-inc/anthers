@@ -73,9 +73,11 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	await expect(note).toBeVisible();
 
 	// The rating alone never decides it: General is met by every reader, and Adult is noted too.
-	await page.getByRole("radio", { name: /^General/ }).check();
+	// The rating is the rating matrix's, so General is every row answered Not in It, and Adult is
+	// one row reaching it.
+	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
 	await expect(note).toHaveCount(0);
-	await page.getByRole("radio", { name: /^Adult/ }).check();
+	await page.getByRole("radio", { name: "Sexual Content: Adult" }).check();
 	await expect(note).toBeVisible();
 
 	// Out of Public Access, there is nothing to qualify.

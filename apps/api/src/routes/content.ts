@@ -60,6 +60,7 @@ import {
 import {
 	maturityLabel,
 	normalizeContentNotes,
+	normalizeMaturityRows,
 	RATING_APPEAL_STATEMENT_MAX,
 	releaseRatingRefusal,
 	requiresAdultVerification,
@@ -124,7 +125,12 @@ import {
 	threadCommentIds,
 } from "../services/comment-thread.js";
 import { adultVisibility, maturityHiddenFrom } from "../services/content-preferences.js";
-import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
+import {
+	appealsForWork,
+	declaredRating,
+	declareRating,
+	fileRatingAppeal,
+} from "../services/content-rating.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -737,6 +743,10 @@ const workBaseSchema = z
 		// operator's correction can only be raised, not lowered, by the creator.
 		maturity: z.enum(["general", "mature", "adult"]).optional(),
 		maturityNotes: z.array(z.string()).max(20).optional(),
+		// The rating matrix, row by row (`RATING_ROWS`). A complete one decides the rating and
+		// the notes, and outranks the two fields above; an incomplete one is only stored. Rows
+		// and levels this build does not know are dropped rather than refused.
+		maturityRows: z.record(z.string(), z.enum(["none", "general", "mature", "adult"])).optional(),
 
 		// Delivery (≥1 enforced on release)
 		streamEnabled: z.boolean().optional(),
@@ -1022,6 +1032,8 @@ function serializeWork(
 		releasedAt: item.releasedAt,
 		maturity: item.maturity,
 		maturityNotes: item.maturityNotes ?? [],
+		/** The rating matrix as its creator marked it; a row absent from it is unanswered. */
+		maturityRows: item.maturityRows ?? {},
 		/** Whether an operator set the rating — what tells the creator an appeal is the route. */
 		maturityLocked: item.maturitySource === "operator",
 		authoredAt: item.authoredAt,
@@ -3051,6 +3063,12 @@ const contentRoutes = new Hono()
 		}
 
 		const bodyHtml = data.type === "text" ? sanitizePostHtml(data.bodyHtml ?? "") : "";
+		// Declared through the matrix or directly, or left `unrated` for the editor to ask about.
+		const declaredOnCreate = declaredRating({
+			maturity: data.maturity,
+			notes: data.maturityNotes,
+			rows: data.maturityRows,
+		});
 		const publicId = await makeUniquePublicId(works);
 
 		const [work] = await db
@@ -3078,10 +3096,13 @@ const contentRoutes = new Hono()
 				// Declared here or left `unrated` for the editor to ask about. Either way it
 				// is the creator's own word, so the source says so — nothing here can be an
 				// operator's correction, because the Work did not exist a moment ago.
-				maturity: data.maturity ?? "unrated",
-				maturityNotes: data.maturity ? normalizeContentNotes(data.maturityNotes ?? []) : [],
-				maturitySource: data.maturity ? "creator" : null,
-				maturitySetAt: data.maturity ? new Date() : null,
+				maturity: declaredOnCreate.maturity ?? "unrated",
+				maturityNotes: declaredOnCreate.maturity
+					? normalizeContentNotes(declaredOnCreate.notes ?? [])
+					: [],
+				maturityRows: normalizeMaturityRows(data.maturityRows),
+				maturitySource: declaredOnCreate.maturity ? "creator" : null,
+				maturitySetAt: declaredOnCreate.maturity ? new Date() : null,
 				authoredAt: data.authoredAt ? new Date(data.authoredAt) : null,
 				authoredPrecision: data.authoredPrecision ?? null,
 				streamEnabled: data.streamEnabled ?? true,
@@ -3619,18 +3640,23 @@ const contentRoutes = new Hono()
 		//
 		// Scoped to a request that names a rating, so a Work sitting at a rung that closed
 		// after it was released stays editable in every other respect.
+		const declaring = declaredRating({
+			maturity: data.maturity,
+			notes: data.maturityNotes,
+			rows: data.maturityRows,
+		}).maturity;
 		if (
 			work.visibility === "released" &&
 			data.visibility !== "private" &&
-			data.maturity !== undefined &&
-			releaseRatingRefusal(data.maturity) === "closed"
+			declaring !== undefined &&
+			releaseRatingRefusal(declaring) === "closed"
 		) {
-			const rung = maturityLabel(data.maturity);
+			const rung = maturityLabel(declaring);
 			return c.json(
 				{
 					error: `Anthers isn't accepting ${rung} work at the moment, so a released Work can't be rated ${rung}. Make this Work private and the rating will save — it will keep it until ${rung} reopens.`,
 					code: "maturity_rung_closed",
-					rung: data.maturity,
+					rung: declaring,
 				},
 				409,
 			);
@@ -3651,10 +3677,15 @@ const contentRoutes = new Hono()
 		// party can have decided. A creator lowering an operator's correction is refused
 		// here rather than silently dropped — and told where the appeal is, since the
 		// refusal is otherwise indistinguishable from the edit not having saved.
-		if (data.maturity !== undefined || data.maturityNotes !== undefined) {
+		if (
+			data.maturity !== undefined ||
+			data.maturityNotes !== undefined ||
+			data.maturityRows !== undefined
+		) {
 			const declared = await declareRating(work, {
 				maturity: data.maturity,
 				notes: data.maturityNotes,
+				rows: data.maturityRows,
 			});
 			if (declared === "locked") {
 				return c.json(
@@ -3828,8 +3859,9 @@ const contentRoutes = new Hono()
 	 * Appealing an operator's correction of a Work's rating.
 	 *
 	 * 🚨 **This is part of the rating feature rather than a later refinement**, on the *Content Standards* page's
-	 * reasoning: because the Adult rung is payment-gated, an over-cautious call
-	 * does not merely add a warning to a work, it puts it behind a paywall — and for a queer
+	 * reasoning: because the Adult rung makes a Work invisible to anyone who has
+	 * not opted in and verified they are an adult, an over-cautious call does not merely add a
+	 * warning to a work, it takes most of its audience away — and for a queer
 	 * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
 	 * prevent, produced by the mechanism meant to prevent it. Shipping the correction
 	 * without the contest would build only the half that can do damage.

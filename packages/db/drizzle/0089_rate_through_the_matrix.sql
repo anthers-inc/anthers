@@ -1,0 +1,1 @@
+ALTER TABLE "works" ADD COLUMN "maturity_rows" jsonb DEFAULT '{}'::jsonb NOT NULL;

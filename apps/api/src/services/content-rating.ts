@@ -18,6 +18,8 @@
  * ⚠️ **Content notes are never locked.** They carry no access consequence — nothing reads
  * them to decide who may reach a Work — so there is nothing for a lock to protect, and
  * locking them would take a creator's own warnings to their own readers out of their hands.
+ * Rating through the matrix keeps that: a creator may mark any row however they like, and
+ * only the rating the rows add up to is held to the operator's.
  *
  * 🚨 **Every door that changes a rating asks for the Work's listing to be re-synced.** A rating
  * decides whether a listing may exist at all — an Adult Work is never published to the network
@@ -39,6 +41,9 @@ import {
 	type MaturityRating,
 	maturityLabel,
 	normalizeContentNotes,
+	normalizeMaturityRows,
+	notesFromRows,
+	ratingFromRows,
 } from "@anthers/shared/content-rating";
 import { and, desc, eq } from "drizzle-orm";
 import { notify } from "./notifications.js";
@@ -67,7 +72,27 @@ export function ratingOf(work: Pick<WorkRow, "maturity" | "maturityNotes" | "mat
 export type DeclineRefusal = "locked";
 
 /**
- * The creator declaring their own Work's rating.
+ * What a declaration amounts to: the rating and notes a request names directly, or the ones its
+ * rating matrix adds up to once every row is answered (see `RATING_ROWS`). A complete matrix
+ * decides both; an incomplete one decides neither and is only stored, so a Work already rated
+ * keeps its rating until its creator finishes answering, and nothing is un-rated by a matrix
+ * left half done.
+ */
+export function declaredRating(input: {
+	maturity?: MaturityRating;
+	notes?: readonly string[];
+	rows?: unknown;
+}): { maturity?: MaturityRating; notes?: readonly string[] } {
+	if (input.rows === undefined) return { maturity: input.maturity, notes: input.notes };
+	const rows = normalizeMaturityRows(input.rows);
+	const fromRows = ratingFromRows(rows);
+	return fromRows
+		? { maturity: fromRows, notes: notesFromRows(rows) }
+		: { maturity: input.maturity, notes: input.notes };
+}
+
+/**
+ * The creator declaring their own Work's rating, directly or through the rating matrix.
  *
  * Returns the updated row, or `"locked"` when an operator has set the rating and this change
  * would lower it. Passing the rating it already has is not a change and is always allowed,
@@ -76,15 +101,17 @@ export type DeclineRefusal = "locked";
  */
 export async function declareRating(
 	work: WorkRow,
-	input: { maturity?: MaturityRating; notes?: readonly string[] },
+	input: { maturity?: MaturityRating; notes?: readonly string[]; rows?: unknown },
 	now: Date = new Date(),
 ): Promise<WorkRow | DeclineRefusal> {
 	const current = ratingOf(work);
-	const maturity = input.maturity ?? current.maturity;
+	const declared = declaredRating(input);
+	const maturity = declared.maturity ?? current.maturity;
 
 	if (current.locked && !isAtLeastAsCautious(maturity, current.maturity)) return "locked";
 
 	const updates: Partial<typeof works.$inferInsert> = { updatedAt: now };
+	if (input.rows !== undefined) updates.maturityRows = normalizeMaturityRows(input.rows);
 	if (maturity !== current.maturity) {
 		updates.maturity = maturity;
 		updates.maturitySetAt = now;
@@ -94,7 +121,7 @@ export async function declareRating(
 		// value is where `isAtLeastAsCautious` is measured from once they have set it.
 		updates.maturitySource = "creator";
 	}
-	if (input.notes) updates.maturityNotes = normalizeContentNotes(input.notes);
+	if (declared.notes) updates.maturityNotes = normalizeContentNotes(declared.notes);
 
 	const [updated] = await db.update(works).set(updates).where(eq(works.id, work.id)).returning();
 	await queueWorkListingSync(work.id);

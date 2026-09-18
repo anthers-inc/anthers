@@ -641,9 +641,9 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// ── Content ratings ─────────────────────────────────────────────────────────
 	// 🚨 **The correction and the appeal ship together, and the appeal is not the
-	// optional half.** The wiki's *Content Standards*: because the Adult rung is payment-gated, an
-	// over-cautious call does not merely add a warning to a work — it puts it behind a
-	// paywall, and for a queer coming-of-age story wrongly flagged that is exactly the
+	// optional half.** The wiki's *Content Standards*: because the Adult rung makes a Work invisible
+	// to anyone who has not opted in and verified they are an adult, an over-cautious call does
+	// not merely add a warning to a work — it takes most of its audience away, and for a queer coming-of-age story wrongly flagged that is exactly the
 	// harm the category exists to prevent, produced by the mechanism meant to prevent it.
 	// An operator surface with no contest would be only the half that can do damage.
 	//

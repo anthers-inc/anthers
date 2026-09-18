@@ -70,7 +70,7 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 			: processing
 				? "Still processing — it can be released once the media is ready"
 				: unrated
-					? "Say whether this is General or Mature before releasing"
+					? "Rate it before releasing"
 					: "Turn on streaming or downloads before releasing";
 
 	return (

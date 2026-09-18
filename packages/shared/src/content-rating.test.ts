@@ -22,6 +22,10 @@ import {
 	type MaturityRating,
 	maturityLabel,
 	normalizeContentNotes,
+	normalizeMaturityRows,
+	notesFromRows,
+	RATING_ROWS,
+	ratingFromRows,
 	releaseRatingRefusal,
 	requiresAdultVerification,
 	rungBelow,
@@ -130,10 +134,10 @@ describe("which rungs Anthers accepts", () => {
 		// with a reader rather than a constant somebody edited in passing. It failed when
 		// Adult was added, which is the mechanism working.
 		//
-		// ⭐ Adult went on this list only once every fence it needs was real: the payment
-		// requirement, the exclusion from Public Access and so from the Time Pool, the
-		// invisibility to anyone who has not opted in, the adulthood verification, and the
-		// reader's own controls. **If a rung is ever added here again, that is the bar.**
+		// ⭐ Adult went on this list only once every fence it needs was real: the invisibility
+		// to anyone who has not opted in, the adulthood verification behind the opt-in, and the
+		// reader's own controls. **If a rung is ever added here again, that is the bar.** A price
+		// or a Public Access exclusion is not a fence, and neither is a property of the rating.
 		expect([...ACCEPTED_MATURITY_RATINGS]).toEqual(["general", "mature", "adult"]);
 		for (const choice of MATURITY_CHOICES) expect(isRatingAccepted(choice.value)).toBe(true);
 		// `unrated` is not a rung and so is not accepted; the release gate answers it with
@@ -303,5 +307,67 @@ describe("content notes", () => {
 		expect(values).not.toContain("queer");
 		expect(values).not.toContain("lgbt");
 		expect(values).not.toContain("trans");
+	});
+});
+
+describe("the rating matrix", () => {
+	const all = (level: "none" | "general") =>
+		Object.fromEntries(RATING_ROWS.map((row) => [row.note, level]));
+
+	it("reaches Adult on sexual content, violence and substance use, and on nothing else", () => {
+		// ⚠️ The MPA's NC-17 descriptors, adapted (Parker, 2026-09-18). A fourth row reaching Adult
+		// is a change to the Rating Standard first and to this list second, never the reverse.
+		const adultRows = RATING_ROWS.filter((row) => row.rungs.adult !== null).map((r) => r.note);
+		expect(adultRows).toEqual(["violence", "sexual-themes", "substance-use"]);
+		// And strong language never rates at all.
+		const language = RATING_ROWS.find((row) => row.note === "language");
+		expect(language?.rungs.mature).toBeNull();
+		expect(language?.rungs.adult).toBeNull();
+	});
+
+	it("is the list the content notes are drawn from", () => {
+		expect(CONTENT_NOTES.map((n) => n.value)).toEqual(RATING_ROWS.map((r) => r.note));
+	});
+
+	it("is not rated until every row is answered", () => {
+		// An unanswered row is not a declaration, so half a matrix adds up to nothing.
+		const { language: _left, ...fiveRows } = all("none");
+		expect(ratingFromRows(normalizeMaturityRows(fiveRows))).toBeNull();
+		expect(ratingFromRows({})).toBeNull();
+	});
+
+	it("is General when nothing is in it, or only at General", () => {
+		expect(ratingFromRows(normalizeMaturityRows(all("none")))).toBe("general");
+		expect(ratingFromRows(normalizeMaturityRows(all("general")))).toBe("general");
+	});
+
+	it("takes the highest rung any row reaches", () => {
+		const rows = normalizeMaturityRows({ ...all("none"), horror: "mature", language: "general" });
+		expect(ratingFromRows(rows)).toBe("mature");
+		expect(ratingFromRows({ ...rows, violence: "adult" })).toBe("adult");
+	});
+
+	it("drops a level a row cannot reach rather than lowering it", () => {
+		// Marking Self-Harm as Adult leaves the row unanswered, rather than quietly answering it
+		// at Mature on the creator's behalf.
+		const rows = normalizeMaturityRows({ ...all("none"), "self-harm": "adult", made: "up" });
+		expect(rows["self-harm"]).toBeUndefined();
+		expect(Object.keys(rows)).not.toContain("made");
+		expect(ratingFromRows(rows)).toBeNull();
+	});
+
+	it("keeps Not in It distinct from unanswered", () => {
+		const rows = normalizeMaturityRows({ violence: "none" });
+		expect(rows.violence).toBe("none");
+		expect(rows.horror).toBeUndefined();
+	});
+
+	it("notes every row marked at a rung, and none marked Not in It", () => {
+		const rows = normalizeMaturityRows({
+			...all("none"),
+			language: "general",
+			violence: "mature",
+		});
+		expect(notesFromRows(rows)).toEqual(["violence", "language"]);
 	});
 });
