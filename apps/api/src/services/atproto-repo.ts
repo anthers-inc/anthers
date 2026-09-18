@@ -105,6 +105,26 @@ export function rkeyFromAtUri(uri: string, collection: string): string | null {
 }
 
 /**
+ * Where a record can be read raw, as JSON, from the server holding the repository it lives in:
+ * that server's own `com.atproto.repo.getRecord`, so the address sends nobody through a service
+ * Anthers does not run (Parker, 2026-09-18). Null without a record or without a server to ask.
+ *
+ * It is the creator's own diagnostic view of what Anthers wrote for them, and it only reaches
+ * anybody through the owner's serialization.
+ */
+export function recordUrlFor(
+	atUri: string | null | undefined,
+	pdsUrl: string | null | undefined,
+): string | null {
+	const match = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(atUri ?? "");
+	const server = (pdsUrl ?? "").trim().replace(/\/+$/, "");
+	if (!match || !/^https?:\/\/[^/]/.test(server)) return null;
+	const [, repo, collection, rkey] = match;
+	const query = new URLSearchParams({ repo, collection, rkey });
+	return `${server}/xrpc/com.atproto.repo.getRecord?${query}`;
+}
+
+/**
  * Decide what to do with a Work's listing, given whatever record it already has.
  *
  * 🚨 **The delete branch is the one worth reading twice.** A Work that stops being publicly

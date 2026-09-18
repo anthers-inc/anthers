@@ -1021,6 +1021,24 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						<span className="label-text text-sm">Released to my public Catalog</span>
 					</label>
 					{/*
+					 * The released Work's listing on the network, as its record, read raw from the
+					 * creator's own server (Parker, 2026-09-18). Said of what is SAVED, since a listing
+					 * is written after a save rather than while a box is ticked, and "not yet" rather
+					 * than "missing": the listing is written by a job a moment after release, and one
+					 * that cannot be written is explained by the permission warnings instead.
+					 */}
+					{current.visibility === "released" &&
+						(current.recordUrl ? (
+							<p className="text-xs text-base-content/60">
+								Its listing is on the network, where other software can read it.{" "}
+								<a href={current.recordUrl} target="_blank" rel="noreferrer" className="link">
+									View the record
+								</a>
+							</p>
+						) : (
+							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
+						))}
+					{/*
 					 * Scheduling. It is refused for the things only the creator can fix, exactly as the
 					 * checkbox is, and not for a file still uploading or processing, because waiting on
 					 * those is what a schedule is for. `jobs/release-scheduled.ts` is what happens at
