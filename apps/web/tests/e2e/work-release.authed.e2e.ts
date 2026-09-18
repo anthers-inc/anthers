@@ -183,6 +183,13 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(cardFor(page)).toContainText("Rate this");
 	await expect(cardFor(page).getByRole("button", { name: "Release" })).toBeDisabled();
 
+	// The thumbnail opens the Work as the title does, since it is the biggest thing on the card
+	// and the first thing a creator clicks. It is kept out of the accessibility tree because the
+	// title already names the same link, so it is found by its place on the card, not by role.
+	await cardFor(page).locator('a[aria-hidden="true"]').click();
+	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
+	await page.goto("/studio/catalog");
+
 	// ── Rate it ─────────────────────────────────────────────────────────────
 	// ⭐ The card's blocked-release hint is a LINK now rather than a tooltip. It could not be
 	// one while the editor had no URL, which is the smallest concrete thing the page bought.

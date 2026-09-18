@@ -21,7 +21,7 @@ import {
 import type { ComponentType } from "react";
 import type { UploadableWorkType, Work } from "../../lib/types";
 import { isUploading, useSourceUpload } from "../../lib/work-uploads";
-import { processingText } from "./processing";
+import { processingStatusText } from "./processing";
 import { type AccessState, accessState } from "./work-state";
 
 export { type AccessState, accessState } from "./work-state";
@@ -115,11 +115,11 @@ export function ProcessingBadge({ item }: { item: Work }) {
 	}
 	switch (processingState(item)) {
 		case "processing":
-			// The same words as the Work's page and the Dashboard, estimate and all — the card is
-			// where a creator uploading a back catalog watches thirty of these at once.
+			// The same words as the Work's page and the Dashboard, less the estimate, which is too
+			// long for a badge. The Catalog card says it on a line of its own.
 			return (
 				<span className="badge badge-warning badge-sm gap-1">
-					{processingText(item.transcoding)}
+					{processingStatusText(item.transcoding)}
 				</span>
 			);
 		case "ready":
