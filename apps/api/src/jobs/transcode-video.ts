@@ -24,6 +24,7 @@ import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
 import { queueScansForWork } from "./scan-media.js";
+import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
@@ -204,10 +205,11 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		return;
 	}
 
-	// Mark as processing.
+	// Mark as processing. The estimate is cleared too, so a job run again after a crash does not
+	// show the previous run's figure until its own first reading.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, updatedAt: new Date() })
+		.set({ status: "processing", progress: 0, etaSeconds: null, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
@@ -286,28 +288,31 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		await mkdir(outputDir, { recursive: true });
 
 		// Variants span the 10→80 range; within each, ffmpeg's -progress drives a
-		// smooth sub-percentage and a live ETA (remaining encode-seconds ÷ speed).
+		// smooth sub-percentage and a live estimate of what is left (`transcode-eta.ts`).
 		const spanStart = 10;
 		const spanEnd = 80;
 		const perVariant = (spanEnd - spanStart) / variants.length;
+		const heights = variants.map((v) => v.height);
+		const clampEta = createEtaClamp();
+		let encoding = true;
+		let lastWrite: Promise<unknown> = Promise.resolve();
 		for (let i = 0; i < variants.length; i++) {
 			const v = variants[i];
 			const variantBase = spanStart + i * perVariant;
 			let lastPct = -1;
 			let lastWriteMs = 0;
 			await ffmpegHls(localPath, outputDir, v.height, v.bitrate, v.name, (outSec, speed) => {
-				if (duration <= 0) return;
+				if (duration <= 0 || !encoding) return;
 				const frac = Math.min(1, outSec / duration);
 				const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
-				// Remaining = rest of this variant + full duration for each later variant.
-				const remainingSec = Math.max(0, duration - outSec) + (variants.length - 1 - i) * duration;
-				const eta = speed > 0 ? Math.round(remainingSec / speed) : null;
+				const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
 				const now = Date.now();
 				if (pct !== lastPct && now - lastWriteMs >= 1000) {
 					lastPct = pct;
 					lastWriteMs = now;
 					// Fire-and-forget so the progress stream isn't blocked on the DB write.
-					db.update(transcodingJobs)
+					lastWrite = db
+						.update(transcodingJobs)
 						.set({ progress: pct, etaSeconds: eta })
 						.where(eq(transcodingJobs.id, jobId))
 						.execute()
@@ -319,7 +324,16 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 
 		// 4. Generate master playlist
 		await generateMasterPlaylist(outputDir, variants);
-		await updateJobProgress(jobId, 80);
+		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
+		// segments and making a thumbnail take a time nothing measures, and the last estimate the
+		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
+		// A progress reading still in flight is let land first, or it could write that figure back.
+		encoding = false;
+		await lastWrite;
+		await db
+			.update(transcodingJobs)
+			.set({ progress: 80, etaSeconds: null })
+			.where(eq(transcodingJobs.id, jobId));
 
 		// 5. Upload HLS files to storage (creator-first layout — see media-upload route)
 		const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;

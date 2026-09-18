@@ -20,6 +20,7 @@ import { Link } from "../../lib/router";
 import { studioEditWorkUrl } from "../../lib/studio";
 import type { Work } from "../../lib/types";
 import { isUploading, useSourceUpload } from "../../lib/work-uploads";
+import { etaLeft } from "./processing";
 import {
 	AccessBadge,
 	accessState,
@@ -49,6 +50,8 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 	// with no delivery switch on. Disable rather than let the click earn an error.
 	const processing =
 		item.transcoding?.status === "pending" || item.transcoding?.status === "processing";
+	const eta =
+		item.transcoding?.status === "processing" ? etaLeft(item.transcoding.etaSeconds) : null;
 	// And one whose file has not arrived (`media_missing`) — still uploading from this tab, or
 	// never uploaded because the tab that was uploading it closed.
 	const upload = useSourceUpload(item.id);
@@ -72,13 +75,23 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 
 	return (
 		<div className="card bg-base-100 border border-base-300 overflow-hidden">
-			<div className="aspect-video bg-base-200 flex items-center justify-center overflow-hidden">
+			{/* The thumbnail is the biggest thing on the card and the first thing a creator
+			    clicks, so it opens the Work like the title does. The card itself cannot be one
+			    link, as the public cards are, because it holds buttons. This second link to the
+			    same place stays out of the tab order and the accessibility tree, where the title
+			    already names it. */}
+			<Link
+				to={editUrl}
+				tabIndex={-1}
+				aria-hidden="true"
+				className="aspect-video bg-base-200 flex items-center justify-center overflow-hidden"
+			>
 				{preview ? (
-					<img src={preview} alt={item.title ?? ""} className="w-full h-full object-cover" />
+					<img src={preview} alt="" className="w-full h-full object-cover" />
 				) : (
 					<TypeIcon type={item.type} className="w-12 h-12 text-base-content/30" />
 				)}
-			</div>
+			</Link>
 			<div className="card-body p-4 gap-2">
 				<h3 className="font-semibold text-sm truncate" title={item.title ?? undefined}>
 					<Link to={editUrl} className="link link-hover">
@@ -100,6 +113,9 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 						.
 					</p>
 				)}
+				{/* The estimate, on its own line because the badge above has no room for it. The card
+				    is where a creator uploading a back catalog watches thirty of these at once. */}
+				{processing && eta && <p className="text-xs text-base-content/60">{eta}</p>}
 				{item.scheduledReleaseAt && !released && (
 					<p className="text-xs text-info">
 						{Date.parse(item.scheduledReleaseAt) <= Date.now()

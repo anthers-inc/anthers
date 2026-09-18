@@ -8,7 +8,14 @@
 import { describe, expect, it } from "bun:test";
 import type { Work } from "../../lib/types";
 import type { WorkUpload } from "../../lib/work-uploads";
-import { etaText, processingQueue, processingText, RECENTLY_FINISHED_MS } from "./processing";
+import {
+	etaLeft,
+	etaText,
+	processingQueue,
+	processingStatusText,
+	processingText,
+	RECENTLY_FINISHED_MS,
+} from "./processing";
 
 const NOW = Date.parse("2026-09-16T12:00:00Z");
 
@@ -44,7 +51,7 @@ describe("processingText", () => {
 		// Audio and ebooks never carry an estimate, and a sentence ending in an empty "left"
 		// is the failure the column's own comment warns about.
 		expect(processingText(work(1, { progress: 43, etaSeconds: 150 }).transcoding)).toBe(
-			"Processing 43% · ~2m 30s left",
+			"Processing 43% · About 3 minutes left",
 		);
 		expect(processingText(work(1, { progress: 43, etaSeconds: null }).transcoding)).toBe(
 			"Processing 43%",
@@ -59,11 +66,48 @@ describe("processingText", () => {
 	});
 });
 
+describe("processingStatusText", () => {
+	it("leaves the estimate out, because a badge has no room for it", () => {
+		expect(processingStatusText(work(1, { progress: 43, etaSeconds: 30 }).transcoding)).toBe(
+			"Processing 43%",
+		);
+		expect(processingStatusText(work(1, { status: "pending" }).transcoding)).toBe(
+			"Waiting to process",
+		);
+		expect(processingStatusText(work(1, { status: "completed" }).transcoding)).toBeNull();
+	});
+});
+
 describe("etaText", () => {
-	it("rounds to the units a person reads", () => {
-		expect(etaText(45)).toBe("~45s");
-		expect(etaText(120)).toBe("~2m");
-		expect(etaText(3900)).toBe("~1h 5m");
+	it("never names seconds", () => {
+		expect(etaText(1)).toBe("less than a minute");
+		expect(etaText(59)).toBe("less than a minute");
+		expect(etaText(60)).toBe("about a minute");
+		expect(etaText(89)).toBe("about a minute");
+	});
+
+	it("gives whole minutes under ten, then the nearest five", () => {
+		expect(etaText(150)).toBe("about 3 minutes");
+		expect(etaText(9 * 60)).toBe("about 9 minutes");
+		expect(etaText(23 * 60)).toBe("about 25 minutes");
+		expect(etaText(57 * 60)).toBe("about 55 minutes");
+	});
+
+	it("turns into hours once the nearest five minutes is an hour", () => {
+		// 58 minutes rounds to 60, which is an hour rather than "about 60 minutes".
+		expect(etaText(58 * 60)).toBe("about an hour");
+		expect(etaText(80 * 60)).toBe("about an hour");
+		expect(etaText(100 * 60)).toBe("about 2 hours");
+	});
+});
+
+describe("etaLeft", () => {
+	it("is a sentence, and absent when there is no estimate", () => {
+		expect(etaLeft(150)).toBe("About 3 minutes left");
+		expect(etaLeft(30)).toBe("Less than a minute left");
+		expect(etaLeft(0)).toBeNull();
+		expect(etaLeft(null)).toBeNull();
+		expect(etaLeft(undefined)).toBeNull();
 	});
 });
 
