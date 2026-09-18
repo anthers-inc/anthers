@@ -59,26 +59,37 @@ async function makeVideo(): Promise<Buffer> {
 
 describe("a video transcode's generated thumbnail", () => {
 	let creatorId: number;
-	let workId: number;
 	let sent: Array<{ name: string; data: unknown; options: unknown }> = [];
+	/** Makes queueing fail the way it does where no queue is started, as in the fixture seed. */
+	let failSend = false;
 	let sendSpy: ReturnType<typeof spyOn>;
 
-	beforeAll(async () => {
-		creatorId = (await createAccount(`tts_${RUN}`, { fields: { isCreator: true } })).userId;
-		const sourceKey = `creators/${creatorId}/videos/originals/${RUN}.mp4`;
+	/** A video Work whose source already has its answer, and a pending transcode for it. */
+	async function stage(label: string): Promise<{ workId: number; jobId: number }> {
+		const sourceKey = `creators/${creatorId}/videos/originals/${RUN}-${label}.mp4`;
 		await storage.upload(sourceKey, await makeVideo(), "video/mp4", "private");
-
-		workId = (await insertWork({ creatorId, type: "video", title: `Thumbnail scan ${RUN}` })).id;
+		const workId = (
+			await insertWork({ creatorId, type: "video", title: `Thumbnail ${label} ${RUN}` })
+		).id;
 		await db.update(works).set({ sourceKey, thumbnail: null }).where(eq(works.id, workId));
 		await db
 			.insert(mediaScans)
 			.values({ storageKey: sourceKey, workId, determination: "clean", scannedAt: new Date() });
+		const [job] = await db
+			.insert(transcodingJobs)
+			.values({ workId, mediaType: "video", status: "pending" })
+			.returning();
+		return { workId, jobId: job.id };
+	}
 
+	beforeAll(async () => {
+		creatorId = (await createAccount(`tts_${RUN}`, { fields: { isCreator: true } })).userId;
 		sendSpy = spyOn(queue, "send").mockImplementation((async (
 			name: string,
 			data: unknown,
 			options: unknown,
 		) => {
+			if (failSend) throw new Error("Database not opened. Call open() before executing SQL.");
 			sent.push({ name, data, options });
 			return "job";
 		}) as typeof queue.send);
@@ -91,13 +102,10 @@ describe("a video transcode's generated thumbnail", () => {
 	});
 
 	it("is queued for a scan as soon as the transcode attaches it, and nothing else is", async () => {
-		const [job] = await db
-			.insert(transcodingJobs)
-			.values({ workId, mediaType: "video", status: "pending" })
-			.returning();
+		const { workId, jobId } = await stage("queued");
 		sent = [];
 
-		await transcodeVideo({ jobId: job.id });
+		await transcodeVideo({ jobId });
 
 		const [work] = await db.select().from(works).where(eq(works.id, workId));
 		expect(work.thumbnail).toBeTruthy();
@@ -111,5 +119,28 @@ describe("a video transcode's generated thumbnail", () => {
 		]);
 		// The release gate waits on the new object, which it can only do with a clock running.
 		expect(work.scanQueuedAt).toBeInstanceOf(Date);
+	}, 60_000);
+
+	it("finishes the encode when the scan cannot be queued, leaving the thumbnail owed", async () => {
+		// The encode is the job; its thumbnail's scan is a follow-on the hourly sweep can make up.
+		const { workId, jobId } = await stage("unqueued");
+		failSend = true;
+		try {
+			await transcodeVideo({ jobId });
+		} finally {
+			failSend = false;
+		}
+
+		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		expect(job.status).toBe("completed");
+		const [work] = await db.select().from(works).where(eq(works.id, workId));
+		expect(work.thumbnail).toBeTruthy();
+		// Owed is what `rescan-owed` selects on: a running clock and no answer.
+		expect(work.scanQueuedAt).toBeInstanceOf(Date);
+		const owed = await db
+			.select()
+			.from(mediaScans)
+			.where(eq(mediaScans.storageKey, urlToKey(work.thumbnail as string)));
+		expect(owed).toEqual([]);
 	}, 60_000);
 });
