@@ -131,6 +131,9 @@ async function fetchOwnWork(id: string | number): Promise<Work | null> {
 const IN_PLACE =
 	"rounded-md border border-transparent bg-transparent px-2 -mx-2 hover:border-base-300 focus:border-primary focus:outline-none";
 
+/** A text area that grows with what is in it, the way the text it stands in for would. */
+const GROWS = "resize-none [field-sizing:content]";
+
 export default function WorkEditPage() {
 	const { publicId } = useParams<{ publicId: string }>();
 	const [loading, setLoading] = useState(true);
@@ -585,7 +588,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
 				<textarea
 					aria-label="Lyrics"
-					className={`${IN_PLACE} w-full font-mono text-sm leading-relaxed`}
+					className={`${IN_PLACE} ${GROWS} w-full min-h-32 font-mono text-sm leading-relaxed`}
 					value={lyrics}
 					onChange={(e) => setLyrics(e.target.value)}
 					rows={8}
@@ -626,12 +629,18 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			<WorkHeader
 				work={asRead}
 				title={
-					<input
-						type="text"
+					// A text area rather than an input, because a title wraps where a reader sees it
+					// and an input cannot. It grows to its content, and Enter is refused, since a
+					// title is one line that happens to be long.
+					<textarea
 						aria-label="Title"
-						className={`${WORK_TITLE_CLASS} ${IN_PLACE} w-full min-w-0 flex-1`}
+						rows={1}
+						className={`${WORK_TITLE_CLASS} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
 						value={title}
-						onChange={(e) => setTitle(e.target.value)}
+						onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.preventDefault();
+						}}
 						placeholder="Work title"
 					/>
 				}
@@ -714,7 +723,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			<section>
 				<textarea
 					aria-label="Description"
-					className={`${WORK_DESCRIPTION_CLASS} ${IN_PLACE} w-full`}
+					className={`${WORK_DESCRIPTION_CLASS} ${IN_PLACE} ${GROWS} w-full min-h-16`}
 					value={description}
 					onChange={(e) => setDescription(e.target.value)}
 					rows={3}
@@ -1181,7 +1190,7 @@ function CreatedDate({
 				<span>Made</span>
 				<select
 					aria-label="Created date"
-					className="select select-bordered select-xs"
+					className="select select-bordered select-xs w-auto"
 					value={precision ?? ""}
 					onChange={(e) => onPrecision((e.target.value || null) as AuthoredPrecision | null)}
 				>
@@ -1220,11 +1229,10 @@ function CreatedDate({
 						onChange={(e) => onValue(e.target.value)}
 					/>
 				)}
-				{released && <span className="ml-2">Released {released}</span>}
+				{released && <span>Released {released}</span>}
 			</div>
 			<p className="text-xs text-base-content/40">
-				When this was made, not when you uploaded it. A reader sees it at the precision you pick, so
-				a work you only date to a year shows the year and nothing finer.
+				When this was made, not when you uploaded it, to whatever precision you know it.
 			</p>
 		</div>
 	);
