@@ -9,7 +9,7 @@
  *
  * ⭐ **Every refusal says whether it resolves on its own.** A file still uploading, media still
  * processing and a scan not yet answered are things a creator waits for; payout setup, the
- * rating and a failed encode are things only the creator can fix. The route treats both the
+ * rating, an empty piece of writing and a failed encode are things only the creator can fix. The route treats both the
  * same, because somebody is at the screen to read the answer. The scheduled sweep does not: it
  * keeps waiting on the first kind and gives the schedule up on the second, because a schedule
  * left standing on a condition the creator must fix would release a stale decision the moment
@@ -21,7 +21,7 @@
 
 import { db } from "@anthers/db/client";
 import { transcodingJobs, type works } from "@anthers/db/schema";
-import { workNeedsFile } from "@anthers/shared/content";
+import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
 import {
 	type MaturityRating,
 	maturityLabel,
@@ -105,6 +105,19 @@ export async function releaseRefusal(
 				code: "media_missing",
 			},
 			resolves: "waiting",
+		};
+	}
+
+	// The same for a piece of writing, which is its body the way a video is its file. Unlike a
+	// file it is not on its way anywhere, so this is the creator's to fix rather than to wait for.
+	if (work.type === "text" && isEmptyWriting(work.bodyHtml)) {
+		return {
+			status: 409,
+			body: {
+				error: "Can't release yet — this piece of writing is empty.",
+				code: "text_missing",
+			},
+			resolves: "creator",
 		};
 	}
 

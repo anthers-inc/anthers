@@ -20,9 +20,9 @@ export default function WorkUploadPage() {
 		<div className="max-w-3xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Upload a Work</h1>
 			<p className="text-sm text-base-content/60 mb-6">
-				A Work is the thing itself — the file, its access and its price. Start with the file, and
-				you'll add everything else on the Work's own page while it uploads. Nothing is public until
-				you release it.
+				A Work is the thing itself — the file or the writing, its access and its price. Start with
+				the file, or with a title if it's writing, and you'll add everything else on the Work's own
+				page. Nothing is public until you release it.
 			</p>
 
 			<WorkUploadForm onCreated={(work) => navigate(studioEditWorkUrl(work.publicId ?? work.id))} />

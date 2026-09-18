@@ -28,7 +28,7 @@
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { client } from "../../lib/rpc";
-import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
+import type { ContentType, Work, WorkInput } from "../../lib/types";
 import { workUploads } from "../../lib/work-uploads";
 import { serializeSeedRows } from "../post/AccessTables";
 import FileUpload from "../ui/FileUpload";
@@ -63,7 +63,7 @@ interface WorkUploadFormProps {
 }
 
 export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadFormProps) {
-	const [type, setType] = useState<UploadableWorkType>("video");
+	const [type, setType] = useState<ContentType>("video");
 	const [title, setTitle] = useState("");
 	const [platform, setPlatform] = useState("windows");
 	const [creating, setCreating] = useState(false);
@@ -72,7 +72,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 	const create = async (file: File | null) => {
 		setCreating(true);
 		setError(null);
-		const input: WorkInput & { type: UploadableWorkType } = {
+		const input: WorkInput & { type: ContentType } = {
 			type,
 			title: title.trim() || (file ? titleFromFileName(file.name) : ""),
 			seedAccess: serializeSeedRows([{ threshold: 0, label: "Everyone", allow: true, price: "0" }]),
@@ -108,12 +108,21 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 				</div>
 			)}
 
-			<FormField label="Type">
+			<FormField
+				label="Type"
+				hint={
+					// The one moment a creator chooses between a piece of writing and a post, and the
+					// only place the difference can still be acted on without writing it twice.
+					type === "text"
+						? "Writing is written on its own page and reads as an article. Like any Work it can be gated, sold or given away; for an announcement, write a post instead."
+						: undefined
+				}
+			>
 				<select
 					className="select select-bordered w-full"
 					value={type}
 					disabled={creating}
-					onChange={(e) => setType(e.target.value as UploadableWorkType)}
+					onChange={(e) => setType(e.target.value as ContentType)}
 				>
 					{LIBRARY_TYPE_OPTIONS.map((opt) => (
 						<option key={opt.value} value={opt.value}>

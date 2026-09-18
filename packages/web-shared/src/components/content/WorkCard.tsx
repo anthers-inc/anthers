@@ -14,7 +14,7 @@
  * clicking it while the editor was a modal with no URL. It has one now.
  */
 
-import { workNeedsFile } from "@anthers/shared/content";
+import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
 import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
 import { studioEditWorkUrl } from "../../lib/studio";
@@ -57,21 +57,26 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 	const upload = useSourceUpload(item.id);
 	const uploading = isUploading(upload);
 	const noFile = workNeedsFile(item.type) && !item.sourceKey;
+	// And a piece of writing with nothing in it yet (`text_missing`), which is its body the way a
+	// video is its file.
+	const emptyWriting = item.type === "text" && isEmptyWriting(item.bodyHtml);
 	const noDelivery = !item.streamEnabled && !item.downloadEnabled;
 	// A Work is born `unrated` and the server refuses to release it while it is — so the
 	// card, which is how a back catalog gets released thirty at a time, has to say which
 	// ones still need answering rather than earning thirty identical errors.
 	const unrated = !item.maturity || item.maturity === "unrated";
-	const blocked = !released && (noFile || processing || noDelivery || unrated);
+	const blocked = !released && (noFile || emptyWriting || processing || noDelivery || unrated);
 	const blockedWhy = uploading
 		? "Still uploading — it can be released once its file arrives and is processed"
 		: noFile
 			? "Upload its file before releasing"
-			: processing
-				? "Still processing — it can be released once the media is ready"
-				: unrated
-					? "Rate it before releasing"
-					: "Turn on streaming or downloads before releasing";
+			: emptyWriting
+				? "Write it before releasing"
+				: processing
+					? "Still processing — it can be released once the media is ready"
+					: unrated
+						? "Rate it before releasing"
+						: "Turn on streaming or downloads before releasing";
 
 	return (
 		<div className="card bg-base-100 border border-base-300 overflow-hidden">
@@ -130,6 +135,14 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 					<p className="text-xs text-warning">
 						<Link to={editUrl} className="link">
 							Upload its file
+						</Link>{" "}
+						before it can be released.
+					</p>
+				)}
+				{emptyWriting && !released && (
+					<p className="text-xs text-warning">
+						<Link to={editUrl} className="link">
+							Write it
 						</Link>{" "}
 						before it can be released.
 					</p>

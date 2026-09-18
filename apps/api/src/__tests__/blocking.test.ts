@@ -343,6 +343,7 @@ describe("a block is a boundary, not a moderation action", () => {
 			type: "text",
 			title: `Bee work ${id}`,
 			body: "words",
+			bodyHtml: "<p>words</p>",
 			maturity: "general",
 		});
 		expect(beeWorkRes.status).toBe(201);

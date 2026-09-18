@@ -82,8 +82,9 @@ describe("project browse filters", () => {
 					title: `${c.label} ${id}`,
 					tags: c.tags,
 					// Declared on create so the release below is not refused for a reason this
-					// suite is not about.
+					// suite is not about, and a piece of writing given its body for the same reason.
 					maturity: "general",
+					...(c.type === "text" ? { bodyHtml: "<p>An essay.</p>" } : {}),
 				}),
 			});
 			expect(created.status).toBe(201);

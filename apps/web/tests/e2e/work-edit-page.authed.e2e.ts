@@ -127,7 +127,9 @@ test("saving stays on the page, and Discard puts back what is saved", async ({ p
 	await description.fill("Written on the Work's own page.");
 	await expect(unsaved).toBeVisible();
 	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+	// ⚠️ Anchored, because a string filter is a case-insensitive substring and "Unsaved changes"
+	// contains "saved": unanchored, this passed before the save had even been sent.
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
 	await expect(page).toHaveURL(editUrl);
 	await expect(unsaved).toHaveCount(0);
 
@@ -136,4 +138,49 @@ test("saving stays on the page, and Discard puts back what is saved", async ({ p
 	expect(stored.description).toBe("Written on the Work's own page.");
 	await page.reload();
 	await expect(description).toHaveValue("Written on the Work's own page.");
+});
+
+/**
+ * A piece of writing is made from a title, written on its own page, and reads as an article.
+ *
+ * ⭐ **The typography is the design, so the walk asserts it.** What tells a text Work apart from
+ * a post is the reading experience (Parker, 2026-09-11): a text serif for the body and the
+ * description set as a standfirst under the headline. A walk that only found the words would pass
+ * with the article rendered as a post's prose block, which is the one thing this kind must not be.
+ */
+test("a piece of writing is written on its page and reads as an article", async ({
+	page,
+	context,
+}) => {
+	session = await signInAsMediaFixture(context);
+	const title = `${STEM} writing`;
+
+	await page.goto("/studio/works/new");
+	await page.locator("select").first().selectOption("text");
+	await page.getByPlaceholder("Work title").fill(title);
+	await page.getByRole("button", { name: "Create Work" }).click();
+	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
+
+	// Rated, and still not releasable, because there is nothing in it yet (`text_missing`).
+	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	const released = page.getByRole("checkbox", { name: /released to my public catalog/i });
+	await expect(released).toBeDisabled();
+
+	await page.getByRole("textbox", { name: "Description" }).fill("A standfirst for the walk.");
+	await page.locator(".tiptap").click();
+	await page.keyboard.type("The first hard frost came early this year.");
+	await expect(released).toBeEnabled();
+	await released.check();
+	await page.getByRole("button", { name: /save work/i }).click();
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+
+	const [work] = (await ownWorks()).filter((w) => w.title === title);
+	await page.goto(`/works/${work.publicId}`);
+	const article = page.locator("article").filter({ hasText: "The first hard frost" });
+	await expect(article).toBeVisible();
+	expect(await article.evaluate((el) => getComputedStyle(el).fontFamily)).toContain("Spectral");
+	// The standfirst sits above the body, under the headline, rather than after the Work.
+	const standfirst = page.getByText("A standfirst for the walk.");
+	const [above, below] = await Promise.all([standfirst.boundingBox(), article.boundingBox()]);
+	expect(above && below && above.y < below.y).toBe(true);
 });

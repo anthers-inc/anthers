@@ -12,6 +12,7 @@ import {
 	BookOpenIcon,
 	CommandLineIcon,
 	CubeIcon,
+	DocumentTextIcon,
 	FilmIcon,
 	MusicalNoteIcon,
 	PhotoIcon,
@@ -19,7 +20,7 @@ import {
 	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
-import type { UploadableWorkType, Work } from "../../lib/types";
+import type { ContentType, Work } from "../../lib/types";
 import { isUploading, useSourceUpload } from "../../lib/work-uploads";
 import { processingStatusText } from "./processing";
 import { type AccessState, accessState } from "./work-state";
@@ -27,13 +28,16 @@ import { type AccessState, accessState } from "./work-state";
 export { type AccessState, accessState } from "./work-state";
 
 /**
- * The Work kinds the Studio can make, in the order its type pickers list them.
+ * The Work kinds the Studio can make, in the order its type pickers list them: all nine of
+ * `WORK_TYPES` in `routes/content.ts`, which is the authority on the list.
  *
- * ⚠️ **Eight of the nine.** `WORK_TYPES` in `routes/content.ts` is the authority on the list, and
- * text is the one missing: it is written in place rather than uploaded, and it waits on a
- * reading layout that makes a text Work look different from a post to the person reading it.
+ * ⭐ **Text is labeled Writing**, the word the creator profile's tab already uses and one that
+ * covers an essay, a story and a poem alike. It is written on the Work's own page rather than
+ * uploaded, and it reads as an article, which is what tells it apart from a post (Parker,
+ * 2026-09-11: the two should differ for the reader, not only in a label).
  */
-export const LIBRARY_TYPE_OPTIONS: { value: UploadableWorkType; label: string }[] = [
+export const LIBRARY_TYPE_OPTIONS: { value: ContentType; label: string }[] = [
+	{ value: "text", label: "Writing" },
 	{ value: "video", label: "Video" },
 	{ value: "audio", label: "Audio" },
 	{ value: "image", label: "Image" },
@@ -46,6 +50,7 @@ export const LIBRARY_TYPE_OPTIONS: { value: UploadableWorkType; label: string }[
 ];
 
 const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+	text: DocumentTextIcon,
 	video: FilmIcon,
 	audio: MusicalNoteIcon,
 	image: PhotoIcon,

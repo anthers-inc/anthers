@@ -3702,6 +3702,17 @@ const contentRoutes = new Hono()
 			work = declared;
 		}
 
+		// 🚨 **The release conditions read the Work as this request leaves it, not as it was
+		// loaded.** A piece of writing is its body, and the Edit page sends the body and the release
+		// in one save, so asking about the stored body would refuse a piece for being empty in the
+		// very request that fills it — the same trap the rating fell into before it was written
+		// ahead of these gates. Only the body is overlaid, because it is the only field a condition
+		// reads that this request can also be the one to supply.
+		const asLeft: typeof work =
+			work.type === "text" && data.bodyHtml !== undefined
+				? { ...work, bodyHtml: sanitizePostHtml(data.bodyHtml) }
+				: work;
+
 		// 🚨 **Scheduling a release asks the conditions only the creator can fix, and asks them
 		// now.** The sweep that releases a scheduled Work runs with nobody at the screen, so a
 		// schedule that could only ever be refused should be refused here, where the answer has a
@@ -3730,7 +3741,7 @@ const contentRoutes = new Hono()
 					400,
 				);
 			}
-			const refusal = await releaseRefusal(work, user);
+			const refusal = await releaseRefusal(asLeft, user);
 			if (refusal?.resolves === "creator") return c.json(refusal.body, refusal.status);
 		}
 
@@ -3739,7 +3750,7 @@ const contentRoutes = new Hono()
 		// would be one the sweep walks straight past. The rating is already stored above, so a
 		// refusal never costs the creator their declaration.
 		if (releasing) {
-			const refusal = await releaseRefusal(work, user);
+			const refusal = await releaseRefusal(asLeft, user);
 			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 

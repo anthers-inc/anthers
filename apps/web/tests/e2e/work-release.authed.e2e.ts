@@ -205,7 +205,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	await page.getByRole("button", { name: /save work/i }).click();
 	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
 	await page.goto("/studio/catalog");
@@ -267,7 +267,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	await page.getByRole("button", { name: /save work/i }).click();
 	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
 	await page.goto("/studio/catalog");
