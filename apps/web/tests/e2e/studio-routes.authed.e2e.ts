@@ -82,6 +82,77 @@ test("a creator reaches the Studio itself", async ({ page, context }) => {
 	await expect(page.getByRole("navigation").getByText("Dashboard")).toBeVisible();
 });
 
+/**
+ * The Studio has chrome of its own, and keeps it on a page that belongs to neither mode.
+ *
+ * The Studio's header and tabs used to render INSIDE the signed-in layout, under its header and
+ * beside a sidebar still offering Feed, Library and Discover. Parker's direction (2026-09-17) is
+ * two modes, each with its own sidebar and neither showing the other's options, switched from the
+ * top of the sidebar. ⚠️ **Most of what this pins is an absence**, which nothing else in the
+ * repository can see: the user nav and the search box are simply not there in studio mode.
+ *
+ * ⭐ **The mode is sticky.** A profile or a Work page belongs to neither mode, so arriving on one
+ * from the Studio keeps the Studio's sidebar and arriving from the Feed keeps the user's. It is
+ * kept per tab rather than in React state, and the reload below is the step that proves it.
+ */
+test("the Studio has its own chrome, and keeps it where neither mode owns the page", async ({
+	page,
+	context,
+}) => {
+	await signInAsCreator(context);
+	const studioSidebar = page.getByRole("navigation", { name: "Studio", exact: true });
+	const userSidebar = page.getByRole("navigation", { name: "Anthers", exact: true });
+	const modeSwitch = page.getByRole("navigation", { name: "Anthers or the Studio" });
+	const header = page.getByRole("banner");
+
+	await page.goto("/studio");
+	await expect(studioSidebar).toBeVisible();
+	await expect(userSidebar).toHaveCount(0);
+	await expect(header.getByPlaceholder("Search...")).toHaveCount(0);
+
+	// A profile belongs to neither mode, so arriving on one from the Studio stays in the Studio.
+	await header.getByRole("button", { name: "Your account" }).click();
+	await header.getByRole("link", { name: "Profile" }).click();
+	await expect(page).toHaveURL(/\/@[^/]+$/);
+	// ⚠️ **Wait for the Dashboard to be gone before asking about the sidebar.** The URL changes
+	// before React renders the new page, so asking straight away read the Studio's sidebar off
+	// the page being left, and passed with the mode broken. Its heading leaving is the proof the
+	// profile has rendered, and the sidebar renders in the same pass.
+	await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toHaveCount(0);
+	await expect(studioSidebar).toBeVisible();
+	await expect(userSidebar).toHaveCount(0);
+
+	// Still in the Studio after a reload, which starts every component from nothing.
+	await page.reload();
+	await expect(studioSidebar).toBeVisible();
+
+	// The switch leaves for the Feed, and user mode is sticky the same way.
+	await modeSwitch.getByRole("link", { name: "Anthers", exact: true }).click();
+	await expect(page).toHaveURL(/\/feed$/);
+	await expect(userSidebar).toBeVisible();
+	await expect(studioSidebar).toHaveCount(0);
+	await expect(header.getByPlaceholder("Search...")).toBeVisible();
+
+	await header.getByRole("button", { name: "Your account" }).click();
+	await header.getByRole("link", { name: "Profile" }).click();
+	await expect(page).toHaveURL(/\/@[^/]+$/);
+	await expect(userSidebar).toBeVisible();
+	await expect(studioSidebar).toHaveCount(0);
+
+	// And back again, from the same switch.
+	await modeSwitch.getByRole("link", { name: "Studio", exact: true }).click();
+	await expect(page).toHaveURL(/\/studio$/);
+	await expect(studioSidebar).toBeVisible();
+});
+
+test("an account without creator mode has no Studio to switch to", async ({ page }) => {
+	// The gauntlet viewer is not a creator. The switch is the only way into the Studio from the
+	// sidebar, so its absence is also the absence of a door they would be turned back from.
+	await page.goto("/feed");
+	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();
+	await expect(page.getByRole("navigation", { name: "Anthers or the Studio" })).toHaveCount(0);
+});
+
 test("every Studio tab lands on its own route", async ({ page, context }) => {
 	await signInAsCreator(context);
 

@@ -29,7 +29,6 @@ import StudioRedirect from "./components/ui/StudioRedirect";
  * rather than per-origin anyway — so the split was buying nothing while costing a second
  * app, a second origin, a CORS allowlist and a dot-prefixed cookie domain.
  */
-const StudioShell = lazy(() => import("./studio/StudioShell"));
 const StudioAuthGate = lazy(() => import("./studio/StudioAuthGate"));
 const DashboardPage = lazy(() => import("@anthers/web-shared/DashboardPage"));
 const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
@@ -44,14 +43,16 @@ const WorkEditPage = lazy(() => import("@anthers/web-shared/WorkEditPage"));
 // const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
 const StudioSettingsPage = lazy(() => import("@anthers/web-shared/StudioSettingsPage"));
 
-/** Shell + creator gate + a suspense boundary, wrapped once for every /studio route. */
+/**
+ * The creator gate and a suspense boundary, wrapped once for every /studio route. The Studio's
+ * chrome is not here: it is the signed-in layout's studio mode (`components/layout/app-mode.ts`),
+ * so the Studio has one header and one sidebar rather than a second set inside the first.
+ */
 function StudioLayout() {
 	return (
 		<RouteSuspense>
 			<StudioAuthGate>
-				<StudioShell>
-					<Outlet />
-				</StudioShell>
+				<Outlet />
 			</StudioAuthGate>
 		</RouteSuspense>
 	);
