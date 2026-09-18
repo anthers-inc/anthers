@@ -2994,10 +2994,19 @@ const contentRoutes = new Hono()
 		const bytes = await storage.read(`${prefixKey}/${file}`);
 		if (!bytes) return c.json({ error: "Not found" }, 404);
 
+		// 🚨 **A recipient's token rides onto the variant URLs, or a shared video never starts.**
+		// hls.js requests each variant exactly as the master lists it, and somebody watching by
+		// share link has no session to fall back on, so a variant URL without the token is a 401
+		// while the page and the master playlist both look fine. Carried only when the viewer
+		// really arrived by the link, the same rule the Work page applies.
+		const { sharedBy } = await viewerFor(c, workId);
 		const rewritten = await rewriteHlsPlaylist(new TextDecoder().decode(bytes), {
 			isMaster: file === "master.m3u8",
 			prefixKey,
-			ctx: { origin: publicOrigin() },
+			ctx: {
+				origin: publicOrigin(),
+				share: sharedBy != null ? (c.req.query("share") ?? null) : null,
+			},
 			workId,
 		});
 		return c.body(rewritten, 200, {
