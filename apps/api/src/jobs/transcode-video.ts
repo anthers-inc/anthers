@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
 
 export interface TranscodeVideoData {
@@ -68,10 +69,7 @@ async function ffmpegHls(
 	const segmentPattern = join(outputDir, `${name}_%03d.ts`);
 
 	const proc = Bun.spawn(
-		[
-			"ffmpeg",
-			"-i",
-			inputPath,
+		ffmpegCommand(inputPath, [
 			"-vf",
 			`scale=-2:${height}`,
 			"-c:v",
@@ -97,7 +95,7 @@ async function ffmpegHls(
 			"pipe:1",
 			"-nostats",
 			"-y",
-		],
+		]),
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 
@@ -163,10 +161,7 @@ async function generateThumbnail(
 ): Promise<string | null> {
 	const outPath = join(tmpdir(), `thumb_${randomUUID()}.jpg`);
 	const proc = Bun.spawn(
-		[
-			"ffmpeg",
-			"-i",
-			inputPath,
+		ffmpegCommand(inputPath, [
 			"-ss",
 			String(positionSeconds),
 			"-vframes",
@@ -175,7 +170,7 @@ async function generateThumbnail(
 			"2",
 			outPath,
 			"-y",
-		],
+		]),
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 	const exitCode = await proc.exited;

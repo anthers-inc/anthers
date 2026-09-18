@@ -25,6 +25,7 @@
  * than footprint.
  */
 
+import { ffmpegCommand } from "./ffmpeg.js";
 import { type PdqHash, pdqHashPixels } from "./pdq.js";
 
 /** Run ffprobe and return its parsed JSON. Shared with `jobs/transcode-video.ts`. */
@@ -143,24 +144,23 @@ export async function hashVideoFrames(
 	const out: SampledFrame[] = [];
 
 	const proc = Bun.spawn(
-		[
-			"ffmpeg",
-			"-v",
-			"error",
-			"-i",
+		ffmpegCommand(
 			localPath,
-			"-vf",
-			// A rate rather than a count: ffmpeg has no "give me N frames evenly" filter,
-			// and `-frames:v` after `fps` truncates rather than spreads.
-			`fps=${1 / interval}`,
-			"-frames:v",
-			String(count),
-			"-pix_fmt",
-			"rgb24",
-			"-f",
-			"rawvideo",
-			"-",
-		],
+			[
+				"-vf",
+				// A rate rather than a count: ffmpeg has no "give me N frames evenly" filter,
+				// and `-frames:v` after `fps` truncates rather than spreads.
+				`fps=${1 / interval}`,
+				"-frames:v",
+				String(count),
+				"-pix_fmt",
+				"rgb24",
+				"-f",
+				"rawvideo",
+				"-",
+			],
+			["-v", "error"],
+		),
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 

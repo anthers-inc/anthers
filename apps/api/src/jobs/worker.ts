@@ -53,9 +53,13 @@ async function start() {
 
 	// ── On-demand jobs ────────────────────────────────────────────────
 
+	// One encode at a time. An encode is the largest thing the worker does — about 400 MB for a
+	// 4K source even with its threads pinned (`lib/ffmpeg.ts`) — and on a worker with one vCPU
+	// a second concurrent encode finishes no sooner, it only doubles the peak. Raise this with
+	// the vCPU count.
 	await queue.work<TranscodeVideoData>(
 		QUEUES.TRANSCODE_VIDEO,
-		{ localConcurrency: 2 },
+		{ localConcurrency: 1 },
 		async (jobs) => {
 			for (const job of jobs) {
 				console.log(`[transcode-video] Processing job ${job.id}`);

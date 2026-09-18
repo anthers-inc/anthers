@@ -13,8 +13,12 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import {
 	CopyObjectCommand,
 	DeleteObjectCommand,
@@ -129,11 +133,23 @@ export class S3StorageService implements StorageService {
 			throw new Error(`S3 object ${key} has no body`);
 		}
 
-		// Stream to a temp file
+		// 🚨 **Streamed to disk, never collected into memory first.** This is how a worker reads a
+		// whole video, and the worker has less memory than a video can be large: collecting the
+		// body with `transformToByteArray()` killed the production worker on every video upload,
+		// and the restart resumed the same transcode and died again. The body is a Node stream
+		// under the SDK's default handler and a web stream under a fetch one, so both are handled.
 		const ext = key.includes(".") ? `.${key.split(".").pop()}` : "";
 		const tempPath = join(tmpdir(), `s3dl_${randomUUID()}${ext}`);
-		const bytes = await response.Body.transformToByteArray();
-		await Bun.write(tempPath, bytes);
+		const body = response.Body;
+		const source: AsyncIterable<Uint8Array> =
+			body instanceof Readable ? body : body.transformToWebStream();
+		try {
+			await pipeline(source, createWriteStream(tempPath));
+		} catch (err) {
+			// A half-written file would be read by ffmpeg as a truncated video, so it goes.
+			await rm(tempPath, { force: true });
+			throw err;
+		}
 		return tempPath;
 	}
 

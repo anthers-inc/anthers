@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
 
 export interface ProcessAudioData {
@@ -83,10 +84,7 @@ async function generateWaveformFallback(filePath: string, numPoints: number): Pr
 	for (let i = 0; i < numPoints; i++) {
 		const start = i * segmentDuration;
 		const proc = Bun.spawn(
-			[
-				"ffmpeg",
-				"-i",
-				filePath,
+			ffmpegCommand(filePath, [
 				"-ss",
 				String(start),
 				"-t",
@@ -96,7 +94,7 @@ async function generateWaveformFallback(filePath: string, numPoints: number): Pr
 				"-f",
 				"null",
 				"-",
-			],
+			]),
 			{ stdout: "pipe", stderr: "pipe" },
 		);
 		await proc.exited;
@@ -185,10 +183,7 @@ export async function processAudio(data: ProcessAudioData) {
 		// 2. Normalize and convert to MP3
 		outputPath = join(tmpdir(), `audio_${randomUUID()}.mp3`);
 		const proc = Bun.spawn(
-			[
-				"ffmpeg",
-				"-i",
-				localPath,
+			ffmpegCommand(localPath, [
 				"-af",
 				"loudnorm",
 				"-c:a",
@@ -197,7 +192,7 @@ export async function processAudio(data: ProcessAudioData) {
 				"192k",
 				outputPath,
 				"-y",
-			],
+			]),
 			{ stdout: "pipe", stderr: "pipe" },
 		);
 		const exitCode = await proc.exited;

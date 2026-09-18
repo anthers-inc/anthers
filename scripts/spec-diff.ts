@@ -117,6 +117,12 @@ function sourceMap(spec: Spec): Map<string, string> {
 			// is worth seeing on its own: it changes both the bill and the concurrency
 			// assumptions of anything holding per-process state.
 			out.set(`${where}/instance_count`, String(component.instance_count ?? 1));
+			// The size, for the same two reasons and a third: it sets the memory ceiling, and a
+			// worker below what its media jobs need crashes on every upload. Static sites carry
+			// no size, so an absent one is left out rather than compared as a value.
+			if (component.instance_size_slug) {
+				out.set(`${where}/instance_size_slug`, component.instance_size_slug);
+			}
 			const g = component.github;
 			if (!g) continue;
 			out.set(`${where}/deploy_on_push`, String(g.deploy_on_push ?? false));

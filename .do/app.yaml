@@ -183,7 +183,7 @@ envs:
     type: SECRET
   # Shield by Project Arachnid — the child-safety detection vendor. Basic auth, so a
   # username and a password rather than a key. At APP level because the scan runs in the
-  # worker, which declares no envs of its own and inherits these.
+  # worker, which inherits app-level values alongside the few it declares itself.
   #
   # Unset means no detection vendor is configured, and the scan records `unscannable`
   # rather than `clean` — a deployment state, not a failure, and deliberately not
@@ -420,7 +420,13 @@ workers:
       branch: release
       deploy_on_push: false
     run_command: bun run apps/api/src/jobs/worker.ts
-    instance_size_slug: basic-xxs
+    # 2 GB, because the media queues run side by side and their peaks add up. Idle is about
+    # 140 MB; a 4K source encoded to 1080p peaks near 400 MB and its scan's frame decode near
+    # 165 MB, each with ffmpeg pinned to one thread (`lib/ffmpeg.ts`); and scans, audio and
+    # ebooks each run two at a time beside the one transcode. 512 MB could not run one video
+    # upload at all. Still one vCPU, which is what that thread pin and the transcode's
+    # concurrency of one are sized for — raise both if this gains cores.
+    instance_size_slug: basic-s
     instance_count: 1
     envs:
       # 🚨 **Without this the worker sends NO ALERTS, and does it silently.**
