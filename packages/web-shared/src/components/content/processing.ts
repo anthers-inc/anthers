@@ -18,33 +18,58 @@ import { isUploading, type WorkUpload } from "../../lib/work-uploads";
 /** How long a finished Work stays in the processing panel. */
 export const RECENTLY_FINISHED_MS = 24 * 60 * 60 * 1000;
 
-/** `~45s`, `~2m 30s`, `~1h 5m` — an estimate, so rounded and marked as one. */
+/**
+ * An estimate as a rough figure said plainly: `less than a minute`, `about 3 minutes`,
+ * `about 25 minutes`, `about 2 hours`.
+ *
+ * ⭐ **Coarse on purpose** (Parker, 2026-09-17: *less precise but more confident*). The figure
+ * underneath is ffmpeg's speed projected forward, which is good to the nearest few minutes and
+ * no better, so `~2m 30s` claimed a precision it never had while the tilde apologized for it.
+ * The coarser the unit, the less a small change in the figure changes what is said.
+ */
 export function etaText(seconds: number): string {
-	const sec = Math.max(1, Math.round(seconds));
-	if (sec < 60) return `~${sec}s`;
-	const m = Math.floor(sec / 60);
-	const s = sec % 60;
-	if (m < 60) return s > 0 ? `~${m}m ${s}s` : `~${m}m`;
-	const h = Math.floor(m / 60);
-	const rest = m % 60;
-	return rest > 0 ? `~${h}h ${rest}m` : `~${h}h`;
+	if (seconds < 60) return "less than a minute";
+	const m = Math.round(seconds / 60);
+	if (m <= 1) return "about a minute";
+	if (m < 10) return `about ${m} minutes`;
+	// Past ten minutes, the nearest five; `about 23 minutes` is the old false precision again.
+	const five = Math.round(m / 5) * 5;
+	if (five < 60) return `about ${five} minutes`;
+	const h = Math.round(seconds / 3600);
+	return h <= 1 ? "about an hour" : `about ${h} hours`;
 }
 
-/** The estimate as a phrase, or null when there is none worth showing. */
+/** The estimate as a sentence, `About 3 minutes left`, or null when there is none to show. */
 export function etaLeft(etaSeconds: number | null | undefined): string | null {
-	return etaSeconds != null && etaSeconds > 0 ? `${etaText(etaSeconds)} left` : null;
+	if (etaSeconds == null || etaSeconds <= 0) return null;
+	const text = etaText(etaSeconds);
+	return `${text.charAt(0).toUpperCase()}${text.slice(1)} left`;
 }
 
 /**
- * A short account of a job still running, for a badge or a list row: `Waiting to process`, or
- * `Processing 43%`, with ` · ~2m left` when an estimate exists. Null for a job that is not running.
+ * Where a job is, short enough for a badge: `Waiting to process` or `Processing 43%`. Null for a
+ * job that is not running.
+ *
+ * ⚠️ **A badge takes this and never `processingText`.** A daisyUI badge is one line of fixed
+ * height, and the longest estimate, `Processing 43% · Less than a minute left`, is wider than a
+ * Catalog card at four to a row, so it wrapped inside the pill and spilled out of it. A card
+ * that wants the estimate says it on its own line, with `etaLeft`.
  */
-export function processingText(job: Work["transcoding"]): string | null {
+export function processingStatusText(job: Work["transcoding"]): string | null {
 	if (!job) return null;
 	if (job.status === "pending") return "Waiting to process";
 	if (job.status !== "processing") return null;
-	const eta = etaLeft(job.etaSeconds);
-	return `Processing ${job.progress ?? 0}%${eta ? ` · ${eta}` : ""}`;
+	return `Processing ${job.progress ?? 0}%`;
+}
+
+/**
+ * A job still running, for a row with room for a sentence: `processingStatusText`, with
+ * ` · About 3 minutes left` when an estimate exists. Null for a job that is not running.
+ */
+export function processingText(job: Work["transcoding"]): string | null {
+	const status = processingStatusText(job);
+	const eta = job?.status === "processing" ? etaLeft(job.etaSeconds) : null;
+	return status && eta ? `${status} · ${eta}` : status;
 }
 
 export interface ProcessingRow {

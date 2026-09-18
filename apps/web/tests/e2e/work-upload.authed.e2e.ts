@@ -223,7 +223,17 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
-	await expect(page.getByText("~2m 30s left")).toBeVisible();
+	await expect(page.getByText("About 3 minutes left")).toBeVisible();
+
+	// The Catalog card gives the estimate a line of its own, because its badge has no room for it:
+	// the longest estimate wrapped inside the badge's one fixed-height line and spilled out of it.
+	await page.goto("/studio/catalog");
+	const card = page.locator(".card").filter({ hasText: `${STEM} processing` });
+	await expect(card.locator(".badge").filter({ hasText: "Processing" })).toHaveText(
+		"Processing 43%",
+	);
+	await expect(card.getByText("About 3 minutes left")).toBeVisible();
+	await page.goto(`/studio/works/${work.publicId}/edit`);
 
 	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page
 	// says nothing about one rather than an empty "left".
