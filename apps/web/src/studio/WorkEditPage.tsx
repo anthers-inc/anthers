@@ -4,13 +4,23 @@
  * made on. `WorkUploadPage` makes the Work from its file and lands here; returning to a Work from
  * anywhere in the Studio lands here too.
  *
+ * ⭐ **The page is the Work as a reader sees it, with what they see editable in place** (Parker,
+ * 2026-09-17: *"the edit page should feel more like the public page, rather than just being an
+ * isolated form where the creator can't get a feel for how the work will look"*). The title, the
+ * dates, the rating, the Work itself, its cover, its lyrics, its description and its downloads
+ * sit where a reader meets them, drawn by the same parts the public page is drawn with
+ * (`components/work/WorkLayout.tsx`). Everything a reader never sees (delivery, the rating's
+ * controls, access and release) is gathered below under a heading that says so. That shared
+ * layout is why this page lives in `apps/web` rather than beside the other Studio pages in
+ * `@anthers/web-shared`: the players belong to this app.
+ *
  * 🚨 **The container is the point, and it is about addressability rather than size.** Two
- * controls on this form send the creator somewhere else: the Access table needs Badge rungs
+ * controls on this page send the creator somewhere else: the Access table needs Badge rungs
  * that live in Settings, and Release needs payout setup that lives in Settings. Both are
  * things a first-time creator meets on their first Work, and from the modal this used to be
  * they were an instruction to discard everything typed. A page can be left and come back to.
  * The rest follows from having a URL at all — the Catalog card's Edit is a link, the
- * blocked-release hint is a link, and an e2e walk can reach the form by typing it.
+ * blocked-release hint is a link, and an e2e walk can reach the page by typing it.
  *
  * 🚨 **The Work's file may still be uploading while this page is open, and the save is shaped
  * around that.** The Upload page creates the Work the moment its file is picked (Parker,
@@ -19,6 +29,11 @@
  * its own thumbnail when its file arrives, and a save carrying the empty thumbnail this page
  * loaded would erase it. When an upload for this Work finishes, the media half of the row is
  * re-read without touching anything typed.
+ *
+ * **One explicit Save, and the page stays where it is** (Parker, 2026-09-17). A bar appears while
+ * anything is unsaved, with Save and Discard, and saving leaves the creator looking at the result
+ * rather than sending them to the Catalog. Keeping one save keeps the upload handling above in one
+ * code path. `work-edit.ts` decides what counts as unsaved.
  *
  * The route is keyed on **`publicId`**, the durable public address a Work carries, not on
  * the internal row id. `GET /works/:id` resolves either and short-circuits to the
@@ -34,12 +49,15 @@
 import {
 	CONTENT_NOTES,
 	type ContentNote,
+	contentNoteLabel,
 	MATURITY_CHOICES,
 	type MaturityRating,
 	normalizeContentNotes,
 } from "@anthers/shared/content-rating";
+import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
 import {
+	fileRules,
 	isFileWorkType,
 	UploadProgress,
 	useWorkDetails,
@@ -55,12 +73,13 @@ import AccessTables, {
 	serializeSeedRows,
 } from "@anthers/web-shared/post/AccessTables";
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import { workUrl } from "@anthers/web-shared/postUrl";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import {
 	RATED_PUBLIC_ACCESS_HELP,
 	showsRatedPublicAccessNotice,
 } from "@anthers/web-shared/rated-public-access";
-import { Link, useNavigate, useParams } from "@anthers/web-shared/router";
+import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import type {
@@ -75,8 +94,20 @@ import FormField from "@anthers/web-shared/ui/FormField";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { isUploading, useWorkUploads, workUploads } from "@anthers/web-shared/work-uploads";
-import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
+import { ArrowUpTrayIcon, CalendarIcon, EyeIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	WORK_DESCRIPTION_CLASS,
+	WORK_LYRICS_CLASS,
+	WORK_LYRICS_HEADING_CLASS,
+	WORK_TITLE_CLASS,
+	WorkColumn,
+	WorkDeliverable,
+	type WorkDetail,
+	WorkHeader,
+} from "../components/work/WorkLayout";
+import { useMediaPlayer } from "../lib/media-player";
+import { unsavedKey } from "./work-edit";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -93,14 +124,28 @@ async function fetchOwnWork(id: string | number): Promise<Work | null> {
 	return work;
 }
 
+/**
+ * A control that reads as the text it edits: no box until it is pointed at or focused, so the
+ * page looks like the Work rather than like a form laid over it.
+ */
+const IN_PLACE =
+	"rounded-md border border-transparent bg-transparent px-2 -mx-2 hover:border-base-300 focus:border-primary focus:outline-none";
+
+/** A text area that grows with what is in it, the way the text it stands in for would. */
+const GROWS = "resize-none [field-sizing:content]";
+
 export default function WorkEditPage() {
 	const { publicId } = useParams<{ publicId: string }>();
 	const [loading, setLoading] = useState(true);
 	const [loaded, setLoaded] = useState<Work | null>(null);
+	/** Bumped by Discard, which reloads the Work and rebuilds the page from what is saved. */
+	const [generation, setGeneration] = useState(0);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new generation is a reload, and is the only reason it changes
 	useEffect(() => {
 		if (!publicId) return;
 		let live = true;
+		setLoading(true);
 		fetchOwnWork(publicId)
 			.then((work) => {
 				if (live) setLoaded(work);
@@ -112,7 +157,7 @@ export default function WorkEditPage() {
 		return () => {
 			live = false;
 		};
-	}, [publicId]);
+	}, [publicId, generation]);
 
 	if (loading) {
 		return (
@@ -136,13 +181,20 @@ export default function WorkEditPage() {
 		);
 	}
 
-	// Keyed so that moving from one Work's page to another's rebuilds the form rather than
-	// carrying the first Work's typed state into the second.
-	return <WorkForm key={loaded.id} editing={loaded} />;
+	// Keyed so that moving from one Work's page to another's rebuilds the page rather than
+	// carrying the first Work's typed state into the second, and so a Discard starts afresh.
+	return (
+		<WorkEditor
+			key={`${loaded.id}:${generation}`}
+			editing={loaded}
+			onDiscard={() => setGeneration((g) => g + 1)}
+		/>
+	);
 }
 
-function WorkForm({ editing }: { editing: Work }) {
-	const navigate = useNavigate();
+function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => void }) {
+	const { user } = useAuth();
+	const { currentTrack } = useMediaPlayer();
 
 	const [current, setCurrent] = useState<Work>(editing);
 	const type = editing.type as UploadableWorkType;
@@ -215,8 +267,9 @@ function WorkForm({ editing }: { editing: Work }) {
 
 	// A scheduled release, as the datetime input holds it. Sent only when changed, so a Work
 	// waiting past its time on processing still saves: the route checks a changed schedule, and
-	// an unchanged one in the past would read as a new time that has already gone by.
-	const loadedSchedule = isoToLocalInput(editing.scheduledReleaseAt);
+	// an unchanged one in the past would read as a new time that has already gone by. Read off
+	// the last SAVED row rather than the loaded one, because a save leaves the page open.
+	const loadedSchedule = isoToLocalInput(current.scheduledReleaseAt);
 	const [scheduledRelease, setScheduledRelease] = useState(loadedSchedule);
 	const scheduledIso = localInputToIso(scheduledRelease);
 	const scheduleHint = !scheduledIso
@@ -259,6 +312,7 @@ function WorkForm({ editing }: { editing: Work }) {
 			thumbnail: fresh.thumbnail,
 			assets: fresh.assets,
 			transcoding: fresh.transcoding,
+			pageCount: fresh.pageCount,
 		}));
 		if (!thumbnailTouched.current && fresh.thumbnail) {
 			setThumbnailUrl(fresh.thumbnail);
@@ -339,9 +393,8 @@ function WorkForm({ editing }: { editing: Work }) {
 		}
 	};
 
-	const handleSave = async () => {
-		setSaving(true);
-		setError(null);
+	/** What a save would send, as the page stands. */
+	const payload = (): WorkInput => {
 		const json: WorkInput = {
 			title: title.trim(),
 			description: description.trim(),
@@ -368,10 +421,42 @@ function WorkForm({ editing }: { editing: Work }) {
 			json.maturityNotes = contentNotes;
 		}
 		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
+		return json;
+	};
+
+	// What the page last saved or loaded, as `unsavedKey` reduces it. Null for the moment between
+	// a save and the render after it, which re-baselines on what then stands: a save changes what
+	// the page would send next (the thumbnail stops being "changed here"), without changing
+	// anything the creator has to save again.
+	const key = unsavedKey(payload());
+	const [baseline, setBaseline] = useState<string | null>(null);
+	useEffect(() => {
+		setBaseline((b) => b ?? key);
+	}, [key]);
+	const dirty = baseline !== null && key !== baseline;
+	const [savedAt, setSavedAt] = useState<number | null>(null);
+	useEffect(() => {
+		if (savedAt == null) return;
+		const timer = setTimeout(() => setSavedAt(null), 4000);
+		return () => clearTimeout(timer);
+	}, [savedAt]);
+
+	// Closing the tab on unsaved changes is asked about. Moving around the app is not, because
+	// the router this app uses has no way to hold a navigation, and the bar is the warning there.
+	useEffect(() => {
+		if (!dirty) return;
+		const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+		window.addEventListener("beforeunload", warn);
+		return () => window.removeEventListener("beforeunload", warn);
+	}, [dirty]);
+
+	const handleSave = async () => {
+		setSaving(true);
+		setError(null);
 		try {
 			const res = await client.api.content.works[":id"].$patch({
 				param: { id: String(current.id) },
-				json,
+				json: payload(),
 			});
 			if (!res.ok) {
 				await failed(res, "Failed to save this Work.");
@@ -379,7 +464,9 @@ function WorkForm({ editing }: { editing: Work }) {
 			}
 			const { work: updated } = await res.json();
 			setCurrent(updated as Work);
-			navigate(studioUrl("/catalog"));
+			thumbnailTouched.current = false;
+			setBaseline(null);
+			setSavedAt(Date.now());
 		} catch {
 			setError("Failed to save this Work.");
 		} finally {
@@ -388,6 +475,8 @@ function WorkForm({ editing }: { editing: Work }) {
 	};
 
 	// ── Builds (game/software downloadable assets) ──
+	// These persist the moment they are added or deleted, as they always have, so they are never
+	// part of what the bar calls unsaved.
 
 	const assets = current.assets ?? [];
 	const [buildFile, setBuildFile] = useState<File | null>(null);
@@ -402,11 +491,11 @@ function WorkForm({ editing }: { editing: Work }) {
 		setBuildUploading(true);
 		setError(null);
 		try {
-			const key = await uploadMediaFile(buildFile, "asset");
+			const fileKey = await uploadMediaFile(buildFile, "asset");
 			const res = await client.api.content.works[":id"].assets.$post({
 				param: { id: String(current.id) },
 				json: {
-					file: key,
+					file: fileKey,
 					filename: buildFile.name,
 					fileSize: buildFile.size,
 					mimeType: buildFile.type || "application/octet-stream",
@@ -441,166 +530,359 @@ function WorkForm({ editing }: { editing: Work }) {
 	};
 
 	// Mirrors the server's own definition of the commons (`isFree && streamEnabled &&
-	// released`) against the rows as they stand in the form, so the preview answers for what
-	// is about to be saved rather than for what was loaded.
+	// released`) against the rows as they stand on the page, so the notes answer for what is
+	// about to be saved rather than for what was loaded.
 	const anyoneAllowed = seedRows.some((r) => r.allow);
 	const baselineRow = seedRows.find((r) => r.threshold === 0);
 	const publicAccessNow = !!baselineRow?.allow && Number(baselineRow.price) === 0 && streamEnabled;
 	// The server refuses to release a file-kind Work with no file (`media_missing`); don't offer
 	// the click that earns it. An upload in flight from this tab is the same state, sooner.
 	const fileMissing = isFileWorkType(type) && (!current.sourceKey || fileUploading);
+	/**
+	 * Whether the Work itself can be shown as a reader sees it: its file is here, and whatever
+	 * processing it needs has finished. Until then the file section stands in for it, with the
+	 * upload's or the processing's progress.
+	 */
+	const fileReady =
+		isFileWorkType(type) &&
+		!!current.sourceKey &&
+		!fileUploading &&
+		(type === "image" || current.transcoding?.status === "completed");
+
+	/**
+	 * The Work as the reader's page would draw it: the saved row, with the creator named as a
+	 * reader sees them. The fields being edited are drawn by the controls in their slots, so
+	 * what the parts read from here is only what the page does not edit in place.
+	 */
+	const asRead: WorkDetail = {
+		...current,
+		sourceKey:
+			type === "image" && current.sourceKey ? keyToPreview(current.sourceKey) : current.sourceKey,
+		creator: user?.username
+			? {
+					username: user.username,
+					displayName: user.displayName ?? null,
+					avatar: user.avatar ?? null,
+				}
+			: undefined,
+	};
+	const released = current.releasedAt
+		? new Date(current.releasedAt).toLocaleDateString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+			})
+		: null;
+
+	const lyricsEditor =
+		type === "audio" ? (
+			/*
+			 * Lyrics — plain text, untimestamped, under the player where a listener reads them.
+			 *
+			 * The help text says the gate covers them on purpose. Lyrics ride with the payload
+			 * (`serializeWorkForViewer` blanks them alongside the audio), and a creator who
+			 * assumed the opposite would only find out from a reader. The escape hatch is stated
+			 * too: Description stays visible when locked.
+			 */
+			<section className={WORK_LYRICS_CLASS}>
+				<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
+				<textarea
+					aria-label="Lyrics"
+					className={`${IN_PLACE} ${GROWS} w-full min-h-32 font-mono text-sm leading-relaxed`}
+					value={lyrics}
+					onChange={(e) => setLyrics(e.target.value)}
+					rows={8}
+					placeholder={"One line per line.\nBlank lines separate verses."}
+				/>
+				<p className="mt-1 text-xs text-base-content/50">
+					Shown while the track plays. Gated with the audio — if this track is behind a Badge Gate
+					or a price, the words are too. Put anything you want everyone to read in the Description
+					instead.
+				</p>
+			</section>
+		) : null;
 
 	return (
-		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-2">Edit {typeLabel(type)}</h1>
-			<p className="text-sm text-base-content/60 mb-6">
-				A Work is the thing itself — the file, its access and its price. It stands on its own in
-				your Catalog whether or not you ever write a post about it.
-			</p>
+		<WorkColumn>
+			{/* What this page is, and the way to see it exactly as a reader does. The reader's view
+			    shows what is saved, which is why it says so while anything is not. */}
+			<div className="flex flex-wrap items-center gap-2">
+				<h1 className="text-sm font-semibold">Edit {typeLabel(type)}</h1>
+				<span
+					className={`badge badge-sm ${current.visibility === "released" ? "badge-success" : "badge-ghost"}`}
+				>
+					{current.visibility === "released" ? "Released" : "Private"}
+				</span>
+				<span className="text-xs text-base-content/60">
+					Laid out as a reader sees it. Change what they see in place, and everything else below.
+				</span>
+				<Link
+					to={`${workUrl(current)}?previewAs=out`}
+					className="btn btn-outline btn-sm gap-1.5 ml-auto"
+					title={dirty ? "Shows what's saved, so save first to see your changes there" : undefined}
+				>
+					<EyeIcon className="size-4" />
+					Preview as a reader
+				</Link>
+			</div>
 
-			{error && (
-				<div className="alert alert-error mb-4">
-					<span>{error}</span>
-				</div>
-			)}
-
-			<div className="flex flex-col gap-4">
-				{/* No Type row: the kind is fixed from the moment the Work was uploaded, and the
-				    heading already names it. */}
-				{isFileWorkType(type) ? (
-					<WorkFileSection work={current} landing={landed > readAfter} />
-				) : (
-					details.slot
-				)}
-
-				<FormField label="Title">
-					<input
-						type="text"
-						className="input input-bordered w-full"
+			<WorkHeader
+				work={asRead}
+				title={
+					// A text area rather than an input, because a title wraps where a reader sees it
+					// and an input cannot. It grows to its content, and Enter is refused, since a
+					// title is one line that happens to be long.
+					<textarea
+						aria-label="Title"
+						rows={1}
+						className={`${WORK_TITLE_CLASS} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
 						value={title}
-						onChange={(e) => setTitle(e.target.value)}
+						onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.preventDefault();
+						}}
 						placeholder="Work title"
 					/>
-				</FormField>
-
-				{/*
-				 * 🚨 **The hint is the point, not decoration.** A description is shown to
-				 * everyone — including somebody who has not cleared this Work's gate, and, once
-				 * a creator holds an Anthers handle, on the AT Protocol network where it cannot
-				 * be un-published. A creator writing one aimed at buyers would reasonably assume
-				 * it sat behind the gate with everything else, and the label said nothing.
-				 * Saying so is what makes this a field the creator controls rather than one
-				 * they are caught by.
-				 */}
-				<FormField
-					label="Description (optional)"
-					hint="Shown to everyone, including people who haven't unlocked this."
-				>
-					<textarea
-						className="textarea textarea-bordered w-full"
-						value={description}
-						onChange={(e) => setDescription(e.target.value)}
-						rows={2}
-						placeholder="Describe this Work…"
+				}
+				dates={
+					<CreatedDate
+						precision={authoredPrecision}
+						value={authoredValue}
+						released={released}
+						onPrecision={(next) => {
+							// Re-cut the value to the new precision rather than dropping it, so
+							// narrowing "2015-06" to a year keeps 2015 instead of blanking.
+							const iso = authoredToIso(authoredPrecision, authoredValue);
+							setAuthoredPrecision(next);
+							setAuthoredValue(next ? isoToAuthoredValue(iso, next) : "");
+						}}
+						onValue={setAuthoredValue}
 					/>
-				</FormField>
+				}
+				rating={<RatingLine maturity={maturity} notes={contentNotes} />}
+			/>
 
-				{/*
-				 * Lyrics — audio only, plain text, untimestamped.
-				 *
-				 * The help text says the gate covers them on purpose. Lyrics ride with the
-				 * payload (`serializeWorkForViewer` blanks them alongside the audio), and a
-				 * creator who assumed the opposite would only find out from a reader. The
-				 * escape hatch is stated too: Description stays visible when locked.
-				 */}
-				{type === "audio" && (
-					<FormField
-						label="Lyrics (optional)"
-						hint="Shown while the track plays. Gated with the audio — if this track is behind a Badge Gate or a price, the words are too. Put anything you want everyone to read in the Description instead."
-					>
-						<textarea
-							className="textarea textarea-bordered w-full font-mono text-sm"
-							value={lyrics}
-							onChange={(e) => setLyrics(e.target.value)}
-							rows={8}
-							placeholder={"One line per line.\nBlank lines separate verses."}
-						/>
-					</FormField>
+			{/* ── The Work itself ── */}
+			<section className="space-y-4">
+				{isFileWorkType(type) &&
+					(fileReady ? (
+						<>
+							<WorkDeliverable work={asRead} lyrics={lyricsEditor} />
+							{/* An image is replaced in place, as it could be before it had an upload
+							    step. Other kinds are not offered this: a new video re-encodes, and a
+							    released one would be unplayable while it did. */}
+							{type === "image" && (
+								<div className="max-w-xs">
+									<FileUpload
+										accept={fileRules("image").accept}
+										maxSize={fileRules("image").maxSize}
+										compact
+										label="Replace the image"
+										onFileSelect={(file) =>
+											workUploads.start(current.id, file, { kind: "source", type: "image" })
+										}
+									/>
+								</div>
+							)}
+						</>
+					) : (
+						<>
+							<WorkFileSection work={current} landing={landed > readAfter} />
+							{lyricsEditor}
+						</>
+					))}
+				{/* A game or software's embedded build: the address it runs from, and the build
+				    running from it once saved. */}
+				{isBuildType(type) && (
+					<>
+						{details.slot}
+						{current.embedUrl && <WorkDeliverable work={asRead} />}
+					</>
 				)}
 
-				<FormField label="Thumbnail (optional)">
-					<div className="max-w-xs">
-						<FileUpload
-							accept="image/*"
-							maxSize={10 * 1024 * 1024}
-							preview={thumbnailPreview}
-							label="Upload a thumbnail"
-							compact
-							onFileSelect={handleThumbnail}
-							onClear={() => {
-								thumbnailTouched.current = true;
-								setThumbnailUrl("");
-								setThumbnailPreview(null);
-							}}
-						/>
-					</div>
-				</FormField>
+				<Cover
+					preview={thumbnailPreview}
+					onFile={handleThumbnail}
+					onClear={() => {
+						thumbnailTouched.current = true;
+						setThumbnailUrl("");
+						setThumbnailPreview(null);
+					}}
+				/>
+			</section>
 
-				{/* Created date — the creator's claim about when the work was MADE. */}
-				<FormField
-					label="Created (optional)"
-					hint="When this was made — not when you uploaded it. Stated at the precision you pick, so a work you only date to a year shows the year and nothing finer."
-				>
-					<div className="flex flex-wrap gap-2 items-center">
-						<select
-							className="select select-bordered select-sm"
-							value={authoredPrecision ?? ""}
-							onChange={(e) => {
-								const next = (e.target.value || null) as AuthoredPrecision | null;
-								// Re-cut the value to the new precision rather than dropping it, so
-								// narrowing "2015-06" to a year keeps 2015 instead of blanking.
-								const iso = authoredToIso(authoredPrecision, authoredValue);
-								setAuthoredPrecision(next);
-								setAuthoredValue(next ? isoToAuthoredValue(iso, next) : "");
-							}}
-						>
-							<option value="">Not stated</option>
-							<option value="year">Year</option>
-							<option value="month">Month</option>
-							<option value="day">Exact date</option>
-						</select>
-						{authoredPrecision === "year" && (
-							<input
-								type="number"
-								className="input input-bordered input-sm w-28"
-								value={authoredValue}
-								min="1900"
-								max="2200"
-								placeholder="2015"
-								onChange={(e) => setAuthoredValue(e.target.value)}
-							/>
-						)}
-						{authoredPrecision === "month" && (
-							<input
-								type="month"
-								className="input input-bordered input-sm"
-								value={authoredValue}
-								onChange={(e) => setAuthoredValue(e.target.value)}
-							/>
-						)}
-						{authoredPrecision === "day" && (
-							<input
-								type="date"
-								className="input input-bordered input-sm"
-								value={authoredValue}
-								onChange={(e) => setAuthoredValue(e.target.value)}
-							/>
-						)}
-					</div>
-				</FormField>
+			{/*
+			 * 🚨 **The hint is the point, not decoration.** A description is shown to
+			 * everyone — including somebody who has not cleared this Work's gate, and, once
+			 * a creator holds an Anthers handle, on the AT Protocol network where it cannot
+			 * be un-published. A creator writing one aimed at buyers would reasonably assume
+			 * it sat behind the gate with everything else, and the label said nothing.
+			 * Saying so is what makes this a field the creator controls rather than one
+			 * they are caught by.
+			 */}
+			<section>
+				<textarea
+					aria-label="Description"
+					className={`${WORK_DESCRIPTION_CLASS} ${IN_PLACE} ${GROWS} w-full min-h-16`}
+					value={description}
+					onChange={(e) => setDescription(e.target.value)}
+					rows={3}
+					placeholder="Describe this Work…"
+				/>
+				<p className="text-xs text-base-content/50">
+					Shown to everyone, including people who haven't unlocked this.
+				</p>
+			</section>
 
-				{/* Delivery + access. */}
-				<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
+			{isBuildType(type) && (
+				<section className="flex flex-col gap-3">
+					<h2 className="font-semibold">Downloadable Builds</h2>
+
+					{buildUploads.map((upload) => (
+						<div key={upload.id} className="flex flex-col gap-2">
+							{upload.status === "failed" ? (
+								<div className="alert alert-error text-sm">
+									<span className="flex-1">{upload.error}</span>
+									<button
+										type="button"
+										className="btn btn-sm"
+										onClick={() => workUploads.retry(upload.id)}
+									>
+										Try again
+									</button>
+								</div>
+							) : (
+								<UploadProgress upload={upload} />
+							)}
+						</div>
+					))}
+
+					{assets.length > 0 && (
+						<div className="overflow-x-auto">
+							<table className="table table-sm">
+								<thead>
+									<tr>
+										<th>Filename</th>
+										<th>Platform</th>
+										<th>Version</th>
+										<th>Size</th>
+										<th />
+									</tr>
+								</thead>
+								<tbody>
+									{assets.map((asset) => (
+										<tr key={asset.id}>
+											<td className="font-mono text-xs">
+												{asset.filename}
+												{asset.isPrimary && (
+													<span className="badge badge-primary badge-xs ml-2">Primary</span>
+												)}
+											</td>
+											<td>
+												<span className="badge badge-outline badge-sm capitalize">
+													{asset.platform}
+												</span>
+											</td>
+											<td>{asset.version || "—"}</td>
+											<td className="text-xs text-base-content/60">
+												{formatFileSize(asset.fileSize ?? 0)}
+											</td>
+											<td>
+												<button
+													type="button"
+													className="btn btn-ghost btn-xs text-error"
+													onClick={() => handleDeleteBuild(asset.id)}
+												>
+													<TrashIcon className="w-4 h-4" />
+												</button>
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+
+					<form onSubmit={handleAddBuild} className="flex flex-col gap-2">
+						<div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+							<div className="flex-1">
+								<FormField label="File">
+									<input
+										type="file"
+										className="file-input file-input-bordered file-input-sm w-full"
+										onChange={(e) => setBuildFile(e.target.files?.[0] || null)}
+									/>
+								</FormField>
+							</div>
+							<FormField label="Platform">
+								<select
+									className="select select-bordered select-sm"
+									value={buildPlatform}
+									onChange={(e) => setBuildPlatform(e.target.value)}
+								>
+									<option value="windows">Windows</option>
+									<option value="mac">macOS</option>
+									<option value="linux">Linux</option>
+									<option value="web">Web</option>
+									<option value="android">Android</option>
+									<option value="ios">iOS</option>
+									<option value="other">Other</option>
+								</select>
+							</FormField>
+							<FormField label="Version">
+								<input
+									type="text"
+									className="input input-bordered input-sm w-24"
+									value={buildVersion}
+									onChange={(e) => setBuildVersion(e.target.value)}
+									placeholder="1.0.0"
+								/>
+							</FormField>
+							<button
+								type="submit"
+								className="btn btn-primary btn-sm"
+								disabled={buildUploading || !buildFile}
+							>
+								{buildUploading ? (
+									<LoadingSpinner size="sm" />
+								) : (
+									<ArrowUpTrayIcon className="w-4 h-4" />
+								)}
+								Add
+							</button>
+						</div>
+						<label className="label cursor-pointer justify-start gap-2 w-fit">
+							<input
+								type="checkbox"
+								className="checkbox checkbox-sm"
+								checked={buildPrimary}
+								onChange={(e) => setBuildPrimary(e.target.checked)}
+							/>
+							<span className="label-text text-sm">Primary build</span>
+						</label>
+					</form>
+				</section>
+			)}
+
+			{/* ── What a reader never sees ── */}
+			<section
+				aria-labelledby="work-settings-heading"
+				className="rounded-box border border-base-300 bg-base-200/40 p-5 flex flex-col gap-4"
+			>
+				<div>
+					<h2 id="work-settings-heading" className="text-lg font-semibold">
+						Only you see these
+					</h2>
+					<p className="text-xs text-base-content/60">
+						How this Work is delivered, rated, gated and released.
+					</p>
+				</div>
+
+				{/* A physical good's or a service's note is for the creator's own fulfillment and is
+				    shown to nobody, so it sits here rather than on the page. */}
+				{!isFileWorkType(type) && !isBuildType(type) && details.slot}
+
+				<div className="flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Delivery</h2>
 					<div className="flex flex-wrap gap-4">
 						<label className="label cursor-pointer justify-start gap-2">
@@ -633,13 +915,13 @@ function WorkForm({ editing }: { editing: Work }) {
 				</div>
 
 				{/* The content rating. Nothing is preselected — see the state above. */}
-				<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
+				<div id="work-rating" className="border-t border-base-300 pt-4 flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Rating</h2>
 					<div className="flex flex-col gap-1">
 						{MATURITY_CHOICES.map((choice) => (
 							<label
 								key={choice.value}
-								className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 hover:border-primary/50"
+								className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 hover:border-primary/50"
 							>
 								<input
 									type="radio"
@@ -704,7 +986,7 @@ function WorkForm({ editing }: { editing: Work }) {
 							<Link to={studioUrl("/settings")} className="link">
 								Add Badge rungs in Settings
 							</Link>{" "}
-							and they appear here. Your changes are kept — this is a page, so you can come back.
+							and they appear here. Save first, and this page is here when you come back.
 						</p>
 					)}
 				</div>
@@ -868,145 +1150,229 @@ function WorkForm({ editing }: { editing: Work }) {
 						Released means listed publicly. It does not mean free — the Access table decides that.
 					</p>
 				</div>
+			</section>
 
-				{isBuildType(type) && (
-					<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
-						<h2 className="font-semibold text-sm">Downloadable builds</h2>
+			<SaveBar
+				dirty={dirty}
+				saving={saving}
+				saved={savedAt != null}
+				error={error}
+				// Above the player bar when one is showing, rather than behind it.
+				raised={currentTrack != null}
+				onSave={handleSave}
+				onDiscard={onDiscard}
+			/>
+		</WorkColumn>
+	);
+}
 
-						{buildUploads.map((upload) => (
-							<div key={upload.id} className="flex flex-col gap-2">
-								{upload.status === "failed" ? (
-									<div className="alert alert-error text-sm">
-										<span className="flex-1">{upload.error}</span>
-										<button
-											type="button"
-											className="btn btn-sm"
-											onClick={() => workUploads.retry(upload.id)}
-										>
-											Try again
-										</button>
-									</div>
-								) : (
-									<UploadProgress upload={upload} />
-								)}
-							</div>
-						))}
+/**
+ * The Created date, where a reader sees "Made 2015": the creator's claim about when the work was
+ * made, at the precision they pick, beside the release date Anthers records.
+ */
+function CreatedDate({
+	precision,
+	value,
+	released,
+	onPrecision,
+	onValue,
+}: {
+	precision: AuthoredPrecision | null;
+	value: string;
+	released: string | null;
+	onPrecision: (next: AuthoredPrecision | null) => void;
+	onValue: (next: string) => void;
+}) {
+	return (
+		<div className="flex flex-col gap-1">
+			<div className="flex flex-wrap items-center gap-2 text-sm text-base-content/60">
+				<CalendarIcon className="w-4 h-4" />
+				<span>Made</span>
+				<select
+					aria-label="Created date"
+					className="select select-bordered select-xs w-auto"
+					value={precision ?? ""}
+					onChange={(e) => onPrecision((e.target.value || null) as AuthoredPrecision | null)}
+				>
+					<option value="">Not stated</option>
+					<option value="year">Year</option>
+					<option value="month">Month</option>
+					<option value="day">Exact date</option>
+				</select>
+				{precision === "year" && (
+					<input
+						type="number"
+						aria-label="Year made"
+						className="input input-bordered input-xs w-24"
+						value={value}
+						min="1900"
+						max="2200"
+						placeholder="2015"
+						onChange={(e) => onValue(e.target.value)}
+					/>
+				)}
+				{precision === "month" && (
+					<input
+						type="month"
+						aria-label="Month made"
+						className="input input-bordered input-xs"
+						value={value}
+						onChange={(e) => onValue(e.target.value)}
+					/>
+				)}
+				{precision === "day" && (
+					<input
+						type="date"
+						aria-label="Date made"
+						className="input input-bordered input-xs"
+						value={value}
+						onChange={(e) => onValue(e.target.value)}
+					/>
+				)}
+				{released && <span>Released {released}</span>}
+			</div>
+			<p className="text-xs text-base-content/40">
+				When this was made, not when you uploaded it, to whatever precision you know it.
+			</p>
+		</div>
+	);
+}
 
-						{assets.length > 0 && (
-							<div className="overflow-x-auto">
-								<table className="table table-sm">
-									<thead>
-										<tr>
-											<th>Filename</th>
-											<th>Platform</th>
-											<th>Version</th>
-											<th>Size</th>
-											<th />
-										</tr>
-									</thead>
-									<tbody>
-										{assets.map((asset) => (
-											<tr key={asset.id}>
-												<td className="font-mono text-xs">
-													{asset.filename}
-													{asset.isPrimary && (
-														<span className="badge badge-primary badge-xs ml-2">Primary</span>
-													)}
-												</td>
-												<td>
-													<span className="badge badge-outline badge-sm capitalize">
-														{asset.platform}
-													</span>
-												</td>
-												<td>{asset.version || "—"}</td>
-												<td className="text-xs text-base-content/60">
-													{formatFileSize(asset.fileSize ?? 0)}
-												</td>
-												<td>
-													<button
-														type="button"
-														className="btn btn-ghost btn-xs text-error"
-														onClick={() => handleDeleteBuild(asset.id)}
-													>
-														<TrashIcon className="w-4 h-4" />
-													</button>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						)}
+/**
+ * The rating where a reader meets it, above the Work. A reader sees nothing for a General Work,
+ * so the creator's version always says what the rating is, and says so loudly while there is
+ * none, since nothing can be released until there is.
+ */
+function RatingLine({
+	maturity,
+	notes,
+}: {
+	maturity: Exclude<MaturityRating, "unrated"> | null;
+	notes: ContentNote[];
+}) {
+	const change = (
+		<button
+			type="button"
+			className="link link-hover text-xs"
+			onClick={() => document.getElementById("work-rating")?.scrollIntoView({ behavior: "smooth" })}
+		>
+			{maturity ? "Change" : "Rate it"}
+		</button>
+	);
+	const label = MATURITY_CHOICES.find((c) => c.value === maturity)?.label;
+	return (
+		<div className="flex flex-wrap items-center gap-2 text-sm">
+			{maturity ? (
+				<span
+					className={`badge badge-sm ${maturity === "general" ? "badge-ghost" : "badge-warning"}`}
+				>
+					{label ?? maturity}
+				</span>
+			) : (
+				<span className="badge badge-sm badge-warning badge-outline">Not rated yet</span>
+			)}
+			{maturity && maturity !== "general" && notes.length > 0 && (
+				<span className="text-base-content/60">{notes.map(contentNoteLabel).join(" · ")}</span>
+			)}
+			{maturity === "general" && (
+				<span className="text-xs text-base-content/50">
+					Readers see no rating on a General Work.
+				</span>
+			)}
+			{change}
+		</div>
+	);
+}
 
-						<form onSubmit={handleAddBuild} className="flex flex-col gap-2">
-							<div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-								<div className="flex-1">
-									<FormField label="File">
-										<input
-											type="file"
-											className="file-input file-input-bordered file-input-sm w-full"
-											onChange={(e) => setBuildFile(e.target.files?.[0] || null)}
-										/>
-									</FormField>
-								</div>
-								<FormField label="Platform">
-									<select
-										className="select select-bordered select-sm"
-										value={buildPlatform}
-										onChange={(e) => setBuildPlatform(e.target.value)}
-									>
-										<option value="windows">Windows</option>
-										<option value="mac">macOS</option>
-										<option value="linux">Linux</option>
-										<option value="web">Web</option>
-										<option value="android">Android</option>
-										<option value="ios">iOS</option>
-										<option value="other">Other</option>
-									</select>
-								</FormField>
-								<FormField label="Version">
-									<input
-										type="text"
-										className="input input-bordered input-sm w-24"
-										value={buildVersion}
-										onChange={(e) => setBuildVersion(e.target.value)}
-										placeholder="1.0.0"
-									/>
-								</FormField>
-								<button
-									type="submit"
-									className="btn btn-primary btn-sm"
-									disabled={buildUploading || !buildFile}
-								>
-									{buildUploading ? (
-										<LoadingSpinner size="sm" />
-									) : (
-										<ArrowUpTrayIcon className="w-4 h-4" />
-									)}
-									Add
-								</button>
-							</div>
-							<label className="label cursor-pointer justify-start gap-2 w-fit">
-								<input
-									type="checkbox"
-									className="checkbox checkbox-sm"
-									checked={buildPrimary}
-									onChange={(e) => setBuildPrimary(e.target.checked)}
-								/>
-								<span className="label-text text-sm">Primary build</span>
-							</label>
-						</form>
+/** The cover a reader sees on cards, before a video plays, and in front of a locked Work. */
+function Cover({
+	preview,
+	onFile,
+	onClear,
+}: {
+	preview: string | null;
+	onFile: (file: File) => void;
+	onClear: () => void;
+}) {
+	return (
+		<div className="flex flex-wrap items-start gap-4">
+			<div className="w-48">
+				<FileUpload
+					accept="image/*"
+					maxSize={10 * 1024 * 1024}
+					preview={preview}
+					label="Upload a cover"
+					compact
+					onFileSelect={onFile}
+					onClear={onClear}
+				/>
+			</div>
+			<p className="flex-1 min-w-48 text-xs text-base-content/60">
+				<span className="block font-medium text-base-content/80">Cover (optional)</span>
+				Shown on cards, before a video plays, and in front of this Work for anyone who hasn't
+				unlocked it.
+			</p>
+		</div>
+	);
+}
+
+/**
+ * Save and Discard, on screen while anything is unsaved (Parker, 2026-09-17), and a moment of
+ * "Saved" afterwards. It sticks to the bottom of the page so it is in reach wherever the creator
+ * has scrolled to, and it carries the save's error, because the top of the page may be far away.
+ */
+function SaveBar({
+	dirty,
+	saving,
+	saved,
+	error,
+	raised,
+	onSave,
+	onDiscard,
+}: {
+	dirty: boolean;
+	saving: boolean;
+	saved: boolean;
+	error: string | null;
+	raised: boolean;
+	onSave: () => void;
+	onDiscard: () => void;
+}): ReactNode {
+	if (!dirty && !saving && !saved && !error) return null;
+	return (
+		<div
+			className={`sticky ${raised ? "bottom-16" : "bottom-0"} z-20 -mx-4 border-t border-base-300 bg-base-100/95 px-4 py-3 backdrop-blur`}
+		>
+			<div className="flex flex-wrap items-center gap-3">
+				<span role="status" className="text-sm">
+					{error ? (
+						<span className="text-error">{error}</span>
+					) : dirty || saving ? (
+						"Unsaved changes"
+					) : (
+						<span className="text-success">Saved</span>
+					)}
+				</span>
+				{(dirty || saving) && (
+					<div className="ml-auto flex gap-2">
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm"
+							onClick={onDiscard}
+							disabled={saving}
+						>
+							Discard
+						</button>
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={onSave}
+							disabled={saving}
+						>
+							{saving ? "Saving…" : "Save Work"}
+						</button>
 					</div>
 				)}
-
-				<div className="flex flex-wrap gap-2 mt-2 border-t border-base-300 pt-4">
-					<button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-						{saving ? "Saving…" : "Save Work"}
-					</button>
-					<Link to={studioUrl("/catalog")} className="btn btn-ghost">
-						Cancel
-					</Link>
-				</div>
 			</div>
 		</div>
 	);

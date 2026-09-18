@@ -199,11 +199,15 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	// The Created date, at year precision, on the same save. Its whole reason for existing is
 	// back-dating a catalog, which is what a creator arriving with years of work actually does.
-	await page.getByRole("combobox").last().selectOption("year");
+	await page.getByRole("combobox", { name: "Created date" }).selectOption("year");
 	await page.locator('input[type="number"][min="1900"]').fill("2015");
 
 	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
+	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
+	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+		timeout: 15_000,
+	});
+	await page.goto("/studio/catalog");
 
 	// ── Release ─────────────────────────────────────────────────────────────
 	await cardFor(page).getByRole("button", { name: "Release" }).click();
@@ -261,7 +265,11 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(page.getByText(/nobody can open this/i)).toBeVisible();
 
 	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
+	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
+	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+		timeout: 15_000,
+	});
+	await page.goto("/studio/catalog");
 	await expect(cardFor(page)).toContainText("Nobody can open");
 
 	// Still released, and now genuinely shut: the server drops it from what a reader sees.

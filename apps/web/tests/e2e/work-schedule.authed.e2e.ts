@@ -85,7 +85,11 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 	await expect(page.getByText(/It releases at this time once it's ready/)).toBeVisible();
 
 	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
+	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
+	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+		timeout: 15_000,
+	});
+	await page.goto("/studio/catalog");
 	const card = page.locator(".card").filter({ hasText: TITLE });
 	await expect(card).toContainText("Releases");
 	await expect(card).toContainText("Private");

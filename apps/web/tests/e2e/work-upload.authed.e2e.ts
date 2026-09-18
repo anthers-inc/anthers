@@ -143,7 +143,11 @@ test("a video Work is made from its file and edited while the file uploads", asy
 
 	// ── And a save made afterwards keeps it ─────────────────────────────────
 	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page).toHaveURL(/\/studio\/catalog$/, { timeout: 15_000 });
+	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
+	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+		timeout: 15_000,
+	});
+	await page.goto("/studio/catalog");
 	await expect(cardFor(page)).not.toContainText("No file");
 
 	const [work] = (await ownWorks()).filter((w) => w.title === STEM);
