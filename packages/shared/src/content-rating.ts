@@ -145,12 +145,14 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * comes off this list, and `releaseRatingRefusal` below takes the accepted set as an argument
  * so that branch can be exercised whichever way the switch happens to be set.
  *
- * ⭐ **`adult` went on this list only once every fence it needs was real** — the payment
- * requirement, the exclusion from Public Access and so from the Time Pool, the invisibility
- * to anyone who has not opted in, the adulthood verification, and the reader's own controls.
- * Adding it earlier would have opened a rung with none of them, which is precisely the
- * failure the *Content Standards* page's deferral principle names. **If a rung is ever added here again, that is
- * the bar**: the fences before the content, never afterwards.
+ * ⭐ **`adult` is on this list because every fence it needs is real** — the invisibility to
+ * anyone who has not opted in, the adulthood verification behind the opt-in, and the reader's
+ * own controls, which a guardian can lock. Opening it before those existed would have opened a
+ * rung with none of them, which is precisely the failure the *Content Standards* page's
+ * deferral principle names. **If a rung is ever added here again, that is the bar**: the
+ * fences before the content, never afterwards. ⚠️ A price, a Public Access exclusion and a
+ * Time Pool exclusion are NOT fences and must not be re-added as properties of the rating:
+ * they cost Adult creators income while keeping nobody out whom verification does not.
  *
  * A constant rather than configuration, deliberately: both inputs are judgments that deserve
  * a commit and a reader, not an environment variable somebody can flip without one.

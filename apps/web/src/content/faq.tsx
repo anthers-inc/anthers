@@ -411,8 +411,15 @@ export const PAGE_FAQS: Record<FAQSurface, FAQId[]> = {
 	],
 };
 
-/** Every question, in the order /faq renders them. */
-export const ALL_FAQ_ITEMS: FAQItem[] = Object.values(FAQ_ITEMS);
+/**
+ * Every question, in the order /faq renders them, each carrying its id.
+ *
+ * The id is the question's anchor on /faq, so `/faq#content-controls` opens that answer. That
+ * makes an id a URL other surfaces hold, and renaming one breaks their links.
+ */
+export const ALL_FAQ_ITEMS: Array<FAQItem & { id: FAQId }> = (
+	Object.entries(FAQ_ITEMS) as Array<[FAQId, FAQItem]>
+).map(([id, item]) => ({ id, ...item }));
 
 /** The categories /faq groups by, in first-appearance order. */
 export const FAQ_CATEGORIES = [...new Set(ALL_FAQ_ITEMS.map((item) => item.category))];

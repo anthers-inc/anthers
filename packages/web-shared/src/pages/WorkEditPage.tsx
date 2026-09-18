@@ -62,6 +62,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { isoToLocalInput, localInputToIso } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
 import { publishingPermissionMissing, usePublishingState } from "../lib/publishing";
+import { RATED_PUBLIC_ACCESS_HELP, showsRatedPublicAccessNotice } from "../lib/rated-public-access";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioUrl } from "../lib/studio";
@@ -842,6 +843,24 @@ function WorkForm({ editing }: { editing: Work }) {
 						<p className="text-xs text-success">
 							Public Access — free to everyone, and earning from the Time Pool.
 						</p>
+					)}
+					{showsRatedPublicAccessNotice({
+						released: visibility === "released",
+						publicAccess: publicAccessNow,
+						maturity,
+					}) && (
+						// Info rather than warning: nothing is wrong, and the note must not read as a
+						// reason to rate lower or leave Public Access. See `rated-public-access.ts`.
+						<div className="alert alert-info text-sm">
+							<span>
+								Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents) can
+								choose to hide Mature Works, and Adult work is shown only to users who are 18+ and
+								have opted in.{" "}
+								<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
+									How Ratings Affect Who Sees a Work
+								</Link>
+							</span>
+						</div>
 					)}
 					<p className="text-xs text-base-content/50">
 						Released means listed publicly. It does not mean free — the Access table decides that.

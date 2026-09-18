@@ -19,13 +19,22 @@ import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { Link } from "@anthers/web-shared/router";
+import { Link, useLocation } from "@anthers/web-shared/router";
+import { useEffect } from "react";
 import { FAQAccordion } from "../components/ui/FAQ";
 import { ALL_FAQ_ITEMS, FAQ_CATEGORIES } from "../content/faq";
 
 const serif = { fontFamily: FONTS.fraunces };
 
 export default function FAQPage() {
+	// `/faq#<id>` opens that answer and scrolls to it, which is how another page links to one
+	// question rather than to the top of all of them. Scrolled by hand because the router does
+	// not follow a fragment on navigation, and a browser's own jump happens before this renders.
+	const target = useLocation().hash.slice(1);
+	useEffect(() => {
+		if (target) document.getElementById(target)?.scrollIntoView({ block: "start" });
+	}, [target]);
+
 	return (
 		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>
 			{/* Hero — the same three-beat fade the other marketing pages open with. */}
@@ -65,8 +74,10 @@ export default function FAQPage() {
 					</Reveal>
 					<div className="mx-auto mt-8 flex max-w-3xl flex-col gap-3 text-left">
 						{ALL_FAQ_ITEMS.filter((item) => item.category === category).map((item, i) => (
-							<Reveal key={item.question} delay={i * 70}>
-								<FAQAccordion item={item} />
+							<Reveal key={item.id} delay={i * 70}>
+								<div id={item.id} className="scroll-mt-24">
+									<FAQAccordion item={item} open={item.id === target} />
+								</div>
 							</Reveal>
 						))}
 					</div>
