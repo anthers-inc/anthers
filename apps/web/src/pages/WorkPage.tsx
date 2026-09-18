@@ -21,6 +21,7 @@ import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-share
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
+import { studioEditWorkUrl } from "@anthers/web-shared/studio";
 import type { TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
@@ -208,8 +209,18 @@ export default function WorkPage() {
 	return (
 		<WorkColumn>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
-			    able to subtract access (the server guards that per Work). */}
-			{isOwner && <PreviewBar />}
+			    able to subtract access (the server guards that per Work). Beside it, the way back
+			    to the Work's Edit page, which is where the preview is usually reached from. */}
+			{isOwner && (
+				<div className="flex flex-wrap items-start gap-2">
+					<div className="flex-1">
+						<PreviewBar />
+					</div>
+					<Link to={studioEditWorkUrl(work.publicId ?? work.id)} className="btn btn-primary btn-sm">
+						Edit This Work
+					</Link>
+				</div>
+			)}
 
 			{work.visibility === "private" && isOwner && (
 				<div className="alert alert-warning">

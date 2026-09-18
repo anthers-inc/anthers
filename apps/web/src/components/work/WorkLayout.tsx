@@ -55,6 +55,11 @@ export const WORK_TITLE_CLASS = "text-3xl font-bold";
 /** The public blurb's typography, likewise. */
 export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
 
+/** An audio Work's lyrics panel, and its heading, likewise. */
+export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
+export const WORK_LYRICS_HEADING_CLASS =
+	"mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50";
+
 /**
  * The creator-asserted Created date, at the precision they actually claimed.
  *
@@ -209,9 +214,12 @@ export function WorkRating({ work }: { work: WorkDetail }) {
 export function WorkDeliverable({
 	work,
 	shareToken = null,
+	lyrics,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
+	/** In place of an audio Work's lyrics, for a control standing in for them. */
+	lyrics?: ReactNode;
 }) {
 	const { playTracks } = useMediaPlayer();
 	return (
@@ -238,16 +246,15 @@ export function WorkDeliverable({
 					{/* The words, under the player. Gated with the audio: the API blanks
 					    them for a viewer without access, so reaching this branch at all
 					    means the viewer may read them. */}
-					{work.lyrics?.trim() && (
-						<section className="mt-4 rounded-lg bg-base-200/60 p-4">
-							<h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
-								Lyrics
-							</h2>
-							<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
-								{work.lyrics}
-							</p>
-						</section>
-					)}
+					{lyrics ??
+						(work.lyrics?.trim() && (
+							<section className={WORK_LYRICS_CLASS}>
+								<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
+								<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
+									{work.lyrics}
+								</p>
+							</section>
+						))}
 				</>
 			)}
 			{work.type === "ebook" && (
