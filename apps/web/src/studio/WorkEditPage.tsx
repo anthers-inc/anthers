@@ -38,43 +38,45 @@ import {
 	type MaturityRating,
 	normalizeContentNotes,
 } from "@anthers/shared/content-rating";
-import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import RatingAppeal from "../components/content/RatingAppeal";
+import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
 import {
 	isFileWorkType,
 	UploadProgress,
 	useWorkDetails,
 	WorkFileSection,
-} from "../components/content/work-media";
-import { authoredToIso, isoToAuthoredValue } from "../components/content/work-state";
-import { isBuildType, typeLabel } from "../components/content/works";
+} from "@anthers/web-shared/content/work-media";
+import { authoredToIso, isoToAuthoredValue } from "@anthers/web-shared/content/work-state";
+import { isBuildType, typeLabel } from "@anthers/web-shared/content/works";
+import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
+import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
 	buildSeedRows,
 	type SeedRowDraft,
 	serializeSeedRows,
-} from "../components/post/AccessTables";
-import { keyToPreview, uploadImageFile } from "../components/post/mediaUpload";
-import FileUpload from "../components/ui/FileUpload";
-import FormField from "../components/ui/FormField";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { isoToLocalInput, localInputToIso } from "../lib/local-datetime";
-import { usePayoutsReady } from "../lib/payouts";
-import { publishingPermissionMissing, usePublishingState } from "../lib/publishing";
-import { RATED_PUBLIC_ACCESS_HELP, showsRatedPublicAccessNotice } from "../lib/rated-public-access";
-import { Link } from "../lib/router";
-import { client } from "../lib/rpc";
-import { studioUrl } from "../lib/studio";
+} from "@anthers/web-shared/post/AccessTables";
+import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
+import {
+	RATED_PUBLIC_ACCESS_HELP,
+	showsRatedPublicAccessNotice,
+} from "@anthers/web-shared/rated-public-access";
+import { Link, useNavigate, useParams } from "@anthers/web-shared/router";
+import { client } from "@anthers/web-shared/rpc";
+import { studioUrl } from "@anthers/web-shared/studio";
 import type {
 	AuthoredPrecision,
 	CreatorGate,
 	UploadableWorkType,
 	Work,
 	WorkInput,
-} from "../lib/types";
-import { uploadMediaFile } from "../lib/upload";
-import { isUploading, useWorkUploads, workUploads } from "../lib/work-uploads";
+} from "@anthers/web-shared/types";
+import FileUpload from "@anthers/web-shared/ui/FileUpload";
+import FormField from "@anthers/web-shared/ui/FormField";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import { uploadMediaFile } from "@anthers/web-shared/upload";
+import { isUploading, useWorkUploads, workUploads } from "@anthers/web-shared/work-uploads";
+import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState } from "react";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;

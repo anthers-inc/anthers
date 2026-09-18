@@ -37,7 +37,7 @@ const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const PostsPage = lazy(() => import("@anthers/web-shared/PostsPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
 const WorkUploadPage = lazy(() => import("@anthers/web-shared/WorkUploadPage"));
-const WorkEditPage = lazy(() => import("@anthers/web-shared/WorkEditPage"));
+const WorkEditPage = lazy(() => import("./studio/WorkEditPage"));
 // ImportPage lazy import kept commented — the route is hidden (see below) but the
 // component remains so re-enabling is a one-line change when the lane ships.
 // const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));

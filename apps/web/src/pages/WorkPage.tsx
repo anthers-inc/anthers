@@ -15,94 +15,44 @@
  */
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
-import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
-import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
-import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
-import type { TranscodingJob, Work } from "@anthers/web-shared/types";
+import { client } from "@anthers/web-shared/rpc";
+import type { TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
+import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AddToBasket from "../components/basket/AddToBasket";
 import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
 import SaveButton from "../components/library/SaveButton";
-import AudioPlayer from "../components/media/AudioPlayer";
-import ComicReader from "../components/media/ComicReader";
-import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
-import VideoPlayer from "../components/media/VideoPlayer";
+import { PublicAccessWall } from "../components/media/PublicAccessNotice";
 import InlineUnlock from "../components/post/InlineUnlock";
 import StickerBar from "../components/post/StickerBar";
 import ProjectDownloads from "../components/project/ProjectDownloads";
-import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
-import ContentTypeBadge from "../components/ui/ContentTypeBadge";
-import SanitizedHtml from "../components/ui/SanitizedHtml";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
+import {
+	pageHoldsTheMeter,
+	WorkColumn,
+	WorkDeliverable,
+	WorkDescription,
+	type WorkDetail,
+	WorkHeader,
+} from "../components/work/WorkLayout";
 import { useAttentionClaim } from "../lib/attention";
-import { useMediaPlayer } from "../lib/media-player";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
-import { trackFromWork } from "../lib/tracks";
-
-/** A Work as the detail endpoint returns it — with its creator and posting history. */
-type WorkDetail = Work & {
-	creator?: { username: string; displayName: string | null; avatar: string | null };
-	/** Whether the creator can actually take a direct payment (Connect onboarded). */
-	creatorHasStripe?: boolean;
-	/**
-	 * Display name of whoever shared the link this page was reached by. Present only on a
-	 * share view — a display name and nothing else, since the rest of that person's account
-	 * is none of the recipient's business.
-	 */
-	sharedBy?: string | null;
-	postedIn?: {
-		slug: string;
-		title: string | null;
-		isPublished: boolean;
-		postedAt: string | null;
-	}[];
-};
-
-/**
- * The creator-asserted Created date, at the precision they actually claimed.
- *
- * Inventing a day the creator never asserted is exactly the false precision the
- * `authoredPrecision` column exists to prevent, so this never widens what was said.
- */
-export function formatAuthored(
-	iso: string | null | undefined,
-	precision: string | null | undefined,
-): string | null {
-	if (!iso) return null;
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return null;
-	switch (precision) {
-		case "year":
-			return String(d.getUTCFullYear());
-		case "month":
-			return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-		default:
-			return d.toLocaleDateString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-				timeZone: "UTC",
-			});
-	}
-}
 
 export default function WorkPage() {
 	const { slug } = useParams<{ slug: string }>();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const { user, isAuthenticated } = useAuth();
-	const { playTracks } = useMediaPlayer();
 	const preview = usePreviewQuery();
 	/**
 	 * The **share link** this page was reached by, if any.
@@ -194,21 +144,8 @@ export default function WorkPage() {
 	 * Text, games, software and images have no such component — so the page holds it.
 	 */
 	const meterBudget = useMeteredBudget();
-	/**
-	 * Media whose METER the page owns, rather than the component.
-	 *
-	 * `VideoPlayer` and `AudioPlayer` each subscribe to the budget and render their own
-	 * countdown and wall, because they own the playback state the footer needs. Nothing
-	 * else does — and that now includes the **ebook** reader, which is deliberate rather
-	 * than an oversight: its pages are fetched one at a time from a metered endpoint, so
-	 * a spent allowance would otherwise surface as a reader full of broken images, which
-	 * is the dead-player failure this whole meter design exists to avoid. The page shows
-	 * the wall instead.
-	 *
-	 * (The name predates the reader. What it means is "the page holds the meter", not
-	 * "there is no player" — a distinction worth keeping straight before adding a type.)
-	 */
-	const playerless = work != null && work.type !== "video" && work.type !== "audio";
+	/** See `pageHoldsTheMeter`, which says which media's meter the page owns and why. */
+	const playerless = work != null && pageHoldsTheMeter(work.type);
 	/**
 	 * The allowance is gone *and* it applies here. Both halves matter: a spent allowance
 	 * says nothing about gated work the viewer cleared, work they bought, or their own
@@ -267,17 +204,9 @@ export default function WorkPage() {
 	const canAccess = access?.canAccess ?? false;
 	const isOwner = isAuthenticated && user?.id === work.creatorId;
 	const creatorName = work.creator?.displayName || work.creator?.username || "this creator";
-	const made = formatAuthored(work.authoredAt, work.authoredPrecision);
-	const released = work.releasedAt
-		? new Date(work.releasedAt).toLocaleDateString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-			})
-		: null;
 
 	return (
-		<div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+		<WorkColumn>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
 			    able to subtract access (the server guards that per Work). */}
 			{isOwner && <PreviewBar />}
@@ -291,68 +220,14 @@ export default function WorkPage() {
 				</div>
 			)}
 
-			<header className="space-y-3">
-				<div className="flex flex-wrap items-center gap-3">
-					<ContentTypeBadge contentType={work.type} />
-					{work.creator && (
-						<Link
-							to={profileUrl(work.creator.username)}
-							className="flex items-center gap-2 text-sm hover:underline"
-						>
-							{work.creator.avatar ? (
-								<img
-									src={work.creator.avatar}
-									alt={work.creator.username}
-									className="w-6 h-6 rounded-full object-cover"
-								/>
-							) : (
-								<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold">
-									{work.creator.username.charAt(0).toUpperCase()}
-								</div>
-							)}
-							{creatorName}
-						</Link>
-					)}
-				</div>
-
-				<div className="flex flex-wrap items-start justify-between gap-3">
-					<h1 className="text-3xl font-bold">{work.title || "Untitled"}</h1>
-					{/* Save sits beside the title rather than under the player, because it
-					    applies to a gated Work too — it keeps the thing, it does not open it. */}
+			<WorkHeader
+				work={work}
+				titleAside={
+					// Save sits beside the title rather than under the player, because it applies
+					// to a gated Work too — it keeps the thing, it does not open it.
 					<SaveButton workId={work.id} className="shrink-0" />
-				</div>
-
-				{/* Made, then released — never the upload date, which is bookkeeping. */}
-				<div className="flex flex-wrap items-center gap-4 text-sm text-base-content/60">
-					{made && (
-						<span className="flex items-center gap-1">
-							<CalendarIcon className="w-4 h-4" />
-							Made {made}
-						</span>
-					)}
-					{released && <span>Released {released}</span>}
-					{work.type === "text" && work.estimatedReadMinutes && (
-						<span className="flex items-center gap-1">
-							<ClockIcon className="w-4 h-4" />
-							{work.estimatedReadMinutes} min read
-						</span>
-					)}
-				</div>
-
-				{/* The rating and its notes sit above the deliverable, not below it: a warning
-				    that only appears once you already have the thing is not a warning. Nothing
-				    renders for a General Work, which is nearly all of them. */}
-				{work.maturity === "mature" && (
-					<div className="flex flex-wrap items-center gap-2 text-sm">
-						<span className="badge badge-warning badge-sm">Mature</span>
-						{(work.maturityNotes ?? []).length > 0 && (
-							<span className="text-base-content/60">
-								{(work.maturityNotes ?? []).map(contentNoteLabel).join(" · ")}
-							</span>
-						)}
-					</div>
-				)}
-			</header>
+				}
+			/>
 
 			{/* ── The deliverable, or the gate in front of it ── */}
 			<section ref={deliverableRef}>
@@ -415,74 +290,7 @@ export default function WorkPage() {
 						errorMessage={work.transcoding?.errorMessage ?? undefined}
 					/>
 				) : (
-					<>
-						{work.type === "video" && work.transcoding?.hlsManifestUrl && (
-							<VideoPlayer
-								src={work.transcoding.hlsManifestUrl}
-								poster={work.thumbnail ?? undefined}
-								attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-								publicAccess={work.publicAccess ?? false}
-							/>
-						)}
-						{work.type === "audio" && work.transcoding?.outputFileUrl && (
-							<>
-								<AudioPlayer
-									src={work.transcoding.outputFileUrl}
-									waveform={work.transcoding.waveformData ?? undefined}
-									attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-									publicAccess={work.publicAccess ?? false}
-									// Hand it to the persistent bar, so listening survives navigating
-									// away — which is the whole reason the bar exists.
-									onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
-								/>
-								{/* The words, under the player. Gated with the audio: the API blanks
-								    them for a viewer without access, so reaching this branch at all
-								    means the viewer may read them. */}
-								{work.lyrics?.trim() && (
-									<section className="mt-4 rounded-lg bg-base-200/60 p-4">
-										<h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
-											Lyrics
-										</h2>
-										<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
-											{work.lyrics}
-										</p>
-									</section>
-								)}
-							</>
-						)}
-						{work.type === "ebook" && (
-							<ComicReader
-								workId={work.id}
-								pageCount={work.pageCount ?? 0}
-								apiBase={apiBaseUrl()}
-								title={work.title ?? "Untitled"}
-								shareToken={shareToken}
-							/>
-						)}
-						{work.type === "image" && work.sourceKey && (
-							<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />
-						)}
-						{(work.type === "game" || work.type === "software") && work.embedUrl && (
-							<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
-						)}
-						{work.bodyHtml && (
-							<article className="prose max-w-none">
-								<SanitizedHtml html={work.bodyHtml} />
-							</article>
-						)}
-						{/*
-						 * Reading, playing and looking draw the allowance exactly as watching does,
-						 * and until now said nothing about it — the countdown and the wall were
-						 * wired into the two players and nowhere else, so a reader nine hours in
-						 * got no signal at all and then met a wall at a video.
-						 *
-						 * 🚨 Rendered here rather than inside each medium's block because there is
-						 * no component to hang it on: text is an <article>, a game is an <iframe>,
-						 * an image is an <img>. The players own their own footer; everything else
-						 * has this one.
-						 */}
-						{playerless && <PublicAccessFooter />}
-					</>
+					<WorkDeliverable work={work} shareToken={shareToken} />
 				)}
 			</section>
 
@@ -491,14 +299,7 @@ export default function WorkPage() {
 			    invitation that interrupted that would be the funnel this deliberately is not. */}
 			{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
-			{/* The public blurb — visible whether or not the viewer can open the Work, because a
-			    locked Work still has to say what it is. The gated prose renders above, inside
-			    the deliverable. */}
-			{work.description && (
-				<section className="prose max-w-none text-base-content/80">
-					<p>{work.description}</p>
-				</section>
-			)}
+			<WorkDescription work={work} />
 
 			{work.assets.length > 0 && (
 				<ProjectDownloads
@@ -563,6 +364,6 @@ export default function WorkPage() {
 					</ul>
 				</section>
 			)}
-		</div>
+		</WorkColumn>
 	);
 }
