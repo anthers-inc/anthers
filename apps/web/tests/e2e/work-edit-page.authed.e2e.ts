@@ -70,6 +70,23 @@ test("a Work's Edit page shows the Work as a reader sees it", async ({ page, con
 	await page.waitForLoadState("networkidle");
 	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
+	// The released Work's listing, as its record on the network. Followed rather than only found,
+	// because a link built wrongly still renders: the seed wrote this record to the session's own
+	// network, and the link has to reach exactly that record on the creator's own server.
+	const record = page.getByRole("link", { name: "View the record" });
+	const href = (await record.getAttribute("href")) ?? "";
+	expect(href).toContain("/xrpc/com.atproto.repo.getRecord?");
+	const fetched = (await (await fetch(href)).json()) as {
+		uri?: string;
+		value?: { $type?: string };
+	};
+	expect(fetched.value?.$type).toBe("org.anthers.work");
+	// And it is the creator's alone: a signed-out read of the same Work carries no such field.
+	const asStranger = (await (
+		await fetch(`${API_URL}/api/content/works/${video.publicId}`)
+	).json()) as { work?: Record<string, unknown> };
+	expect(asStranger.work && "recordUrl" in asStranger.work).toBe(false);
+
 	// The reader's view, and back again from it.
 	await page.getByRole("link", { name: "Preview as a reader" }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+\?previewAs=out$/);

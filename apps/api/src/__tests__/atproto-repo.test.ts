@@ -18,6 +18,7 @@ import {
 	planWorkRecord,
 	type RecordRef,
 	type RepoWriter,
+	recordUrlFor,
 	rkeyFromAtUri,
 	syncWorkRecord,
 	WORK_COLLECTION,
@@ -115,6 +116,30 @@ describe("reading a record's address", () => {
 		[""],
 	])("refuses the malformed URI %p", (bad) => {
 		expect(rkeyFromAtUri(bad, WORK_COLLECTION)).toBeNull();
+	});
+});
+
+describe("reading a record raw, from the server holding it", () => {
+	it("asks that server's own getRecord for exactly this record", () => {
+		const url = new URL(recordUrlFor(URI, "https://pds.example/") ?? "");
+		expect(`${url.origin}${url.pathname}`).toBe(
+			"https://pds.example/xrpc/com.atproto.repo.getRecord",
+		);
+		expect(Object.fromEntries(url.searchParams)).toEqual({
+			repo: DID,
+			collection: WORK_COLLECTION,
+			rkey: RKEY,
+		});
+	});
+
+	it("has no address without a record or without a server to ask", () => {
+		// A Work with no listing is ordinary, and an account whose server is unknown has nowhere
+		// to point, so both are null rather than a link to nothing.
+		expect(recordUrlFor(null, "https://pds.example")).toBeNull();
+		expect(recordUrlFor(URI, "")).toBeNull();
+		expect(recordUrlFor(URI, null)).toBeNull();
+		expect(recordUrlFor("not-a-uri", "https://pds.example")).toBeNull();
+		expect(recordUrlFor(URI, "pds.example")).toBeNull();
 	});
 });
 

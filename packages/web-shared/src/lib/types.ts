@@ -299,6 +299,12 @@ export interface Work {
 	transcoding: TranscodingJob | null;
 	createdAt?: string;
 	updatedAt?: string;
+	/**
+	 * The Work's listing on the network while it has one, and where its creator can read that
+	 * record raw. Present only in the owner's shape; absent or null means no listing.
+	 */
+	atprotoUri?: string | null;
+	recordUrl?: string | null;
 }
 
 /**

@@ -114,6 +114,7 @@ import {
 	VOTE_COLLECTION,
 } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
+import { recordUrlFor } from "../services/atproto-repo.js";
 import { blockedUserIds, isBlocked, notBlockedBy } from "../services/blocks.js";
 import {
 	commentAncestry,
@@ -993,6 +994,8 @@ function serializeWork(
 	item: WorkRow,
 	workAssets: AssetRow[] = [],
 	job: TranscodingJobRow | null = null,
+	/** The server holding the creator's identity, which their own records are read from. */
+	pdsUrl: string | null = null,
 ) {
 	return {
 		id: item.id,
@@ -1037,7 +1040,25 @@ function serializeWork(
 		updatedAt: item.updatedAt,
 		assets: workAssets,
 		transcoding: job,
+		/**
+		 * The Work's listing on the network while it has one, and where its creator can read that
+		 * record raw. The record is public anyway; this is the creator's own way to it, for the
+		 * Edit page, and it is null for a Work with no listing, which is ordinary rather than a fault.
+		 */
+		atprotoUri: item.atprotoUri,
+		recordUrl: recordUrlFor(item.atprotoUri, pdsUrl),
 	};
+}
+
+/** The server holding a creator's identity, or "" when there is none to ask. */
+async function pdsUrlOf(userId: number | null): Promise<string> {
+	if (userId === null) return "";
+	const [row] = await db
+		.select({ pdsUrl: users.atprotoPdsUrl })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	return row?.pdsUrl ?? "";
 }
 
 /**
@@ -3112,9 +3133,10 @@ const contentRoutes = new Hono()
 		}
 
 		await Promise.all(items.map(resolveWorkThumbnail));
+		const pdsUrl = await pdsUrlOf(user.id);
 		return c.json({
 			works: items.map((i) =>
-				serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null),
+				serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null, pdsUrl),
 			),
 		});
 	})
@@ -3203,7 +3225,8 @@ const contentRoutes = new Hono()
 		 * the request never reached the code that used it.
 		 */
 		if (isOwner && previewRequest(c) === null) {
-			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null) });
+			const pdsUrl = await pdsUrlOf(work.creatorId);
+			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl) });
 		}
 
 		// Fire-and-forget view count, owners excluded.
@@ -3777,7 +3800,8 @@ const contentRoutes = new Hono()
 		]);
 
 		await resolveWorkThumbnail(updated);
-		return c.json({ work: serializeWork(updated, workAssets, jobRows[0] ?? null) });
+		const pdsUrl = await pdsUrlOf(updated.creatorId);
+		return c.json({ work: serializeWork(updated, workAssets, jobRows[0] ?? null, pdsUrl) });
 	})
 
 	/**
