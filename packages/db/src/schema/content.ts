@@ -206,25 +206,32 @@ export const works = pgTable(
 		downloadCount: bigint("download_count", { mode: "number" }).notNull().default(0),
 
 		// ── Content rating ──
-		// `unrated` | `general` | `mature`, and every Work is born `unrated` — a value
-		// rather than a null, because "nobody has said" and "somebody said General" are
-		// different facts and a report of *"this is mature and is not labeled as mature"*
-		// has to be able to tell them apart. Release is refused while it is `unrated`.
+		// `unrated` | `general` | `mature` | `adult`, and every Work is born `unrated` — a
+		// value rather than a null, because "nobody has said" and "somebody said General" are
+		// different facts and a report of *"this is mature and is not labeled as mature"* has
+		// to be able to tell them apart. Release is refused while it is `unrated`.
 		//
-		// 🚨 This gates nothing today. Mature work is allowed on Anthers and is simply
-		// unlabeled; the adults-only category that will payment-gate it is closed on
-		// moderation-capacity grounds. What the value does now is give the viewer filters
-		// something to read. The wiki's *Content Standards* carries the whole model, including the two standing
-		// principles that bound what `mature` may ever mean.
+		// Mature blurs a Work's cover by default and changes nothing else; Adult makes it
+		// invisible to anyone who has not opted in and verified they are an adult, and changes
+		// nothing about what its creator may charge or earn. The wiki's *Content Standards* and
+		// *The Rating Standard* carry the whole model, including the principles that bound what
+		// a rung may ever mean. `@anthers/shared/content-rating` is the transcription.
 		maturity: text("maturity").notNull().default("unrated"),
-		// Content notes — violence, sexual themes, substance use, and so on. Warnings for a
-		// reader rather than a classification: nothing reads this to decide access, which is
-		// what makes it safe to be expressive here and why there is nothing to enforce.
+		// Content notes — the matrix rows marked at any rung, derived from `maturity_rows` when a
+		// creator rates through the matrix. Warnings for a reader rather than a classification:
+		// nothing reads this to decide access.
 		maturityNotes: jsonb("maturity_notes").$type<string[]>().notNull().default([]),
+		// The rating matrix as its creator marked it: each kind of content (`RATING_ROWS`) as
+		// `none` or the rung it reaches, and a row absent from the object not yet answered. The
+		// difference between `none` and absent is the point of storing it: *Not in it* is a
+		// statement a reader's own filter can rely on, and an unanswered row is not (Parker,
+		// 2026-09-18). `maturity` is the highest row once every row is answered, and an
+		// incomplete matrix changes no rating, so a rated Work is never un-rated by one.
+		maturityRows: jsonb("maturity_rows").$type<Record<string, string>>().notNull().default({}),
 		// `creator` | `operator`, and null while nobody has rated it. This is what makes an
 		// operator's correction hold: while it reads `operator`, the creator may raise the
 		// rating but not lower it, and lowering it takes an appeal. See
-		// `services/content-rating.ts`, the only writer of all four of these columns.
+		// `services/content-rating.ts`, the only writer of all five of these columns.
 		maturitySource: text("maturity_source"),
 		maturitySetAt: timestamp("maturity_set_at", { withTimezone: true }),
 

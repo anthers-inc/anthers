@@ -14,13 +14,13 @@
  *
  * Three decisions are frozen here.
  *
- * 1. **The rating decides access and the notes describe the work.** A Work carries exactly
- *    one `MaturityRating`, and that single value is what a viewer filter reads and what the
- *    Adult rung will attach to when it opens. The notes beside it carry no access consequence
- *    from the platform and never will — 🚨 **a note may be read by a reader's own filter and
- *    may never drive a platform default**, so the most one can cost a creator is a blur shown
- *    to somebody who asked to be warned about exactly that. The expressiveness lives off the
- *    axis that carries consequences, which is what makes it safe to have.
+ * 1. **The rating decides access, and it is the highest row of one matrix.** A Work carries
+ *    exactly one `MaturityRating`, and that single value is what a viewer filter reads and
+ *    what the Adult rung attaches to. A creator declares it by marking each kind of content in
+ *    `RATING_ROWS`, and the rows marked at a rung are the Work's notes. A note carries no access
+ *    consequence of its own — 🚨 **a note may be read by a reader's own filter and may never
+ *    drive a platform default**, so the most one can cost a creator is a blur shown to
+ *    somebody who asked to be warned about exactly that.
  *
  * 2. **`unrated` is a real state and not a missing value.** Defaulting a Work to `general`
  *    would assert a rating on a creator's behalf that nobody asked them for, and would make
@@ -46,9 +46,10 @@
  * - `general` — its creator says anyone can meet it.
  * - `mature` — its creator (or an operator) says it is made for adults. A warning and a
  *   filter input, carrying no access consequence at all.
- * - `adult` — explicit sexual depiction central to the work. Reachable only by an account
- *   that has opted in and verified an adult, and invisible to everyone else. It costs its
- *   creator nothing: Adult work may be free, may be Public Access, and earns the Time Pool.
+ * - `adult` — explicit sexual depiction central to the work, or extreme violence or drug use
+ *   that is the work's focus (see `RATING_ROWS`). Reachable only by an account that has opted
+ *   in and verified an adult, and invisible to everyone else. It costs its creator nothing:
+ *   Adult work may be free, may be Public Access, and earns the Time Pool.
  *
  * 🚨 **Nothing above `adult` is a rating.** Work made for the purpose of sexual
  * gratification is not published on Anthers at all, so there is no rung for it and no reason
@@ -125,7 +126,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
 		// at it — that is `ACCEPTED_MATURITY_RATINGS`, it changes, and a sentence here would
 		// go stale.
 		label: "Adult",
-		hint: "Explicit sexual depiction that is central to the work. This changes who can reach it and nothing else: only people who have opted in and verified that they are adults. You can still price it however you like, still leave it free in Public Access, and it still earns from the Time Pool.",
+		hint: "Explicit sexual depiction central to the work, or extreme violence or drug use that is the work's focus. This changes who can reach it and nothing else: only people who have opted in and verified that they are adults. You can still price it however you like, still leave it free in Public Access, and it still earns from the Time Pool.",
 	},
 ] as const;
 
@@ -322,10 +323,12 @@ export const MATURITY_DISPLAY_CHOICES: readonly MaturityDisplayDef[] = [
 /**
  * A content note — what someone meeting this work should know is in it.
  *
- * ⭐ **These are warnings, not classifications, and nothing reads them to decide access.**
- * That is what keeps them honest: there is no advantage to leaving one off, so there is
- * nothing here to enforce and nothing to appeal. If several ratings are ever genuinely
- * wanted, these are the inputs a computed rating would read.
+ * ⭐ **A note is a row of the rating matrix marked at any rung**, so the notes and the rating
+ * are one answer rather than two (Parker, 2026-09-18): a creator marks each kind of content
+ * *Not in it*, General, Mature or Adult, the Work takes the highest rung any row reaches, and
+ * every row marked at a rung is a note. A note still carries no access consequence of its own.
+ * The identifiers are the stored values and outlived the labels, so `sexual-themes` is labeled
+ * *Sexual Content* after the Rating Standard's row.
  */
 export type ContentNote =
 	| "violence"
@@ -335,19 +338,159 @@ export type ContentNote =
 	| "horror"
 	| "language";
 
+/** What a row of the matrix says about a Work: not in it, or in it at a rung. */
+export type RowLevel = "none" | DeclarableMaturity;
+
+/**
+ * One row of the rating matrix: a kind of content, and where each rung begins on it.
+ *
+ * 🚨 **The wiki's *The Rating Standard* owns these lines, and this is their transcription.** Its
+ * table and this one must say the same thing, cell for cell, because the creator reads this one
+ * while choosing and an operator reads that one while correcting. A rung set to null is one the
+ * standard says the row never reaches, which the matrix shows and does not offer.
+ */
+export interface RatingRowDef {
+	/** The stored value, which is also the note a row marked at any rung puts on the Work. */
+	note: ContentNote;
+	label: string;
+	/** Where each rung begins on this row, or null where the row never reaches it. */
+	rungs: Record<DeclarableMaturity, string | null>;
+	/** Said under the row's name, where the row has a line past its last rung. */
+	after?: string;
+}
+
+/**
+ * The rows, in the order the matrix and the notes are shown.
+ *
+ * ⚠️ **Adult is reachable on three rows and on no others**: sexual content, violence and
+ * substance use, which are the MPA's NC-17 descriptors adapted (Parker, 2026-09-18). Self-harm
+ * and horror stop at Mature, and language never rates at all. On Violence and Substance use the
+ * Adult line is the work's focus rather than any moment in it, because Adult costs a creator
+ * discoverability and the standard draws expensive lines tightly: a story with graphic violence
+ * in it, on-screen dismemberment included, is Mature.
+ */
+export const RATING_ROWS: readonly RatingRowDef[] = [
+	{
+		note: "violence",
+		label: "Violence",
+		rungs: {
+			general:
+				"Conflict, peril or injury shown without dwelling on it; stylized, fantasy or cartoon violence",
+			mature:
+				"Realistic injury in sustained detail: gore, mutilation or torture shown rather than implied",
+			adult:
+				"Exceptionally graphic, prolonged violence as the work's focus, such as torture or dismemberment dwelt on for its own sake",
+		},
+	},
+	{
+		note: "sexual-themes",
+		label: "Sexual Content",
+		rungs: {
+			general: "Romance and attraction; sex implied or cut away from; nudity that isn't sexual",
+			mature: "Sexual activity depicted rather than implied; sexually oriented nudity",
+			adult: "Explicit sexual depiction central to the work, made for something other than arousal",
+		},
+		after: "Anything made for the purpose of sexual gratification isn't published on Anthers.",
+	},
+	{
+		note: "substance-use",
+		label: "Substance Use",
+		rungs: {
+			general: "Presence, reference, use, consequence, addiction or recovery",
+			mature: "Use depicted in reproducible real-world detail: method, dose or synthesis",
+			adult: "Pervasive, graphic drug use as the work's focus, depicted with extreme realism",
+		},
+	},
+	{
+		note: "self-harm",
+		label: "Self-Harm and Suicide",
+		rungs: {
+			general: "Presence, aftermath, ideation, discussion or recovery",
+			mature: "Method depicted in reproducible detail",
+			adult: null,
+		},
+	},
+	{
+		note: "horror",
+		label: "Intense Horror",
+		rungs: {
+			general: "Dread, threat, jump scares, monsters, non-graphic death",
+			mature: "Sustained graphic body horror or torture, or extended depiction of extreme distress",
+			adult: null,
+		},
+	},
+	{
+		note: "language",
+		label: "Strong Language",
+		rungs: {
+			general: "Any, at any amount. Language never changes a rating.",
+			mature: null,
+			adult: null,
+		},
+	},
+] as const;
+
 export interface ContentNoteDef {
 	value: ContentNote;
 	label: string;
 }
 
-export const CONTENT_NOTES: readonly ContentNoteDef[] = [
-	{ value: "violence", label: "Violence" },
-	{ value: "sexual-themes", label: "Sexual Themes" },
-	{ value: "substance-use", label: "Substance Use" },
-	{ value: "self-harm", label: "Self-Harm" },
-	{ value: "horror", label: "Intense Horror" },
-	{ value: "language", label: "Strong Language" },
-] as const;
+/** The notes, drawn from the matrix's rows so the two can never name different things. */
+export const CONTENT_NOTES: readonly ContentNoteDef[] = RATING_ROWS.map((row) => ({
+	value: row.note,
+	label: row.label,
+}));
+
+/** What a creator has marked, row by row. A row absent from it has not been answered. */
+export type MaturityRows = Partial<Record<ContentNote, RowLevel>>;
+
+/**
+ * Keep only rows this build knows, at levels those rows can take.
+ *
+ * ⚠️ **A level a row cannot reach is dropped, not lowered**, so a request marking Self-Harm as
+ * Adult leaves that row unanswered rather than quietly answering it at Mature on the creator's
+ * behalf. Anything unreadable is treated as no answer at all.
+ */
+export function normalizeMaturityRows(input: unknown): MaturityRows {
+	const rows: MaturityRows = {};
+	if (input == null || typeof input !== "object") return rows;
+	const given = input as Record<string, unknown>;
+	for (const row of RATING_ROWS) {
+		const level = given[row.note];
+		if (level === "none") rows[row.note] = "none";
+		else if (
+			(level === "general" || level === "mature" || level === "adult") &&
+			row.rungs[level] !== null
+		) {
+			rows[row.note] = level;
+		}
+	}
+	return rows;
+}
+
+/**
+ * The rating the rows add up to: the highest rung any row reaches, and General when every row
+ * is *Not in it* or General. Null until every row is answered, because an unanswered row is not
+ * a declaration of anything, and a rating assembled from half a matrix would be the editor
+ * answering the rest on the creator's behalf.
+ */
+export function ratingFromRows(rows: MaturityRows): DeclarableMaturity | null {
+	let rating: DeclarableMaturity = "general";
+	for (const row of RATING_ROWS) {
+		const level = rows[row.note];
+		if (level === undefined) return null;
+		if (level !== "none" && CAUTION[level] > CAUTION[rating]) rating = level;
+	}
+	return rating;
+}
+
+/** The notes the rows put on a Work: every row marked at a rung, in the canonical order. */
+export function notesFromRows(rows: MaturityRows): ContentNote[] {
+	return RATING_ROWS.filter((row) => {
+		const level = rows[row.note];
+		return level !== undefined && level !== "none";
+	}).map((row) => row.note);
+}
 
 export const CONTENT_NOTE_VALUES: readonly string[] = CONTENT_NOTES.map((n) => n.value);
 

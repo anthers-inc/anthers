@@ -192,12 +192,20 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 	);
 }
 
-/** The Mature warning and its content notes. Nothing for a General Work. */
+/**
+ * The rating and its content notes, for a Mature or Adult Work. Nothing for a General Work,
+ * which is nearly all of them. An Adult Work reaches only readers who opted in and verified, and
+ * it is labeled for them all the same, because its notes are as much a warning there as anywhere.
+ */
 export function WorkRating({ work }: { work: WorkDetail }) {
-	if (work.maturity !== "mature") return null;
+	if (work.maturity !== "mature" && work.maturity !== "adult") return null;
 	return (
 		<div className="flex flex-wrap items-center gap-2 text-sm">
-			<span className="badge badge-warning badge-sm">Mature</span>
+			<span
+				className={`badge badge-sm ${work.maturity === "adult" ? "badge-error" : "badge-warning"}`}
+			>
+				{work.maturity === "adult" ? "Adult" : "Mature"}
+			</span>
 			{(work.maturityNotes ?? []).length > 0 && (
 				<span className="text-base-content/60">
 					{(work.maturityNotes ?? []).map(contentNoteLabel).join(" · ")}

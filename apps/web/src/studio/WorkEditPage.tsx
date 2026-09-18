@@ -47,12 +47,15 @@
  */
 
 import {
-	CONTENT_NOTES,
 	type ContentNote,
 	contentNoteLabel,
-	MATURITY_CHOICES,
 	type MaturityRating,
+	type MaturityRows,
+	maturityLabel,
 	normalizeContentNotes,
+	normalizeMaturityRows,
+	notesFromRows,
+	ratingFromRows,
 } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
@@ -107,6 +110,7 @@ import {
 	WorkHeader,
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
+import RatingMatrix from "./RatingMatrix";
 import { unsavedKey } from "./work-edit";
 
 function formatFileSize(bytes: number): string {
@@ -230,26 +234,31 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const [streamEnabled, setStreamEnabled] = useState(editing.streamEnabled ?? true);
 	const [downloadEnabled, setDownloadEnabled] = useState(editing.downloadEnabled ?? false);
 
-	// The content rating. Held as `null` until answered rather than pre-selected as General:
-	// a default here would be the editor answering on the creator's behalf, which is the one
-	// thing `unrated` exists in the schema to prevent. The release checkbox below refuses to
-	// be ticked while it is null, so the question is asked at the moment it matters.
-	// Reads the vocabulary rather than listing the values, so a rung added to the scale is
-	// carried into the editor rather than silently falling back to "unanswered" on a Work
-	// that is in fact rated.
-	const [maturity, setMaturity] = useState<Exclude<MaturityRating, "unrated"> | null>(
-		editing.maturity && editing.maturity !== "unrated" ? editing.maturity : null,
-	);
-	const [contentNotes, setContentNotes] = useState<ContentNote[]>(() =>
-		normalizeContentNotes(editing.maturityNotes ?? []),
-	);
+	// The content rating, as the matrix a creator marks row by row (`RatingMatrix`). Nothing is
+	// preselected: an unanswered row is not a declaration, and a default would be the editor
+	// answering on the creator's behalf, which is the one thing `unrated` exists in the schema to
+	// prevent. The release checkbox below refuses to be ticked until there is a rating.
+	const [rows, setRows] = useState<MaturityRows>(() => normalizeMaturityRows(editing.maturityRows));
+	/**
+	 * Whether the rows differ from what is saved, and so whether a save sends them. Sent
+	 * unchanged, they would re-declare the rating they add up to, which an operator's correction
+	 * above it would refuse on every save of anything else.
+	 */
+	const rowsChanged =
+		JSON.stringify(normalizeMaturityRows(rows)) !==
+		JSON.stringify(normalizeMaturityRows(current.maturityRows));
+	// The rating the page stands at: what the rows add up to once every row is answered, and the
+	// Work's own rating until then, because an incomplete matrix changes no rating on the server.
+	const fromRows = ratingFromRows(rows);
+	const storedMaturity =
+		current.maturity && current.maturity !== "unrated" ? current.maturity : null;
+	const maturity = fromRows ?? storedMaturity;
+	const contentNotes = fromRows
+		? notesFromRows(rows)
+		: normalizeContentNotes(current.maturityNotes ?? []);
 	// An operator's correction. The creator may make it more cautious at any time and may
 	// not make it less, so the control stays live and the appeal is what the copy points at.
-	const maturityLocked = editing.maturityLocked ?? false;
-	const toggleNote = (note: ContentNote) =>
-		setContentNotes((prev) =>
-			normalizeContentNotes(prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note]),
-		);
+	const maturityLocked = current.maturityLocked ?? false;
 
 	// Access. The creator's Badge ladder is fetched below because rungs live on the creator,
 	// not on the Work — `buildSeedRows` merges the Work's stored rows onto whatever rungs
@@ -416,10 +425,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			authoredAt: authoredToIso(authoredPrecision, authoredValue),
 			...details.fields(),
 		};
-		if (maturity) {
-			json.maturity = maturity;
-			json.maturityNotes = contentNotes;
-		}
+		if (rowsChanged) json.maturityRows = normalizeMaturityRows(rows);
 		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
 		return json;
 	};
@@ -914,30 +920,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					</p>
 				</div>
 
-				{/* The content rating. Nothing is preselected — see the state above. */}
+				{/* The content rating, as one matrix of content and rating. Nothing is preselected —
+				    see the state above. */}
 				<div id="work-rating" className="border-t border-base-300 pt-4 flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Rating</h2>
-					<div className="flex flex-col gap-1">
-						{MATURITY_CHOICES.map((choice) => (
-							<label
-								key={choice.value}
-								className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 hover:border-primary/50"
-							>
-								<input
-									type="radio"
-									name="work-maturity"
-									className="radio radio-sm mt-0.5"
-									value={choice.value}
-									checked={maturity === choice.value}
-									onChange={() => setMaturity(choice.value)}
-								/>
-								<span>
-									<span className="block text-sm font-medium">{choice.label}</span>
-									<span className="block text-xs text-base-content/50">{choice.hint}</span>
-								</span>
-							</label>
-						))}
-					</div>
+					<RatingMatrix rows={rows} onChange={setRows} />
+					{!fromRows && storedMaturity && (
+						<p className="text-xs text-base-content/60">
+							This Work is rated {maturityLabel(storedMaturity)} today. Answering every row replaces
+							that with the rating the rows add up to.
+						</p>
+					)}
 					{maturityLocked && (
 						<div className="alert alert-info text-sm">
 							<span>
@@ -946,34 +939,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							</span>
 						</div>
 					)}
-					{/* Stated where the creator meets the control, because it is the rule most
-					    often got wrong elsewhere and a policy page nobody opens cannot fix that. */}
-					<p className="text-xs text-base-content/50">
-						Queer characters, relationships and identity are not Mature, and neither is a difficult
-						subject on its own. What this reads is how the work treats it.
-					</p>
-					<div>
-						<p className="text-xs font-medium text-base-content/70">Content notes (optional)</p>
-						<p className="text-xs text-base-content/50">
-							What someone should know is in this. These describe the work and change nothing about
-							who can reach it.
-						</p>
-						<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-							{CONTENT_NOTES.map((note) => (
-								<label key={note.value} className="label cursor-pointer justify-start gap-2">
-									<input
-										type="checkbox"
-										className="checkbox checkbox-sm"
-										checked={contentNotes.includes(note.value)}
-										onChange={() => toggleNote(note.value)}
-									/>
-									<span className="label-text text-sm">{note.label}</span>
-								</label>
-							))}
-						</div>
-					</div>
 					{maturityLocked && (
-						<RatingAppeal workId={current.id} corrected={editing.maturity ?? "mature"} />
+						<RatingAppeal workId={current.id} corrected={current.maturity ?? "mature"} />
 					)}
 				</div>
 
@@ -1078,8 +1045,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					)}
 					{!maturity && (
 						<p className="text-xs text-warning">
-							Pick a rating above first. Nothing goes into your public Catalog until somebody has
-							said whether it is General or Mature.
+							Answer every row of the Rating above first. Nothing goes into your public Catalog
+							until it has a rating.
 						</p>
 					)}
 					{serverDown && visibility !== "released" && (
@@ -1277,12 +1244,18 @@ function RatingLine({
 			{maturity ? "Change" : "Rate it"}
 		</button>
 	);
-	const label = MATURITY_CHOICES.find((c) => c.value === maturity)?.label;
+	const label = maturity ? maturityLabel(maturity) : null;
 	return (
 		<div className="flex flex-wrap items-center gap-2 text-sm">
 			{maturity ? (
 				<span
-					className={`badge badge-sm ${maturity === "general" ? "badge-ghost" : "badge-warning"}`}
+					className={`badge badge-sm ${
+						maturity === "general"
+							? "badge-ghost"
+							: maturity === "adult"
+								? "badge-error"
+								: "badge-warning"
+					}`}
 				>
 					{label ?? maturity}
 				</span>

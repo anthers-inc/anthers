@@ -585,4 +585,80 @@ describe("content ratings", () => {
 			expect(work.maturityLocked).toBe(true);
 		});
 	});
+
+	describe("declared through the rating matrix", () => {
+		/** Every row answered: nothing in it, apart from what `over` marks. */
+		const rows = (over: Record<string, string> = {}) => ({
+			violence: "none",
+			"sexual-themes": "none",
+			"substance-use": "none",
+			"self-harm": "none",
+			horror: "none",
+			language: "none",
+			...over,
+		});
+
+		it("rates a Work at the highest row once every row is answered, and notes each row", async () => {
+			const workId = await makeWork();
+			const res = await patch(workId, {
+				maturityRows: rows({ violence: "mature", language: "general" }),
+			});
+			expect(res.status).toBe(200);
+			const row = await reload(workId);
+			expect(row.maturity).toBe("mature");
+			expect(row.maturitySource).toBe("creator");
+			expect(row.maturityNotes).toEqual(["violence", "language"]);
+			// Stored as marked, Not in It and all, which is what a reader's filter can rely on.
+			expect(row.maturityRows).toMatchObject({ violence: "mature", horror: "none" });
+		});
+
+		it("rates nothing from half a matrix, and never un-rates a rated Work", async () => {
+			const workId = await makeWork({ maturity: "general" });
+			const { language: _left, ...fiveRows } = rows({ violence: "mature" });
+			expect((await patch(workId, { maturityRows: fiveRows })).status).toBe(200);
+			const row = await reload(workId);
+			// The rows are kept for the creator to finish, and the rating stands meanwhile.
+			expect(row.maturity).toBe("general");
+			expect(row.maturityRows).toMatchObject({ violence: "mature" });
+			expect(row.maturityRows).not.toHaveProperty("language");
+		});
+
+		it("rates Adult from a violence row, which the Rating Standard now allows", async () => {
+			const workId = await makeWork();
+			expect((await patch(workId, { maturityRows: rows({ violence: "adult" }) })).status).toBe(200);
+			expect((await reload(workId)).maturity).toBe("adult");
+		});
+
+		it("refuses rows that add up below an operator's correction", async () => {
+			const workId = await makeWork({ maturity: "general" });
+			expect((await correct(workId, "adult")).status).toBe(200);
+			const lower = await patch(workId, { maturityRows: rows({ violence: "mature" }) });
+			expect(lower.status).toBe(409);
+			expect((await lower.json()).code).toBe("maturity_locked");
+			expect((await reload(workId)).maturity).toBe("adult");
+			// And rows that reach the operator's rung are the creator's own to mark.
+			const same = await patch(workId, { maturityRows: rows({ "sexual-themes": "adult" }) });
+			expect(same.status).toBe(200);
+		});
+
+		it("gives the creator their matrix back, and a stranger nothing of it", async () => {
+			const workId = await makeWork();
+			// Released, so the stranger is answered with the reader's shape rather than a 404,
+			// which would make the absence below true of nothing.
+			const released = await patch(workId, {
+				maturityRows: rows({ horror: "general" }),
+				visibility: "released",
+			});
+			expect(released.status).toBe(200);
+			const own = await (
+				await req(`/api/content/works/${workId}`, { headers: { Cookie: creator } })
+			).json();
+			expect(own.work.maturityRows).toMatchObject({ horror: "general" });
+			const theirs = await (
+				await req(`/api/content/works/${workId}`, { headers: { Cookie: stranger } })
+			).json();
+			expect(theirs.work.title).toBe(`Rating fixture ${id}`);
+			expect(theirs.work.maturityRows).toBeUndefined();
+		});
+	});
 });

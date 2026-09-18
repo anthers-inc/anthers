@@ -609,8 +609,9 @@ export const mediaQuarantine = pgTable(
  * A creator's appeal against an operator's correction of their Work's maturity rating.
  *
  * 🚨 **The appeal is part of the rating feature rather than a later refinement**, and the wiki's *Content Standards*
- * is emphatic about why: the adults-only category is payment-gated, so an over-cautious call
- * does not merely add a warning to a work — it puts it behind a paywall. For a queer
+ * is emphatic about why: the Adult rung makes a Work invisible to anyone who has not opted in and
+ * verified they are an adult, so an over-cautious call does not merely add a warning to a work —
+ * it takes most of its audience away. For a queer
  * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
  * prevent, produced by the mechanism meant to prevent it. Shipping a correction path without
  * a way to contest it would build only the half that can do damage.

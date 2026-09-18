@@ -383,9 +383,9 @@ function MatureContentSection() {
 				<div className="border-t border-base-300 pt-4">
 					<p className="font-medium text-sm">Adult</p>
 					<p className="text-xs text-base-content/60">
-						Explicit sexual content. You will not see it anywhere on Anthers unless you turn this
-						on. Creators set their own price for it, or leave it free, exactly as they would for
-						anything else.
+						Explicit sexual content, or extreme violence or drug use that is the work's focus. You
+						will not see it anywhere on Anthers unless you turn this on. Creators set their own
+						price for it, or leave it free, exactly as they would for anything else.
 					</p>
 
 					{prefs.adultAccess.canReach ? (

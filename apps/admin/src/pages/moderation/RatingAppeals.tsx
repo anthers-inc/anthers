@@ -3,9 +3,9 @@
  * Rating appeals — the operator's half of the content-rating surface.
  *
  * 🚨 **This queue exists because the correction can do harm, and it is not the optional
- * half of the feature.** Anthers' Adult rung is payment-gated, so an
- * over-cautious call does not merely add a warning to a work — it puts it behind a
- * paywall. For a queer coming-of-age story wrongly flagged, that is exactly the harm the
+ * half of the feature.** Anthers' Adult rung makes a Work invisible to anyone who has not
+ * opted in and verified they are an adult, so an over-cautious call does not merely add a
+ * warning to a work — it takes most of its audience away. For a queer coming-of-age story wrongly flagged, that is exactly the harm the
  * category exists to prevent, produced by the mechanism meant to prevent it (the wiki's *Content Standards*).
  * An operator surface that could correct a rating and offered no way to contest it would
  * be only the half that can do damage.

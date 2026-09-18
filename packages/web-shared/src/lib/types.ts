@@ -9,7 +9,7 @@
  * Projects group a creator's Works and Posts.
  */
 
-import type { ContentNote, MaturityRating } from "@anthers/shared/content-rating";
+import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
 
 // ─── User Types ───
 
@@ -266,6 +266,8 @@ export interface Work {
 	 */
 	maturity?: MaturityRating;
 	maturityNotes?: ContentNote[];
+	/** The rating matrix as its creator marked it (owner's shape only); absent rows are unanswered. */
+	maturityRows?: MaturityRows;
 	/**
 	 * Whether an operator set the rating. **Creator-facing only** — the viewer serialization
 	 * withholds it, because a viewer able to read it could tell a corrected Work from a
@@ -349,6 +351,8 @@ export interface WorkInput {
 	 */
 	maturity?: Exclude<MaturityRating, "unrated">;
 	maturityNotes?: ContentNote[];
+	/** The rating matrix; a complete one decides the rating and the notes. */
+	maturityRows?: MaturityRows;
 	authoredAt?: string | null;
 	authoredPrecision?: AuthoredPrecision | null;
 	streamEnabled?: boolean;

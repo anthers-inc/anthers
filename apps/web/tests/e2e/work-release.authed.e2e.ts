@@ -195,7 +195,8 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// one while the editor had no URL, which is the smallest concrete thing the page bought.
 	await cardFor(page).getByRole("link", { name: "Rate this" }).click();
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
-	await page.getByRole("radio", { name: "General" }).check();
+	// Rated through the matrix: every row answered Not in It is a General Work.
+	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
 
 	// The Created date, at year precision, on the same save. Its whole reason for existing is
 	// back-dating a catalog, which is what a creator arriving with years of work actually does.
