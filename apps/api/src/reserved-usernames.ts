@@ -69,7 +69,12 @@ const STAFF_PREFIXES = ["anthers-", "anthers_"];
  * holder is gone re-opens it to anybody**, so removing the line is part of offboarding
  * rather than tidying afterwards.
  */
-const ISSUED_STAFF_USERNAMES = ["anthers-parker"];
+const ISSUED_STAFF_USERNAMES = [
+	"anthers-parker",
+	// The account Anthers tests production with. It is the organization's own, which is what
+	// earns it the prefix.
+	"anthers-test",
+];
 
 /** Lower-cased for case-insensitive comparison — see the note on `@Admin` above. */
 export const RESERVED_USERNAMES: ReadonlySet<string> = new Set(

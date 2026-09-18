@@ -108,6 +108,7 @@ describe("the official-account prefix", () => {
 		// ever fails, the person it names cannot re-create their own account.
 		expect(isReservedUsername("anthers-parker")).toBe(false);
 		expect(isReservedUsername("ANTHERS-PARKER")).toBe(false);
+		expect(isReservedUsername("anthers-test")).toBe(false);
 	});
 
 	it("leaves a community name alone, which is the deliberate limit of the rule", () => {
