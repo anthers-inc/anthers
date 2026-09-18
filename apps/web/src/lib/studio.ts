@@ -8,8 +8,8 @@
  * origin-sniffing branch (localhost:3001, `studio.<apex>`, stripping `www.`) is gone.
  *
  * 🚨 The definitions moved to `@anthers/web-shared/studio` on 2026-08-17 and this file is a
- * re-export, not a second copy. The Studio's PAGES live in that package and link to each
- * other; its ROUTES are mounted here. A prefix defined on this side of that boundary is one
+ * re-export, not a second copy. Most of the Studio's PAGES live in that package and link to
+ * each other; its ROUTES are mounted here. A prefix defined on this side of that boundary is one
  * the pages cannot reach, which is exactly how they spent six days linking to the pre-merge
  * root paths — see the header there for what that rendered instead.
  *

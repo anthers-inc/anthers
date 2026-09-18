@@ -29,8 +29,8 @@
  *     hard-navigate across origins; it is an in-app redirect now.
  *   - **That the Studio's own buttons GO there** — added 2026-08-17, and the gap they close
  *     is the point. Every test above reaches a route by typing its URL, which is precisely
- *     what cannot see a wrong `<Link to>`. The Studio's pages live in `@anthers/web-shared`
- *     while its routes are mounted in `apps/web`, so the merge re-prefixed the shell's nav
+ *     what cannot see a wrong `<Link to>`. Most of the Studio's pages live in
+ *     `@anthers/web-shared` while its routes are mounted in `apps/web`, so the merge re-prefixed the shell's nav
  *     and left the pages linking to the pre-merge root paths, none of which announced
  *     themselves as broken. ⚠️ **A wrong in-app link still need not 404** — `/settings`,
  *     `/library` and `/@somebody` are all real destinations a stale Studio link could

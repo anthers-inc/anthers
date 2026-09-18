@@ -2,8 +2,9 @@
 /**
  * Paths into the Creator Studio — the ONE place the `/studio` prefix is written.
  *
- * 🚨 **The Studio's pages live in this package while its ROUTES are mounted by the consuming
- * app, so a page here cannot see where it was mounted.** That split is what made every
+ * 🚨 **Most of the Studio's pages live in this package while its ROUTES are mounted by the
+ * consuming app, so a page here cannot see where it was mounted.** The exception is a Work's Edit
+ * page, which lives in `apps/web` because it lays the Work out with the web app's own players. That split is what made every
  * in-Studio link rot silently when the Studio stopped being its own app at
  * `studio.anthers.org`: the shell's nav was re-prefixed and the pages went on linking to
  * root-absolute paths like `/projects/new` and `/analytics`, which is a whole navigation
