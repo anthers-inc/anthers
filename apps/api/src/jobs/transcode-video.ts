@@ -23,6 +23,7 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
+import { queueScansForWork } from "./scan-media.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
@@ -349,6 +350,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
 				await db.update(works).set({ thumbnail: thumbnailUrl }).where(eq(works.id, item.id));
+				// New bytes in the public bucket, so scanned now rather than whenever the hourly
+				// sweep finds them. The video's own scan runs beside this job and normally answered
+				// long before the encode finished, so usually only the thumbnail is sent.
+				await queueScansForWork({ ...item, thumbnail: thumbnailUrl });
 			}
 		}
 

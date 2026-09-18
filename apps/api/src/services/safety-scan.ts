@@ -559,6 +559,22 @@ export function scannableKeys(
 	return [...out].map(([key, kind]) => ({ key, kind }));
 }
 
+/** The objects among these that have no answer recorded, which is what "owed" means here. */
+async function unanswered(objects: ScannableObject[]): Promise<ScannableObject[]> {
+	if (objects.length === 0) return [];
+	const answered = await db
+		.select({ storageKey: mediaScans.storageKey })
+		.from(mediaScans)
+		.where(
+			inArray(
+				mediaScans.storageKey,
+				objects.map((o) => o.key),
+			),
+		);
+	const seen = new Set(answered.map((row) => row.storageKey));
+	return objects.filter((o) => !seen.has(o.key));
+}
+
 /**
  * Stamp a Work as owing scans, and say which objects those are.
  *
@@ -567,14 +583,19 @@ export function scannableKeys(
  * means the Work owes nothing and nothing should be enqueued — and leaves `scan_queued_at`
  * untouched, so a Work that never had a scannable object never acquires a clock.
  *
- * ⚠️ **Re-stamping on every enqueue is deliberate.** Replacing a thumbnail is new bytes from
- * the same uploader owing a fresh answer, so the grace window restarts with it.
+ * ⭐ **Only objects with no answer are owed.** An object's key changes whenever its bytes do —
+ * every upload and every generated thumbnail is written under a fresh name — so a key with a
+ * row has been answered. Naming it again would re-decode a whole video to cover a new
+ * thumbnail beside it.
+ *
+ * ⚠️ **Re-stamping whenever something is owed is deliberate.** Replacing a thumbnail is new
+ * bytes from the same uploader owing a fresh answer, so the grace window restarts with it.
  */
 export async function beginScans(
 	work: WorkRow,
 	now: Date = new Date(),
 ): Promise<ScannableObject[]> {
-	const objects = scannableKeys(work);
+	const objects = await unanswered(scannableKeys(work));
 	if (objects.length === 0) return [];
 	await db.update(works).set({ scanQueuedAt: now }).where(eq(works.id, work.id));
 	return objects;
@@ -670,19 +691,7 @@ export async function worksOwedScans(
 
 	const owed: Array<{ id: number; objects: ScannableObject[] }> = [];
 	for (const work of candidates) {
-		const objects = scannableKeys(work);
-		if (objects.length === 0) continue;
-		const answered = await db
-			.select({ storageKey: mediaScans.storageKey })
-			.from(mediaScans)
-			.where(
-				inArray(
-					mediaScans.storageKey,
-					objects.map((o) => o.key),
-				),
-			);
-		const seen = new Set(answered.map((row) => row.storageKey));
-		const pending = objects.filter((o) => !seen.has(o.key));
+		const pending = await unanswered(scannableKeys(work));
 		if (pending.length > 0) owed.push({ id: work.id, objects: pending });
 	}
 	return owed;

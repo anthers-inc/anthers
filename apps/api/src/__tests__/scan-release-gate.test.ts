@@ -170,6 +170,28 @@ describe("release waits for a safety scan, and gives way", () => {
 			expect((await reload(work.id)).scanQueuedAt).toBeInstanceOf(Date);
 		});
 
+		it("names only the objects with no answer, so a new thumbnail does not resend its video", async () => {
+			// Keys change whenever bytes do, so an answered key is finished. Sending it again would
+			// re-decode a whole video to cover the thumbnail beside it.
+			const work = await stage({
+				type: "image",
+				sourceKey: KEY("answered-source"),
+				thumbnail: KEY("new-thumbnail"),
+			});
+			await answer(KEY("answered-source"), "clean", work.id);
+
+			expect(await beginScans(work)).toEqual([{ key: KEY("new-thumbnail"), kind: "image" }]);
+			expect((await reload(work.id)).scanQueuedAt).toBeInstanceOf(Date);
+		});
+
+		it("starts no clock when every object already has its answer", async () => {
+			const work = await stage({ type: "image", sourceKey: KEY("all-answered") });
+			await answer(KEY("all-answered"), "clean", work.id);
+
+			expect(await beginScans(work)).toEqual([]);
+			expect((await reload(work.id)).scanQueuedAt).toBeNull();
+		});
+
 		it("starts no clock on a Work that will never owe a scan", async () => {
 			// A text Work with no thumbnail has nothing an image hash can read. Stamping it
 			// would make the gate wait forever for an answer nobody was ever going to give.

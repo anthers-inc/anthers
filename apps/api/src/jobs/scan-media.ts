@@ -18,7 +18,35 @@
  * a *falsely* clean one is a lie in our own records.
  */
 
-import { type ScannableKind, scanStoredImage, scanStoredVideo } from "../services/safety-scan.js";
+import type { works } from "@anthers/db/schema";
+import {
+	beginScans,
+	type ScannableKind,
+	scanStoredImage,
+	scanStoredVideo,
+} from "../services/safety-scan.js";
+import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
+
+/**
+ * Queue a scan for each of a Work's objects that has no answer yet, restarting its release
+ * clock when anything is owed.
+ *
+ * 🚨 **Every writer that attaches an object to a Work calls this**, and there are two: the
+ * content routes, when a file or a thumbnail arrives, and the video transcode, which attaches
+ * the poster thumbnail it generates. The transcode used to write its thumbnail straight onto the
+ * Work, so a released video's poster sat in the public bucket unscanned until the hourly
+ * `rescan-owed` sweep found it. `beginScans` decides what is owed; the key set is the one the
+ * release gate waits on, so it is never computed a second way.
+ */
+export async function queueScansForWork(work: typeof works.$inferSelect): Promise<void> {
+	for (const object of await beginScans(work)) {
+		await queue.send(
+			QUEUES.SCAN_MEDIA,
+			{ storageKey: object.key, workId: work.id, kind: object.kind },
+			JOB_OPTIONS[QUEUES.SCAN_MEDIA],
+		);
+	}
+}
 
 export interface ScanMediaData {
 	/** The stored object to scan. */
