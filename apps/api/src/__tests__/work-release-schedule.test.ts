@@ -10,9 +10,11 @@
  *
  * ⚠️ `queue.send` is replaced, so the listing sync a release asks for can be read rather than run.
  */
+
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import { notifications, stripeAccounts, transcodingJobs, works } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { CRON_SCHEDULES, QUEUES, queue } from "../jobs/queue";
@@ -123,7 +125,7 @@ describe("scheduling a release", () => {
 		expect((await row(workId)).scheduledReleaseAt).toBeNull();
 
 		const accepted = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
-			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 			scheduledReleaseAt: inAnHour(),
 		});
 		expect(accepted.status).toBe(200);

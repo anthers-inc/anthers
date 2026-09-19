@@ -15,6 +15,7 @@
  */
 
 import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
+import { isRatingComplete } from "@anthers/shared/content-rating";
 import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
 import { studioEditWorkUrl } from "../../lib/studio";
@@ -61,10 +62,12 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 	// video is its file.
 	const emptyWriting = item.type === "text" && isEmptyWriting(item.bodyHtml);
 	const noDelivery = !item.streamEnabled && !item.downloadEnabled;
-	// A Work is born `unrated` and the server refuses to release it while it is — so the
-	// card, which is how a back catalog gets released thirty at a time, has to say which
-	// ones still need answering rather than earning thirty identical errors.
-	const unrated = !item.maturity || item.maturity === "unrated";
+	// A Work is born `unrated` and the server refuses to release it until every row of its rating
+	// is answered — so the card, which is how a back catalog gets released thirty at a time, has
+	// to say which ones still need answering rather than earning thirty identical errors. Asked of
+	// the rows rather than the rating, since a Work rated before the matrix holds a rating with no
+	// rows behind it and is refused all the same.
+	const unrated = !isRatingComplete(item.maturityRows);
 	const blocked = !released && (noFile || emptyWriting || processing || noDelivery || unrated);
 	const blockedWhy = uploading
 		? "Still uploading — it can be released once its file arrives and is processed"

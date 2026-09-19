@@ -20,9 +20,11 @@
  * identifies the reporter, which is what GDPR Art. 15(4) is for and what the
  * moderation model's open question about not exposing reporters points at too.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sessions, users } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -90,9 +92,9 @@ beforeAll(async () => {
 	const workRes = await post("/api/content/works", subject, {
 		type: "game",
 		title: `Export fixture ${id}`,
-		// Declared on create so the release below is not refused for a reason this suite
-		// is not about — release is gated on a declared content rating.
-		maturity: "general",
+		// Rated on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on every row of the rating being answered.
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;

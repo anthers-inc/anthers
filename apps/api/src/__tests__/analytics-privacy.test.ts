@@ -26,9 +26,11 @@
  * that comes back can be traced to either of them** — which stays true as a test of a
  * new field nobody has written yet.
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -120,9 +122,9 @@ beforeAll(async () => {
 	const workRes = await post("/api/content/works", creator, {
 		type: "video",
 		title: `Analytics privacy fixture ${id}`,
-		// Declared on create so the release below is not refused for a reason this suite
-		// is not about — release is gated on a declared content rating.
-		maturity: "general",
+		// Rated on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on every row of the rating being answered.
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;

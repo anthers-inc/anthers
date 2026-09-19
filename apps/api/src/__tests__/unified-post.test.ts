@@ -11,9 +11,11 @@
  *
  * Works are game/text so nothing hits real media processing (no pg-boss).
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -80,7 +82,7 @@ describe("Catalog vertical slice", () => {
 			body: JSON.stringify({
 				type: "game",
 				title: `Old Game ${id}`,
-				maturity: "general",
+				maturityRows: rowsRatedAs("general"),
 				description: "Made years before Anthers existed",
 				streamEnabled: false,
 				downloadEnabled: true,
@@ -148,7 +150,7 @@ describe("Catalog vertical slice", () => {
 			body: JSON.stringify({
 				type: "text",
 				title: `Recent Essay ${id}`,
-				maturity: "general",
+				maturityRows: rowsRatedAs("general"),
 				bodyHtml: "<p>a thing I wrote lately</p>",
 				authoredAt: new Date().toISOString(),
 				authoredPrecision: "day",

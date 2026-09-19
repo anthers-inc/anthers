@@ -17,10 +17,12 @@
  * ⭐ **`POST /seeds` stays unfloored and has its own test.** It allocates an already-charged
  * balance, creates no Stripe charge, and a blanket sweep would have floored it wrongly.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { like } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -75,7 +77,11 @@ describe("Stripe's minimum charge floors what a creator can set", () => {
 		const created = await req("/api/content/works", {
 			method: "POST",
 			headers: auth,
-			body: JSON.stringify({ type: "audio", title: "Floor fixture", maturity: "general" }),
+			body: JSON.stringify({
+				type: "audio",
+				title: "Floor fixture",
+				maturityRows: rowsRatedAs("general"),
+			}),
 		});
 		expect(created.status).toBe(201);
 		workId = (await created.json()).work.id as number;

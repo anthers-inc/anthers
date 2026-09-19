@@ -30,6 +30,8 @@ import {
 	workRatingAppeals,
 	works,
 } from "@anthers/db/schema";
+import type { DeclarableMaturity } from "@anthers/shared/content-rating";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -105,8 +107,11 @@ describe("content ratings", () => {
 		await purgeFixtureAccounts([creatorName, strangerName]);
 	});
 
-	/** A private text Work — nothing here needs media, and media needs pg-boss. */
-	async function makeWork(body: Record<string, unknown> = {}): Promise<number> {
+	/**
+	 * A private text Work — nothing here needs media, and media needs pg-boss. Anything created is
+	 * taken back afterward, including a Work a create that should have been refused made anyway.
+	 */
+	async function createWork(body: Record<string, unknown>): Promise<Response> {
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
@@ -119,11 +124,29 @@ describe("content ratings", () => {
 				...body,
 			}),
 		});
-		expect(res.status).toBe(201);
-		const { work } = await res.json();
-		created.push(work.id);
-		return work.id;
+		if (res.status === 201) created.push((await res.clone().json()).work.id);
+		return res;
 	}
+
+	async function makeWork(body: Record<string, unknown> = {}): Promise<number> {
+		const res = await createWork(body);
+		expect(res.status).toBe(201);
+		return (await res.json()).work.id;
+	}
+
+	/** Every row answered: nothing in it, apart from what `over` marks. */
+	const rows = (over: Record<string, string> = {}) => ({
+		violence: "none",
+		"sexual-themes": "none",
+		"substance-use": "none",
+		"self-harm": "none",
+		horror: "none",
+		language: "none",
+		...over,
+	});
+
+	/** A creator rating a Work, which they do by answering every row of its matrix. */
+	const rated = (rating: DeclarableMaturity) => ({ maturityRows: rowsRatedAs(rating) });
 
 	function patch(workId: number, body: Record<string, unknown>, cookie = creator) {
 		return req(`/api/content/works/${workId}`, {
@@ -157,20 +180,41 @@ describe("content ratings", () => {
 			expect(row.maturityNotes).toEqual([]);
 		});
 
-		it("records the creator's own declaration when they make one at create", async () => {
-			const workId = await makeWork({ maturity: "mature", maturityNotes: ["violence"] });
+		it("records the creator's own rating when they answer the matrix at create", async () => {
+			const workId = await makeWork({ maturityRows: rows({ violence: "mature" }) });
 			const row = await reload(workId);
 			expect(row.maturity).toBe("mature");
 			expect(row.maturitySource).toBe("creator");
 			expect(row.maturityNotes).toEqual(["violence"]);
 		});
 
-		it("drops a note it cannot label rather than storing a code nobody can read", async () => {
+		it("drops a row it cannot label rather than storing a code nobody can read", async () => {
 			const workId = await makeWork({
-				maturity: "general",
-				maturityNotes: ["violence", "made-up-note"],
+				maturityRows: rows({ violence: "general", "made-up-note": "mature" }),
 			});
-			expect((await reload(workId)).maturityNotes).toEqual(["violence"]);
+			const row = await reload(workId);
+			expect(row.maturityNotes).toEqual(["violence"]);
+			expect(row.maturityRows).not.toHaveProperty("made-up-note");
+		});
+
+		it("refuses a rating named rather than answered, and stores nothing the request carried", async () => {
+			// 🚨 A creator rates a Work by answering every row of its matrix (Parker, 2026-09-18).
+			// Stripping a named rating instead would answer a save meant to rate the Work with a 200
+			// and a Work still unrated, which is a save that appears to work and does not.
+			const workId = await makeWork();
+			const named = await patch(workId, { maturity: "general", title: "Renamed" });
+			expect(named.status).toBe(400);
+			expect((await named.json()).code).toBe("rate_through_matrix");
+			const noted = await patch(workId, { maturityNotes: ["violence"] });
+			expect(noted.status).toBe(400);
+			const row = await reload(workId);
+			expect(row.maturity).toBe("unrated");
+			expect(row.maturityNotes).toEqual([]);
+			expect(row.title).toBe(`Rating fixture ${id}`);
+
+			const born = await createWork({ maturity: "general" });
+			expect(born.status).toBe(400);
+			expect((await born.json()).code).toBe("rate_through_matrix");
 		});
 	});
 
@@ -183,9 +227,9 @@ describe("content ratings", () => {
 			expect((await reload(workId)).visibility).toBe("private");
 		});
 
-		it("releases once the rating is declared", async () => {
+		it("releases once every row is answered", async () => {
 			const workId = await makeWork();
-			expect((await patch(workId, { maturity: "general" })).status).toBe(200);
+			expect((await patch(workId, rated("general"))).status).toBe(200);
 			expect((await patch(workId, { visibility: "released" })).status).toBe(200);
 		});
 
@@ -193,7 +237,7 @@ describe("content ratings", () => {
 			// The ordinary flow out of the editor, which sends the whole form. Refusing it
 			// would mean two round trips to do one thing.
 			const workId = await makeWork();
-			const res = await patch(workId, { maturity: "mature", visibility: "released" });
+			const res = await patch(workId, { ...rated("mature"), visibility: "released" });
 			expect(res.status).toBe(200);
 			const row = await reload(workId);
 			expect(row.visibility).toBe("released");
@@ -211,7 +255,7 @@ describe("content ratings", () => {
 			// Public Access, and what keeps it away from minors is the verification gate
 			// rather than a price.
 			const workId = await makeWork({ seedAccess: [{ threshold: 0, allow: true, price: "0" }] });
-			const res = await patch(workId, { maturity: "adult", visibility: "released" });
+			const res = await patch(workId, { ...rated("adult"), visibility: "released" });
 			expect(res.status).toBe(200);
 			const row = await reload(workId);
 			expect(row.visibility).toBe("released");
@@ -231,11 +275,30 @@ describe("content ratings", () => {
 			expect(res.status).toBe(409);
 			expect((await res.json()).code).toBe("maturity_undeclared");
 		});
+
+		it("refuses a Work holding a rating with no rows behind it", async () => {
+			// 🚨 Rated means every row answered, not a rating held. A Work rated before the matrix
+			// existed has a General that cannot say whether it means a General form of something or
+			// none of it, which is what a reader's filter needs to know. Written straight to the
+			// column, because no creator path produces this any more.
+			const workId = await makeWork();
+			await db
+				.update(works)
+				.set({ maturity: "general", maturitySource: "creator" })
+				.where(eq(works.id, workId));
+			const res = await patch(workId, { visibility: "released" });
+			expect(res.status).toBe(409);
+			expect((await res.json()).code).toBe("maturity_undeclared");
+			// Answering the rows is the whole fix, and it goes in the same save.
+			expect((await patch(workId, { ...rated("general"), visibility: "released" })).status).toBe(
+				200,
+			);
+		});
 	});
 
 	describe("an operator's correction", () => {
 		it("sets the rating, marks it theirs, and writes the log an appeal will read", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			const res = await correct(workId, "mature", ["sexual-themes"]);
 			expect(res.status).toBe(200);
 
@@ -258,7 +321,7 @@ describe("content ratings", () => {
 		});
 
 		it("is not reachable by an ordinary account, and is not advertised to a bearer credential", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			const body = JSON.stringify({ workId, maturity: "mature" });
 			// An Anthers account's session is not an admin session.
 			const withCookie = await req("/api/admin/works/rating", {
@@ -279,7 +342,7 @@ describe("content ratings", () => {
 		it("cannot put a Work back to unrated", async () => {
 			// That would be un-releasing it by a side door: the release gate refuses an
 			// unrated Work, so one already out would be in a state no creator path produces.
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			const res = await req("/api/admin/works/rating", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: operator },
@@ -296,7 +359,7 @@ describe("content ratings", () => {
 			// like anything else, so a correction that re-priced somebody's work would make
 			// the rating a penalty, which it is not.
 			const open = [{ threshold: 0, allow: true, price: "0" }];
-			const workId = await makeWork({ maturity: "general", seedAccess: open });
+			const workId = await makeWork({ ...rated("general"), seedAccess: open });
 			const res = await correct(workId, "adult");
 			expect(res.status).toBe(200);
 
@@ -312,7 +375,7 @@ describe("content ratings", () => {
 			// 🚨 The half that makes the correction legitimate rather than merely permitted.
 			// The appeal path is part of the feature, and an appeal nobody knows to file is
 			// the version of it that teaches creators the queue is decorative.
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "adult");
 
 			// ⚠️ Scoped to THIS Work by its dedupe key, not just to the creator and the
@@ -341,10 +404,10 @@ describe("content ratings", () => {
 
 	describe("the lock, in both directions", () => {
 		it("refuses to let the creator lower it, and says where the appeal is", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 
-			const res = await patch(workId, { maturity: "general" });
+			const res = await patch(workId, rated("general"));
 			expect(res.status).toBe(409);
 			const body = await res.json();
 			expect(body.code).toBe("maturity_locked");
@@ -357,10 +420,10 @@ describe("content ratings", () => {
 			// choose. This is the case the caution ORDER exists for: a fourth value added
 			// above the others had to leave "raise yes, lower no" true without anybody
 			// rewriting the rule, and a pair of hardcoded cases would have refused this.
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 
-			expect((await patch(workId, { maturity: "adult" })).status).toBe(200);
+			expect((await patch(workId, rated("adult"))).status).toBe(200);
 			const row = await reload(workId);
 			expect(row.maturity).toBe("adult");
 			// Raising past a correction is still the creator's own declaration, so the
@@ -372,10 +435,10 @@ describe("content ratings", () => {
 		it("lets the creator raise it, and hands the rating back to them", async () => {
 			// 🚨 The direction a blanket lock would have broken. Being more cautious about
 			// your own work is the creator's business; the harm is only ever downward.
-			const workId = await makeWork({ maturity: "mature" });
+			const workId = await makeWork(rated("mature"));
 			await correct(workId, "general");
 
-			const res = await patch(workId, { maturity: "mature" });
+			const res = await patch(workId, rated("mature"));
 			expect(res.status).toBe(200);
 			const row = await reload(workId);
 			expect(row.maturity).toBe("mature");
@@ -385,24 +448,24 @@ describe("content ratings", () => {
 		it("lets a PATCH carrying the unchanged rating through", async () => {
 			// The editor sends the whole form on every save, so a save that touches the
 			// title must not be refused because it also restated the rating.
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
-			const res = await patch(workId, { maturity: "mature", title: "Renamed" });
+			const res = await patch(workId, { ...rated("mature"), title: "Renamed" });
 			expect(res.status).toBe(200);
 			expect((await reload(workId)).title).toBe("Renamed");
 		});
 
-		it("never locks the content notes", async () => {
+		it("never locks which rows are marked, only how high they reach", async () => {
 			// Notes carry no access consequence, so there is nothing for a lock to protect —
 			// and locking them would take a creator's own warnings to their own readers out
 			// of their hands.
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature", ["violence"]);
-			const res = await patch(workId, { maturityNotes: ["horror"] });
+			const res = await patch(workId, { maturityRows: rows({ horror: "mature" }) });
 			expect(res.status).toBe(200);
 			const row = await reload(workId);
 			expect(row.maturityNotes).toEqual(["horror"]);
-			// And the lock itself is untouched by a notes-only edit.
+			// And the lock itself is untouched by rows that stay at the operator's rung.
 			expect(row.maturitySource).toBe("operator");
 		});
 	});
@@ -419,7 +482,7 @@ describe("content ratings", () => {
 		it("refuses one on a rating the creator set themselves, and points at the editor", async () => {
 			// Not pedantry: a creator whose rating is their own needs the edit field, not a
 			// queue that waits on a person.
-			const workId = await makeWork({ maturity: "mature" });
+			const workId = await makeWork(rated("mature"));
 			const res = await appeal(workId, {
 				requestedMaturity: "general",
 				statement: "This is a coming-of-age story with no explicit content in it.",
@@ -429,7 +492,7 @@ describe("content ratings", () => {
 		});
 
 		it("is filed against an operator's correction", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const res = await appeal(workId, {
 				requestedMaturity: "general",
@@ -444,7 +507,7 @@ describe("content ratings", () => {
 		});
 
 		it("refuses a second open appeal on the same Work", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const first = await appeal(workId, {
 				requestedMaturity: "general",
@@ -460,7 +523,7 @@ describe("content ratings", () => {
 		});
 
 		it("refuses an empty argument", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			expect((await appeal(workId, { requestedMaturity: "general", statement: "" })).status).toBe(
 				400,
@@ -468,7 +531,7 @@ describe("content ratings", () => {
 		});
 
 		it("is not filable by anyone but the Work's creator", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const res = await appeal(
 				workId,
@@ -482,7 +545,7 @@ describe("content ratings", () => {
 		});
 
 		it("applies the rating and lifts the lock when granted", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const filed = await appeal(workId, {
 				requestedMaturity: "general",
@@ -504,7 +567,7 @@ describe("content ratings", () => {
 		});
 
 		it("leaves the rating alone when upheld, and keeps the answer", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const filed = await appeal(workId, {
 				requestedMaturity: "general",
@@ -539,7 +602,7 @@ describe("content ratings", () => {
 		});
 
 		it("cannot be resolved twice", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const filed = await appeal(workId, {
 				requestedMaturity: "general",
@@ -561,7 +624,7 @@ describe("content ratings", () => {
 		it("shows the rating and the notes on a Work nobody can open", async () => {
 			// The warning has to arrive before the thing, not with it — so it rides with the
 			// public blurb rather than with the payload.
-			const workId = await makeWork({ maturity: "mature", maturityNotes: ["violence"] });
+			const workId = await makeWork({ maturityRows: rows({ violence: "mature" }) });
 			await patch(workId, { visibility: "released" });
 
 			const res = await req(`/api/content/works/${workId}`, { headers: { Cookie: stranger } });
@@ -574,7 +637,7 @@ describe("content ratings", () => {
 		it("never tells a viewer who set the rating", async () => {
 			// 🚨 A viewer able to read this could tell a corrected Work from a self-declared
 			// one, which is operator information about somebody else's account.
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await patch(workId, { visibility: "released" });
 			await correct(workId, "mature");
 
@@ -585,7 +648,7 @@ describe("content ratings", () => {
 		});
 
 		it("tells the creator their rating was corrected, so they can find the appeal", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature");
 			const res = await req(`/api/content/works/${workId}`, { headers: { Cookie: creator } });
 			const { work } = await res.json();
@@ -594,17 +657,6 @@ describe("content ratings", () => {
 	});
 
 	describe("declared through the rating matrix", () => {
-		/** Every row answered: nothing in it, apart from what `over` marks. */
-		const rows = (over: Record<string, string> = {}) => ({
-			violence: "none",
-			"sexual-themes": "none",
-			"substance-use": "none",
-			"self-harm": "none",
-			horror: "none",
-			language: "none",
-			...over,
-		});
-
 		it("rates a Work at the highest row once every row is answered, and notes each row", async () => {
 			const workId = await makeWork();
 			const res = await patch(workId, {
@@ -619,8 +671,8 @@ describe("content ratings", () => {
 			expect(row.maturityRows).toMatchObject({ violence: "mature", horror: "none" });
 		});
 
-		it("rates nothing from half a matrix, and never un-rates a rated Work", async () => {
-			const workId = await makeWork({ maturity: "general" });
+		it("rates nothing from half a matrix, never un-rates a rated Work, and never releases it", async () => {
+			const workId = await makeWork(rated("general"));
 			const { language: _left, ...fiveRows } = rows({ violence: "mature" });
 			expect((await patch(workId, { maturityRows: fiveRows })).status).toBe(200);
 			const row = await reload(workId);
@@ -628,6 +680,10 @@ describe("content ratings", () => {
 			expect(row.maturity).toBe("general");
 			expect(row.maturityRows).toMatchObject({ violence: "mature" });
 			expect(row.maturityRows).not.toHaveProperty("language");
+			// But a rating with an unanswered row behind it is not one release will take.
+			const release = await patch(workId, { visibility: "released" });
+			expect(release.status).toBe(409);
+			expect((await release.json()).code).toBe("maturity_undeclared");
 		});
 
 		it("rates Adult from a violence row, which the Rating Standard now allows", async () => {
@@ -637,7 +693,7 @@ describe("content ratings", () => {
 		});
 
 		it("refuses rows that add up below an operator's correction", async () => {
-			const workId = await makeWork({ maturity: "general" });
+			const workId = await makeWork(rated("general"));
 			expect((await correct(workId, "adult")).status).toBe(200);
 			const lower = await patch(workId, { maturityRows: rows({ violence: "mature" }) });
 			expect(lower.status).toBe(409);

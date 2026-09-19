@@ -484,6 +484,20 @@ export function ratingFromRows(rows: MaturityRows): DeclarableMaturity | null {
 	return rating;
 }
 
+/**
+ * Whether every row of the matrix is answered, which is what being rated means.
+ *
+ * 🚨 **A rated Work has every row answered, with no exceptions** (Parker, 2026-09-18). *Not in
+ * It* exists so that General means only a General-acceptable form of the content rather than
+ * also "none of it", and a reader's filter relies on that. So release asks this rather than
+ * whether `maturity` holds a value: a rating assigned any other way (before the matrix existed,
+ * or written straight into the database) is not a declaration the rows can stand behind. An
+ * operator's correction sets the rating over the rows and does not answer them.
+ */
+export function isRatingComplete(rows: MaturityRows | null | undefined): boolean {
+	return ratingFromRows(normalizeMaturityRows(rows)) !== null;
+}
+
 /** The notes the rows put on a Work: every row marked at a rung, in the canonical order. */
 export function notesFromRows(rows: MaturityRows): ContentNote[] {
 	return RATING_ROWS.filter((row) => {

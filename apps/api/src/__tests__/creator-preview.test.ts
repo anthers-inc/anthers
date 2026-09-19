@@ -16,6 +16,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -63,7 +64,7 @@ async function makeWork(title: string, access: unknown): Promise<number> {
 	const created = await req("/api/content/works", {
 		method: "POST",
 		headers: creatorAuth,
-		body: JSON.stringify({ type: "audio", title, maturity: "general" }),
+		body: JSON.stringify({ type: "audio", title, maturityRows: rowsRatedAs("general") }),
 	});
 	expect(created.status).toBe(201);
 	const workId = (await created.json()).work.id as number;

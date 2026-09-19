@@ -12,8 +12,10 @@
  * asks a question about the **Works** it contains, and a project matches when ANY
  * released Work in it does. Works are game/audio/text so nothing hits media processing.
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -81,9 +83,9 @@ describe("project browse filters", () => {
 					type: c.type,
 					title: `${c.label} ${id}`,
 					tags: c.tags,
-					// Declared on create so the release below is not refused for a reason this
+					// Rated on create so the release below is not refused for a reason this
 					// suite is not about, and a piece of writing given its body for the same reason.
-					maturity: "general",
+					maturityRows: rowsRatedAs("general"),
 					...(c.type === "text" ? { bodyHtml: "<p>An essay.</p>" } : {}),
 				}),
 			});

@@ -11,6 +11,7 @@
  * Runs on `media_fixture`, which has payouts set up, since the release checkbox is locked for a
  * creator who could not release. Nothing is saved, so the Work is never actually released.
  */
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const TITLE_PREFIX = "Rated PA walk ";
@@ -53,7 +54,7 @@ test("a creator releasing rated work into Public Access is told who will see it"
 			type: "text",
 			title: TITLE,
 			bodyHtml: "<p>A walk.</p>",
-			maturity: "mature",
+			maturityRows: rowsRatedAs("mature"),
 			streamEnabled: true,
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		}),
@@ -73,9 +74,9 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	await expect(note).toBeVisible();
 
 	// The rating alone never decides it: General is met by every reader, and Adult is noted too.
-	// The rating is the rating matrix's, so General is every row answered Not in It, and Adult is
-	// one row reaching it.
-	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	// The rating is the rating matrix's, and the Work is Mature from its Violence row, so taking
+	// that row to Not in It leaves every row there and the Work General; Adult is one row reaching it.
+	await page.getByRole("radio", { name: "Violence: Not in It" }).check();
 	await expect(note).toHaveCount(0);
 	await page.getByRole("radio", { name: "Sexual Content: Adult" }).check();
 	await expect(note).toBeVisible();

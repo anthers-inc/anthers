@@ -14,6 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import { moderationActions } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray } from "drizzle-orm";
 import { QUEUES, queue } from "../jobs/queue";
 import {
@@ -85,7 +86,7 @@ describe("a rating change asks for the listing to be re-synced", () => {
 	it("when the creator declares a rating", async () => {
 		const w = await work();
 		sent = [];
-		await declareRating(w, { maturity: "mature" });
+		await declareRating(w, { rows: rowsRatedAs("mature") });
 		expect(listingSyncs()).toContainEqual({ workId: w.id });
 	});
 

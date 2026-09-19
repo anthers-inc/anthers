@@ -60,6 +60,7 @@ import {
 	GAUNTLET_VIEWER_USERNAME,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like } from "drizzle-orm";
 import { createLocalAccount } from "./local-accounts.js";
 
@@ -250,8 +251,10 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			seedAccess: spec.seedAccess,
 			visibility: "released",
 			// Seeded Works stand for properly released ones, and release is gated on a
-			// declared rating — an unrated released Work is a state no path produces.
+			// declared rating with every row of its matrix answered — a released Work without
+			// one is a state no path produces. Every row Not in It, which is General.
 			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 			maturitySource: "creator",
 			releasedAt: new Date(),
 		})

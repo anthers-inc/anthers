@@ -265,6 +265,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		JSON.stringify(normalizeMaturityRows(current.maturityRows));
 	// The rating the page stands at: what the rows add up to once every row is answered, and the
 	// Work's own rating until then, because an incomplete matrix changes no rating on the server.
+	// 🚨 Release and scheduling wait on `fromRows` rather than on `maturity`: a rated Work has every
+	// row answered (Parker, 2026-09-18), and the server refuses a stored rating with none behind it.
 	const fromRows = ratingFromRows(rows);
 	const storedMaturity =
 		current.maturity && current.maturity !== "unrated" ? current.maturity : null;
@@ -966,8 +968,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					<RatingMatrix rows={rows} onChange={setRows} />
 					{!fromRows && storedMaturity && (
 						<p className="text-xs text-base-content/60">
-							This Work is rated {maturityLabel(storedMaturity)} today. Answering every row replaces
-							that with the rating the rows add up to.
+							This Work is rated {maturityLabel(storedMaturity)} today, but not every row is
+							answered. Answering every row replaces that with the rating the rows add up to.
 						</p>
 					)}
 					{maturityLocked && (
@@ -1004,19 +1006,19 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							type="checkbox"
 							className="checkbox checkbox-sm checkbox-primary"
 							checked={visibility === "released"}
-							// The server refuses an unrated release with `maturity_undeclared`, one
-							// with no payout setup with `payouts_required`, one Anthers has no
-							// permission to list with `publishing_permission_required`, and one whose
-							// file has not arrived with `media_missing`. Don't offer the click that
-							// fails — the same reasoning as the delivery switches above. `=== false`
-							// and `=== true` rather than truthiness, so an unanswered status request
-							// leaves the control alone instead of locking it for a reason nobody
-							// stated. The file and permission checks apply only before release, so
-							// neither locks the control that would make a released Work private.
+							// The server refuses a release with an unanswered row with
+							// `maturity_undeclared`, one with no payout setup with `payouts_required`,
+							// one Anthers has no permission to list with
+							// `publishing_permission_required`, and one whose file has not arrived with
+							// `media_missing`. Don't offer the click that fails — the same reasoning as
+							// the delivery switches above. `=== false` and `=== true` rather than
+							// truthiness, so an unanswered status request leaves the control alone
+							// instead of locking it for a reason nobody stated. The rating, file and
+							// permission checks apply only before release, so none of them locks the
+							// control that would make a released Work private.
 							disabled={
-								!maturity ||
 								payoutsReady === false ||
-								((fileMissing || writingEmpty || permissionMissing === true) &&
+								((!fromRows || fileMissing || writingEmpty || permissionMissing === true) &&
 									visibility !== "released")
 							}
 							onChange={(e) => {
@@ -1061,7 +1063,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 									aria-label="Release time"
 									value={scheduledRelease}
 									disabled={
-										!maturity ||
+										!fromRows ||
 										writingEmpty ||
 										payoutsReady === false ||
 										permissionMissing === true
@@ -1094,10 +1096,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 								: "Upload this Work's file above first. There's nothing to release until it arrives."}
 						</p>
 					)}
-					{!maturity && (
+					{!fromRows && visibility !== "released" && (
 						<p className="text-xs text-warning">
 							Answer every row of the Rating above first. Nothing goes into your public Catalog
-							until it has a rating.
+							until every row has an answer.
 						</p>
 					)}
 					{serverDown && visibility !== "released" && (

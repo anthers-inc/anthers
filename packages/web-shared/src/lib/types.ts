@@ -345,13 +345,10 @@ export interface WorkInput {
 	/** A release time for a private Work; null clears it. */
 	scheduledReleaseAt?: string | null;
 	/**
-	 * What a creator may DECLARE. Narrower than `Work["maturity"]` for the same reason
-	 * `visibility` is: `unrated` is the state a Work is born in and leaves, never a value
-	 * anybody sets, and release is refused while it holds.
+	 * The rating matrix; a complete one decides the rating and the notes. It is the only way a
+	 * creator rates a Work, and the API refuses a request naming `maturity` or `maturityNotes`
+	 * with `rate_through_matrix`, so neither is on this type.
 	 */
-	maturity?: Exclude<MaturityRating, "unrated">;
-	maturityNotes?: ContentNote[];
-	/** The rating matrix; a complete one decides the rating and the notes. */
 	maturityRows?: MaturityRows;
 	authoredAt?: string | null;
 	authoredPrecision?: AuthoredPrecision | null;
