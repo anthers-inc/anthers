@@ -38,6 +38,8 @@
  *    with the full list of what may never move a Work along the scale.
  */
 
+import type { WorkType } from "./content.js";
+
 /**
  * What a Work is rated.
  *
@@ -46,8 +48,8 @@
  * - `general` — its creator says anyone can meet it.
  * - `mature` — its creator (or an operator) says it is made for adults. A warning and a
  *   filter input, carrying no access consequence at all.
- * - `adult` — explicit sexual depiction central to the work, or extreme violence or drug use
- *   that is the work's focus (see `RATING_ROWS`). Reachable only by an account that has opted
+ * - `adult` — explicit sexual depiction central to the work, or, on the visual grid, extreme
+ *   violence or drug use that is the work's focus (see `RATING_ROWS`). Reachable only by an account that has opted
  *   in and verified an adult, and invisible to everyone else. It costs its creator nothing:
  *   Adult work may be free, may be Public Access, and earns the Time Pool.
  *
@@ -342,19 +344,59 @@ export type ContentNote =
 export type RowLevel = "none" | DeclarableMaturity;
 
 /**
- * One row of the rating matrix: a kind of content, and where each rung begins on it.
+ * Which grid a Work is rated on, decided by its type and by nothing else (Parker, 2026-09-18:
+ * *"let's try two and see how it feels"*).
+ *
+ * - `visual` — the full grid, for what a Work shows: video, images, comics, games, software,
+ *   physical goods and services.
+ * - `light` — for what a Work says or sounds like: writing, books, music and other audio. Each
+ *   kind of content is answered *Not in It*, *In It* or *Explicit*, because *"people are used to
+ *   the fact that music ratings are really just 'explicit or not'"*, and only sexual content
+ *   reaches Adult.
+ *
+ * ⭐ **Both grids ask about the same six kinds of content**, because a reader's filter reads them.
+ * A grid that skipped a row would leave the filter to treat the missing answer either as present,
+ * hiding every song from a reader who hides horror, or as *Not in It*, which nobody said. So the
+ * grids differ only in which answers each row offers and where each begins, and they store the
+ * same values: *In It* is `general` and *Explicit* is `mature`.
+ */
+export type RatingGrid = "visual" | "light";
+
+/**
+ * The Work types rated on the light grid. Every other type is rated on the visual grid, and so is
+ * a type this build does not know, because the visual grid is the one that asks more.
+ */
+export const LIGHT_GRID_TYPES = [
+	"text",
+	"ebook",
+	"music",
+	"audio",
+] as const satisfies readonly WorkType[];
+
+export function gridFor(type: string | null | undefined): RatingGrid {
+	return (LIGHT_GRID_TYPES as readonly string[]).includes(type ?? "") ? "light" : "visual";
+}
+
+/** What each answer is called on each grid. The value stored for it is the same on both. */
+export const GRID_ANSWER_LABELS: Record<RatingGrid, Record<RowLevel, string>> = {
+	visual: { none: "Not in It", general: "General", mature: "Mature", adult: "Adult" },
+	light: { none: "Not in It", general: "In It", mature: "Explicit", adult: "Adult" },
+};
+
+/**
+ * One row of the rating matrix: a kind of content, and where each rung begins on it on each grid.
  *
  * 🚨 **The wiki's *The Rating Standard* owns these lines, and this is their transcription.** Its
- * table and this one must say the same thing, cell for cell, because the creator reads this one
- * while choosing and an operator reads that one while correcting. A rung set to null is one the
- * standard says the row never reaches, which the matrix shows and does not offer.
+ * two tables and these must say the same thing, cell for cell, because the creator reads these
+ * while choosing and an operator reads those while correcting. A rung set to null is one the
+ * standard says the row never reaches on that grid, which the matrix shows and does not offer.
  */
 export interface RatingRowDef {
 	/** The stored value, which is also the note a row marked at any rung puts on the Work. */
 	note: ContentNote;
 	label: string;
-	/** Where each rung begins on this row, or null where the row never reaches it. */
-	rungs: Record<DeclarableMaturity, string | null>;
+	/** Where each rung begins on this row, on each grid, or null where the row never reaches it. */
+	rungs: Record<RatingGrid, Record<DeclarableMaturity, string | null>>;
 	/** Said under the row's name, where the row has a line past its last rung. */
 	after?: string;
 }
@@ -362,33 +404,56 @@ export interface RatingRowDef {
 /**
  * The rows, in the order the matrix and the notes are shown.
  *
- * ⚠️ **Adult is reachable on three rows and on no others**: sexual content, violence and
- * substance use, which are the MPA's NC-17 descriptors adapted (Parker, 2026-09-18). Self-harm
- * and horror stop at Mature, and language never rates at all. On Violence and Substance use the
- * Adult line is the work's focus rather than any moment in it, because Adult costs a creator
- * discoverability and the standard draws expensive lines tightly: a story with graphic violence
- * in it, on-screen dismemberment included, is Mature.
+ * ⚠️ **On the visual grid, Adult is reachable on three rows and on no others**: sexual content,
+ * violence and substance use, which are the MPA's NC-17 descriptors adapted (Parker,
+ * 2026-09-18). Self-harm and horror stop at Mature, and language never rates at all. On Violence
+ * and Substance use the Adult line is the work's focus rather than any moment in it, because
+ * Adult costs a creator discoverability and the standard draws expensive lines tightly: a story
+ * with graphic violence in it, on-screen dismemberment included, is Mature.
+ *
+ * ⚠️ **On the light grid, only sexual content reaches Adult**, at the visual grid's own line,
+ * because parents and payment processors draw that line rather than the medium. Violence and
+ * substance use stop at Explicit, as a bookshop shelves a violent novel openly. Language may be
+ * marked Explicit, and that is its creator's call alone: an operator never raises a Work over
+ * language, which is the rule that keeps the Explicit label from falling on some artists and not
+ * others.
  */
 export const RATING_ROWS: readonly RatingRowDef[] = [
 	{
 		note: "violence",
 		label: "Violence",
 		rungs: {
-			general:
-				"Conflict, peril or injury shown without dwelling on it; stylized, fantasy or cartoon violence",
-			mature:
-				"Realistic injury in sustained detail: gore, mutilation or torture shown rather than implied",
-			adult:
-				"Exceptionally graphic, prolonged violence as the work's focus, such as torture or dismemberment dwelt on for its own sake",
+			visual: {
+				general:
+					"Conflict, peril or injury shown without dwelling on it; stylized, fantasy or cartoon violence",
+				mature:
+					"Realistic injury in sustained detail: gore, mutilation or torture shown rather than implied",
+				adult:
+					"Exceptionally graphic, prolonged violence as the work's focus, such as torture or dismemberment dwelt on for its own sake",
+			},
+			light: {
+				general: "Conflict, peril, injury or death, described without dwelling on it",
+				mature: "Gore, mutilation or torture described in sustained, graphic detail",
+				adult: null,
+			},
 		},
 	},
 	{
 		note: "sexual-themes",
 		label: "Sexual Content",
 		rungs: {
-			general: "Romance and attraction; sex implied or cut away from; nudity that isn't sexual",
-			mature: "Sexual activity depicted rather than implied; sexually oriented nudity",
-			adult: "Explicit sexual depiction central to the work, made for something other than arousal",
+			visual: {
+				general: "Romance and attraction; sex implied or cut away from; nudity that isn't sexual",
+				mature: "Sexual activity depicted rather than implied; sexually oriented nudity",
+				adult:
+					"Explicit sexual depiction central to the work, made for something other than arousal",
+			},
+			light: {
+				general: "Romance and attraction; sex implied or skipped over; nudity that isn't sexual",
+				mature: "Sex described on the page rather than implied; sexually oriented nudity",
+				adult:
+					"Explicit sexual description central to the work, made for something other than arousal",
+			},
 		},
 		after: "Anything made for the purpose of sexual gratification isn't published on Anthers.",
 	},
@@ -396,36 +461,66 @@ export const RATING_ROWS: readonly RatingRowDef[] = [
 		note: "substance-use",
 		label: "Substance Use",
 		rungs: {
-			general: "Presence, reference, use, consequence, addiction or recovery",
-			mature: "Use depicted in reproducible real-world detail: method, dose or synthesis",
-			adult: "Pervasive, graphic drug use as the work's focus, depicted with extreme realism",
+			visual: {
+				general: "Presence, reference, use, consequence, addiction or recovery",
+				mature: "Use depicted in reproducible real-world detail: method, dose or synthesis",
+				adult: "Pervasive, graphic drug use as the work's focus, depicted with extreme realism",
+			},
+			light: {
+				general: "Presence, reference, use, consequence, addiction or recovery",
+				mature: "Use described in reproducible real-world detail: method, dose or synthesis",
+				adult: null,
+			},
 		},
 	},
 	{
 		note: "self-harm",
 		label: "Self-Harm and Suicide",
 		rungs: {
-			general: "Presence, aftermath, ideation, discussion or recovery",
-			mature: "Method depicted in reproducible detail",
-			adult: null,
+			visual: {
+				general: "Presence, aftermath, ideation, discussion or recovery",
+				mature: "Method depicted in reproducible detail",
+				adult: null,
+			},
+			light: {
+				general: "Presence, aftermath, ideation, discussion or recovery",
+				mature: "Method described in reproducible detail",
+				adult: null,
+			},
 		},
 	},
 	{
 		note: "horror",
 		label: "Intense Horror",
 		rungs: {
-			general: "Dread, threat, jump scares, monsters, non-graphic death",
-			mature: "Sustained graphic body horror or torture, or extended depiction of extreme distress",
-			adult: null,
+			visual: {
+				general: "Dread, threat, jump scares, monsters, non-graphic death",
+				mature:
+					"Sustained graphic body horror or torture, or extended depiction of extreme distress",
+				adult: null,
+			},
+			light: {
+				general: "Dread, threat, monsters, non-graphic death",
+				mature:
+					"Sustained graphic body horror or torture, or extended description of extreme distress",
+				adult: null,
+			},
 		},
 	},
 	{
 		note: "language",
 		label: "Strong Language",
 		rungs: {
-			general: "Any, at any amount. Language never changes a rating.",
-			mature: null,
-			adult: null,
+			visual: {
+				general: "Any, at any amount. Language never changes this grid's rating.",
+				mature: null,
+				adult: null,
+			},
+			light: {
+				general: "Swearing or crude language that you wouldn't call explicit",
+				mature: "Language you'd label explicit. That's your call, and never an operator's.",
+				adult: null,
+			},
 		},
 	},
 ] as const;
@@ -445,13 +540,13 @@ export const CONTENT_NOTES: readonly ContentNoteDef[] = RATING_ROWS.map((row) =>
 export type MaturityRows = Partial<Record<ContentNote, RowLevel>>;
 
 /**
- * Keep only rows this build knows, at levels those rows can take.
+ * Keep only rows this build knows, at levels those rows can take on the Work's grid.
  *
  * ⚠️ **A level a row cannot reach is dropped, not lowered**, so a request marking Self-Harm as
  * Adult leaves that row unanswered rather than quietly answering it at Mature on the creator's
  * behalf. Anything unreadable is treated as no answer at all.
  */
-export function normalizeMaturityRows(input: unknown): MaturityRows {
+export function normalizeMaturityRows(input: unknown, grid: RatingGrid): MaturityRows {
 	const rows: MaturityRows = {};
 	if (input == null || typeof input !== "object") return rows;
 	const given = input as Record<string, unknown>;
@@ -460,7 +555,7 @@ export function normalizeMaturityRows(input: unknown): MaturityRows {
 		if (level === "none") rows[row.note] = "none";
 		else if (
 			(level === "general" || level === "mature" || level === "adult") &&
-			row.rungs[level] !== null
+			row.rungs[grid][level] !== null
 		) {
 			rows[row.note] = level;
 		}
@@ -473,6 +568,10 @@ export function normalizeMaturityRows(input: unknown): MaturityRows {
  * is *Not in it* or General. Null until every row is answered, because an unanswered row is not
  * a declaration of anything, and a rating assembled from half a matrix would be the editor
  * answering the rest on the creator's behalf.
+ *
+ * It reads the rows as given, so rows from a request are put through `normalizeMaturityRows`
+ * for the Work's grid first; that is what keeps a language row marked Explicit from rating a
+ * visual Work.
  */
 export function ratingFromRows(rows: MaturityRows): DeclarableMaturity | null {
 	let rating: DeclarableMaturity = "general";
@@ -494,8 +593,8 @@ export function ratingFromRows(rows: MaturityRows): DeclarableMaturity | null {
  * or written straight into the database) is not a declaration the rows can stand behind. An
  * operator's correction sets the rating over the rows and does not answer them.
  */
-export function isRatingComplete(rows: MaturityRows | null | undefined): boolean {
-	return ratingFromRows(normalizeMaturityRows(rows)) !== null;
+export function isRatingComplete(rows: MaturityRows | null | undefined, grid: RatingGrid): boolean {
+	return ratingFromRows(normalizeMaturityRows(rows, grid)) !== null;
 }
 
 /** The notes the rows put on a Work: every row marked at a rung, in the canonical order. */

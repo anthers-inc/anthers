@@ -23,6 +23,7 @@ import { db } from "@anthers/db/client";
 import { transcodingJobs, type works } from "@anthers/db/schema";
 import { isEmptyWriting, processingFor, workNeedsFile } from "@anthers/shared/content";
 import {
+	gridFor,
 	isRatingComplete,
 	type MaturityRating,
 	maturityLabel,
@@ -156,7 +157,7 @@ export async function releaseRefusal(
 	// a rating straight into the database, holds a value its rows cannot stand behind, so it is
 	// refused as undeclared, which it is, with the same code as an unrated one because the fix is
 	// the same one.
-	if (ratingRefusal === "undeclared" || !isRatingComplete(work.maturityRows)) {
+	if (ratingRefusal === "undeclared" || !isRatingComplete(work.maturityRows, gridFor(work.type))) {
 		return {
 			status: 409,
 			body: {

@@ -397,8 +397,9 @@ function MatureContentSection() {
 					<div>
 						<p className="font-medium text-sm">Mature</p>
 						<p className="text-xs text-base-content/60">
-							Work made for adults — violence, sex or difficult subjects shown rather than implied.
-							Covered by default.
+							Work made for adults — violence, sex or difficult subjects shown or described rather
+							than implied, and writing, music or audio its creator labels explicit. Covered by
+							default.
 						</p>
 					</div>
 					{rungControl("mature", prefs.mature)}
@@ -407,9 +408,10 @@ function MatureContentSection() {
 				<div className="border-t border-base-300 pt-4">
 					<p className="font-medium text-sm">Adult</p>
 					<p className="text-xs text-base-content/60">
-						Explicit sexual content, or extreme violence or drug use that is the work's focus. You
-						will not see it anywhere on Anthers unless you turn this on. Creators set their own
-						price for it, or leave it free, exactly as they would for anything else.
+						Explicit sexual content, or, in visual work such as video and games, extreme violence or
+						drug use that is the work's focus. You will not see it anywhere on Anthers unless you
+						turn this on. Creators set their own price for it, or leave it free, exactly as they
+						would for anything else.
 					</p>
 
 					{prefs.adultAccess.canReach ? (

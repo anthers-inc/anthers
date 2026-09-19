@@ -38,12 +38,14 @@ import { moderationActions, workRatingAppeals, works } from "@anthers/db/schema"
 import {
 	type ContentNote,
 	type DeclarableMaturity,
+	gridFor,
 	isAtLeastAsCautious,
 	type MaturityRating,
 	maturityLabel,
 	normalizeContentNotes,
 	normalizeMaturityRows,
 	notesFromRows,
+	type RatingGrid,
 	ratingFromRows,
 } from "@anthers/shared/content-rating";
 import { and, desc, eq } from "drizzle-orm";
@@ -84,11 +86,14 @@ export type DeclineRefusal = "locked";
  * General form of this" or "none of this". An operator's correction is `correctRating`, which
  * sets the rating over the rows rather than answering them.
  */
-export function declaredRating(rows: unknown): {
+export function declaredRating(
+	rows: unknown,
+	grid: RatingGrid,
+): {
 	maturity?: DeclarableMaturity;
 	notes?: readonly string[];
 } {
-	const normalized = normalizeMaturityRows(rows);
+	const normalized = normalizeMaturityRows(rows, grid);
 	const fromRows = ratingFromRows(normalized);
 	return fromRows ? { maturity: fromRows, notes: notesFromRows(normalized) } : {};
 }
@@ -107,13 +112,14 @@ export async function declareRating(
 	now: Date = new Date(),
 ): Promise<WorkRow | DeclineRefusal> {
 	const current = ratingOf(work);
-	const declared = declaredRating(input.rows);
+	const grid = gridFor(work.type);
+	const declared = declaredRating(input.rows, grid);
 	const maturity = declared.maturity ?? current.maturity;
 
 	if (current.locked && !isAtLeastAsCautious(maturity, current.maturity)) return "locked";
 
 	const updates: Partial<typeof works.$inferInsert> = { updatedAt: now };
-	updates.maturityRows = normalizeMaturityRows(input.rows);
+	updates.maturityRows = normalizeMaturityRows(input.rows, grid);
 	if (maturity !== current.maturity) {
 		updates.maturity = maturity;
 		updates.maturitySetAt = now;

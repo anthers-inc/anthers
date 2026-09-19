@@ -687,7 +687,8 @@ describe("content ratings", () => {
 		});
 
 		it("rates Adult from a violence row, which the Rating Standard now allows", async () => {
-			const workId = await makeWork();
+			// A game, because violence reaches Adult on the visual grid and not on writing's.
+			const workId = await makeWork({ type: "game" });
 			expect((await patch(workId, { maturityRows: rows({ violence: "adult" }) })).status).toBe(200);
 			expect((await reload(workId)).maturity).toBe("adult");
 		});
@@ -725,6 +726,58 @@ describe("content ratings", () => {
 			expect(theirs.work.title).toBe(`Rating fixture ${id}`);
 			expect(theirs.work.maturityRows).toMatchObject({ horror: "general", violence: "none" });
 			expect(theirs.work.maturitySource).toBeUndefined();
+		});
+	});
+	/**
+	 * Writing, books, music and other audio are rated on the light grid, and everything else on the
+	 * visual grid (Parker, 2026-09-18). Both store the same values, so what differs is which answer
+	 * each row accepts, and every path that reads the rows has to ask for the Work's own grid.
+	 */
+	describe("rated on the grid its type decides", () => {
+		it("rates a piece of writing Mature for its language, and releases it", async () => {
+			const workId = await makeWork();
+			const res = await patch(workId, {
+				maturityRows: rows({ language: "mature" }),
+				visibility: "released",
+			});
+			expect(res.status).toBe(200);
+			const row = await reload(workId);
+			expect(row.maturity).toBe("mature");
+			expect(row.maturityNotes).toEqual(["language"]);
+			expect(row.visibility).toBe("released");
+		});
+
+		it("never rates a game for its language, and leaves that row for its creator", async () => {
+			const workId = await makeWork({ type: "game" });
+			expect((await patch(workId, { maturityRows: rows({ language: "mature" }) })).status).toBe(
+				200,
+			);
+			const row = await reload(workId);
+			expect(row.maturity).toBe("unrated");
+			expect(row.maturityRows).not.toHaveProperty("language");
+		});
+
+		it("rates a song on the light grid when it is created", async () => {
+			const res = await createWork({ type: "music", maturityRows: rows({ language: "mature" }) });
+			expect(res.status).toBe(201);
+			const { work } = await res.json();
+			expect((await reload(work.id)).maturity).toBe("mature");
+		});
+
+		it("never rates writing Adult for violence, and does for explicit sexual content", async () => {
+			const violent = await makeWork();
+			expect((await patch(violent, { maturityRows: rows({ violence: "adult" }) })).status).toBe(
+				200,
+			);
+			const row = await reload(violent);
+			expect(row.maturity).toBe("unrated");
+			expect(row.maturityRows).not.toHaveProperty("violence");
+
+			const explicit = await makeWork();
+			expect(
+				(await patch(explicit, { maturityRows: rows({ "sexual-themes": "adult" }) })).status,
+			).toBe(200);
+			expect((await reload(explicit)).maturity).toBe("adult");
 		});
 	});
 });

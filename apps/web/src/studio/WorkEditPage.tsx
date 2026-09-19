@@ -50,6 +50,7 @@ import { isEmptyWriting } from "@anthers/shared/content";
 import {
 	type ContentNote,
 	contentNoteLabel,
+	gridFor,
 	type MaturityRating,
 	type MaturityRows,
 	maturityLabel,
@@ -207,6 +208,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	const [current, setCurrent] = useState<Work>(editing);
 	const type = editing.type as UploadableWorkType;
+	// Which rating grid this Work is rated on, which its type alone decides.
+	const grid = gridFor(type);
 
 	const [title, setTitle] = useState(editing.title ?? "");
 	const [description, setDescription] = useState(editing.description ?? "");
@@ -254,15 +257,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// preselected: an unanswered row is not a declaration, and a default would be the editor
 	// answering on the creator's behalf, which is the one thing `unrated` exists in the schema to
 	// prevent. The release checkbox below refuses to be ticked until there is a rating.
-	const [rows, setRows] = useState<MaturityRows>(() => normalizeMaturityRows(editing.maturityRows));
+	const [rows, setRows] = useState<MaturityRows>(() =>
+		normalizeMaturityRows(editing.maturityRows, grid),
+	);
 	/**
 	 * Whether the rows differ from what is saved, and so whether a save sends them. Sent
 	 * unchanged, they would re-declare the rating they add up to, which an operator's correction
 	 * above it would refuse on every save of anything else.
 	 */
 	const rowsChanged =
-		JSON.stringify(normalizeMaturityRows(rows)) !==
-		JSON.stringify(normalizeMaturityRows(current.maturityRows));
+		JSON.stringify(normalizeMaturityRows(rows, grid)) !==
+		JSON.stringify(normalizeMaturityRows(current.maturityRows, grid));
 	// The rating the page stands at: what the rows add up to once every row is answered, and the
 	// Work's own rating until then, because an incomplete matrix changes no rating on the server.
 	// 🚨 Release and scheduling wait on `fromRows` rather than on `maturity`: a rated Work has every
@@ -444,7 +449,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			...details.fields(),
 			...(writing ? { bodyHtml, body: bodyText } : {}),
 		};
-		if (rowsChanged) json.maturityRows = normalizeMaturityRows(rows);
+		if (rowsChanged) json.maturityRows = normalizeMaturityRows(rows, grid);
 		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
 		return json;
 	};
@@ -965,7 +970,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				    see the state above. */}
 				<div id="work-rating" className="border-t border-base-300 pt-4 flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Rating</h2>
-					<RatingMatrix rows={rows} onChange={setRows} />
+					<RatingMatrix grid={grid} rows={rows} onChange={setRows} />
 					{!fromRows && storedMaturity && (
 						<p className="text-xs text-base-content/60">
 							This Work is rated {maturityLabel(storedMaturity)} today, but not every row is

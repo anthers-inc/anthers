@@ -20,7 +20,7 @@
  */
 
 import { workNeedsFile } from "@anthers/shared/content";
-import { isRatingComplete } from "@anthers/shared/content-rating";
+import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
 import type { Work } from "../../lib/types";
 import { accessState } from "./work-state";
 
@@ -176,7 +176,9 @@ export function buildWorklist({
 	// with no rows behind it and is refused all the same (Parker, 2026-09-18: rated means every
 	// row answered). Unreleased only, since the release is what this condition stands in front of.
 	const unrated = group(
-		works.filter((w) => w.visibility !== "released" && !isRatingComplete(w.maturityRows)),
+		works.filter(
+			(w) => w.visibility !== "released" && !isRatingComplete(w.maturityRows, gridFor(w.type)),
+		),
 	);
 	if (unrated.count > 0) {
 		items.push({
@@ -193,7 +195,9 @@ export function buildWorklist({
 	// counts an unanswered row as present (`mayContain`). Wrong out in the world and the creator's to
 	// fix, so it is on the list, though only some readers are missing it.
 	const unanswered = group(
-		works.filter((w) => w.visibility === "released" && !isRatingComplete(w.maturityRows)),
+		works.filter(
+			(w) => w.visibility === "released" && !isRatingComplete(w.maturityRows, gridFor(w.type)),
+		),
 	);
 	if (unanswered.count > 0) {
 		items.push({

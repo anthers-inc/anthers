@@ -16,10 +16,11 @@
  * would drift the first time somebody added a fourth dimension.
  *
  * ⚠️ **The fifth — language filtering — is deliberately the odd one out and cannot be made to
- * fit.** Strong language never affects a Work's rating (the wiki's *Rating Standard*), so the filter runs over
- * content **nobody classified**: it cannot read a rating or a content note to decide where to
- * apply, and it therefore behaves differently from every other control here. It is a courtesy
- * for a household, not a guarantee about anything, and the word list says so.
+ * fit.** It softens words wherever text is shown, including comments and reviews that carry no
+ * rating, so it runs over content **nobody classified word by word**: it cannot read a rating or a
+ * content note to decide where to apply, and it therefore behaves differently from every other
+ * control here. It is a courtesy for a household, not a guarantee about anything, and the word
+ * list says so. Hiding Works marked for strong language is the kinds-of-content setting's job.
  */
 
 import type { WorkType } from "./content.js";

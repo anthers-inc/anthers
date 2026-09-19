@@ -451,11 +451,11 @@ export default function ParentalControlsSection() {
 							wherever text is shown — "fork", "shirt", and so on.
 						</span>
 					</label>
-					{/* ⚠️ The honest limit, stated where somebody will read it. Strong language never
-					    affects a work's rating, so this runs over content nobody classified. */}
+					{/* ⚠️ The honest limit, stated where somebody will read it. Nobody classifies text word
+					    by word, so this runs over a list rather than over anything a creator said. */}
 					<p className="max-w-prose pl-11 text-xs text-base-content/50">
-						It's a courtesy rather than a guarantee: language doesn't affect how work is rated here,
-						so this has nothing to consult and will miss things it hasn't been told about.
+						It's a courtesy rather than a guarantee: it works from a list of words rather than from
+						how anything was rated, so it will miss things it hasn't been told about.
 					</p>
 				</div>
 
