@@ -120,7 +120,7 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 				</figure>
 			) : (
 				<div className="flex h-40 w-full items-center justify-center bg-base-300">
-					<span className="text-sm text-base-content/30">No cover</span>
+					<span className="text-sm text-base-content/30">No thumbnail</span>
 				</div>
 			)}
 			<div className="card-body gap-1 p-4">

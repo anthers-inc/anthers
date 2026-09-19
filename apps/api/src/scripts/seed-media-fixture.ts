@@ -55,6 +55,7 @@ import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { storage } from "../services/storage/index.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createLocalAccount } from "./local-accounts.js";
+import { seedVideoThumbnail } from "./seed-thumbnail.js";
 
 const TAG = "[media-fixture]";
 const FORCE = process.argv.includes("--force");
@@ -360,8 +361,10 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 			.values({ workId, mediaType: processing, status: "pending", progress: 0 })
 			.returning({ id: transcodingJobs.id });
 
-		if (processing === "video") await transcodeVideo({ jobId: job.id });
-		else if (processing === "ebook") await rasterizeEbook({ jobId: job.id });
+		if (processing === "video") {
+			await transcodeVideo({ jobId: job.id });
+			await seedVideoThumbnail(workId, creator, clipPath);
+		} else if (processing === "ebook") await rasterizeEbook({ jobId: job.id });
 		else await processAudio({ jobId: job.id });
 
 		const [done] = await db

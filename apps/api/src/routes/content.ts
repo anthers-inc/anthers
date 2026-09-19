@@ -52,6 +52,7 @@ import {
 	COMMENT_MAX,
 	type CommentSubjectType,
 	embedUrlProblem,
+	isOwnThumbnail,
 	isReviewVerdict,
 	processingFor,
 	REVIEW_MAX,
@@ -613,6 +614,12 @@ async function findWorkRow(param: string): Promise<typeof works.$inferSelect | n
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
+
+/** An image Work is its own thumbnail and takes no other (`isOwnThumbnail`). */
+const IMAGE_THUMBNAIL_REFUSAL = {
+	error: "An image is its own thumbnail, so it can't be given another.",
+	code: "image_is_its_thumbnail",
+} as const;
 
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
@@ -3047,6 +3054,8 @@ const contentRoutes = new Hono()
 			);
 		}
 
+		if (isOwnThumbnail(data.type) && data.thumbnail) return c.json(IMAGE_THUMBNAIL_REFUSAL, 400);
+
 		// Refused before anything is written. See `storage/keys.ts` for what naming another
 		// account's object would let a Work do.
 		for (const ref of [data.sourceKey, data.thumbnail]) {
@@ -3077,7 +3086,8 @@ const contentRoutes = new Hono()
 				type: data.type,
 				title: data.title,
 				description: data.description,
-				thumbnail: data.thumbnail,
+				// An image is its own thumbnail (`isOwnThumbnail`).
+				thumbnail: isOwnThumbnail(data.type) ? (data.sourceKey ?? "") : data.thumbnail,
 				sourceKey: data.sourceKey,
 				embedUrl: data.embedUrl,
 				durationSeconds: data.durationSeconds ?? null,
@@ -3608,6 +3618,16 @@ const contentRoutes = new Hono()
 			return c.json({ error: "Work not found" }, 404);
 		}
 
+		// An image is its own thumbnail, so a request naming another is refused rather than
+		// quietly ignored, before anything is written.
+		if (
+			isOwnThumbnail(work.type) &&
+			data.thumbnail !== undefined &&
+			data.thumbnail !== (work.thumbnail ?? "")
+		) {
+			return c.json(IMAGE_THUMBNAIL_REFUSAL, 400);
+		}
+
 		// A file reference is checked when it CHANGES, and before anything is written — the
 		// rating below is stored ahead of the release gates, and a refused request must store
 		// nothing. Only a change is asked about, so a row written before the check stays
@@ -3793,18 +3813,10 @@ const contentRoutes = new Hono()
 		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
 		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
 		if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
-		// A single image is its own thumbnail until one is set. Decided here against the STORED
-		// thumbnail rather than by the client, because the file arrives while the creator may be
-		// editing the same Work on its page, and whichever wrote second would otherwise win.
-		if (
-			sourceChanged &&
-			data.sourceKey &&
-			work.type === "image" &&
-			data.thumbnail === undefined &&
-			!work.thumbnail
-		) {
-			updates.thumbnail = data.sourceKey;
-		}
+		// An image is its own thumbnail, and follows its file when the file arrives or is replaced
+		// (Parker, 2026-09-18). Decided here rather than by the client, because the file arrives
+		// while the creator may be editing the same Work on its page.
+		if (sourceChanged && isOwnThumbnail(work.type)) updates.thumbnail = data.sourceKey ?? "";
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 

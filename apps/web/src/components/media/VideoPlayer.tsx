@@ -20,7 +20,7 @@
  */
 import { PlayIcon } from "@heroicons/react/24/solid";
 import type HlsInstance from "hls.js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
@@ -49,6 +49,11 @@ interface VideoPlayerProps {
 	 * without spending an allowance, so metering them would bill somebody twice.
 	 */
 	publicAccess?: boolean;
+	/**
+	 * Handed the `<video>` element, for a caller that reads the picture it is showing — the
+	 * Studio's *Use This Frame*, which draws the paused frame into a thumbnail.
+	 */
+	elementRef?: MutableRefObject<HTMLVideoElement | null>;
 }
 
 export default function VideoPlayer({
@@ -57,9 +62,17 @@ export default function VideoPlayer({
 	autoPlay = false,
 	attention,
 	publicAccess = false,
+	elementRef,
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
+	useEffect(() => {
+		if (!elementRef) return;
+		elementRef.current = videoRef.current;
+		return () => {
+			elementRef.current = null;
+		};
+	}, [elementRef]);
 	const hlsRef = useRef<HlsInstance | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [position, setPosition] = useState(0);

@@ -129,7 +129,7 @@ export default function ParentsPage() {
 					<strong>
 						Adult work is invisible unless an account has asked for it and proved an adult holds it.
 					</strong>{" "}
-					Not just locked — the title and cover art don't appear either, in listings, in search, or
+					Not just locked — the title and thumbnail don't appear either, in listings, in search, or
 					on a creator's page. Getting to it takes two separate things: a setting the account turns
 					on, and a one-off check that reads whether there's a <em>credit</em> card on the account,
 					since card issuers require the primary accountholder to be 18. We don't ask for a date of

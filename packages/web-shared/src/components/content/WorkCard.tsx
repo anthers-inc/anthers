@@ -14,7 +14,7 @@
  * clicking it while the editor was a modal with no URL. It has one now.
  */
 
-import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
+import { isEmptyWriting, needsChosenThumbnail, workNeedsFile } from "@anthers/shared/content";
 import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
 import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
@@ -68,7 +68,10 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 	// the rows rather than the rating, since a Work rated before the matrix holds a rating with no
 	// rows behind it and is refused all the same.
 	const unrated = !isRatingComplete(item.maturityRows, gridFor(item.type));
-	const blocked = !released && (noFile || emptyWriting || processing || noDelivery || unrated);
+	// And a video with no thumbnail its creator chose (`thumbnail_missing`).
+	const noThumbnail = needsChosenThumbnail(item.type) && !item.thumbnail;
+	const blocked =
+		!released && (noFile || emptyWriting || processing || noDelivery || unrated || noThumbnail);
 	const blockedWhy = uploading
 		? "Still uploading — it can be released once its file arrives and is processed"
 		: noFile
@@ -79,7 +82,9 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 					? "Still processing — it can be released once the media is ready"
 					: unrated
 						? "Rate it before releasing"
-						: "Turn on streaming or downloads before releasing";
+						: noThumbnail
+							? "Choose a thumbnail before releasing"
+							: "Turn on streaming or downloads before releasing";
 
 	return (
 		<div className="card bg-base-100 border border-base-300 overflow-hidden">
