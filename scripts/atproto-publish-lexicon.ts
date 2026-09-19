@@ -48,6 +48,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { isOffNetworkUrl } from "../apps/api/src/lib/atproto-network.js";
+import { PUBLISHED_LEXICONS } from "../apps/api/src/services/published-lexicons.js";
 import type { SessionWriter } from "./atproto-writer.js";
 import {
 	evolutionProblems,
@@ -57,6 +58,7 @@ import {
 	publishedPath,
 	readLexiconDocs,
 } from "./lexicon-evolution.js";
+import { promptHidden } from "./terminal.js";
 
 /** The collection every schema record lives in. */
 export const SCHEMA_COLLECTION = "com.atproto.lexicon.schema";
@@ -140,7 +142,8 @@ export function decide(
 	}
 	// A password passed as a flag is refused rather than accepted: it would sit in the shell
 	// history of whichever machine published, and rotating it is a worse afternoon than
-	// retyping it now.
+	// retyping it now. The prompt that asks for it instead does not echo (`promptHidden`), or
+	// the password would sit in the terminal's scrollback just the same.
 	if (argv.includes("--password")) {
 		return {
 			refuse: "--password is refused; the password is prompted for and never read from a flag",
@@ -385,7 +388,7 @@ if (import.meta.main) {
 
 	/** One login for the whole run, after the person has said what they want. */
 	async function openTarget(): Promise<PublishTarget> {
-		const password = prompt("  password: ");
+		const password = await promptHidden("  password: ");
 		if (!password) {
 			console.log("  stopped (no password given)");
 			process.exit(0);
@@ -501,8 +504,13 @@ if (import.meta.main) {
 		);
 	}
 	// ⚠️ Publishing a schema does not start Anthers writing records under it, on purpose: that is
-	// a separate decision made in code. Said here because this is the moment somebody needs it.
-	const collections = published.filter((nsid) => !nsid.endsWith("Permissions"));
+	// a separate decision made in code. Said here because this is the moment somebody needs it,
+	// and only of a collection Anthers is not already writing, since re-publishing one it writes
+	// changes nothing about that.
+	const writing = new Set<string>(PUBLISHED_LEXICONS);
+	const collections = published.filter(
+		(nsid) => !nsid.endsWith("Permissions") && !writing.has(nsid),
+	);
 	if (collections.length > 0 && !rehearsal) {
 		console.log(
 			"\nAnthers writes no records under these until they are added to PUBLISHED_LEXICONS in\n" +
