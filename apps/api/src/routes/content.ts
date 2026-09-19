@@ -53,9 +53,11 @@ import {
 	type CommentSubjectType,
 	embedUrlProblem,
 	isReviewVerdict,
+	processingFor,
 	REVIEW_MAX,
 	REVIEW_MIN,
 	recommendedPercent,
+	WORK_TYPES,
 } from "@anthers/shared/content";
 import {
 	maturityLabel,
@@ -611,33 +613,6 @@ async function findWorkRow(param: string): Promise<typeof works.$inferSelect | n
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-/**
- * Work types. `text` is here now: prose is a Work, not post-native content. Under the old
- * model rich text was deliberately excluded from the library, which produced the strangest
- * rule in the system — prose in a post body earned nothing while the same prose as a
- * content element earned. The rule was right; the earning form just had no home.
- */
-/**
- * The Work types, and **the authority on the list** — not any table in any document.
- * There are nine. A doc listing eight is how `ebook` got missed once, so add a type
- * here first and let the documentation follow; `CONSUMPTION` in `attention.ts` is tied
- * to this by a test, because a type missing from there earns its creator nothing.
- */
-const WORK_TYPES = [
-	"text",
-	"video",
-	"audio",
-	"image",
-	// A packaged multi-page document — a comic, a graphic novel, a prose book. The
-	// creator uploads ONE file (a PDF); `rasterize-ebook` renders it to private per-page
-	// images, because a single-file deliverable cannot be access-checked page by page.
-	"ebook",
-	"game",
-	"software",
-	"physical",
-	"service",
-] as const;
-
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 /**
@@ -725,7 +700,7 @@ const workBaseSchema = z
 		// type = "text": the prose itself.
 		body: z.string().optional().default(""),
 		bodyHtml: z.string().optional().default(""),
-		// type = "audio": the song's words, plain text and untimestamped. Bounded generously
+		// type = "music": the song's words, plain text and untimestamped. Bounded generously
 		// — a long song with repeats runs to a few thousand characters, and an epic runs to
 		// more. No sanitizer, because nothing here is ever rendered as HTML.
 		lyrics: z.string().max(20_000).optional(),
@@ -951,7 +926,8 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * until a manual refresh.
  */
 async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow | null> {
-	if (item.type === "video" && item.sourceKey) {
+	const processing = processingFor(item.type);
+	if (processing === "video" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "video", status: "pending" })
@@ -963,7 +939,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 		);
 		return job;
 	}
-	if (item.type === "ebook" && item.sourceKey) {
+	if (processing === "ebook" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
@@ -975,7 +951,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 		);
 		return job;
 	}
-	if (item.type === "audio" && item.sourceKey) {
+	if (processing === "audio" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "audio", status: "pending" })
@@ -3779,7 +3755,7 @@ const contentRoutes = new Hono()
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
 		if (data.body !== undefined) updates.body = data.body;
-		// Not gated on `work.type === "audio"`, unlike bodyHtml below. Only audio Works show
+		// Not gated on `work.type === "music"`, unlike bodyHtml below. Only music Works show
 		// lyrics, but refusing the write for any other type would silently discard what a
 		// creator typed if they ever changed the type — and the column is inert everywhere
 		// else, so there is nothing to protect against.
@@ -4288,7 +4264,9 @@ const contentRoutes = new Hono()
 		// is int4 and any "very large" stand-in either overflows the column type or
 		// invites someone to pick one that doesn't.
 		const BANDS: Record<string, Record<string, [number, number | null]>> = {
-			audio: { short: [0, 300], medium: [300, 1800], long: [1800, null] },
+			music: { short: [0, 300], medium: [300, 1800], long: [1800, null] },
+			// A podcast episode or an audiobook runs on a film's scale rather than a song's.
+			audio: { short: [0, 600], medium: [600, 3600], long: [3600, null] },
 			video: { short: [0, 600], medium: [600, 3600], long: [3600, null] },
 		};
 		const band = duration && mediaType ? BANDS[mediaType]?.[duration] : undefined;
@@ -5199,16 +5177,17 @@ const contentRoutes = new Hono()
 		 * tracks themselves are fetched when somebody actually presses play, and shipping
 		 * every member of every saved album on a shelf request would be the opposite trade.
 		 *
-		 * `audioCount === workCount` is what makes it a record rather than a folder — the
+		 * `musicCount === workCount` is what makes it a record rather than a folder — the
 		 * same rule `isAlbum` applies on a Project page, kept in step by both being about
-		 * "every member is audio" rather than by sharing code across the boundary.
+		 * "every member is music" rather than by sharing code across the boundary. A Project
+		 * of podcast episodes is a series, not an album, so `audio` does not count.
 		 */
 		const memberCounts = projectIds.length
 			? await db
 					.select({
 						projectId: projectItems.projectId,
 						workCount: sql<number>`count(*)::int`,
-						audioCount: sql<number>`count(*) filter (where ${works.type} = 'audio')::int`,
+						musicCount: sql<number>`count(*) filter (where ${works.type} = 'music')::int`,
 					})
 					.from(projectItems)
 					.innerJoin(works, eq(projectItems.workId, works.id))
@@ -5278,9 +5257,9 @@ const contentRoutes = new Hono()
 						project: {
 							...p,
 							trackCount: counts?.workCount ?? 0,
-							// Every released member is audio — i.e. this is a record, not a
+							// Every released member is music — i.e. this is a record, not a
 							// folder that happens to contain some music.
-							isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.audioCount,
+							isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.musicCount,
 						},
 					};
 				})

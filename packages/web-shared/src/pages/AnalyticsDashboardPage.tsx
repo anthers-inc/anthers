@@ -7,6 +7,7 @@ import {
 	DocumentTextIcon,
 	EyeIcon,
 	FilmIcon,
+	MicrophoneIcon,
 	MusicalNoteIcon,
 	PlayIcon,
 	UsersIcon,
@@ -52,8 +53,10 @@ function EventTypeIcon({ type }: { type: string }) {
 			return <PlayIcon className="w-4 h-4" />;
 		case "video":
 			return <FilmIcon className="w-4 h-4" />;
-		case "audio":
+		case "music":
 			return <MusicalNoteIcon className="w-4 h-4" />;
+		case "audio":
+			return <MicrophoneIcon className="w-4 h-4" />;
 		default:
 			return <DocumentTextIcon className="w-4 h-4" />;
 	}

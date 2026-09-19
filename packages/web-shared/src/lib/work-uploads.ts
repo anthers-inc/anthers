@@ -27,6 +27,7 @@
  * moment earlier.
  */
 
+import { type FILE_WORK_TYPES, processingFor } from "@anthers/shared/content";
 import { useMemo, useSyncExternalStore } from "react";
 import { uploadImageFile } from "../components/post/mediaUpload";
 import { client } from "./rpc";
@@ -35,7 +36,7 @@ import { uploadMediaFile } from "./upload";
 /** Where an uploaded file goes once it has arrived. */
 export type WorkUploadTarget =
 	/** The Work's own file — what a video, a track, an image or a book IS. */
-	| { kind: "source"; type: "video" | "audio" | "image" | "ebook" }
+	| { kind: "source"; type: (typeof FILE_WORK_TYPES)[number] }
 	/** A downloadable build for a game or software Work, which becomes its primary download. */
 	| { kind: "build"; platform: string };
 
@@ -70,10 +71,8 @@ const defaultTransport: WorkUploadTransport = {
 		if (target.kind === "source" && target.type === "image") {
 			return (await uploadImageFile(file, "image")).url;
 		}
-		const mediaType =
-			target.kind === "source" && (target.type === "video" || target.type === "audio")
-				? target.type
-				: "asset";
+		const processing = target.kind === "source" ? processingFor(target.type) : null;
+		const mediaType = processing === "video" || processing === "audio" ? processing : "asset";
 		return uploadMediaFile(file, mediaType, onProgress);
 	},
 	async attach(workId, target, key, file) {

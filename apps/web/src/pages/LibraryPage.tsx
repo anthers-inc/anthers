@@ -35,9 +35,11 @@ import {
 	EyeIcon,
 	EyeSlashIcon,
 	LockClosedIcon,
+	MicrophoneIcon,
 	MusicalNoteIcon,
 	PencilSquareIcon,
 	PuzzlePieceIcon,
+	RectangleGroupIcon,
 	RectangleStackIcon,
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
@@ -48,10 +50,12 @@ import { removeItem, setHidden } from "../lib/library";
 const MEDIA_TABS = [
 	{ id: "", label: "All", icon: RectangleStackIcon },
 	{ id: "game", label: "Games", icon: PuzzlePieceIcon },
-	{ id: "audio", label: "Music", icon: MusicalNoteIcon },
+	{ id: "music", label: "Music", icon: MusicalNoteIcon },
+	{ id: "audio", label: "Audio", icon: MicrophoneIcon },
 	{ id: "video", label: "Video", icon: VideoCameraIcon },
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
 	{ id: "ebook", label: "Books", icon: BookOpenIcon },
+	{ id: "comic", label: "Comics", icon: RectangleGroupIcon },
 ] as const;
 
 /** The shelf's view of a saved Project — the album card's whole data source. */

@@ -102,6 +102,75 @@ export function isCommentSubjectType(value: string): value is CommentSubjectType
 }
 
 /**
+ * The Work types, and **the authority on the list** — not any table in any document. A type
+ * says how a Work is handled: how its file is processed, which player or reader opens it, and
+ * how time spent with it is counted. Add a type here first. Every table keyed by `WorkType`
+ * then fails to compile until it says what the new type does, which is the point: a type
+ * missing from `CONSUMPTION` in `attention.ts` would earn its creator nothing, with no error
+ * anywhere to say so.
+ *
+ * ⚠️ **`comic` and `music` sit beside `ebook` and `audio` rather than replacing them**, and
+ * `ebook` and `audio` mean everything of their medium that is not the other: a book that is
+ * not a comic, and audio that is not music — a podcast, an audiobook, audio drama, a
+ * soundscape. The published `org.anthers.work` Lexicon names a Work's kind, and a published
+ * list of values can only grow, so neither older value could be retired (Parker, 2026-09-18).
+ */
+export const WORK_TYPES = [
+	"text",
+	"video",
+	"music",
+	"audio",
+	"image",
+	"comic",
+	"ebook",
+	"game",
+	"software",
+	"physical",
+	"service",
+] as const;
+
+export type WorkType = (typeof WORK_TYPES)[number];
+
+export function isWorkType(v: unknown): v is WorkType {
+	return typeof v === "string" && (WORK_TYPES as readonly string[]).includes(v);
+}
+
+/**
+ * The Work types that are listened to. Each is one uploaded file, processed into one
+ * normalized rendition with a waveform, and played in the audio player.
+ */
+export const LISTENED_WORK_TYPES = ["music", "audio"] as const satisfies readonly WorkType[];
+
+export function isListened(type: string): boolean {
+	return (LISTENED_WORK_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * The Work types that are read page by page. Each is one uploaded PDF, which
+ * `rasterize-ebook` renders to private per-page images, because a single-file deliverable
+ * cannot be access-checked page by page.
+ */
+export const PAGED_WORK_TYPES = ["comic", "ebook"] as const satisfies readonly WorkType[];
+
+export function isPaged(type: string): boolean {
+	return (PAGED_WORK_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * Which processing a Work's uploaded file goes through, as `transcoding_jobs.media_type`
+ * names it, or null for a type whose file is used as it was uploaded. The pipeline is a
+ * property of the medium rather than the type, which is why `music` and `audio` share one.
+ */
+export type ProcessingKind = "video" | "audio" | "ebook";
+
+export function processingFor(type: string): ProcessingKind | null {
+	if (type === "video") return "video";
+	if (isListened(type)) return "audio";
+	if (isPaged(type)) return "ebook";
+	return null;
+}
+
+/**
  * The Work kinds that ARE their uploaded file: a video, a track, an image and a book have
  * nothing to deliver until the file arrives, where a game can be an embed, and a physical good
  * or a service is described rather than uploaded.
@@ -112,7 +181,12 @@ export function isCommentSubjectType(value: string): value is CommentSubjectType
  * is an upload still in flight or one that never finished. Release refuses it
  * (`media_missing`), because processing cannot be waited on for a file that is not there.
  */
-export const FILE_WORK_TYPES = ["video", "audio", "image", "ebook"] as const;
+export const FILE_WORK_TYPES = [
+	"video",
+	...LISTENED_WORK_TYPES,
+	"image",
+	...PAGED_WORK_TYPES,
+] as const satisfies readonly WorkType[];
 
 /** Whether a Work of this kind has nothing to deliver until its file is uploaded. */
 export function workNeedsFile(type: string): boolean {

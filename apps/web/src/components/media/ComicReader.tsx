@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The comic reader — page turns over an ebook Work.
+ * The comic reader — page turns over a comic or ebook Work, until comics get a reader of their own.
  *
  * Third of the three players, and built from the same `transport/` pieces as the other
  * two on purpose: same button shapes, same focus treatment, same keyboard philosophy, same
@@ -22,7 +22,7 @@
  * implementation: the browser's own cache holds bytes it was allowed to have, and asking
  * again goes through the door again.
  *
- * **Attention is presence-mode** for an ebook — visible tab plus a sign of life within
+ * **Attention is presence-mode** for a comic or an ebook — visible tab plus a sign of life within
  * 60s, which turning pages supplies naturally. The claim lives on the page that renders
  * this, keyed on the Work; see the wiki's *What the Time Pool Pays For*.
  */

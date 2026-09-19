@@ -357,7 +357,7 @@ export default function CatalogPage() {
 				<EmptyState
 					icon={<RectangleStackIcon className="w-12 h-12" />}
 					title="Your Catalog is empty"
-					description="Upload video, audio, images, games, software, or list physical goods and services. Each one is a Work you can release, gate or sell on its own — with or without ever writing a post about it."
+					description="Upload video, music and other audio, images, comics and books, games or software, or list physical goods and services. Each one is a Work you can release, gate or sell on its own — with or without ever writing a post about it."
 					action={
 						<div className="flex flex-wrap justify-center gap-2">
 							<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">

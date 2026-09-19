@@ -215,7 +215,7 @@ describe("Delivery-layer access", () => {
 	it("withholds a locked track's lyrics but keeps its public blurb", async () => {
 		const track = await insertWork({
 			creatorId,
-			type: "audio",
+			type: "music",
 			title: "Locked Track",
 			description: "A song about gates.",
 			lyrics: "the gated words\nsecond line",
@@ -236,7 +236,7 @@ describe("Delivery-layer access", () => {
 		// if you only ever look at the denied side.
 		const track = await insertWork({
 			creatorId,
-			type: "audio",
+			type: "music",
 			title: "Open Track",
 			lyrics: "the open words",
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],

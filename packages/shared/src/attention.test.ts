@@ -21,6 +21,7 @@ import {
 	IDLE_TIMEOUT_MS,
 	isTimePoolEligible,
 } from "./attention.js";
+import { WORK_TYPES } from "./content.js";
 
 /** Present and active — attended content credits. */
 const ATTENTIVE: AttentionContext = { visible: true, msSinceInteraction: 0 };
@@ -36,11 +37,12 @@ function claim(over: Partial<AttentionClaim> & { contentType: string }): Attenti
 describe("consumption modes", () => {
 	test("timed media is playback-gated", () => {
 		expect(consumptionModeFor("video")).toBe("playback");
+		expect(consumptionModeFor("music")).toBe("playback");
 		expect(consumptionModeFor("audio")).toBe("playback");
 	});
 
 	test("text and other attended content require presence", () => {
-		for (const type of ["text", "image", "game", "software"]) {
+		for (const type of ["text", "image", "comic", "ebook", "game", "software"]) {
 			expect(consumptionModeFor(type)).toBe("presence");
 		}
 	});
@@ -60,9 +62,18 @@ describe("consumption modes", () => {
 
 	test("every eligible type maps to a real event type", () => {
 		expect(eventTypeFor("video")).toBe("watch");
+		expect(eventTypeFor("music")).toBe("listen");
 		expect(eventTypeFor("audio")).toBe("listen");
 		expect(eventTypeFor("text")).toBe("read");
+		expect(eventTypeFor("comic")).toBe("read");
 		expect(eventTypeFor("game")).toBe("play");
+		for (const type of WORK_TYPES.filter(isTimePoolEligible)) {
+			expect(eventTypeFor(type)).not.toBe("page_view");
+		}
+	});
+
+	test("every medium but a listing earns", () => {
+		expect(WORK_TYPES.filter((t) => !isTimePoolEligible(t))).toEqual(["physical", "service"]);
 	});
 });
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import {
 	coverFor,
@@ -15,7 +16,7 @@ import {
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { Work } from "@anthers/web-shared/types";
-import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
+import { MicrophoneIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
@@ -120,10 +121,14 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 						</div>
 					)}
 
-					{post.type === "audio" && (
+					{isListened(post.type) && (
 						<div className="relative h-24 bg-gradient-to-br from-secondary/20 to-primary/20">
 							<div className="absolute inset-0 flex items-center justify-center">
-								<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
+								{post.type === "music" ? (
+									<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
+								) : (
+									<MicrophoneIcon className="w-10 h-10 text-base-content/20" />
+								)}
 							</div>
 						</div>
 					)}

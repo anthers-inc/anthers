@@ -15,6 +15,7 @@
  * like "the audio file" and is the raw private upload rather than the processed,
  * access-checked deliverable.
  */
+import { isListened } from "@anthers/shared/content";
 import type { Work } from "@anthers/web-shared/types";
 import type { QueueTrack } from "./music-queue";
 
@@ -54,22 +55,23 @@ export function trackFromWork(work: WorkWithCreator, creator?: TrackCreator | nu
 }
 
 /**
- * The audio Works of a list, in the order given, as a queue.
+ * The Works of a list that are listened to, in the order given, as a queue.
  *
  * Order is the caller's — for a Project that is `project_items.sortOrder`, which is the
  * whole artifact of an EP and the reason that column exists.
  */
 export function tracksFrom(works: WorkWithCreator[], creator?: TrackCreator | null): QueueTrack[] {
-	return works.filter((w) => w.type === "audio").map((w) => trackFromWork(w, creator));
+	return works.filter((w) => isListened(w.type)).map((w) => trackFromWork(w, creator));
 }
 
 /**
- * Whether a list of Works reads as an album — every one of them is audio.
+ * Whether a list of Works reads as an album — every one of them is music. A Project of
+ * podcast episodes is a series rather than a record, so `audio` does not make one.
  *
  * Deliberately strict. A game Project holding five tracks *and* a build is not an album:
  * turning it into a track list would bury the game, and the grid it already has says
  * "here are some things" perfectly well. An album view is for something that IS a record.
  */
 export function isAlbum(works: { type?: string }[]): boolean {
-	return works.length > 0 && works.every((w) => w.type === "audio");
+	return works.length > 0 && works.every((w) => w.type === "music");
 }

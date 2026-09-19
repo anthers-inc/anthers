@@ -13,6 +13,7 @@
  * question, answered by the server's verdict on the reader page and by ownership on the Edit page.
  */
 
+import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -91,7 +92,7 @@ export function workTitleTypography(type: string): {
 		: { className: WORK_TITLE_CLASS, style: undefined };
 }
 
-/** An audio Work's lyrics panel, and its heading, likewise. */
+/** A music Work's lyrics panel, and its heading, likewise. */
 export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
 export const WORK_LYRICS_HEADING_CLASS =
 	"mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50";
@@ -136,7 +137,7 @@ export function formatAuthored(
  * the wall instead.
  */
 export function pageHoldsTheMeter(type: string): boolean {
-	return type !== "video" && type !== "audio";
+	return type !== "video" && !isListened(type);
 }
 
 /**
@@ -273,7 +274,7 @@ export function WorkDeliverable({
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
-	/** In place of an audio Work's lyrics, for a control standing in for them. */
+	/** In place of a music Work's lyrics, for a control standing in for them. */
 	lyrics?: ReactNode;
 }) {
 	const { playTracks } = useMediaPlayer();
@@ -287,7 +288,7 @@ export function WorkDeliverable({
 					publicAccess={work.publicAccess ?? false}
 				/>
 			)}
-			{work.type === "audio" && work.transcoding?.outputFileUrl && (
+			{isListened(work.type) && work.transcoding?.outputFileUrl && (
 				<>
 					<AudioPlayer
 						src={work.transcoding.outputFileUrl}
@@ -298,21 +299,22 @@ export function WorkDeliverable({
 						// away — which is the whole reason the bar exists.
 						onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 					/>
-					{/* The words, under the player. Gated with the audio: the API blanks
+					{/* A song's words, under the player. Gated with the audio: the API blanks
 					    them for a viewer without access, so reaching this branch at all
 					    means the viewer may read them. */}
-					{lyrics ??
-						(work.lyrics?.trim() && (
-							<section className={WORK_LYRICS_CLASS}>
-								<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
-								<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
-									{work.lyrics}
-								</p>
-							</section>
-						))}
+					{work.type === "music" &&
+						(lyrics ??
+							(work.lyrics?.trim() && (
+								<section className={WORK_LYRICS_CLASS}>
+									<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
+									<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
+										{work.lyrics}
+									</p>
+								</section>
+							)))}
 				</>
 			)}
-			{work.type === "ebook" && (
+			{isPaged(work.type) && (
 				<ComicReader
 					workId={work.id}
 					pageCount={work.pageCount ?? 0}

@@ -425,9 +425,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		const json: WorkInput = {
 			title: title.trim(),
 			description: description.trim(),
-			// Sent unconditionally on an audio Work, including empty — deleting the lyrics
+			// Sent unconditionally on a music Work, including empty — deleting the lyrics
 			// is a real edit, and an omitted field cannot express it.
-			...(type === "audio" ? { lyrics } : {}),
+			...(type === "music" ? { lyrics } : {}),
 			// Only when changed here: see the header on why a save must not carry what was loaded.
 			...(thumbnailTouched.current ? { thumbnail: thumbnailUrl } : {}),
 			visibility,
@@ -603,7 +603,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		: null;
 
 	const lyricsEditor =
-		type === "audio" ? (
+		type === "music" ? (
 			/*
 			 * Lyrics — plain text, untimestamped, under the player where a listener reads them.
 			 *

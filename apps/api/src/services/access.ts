@@ -105,7 +105,7 @@ export interface AccessibleWork {
 	 */
 	quarantineStatus: string;
 	/**
-	 * The Work's medium — `video`, `audio`, `text`, `game`, `ebook`, `image`, `software`.
+	 * The Work's type, one of `WORK_TYPES` in `@anthers/shared/content`.
 	 *
 	 * Read only by the **parental** rules, which are the one viewer-side restriction that
 	 * cares what something *is* rather than what it costs or who made it. Nothing else in this

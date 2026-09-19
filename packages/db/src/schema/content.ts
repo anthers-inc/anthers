@@ -107,7 +107,7 @@ export const works = pgTable(
 		// /works/{slug}-{publicId}; the slug may change on rename without breaking links.
 		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
 		slug: text("slug").notNull().unique(),
-		// text | video | audio | image | game | software | physical | service
+		// One of `WORK_TYPES` in `@anthers/shared/content`, which is the authority on the list.
 		type: text("type").notNull(),
 		title: text("title").default(""),
 		description: text("description").default(""),
@@ -116,13 +116,13 @@ export const works = pgTable(
 		// ── Source media (only the fields relevant to `type` are populated) ──
 		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
 		embedUrl: text("embed_url").default(""), // game/software web embed
-		durationSeconds: integer("duration_seconds"), // video/audio
+		durationSeconds: integer("duration_seconds"), // video, music and audio
 		// type = "text": the prose itself. `body` is the plain-text shadow used for search;
 		// `bodyHtml` is sanitized server-side at the write boundary, as post bodies are.
 		body: text("body").default(""),
 		bodyHtml: text("body_html").default(""),
 		estimatedReadMinutes: integer("estimated_read_minutes"),
-		// type = "audio": the song's words. **A column, not `metadata`** — lyrics are
+		// type = "music": the song's words. **A column, not `metadata`** — lyrics are
 		// creator-authored, reader-visible content, the same class of thing as `description`
 		// and `body`, both of which are columns. `metadata` is for incidental shape
 		// (`clientVariants`, a physical item's note), and burying published text in the
@@ -141,9 +141,9 @@ export const works = pgTable(
 		// `description`, which stays visible when locked — a creator who wanted them
 		// private has no way to un-publish words already served.
 		//
-		// Stored for any type rather than only `audio` (which is how `bodyHtml` is
+		// Stored for any type rather than only `music` (which is how `bodyHtml` is
 		// restricted to `text`), so that changing a Work's type cannot silently destroy
-		// what someone wrote. Only audio Works display them.
+		// what someone wrote. Only music Works display them.
 		lyrics: text("lyrics").default(""),
 		// Browser-encode transport (metadata.clientVariants) + physical/service product
 		// details. Full variant/SKU modeling lands when merch/fulfillment is real; for now
@@ -540,7 +540,7 @@ export const assets = pgTable(
 );
 
 /**
- * The pages of an **ebook** Work — a comic, a graphic novel, a prose book — one row per
+ * The pages of a **comic** or an **ebook** Work — a comic, a graphic novel, a prose book — one row per
  * rendered page, in order.
  *
  * 🚨 **Why pages exist as rows at all, when the creator uploaded one PDF.** The delivery
