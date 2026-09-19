@@ -131,14 +131,26 @@ describe("a video Work whose file has not arrived", () => {
 		expect((await res.json()).code).toBe("media_not_ready");
 	});
 
-	it("releases once processing and the scan have answered", async () => {
+	it("waits for a thumbnail its creator chose once processing has finished", async () => {
 		await db
 			.update(transcodingJobs)
 			.set({ status: "completed", progress: 100 })
 			.where(eq(transcodingJobs.workId, workId));
-		await db
-			.insert(mediaScans)
-			.values({ storageKey: sourceKey(), workId, determination: "clean", scannedAt: new Date() });
+		// Nothing took one on the creator's behalf, so there is none until they choose.
+		const [row] = await db.select().from(works).where(eq(works.id, workId));
+		expect(row.thumbnail ?? "").toBe("");
+		const res = await release(workId);
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("thumbnail_missing");
+	});
+
+	it("releases once it has a thumbnail and the scans have answered", async () => {
+		const thumbnail = KEY("chosen-frame.jpg");
+		expect((await call("PATCH", `/api/content/works/${workId}`, { thumbnail })).status).toBe(200);
+		await db.insert(mediaScans).values([
+			{ storageKey: sourceKey(), workId, determination: "clean", scannedAt: new Date() },
+			{ storageKey: thumbnail, workId, determination: "clean", scannedAt: new Date() },
+		]);
 		const res = await release(workId);
 		expect(res.status).toBe(200);
 		expect((await res.json()).work.visibility).toBe("released");
@@ -186,26 +198,42 @@ describe("the kinds with no file to wait for", () => {
 	});
 });
 
-describe("an image whose file arrives after it was created", () => {
-	it("becomes its own thumbnail", async () => {
+/**
+ * An image is its own thumbnail and takes no other (Parker, 2026-09-18): the Work and its
+ * thumbnail are the same picture, so the Work's rating decides how both are shown.
+ */
+describe("an image, which is its own thumbnail", () => {
+	it("becomes its thumbnail when its file arrives, and again when the file is replaced", async () => {
 		const workId = await createWithoutFile("image");
-		const key = KEY("picture.png");
-		const res = await call("PATCH", `/api/content/works/${workId}`, { sourceKey: key });
-		expect(res.status).toBe(200);
-		const [row] = await db.select().from(works).where(eq(works.id, workId));
-		expect(row.thumbnail).toBe(key);
+		const first = KEY("picture.png");
+		expect((await call("PATCH", `/api/content/works/${workId}`, { sourceKey: first })).status).toBe(
+			200,
+		);
+		expect((await db.select().from(works).where(eq(works.id, workId)))[0].thumbnail).toBe(first);
+
+		const second = KEY("replacement.png");
+		expect(
+			(await call("PATCH", `/api/content/works/${workId}`, { sourceKey: second })).status,
+		).toBe(200);
+		expect((await db.select().from(works).where(eq(works.id, workId)))[0].thumbnail).toBe(second);
 	});
 
-	it("keeps a thumbnail the creator set while it was uploading", async () => {
-		const workId = await createWithoutFile("image");
-		const chosen = KEY("chosen-thumb.png");
-		await call("PATCH", `/api/content/works/${workId}`, { thumbnail: chosen });
-		const res = await call("PATCH", `/api/content/works/${workId}`, {
-			sourceKey: KEY("late.png"),
+	it("refuses another thumbnail, on create and afterwards, and stores nothing", async () => {
+		const created = await call("POST", "/api/content/works", {
+			type: "image",
+			title: `File arrival ${id}`,
+			thumbnail: KEY("other-on-create.png"),
 		});
-		expect(res.status).toBe(200);
-		const [row] = await db.select().from(works).where(eq(works.id, workId));
-		expect(row.thumbnail).toBe(chosen);
+		expect(created.status).toBe(400);
+		expect((await created.json()).code).toBe("image_is_its_thumbnail");
+
+		const workId = await createWithoutFile("image");
+		const res = await call("PATCH", `/api/content/works/${workId}`, {
+			thumbnail: KEY("other.png"),
+		});
+		expect(res.status).toBe(400);
+		expect((await res.json()).code).toBe("image_is_its_thumbnail");
+		expect((await db.select().from(works).where(eq(works.id, workId)))[0].thumbnail ?? "").toBe("");
 	});
 });
 

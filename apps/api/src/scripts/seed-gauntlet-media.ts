@@ -57,6 +57,7 @@ import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { storage } from "../services/storage/index.js";
+import { seedVideoThumbnail } from "./seed-thumbnail.js";
 
 const TAG = "[gauntlet-media]";
 
@@ -186,8 +187,10 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 			.returning({ id: transcodingJobs.id });
 
 		// The real job, in-process. pg-boss isn't running; this is the code it would run.
-		if (post.media === "video") await transcodeVideo({ jobId: job.id });
-		else await processAudio({ jobId: job.id });
+		if (post.media === "video") {
+			await transcodeVideo({ jobId: job.id });
+			await seedVideoThumbnail(item.id, creator, clipPath);
+		} else await processAudio({ jobId: job.id });
 
 		const [done] = await db
 			.select()
