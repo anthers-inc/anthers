@@ -21,7 +21,12 @@
 
 import { db } from "@anthers/db/client";
 import { transcodingJobs, type works } from "@anthers/db/schema";
-import { isEmptyWriting, processingFor, workNeedsFile } from "@anthers/shared/content";
+import {
+	isEmptyWriting,
+	needsChosenThumbnail,
+	processingFor,
+	workNeedsFile,
+} from "@anthers/shared/content";
 import {
 	gridFor,
 	isRatingComplete,
@@ -178,6 +183,20 @@ export async function releaseRefusal(
 				error: `Anthers isn't accepting ${rung} work at the moment, so this Work can't be released. The rating is right and has been saved — you'll be able to release when ${rung} reopens.`,
 				code: "maturity_rung_closed",
 				rung: rating,
+			},
+			resolves: "creator",
+		};
+	}
+
+	// A video goes out with a thumbnail its creator chose, because nothing takes one on their
+	// behalf: a still picked by the platform could be any moment of a Mature or Adult video, and
+	// the thumbnail is what feeds show to everybody (Parker, 2026-09-18).
+	if (needsChosenThumbnail(work.type) && !work.thumbnail) {
+		return {
+			status: 409,
+			body: {
+				error: "Choose a thumbnail for this video before releasing it.",
+				code: "thumbnail_missing",
 			},
 			resolves: "creator",
 		};

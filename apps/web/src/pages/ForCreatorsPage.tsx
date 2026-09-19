@@ -363,7 +363,7 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<PaintBrushIcon className="h-6 w-6" />}
 							title="Rich project pages"
-							description="Cover images, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type—platform-grouped downloads for games, embedded players for audio and video."
+							description="Thumbnails, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type—platform-grouped downloads for games, embedded players for audio and video."
 						/>
 					</Reveal>
 					<Reveal delay={80}>

@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The poster thumbnail a video transcode generates is queued for a scan the moment it exists.
+ * A video transcode takes no thumbnail on its creator's behalf.
  *
- * 🚨 **The transcode is a writer of a Work's objects, and it used to skip detection.** It wrote
- * the thumbnail straight onto the Work, into the public bucket, and nothing queued a scan for it,
- * so the hourly `rescan-owed` sweep was the only thing that ever looked. On production on
- * 2026-09-18 a released video's poster went 23 minutes unscanned that way. This runs the real job
- * on a real video, because the gap was in which code the job calls, which no stub can show.
- *
- * ⚠️ **The source is given an answer first, so the only scan owed is the thumbnail's.** That is
- * the ordinary case — the video's own scan finishes long before its encode — and it also proves
- * the job does not send the whole video again to cover a new thumbnail.
+ * 🚨 **A video's thumbnail is its creator's choice, uploaded or picked from a frame** (Parker,
+ * 2026-09-18: *"this is how every other video platform works"*). A still the platform takes could
+ * be any moment of a Mature or Adult video, and a thumbnail is what feeds show to everybody, so
+ * the transcode leaves the Work without one and release refuses it until the creator chooses
+ * (`thumbnail_missing`). This runs the real job on a real video, because what is under test is
+ * which code the job calls, which no stub can show.
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { rm } from "node:fs/promises";
@@ -19,10 +16,9 @@ import { join } from "node:path";
 import { db } from "@anthers/db/client";
 import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { QUEUES, queue } from "../jobs/queue.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { storage } from "../services/storage/index.js";
-import { urlToKey } from "../services/storage/keys.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -57,11 +53,9 @@ async function makeVideo(): Promise<Buffer> {
 	return bytes;
 }
 
-describe("a video transcode's generated thumbnail", () => {
+describe("a video transcode", () => {
 	let creatorId: number;
 	let sent: Array<{ name: string; data: unknown; options: unknown }> = [];
-	/** Makes queueing fail the way it does where no queue is started, as in the fixture seed. */
-	let failSend = false;
 	let sendSpy: ReturnType<typeof spyOn>;
 
 	/** A video Work whose source already has its answer, and a pending transcode for it. */
@@ -89,7 +83,6 @@ describe("a video transcode's generated thumbnail", () => {
 			data: unknown,
 			options: unknown,
 		) => {
-			if (failSend) throw new Error("Database not opened. Call open() before executing SQL.");
 			sent.push({ name, data, options });
 			return "job";
 		}) as typeof queue.send);
@@ -101,46 +94,16 @@ describe("a video transcode's generated thumbnail", () => {
 		await storage.deletePrefix(`creators/${creatorId}/`);
 	});
 
-	it("is queued for a scan as soon as the transcode attaches it, and nothing else is", async () => {
-		const { workId, jobId } = await stage("queued");
+	it("finishes the encode and leaves the Work without a thumbnail, with nothing sent to scan", async () => {
+		const { workId, jobId } = await stage("no-poster");
 		sent = [];
 
 		await transcodeVideo({ jobId });
 
-		const [work] = await db.select().from(works).where(eq(works.id, workId));
-		expect(work.thumbnail).toBeTruthy();
-		const thumbnailKey = urlToKey(work.thumbnail as string);
-		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA)).toEqual([
-			{
-				name: QUEUES.SCAN_MEDIA,
-				data: { storageKey: thumbnailKey, workId, kind: "image" },
-				options: JOB_OPTIONS[QUEUES.SCAN_MEDIA],
-			},
-		]);
-		// The release gate waits on the new object, which it can only do with a clock running.
-		expect(work.scanQueuedAt).toBeInstanceOf(Date);
-	}, 60_000);
-
-	it("finishes the encode when the scan cannot be queued, leaving the thumbnail owed", async () => {
-		// The encode is the job; its thumbnail's scan is a follow-on the hourly sweep can make up.
-		const { workId, jobId } = await stage("unqueued");
-		failSend = true;
-		try {
-			await transcodeVideo({ jobId });
-		} finally {
-			failSend = false;
-		}
-
 		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
 		expect(job.status).toBe("completed");
 		const [work] = await db.select().from(works).where(eq(works.id, workId));
-		expect(work.thumbnail).toBeTruthy();
-		// Owed is what `rescan-owed` selects on: a running clock and no answer.
-		expect(work.scanQueuedAt).toBeInstanceOf(Date);
-		const owed = await db
-			.select()
-			.from(mediaScans)
-			.where(eq(mediaScans.storageKey, urlToKey(work.thumbnail as string)));
-		expect(owed).toEqual([]);
+		expect(work.thumbnail).toBeNull();
+		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA)).toEqual([]);
 	}, 60_000);
 });

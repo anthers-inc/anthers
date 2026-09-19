@@ -21,7 +21,7 @@ import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl } from "@anthers/web-shared/rpc";
 import type { Work } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
 import AudioPlayer from "../media/AudioPlayer";
@@ -271,11 +271,14 @@ export function WorkDeliverable({
 	work,
 	shareToken = null,
 	lyrics,
+	videoRef,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
 	/** In place of a music Work's lyrics, for a control standing in for them. */
 	lyrics?: ReactNode;
+	/** Handed a video's `<video>` element, for the Studio to take a frame from. */
+	videoRef?: MutableRefObject<HTMLVideoElement | null>;
 }) {
 	const { playTracks } = useMediaPlayer();
 	return (
@@ -286,6 +289,7 @@ export function WorkDeliverable({
 					poster={work.thumbnail ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
+					elementRef={videoRef}
 				/>
 			)}
 			{isListened(work.type) && work.transcoding?.outputFileUrl && (

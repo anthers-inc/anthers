@@ -10,8 +10,9 @@
  * 3. Transcode each variant to HLS via ffmpeg
  * 4. Generate master playlist
  * 5. Upload all HLS files to storage
- * 6. Auto-generate thumbnail at 25% mark if none exists
- * 7. Update TranscodingJob status throughout
+ * 6. Update TranscodingJob status throughout
+ *
+ * It takes no poster from the video: its creator chooses the thumbnail, and release waits for it.
  */
 
 import { randomUUID } from "node:crypto";
@@ -23,7 +24,6 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
-import { queueScansForWork } from "./scan-media.js";
 import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
@@ -156,35 +156,6 @@ async function generateMasterPlaylist(outputDir: string, variants: Variant[]) {
 	await Bun.write(join(outputDir, "master.m3u8"), `${lines.join("\n")}\n`);
 }
 
-/** Generate a thumbnail from a video at the given position */
-async function generateThumbnail(
-	inputPath: string,
-	positionSeconds: number,
-): Promise<string | null> {
-	const outPath = join(tmpdir(), `thumb_${randomUUID()}.jpg`);
-	const proc = Bun.spawn(
-		ffmpegCommand(inputPath, [
-			"-ss",
-			String(positionSeconds),
-			"-vframes",
-			"1",
-			"-q:v",
-			"2",
-			outPath,
-			"-y",
-		]),
-		{ stdout: "pipe", stderr: "pipe" },
-	);
-	const exitCode = await proc.exited;
-	if (exitCode !== 0) {
-		try {
-			await rm(outPath);
-		} catch {}
-		return null;
-	}
-	return outPath;
-}
-
 async function updateJobProgress(jobId: number, progress: number) {
 	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
 }
@@ -220,7 +191,6 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 
 	let localPath: string | null = null;
 	let outputDir: string | null = null;
-	let thumbPath: string | null = null;
 
 	try {
 		// 0. Download source file to local temp path for ffmpeg
@@ -325,7 +295,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		// 4. Generate master playlist
 		await generateMasterPlaylist(outputDir, variants);
 		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
-		// segments and making a thumbnail take a time nothing measures, and the last estimate the
+		// segments takes a time nothing measures, and the last estimate the
 		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
 		// A progress reading still in flight is let land first, or it could write that figure back.
 		encoding = false;
@@ -352,37 +322,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		}
 		await updateJobProgress(jobId, 90);
 
-		// 6. Auto-generate a poster thumbnail for the item if none set. Posts that
-		// reference the item derive their card image from it at display time.
-		let thumbnailKey: string | null = null;
-		if (!item.thumbnail) {
-			const thumbPosition = Math.max(1, Math.round(duration * 0.25));
-			thumbPath = await generateThumbnail(localPath, thumbPosition);
-			if (thumbPath) {
-				const thumbBuffer = await readFile(thumbPath);
-				thumbnailKey = `creators/${item.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
-				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
-				const thumbnailUrl = await storage.getUrl(thumbnailKey);
-				await db.update(works).set({ thumbnail: thumbnailUrl }).where(eq(works.id, item.id));
-				// New bytes in the public bucket, so scanned now rather than whenever the hourly
-				// sweep finds them. The video's own scan runs beside this job and normally answered
-				// long before the encode finished, so usually only the thumbnail is sent.
-				//
-				// ⚠️ **A scan that cannot be queued does not fail the encode.** The clock is already
-				// started, so the thumbnail is recorded as owed and `rescan-owed` asks about it within
-				// the hour — the same fallback a vendor outage gets. This also runs where no queue
-				// is started at all, such as the media fixture's seed.
-				try {
-					await queueScansForWork({ ...item, thumbnail: thumbnailUrl });
-				} catch (err) {
-					console.error(
-						`[transcode-video] could not queue a scan of work ${item.id}'s thumbnail; the hourly sweep will: ${err instanceof Error ? err.message : err}`,
-					);
-				}
-			}
-		}
-
-		// 7. Complete
+		// 6. Complete. No poster is taken from the video: its creator chooses the thumbnail,
+		// uploaded or picked from a frame in the Studio, because a still taken on their behalf
+		// could be any moment of a Mature or Adult video and a thumbnail is shown to everybody.
+		// Release refuses a video without one (`thumbnail_missing`).
 		const manifestUrl = await storage.getUrl(`${storagePrefix}/master.m3u8`);
 		await db
 			.update(transcodingJobs)
@@ -416,11 +359,6 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		if (outputDir) {
 			try {
 				await rm(outputDir, { recursive: true });
-			} catch {}
-		}
-		if (thumbPath) {
-			try {
-				await rm(thumbPath);
 			} catch {}
 		}
 	}

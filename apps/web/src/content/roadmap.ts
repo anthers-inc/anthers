@@ -580,7 +580,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "adult",
 						title: "Adult Work Is Invisible Until You Ask for It",
 						blurb:
-							"Not the work, its title or its cover, to anybody who has not opted in and verified. It is otherwise ordinary work.",
+							"Not the work, its title or its thumbnail, to anybody who has not opted in and verified. It is otherwise ordinary work.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "50.01", title: "The Rating Standard" },

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { THUMBNAIL_RULE } from "@anthers/shared/content";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ProjectPosts from "../components/content/ProjectPosts";
@@ -109,7 +110,7 @@ export default function ProjectFormPage() {
 			setCoverImage(url);
 			setCoverPreview(url);
 		} catch {
-			setError("Cover image upload failed.");
+			setError("The thumbnail didn't upload. Try it again.");
 		} finally {
 			setUploading(false);
 		}
@@ -238,12 +239,14 @@ export default function ProjectFormPage() {
 					/>
 				</FormField>
 
-				<FormField label="Cover Image">
+				{/* A Project's thumbnail shows in listings as a Work's does, so it is held to the same
+				    rule. The column and the upload's media type are still called `cover`. */}
+				<FormField label="Thumbnail" hint={THUMBNAIL_RULE}>
 					<FileUpload
 						accept="image/*"
 						maxSize={10 * 1024 * 1024}
 						preview={coverPreview}
-						label="Upload cover image (recommended 630x500)"
+						label="Upload a thumbnail (recommended 630x500)"
 						onFileSelect={handleCoverSelect}
 						onClear={() => {
 							setCoverImage("");

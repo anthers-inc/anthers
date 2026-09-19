@@ -46,7 +46,12 @@
  * point of separating the Catalog from posting — and the Upload page offers no release control.
  */
 
-import { isEmptyWriting } from "@anthers/shared/content";
+import {
+	isEmptyWriting,
+	isOwnThumbnail,
+	needsChosenThumbnail,
+	THUMBNAIL_RULE,
+} from "@anthers/shared/content";
 import {
 	type ContentNote,
 	contentNoteLabel,
@@ -116,6 +121,7 @@ import {
 	workTitleTypography,
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
+import { frameOf } from "../lib/video-frame";
 import RatingMatrix from "./RatingMatrix";
 import { unsavedKey } from "./work-edit";
 
@@ -234,6 +240,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	 * because the re-reads below run from timers and must see the answer as it is now.
 	 */
 	const thumbnailTouched = useRef(false);
+	/** The video's `<video>` element, once it plays, for *Use This Frame*. */
+	const videoEl = useRef<HTMLVideoElement | null>(null);
+	/** Why taking a frame did not work, said beside the button. */
+	const [frameError, setFrameError] = useState<string | null>(null);
 
 	const details = useWorkDetails(type, editing);
 
@@ -405,6 +415,24 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		}
 	};
 
+	/** Make the frame the video is paused on its thumbnail. See `lib/video-frame.ts`. */
+	const takeCurrentFrame = async () => {
+		setFrameError(null);
+		const video = videoEl.current;
+		if (!video?.videoWidth) {
+			setFrameError("Play the video to the moment you want first.");
+			return;
+		}
+		let frame: File;
+		try {
+			frame = await frameOf(video);
+		} catch {
+			setFrameError("This browser can't take a frame from the video. Upload an image instead.");
+			return;
+		}
+		await handleThumbnail(frame);
+	};
+
 	/**
 	 * The server's own words, when it has any.
 	 *
@@ -571,6 +599,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// And the same for a piece of writing with nothing in it yet (`text_missing`), which is the
 	// creator's to fix rather than to wait for, so it locks scheduling as well as releasing.
 	const writingEmpty = writing && isEmptyWriting(bodyHtml);
+	// And a video with no thumbnail its creator chose (`thumbnail_missing`), judged against the
+	// thumbnail this page would save, which is also the creator's to fix.
+	const thumbnailMissing = needsChosenThumbnail(type) && !thumbnailUrl;
 	/**
 	 * Whether the Work itself can be shown as a reader sees it: its file is here, and whatever
 	 * processing it needs has finished. Until then the file section stands in for it, with the
@@ -730,7 +761,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				{isFileWorkType(type) &&
 					(fileReady ? (
 						<>
-							<WorkDeliverable work={asRead} lyrics={lyricsEditor} />
+							<WorkDeliverable work={asRead} lyrics={lyricsEditor} videoRef={videoEl} />
 							{/* An image is replaced in place, as it could be before it had an upload
 							    step. Other kinds are not offered this: a new video re-encodes, and a
 							    released one would be unplayable while it did. */}
@@ -773,15 +804,21 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					/>
 				)}
 
-				<Cover
-					preview={thumbnailPreview}
-					onFile={handleThumbnail}
-					onClear={() => {
-						thumbnailTouched.current = true;
-						setThumbnailUrl("");
-						setThumbnailPreview(null);
-					}}
-				/>
+				{/* An image is its own thumbnail, so it has no control of its own. */}
+				{!isOwnThumbnail(type) && (
+					<Thumbnail
+						preview={thumbnailPreview}
+						required={needsChosenThumbnail(type)}
+						onFile={handleThumbnail}
+						onClear={() => {
+							thumbnailTouched.current = true;
+							setThumbnailUrl("");
+							setThumbnailPreview(null);
+						}}
+						onFrame={type === "video" && fileReady ? takeCurrentFrame : undefined}
+						frameError={frameError}
+					/>
+				)}
 			</section>
 
 			{!writing && descriptionEditor}
@@ -1025,7 +1062,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							// control that would make a released Work private.
 							disabled={
 								payoutsReady === false ||
-								((!fromRows || fileMissing || writingEmpty || permissionMissing === true) &&
+								((!fromRows ||
+									fileMissing ||
+									writingEmpty ||
+									thumbnailMissing ||
+									permissionMissing === true) &&
 									visibility !== "released")
 							}
 							onChange={(e) => {
@@ -1072,6 +1113,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 									disabled={
 										!fromRows ||
 										writingEmpty ||
+										thumbnailMissing ||
 										payoutsReady === false ||
 										permissionMissing === true
 									}
@@ -1094,6 +1136,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						<p className="text-xs text-warning">
 							Write something above first. There's nothing to release until this piece has words in
 							it.
+						</p>
+					)}
+					{thumbnailMissing && visibility !== "released" && (
+						<p className="text-xs text-warning">
+							Choose a thumbnail above first. A video isn't released without one.
 						</p>
 					)}
 					{fileMissing && visibility !== "released" && (
@@ -1335,34 +1382,57 @@ function RatingLine({
 	);
 }
 
-/** The cover a reader sees on cards, before a video plays, and in front of a locked Work. */
-function Cover({
+/**
+ * The thumbnail feeds, listings and libraries show of a Work, before a video plays, and in front
+ * of a locked Work, with the rule it is held to beside it (`THUMBNAIL_RULE`). A video's is
+ * required and can be taken from the frame the player is paused on (`onFrame`).
+ */
+function Thumbnail({
 	preview,
+	required,
 	onFile,
 	onClear,
+	onFrame,
+	frameError,
 }: {
 	preview: string | null;
+	required: boolean;
 	onFile: (file: File) => void;
 	onClear: () => void;
+	onFrame?: () => void;
+	frameError: string | null;
 }) {
 	return (
 		<div className="flex flex-wrap items-start gap-4">
-			<div className="w-48">
+			<div className="w-48 flex flex-col gap-2">
 				<FileUpload
 					accept="image/*"
 					maxSize={10 * 1024 * 1024}
 					preview={preview}
-					label="Upload a cover"
+					label="Upload a thumbnail"
 					compact
 					onFileSelect={onFile}
 					onClear={onClear}
 				/>
+				{onFrame && (
+					<button type="button" className="btn btn-outline btn-sm" onClick={onFrame}>
+						Use This Frame
+					</button>
+				)}
 			</div>
-			<p className="flex-1 min-w-48 text-xs text-base-content/60">
-				<span className="block font-medium text-base-content/80">Cover (optional)</span>
-				Shown on cards, before a video plays, and in front of this Work for anyone who hasn't
-				unlocked it.
-			</p>
+			<div className="flex-1 min-w-48 flex flex-col gap-1 text-xs text-base-content/60">
+				<span className="font-medium text-base-content/80">
+					{required ? "Thumbnail" : "Thumbnail (optional)"}
+				</span>
+				<p>
+					Shown on cards, before a video plays, and in front of this Work for anyone who hasn't
+					unlocked it.
+					{required &&
+						" A video needs one before it's released: upload an image, or pause the video above and use that frame."}
+				</p>
+				<p>{THUMBNAIL_RULE}</p>
+				{frameError && <p className="text-warning">{frameError}</p>}
+			</div>
 		</div>
 	);
 }
