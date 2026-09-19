@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Content preferences — the only writer of what a reader has asked to meet: the Adult opt-in,
- * the adulthood verification behind it, and the per-rung display setting for each of them.
+ * the adulthood verification behind it, the per-rung display setting for each of them, and the
+ * display setting for each kind of content a Work may contain, whatever its rating.
  *
  * Follows the one-writer pattern `services/content-rating.ts`, `services/moderation.ts` and
  * `services/quarantine.ts` establish. Every door into this state comes through here, so an
@@ -57,10 +58,14 @@
 import { db } from "@anthers/db/client";
 import { accounts, works } from "@anthers/db/schema";
 import {
+	type ContentNote,
 	DEFAULT_MATURITY_DISPLAY,
 	isMaturityDisplay,
 	MATURITY_RATINGS,
 	type MaturityDisplay,
+	type NoteDisplays,
+	normalizeNoteDisplays,
+	RATING_ROWS,
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { eq, type SQL, sql } from "drizzle-orm";
@@ -82,6 +87,8 @@ export const CARD_FUNDING_METHOD = "card_funding";
 export interface ContentPreferences {
 	mature: MaturityDisplay;
 	adult: MaturityDisplay;
+	/** Hide, Blur or Show for each kind of content, with every row present. */
+	notes: NoteDisplays;
 	adultAccess: AdultAccess;
 }
 
@@ -94,6 +101,7 @@ export async function contentPreferencesFor(userId: number | null): Promise<Cont
 	const fallback = {
 		mature: DEFAULT_MATURITY_DISPLAY.mature,
 		adult: DEFAULT_MATURITY_DISPLAY.adult,
+		notes: normalizeNoteDisplays(null),
 		adultAccess: NO_ADULT_ACCESS,
 	};
 	if (userId == null) return fallback;
@@ -105,6 +113,7 @@ export async function contentPreferencesFor(userId: number | null): Promise<Cont
 			method: accounts.adultVerifiedMethod,
 			mature: accounts.matureDisplay,
 			adult: accounts.adultDisplay,
+			notes: accounts.noteDisplay,
 		})
 		.from(accounts)
 		.where(eq(accounts.userId, userId))
@@ -114,6 +123,7 @@ export async function contentPreferencesFor(userId: number | null): Promise<Cont
 	return {
 		mature: displayOr(row.mature, DEFAULT_MATURITY_DISPLAY.mature),
 		adult: displayOr(row.adult, DEFAULT_MATURITY_DISPLAY.adult),
+		notes: normalizeNoteDisplays(row.notes),
 		adultAccess: {
 			optIn: row.optIn,
 			verifiedAt: row.verifiedAt,
@@ -124,14 +134,22 @@ export async function contentPreferencesFor(userId: number | null): Promise<Cont
 }
 
 /**
- * Set a rung's display preference. The only writer of the two display columns.
+ * Set a rung's display preference, or a kind of content's. The only writer of the display
+ * columns.
  *
  * Refuses under a guardian's lock rather than writing, and the refusal is returned rather than
- * swallowed: a setting that appears to save and does not is worse than one that says no.
+ * swallowed: a setting that appears to save and does not is worse than one that says no. The
+ * kinds of content go through here with the rungs so the lock covers them by construction —
+ * allowing intense horror while blurring substance use is a position a guardian may want to hold
+ * (Parker, 2026-09-18).
  */
 export async function setMaturityDisplay(
 	userId: number,
-	input: { mature?: MaturityDisplay; adult?: MaturityDisplay },
+	input: {
+		mature?: MaturityDisplay;
+		adult?: MaturityDisplay;
+		notes?: Partial<Record<ContentNote, MaturityDisplay>>;
+	},
 	now: Date = new Date(),
 ): Promise<ContentPreferences | "parental_locked"> {
 	if (await maturityLocked(userId)) return "parental_locked";
@@ -139,6 +157,13 @@ export async function setMaturityDisplay(
 	const updates: Record<string, unknown> = { updatedAt: now };
 	if (input.mature) updates.matureDisplay = input.mature;
 	if (input.adult) updates.adultDisplay = input.adult;
+	// Merged into what is stored rather than replacing it, so changing one row leaves the others
+	// as the reader set them.
+	if (input.notes) {
+		// Qualified, because a bare column inside ON CONFLICT DO UPDATE could as well be `excluded`'s.
+		const stored = sql`${sql.identifier("accounts")}.${sql.identifier("note_display")}`;
+		updates.noteDisplay = sql`coalesce(${stored}, '{}'::jsonb) || ${JSON.stringify(input.notes)}::jsonb`;
+	}
 
 	// ⚠️ Upserts rather than updates, because **signing up does not create an `accounts`
 	// row** — one appears on first payment. A plain UPDATE would silently affect nothing and
@@ -146,7 +171,12 @@ export async function setMaturityDisplay(
 	// so. This is the same trap the verification fixture hit.
 	await db
 		.insert(accounts)
-		.values({ userId, matureDisplay: input.mature ?? null, adultDisplay: input.adult ?? null })
+		.values({
+			userId,
+			matureDisplay: input.mature ?? null,
+			adultDisplay: input.adult ?? null,
+			noteDisplay: input.notes ?? null,
+		})
 		.onConflictDoUpdate({ target: accounts.userId, set: updates });
 
 	return contentPreferencesFor(userId);
@@ -202,7 +232,8 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
 }
 
 /**
- * Every rung this viewer has asked to keep out of listings, as one condition.
+ * Every rung and every kind of content this viewer has asked to keep out of listings, as one
+ * condition.
  *
  * 🚨 **This is the ONLY maturity condition a listing composes, and there is deliberately no
  * narrower sibling.** An `adultHiddenFrom` covering the access half alone existed until
@@ -232,8 +263,14 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
  * the rung does not get. The accepted cost is that a creator's profile silently omits work
  * from a reader who has not opted in.
  *
+ * 🚨 **A kind of content the viewer hides is an allow-list too**: a Work is listed only when its
+ * creator answered that row *Not in It*, so a row marked at any rung hides it and so does a row
+ * nobody answered (`mayContain` in `@anthers/shared/content-rating` is the same rule for the
+ * browser). It is the reader's own filter and never an access rule, exactly like a hidden rung: the
+ * Work stays reachable by a direct link, listed for everyone else, and earning.
+ *
  * ⭐ **`blur` produces no condition at all**, because a blurred Work is listed. The blur is
- * the client's job, from the `maturity` value that already travels with every Work.
+ * the client's job, from the `maturity` and `maturityRows` values that travel with every Work.
  *
  * Always returns a condition — a viewer who may see everything gets `IN` over every rung
  * rather than nothing — and keeps `undefined` in its type so it composes into `and(...)`
@@ -244,6 +281,7 @@ export function maturityHiddenFrom(
 	viewerId: number | null,
 	creatorColumn: SQL | unknown = works.creatorId,
 	maturityColumn: SQL | unknown = works.maturity,
+	rowsColumn: SQL | unknown = works.maturityRows,
 ): SQL | undefined {
 	// 🚨 **An allow-list, not a deny-list, and the direction is the safety property.**
 	// `NOT IN ('adult')` lets through any value it has not been told about — a rating from a
@@ -267,11 +305,16 @@ export function maturityHiddenFrom(
 		visible.map((rung) => sql`${rung}`),
 		sql`, `,
 	);
+	// A missing row reads as NULL, and NULL is not 'none', so an unanswered row hides the Work.
+	const freeOf = RATING_ROWS.filter((row) => prefs.notes[row.note] === "hide").map(
+		(row) => sql`(${rowsColumn} ->> ${row.note}::text) = 'none'`,
+	);
+	const allowed = sql.join([sql`${maturityColumn} IN (${list})`, ...freeOf], sql` AND `);
 	// 🚨 A creator always sees their own, whatever they have asked to be shown. Somebody who
 	// hid a rung is filtering what they browse, not deleting their own Catalog — and a reader
 	// with no opt-in is not asking to be protected from the thing they made.
-	if (viewerId == null) return sql`${maturityColumn} IN (${list})`;
-	return sql`(${maturityColumn} IN (${list}) OR ${creatorColumn} = ${viewerId})`;
+	if (viewerId == null) return sql`(${allowed})`;
+	return sql`((${allowed}) OR ${creatorColumn} = ${viewerId})`;
 }
 
 /** Load the viewer's preferences and the listing condition that follows, in one step. */

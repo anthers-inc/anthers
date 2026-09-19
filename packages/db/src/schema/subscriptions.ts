@@ -120,6 +120,11 @@ export const accounts = pgTable("accounts", {
 	// answered", which is what lets the shared default move without rewriting stored rows.
 	matureDisplay: text("mature_display"),
 	adultDisplay: text("adult_display"),
+	// ── And per kind of content, whatever the rating ──
+	// A map from a row of the rating matrix (`violence`, `horror`, …) to `hide` | `blur` | `show`,
+	// holding only the rows the reader has answered; the default for the rest lives in
+	// `@anthers/shared/content-rating` for the same reason as the two columns above.
+	noteDisplay: jsonb("note_display").$type<Record<string, string>>(),
 
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),

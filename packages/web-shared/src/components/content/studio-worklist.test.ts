@@ -102,8 +102,15 @@ describe("buildWorklist", () => {
 		expect(kinds([work({ visibility: "private", maturityRows: {} })])).toEqual(["unrated"]);
 		expect(kinds([work({ visibility: "private", maturityRows: fiveRows })])).toEqual(["unrated"]);
 		expect(kinds([work({ visibility: "private", maturityRows: undefined })])).toEqual(["unrated"]);
-		// Released, the release is no longer what an unanswered row stands in front of.
-		expect(kinds([work({ visibility: "released", maturityRows: {} })])).toEqual([]);
+	});
+
+	it("tells the creator of a released Work with unanswered rows who is missing it", () => {
+		// Only a Work released before the matrix existed can be here, and a reader hiding any kind
+		// of content never meets it, because an unanswered row counts as present.
+		const items = build([work({ visibility: "released", maturityRows: {} })]);
+		expect(items.map((i) => i.kind)).toEqual(["unanswered-rows"]);
+		expect(items[0].message).toContain("readers who hide a kind of content");
+		expect(kinds([work({ visibility: "released" })])).toEqual([]);
 	});
 
 	it("flags a Work with no way to be consumed, before it is released", () => {
@@ -149,6 +156,7 @@ describe("buildWorklist", () => {
 			work({ id: 2, publicId: 2, transcoding: { status: "failed" } as Work["transcoding"] }),
 			work({ id: 5, publicId: 5, visibility: "private", sourceKey: "" }),
 			work({ id: 3, publicId: 3, visibility: "private", maturity: "unrated", maturityRows: {} }),
+			work({ id: 6, publicId: 6, maturityRows: {} }),
 			work({
 				id: 4,
 				publicId: 4,
@@ -163,6 +171,7 @@ describe("buildWorklist", () => {
 			"encode-failed",
 			"no-file",
 			"unrated",
+			"unanswered-rows",
 			"no-delivery",
 		]);
 	});

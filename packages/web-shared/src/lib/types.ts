@@ -266,7 +266,10 @@ export interface Work {
 	 */
 	maturity?: MaturityRating;
 	maturityNotes?: ContentNote[];
-	/** The rating matrix as its creator marked it (owner's shape only); absent rows are unanswered. */
+	/**
+	 * The rating matrix as its creator marked it; absent rows are unanswered. On the reader's
+	 * shape as well as the owner's, because a reader's own filter covers by kind of content.
+	 */
 	maturityRows?: MaturityRows;
 	/**
 	 * Whether an operator set the rating. **Creator-facing only** — the viewer serialization

@@ -299,7 +299,9 @@ export const FAQ_ITEMS = {
 					carries no restriction at all; <strong>Mature</strong> is labeled and blurred behind a
 					click for everybody by default, and can be hidden outright; <strong>Adult</strong> is
 					invisible — not merely locked — unless an account has both asked for it and passed a
-					one-off check that an adult holds the account.
+					one-off check that an adult holds the account. Whatever a Work is rated, you can also hide
+					or blur work that contains a particular kind of content, such as violence or intense
+					horror.
 				</p>
 				<p>
 					Separately, any account can be given a <strong>pin</strong> from its settings, and the pin

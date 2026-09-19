@@ -228,6 +228,28 @@ describe("Parental controls", () => {
 		await reset();
 	});
 
+	it("🚨 locks the kinds of content with the rungs", async () => {
+		// Allowing intense horror while blurring substance use is a position a guardian may want to
+		// hold, so the lock covers every kind of content as well as the two rungs.
+		await reset();
+		await send("/api/accounts/me/parental-controls", "PATCH", child, {
+			pin: PIN,
+			lockMaturity: true,
+		});
+
+		const res = await send("/api/accounts/me/content-preferences", "PATCH", child, {
+			notes: { violence: "hide" },
+		});
+		expect(res.status).toBe(403);
+		expect((await res.json()).code).toBe("parental_locked");
+
+		const prefs = await (
+			await req("/api/accounts/me/content-preferences", { headers: { Cookie: child } })
+		).json();
+		expect(prefs.notes.violence).toBe("show");
+		await reset();
+	});
+
 	it("leaves the settings alone when the lock is off", async () => {
 		await reset();
 		const res = await send("/api/accounts/me/content-preferences", "PATCH", child, {

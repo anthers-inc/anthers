@@ -34,16 +34,17 @@ test("the two rungs have separate controls, and Mature blurs by default", async 
 	await expect(section).toContainText("Mature");
 	await expect(section).toContainText("Adult");
 
-	// Scoped to the section, because "Blur" and "Show" are ordinary enough words to appear
-	// in a header or a footer and a page-wide match would test neither.
-	await expect(section.getByRole("button", { name: "Hide", exact: true })).toBeVisible();
-	await expect(section.getByRole("button", { name: "Blur", exact: true })).toBeVisible();
-	await expect(section.getByRole("button", { name: "Show", exact: true })).toBeVisible();
+	// Scoped to the Mature rung's own group, because "Blur" and "Show" are ordinary enough words
+	// to appear in a header or a footer, and every kind of content below has the same three.
+	const mature = section.getByRole("group", { name: "Mature", exact: true });
+	await expect(mature.getByRole("button", { name: "Hide", exact: true })).toBeVisible();
+	await expect(mature.getByRole("button", { name: "Blur", exact: true })).toBeVisible();
+	await expect(mature.getByRole("button", { name: "Show", exact: true })).toBeVisible();
 
 	// The default that makes the rung mean something. `btn-primary` is how the section
 	// marks the current choice, so this reads the state rather than the mere presence of a
 	// control.
-	await expect(section.getByRole("button", { name: "Blur", exact: true })).toHaveClass(
+	await expect(mature.getByRole("button", { name: "Blur", exact: true })).toHaveClass(
 		/btn-primary/,
 	);
 });

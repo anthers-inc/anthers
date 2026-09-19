@@ -506,6 +506,45 @@ export function notesFromRows(rows: MaturityRows): ContentNote[] {
 	}).map((row) => row.note);
 }
 
+/**
+ * Whether a Work may contain a kind of content, as a reader's filter reads it: yes, unless its
+ * creator answered that row *Not in It*.
+ *
+ * 🚨 **An unanswered row counts as containing it.** A reader who hides a kind of content relies on
+ * the filter, so it must not let through a Work nobody has said is free of it, which is the same
+ * allow-list direction `maturityHiddenFrom` takes with the rungs. Release requires every row
+ * answered, so this reaches only a Work released before the matrix existed, and the Dashboard tells
+ * its creator so.
+ */
+export function mayContain(rows: MaturityRows | null | undefined, note: ContentNote): boolean {
+	return rows?.[note] !== "none";
+}
+
+/** How a reader has asked to meet each kind of content, whatever a Work's rating. */
+export type NoteDisplays = Record<ContentNote, MaturityDisplay>;
+
+/**
+ * What a reader meets for each kind of content before they have said anything: Show.
+ *
+ * ⭐ **Show rather than the Mature rung's Blur, because a note is not a rung.** A note may be read
+ * by a reader's own filter and may never drive a platform default (the wiki's *The Rating
+ * Standard*), and a default that covered a Work for what it contains would be exactly that.
+ */
+export const DEFAULT_NOTE_DISPLAY: MaturityDisplay = "show";
+
+/** A stored map read back with every row present, and anything unreadable at the default. */
+export function normalizeNoteDisplays(input: unknown): NoteDisplays {
+	const given =
+		input != null && typeof input === "object" ? (input as Record<string, unknown>) : {};
+	const displays = {} as NoteDisplays;
+	for (const row of RATING_ROWS) {
+		const value = given[row.note];
+		displays[row.note] =
+			typeof value === "string" && isMaturityDisplay(value) ? value : DEFAULT_NOTE_DISPLAY;
+	}
+	return displays;
+}
+
 export const CONTENT_NOTE_VALUES: readonly string[] = CONTENT_NOTES.map((n) => n.value);
 
 export function isContentNote(value: string): value is ContentNote {
