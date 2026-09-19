@@ -119,8 +119,11 @@ export default function ParentsPage() {
 					<strong>General</strong> and carries no restriction at all. <strong>Mature</strong> means
 					sustained violence, sexual activity depicted rather than implied, or similar — it's
 					labeled, blurred behind a click by default for everybody, and can be hidden entirely.{" "}
-					<strong>Adult</strong> means explicit sexual content that is central to the work, or
-					extreme violence or drug use that is the work's focus.
+					<strong>Adult</strong> means explicit sexual content that is central to the work, or, in
+					video, games and other visual work, extreme violence or drug use that is the work's focus.
+					Writing, books, music and other audio are rated a little differently, closer to how music
+					is labeled explicit or not: explicit violence, drug use or language makes them Mature, and
+					only explicit sexual content can make them Adult.
 				</p>
 				<p>
 					<strong>
@@ -195,9 +198,10 @@ export default function ParentsPage() {
 				</p>
 				<p>
 					<strong>Soften strong language</strong>, swapping a short list of words for milder ones
-					wherever text appears. ⚠️ It's a courtesy rather than a guarantee: language doesn't affect
-					how work is rated here, so the filter has nothing to consult and will miss words it hasn't
-					been told about.
+					wherever text appears. ⚠️ It's a courtesy rather than a guarantee: it works from a list of
+					words rather than from how anything was rated, so it will miss words it hasn't been told
+					about. Hiding work that contains strong language, above, is the control that reads what
+					creators said.
 				</p>
 				<p>
 					<strong>There's no way to reset a forgotten pin from the site.</strong> A reset link would

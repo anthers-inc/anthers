@@ -15,7 +15,7 @@
  */
 
 import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
-import { isRatingComplete } from "@anthers/shared/content-rating";
+import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
 import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
 import { studioEditWorkUrl } from "../../lib/studio";
@@ -67,7 +67,7 @@ export default function WorkCard({ item, onDelete, onSetVisibility, busy }: Cont
 	// to say which ones still need answering rather than earning thirty identical errors. Asked of
 	// the rows rather than the rating, since a Work rated before the matrix holds a rating with no
 	// rows behind it and is refused all the same.
-	const unrated = !isRatingComplete(item.maturityRows);
+	const unrated = !isRatingComplete(item.maturityRows, gridFor(item.type));
 	const blocked = !released && (noFile || emptyWriting || processing || noDelivery || unrated);
 	const blockedWhy = uploading
 		? "Still uploading — it can be released once its file arrives and is processed"

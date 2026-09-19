@@ -60,6 +60,7 @@ import {
 	WORK_TYPES,
 } from "@anthers/shared/content";
 import {
+	gridFor,
 	maturityLabel,
 	normalizeContentNotes,
 	normalizeMaturityRows,
@@ -3064,7 +3065,7 @@ const contentRoutes = new Hono()
 
 		const bodyHtml = data.type === "text" ? sanitizePostHtml(data.bodyHtml ?? "") : "";
 		// Declared through a complete matrix, or left `unrated` for the Edit page to ask about.
-		const declaredOnCreate = declaredRating(data.maturityRows);
+		const declaredOnCreate = declaredRating(data.maturityRows, gridFor(data.type));
 		const publicId = await makeUniquePublicId(works);
 
 		const [work] = await db
@@ -3096,7 +3097,7 @@ const contentRoutes = new Hono()
 				maturityNotes: declaredOnCreate.maturity
 					? normalizeContentNotes(declaredOnCreate.notes ?? [])
 					: [],
-				maturityRows: normalizeMaturityRows(data.maturityRows),
+				maturityRows: normalizeMaturityRows(data.maturityRows, gridFor(data.type)),
 				maturitySource: declaredOnCreate.maturity ? "creator" : null,
 				maturitySetAt: declaredOnCreate.maturity ? new Date() : null,
 				authoredAt: data.authoredAt ? new Date(data.authoredAt) : null,
@@ -3637,7 +3638,7 @@ const contentRoutes = new Hono()
 		//
 		// Scoped to a request that names a rating, so a Work sitting at a rung that closed
 		// after it was released stays editable in every other respect.
-		const declaring = declaredRating(data.maturityRows).maturity;
+		const declaring = declaredRating(data.maturityRows, gridFor(work.type)).maturity;
 		if (
 			work.visibility === "released" &&
 			data.visibility !== "private" &&

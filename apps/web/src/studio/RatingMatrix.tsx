@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The rating matrix: each kind of content marked *Not in it*, General, Mature or Adult, and the
- * Work rated at the highest rung any row reaches (Parker, 2026-09-18).
+ * The rating matrix: each kind of content marked *Not in it* or at a rung, and the Work rated at
+ * the highest rung any row reaches (Parker, 2026-09-18). A Work's type decides which of the two
+ * grids it shows: the visual grid's General, Mature and Adult, or the light grid's *In It* and
+ * *Explicit*, with Adult on sexual content alone (`gridFor`).
  *
  * ⭐ **The cells are the explanation.** Each one carries the Rating Standard's own line for where
  * that rung begins on that row, from `RATING_ROWS`, so the difference between General, Mature
@@ -16,17 +18,21 @@
 
 import {
 	type ContentNote,
+	GRID_ANSWER_LABELS,
 	type MaturityRows,
 	RATING_ROWS,
+	type RatingGrid,
 	type RowLevel,
 } from "@anthers/shared/content-rating";
 
 const COLUMNS: readonly RowLevel[] = ["none", "general", "mature", "adult"];
-const COLUMN_LABEL: Record<RowLevel, string> = {
-	none: "Not in It",
-	general: "General",
-	mature: "Mature",
-	adult: "Adult",
+
+/** How the grid asks, before the table: what a row is marked by, with an example of each side of the line. */
+const INTRO: Record<RatingGrid, string> = {
+	visual:
+		"Mark how each kind of content is shown, not what the Work is about: a story about addiction is General, and a scene showing how to synthesize something is Mature. The Work takes the highest rating any row reaches.",
+	light:
+		"Mark each kind of content by how it's described, not by what the Work is about: a song about addiction is In It, and lyrics that spell out a dose are Explicit. Any row marked Explicit makes the Work Mature, and only explicit sexual content can make it Adult. Rate any pictures inside the Work by the same lines.",
 };
 
 /** A chosen cell wears its rung's color, the same one its badge wears everywhere else. */
@@ -37,12 +43,15 @@ function chosenClass(level: RowLevel): string {
 }
 
 export default function RatingMatrix({
+	grid,
 	rows,
 	onChange,
 }: {
+	grid: RatingGrid;
 	rows: MaturityRows;
 	onChange: (next: MaturityRows) => void;
 }) {
+	const answerLabel = GRID_ANSWER_LABELS[grid];
 	const set = (note: ContentNote, level: RowLevel) => onChange({ ...rows, [note]: level });
 	const unanswered = RATING_ROWS.filter((row) => rows[row.note] === undefined).length;
 	const markRestNone = () => {
@@ -54,11 +63,9 @@ export default function RatingMatrix({
 	return (
 		<div className="flex flex-col gap-3">
 			<p className="text-xs text-base-content/60">
-				Mark how each kind of content is shown, not what the Work is about: a story about addiction
-				is General, and a scene showing how to synthesize something is Mature. The Work takes the
-				highest rating any row reaches, and a Work's rating can change how it's shown to a reader,
-				or whether it's shown at all, depending on their settings and whether they've verified
-				through a payment that they're 18 or older.
+				{INTRO[grid]} A Work's rating can change how it's shown to a reader, or whether it's shown
+				at all, depending on their settings and whether they've verified through a payment that
+				they're 18 or older.
 			</p>
 
 			{/* Wider than a phone, so it scrolls sideways there rather than squeezing each cell's
@@ -70,7 +77,7 @@ export default function RatingMatrix({
 							<th className="w-36" />
 							{COLUMNS.map((level) => (
 								<th key={level} className={level === "none" ? "w-24" : ""}>
-									{COLUMN_LABEL[level]}
+									{answerLabel[level]}
 								</th>
 							))}
 						</tr>
@@ -92,7 +99,7 @@ export default function RatingMatrix({
 										)}
 									</th>
 									{COLUMNS.map((level) => {
-										const line = level === "none" ? null : row.rungs[level];
+										const line = level === "none" ? null : row.rungs[grid][level];
 										if (level !== "none" && line === null) {
 											return (
 												<td key={level}>
@@ -114,7 +121,7 @@ export default function RatingMatrix({
 														type="radio"
 														className="radio radio-xs mt-0.5 shrink-0"
 														name={`rating-row-${row.note}`}
-														aria-label={`${row.label}: ${COLUMN_LABEL[level]}`}
+														aria-label={`${row.label}: ${answerLabel[level]}`}
 														checked={on}
 														onChange={() => set(row.note, level)}
 													/>

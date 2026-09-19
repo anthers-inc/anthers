@@ -13,13 +13,17 @@ import {
 	ACCEPTED_MATURITY_RATINGS,
 	CONTENT_NOTES,
 	contentNoteLabel,
+	GRID_ANSWER_LABELS,
+	gridFor,
 	isAtLeastAsCautious,
 	isContentNote,
 	isMaturityRating,
 	isRatingAccepted,
+	isRatingComplete,
 	MATURITY_CHOICES,
 	MATURITY_RATINGS,
 	type MaturityRating,
+	type MaturityRows,
 	maturityLabel,
 	normalizeContentNotes,
 	normalizeMaturityRows,
@@ -317,12 +321,14 @@ describe("the rating matrix", () => {
 	it("reaches Adult on sexual content, violence and substance use, and on nothing else", () => {
 		// ⚠️ The MPA's NC-17 descriptors, adapted (Parker, 2026-09-18). A fourth row reaching Adult
 		// is a change to the Rating Standard first and to this list second, never the reverse.
-		const adultRows = RATING_ROWS.filter((row) => row.rungs.adult !== null).map((r) => r.note);
+		const adultRows = RATING_ROWS.filter((row) => row.rungs.visual.adult !== null).map(
+			(r) => r.note,
+		);
 		expect(adultRows).toEqual(["violence", "sexual-themes", "substance-use"]);
-		// And strong language never rates at all.
+		// And strong language never rates a visual Work at all.
 		const language = RATING_ROWS.find((row) => row.note === "language");
-		expect(language?.rungs.mature).toBeNull();
-		expect(language?.rungs.adult).toBeNull();
+		expect(language?.rungs.visual.mature).toBeNull();
+		expect(language?.rungs.visual.adult).toBeNull();
 	});
 
 	it("is the list the content notes are drawn from", () => {
@@ -332,17 +338,20 @@ describe("the rating matrix", () => {
 	it("is not rated until every row is answered", () => {
 		// An unanswered row is not a declaration, so half a matrix adds up to nothing.
 		const { language: _left, ...fiveRows } = all("none");
-		expect(ratingFromRows(normalizeMaturityRows(fiveRows))).toBeNull();
+		expect(ratingFromRows(normalizeMaturityRows(fiveRows, "visual"))).toBeNull();
 		expect(ratingFromRows({})).toBeNull();
 	});
 
 	it("is General when nothing is in it, or only at General", () => {
-		expect(ratingFromRows(normalizeMaturityRows(all("none")))).toBe("general");
-		expect(ratingFromRows(normalizeMaturityRows(all("general")))).toBe("general");
+		expect(ratingFromRows(normalizeMaturityRows(all("none"), "visual"))).toBe("general");
+		expect(ratingFromRows(normalizeMaturityRows(all("general"), "visual"))).toBe("general");
 	});
 
 	it("takes the highest rung any row reaches", () => {
-		const rows = normalizeMaturityRows({ ...all("none"), horror: "mature", language: "general" });
+		const rows = normalizeMaturityRows(
+			{ ...all("none"), horror: "mature", language: "general" },
+			"visual",
+		);
 		expect(ratingFromRows(rows)).toBe("mature");
 		expect(ratingFromRows({ ...rows, violence: "adult" })).toBe("adult");
 	});
@@ -350,24 +359,90 @@ describe("the rating matrix", () => {
 	it("drops a level a row cannot reach rather than lowering it", () => {
 		// Marking Self-Harm as Adult leaves the row unanswered, rather than quietly answering it
 		// at Mature on the creator's behalf.
-		const rows = normalizeMaturityRows({ ...all("none"), "self-harm": "adult", made: "up" });
+		const rows = normalizeMaturityRows(
+			{ ...all("none"), "self-harm": "adult", made: "up" },
+			"visual",
+		);
 		expect(rows["self-harm"]).toBeUndefined();
 		expect(Object.keys(rows)).not.toContain("made");
 		expect(ratingFromRows(rows)).toBeNull();
 	});
 
 	it("keeps Not in It distinct from unanswered", () => {
-		const rows = normalizeMaturityRows({ violence: "none" });
+		const rows = normalizeMaturityRows({ violence: "none" }, "visual");
 		expect(rows.violence).toBe("none");
 		expect(rows.horror).toBeUndefined();
 	});
 
 	it("notes every row marked at a rung, and none marked Not in It", () => {
-		const rows = normalizeMaturityRows({
-			...all("none"),
-			language: "general",
-			violence: "mature",
-		});
+		const rows = normalizeMaturityRows(
+			{
+				...all("none"),
+				language: "general",
+				violence: "mature",
+			},
+			"visual",
+		);
 		expect(notesFromRows(rows)).toEqual(["violence", "language"]);
+	});
+});
+
+describe("the light grid, for writing, books, music and other audio", () => {
+	const all = (level: "none" | "general") =>
+		Object.fromEntries(RATING_ROWS.map((row) => [row.note, level]));
+
+	it("is chosen by a Work's type alone, and an unknown type gets the visual grid", () => {
+		for (const type of ["text", "ebook", "music", "audio"]) expect(gridFor(type)).toBe("light");
+		for (const type of ["video", "image", "comic", "game", "software", "physical", "service"]) {
+			expect(gridFor(type)).toBe("visual");
+		}
+		// The visual grid asks more, so it is the one a type this build has never heard of gets.
+		expect(gridFor("hologram")).toBe("visual");
+		expect(gridFor(null)).toBe("visual");
+	});
+
+	it("asks about the same kinds of content as the visual grid, so a reader's filter reads both", () => {
+		for (const row of RATING_ROWS) {
+			expect(row.rungs.light.general, row.note).not.toBeNull();
+			expect(row.rungs.light.mature, row.note).not.toBeNull();
+		}
+	});
+
+	it("reaches Adult on sexual content alone", () => {
+		const adultRows = RATING_ROWS.filter((row) => row.rungs.light.adult !== null).map(
+			(r) => r.note,
+		);
+		expect(adultRows).toEqual(["sexual-themes"]);
+	});
+
+	it("calls its answers In It and Explicit, and stores them as General and Mature", () => {
+		expect(GRID_ANSWER_LABELS.light).toEqual({
+			none: "Not in It",
+			general: "In It",
+			mature: "Explicit",
+			adult: "Adult",
+		});
+		const rows = normalizeMaturityRows({ ...all("none"), violence: "mature" }, "light");
+		expect(ratingFromRows(rows)).toBe("mature");
+	});
+
+	it("lets language make a Work Mature, which it never does on the visual grid", () => {
+		const explicit = { ...all("none"), language: "mature" } as MaturityRows;
+		expect(ratingFromRows(normalizeMaturityRows(explicit, "light"))).toBe("mature");
+		expect(isRatingComplete(explicit, "light")).toBe(true);
+		// On the visual grid the answer is one the row does not offer, so it is dropped and the
+		// row is left unanswered rather than quietly rated.
+		expect(normalizeMaturityRows(explicit, "visual").language).toBeUndefined();
+		expect(isRatingComplete(explicit, "visual")).toBe(false);
+	});
+
+	it("drops Adult on violence and substance use rather than lowering it", () => {
+		for (const note of ["violence", "substance-use"]) {
+			const rows = normalizeMaturityRows({ ...all("none"), [note]: "adult" }, "light");
+			expect(rows[note as keyof typeof rows]).toBeUndefined();
+			expect(ratingFromRows(rows)).toBeNull();
+		}
+		const adult = normalizeMaturityRows({ ...all("none"), "sexual-themes": "adult" }, "light");
+		expect(ratingFromRows(adult)).toBe("adult");
 	});
 });
