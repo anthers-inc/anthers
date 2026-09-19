@@ -45,6 +45,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { type ProcessingKind, processingFor } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
@@ -331,21 +332,23 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 
 	await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, workId));
 
+	// The fixture's types are all processed ones, so this is never null.
+	const processing = processingFor(spec.media) as ProcessingKind;
 	// 440 Hz for the video, then a rising scale for the tracks, so a person listening to
 	// the queue can hear it advance.
-	const hz = spec.media === "video" ? 440 : 440 + spec.trackNumber * 110;
+	const hz = processing === "video" ? 440 : 440 + spec.trackNumber * 110;
 	const clipPath =
-		spec.media === "ebook" ? await generatePdf(EBOOK_PAGES) : await generateClip(spec.media, hz);
+		processing === "ebook" ? await generatePdf(EBOOK_PAGES) : await generateClip(processing, hz);
 	try {
-		const ext = spec.media === "video" ? "mp4" : spec.media === "ebook" ? "pdf" : "mp3";
-		const sourceKey = `creators/${creator}/${spec.media}/source/${randomUUID().replace(/-/g, "")}.${ext}`;
+		const ext = processing === "video" ? "mp4" : processing === "ebook" ? "pdf" : "mp3";
+		const sourceKey = `creators/${creator}/${processing}/source/${randomUUID().replace(/-/g, "")}.${ext}`;
 		// Sources are private: only derived, access-checked deliverables are ever served.
 		await storage.upload(
 			sourceKey,
 			new Uint8Array(await Bun.file(clipPath).arrayBuffer()),
-			spec.media === "video"
+			processing === "video"
 				? "video/mp4"
-				: spec.media === "ebook"
+				: processing === "ebook"
 					? "application/pdf"
 					: "audio/mpeg",
 			"private",
@@ -354,11 +357,11 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ workId, mediaType: spec.media, status: "pending", progress: 0 })
+			.values({ workId, mediaType: processing, status: "pending", progress: 0 })
 			.returning({ id: transcodingJobs.id });
 
-		if (spec.media === "video") await transcodeVideo({ jobId: job.id });
-		else if (spec.media === "ebook") await rasterizeEbook({ jobId: job.id });
+		if (processing === "video") await transcodeVideo({ jobId: job.id });
+		else if (processing === "ebook") await rasterizeEbook({ jobId: job.id });
 		else await processAudio({ jobId: job.id });
 
 		const [done] = await db
@@ -377,7 +380,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 	}
 }
 
-/** Put the audio Works on the album's shelf, in track order. */
+/** Put the music Works on the album's shelf, in track order. */
 async function ensureProject(creator: number): Promise<void> {
 	let [project] = await db
 		.select({ id: projects.id })
@@ -398,7 +401,7 @@ async function ensureProject(creator: number): Promise<void> {
 	}
 
 	for (const spec of MEDIA_FIXTURE_WORKS) {
-		if (spec.media !== "audio") continue;
+		if (spec.media !== "music") continue;
 		const [work] = await db
 			.select({ id: works.id })
 			.from(works)

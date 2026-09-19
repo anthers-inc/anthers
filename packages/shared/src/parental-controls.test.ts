@@ -216,7 +216,7 @@ describe("the media list", () => {
 		const entries = [...block.matchAll(/^\t(\w+): "(\w+)"/gm)].map((m) => [m[1]!, m[2]!]);
 		expect(entries.length).toBeGreaterThan(5);
 
-		const offered = new Set(PARENTAL_MEDIA_TYPES.map((t) => t.value));
+		const offered = new Set<string>(PARENTAL_MEDIA_TYPES.map((t) => t.value));
 		for (const [medium, mode] of entries) {
 			// ⚠️ `physical` and `service` carry mode "none" — a shipped object and a commissioned
 			// piece of work are consumed off the platform entirely, so there is no reaching for a

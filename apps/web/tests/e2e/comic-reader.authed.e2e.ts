@@ -16,7 +16,7 @@ import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-const COMIC = mediaFixtureWork("ebook");
+const COMIC = mediaFixtureWork("comic");
 const READER = 'section[aria-label^="Reader:"]';
 
 async function openReader(page: Page) {

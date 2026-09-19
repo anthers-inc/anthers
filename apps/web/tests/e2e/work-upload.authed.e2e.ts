@@ -159,37 +159,44 @@ test("a video Work is made from its file and edited while the file uploads", asy
 });
 
 /**
- * An ebook is made from one PDF, the same way a video is made from its file.
+ * A comic and a book are each made from one PDF, the same way a video is made from its file.
  *
  * The Studio could not make an ebook at all until 2026-09-16, though everything downstream of the
  * upload — the rasterizer, the page route, the reader — already existed. What this walk proves is
  * the join: the kind is offered, the file goes up as a private asset, and arriving starts the
- * rendering. No worker runs here, so the pages themselves are the seed fixture's business.
+ * rendering. It runs for both kinds because they share that pipeline through `processingFor`, and
+ * a kind that fell out of it would upload a file nothing ever renders. No worker runs here, so the
+ * pages themselves are the seed fixture's business.
  */
-test("an ebook is made from its PDF", async ({ page, context }) => {
-	session = await signInAsMediaFixture(context);
+for (const { type, label } of [
+	{ type: "comic", label: "Comic" },
+	{ type: "ebook", label: "Book" },
+]) {
+	test(`a ${label.toLowerCase()} is made from its PDF`, async ({ page, context }) => {
+		session = await signInAsMediaFixture(context);
 
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("ebook");
-	await page.locator('input[type="file"]').setInputFiles({
-		name: `${STEM} ebook.pdf`,
-		mimeType: "application/pdf",
-		buffer: Buffer.from(
-			"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
-		),
+		await page.goto("/studio/works/new");
+		await page.locator("select").first().selectOption(type);
+		await page.locator('input[type="file"]').setInputFiles({
+			name: `${STEM} ${type}.pdf`,
+			mimeType: "application/pdf",
+			buffer: Buffer.from(
+				"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
+			),
+		});
+
+		await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
+		await expect(page.getByRole("heading", { name: `Edit ${label}` })).toBeVisible();
+		await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+		await expect
+			.poll(async () => {
+				const [work] = (await ownWorks()).filter((w) => w.title === `${STEM} ${type}`);
+				return work?.transcoding ? `${work.sourceKey?.includes("/assets/")}` : null;
+			})
+			.toBe("true");
 	});
-
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
-	await expect(page.getByRole("heading", { name: "Edit Ebook" })).toBeVisible();
-	await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 30_000 });
-
-	await expect
-		.poll(async () => {
-			const [work] = (await ownWorks()).filter((w) => w.title === `${STEM} ebook`);
-			return work?.transcoding ? `${work.sourceKey?.includes("/assets/")}` : null;
-		})
-		.toBe("true");
-});
+}
 
 /**
  * The page a creator lands on after uploading follows the processing it started.

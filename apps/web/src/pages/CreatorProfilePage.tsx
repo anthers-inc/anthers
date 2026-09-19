@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/constants";
+import { isListened } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { displayHandle, usernameFromHandleParam } from "@anthers/web-shared/profile";
@@ -621,7 +622,8 @@ export default function CreatorProfilePage() {
 	// made?", which is a question about Works, not about announcements.
 	const gameWorks = works.filter((w) => w.type === "game" || w.type === "software");
 	const videoWorks = works.filter((w) => w.type === "video");
-	const audioWorks = works.filter((w) => w.type === "audio");
+	// Music and every other kind of audio share a tab: it is the medium a visitor is asking about.
+	const audioWorks = works.filter((w) => isListened(w.type));
 	const textWorks = works.filter((w) => w.type === "text");
 
 	// The "All" tab is the Catalog timeline: everything this creator has made, in the order

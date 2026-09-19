@@ -5,15 +5,18 @@
  */
 
 import {
+	BookOpenIcon,
 	CommandLineIcon,
 	CubeIcon,
 	CubeTransparentIcon,
 	CurrencyDollarIcon,
 	FunnelIcon,
+	MicrophoneIcon,
 	MusicalNoteIcon,
 	PencilSquareIcon,
 	PhotoIcon,
 	PuzzlePieceIcon,
+	RectangleGroupIcon,
 	TagIcon,
 	VideoCameraIcon,
 	WrenchScrewdriverIcon,
@@ -27,9 +30,12 @@ import { useId } from "react";
 export const CONTENT_TYPES = [
 	{ id: "", label: "All", icon: CubeTransparentIcon },
 	{ id: "game", label: "Games", icon: PuzzlePieceIcon },
-	{ id: "audio", label: "Music", icon: MusicalNoteIcon },
+	{ id: "music", label: "Music", icon: MusicalNoteIcon },
+	{ id: "audio", label: "Audio", icon: MicrophoneIcon },
 	{ id: "video", label: "Video", icon: VideoCameraIcon },
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
+	{ id: "ebook", label: "Books", icon: BookOpenIcon },
+	{ id: "comic", label: "Comics", icon: RectangleGroupIcon },
 	{ id: "image", label: "Images", icon: PhotoIcon },
 	{ id: "software", label: "Software", icon: CommandLineIcon },
 	{ id: "physical", label: "Physical", icon: CubeIcon },
@@ -80,19 +86,18 @@ export const TAGS_BY_TYPE: Record<string, string[]> = {
 		"level-editor",
 		"indie",
 	],
-	audio: [
+	music: [
 		"chiptune",
 		"lo-fi",
 		"ost",
 		"game-music",
-		"podcast",
-		"interviews",
 		"synthwave",
 		"electronic",
 		"ambient",
 		"soundtrack",
 		"remix",
 	],
+	audio: ["podcast", "interviews", "audiobook", "audio-drama", "soundscape", "field-recording"],
 	video: [
 		"devlog",
 		"behind-the-scenes",
@@ -261,7 +266,10 @@ export default function ContentFilterSections({
 			</section>
 
 			{/* Type-specific filters */}
-			{(contentType === "game" || contentType === "audio" || contentType === "video") && (
+			{(contentType === "game" ||
+				contentType === "music" ||
+				contentType === "audio" ||
+				contentType === "video") && (
 				<section>
 					<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
 						<FunnelIcon className="w-3.5 h-3.5" />
@@ -288,7 +296,7 @@ export default function ContentFilterSections({
 						</div>
 					)}
 
-					{contentType === "audio" && (
+					{contentType === "music" && (
 						<div className="mb-3">
 							<label htmlFor={filterSelectId} className="text-xs text-base-content/50 mb-1 block">
 								Duration
@@ -307,7 +315,9 @@ export default function ContentFilterSections({
 						</div>
 					)}
 
-					{contentType === "video" && (
+					{/* A podcast episode or an audiobook runs on a film's scale rather than a
+					    song's, so the two share bands — as `BANDS` in the API does. */}
+					{(contentType === "video" || contentType === "audio") && (
 						<div className="mb-3">
 							<label htmlFor={filterSelectId} className="text-xs text-base-content/50 mb-1 block">
 								Duration

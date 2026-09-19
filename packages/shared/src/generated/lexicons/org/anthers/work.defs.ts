@@ -14,9 +14,9 @@ export { $nsid };
 type Main = { $type: "org.anthers.work";
 
   /**
-   * What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. This is an open set: consumers must accept values not listed here, because new mediums are added over time.
+   * What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. `comic` and `music` are narrower than `ebook` and `audio`, which mean a book that is not a comic and audio that is not music. This is an open set: consumers must accept values not listed here, because new mediums are added over time.
    */
-  "kind":"text" | "video" | "audio" | "image" | "ebook" | "game" | "software" | "physical" | "service" | l.UnknownString;
+  "kind":"text" | "video" | "music" | "audio" | "image" | "comic" | "ebook" | "game" | "software" | "physical" | "service" | l.UnknownString;
 
   /**
    * The work's name, as its creator wrote it. Plain text for the same reason the description is: every consumer should be able to render it without a sanitizer. Required and never empty — a listing that names nothing is worse than no listing, so a work without a title is not published rather than published anonymously.
@@ -41,7 +41,7 @@ type Main = { $type: "org.anthers.work";
 export type { Main };
 
 /** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","audio","image","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any))}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any))}));
 
 export { main };
 

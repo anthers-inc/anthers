@@ -12,12 +12,14 @@
 				"properties": {
 					"kind": {
 						"type": "string",
-						"description": "What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. This is an open set: consumers must accept values not listed here, because new mediums are added over time.",
+						"description": "What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. `comic` and `music` are narrower than `ebook` and `audio`, which mean a book that is not a comic and audio that is not music. This is an open set: consumers must accept values not listed here, because new mediums are added over time.",
 						"knownValues": [
 							"text",
 							"video",
+							"music",
 							"audio",
 							"image",
+							"comic",
 							"ebook",
 							"game",
 							"software",

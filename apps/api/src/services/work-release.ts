@@ -21,7 +21,7 @@
 
 import { db } from "@anthers/db/client";
 import { transcodingJobs, type works } from "@anthers/db/schema";
-import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
+import { isEmptyWriting, processingFor, workNeedsFile } from "@anthers/shared/content";
 import {
 	isRatingComplete,
 	type MaturityRating,
@@ -33,9 +33,6 @@ import { publishRefusal } from "./publish-refusal.js";
 import { scanReleaseGate } from "./safety-scan.js";
 
 type WorkRow = typeof works.$inferSelect;
-
-/** Work types whose media is processed asynchronously before the Work can be released. */
-const PROCESSED_WORK_TYPES = new Set(["video", "audio", "ebook"]);
 
 /** Why a Work cannot be released yet, ready to send as a response or to put in a notice. */
 export interface ReleaseRefusal {
@@ -122,7 +119,8 @@ export async function releaseRefusal(
 		};
 	}
 
-	if (PROCESSED_WORK_TYPES.has(work.type)) {
+	// A Work whose file is processed asynchronously waits for the processing to finish.
+	if (processingFor(work.type)) {
 		const unready = await unreadyWorks([work.id]);
 		if (unready.length > 0) {
 			// ⚠️ A failed encode is unready too, and is not something to wait for: nothing will

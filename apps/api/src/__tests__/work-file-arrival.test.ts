@@ -145,6 +145,39 @@ describe("a video Work whose file has not arrived", () => {
 	});
 });
 
+/**
+ * `music` and `comic` reach the pipelines of `audio` and `ebook` through `processingFor`, so a type
+ * that fell out of it would upload a file nothing ever processes, and would then release without
+ * waiting for it.
+ */
+describe("each kind with a file is processed by its medium's pipeline", () => {
+	for (const [type, mediaType, queueName] of [
+		["music", "audio", QUEUES.PROCESS_AUDIO],
+		["audio", "audio", QUEUES.PROCESS_AUDIO],
+		["comic", "ebook", QUEUES.RASTERIZE_EBOOK],
+		["ebook", "ebook", QUEUES.RASTERIZE_EBOOK],
+	] as const) {
+		it(`sends a ${type} Work's file to ${queueName}, and waits for it before release`, async () => {
+			const workId = await createWithoutFile(type);
+			sent = [];
+			const res = await call("PATCH", `/api/content/works/${workId}`, {
+				sourceKey: KEY(`${type}-source`),
+			});
+			expect(res.status).toBe(200);
+			const [job] = await db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.workId, workId));
+			expect(job?.mediaType).toBe(mediaType);
+			expect(sent.find((s) => s.name === queueName)?.data).toEqual({ jobId: job?.id });
+
+			const refused = await release(workId);
+			expect(refused.status).toBe(409);
+			expect((await refused.json()).code).toBe("media_not_ready");
+		});
+	}
+});
+
 describe("the kinds with no file to wait for", () => {
 	it("releases a game that has no file at all", async () => {
 		const workId = await createWithoutFile("game");

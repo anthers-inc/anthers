@@ -60,10 +60,10 @@ export default function MusicLens({ items }: { items: LensItem[] }) {
 
 	const albums = items.map((i) => i.project).filter((p): p is LensProject => p?.isAlbum === true);
 
-	// Saved audio Works, in shelf order. These are the "singles" — tracks kept on their
+	// Saved music Works, in shelf order. These are the "singles" — tracks kept on their
 	// own, as opposed to records kept whole.
 	const singles: QueueTrack[] = items
-		.filter((i) => i.kind === "work" && i.work?.type === "audio")
+		.filter((i) => i.kind === "work" && i.work?.type === "music")
 		.map((i) =>
 			trackFromWork(i.work as Work, {
 				id: i.work?.creatorId ?? null,
@@ -88,7 +88,7 @@ export default function MusicLens({ items }: { items: LensItem[] }) {
 				project: { works?: Work[]; creator?: { username?: string; displayName?: string } };
 			};
 			const tracks = (full.works ?? [])
-				.filter((w) => w.type === "audio")
+				.filter((w) => w.type === "music")
 				.map((w) =>
 					trackFromWork(w, {
 						id: project.creatorId,

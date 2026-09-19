@@ -9,6 +9,7 @@
  * Projects group a creator's Works and Posts.
  */
 
+import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
 
 // ─── User Types ───
@@ -168,19 +169,8 @@ export interface TranscodingJob {
 	updatedAt: string;
 }
 
-/** Content type discriminator. Text is post-native, not a library type — library items
- *  are the uploadable/processable types below. */
-export type ContentType =
-	| "text"
-	| "image"
-	/** A packaged multi-page document — a comic, a graphic novel, a prose book. */
-	| "ebook"
-	| "audio"
-	| "video"
-	| "game"
-	| "software"
-	| "physical"
-	| "service";
+/** A Work's type. `WORK_TYPES` in `@anthers/shared/content` is the authority on the list. */
+export type ContentType = WorkType;
 
 /**
  * Work types whose media is UPLOADED. A text Work is authored in place — its prose is the
@@ -230,7 +220,7 @@ export interface Work {
 	body?: string | null;
 	bodyHtml?: string | null;
 	/**
-	 * The song's words, for `type: "audio"` — plain text, untimestamped, newline-separated.
+	 * The song's words, for `type: "music"` — plain text, untimestamped, newline-separated.
 	 *
 	 * Gated exactly like `body`: a denied viewer gets `""`, because a gated track's words
 	 * are part of what the support or purchase buys. The public blurb that survives a gate is

@@ -183,8 +183,8 @@ export default function ParentsPage() {
 				</p>
 				<p>
 					<strong>Choose creators, and kinds of work.</strong> Either a list of who and what is
-					allowed, or a list of what isn't — whichever way round suits. Video, audio, writing, books
-					and comics, images, games and software can each be allowed or not.
+					allowed, or a list of what isn't — whichever way round suits. Video, music, other audio,
+					writing, books, comics, images, games and software can each be allowed or not.
 				</p>
 				<p>
 					<strong>Set time limits</strong> per day, week or month, and optionally a tighter daily

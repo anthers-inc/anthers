@@ -45,10 +45,12 @@ export function fileRules(type: FileWorkType): { accept: string; maxSize: number
 	switch (type) {
 		case "video":
 			return { accept: "video/*", maxSize: 2 * 1024 * 1024 * 1024, noun: "a video file" };
+		case "music":
 		case "audio":
 			return { accept: "audio/*", maxSize: 500 * 1024 * 1024, noun: "an audio file" };
 		case "image":
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
+		case "comic":
 		case "ebook":
 			return { accept: "application/pdf", maxSize: 500 * 1024 * 1024, noun: "a PDF" };
 	}

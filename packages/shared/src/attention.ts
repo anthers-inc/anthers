@@ -26,6 +26,8 @@
  * sign of life.
  */
 
+import type { WorkType } from "./content.js";
+
 /** The kind of evidence a content type needs before its seconds count. */
 export type ConsumptionMode =
 	/** Timed media: credits only while playing, visible or not. */
@@ -39,24 +41,24 @@ export type ConsumptionMode =
 export type AttentionEventType = "page_view" | "play" | "watch" | "read" | "listen";
 
 /**
- * Consumption mode per content entity. Keys are `content_items.type` values plus
- * `text`, which is a post-native content element (`post_contents.kind = "text"`)
- * rather than a library item today. Physical goods and services are listings, not
- * works — nothing is consumed, so nothing accrues.
+ * Consumption mode per Work type. Physical goods and services are listings, not works —
+ * nothing is consumed, so nothing accrues.
+ *
+ * 🚨 **Keyed by `WorkType` so that a new type cannot compile without an entry.**
+ * `consumptionModeFor` returns "none" for an unrecognized type, which makes it
+ * Time-Pool-ineligible — the safe default (unknown types are inert rather than free money)
+ * and the wrong answer for a real medium. A Work type missing here would earn its creator
+ * nothing, with no error anywhere to say so.
  */
-const CONSUMPTION: Record<string, ConsumptionMode> = {
+const CONSUMPTION: Record<WorkType, ConsumptionMode> = {
 	video: "playback",
+	music: "playback",
 	audio: "playback",
 	text: "presence",
 	image: "presence",
-	// An ebook — a comic, a graphic novel, a prose book — is read, which is presence:
-	// visible tab plus a sign of life. Turning pages supplies that naturally.
-	//
-	// 🚨 Registering it here is NOT optional bookkeeping. `consumptionModeFor` returns
-	// "none" for an unrecognized type, which makes it Time-Pool-ineligible — the safe
-	// default (unknown types are inert rather than free money) and the wrong answer for a
-	// real medium. A new Work type that nobody adds here earns its creator nothing, with
-	// no error anywhere to say so.
+	// A comic or a book is read, which is presence: visible tab plus a sign of life.
+	// Turning pages supplies that naturally.
+	comic: "presence",
 	ebook: "presence",
 	game: "presence",
 	software: "presence",
@@ -64,12 +66,14 @@ const CONSUMPTION: Record<string, ConsumptionMode> = {
 	service: "none",
 };
 
-/** The attention event type recorded for each content entity. */
-const EVENT_TYPE: Record<string, AttentionEventType> = {
+/** The attention event type recorded for each Work type that is consumed at all. */
+const EVENT_TYPE: Record<Exclude<WorkType, "physical" | "service">, AttentionEventType> = {
 	video: "watch",
+	music: "listen",
 	audio: "listen",
 	text: "read",
 	image: "read",
+	comic: "read",
 	ebook: "read",
 	game: "play",
 	software: "play",
@@ -77,12 +81,12 @@ const EVENT_TYPE: Record<string, AttentionEventType> = {
 
 /** How a content entity is consumed. Unknown types are inert rather than free money. */
 export function consumptionModeFor(contentType: string): ConsumptionMode {
-	return CONSUMPTION[contentType] ?? "none";
+	return (CONSUMPTION as Record<string, ConsumptionMode>)[contentType] ?? "none";
 }
 
 /** The event type recorded for a content entity's attention. */
 export function eventTypeFor(contentType: string): AttentionEventType {
-	return EVENT_TYPE[contentType] ?? "page_view";
+	return (EVENT_TYPE as Record<string, AttentionEventType>)[contentType] ?? "page_view";
 }
 
 /** Whether time spent with this content entity can earn Time Pool minutes at all. */

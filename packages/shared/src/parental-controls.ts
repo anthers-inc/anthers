@@ -22,6 +22,8 @@
  * for a household, not a guarantee about anything, and the word list says so.
  */
 
+import type { WorkType } from "./content.js";
+
 /**
  * One rule in a list — a creator, or a media type.
  *
@@ -172,11 +174,13 @@ export function dailyCapFor(
  * so there is no reaching for a guardian to restrict and no seconds to cap. Blocking one would
  * be blocking a *purchase*, which is a different thing this panel does not claim to do.
  */
-export const PARENTAL_MEDIA_TYPES: readonly { value: string; label: string }[] = [
+export const PARENTAL_MEDIA_TYPES: readonly { value: WorkType; label: string }[] = [
 	{ value: "video", label: "Video" },
+	{ value: "music", label: "Music" },
 	{ value: "audio", label: "Audio" },
 	{ value: "text", label: "Writing" },
-	{ value: "ebook", label: "Books & comics" },
+	{ value: "ebook", label: "Books" },
+	{ value: "comic", label: "Comics" },
 	{ value: "image", label: "Images" },
 	{ value: "game", label: "Games" },
 	{ value: "software", label: "Software" },

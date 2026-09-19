@@ -39,7 +39,8 @@ export interface MediaFixtureWork {
 	slug: string;
 	publicId: number;
 	title: string;
-	media: "video" | "audio" | "ebook";
+	/** The Work's type. */
+	media: "video" | "music" | "comic";
 	/** Position within the fixture's Project — the album's track order. */
 	trackNumber: number;
 	/**
@@ -59,7 +60,7 @@ export interface MediaFixtureWork {
 /**
  * The Works.
  *
- * One video and four audio tracks. Four rather than one because the music work needs a
+ * One comic, one video and four music tracks. Four rather than one because the music work needs a
  * queue with somewhere to advance *to* — a single-track album cannot tell a "next" that
  * works from a "next" that silently does nothing — and because **track 3 is gated**, which
  * is what makes the skip-over-locked behavior observable at all.
@@ -69,11 +70,11 @@ export interface MediaFixtureWork {
  */
 export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 	{
-		key: "ebook",
+		key: "comic",
 		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}comic`,
 		publicId: PUBLIC_ID_BASE + 2,
 		title: "A comic that really turns",
-		media: "ebook",
+		media: "comic",
 		trackNumber: 0,
 	},
 	{
@@ -89,7 +90,7 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-1`,
 		publicId: PUBLIC_ID_BASE + 11,
 		title: "Track 1",
-		media: "audio",
+		media: "music",
 		trackNumber: 1,
 		lyrics: "First verse, first line\nFirst verse, second line\n\nChorus goes here",
 	},
@@ -98,7 +99,7 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-2`,
 		publicId: PUBLIC_ID_BASE + 12,
 		title: "Track 2",
-		media: "audio",
+		media: "music",
 		trackNumber: 2,
 	},
 	{
@@ -106,7 +107,7 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-3`,
 		publicId: PUBLIC_ID_BASE + 13,
 		title: "Track 3 (gated)",
-		media: "audio",
+		media: "music",
 		trackNumber: 3,
 		gated: true,
 		// Gated lyrics, so the withholding has something to withhold. A viewer without
@@ -118,7 +119,7 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-4`,
 		publicId: PUBLIC_ID_BASE + 14,
 		title: "Track 4",
-		media: "audio",
+		media: "music",
 		trackNumber: 4,
 	},
 ];
@@ -131,12 +132,12 @@ export function mediaFixtureWork(key: string): MediaFixtureWork {
 	return found;
 }
 
-/** The audio Works, in track order — the fixture's "album". */
-export const MEDIA_FIXTURE_TRACKS = MEDIA_FIXTURE_WORKS.filter((w) => w.media === "audio").sort(
+/** The music Works, in track order — the fixture's "album". */
+export const MEDIA_FIXTURE_TRACKS = MEDIA_FIXTURE_WORKS.filter((w) => w.media === "music").sort(
 	(a, b) => a.trackNumber - b.trackNumber,
 );
 
-/** The Project the tracks sit in, ordered. An album is a Project of ordered audio Works. */
+/** The Project the tracks sit in, ordered. An album is a Project of ordered music Works. */
 export const MEDIA_FIXTURE_PROJECT = {
 	slug: `${MEDIA_FIXTURE_SLUG_PREFIX}album`,
 	title: "An album that really plays",

@@ -182,6 +182,7 @@ const HANDFUL = 6;
 const MEDIUMS = [
 	{ key: "game", label: "Games" },
 	{ key: "video", label: "Video" },
+	{ key: "music", label: "Music" },
 	{ key: "audio", label: "Audio" },
 	{ key: "text", label: "Writing" },
 ] as const;

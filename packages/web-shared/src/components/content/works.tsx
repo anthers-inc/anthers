@@ -6,7 +6,7 @@
  * post authoring content picker.
  */
 
-import { workNeedsFile } from "@anthers/shared/content";
+import { type WorkType, workNeedsFile } from "@anthers/shared/content";
 import { contentNoteLabel, maturityLabel } from "@anthers/shared/content-rating";
 import {
 	BookOpenIcon,
@@ -14,9 +14,11 @@ import {
 	CubeIcon,
 	DocumentTextIcon,
 	FilmIcon,
+	MicrophoneIcon,
 	MusicalNoteIcon,
 	PhotoIcon,
 	PuzzlePieceIcon,
+	RectangleGroupIcon,
 	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
@@ -28,8 +30,8 @@ import { type AccessState, accessState } from "./work-state";
 export { type AccessState, accessState } from "./work-state";
 
 /**
- * The Work kinds the Studio can make, in the order its type pickers list them: all nine of
- * `WORK_TYPES` in `routes/content.ts`, which is the authority on the list.
+ * The Work kinds the Studio can make, in the order its type pickers list them: every one of
+ * `WORK_TYPES` in `@anthers/shared/content`, which is the authority on the list.
  *
  * ⭐ **Text is labeled Writing**, the word the creator profile's tab already uses and one that
  * covers an essay, a story and a poem alike. It is written on the Work's own page rather than
@@ -39,21 +41,26 @@ export { type AccessState, accessState } from "./work-state";
 export const LIBRARY_TYPE_OPTIONS: { value: ContentType; label: string }[] = [
 	{ value: "text", label: "Writing" },
 	{ value: "video", label: "Video" },
+	// Music, and then every other kind of audio: a podcast, an audiobook, audio drama.
+	{ value: "music", label: "Music" },
 	{ value: "audio", label: "Audio" },
 	{ value: "image", label: "Image" },
-	// One PDF, rendered to pages after it lands. A comic is an ebook; see *What You Can Publish*.
-	{ value: "ebook", label: "Ebook" },
+	// Each is one PDF, rendered to pages after it lands; *What You Can Publish* says which is which.
+	{ value: "comic", label: "Comic" },
+	{ value: "ebook", label: "Book" },
 	{ value: "game", label: "Game" },
 	{ value: "software", label: "Software" },
 	{ value: "physical", label: "Physical" },
 	{ value: "service", label: "Service" },
 ];
 
-const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+const TYPE_ICONS: Record<WorkType, ComponentType<{ className?: string }>> = {
 	text: DocumentTextIcon,
 	video: FilmIcon,
-	audio: MusicalNoteIcon,
+	music: MusicalNoteIcon,
+	audio: MicrophoneIcon,
 	image: PhotoIcon,
+	comic: RectangleGroupIcon,
 	ebook: BookOpenIcon,
 	game: PuzzlePieceIcon,
 	software: CommandLineIcon,
@@ -68,7 +75,8 @@ export function typeLabel(type: string): string {
 
 /** The heroicon for a content type (defaults to the image icon). */
 export function TypeIcon({ type, className }: { type: string; className?: string }) {
-	const Icon = TYPE_ICONS[type] ?? PhotoIcon;
+	const Icon =
+		(TYPE_ICONS as Record<string, ComponentType<{ className?: string }>>)[type] ?? PhotoIcon;
 	return <Icon className={className} />;
 }
 
