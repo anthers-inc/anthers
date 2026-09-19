@@ -15,9 +15,11 @@
  * detail — that re-rating can't resurrect a hidden rating, and that a restore is
  * a NEW log row rather than an edit to the hide it reverses.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { comments, moderationActions, moderationReports, reviews, users } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -115,9 +117,9 @@ beforeAll(async () => {
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Mod fixture ${id}`,
-		// Declared on create so the release below is not refused for a reason this suite
-		// is not about — release is gated on a declared content rating.
-		maturity: "general",
+		// Rated on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on every row of the rating being answered.
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(itemRes.status).toBe(201);
 	workId = (await itemRes.json()).work.id;

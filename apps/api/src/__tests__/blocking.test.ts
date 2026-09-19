@@ -18,6 +18,7 @@
  * Point 4 in particular is the one that looks like an omission. It is a decision, and
  * `blocks_do_not_filter_content` exists so that changing it has to be deliberate.
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
@@ -28,6 +29,7 @@ import {
 	userBlocks,
 	users,
 } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -113,12 +115,12 @@ beforeAll(async () => {
 	abeId = await userId(abeName);
 	beeId = await userId(beeName);
 
-	// `maturity` declared on create so the release below is not refused for a reason
+	// Rated on create so the release below is not refused for a reason
 	// this suite is not about.
 	const workRes = await post("/api/content/works", host, {
 		type: "game",
 		title: `Blk work ${id}`,
-		maturity: "general",
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;
@@ -344,7 +346,7 @@ describe("a block is a boundary, not a moderation action", () => {
 			title: `Bee work ${id}`,
 			body: "words",
 			bodyHtml: "<p>words</p>",
-			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 		});
 		expect(beeWorkRes.status).toBe(201);
 		const beeWork = (await beeWorkRes.json()).work;

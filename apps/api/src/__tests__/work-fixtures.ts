@@ -13,9 +13,12 @@
  * nothing to do with the gates under test. Pass `visibility: "private"` explicitly when
  * staging is the thing being tested.
  */
+
 import { db } from "@anthers/db/client";
 import type { SeedAccessRow } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
+import type { DeclarableMaturity } from "@anthers/shared/content-rating";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
 
 /**
@@ -64,6 +67,12 @@ export interface WorkFixture {
 	 */
 	maturity?: "unrated" | "general" | "mature" | "adult";
 	maturityNotes?: string[];
+	/**
+	 * The rating matrix. Defaults to a complete one that adds up to `maturity`, because a rated
+	 * Work has every row answered (Parker, 2026-09-18) and release refuses one that does not. Pass
+	 * `{}` to stand for a Work rated before the matrix existed.
+	 */
+	maturityRows?: Record<string, string>;
 	/** When scans were last enqueued for this Work — the release gate's clock. */
 	scanQueuedAt?: Date | null;
 	embedUrl?: string;
@@ -98,6 +107,11 @@ export async function insertWork(fixture: WorkFixture) {
 			thumbnail: fixture.thumbnail ?? "",
 			maturity: fixture.maturity ?? "general",
 			maturityNotes: fixture.maturityNotes ?? [],
+			maturityRows:
+				fixture.maturityRows ??
+				((fixture.maturity ?? "general") === "unrated"
+					? {}
+					: rowsRatedAs((fixture.maturity ?? "general") as DeclarableMaturity)),
 			maturitySource: (fixture.maturity ?? "general") === "unrated" ? null : "creator",
 			maturitySetAt: (fixture.maturity ?? "general") === "unrated" ? null : new Date(),
 			scanQueuedAt: fixture.scanQueuedAt ?? null,

@@ -37,6 +37,7 @@ import { db } from "@anthers/db/client";
 import { moderationActions, workRatingAppeals, works } from "@anthers/db/schema";
 import {
 	type ContentNote,
+	type DeclarableMaturity,
 	isAtLeastAsCautious,
 	type MaturityRating,
 	maturityLabel,
@@ -72,46 +73,47 @@ export function ratingOf(work: Pick<WorkRow, "maturity" | "maturityNotes" | "mat
 export type DeclineRefusal = "locked";
 
 /**
- * What a declaration amounts to: the rating and notes a request names directly, or the ones its
- * rating matrix adds up to once every row is answered (see `RATING_ROWS`). A complete matrix
- * decides both; an incomplete one decides neither and is only stored, so a Work already rated
- * keeps its rating until its creator finishes answering, and nothing is un-rated by a matrix
- * left half done.
+ * What a creator's rating matrix amounts to: the rating and notes a complete matrix adds up to
+ * (see `RATING_ROWS`), or nothing for an incomplete one. An incomplete matrix is only stored, so a
+ * Work keeps whatever rating it had until its creator finishes answering, and nothing is un-rated
+ * by a matrix left half done.
+ *
+ * 🚨 **The matrix is the only way a creator rates a Work** (Parker, 2026-09-18: *"you should
+ * always have to rate them, no exceptions"*). There is deliberately no path taking a rating by
+ * name, because a rating with unanswered rows is a General that cannot say whether it means "a
+ * General form of this" or "none of this". An operator's correction is `correctRating`, which
+ * sets the rating over the rows rather than answering them.
  */
-export function declaredRating(input: {
-	maturity?: MaturityRating;
+export function declaredRating(rows: unknown): {
+	maturity?: DeclarableMaturity;
 	notes?: readonly string[];
-	rows?: unknown;
-}): { maturity?: MaturityRating; notes?: readonly string[] } {
-	if (input.rows === undefined) return { maturity: input.maturity, notes: input.notes };
-	const rows = normalizeMaturityRows(input.rows);
-	const fromRows = ratingFromRows(rows);
-	return fromRows
-		? { maturity: fromRows, notes: notesFromRows(rows) }
-		: { maturity: input.maturity, notes: input.notes };
+} {
+	const normalized = normalizeMaturityRows(rows);
+	const fromRows = ratingFromRows(normalized);
+	return fromRows ? { maturity: fromRows, notes: notesFromRows(normalized) } : {};
 }
 
 /**
- * The creator declaring their own Work's rating, directly or through the rating matrix.
+ * The creator declaring their own Work's rating, through the rating matrix.
  *
- * Returns the updated row, or `"locked"` when an operator has set the rating and this change
- * would lower it. Passing the rating it already has is not a change and is always allowed,
- * so a PATCH that happens to include the current value never trips the lock — which matters
- * because the Work editor sends the whole form every time.
+ * Returns the updated row, or `"locked"` when an operator has set the rating and the rows add up
+ * to something lower. Passing rows that add up to the rating the Work already has is not a
+ * change and is always allowed, so a save that happens to include unchanged rows never trips the
+ * lock.
  */
 export async function declareRating(
 	work: WorkRow,
-	input: { maturity?: MaturityRating; notes?: readonly string[]; rows?: unknown },
+	input: { rows: unknown },
 	now: Date = new Date(),
 ): Promise<WorkRow | DeclineRefusal> {
 	const current = ratingOf(work);
-	const declared = declaredRating(input);
+	const declared = declaredRating(input.rows);
 	const maturity = declared.maturity ?? current.maturity;
 
 	if (current.locked && !isAtLeastAsCautious(maturity, current.maturity)) return "locked";
 
 	const updates: Partial<typeof works.$inferInsert> = { updatedAt: now };
-	if (input.rows !== undefined) updates.maturityRows = normalizeMaturityRows(input.rows);
+	updates.maturityRows = normalizeMaturityRows(input.rows);
 	if (maturity !== current.maturity) {
 		updates.maturity = maturity;
 		updates.maturitySetAt = now;

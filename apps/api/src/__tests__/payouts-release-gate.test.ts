@@ -25,9 +25,11 @@
  * correct a rating, or to take the Work down — punishing them for something Stripe did. The
  * gate asks only about the moment of release or publication.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { posts, projects, stripeAccounts, users, works } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
@@ -113,7 +115,7 @@ describe("publishing requires a fully set-up creator", () => {
 				title: `Payout fixture ${id}`,
 				body: "A short thing.",
 				bodyHtml: "<p>A short thing.</p>",
-				maturity: "general",
+				maturityRows: rowsRatedAs("general"),
 			}),
 		});
 		expect(res.status).toBe(201);
@@ -178,7 +180,7 @@ describe("publishing requires a fully set-up creator", () => {
 		const workId = await makeWork(none.cookie);
 		const res = await patch(
 			workId,
-			{ maturity: "mature", maturityNotes: ["violence"], visibility: "released" },
+			{ maturityRows: rowsRatedAs("mature"), visibility: "released" },
 			none.cookie,
 		);
 		expect(res.status).toBe(409);

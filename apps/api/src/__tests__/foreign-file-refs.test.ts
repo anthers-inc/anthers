@@ -16,9 +16,11 @@
  * ⚠️ `queue.send` is replaced, because attaching a file enqueues a transcode and a scan and
  * pg-boss is not running under the test runner.
  */
+
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import { projects, users, works } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { queue } from "../jobs/queue";
@@ -141,7 +143,7 @@ describe("the write routes refuse another account's file", () => {
 		const { work } = (await res.json()) as { work: { id: number } };
 		const patched = await call("PATCH", `/api/content/works/${work.id}`, attacker.cookie, {
 			sourceKey: victimSource(),
-			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 		});
 		expect(await refusal(patched)).toBe("foreign_file");
 		const [row] = await db.select().from(works).where(eq(works.id, work.id));

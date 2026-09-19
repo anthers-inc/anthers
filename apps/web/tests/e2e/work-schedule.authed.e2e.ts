@@ -11,6 +11,7 @@
  * schedule is refused for a creator who could not release. Serial, because the sweep below is by
  * title prefix.
  */
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const TITLE_PREFIX = "Schedule walk ";
@@ -62,7 +63,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 			Cookie: `session=${session}`,
 			Origin: WEB_ORIGIN,
 		},
-		body: JSON.stringify({ type: "service", title: TITLE, maturity: "general" }),
+		body: JSON.stringify({ type: "service", title: TITLE, maturityRows: rowsRatedAs("general") }),
 	});
 	const { work } = (await created.json()) as { work: OwnedWork };
 

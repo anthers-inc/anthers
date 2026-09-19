@@ -14,9 +14,11 @@
  *   entitled viewers — through `resolveAccessSync`.
  * - The `takedown` reason is returned, not `gated` or `payment_required`.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { dmcaNotices, moderationActions, works } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -109,9 +111,9 @@ beforeAll(async () => {
 	const w1 = await post("/api/content/works", creator, {
 		type: "game",
 		title: `DMCA fixture ${id}`,
-		// Declared on create so the release below is not refused for a reason this suite
-		// is not about — release is gated on a declared content rating.
-		maturity: "general",
+		// Rated on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on every row of the rating being answered.
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(w1.status).toBe(201);
 	workId = (await w1.json()).work.id;
@@ -119,7 +121,7 @@ beforeAll(async () => {
 	const w2 = await post("/api/content/works", otherCreator, {
 		type: "game",
 		title: `Other ${id}`,
-		maturity: "general",
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(w2.status).toBe(201);
 	otherWorkId = (await w2.json()).work.id;

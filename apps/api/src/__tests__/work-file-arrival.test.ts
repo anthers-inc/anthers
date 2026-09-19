@@ -12,9 +12,11 @@
  * scan, pg-boss is not running under the test runner, and what is under test is that the route
  * asks for them rather than that a worker answers.
  */
+
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
@@ -62,7 +64,7 @@ async function createWithoutFile(type: string): Promise<number> {
 function release(workId: number) {
 	return call("PATCH", `/api/content/works/${workId}`, {
 		visibility: "released",
-		maturity: "general",
+		maturityRows: rowsRatedAs("general"),
 	});
 }
 
@@ -184,7 +186,7 @@ describe("a piece of writing, which is its body the way a video is its file", ()
 		const blank = await call("PATCH", `/api/content/works/${workId}`, {
 			bodyHtml: "<p> </p><p>&nbsp;</p>",
 			visibility: "released",
-			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 		});
 		expect((await blank.json()).code).toBe("text_missing");
 	});
@@ -197,7 +199,7 @@ describe("a piece of writing, which is its body the way a video is its file", ()
 			bodyHtml: "<p>The first hard frost came early this year.</p>",
 			body: "The first hard frost came early this year.",
 			visibility: "released",
-			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 		});
 		expect(res.status).toBe(200);
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
@@ -208,7 +210,7 @@ describe("a piece of writing, which is its body the way a video is its file", ()
 	it("cannot be scheduled while it is empty, since nothing will fill it on its own", async () => {
 		const workId = await createWithoutFile("text");
 		const res = await call("PATCH", `/api/content/works/${workId}`, {
-			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 			scheduledReleaseAt: new Date(Date.now() + 86_400_000).toISOString(),
 		});
 		expect(res.status).toBe(409);

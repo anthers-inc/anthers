@@ -45,6 +45,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
@@ -296,8 +297,10 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 			lyrics: spec.lyrics ?? "",
 			visibility: "released",
 			// Seeded Works stand for properly released ones, and release is gated on a
-			// declared rating — an unrated released Work is a state no path produces.
+			// declared rating with every row of its matrix answered — a released Work without
+			// one is a state no path produces. Every row Not in It, which is General.
 			maturity: "general",
+			maturityRows: rowsRatedAs("general"),
 			maturitySource: "creator",
 			releasedAt: new Date(),
 			streamEnabled: true,

@@ -16,10 +16,12 @@
  *   - Rows written before text was required have `body IS NULL`, must keep
  *     rendering, and must keep counting toward the average.
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { reviews } from "@anthers/db/schema";
 import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -91,9 +93,9 @@ beforeAll(async () => {
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Review fixture ${id}`,
-		// Declared on create so the release below is not refused for a reason this suite
-		// is not about — release is gated on a declared content rating.
-		maturity: "general",
+		// Rated on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on every row of the rating being answered.
+		maturityRows: rowsRatedAs("general"),
 	});
 	expect(itemRes.status).toBe(201);
 	workId = (await itemRes.json()).work.id;

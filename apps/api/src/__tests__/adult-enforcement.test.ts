@@ -22,6 +22,7 @@
  * the second. The creator's case is the one a too-broad guard breaks, and it is the one that
  * would be found last, because it needs somebody to notice their own work had vanished.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
@@ -34,6 +35,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -271,7 +273,7 @@ describe("what an Adult rating costs", () => {
 			const res = await req(`/api/content/works/${freeDraft.id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-				body: JSON.stringify({ maturity: "adult" }),
+				body: JSON.stringify({ maturityRows: rowsRatedAs("adult") }),
 			});
 			expect(res.status).toBe(200);
 			const [row] = await db.select().from(works).where(eq(works.id, freeDraft.id));
@@ -285,7 +287,7 @@ describe("what an Adult rating costs", () => {
 				body: JSON.stringify({
 					type: "text",
 					title: `Born free and adult ${run}`,
-					maturity: "adult",
+					maturityRows: rowsRatedAs("adult"),
 					seedAccess: OPEN_TO_EVERYONE,
 				}),
 			});

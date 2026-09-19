@@ -10,6 +10,7 @@
  * creator cannot discover any other way.
  */
 import { describe, expect, it } from "bun:test";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import type { Work } from "../../lib/types";
 import { buildWorklist, type WorklistKind } from "./studio-worklist";
 
@@ -23,6 +24,7 @@ function work(over: Partial<Work> = {}): Work {
 		title: "Tide",
 		visibility: "released",
 		maturity: "general",
+		maturityRows: rowsRatedAs("general"),
 		streamEnabled: true,
 		downloadEnabled: false,
 		seedAccess: [{ threshold: 0, allow: true, price: "0" }],
@@ -90,15 +92,18 @@ describe("buildWorklist", () => {
 		expect(kinds([work()], false)).toEqual(["payouts"]);
 	});
 
-	it("does not ask about the rating of something already released", () => {
-		// The server refuses to release an unrated Work, so a released one that reads as
-		// unrated is a state that cannot exist — asking about it would be asking about a bug
-		// somewhere else, in the one place a creator can do nothing about it.
-		expect(kinds([work({ visibility: "released", maturity: "unrated" })])).toEqual([]);
-		expect(kinds([work({ visibility: "private", maturity: "unrated" })])).toEqual(["unrated"]);
-		expect(
-			kinds([work({ visibility: "private", maturity: null as unknown as undefined })]),
-		).toEqual(["unrated"]);
+	it("asks about a rating with any row unanswered, and only before release", () => {
+		// Asked of the rows rather than the rating: a Work rated before the matrix existed holds a
+		// rating with no rows behind it, and the server refuses to release it all the same.
+		const { language: _left, ...fiveRows } = rowsRatedAs("general");
+		expect(kinds([work({ visibility: "private", maturity: "unrated", maturityRows: {} })])).toEqual(
+			["unrated"],
+		);
+		expect(kinds([work({ visibility: "private", maturityRows: {} })])).toEqual(["unrated"]);
+		expect(kinds([work({ visibility: "private", maturityRows: fiveRows })])).toEqual(["unrated"]);
+		expect(kinds([work({ visibility: "private", maturityRows: undefined })])).toEqual(["unrated"]);
+		// Released, the release is no longer what an unanswered row stands in front of.
+		expect(kinds([work({ visibility: "released", maturityRows: {} })])).toEqual([]);
 	});
 
 	it("flags a Work with no way to be consumed, before it is released", () => {
@@ -143,7 +148,7 @@ describe("buildWorklist", () => {
 			work({ id: 1, publicId: 1, seedAccess: [{ threshold: 0, allow: false, price: "0" }] }),
 			work({ id: 2, publicId: 2, transcoding: { status: "failed" } as Work["transcoding"] }),
 			work({ id: 5, publicId: 5, visibility: "private", sourceKey: "" }),
-			work({ id: 3, publicId: 3, visibility: "private", maturity: "unrated" }),
+			work({ id: 3, publicId: 3, visibility: "private", maturity: "unrated", maturityRows: {} }),
 			work({
 				id: 4,
 				publicId: 4,

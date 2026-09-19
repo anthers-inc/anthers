@@ -23,6 +23,7 @@ import { db } from "@anthers/db/client";
 import { transcodingJobs, type works } from "@anthers/db/schema";
 import { isEmptyWriting, workNeedsFile } from "@anthers/shared/content";
 import {
+	isRatingComplete,
 	type MaturityRating,
 	maturityLabel,
 	releaseRatingRefusal,
@@ -152,11 +153,16 @@ export async function releaseRefusal(
 	// rather than pushed into under-declaring one rung down.
 	const rating = work.maturity as MaturityRating;
 	const ratingRefusal = releaseRatingRefusal(rating);
-	if (ratingRefusal === "undeclared") {
+	// 🚨 **Rated means every row answered, not a rating held** (Parker, 2026-09-18: *"you should
+	// always have to rate them, no exceptions"*). A Work rated before the matrix existed, or given
+	// a rating straight into the database, holds a value its rows cannot stand behind, so it is
+	// refused as undeclared, which it is, with the same code as an unrated one because the fix is
+	// the same one.
+	if (ratingRefusal === "undeclared" || !isRatingComplete(work.maturityRows)) {
 		return {
 			status: 409,
 			body: {
-				error: "Say how this Work is rated before releasing it.",
+				error: "Answer every row of this Work's rating before releasing it.",
 				code: "maturity_undeclared",
 			},
 			resolves: "creator",

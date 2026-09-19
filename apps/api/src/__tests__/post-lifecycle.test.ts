@@ -10,9 +10,11 @@
  * Transcode state is simulated by inserting transcoding_jobs rows directly, so nothing
  * touches real ffmpeg or pg-boss.
  */
+
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { transcodingJobs, works } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
@@ -43,9 +45,9 @@ async function makeItem(cookie: string, title: string, type = "game"): Promise<n
 	const res = await req("/api/content/works", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		// `maturity` declared on create so the release below is not refused for a reason
-		// this suite is not about — release is gated on a declared content rating.
-		body: JSON.stringify({ type, title, maturity: "general" }),
+		// Rated on create so the release below is not refused for a reason
+		// this suite is not about — release is gated on every row of the rating being answered.
+		body: JSON.stringify({ type, title, maturityRows: rowsRatedAs("general") }),
 	});
 	expect(res.status).toBe(201);
 	return (await res.json()).work.id;
@@ -403,7 +405,7 @@ describe("Delivery-method floor lives on the Work", () => {
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ type: "game", title, maturity: "general", ...body }),
+			body: JSON.stringify({ type: "game", title, maturityRows: rowsRatedAs("general"), ...body }),
 		});
 		expect(res.status).toBe(201);
 		return (await res.json()).work.id as number;

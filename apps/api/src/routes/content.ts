@@ -737,16 +737,17 @@ const workBaseSchema = z
 		// release, and checked on a change by the edit route.
 		scheduledReleaseAt: z.string().datetime().nullable().optional(),
 
-		// The content rating. `unrated` is accepted from nobody: it is the state a Work is
-		// born in and leaves, never a value a client sets, and release is refused while it
-		// holds. `services/content-rating.ts` decides whether the change is allowed — an
-		// operator's correction can only be raised, not lowered, by the creator.
-		maturity: z.enum(["general", "mature", "adult"]).optional(),
-		maturityNotes: z.array(z.string()).max(20).optional(),
-		// The rating matrix, row by row (`RATING_ROWS`). A complete one decides the rating and
-		// the notes, and outranks the two fields above; an incomplete one is only stored. Rows
+		// The content rating, as the matrix a creator answers row by row (`RATING_ROWS`). A
+		// complete one decides the rating and the notes; an incomplete one is only stored. Rows
 		// and levels this build does not know are dropped rather than refused.
+		// `services/content-rating.ts` decides whether the change is allowed — an operator's
+		// correction can only be raised, not lowered, by the creator.
 		maturityRows: z.record(z.string(), z.enum(["none", "general", "mature", "adult"])).optional(),
+		// 🚨 Accepted only so a request naming a rating can be REFUSED rather than silently
+		// stripped: a creator rates a Work by answering every row, never by naming a rung
+		// (Parker, 2026-09-18). See `namesARating` below.
+		maturity: z.string().optional(),
+		maturityNotes: z.array(z.string()).max(20).optional(),
 
 		// Delivery (≥1 enforced on release)
 		streamEnabled: z.boolean().optional(),
@@ -1061,6 +1062,24 @@ function serializeWork(
 		recordUrl: recordUrlFor(item.atprotoUri, pdsUrl),
 	};
 }
+
+/**
+ * Whether a creator's request names a rating rather than answering the matrix.
+ *
+ * 🚨 **Refused, not ignored.** A creator rates a Work by answering every row of its matrix, with
+ * no exceptions (Parker, 2026-09-18), so a request carrying `maturity` or `maturityNotes` is
+ * asking for something that is not offered. Stripping the fields would answer a request that
+ * meant to rate a Work with a Work still unrated and a 200, which is a save that appears to work
+ * and does not. An operator's correction has its own route and is unaffected.
+ */
+function namesARating(data: { maturity?: unknown; maturityNotes?: unknown }): boolean {
+	return data.maturity !== undefined || data.maturityNotes !== undefined;
+}
+
+const RATING_BY_NAME_REFUSAL = {
+	error: "A Work is rated by answering every row of its rating matrix, not by naming a rating.",
+	code: "rate_through_matrix",
+} as const;
 
 /** The server holding a creator's identity, or "" when there is none to ask. */
 async function pdsUrlOf(userId: number | null): Promise<string> {
@@ -3032,6 +3051,7 @@ const contentRoutes = new Hono()
 	.post("/works", requireAuth, createWorkBody, async (c) => {
 		const user = c.get("user");
 		const data = c.req.valid("json");
+		if (namesARating(data)) return c.json(RATING_BY_NAME_REFUSAL, 400);
 
 		// A Work is born private. Nothing is visible on upload — release is a separate,
 		// deliberate act, which is the whole point of separating the Catalog from posting.
@@ -3063,12 +3083,8 @@ const contentRoutes = new Hono()
 		}
 
 		const bodyHtml = data.type === "text" ? sanitizePostHtml(data.bodyHtml ?? "") : "";
-		// Declared through the matrix or directly, or left `unrated` for the editor to ask about.
-		const declaredOnCreate = declaredRating({
-			maturity: data.maturity,
-			notes: data.maturityNotes,
-			rows: data.maturityRows,
-		});
+		// Declared through a complete matrix, or left `unrated` for the Edit page to ask about.
+		const declaredOnCreate = declaredRating(data.maturityRows);
 		const publicId = await makeUniquePublicId(works);
 
 		const [work] = await db
@@ -3584,6 +3600,7 @@ const contentRoutes = new Hono()
 		}
 
 		const data = c.req.valid("json");
+		if (namesARating(data)) return c.json(RATING_BY_NAME_REFUSAL, 400);
 
 		if (data.slug && data.slug !== work.slug) {
 			if (await workSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
@@ -3640,11 +3657,7 @@ const contentRoutes = new Hono()
 		//
 		// Scoped to a request that names a rating, so a Work sitting at a rung that closed
 		// after it was released stays editable in every other respect.
-		const declaring = declaredRating({
-			maturity: data.maturity,
-			notes: data.maturityNotes,
-			rows: data.maturityRows,
-		}).maturity;
+		const declaring = declaredRating(data.maturityRows).maturity;
 		if (
 			work.visibility === "released" &&
 			data.visibility !== "private" &&
@@ -3677,16 +3690,8 @@ const contentRoutes = new Hono()
 		// party can have decided. A creator lowering an operator's correction is refused
 		// here rather than silently dropped — and told where the appeal is, since the
 		// refusal is otherwise indistinguishable from the edit not having saved.
-		if (
-			data.maturity !== undefined ||
-			data.maturityNotes !== undefined ||
-			data.maturityRows !== undefined
-		) {
-			const declared = await declareRating(work, {
-				maturity: data.maturity,
-				notes: data.maturityNotes,
-				rows: data.maturityRows,
-			});
+		if (data.maturityRows !== undefined) {
+			const declared = await declareRating(work, { rows: data.maturityRows });
 			if (declared === "locked") {
 				return c.json(
 					{

@@ -20,6 +20,7 @@
  */
 
 import { workNeedsFile } from "@anthers/shared/content";
+import { isRatingComplete } from "@anthers/shared/content-rating";
 import type { Work } from "../../lib/types";
 import { accessState } from "./work-state";
 
@@ -169,16 +170,17 @@ export function buildWorklist({
 		});
 	}
 
-	// Unreleased only: a released Work cannot be unrated, because the server refuses the
-	// release while it is. Asking about one that is already out would be asking about a
-	// state that cannot exist.
+	// A Work with a row of its rating unanswered, which the server will not release. Asked of the
+	// rows rather than the rating, because a Work rated before the matrix existed holds a rating
+	// with no rows behind it and is refused all the same (Parker, 2026-09-18: rated means every
+	// row answered). Unreleased only, since the release is what this condition stands in front of.
 	const unrated = group(
-		works.filter((w) => w.visibility !== "released" && (!w.maturity || w.maturity === "unrated")),
+		works.filter((w) => w.visibility !== "released" && !isRatingComplete(w.maturityRows)),
 	);
 	if (unrated.count > 0) {
 		items.push({
 			kind: "unrated",
-			message: `${subject(unrated)} ${unrated.only ? "has" : "have"} no content rating, so ${unrated.only ? "it" : "they"} cannot be released.`,
+			message: `${subject(unrated)} ${unrated.only ? "has" : "have"} unanswered rows in ${unrated.only ? "its" : "their"} rating, so ${unrated.only ? "it" : "they"} cannot be released.`,
 			action: unrated.only ? "Rate it" : "Rate them",
 			href: hrefFor(unrated, editUrl, catalogUrl),
 			severity: "attention",

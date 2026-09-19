@@ -17,8 +17,10 @@
  * those documents in the same change — a safety claim to parents and the code that backs it
  * have to move together.
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -83,7 +85,7 @@ describe("Catalog CRUD and post links", () => {
 				type: "game",
 				title: "Library Build",
 				description: "A build",
-				maturity: "general",
+				maturityRows: rowsRatedAs("general"),
 			}),
 		});
 		expect(create.status).toBe(201);
