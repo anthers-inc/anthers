@@ -19,7 +19,7 @@
  *   PATCH  /me/studio-panels        — reorder or show/hide them
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
  *                                     the defaults are what a signed-out visitor gets
- *   PATCH  /me/content-preferences  — change one or both
+ *   PATCH  /me/content-preferences  — change either rung, or any kind of content
  *   GET    /creators                — list all creators
  *   GET    /users/:username         — public user profile
  *   POST   /users/:username/follow  — follow a creator
@@ -43,6 +43,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
@@ -188,9 +189,21 @@ const publishedProjectCount = sql<number>`(SELECT count(*)::int FROM projects WH
  * are settled separately on purpose: a reader who wants difficult work unblurred has said
  * nothing about whether they want explicit work at all.
  */
+const displaySchema = z.enum(["hide", "blur", "show"]);
+
 const contentPreferencesSchema = z.object({
-	mature: z.enum(["hide", "blur", "show"]).optional(),
-	adult: z.enum(["hide", "blur", "show"]).optional(),
+	mature: displaySchema.optional(),
+	adult: displaySchema.optional(),
+	/** Any of the rows of the rating matrix, each Hide, Blur or Show; the rest are left alone. */
+	notes: z
+		.object(
+			Object.fromEntries(RATING_ROWS.map((row) => [row.note, displaySchema.optional()])) as Record<
+				ContentNote,
+				z.ZodOptional<typeof displaySchema>
+			>,
+		)
+		.strict()
+		.optional(),
 });
 
 /**
@@ -516,6 +529,11 @@ const accountRoutes = new Hono()
 					// Thumbnails are public by design — they are the preview a locked Work is
 					// supposed to show.
 					thumbnail: w.thumbnail,
+					// The rating travels with the card, because the card is where a reader's
+					// Blur covers the thumbnail. Without it every release here showed uncovered.
+					maturity: w.maturity,
+					maturityNotes: w.maturityNotes ?? [],
+					maturityRows: w.maturityRows ?? {},
 					description: w.description,
 					authoredAt: w.authoredAt,
 					authoredPrecision: w.authoredPrecision,

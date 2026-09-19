@@ -2,7 +2,7 @@
 
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import {
-	displayFor,
+	coverFor,
 	MaturityVeil,
 	useContentPreferences,
 } from "@anthers/web-shared/content-preferences";
@@ -70,12 +70,13 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	// person the public page is for — see `presentsAsLocked`.
 	const locked = presentsAsLocked(post.access);
 
-	// What this reader asked to meet at this rung. **A veil is not a lock**: a veiled Work
-	// is listed, reachable and earning, and the reader can uncover it in one click. The two
-	// treatments never stack — a locked cover is already blurred, and covering it twice
-	// would say the same thing twice while implying the rating is what shut them out.
+	// What this reader asked to meet at this rung, and for each kind of content in it. **A veil is
+	// not a lock**: a veiled Work is listed, reachable and earning, and the reader can uncover it
+	// in one click. The two treatments never stack — a locked cover is already blurred, and
+	// covering it twice would say the same thing twice while implying the rating is what shut
+	// them out.
 	const { prefs } = useContentPreferences();
-	const veiled = !locked && displayFor(prefs, post.maturity) === "blur";
+	const cover = locked ? null : coverFor(prefs, post);
 
 	const content = (
 		<>
@@ -86,10 +87,11 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					className="aspect-video"
 					lockedBy={post.access ? lockedByBadge(post.access, cardCreatorName(post)) : null}
 				/>
-			) : veiled ? (
+			) : cover ? (
 				<MaturityVeil
 					maturity={post.maturity}
 					notes={(post.maturityNotes ?? []).map(contentNoteLabel)}
+					because={cover.byRung ? undefined : cover.byNotes.map(contentNoteLabel)}
 					className="aspect-video"
 				>
 					{post.thumbnail ? (

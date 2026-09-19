@@ -704,10 +704,12 @@ describe("content ratings", () => {
 			expect(same.status).toBe(200);
 		});
 
-		it("gives the creator their matrix back, and a stranger nothing of it", async () => {
+		it("gives the creator their matrix back, and a reader the rows their own filter reads", async () => {
+			// A reader's filter by kind of content blurs in the browser, so the reader's copy carries
+			// the rows. They restate the public notes plus which rows are Not in It, and what stays
+			// behind is who set the rating, asserted above.
 			const workId = await makeWork();
-			// Released, so the stranger is answered with the reader's shape rather than a 404,
-			// which would make the absence below true of nothing.
+			// Released, so the stranger is answered with the reader's shape rather than a 404.
 			const released = await patch(workId, {
 				maturityRows: rows({ horror: "general" }),
 				visibility: "released",
@@ -721,7 +723,8 @@ describe("content ratings", () => {
 				await req(`/api/content/works/${workId}`, { headers: { Cookie: stranger } })
 			).json();
 			expect(theirs.work.title).toBe(`Rating fixture ${id}`);
-			expect(theirs.work.maturityRows).toBeUndefined();
+			expect(theirs.work.maturityRows).toMatchObject({ horror: "general", violence: "none" });
+			expect(theirs.work.maturitySource).toBeUndefined();
 		});
 	});
 });

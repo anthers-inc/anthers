@@ -1727,6 +1727,10 @@ function serializeWorkForViewer(
 		// from a self-declared one.
 		maturity: work.maturity,
 		maturityNotes: work.maturityNotes ?? [],
+		// The matrix too, so a reader's own filter can blur by kind of content in the browser. It
+		// restates the notes plus which rows are Not in It, so it tells a reader nothing the notes
+		// do not, except that a creator said something is absent.
+		maturityRows: work.maturityRows ?? {},
 		authoredAt: work.authoredAt,
 		authoredPrecision: work.authoredPrecision,
 		streamEnabled: work.streamEnabled,
@@ -4169,7 +4173,13 @@ const contentRoutes = new Hono()
 			parentalVisibility(listingViewerId),
 		]);
 		const memberVisible = and(
-			maturityHiddenFrom(viewerPrefs, listingViewerId, sql`w.creator_id`, sql`w.maturity`),
+			maturityHiddenFrom(
+				viewerPrefs,
+				listingViewerId,
+				sql`w.creator_id`,
+				sql`w.maturity`,
+				sql`w.maturity_rows`,
+			),
 			parentalHiddenFrom(viewerPolicy, listingViewerId, sql`w.creator_id`, sql`w.type`),
 		);
 		conditions.push(sql`(

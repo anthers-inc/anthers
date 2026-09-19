@@ -34,6 +34,7 @@ export type WorklistKind =
 	| "encode-failed"
 	| "no-file"
 	| "unrated"
+	| "unanswered-rows"
 	| "no-delivery";
 
 export interface WorklistItem {
@@ -183,6 +184,23 @@ export function buildWorklist({
 			message: `${subject(unrated)} ${unrated.only ? "has" : "have"} unanswered rows in ${unrated.only ? "its" : "their"} rating, so ${unrated.only ? "it" : "they"} cannot be released.`,
 			action: unrated.only ? "Rate it" : "Rate them",
 			href: hrefFor(unrated, editUrl, catalogUrl),
+			severity: "attention",
+		});
+	}
+
+	// A RELEASED Work with a row unanswered, which can only be one released before the matrix
+	// existed. It stays out, but a reader hiding a kind of content never meets it, because a filter
+	// counts an unanswered row as present (`mayContain`). Wrong out in the world and the creator's to
+	// fix, so it is on the list, though only some readers are missing it.
+	const unanswered = group(
+		works.filter((w) => w.visibility === "released" && !isRatingComplete(w.maturityRows)),
+	);
+	if (unanswered.count > 0) {
+		items.push({
+			kind: "unanswered-rows",
+			message: `${subject(unanswered)} ${unanswered.only ? "has" : "have"} unanswered rows in ${unanswered.only ? "its" : "their"} rating, so readers who hide a kind of content won't see ${unanswered.only ? "it" : "them"}.`,
+			action: unanswered.only ? "Rate it" : "Rate them",
+			href: hrefFor(unanswered, editUrl, catalogUrl),
 			severity: "attention",
 		});
 	}

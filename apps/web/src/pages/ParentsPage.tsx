@@ -174,11 +174,12 @@ export default function ParentsPage() {
 					can't be undone from the account itself.
 				</p>
 				<p>
-					<strong>Lock the content settings.</strong> Mature and Adult are separate switches, and
-					locking freezes both wherever you left them. It also stops the account turning Adult
-					content on at all — card or no card — which is what closes the borrowed-card gap in the
-					check above. Turning Adult content <em>off</em> still works while it's locked, because
-					that only makes the account stricter.
+					<strong>Lock the content settings.</strong> Mature and Adult are separate switches, and so
+					is each kind of content, such as violence or intense horror, which can be hidden or
+					blurred whatever a Work is rated. Locking freezes all of them wherever you left them. It
+					also stops the account turning Adult content on at all — card or no card — which is what
+					closes the borrowed-card gap in the check above. Turning Adult content <em>off</em> still
+					works while it's locked, because that only makes the account stricter.
 				</p>
 				<p>
 					<strong>Choose creators, and kinds of work.</strong> Either a list of who and what is

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { MATURITY_DISPLAY_CHOICES, type MaturityDisplay } from "@anthers/shared/content-rating";
+import {
+	type ContentNote,
+	MATURITY_DISPLAY_CHOICES,
+	type MaturityDisplay,
+	RATING_ROWS,
+} from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
@@ -274,6 +279,11 @@ function AdultVerificationCard({ onVerified }: { onVerified: () => Promise<void>
  * want explicit work at all, and one control covering both would make them say it (wiki
  * The wiki's *Content Standards*).
  *
+ * **Each kind of content gets a control too, whatever the rating** (Parker, 2026-09-18), for a
+ * reader who does not mind rated work but wants to avoid one thing. Show by default, because a note
+ * may drive a reader's own filter and never a platform default. A guardian's lock covers these
+ * with the rungs, since they are written by the same writer.
+ *
  * 🚨 **Nothing here may describe paying as an age check.** A payment proves nothing about
  * age — debit and prepaid cards have no age floor. What carries the signal is the card's
  * funding TYPE, because issuers require the primary accountholder of a credit line to be 18.
@@ -288,14 +298,19 @@ function MatureContentSection() {
 	// somebody who has never paid, which is most of the audience for free Adult work.
 	const [needsCard, setNeedsCard] = useState(false);
 
-	const setDisplay = async (rung: "mature" | "adult", value: MaturityDisplay) => {
+	const setDisplay = async (
+		change:
+			| { mature: MaturityDisplay }
+			| { adult: MaturityDisplay }
+			| { notes: Partial<Record<ContentNote, MaturityDisplay>> },
+	) => {
 		setBusy(true);
 		setError(null);
 		try {
 			const res = await apiFetch("/api/accounts/me/content-preferences", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ [rung]: value }),
+				body: JSON.stringify(change),
 			});
 			if (!res.ok) throw new Error();
 			await refresh();
@@ -341,22 +356,31 @@ function MatureContentSection() {
 		}
 	};
 
-	const rungControl = (rung: "mature" | "adult", current: MaturityDisplay) => (
-		<div className="join">
+	const displayControl = (
+		name: string,
+		current: MaturityDisplay,
+		choose: (value: MaturityDisplay) => void,
+	) => (
+		<fieldset className="join" aria-label={name}>
 			{MATURITY_DISPLAY_CHOICES.map((choice) => (
 				<button
 					key={choice.value}
 					type="button"
 					className={`btn btn-sm join-item ${current === choice.value ? "btn-primary" : "btn-outline"}`}
+					aria-pressed={current === choice.value}
 					disabled={busy}
 					title={choice.hint}
-					onClick={() => setDisplay(rung, choice.value)}
+					onClick={() => choose(choice.value)}
 				>
 					{choice.label}
 				</button>
 			))}
-		</div>
+		</fieldset>
 	);
+	const rungControl = (rung: "mature" | "adult", current: MaturityDisplay) =>
+		displayControl(rung === "mature" ? "Mature" : "Adult", current, (value) =>
+			setDisplay(rung === "mature" ? { mature: value } : { adult: value }),
+		);
 
 	return (
 		<div className="card bg-base-200 mb-6">
@@ -435,6 +459,25 @@ function MatureContentSection() {
 							)}
 						</div>
 					)}
+				</div>
+
+				<div className="border-t border-base-300 pt-4">
+					<p className="font-medium text-sm">Kinds of Content</p>
+					<p className="text-xs text-base-content/60">
+						Hide or blur work that contains any of these, whatever it's rated. Creators mark each
+						one for every Work, and work counts as containing it unless its creator marked it Not in
+						It.
+					</p>
+					<div className="mt-3 flex flex-col gap-2">
+						{RATING_ROWS.map((row) => (
+							<div key={row.note} className="flex flex-wrap items-center justify-between gap-3">
+								<span className="text-sm">{row.label}</span>
+								{displayControl(row.label, prefs.notes[row.note], (value) =>
+									setDisplay({ notes: { [row.note]: value } }),
+								)}
+							</div>
+						))}
+					</div>
 				</div>
 
 				{error && <p className="text-sm text-error">{error}</p>}

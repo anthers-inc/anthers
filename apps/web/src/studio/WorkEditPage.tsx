@@ -970,6 +970,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						<p className="text-xs text-base-content/60">
 							This Work is rated {maturityLabel(storedMaturity)} today, but not every row is
 							answered. Answering every row replaces that with the rating the rows add up to.
+							{current.visibility === "released" &&
+								" Until then, readers who hide a kind of content won't see it."}
 						</p>
 					)}
 					{maturityLocked && (
