@@ -86,7 +86,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 
 	await page.getByRole("button", { name: /save work/i }).click();
 	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible({
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
 	await page.goto("/studio/catalog");

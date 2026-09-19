@@ -110,7 +110,14 @@ describe("content ratings", () => {
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
-			body: JSON.stringify({ type: "text", title: `Rating fixture ${id}`, ...body }),
+			// With a body, because a piece of writing with none is refused release (`text_missing`)
+			// for a reason that is not this suite's subject.
+			body: JSON.stringify({
+				type: "text",
+				title: `Rating fixture ${id}`,
+				bodyHtml: "<p>A rating fixture.</p>",
+				...body,
+			}),
 		});
 		expect(res.status).toBe(201);
 		const { work } = await res.json();

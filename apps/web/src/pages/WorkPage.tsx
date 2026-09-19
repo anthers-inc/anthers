@@ -38,6 +38,7 @@ import WorkReviews from "../components/project/WorkReviews";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
 import {
+	isWriting,
 	pageHoldsTheMeter,
 	WorkColumn,
 	WorkDeliverable,
@@ -202,12 +203,22 @@ export default function WorkPage() {
 	}
 
 	const access = work.access;
-	const canAccess = access?.canAccess ?? false;
 	const isOwner = isAuthenticated && user?.id === work.creatorId;
+	/**
+	 * Whether this viewer may open the Work.
+	 *
+	 * ⚠️ **No verdict is the owner's own shape, not a refusal.** The server answers a creator's own
+	 * Work with `serializeWork`, which carries no access verdict because a creator can always open
+	 * their own Work, and reading that absence as `false` left a creator's page showing neither
+	 * the Work nor a lock unless they turned a preview on. A verdict, which a preview always has,
+	 * still decides, so previewing as a stranger still shows exactly what a stranger meets. Time a
+	 * creator spends in their own catalog draws nothing from the Time Pool (`distribute-pool`).
+	 */
+	const canAccess = access ? access.canAccess : isOwner;
 	const creatorName = work.creator?.displayName || work.creator?.username || "this creator";
 
 	return (
-		<WorkColumn>
+		<WorkColumn type={work.type}>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
 			    able to subtract access (the server guards that per Work). Beside it, the way back
 			    to the Work's Edit page, which is where the preview is usually reached from. */}
@@ -239,6 +250,10 @@ export default function WorkPage() {
 					<SaveButton workId={work.id} className="shrink-0" />
 				}
 			/>
+
+			{/* A piece of writing's description is its standfirst, under the headline where a reader
+			    expects one; every other kind keeps it under the Work, below. */}
+			{isWriting(work.type) && <WorkDescription work={work} />}
 
 			{/* ── The deliverable, or the gate in front of it ── */}
 			<section ref={deliverableRef}>
@@ -310,7 +325,7 @@ export default function WorkPage() {
 			    invitation that interrupted that would be the funnel this deliberately is not. */}
 			{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
-			<WorkDescription work={work} />
+			{!isWriting(work.type) && <WorkDescription work={work} />}
 
 			{work.assets.length > 0 && (
 				<ProjectDownloads

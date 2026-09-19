@@ -119,6 +119,23 @@ export function workNeedsFile(type: string): boolean {
 	return (FILE_WORK_TYPES as readonly string[]).includes(type);
 }
 
+/**
+ * Whether a piece of writing has nothing in it yet: no text and no image, once its markup is
+ * set aside. A text Work is its body the way a video is its file, so an empty one would release
+ * as a page with nothing on it, and release refuses it (`text_missing`) for the same reason
+ * it refuses a video with no file.
+ */
+export function isEmptyWriting(bodyHtml: string | null | undefined): boolean {
+	const html = bodyHtml ?? "";
+	if (/<img\b/i.test(html)) return false;
+	return (
+		html
+			.replace(/<[^>]*>/g, "")
+			.replace(/&nbsp;/gi, " ")
+			.trim().length === 0
+	);
+}
+
 /** The longest embed address a game or software Work may carry. */
 export const EMBED_URL_MAX = 500;
 

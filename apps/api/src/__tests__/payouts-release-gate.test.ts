@@ -112,6 +112,7 @@ describe("publishing requires a fully set-up creator", () => {
 				type: "text",
 				title: `Payout fixture ${id}`,
 				body: "A short thing.",
+				bodyHtml: "<p>A short thing.</p>",
 				maturity: "general",
 			}),
 		});

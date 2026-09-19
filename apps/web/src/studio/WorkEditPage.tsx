@@ -46,6 +46,7 @@
  * point of separating the Catalog from posting — and the Upload page offers no release control.
  */
 
+import { isEmptyWriting } from "@anthers/shared/content";
 import {
 	type ContentNote,
 	contentNoteLabel,
@@ -68,6 +69,7 @@ import {
 } from "@anthers/web-shared/content/work-media";
 import { authoredToIso, isoToAuthoredValue } from "@anthers/web-shared/content/work-state";
 import { isBuildType, typeLabel } from "@anthers/web-shared/content/works";
+import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
@@ -100,14 +102,17 @@ import { isUploading, useWorkUploads, workUploads } from "@anthers/web-shared/wo
 import { ArrowUpTrayIcon, CalendarIcon, EyeIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+	isWriting,
 	WORK_DESCRIPTION_CLASS,
 	WORK_LYRICS_CLASS,
 	WORK_LYRICS_HEADING_CLASS,
-	WORK_TITLE_CLASS,
 	WorkColumn,
 	WorkDeliverable,
 	type WorkDetail,
 	WorkHeader,
+	WRITING_BODY_STYLE,
+	WRITING_STANDFIRST_CLASS,
+	workTitleTypography,
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
 import RatingMatrix from "./RatingMatrix";
@@ -205,6 +210,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	const [title, setTitle] = useState(editing.title ?? "");
 	const [description, setDescription] = useState(editing.description ?? "");
+	// A piece of writing's body, written in place in the typography it is read in. The plain-text
+	// shadow goes with it, as it does from the post editor, because search reads that one.
+	const writing = isWriting(editing.type);
+	const [bodyHtml, setBodyHtml] = useState(editing.bodyHtml ?? "");
+	const [bodyText, setBodyText] = useState(editing.body ?? "");
+	const handleBody = (html: string) => {
+		setBodyHtml(html);
+		const holder = document.createElement("div");
+		holder.innerHTML = html;
+		setBodyText(holder.textContent ?? "");
+	};
 	const [lyrics, setLyrics] = useState(editing.lyrics ?? "");
 	const [thumbnailUrl, setThumbnailUrl] = useState(editing.thumbnail ?? "");
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
@@ -424,6 +440,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			// alongside it, since a precision without a date claims accuracy about nothing.
 			authoredAt: authoredToIso(authoredPrecision, authoredValue),
 			...details.fields(),
+			...(writing ? { bodyHtml, body: bodyText } : {}),
 		};
 		if (rowsChanged) json.maturityRows = normalizeMaturityRows(rows);
 		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
@@ -544,6 +561,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// The server refuses to release a file-kind Work with no file (`media_missing`); don't offer
 	// the click that earns it. An upload in flight from this tab is the same state, sooner.
 	const fileMissing = isFileWorkType(type) && (!current.sourceKey || fileUploading);
+	// And the same for a piece of writing with nothing in it yet (`text_missing`), which is the
+	// creator's to fix rather than to wait for, so it locks scheduling as well as releasing.
+	const writingEmpty = writing && isEmptyWriting(bodyHtml);
 	/**
 	 * Whether the Work itself can be shown as a reader sees it: its file is here, and whatever
 	 * processing it needs has finished. Until then the file section stands in for it, with the
@@ -608,8 +628,34 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			</section>
 		) : null;
 
+	/*
+	 * 🚨 **The hint is the point, not decoration.** A description is shown to
+	 * everyone — including somebody who has not cleared this Work's gate, and, once
+	 * a creator holds an Anthers handle, on the AT Protocol network where it cannot
+	 * be un-published. A creator writing one aimed at buyers would reasonably assume
+	 * it sat behind the gate with everything else, and the label said nothing.
+	 * Saying so is what makes this a field the creator controls rather than one
+	 * they are caught by. A piece of writing sets it as its standfirst.
+	 */
+	const descriptionEditor = (
+		<section>
+			<textarea
+				aria-label="Description"
+				className={`${writing ? WRITING_STANDFIRST_CLASS : WORK_DESCRIPTION_CLASS} ${IN_PLACE} ${GROWS} w-full ${writing ? "min-h-12" : "min-h-16"}`}
+				style={writing ? WRITING_BODY_STYLE : undefined}
+				value={description}
+				onChange={(e) => setDescription(e.target.value)}
+				rows={writing ? 2 : 3}
+				placeholder={writing ? "A line or two under the headline…" : "Describe this Work…"}
+			/>
+			<p className="text-xs text-base-content/50">
+				Shown to everyone, including people who haven't unlocked this.
+			</p>
+		</section>
+	);
+
 	return (
-		<WorkColumn>
+		<WorkColumn type={type}>
 			{/* What this page is, and the way to see it exactly as a reader does. The reader's view
 			    shows what is saved, which is why it says so while anything is not. */}
 			<div className="flex flex-wrap items-center gap-2">
@@ -641,7 +687,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					<textarea
 						aria-label="Title"
 						rows={1}
-						className={`${WORK_TITLE_CLASS} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
+						className={`${workTitleTypography(type).className} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
+						style={workTitleTypography(type).style}
 						value={title}
 						onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))}
 						onKeyDown={(e) => {
@@ -667,6 +714,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				}
 				rating={<RatingLine maturity={maturity} notes={contentNotes} />}
 			/>
+
+			{/* A piece of writing's description is its standfirst, under the headline. */}
+			{writing && descriptionEditor}
 
 			{/* ── The Work itself ── */}
 			<section className="space-y-4">
@@ -706,6 +756,16 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					</>
 				)}
 
+				{/* A piece of writing is its body, written here in the typography it is read in. */}
+				{writing && (
+					<RichTextEditor
+						variant="article"
+						content={bodyHtml}
+						onChange={handleBody}
+						placeholder="Start writing…"
+					/>
+				)}
+
 				<Cover
 					preview={thumbnailPreview}
 					onFile={handleThumbnail}
@@ -717,28 +777,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				/>
 			</section>
 
-			{/*
-			 * 🚨 **The hint is the point, not decoration.** A description is shown to
-			 * everyone — including somebody who has not cleared this Work's gate, and, once
-			 * a creator holds an Anthers handle, on the AT Protocol network where it cannot
-			 * be un-published. A creator writing one aimed at buyers would reasonably assume
-			 * it sat behind the gate with everything else, and the label said nothing.
-			 * Saying so is what makes this a field the creator controls rather than one
-			 * they are caught by.
-			 */}
-			<section>
-				<textarea
-					aria-label="Description"
-					className={`${WORK_DESCRIPTION_CLASS} ${IN_PLACE} ${GROWS} w-full min-h-16`}
-					value={description}
-					onChange={(e) => setDescription(e.target.value)}
-					rows={3}
-					placeholder="Describe this Work…"
-				/>
-				<p className="text-xs text-base-content/50">
-					Shown to everyone, including people who haven't unlocked this.
-				</p>
-			</section>
+			{!writing && descriptionEditor}
 
 			{isBuildType(type) && (
 				<section className="flex flex-col gap-3">
@@ -977,7 +1016,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							disabled={
 								!maturity ||
 								payoutsReady === false ||
-								((fileMissing || permissionMissing === true) && visibility !== "released")
+								((fileMissing || writingEmpty || permissionMissing === true) &&
+									visibility !== "released")
 							}
 							onChange={(e) => {
 								setVisibility(e.target.checked ? "released" : "private");
@@ -1020,7 +1060,12 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 									className="input input-bordered input-sm"
 									aria-label="Release time"
 									value={scheduledRelease}
-									disabled={!maturity || payoutsReady === false || permissionMissing === true}
+									disabled={
+										!maturity ||
+										writingEmpty ||
+										payoutsReady === false ||
+										permissionMissing === true
+									}
 									onChange={(e) => setScheduledRelease(e.target.value)}
 								/>
 								{scheduledRelease && (
@@ -1035,6 +1080,12 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							</div>
 							<p className="text-xs text-base-content/50">{scheduleHint}</p>
 						</div>
+					)}
+					{writingEmpty && visibility !== "released" && (
+						<p className="text-xs text-warning">
+							Write something above first. There's nothing to release until this piece has words in
+							it.
+						</p>
 					)}
 					{fileMissing && visibility !== "released" && (
 						<p className="text-xs text-warning">

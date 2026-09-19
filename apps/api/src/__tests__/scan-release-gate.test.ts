@@ -109,6 +109,9 @@ describe("release waits for a safety scan, and gives way", () => {
 		const work = await insertWork({
 			creatorId: creator.userId,
 			visibility: "private",
+			// A piece of writing is its body, and one with none is refused release (`text_missing`)
+			// for a reason that is not this suite's subject.
+			...(fixture.type === "text" ? { bodyHtml: "<p>A piece of writing.</p>" } : {}),
 			...fixture,
 		});
 		workIds.push(work.id);

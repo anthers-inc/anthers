@@ -173,3 +173,45 @@ describe("an image whose file arrives after it was created", () => {
 		expect(row.thumbnail).toBe(chosen);
 	});
 });
+
+describe("a piece of writing, which is its body the way a video is its file", () => {
+	it("cannot be released while it is empty, and says so as the creator's to fix", async () => {
+		const workId = await createWithoutFile("text");
+		const res = await release(workId);
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("text_missing");
+		// Markup with no words in it is still nothing to read.
+		const blank = await call("PATCH", `/api/content/works/${workId}`, {
+			bodyHtml: "<p> </p><p>&nbsp;</p>",
+			visibility: "released",
+			maturity: "general",
+		});
+		expect((await blank.json()).code).toBe("text_missing");
+	});
+
+	it("releases when it is written and released in the same save", async () => {
+		// The Edit page sends the body and the release together, so the release has to be asked
+		// about the body this request writes rather than the empty one it found.
+		const workId = await createWithoutFile("text");
+		const res = await call("PATCH", `/api/content/works/${workId}`, {
+			bodyHtml: "<p>The first hard frost came early this year.</p>",
+			body: "The first hard frost came early this year.",
+			visibility: "released",
+			maturity: "general",
+		});
+		expect(res.status).toBe(200);
+		const [row] = await db.select().from(works).where(eq(works.id, workId));
+		expect(row.visibility).toBe("released");
+		expect(row.estimatedReadMinutes).toBeGreaterThan(0);
+	});
+
+	it("cannot be scheduled while it is empty, since nothing will fill it on its own", async () => {
+		const workId = await createWithoutFile("text");
+		const res = await call("PATCH", `/api/content/works/${workId}`, {
+			maturity: "general",
+			scheduledReleaseAt: new Date(Date.now() + 86_400_000).toISOString(),
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("text_missing");
+	});
+});

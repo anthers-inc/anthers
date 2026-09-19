@@ -14,12 +14,13 @@
  */
 
 import { contentNoteLabel } from "@anthers/shared/content-rating";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl } from "@anthers/web-shared/rpc";
 import type { Work } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
 import AudioPlayer from "../media/AudioPlayer";
@@ -54,6 +55,41 @@ export const WORK_TITLE_CLASS = "text-3xl font-bold";
 
 /** The public blurb's typography, likewise. */
 export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
+
+/**
+ * Whether a Work is a piece of writing, which reads as an article rather than as a player.
+ *
+ * ⭐ **The reading experience is what tells writing apart from a post** (Parker, 2026-09-11): a
+ * post is social and a text Work is an essay, a story or a poem, and the two were prose in the same
+ * editor with nothing on the page to say which a reader was holding. So a text Work gets a reading
+ * column, a display serif for its headline (Fraunces), its description as a standfirst under the
+ * headline, and a text serif for its body (Spectral), where every post is set in the app's sans.
+ */
+export function isWriting(type: string): boolean {
+	return type === "text";
+}
+
+/** The headline of a piece of writing, and the typography of a control standing in for it. */
+export const WRITING_TITLE_CLASS = "text-4xl font-semibold leading-tight";
+export const WRITING_TITLE_STYLE: CSSProperties = { fontFamily: FONTS.fraunces };
+
+/** The standfirst: a piece of writing's description, set under its headline. */
+export const WRITING_STANDFIRST_CLASS = "text-xl leading-snug text-base-content/70";
+export const WRITING_BODY_STYLE: CSSProperties = { fontFamily: FONTS.spectral };
+
+/** A piece of writing's body: a text serif at a reading size, with room between the lines. */
+export const WRITING_ARTICLE_CLASS =
+	"prose prose-lg max-w-none leading-relaxed prose-headings:font-semibold";
+
+/** The title's typography for a Work of this kind. */
+export function workTitleTypography(type: string): {
+	className: string;
+	style: CSSProperties | undefined;
+} {
+	return isWriting(type)
+		? { className: WRITING_TITLE_CLASS, style: WRITING_TITLE_STYLE }
+		: { className: WORK_TITLE_CLASS, style: undefined };
+}
 
 /** An audio Work's lyrics panel, and its heading, likewise. */
 export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
@@ -103,9 +139,13 @@ export function pageHoldsTheMeter(type: string): boolean {
 	return type !== "video" && type !== "audio";
 }
 
-/** The page's column, shared so the Edit page is the width a reader's page is. */
-export function WorkColumn({ children }: { children: ReactNode }) {
-	return <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">{children}</div>;
+/**
+ * The page's column, shared so the Edit page is the width a reader's page is. A piece of writing
+ * gets a reading column, narrow enough that a line of its body stays a comfortable length.
+ */
+export function WorkColumn({ children, type }: { children: ReactNode; type?: string }) {
+	const width = type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
+	return <div className={`${width} mx-auto px-4 py-8 space-y-6`}>{children}</div>;
 }
 
 interface WorkHeaderProps {
@@ -149,7 +189,14 @@ export function WorkHeader({ work, title, titleAside, dates, rating }: WorkHeade
 			</div>
 
 			<div className="flex flex-wrap items-start justify-between gap-3">
-				{title ?? <h1 className={WORK_TITLE_CLASS}>{work.title || "Untitled"}</h1>}
+				{title ?? (
+					<h1
+						className={workTitleTypography(work.type).className}
+						style={workTitleTypography(work.type).style}
+					>
+						{work.title || "Untitled"}
+					</h1>
+				)}
 				{titleAside}
 			</div>
 
@@ -280,11 +327,14 @@ export function WorkDeliverable({
 			{(work.type === "game" || work.type === "software") && work.embedUrl && (
 				<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
 			)}
-			{work.bodyHtml && (
-				<article className="prose max-w-none">
-					<SanitizedHtml html={work.bodyHtml} />
-				</article>
-			)}
+			{work.bodyHtml &&
+				(isWriting(work.type) ? (
+					<WorkArticle html={work.bodyHtml} />
+				) : (
+					<article className="prose max-w-none">
+						<SanitizedHtml html={work.bodyHtml} />
+					</article>
+				))}
 			{/*
 			 * Reading, playing and looking draw the allowance exactly as watching does,
 			 * and until now said nothing about it — the countdown and the wall were
@@ -303,13 +353,30 @@ export function WorkDeliverable({
 
 /**
  * The public blurb — visible whether or not the viewer can open the Work, because a locked
- * Work still has to say what it is. The gated prose renders inside the deliverable.
+ * Work still has to say what it is. The gated prose renders inside the deliverable. For a piece
+ * of writing it is the standfirst, which the page sets under the headline rather than here.
  */
 export function WorkDescription({ work }: { work: WorkDetail }) {
 	if (!work.description) return null;
+	if (isWriting(work.type)) {
+		return (
+			<p className={WRITING_STANDFIRST_CLASS} style={WRITING_BODY_STYLE}>
+				{work.description}
+			</p>
+		);
+	}
 	return (
 		<section className={WORK_DESCRIPTION_CLASS}>
 			<p>{work.description}</p>
 		</section>
+	);
+}
+
+/** A piece of writing's body, set for reading. */
+export function WorkArticle({ html }: { html: string }) {
+	return (
+		<article className={WRITING_ARTICLE_CLASS} style={WRITING_BODY_STYLE}>
+			<SanitizedHtml html={html} />
+		</article>
 	);
 }
