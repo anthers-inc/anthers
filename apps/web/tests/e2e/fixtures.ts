@@ -90,7 +90,7 @@ async function signInAs(context: BrowserContext, email: string): Promise<string>
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
 		body: JSON.stringify({ email, code }),
 	});
-	expect(res.ok, `sign-in as ${email} failed: ${res.status}`).toBe(true);
+	expect(res.ok, `sign-in as ${email} failed (${res.status}): ${await res.clone().text().catch(() => "")} — code tried: ${code}`).toBe(true);
 
 	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
 	expect(token, "no session cookie returned").toBeTruthy();
