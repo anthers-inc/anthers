@@ -50,13 +50,11 @@ import { localContentRoot } from "@anthers/db/content-root";
 import { assertDevCheckout } from "@anthers/db/dev-only";
 import {
 	GAUNTLET_CREATOR_EMAIL,
-	GAUNTLET_CREATOR_PASSWORD,
 	GAUNTLET_CREATOR_USERNAME,
 	GAUNTLET_GATES,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_VIEWER_EMAIL,
-	GAUNTLET_VIEWER_PASSWORD,
 	GAUNTLET_VIEWER_USERNAME,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
@@ -102,9 +100,9 @@ async function ensureViewer(): Promise<void> {
 		username: GAUNTLET_VIEWER_USERNAME,
 		email: GAUNTLET_VIEWER_EMAIL,
 		handleName: GAUNTLET_VIEWER_USERNAME,
-		passwordHash: await Bun.password.hash(GAUNTLET_VIEWER_PASSWORD, { algorithm: "argon2id" }),
 		// Pre-verified: checkout and support carry requireVerified, and there is no email loop to
-		// click through in a headless run.
+		// click through in a headless run. Signing in is the emailed code, read from the
+		// session's mail catcher by the spec's own setup.
 		emailVerified: true,
 		fields: {
 			displayName: "Gauntlet Viewer",
@@ -128,7 +126,6 @@ async function ensureCreator(): Promise<number> {
 		username: GAUNTLET_CREATOR_USERNAME,
 		email: GAUNTLET_CREATOR_EMAIL,
 		handleName: GAUNTLET_CREATOR_USERNAME,
-		passwordHash: await Bun.password.hash(GAUNTLET_CREATOR_PASSWORD, { algorithm: "argon2id" }),
 		emailVerified: true,
 		fields: {
 			displayName: "Gauntlet Creator",

@@ -25,20 +25,17 @@ import type { SeedAccessRow } from "./schema/content.js";
 export const GAUNTLET_PREFIX = "gauntlet_";
 export const GAUNTLET_CREATOR_USERNAME = `${GAUNTLET_PREFIX}creator`;
 export const GAUNTLET_CREATOR_EMAIL = `${GAUNTLET_PREFIX}creator@example.test`;
-/** Not security-sensitive — a local fixture account that never exists outside dev. */
-export const GAUNTLET_CREATOR_PASSWORD = "gauntletpassword123";
 
 /**
  * The harness's own viewer, for automated walks. The observational pass defaults to the
- * dev account (`DEV_ACCOUNT_USERNAME`), but the e2e spec needs an account whose password
- * it knows and whose state it may freely reset — so it owns both ends of the walk.
- * Created on demand by `seed-gauntlet.ts --ensure-viewer`; email pre-verified because
- * checkout and giving carry `requireVerified`.
+ * dev account (`DEV_ACCOUNT_USERNAME`), but the e2e spec needs an account it may freely
+ * reset — so it owns both ends of the walk. Signing either fixture in is the emailed
+ * code, read from the session's mail catcher; no account holds a password. Created on
+ * demand by `seed-gauntlet.ts --ensure-viewer`; email pre-verified because checkout and
+ * giving carry `requireVerified`.
  */
 export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
 export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
-/** Not security-sensitive — a local fixture account that never exists outside dev. */
-export const GAUNTLET_VIEWER_PASSWORD = "gauntletpassword123";
 
 /** Post slugs share this prefix so the fixture can find and replace exactly its own rows. */
 export const GAUNTLET_SLUG_PREFIX = "gauntlet-";

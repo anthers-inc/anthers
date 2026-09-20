@@ -24,19 +24,19 @@
  *    when the probe fails as well as when it passes. The run that most needs tidying up
  *    after is the one that fell over halfway.
  *
- * 🚨 **The admin password is prompted for and never read from anywhere else.** It used to be
- * `--admin-password`, which put a production credential into shell history and into whatever
- * transcript the command was run from. Passing it now is **refused rather than accepted**:
- * silently ignoring the flag would leave the secret in the history anyway and teach nobody.
- * Nothing here writes the password to disk, to an environment variable, or to the log.
+ * 🚨 **Credentials are typed at the terminal, never carried on a flag.** An emailed sign-in
+ * code is prompted for without echo, for both the Anthers account and the admin one. Flag forms
+ * (`--admin-password`, `--password`, `--admin-pass`) are **refused rather than accepted**:
+ * a production credential in a flag lands in shell history and in whatever transcript the
+ * command was run from, and silently ignoring it would leave it there while reading as fixed.
+ * Nothing here writes a credential to disk, to an environment variable, or to the log.
  *
  * ⚠️ **An admin account is needed for exactly one thing — reading the escalation state back**,
  * and closing the report afterwards, over `/api/admin/*`, which is operator information by
  * design, since the report route deliberately tells a reporter nothing about what happens next.
  * Without it the report is still filed; what is lost is the answer. The admin account is a
  * separate identity from the Anthers account the in-app report is filed from, so the two are
- * signed in separately: the Anthers account with its password, and the admin account with a
- * code emailed to it, at the host the admin routes answer on.
+ * signed in separately — each with a code mailed to its own address.
  *
  * 🚨 **What this can and cannot settle, because the boundary is the whole point.** It can
  * prove a report was accepted, that the right row was written, and that `escalated_at` was
@@ -65,7 +65,9 @@
  *   --path        which single report to file: `public` (the no-account form, the default) or
  *                 `in-app` (the authenticated route, which needs --login and creates a draft
  *                 post and a comment from that account to report, removing them afterwards).
- *   --login       the Anthers account the in-app report is filed from, by username or email.
+ *   --login       the address of the Anthers account the in-app report is filed from — an
+ *                 emailed code is what signs it in now, and a code can only be mailed to an
+ *                 address, so a username is refused below rather than left to fail oddly.
  *   --admin       the admin account that reads the escalation back and closes the report.
  *   --admin-base  where the admin routes answer. Defaults to --base, which is right for a local
  *                 API; a deployment needs the admin host.
@@ -73,8 +75,8 @@
  *               cron runs every five minutes, so anything under 300 can report a false
  *               "never escalated").
  *
- * The Anthers account's password and the admin account's emailed code are both asked for on the
- * terminal. There is no flag for either.
+ * The mailed codes — one for the Anthers account the in-app report is filed from, one for the
+ * admin account — are both typed in at the terminal. There is no flag for either.
  */
 
 import { promptHidden } from "./terminal.ts";
@@ -88,10 +90,9 @@ export interface ProbePlan {
 	adminBase: string;
 	path: ProbePath;
 	/**
-	 * The Anthers account the in-app report is filed from. `/api/auth/sign-in` takes
-	 * `{ login, password }` and resolves a username **or** an email against it, so this is a
-	 * LOGIN rather than an email. Sending `{ email }` gets a 400 from the schema, which reads as
-	 * bad credentials and is not.
+	 * The Anthers account the in-app report is filed from, by its email address. Signing in
+	 * mails a code to the address, so the address is what this is — the old
+	 * username-or-password route is gone with passwords.
 	 */
 	login?: string;
 	/** The admin account the readback signs in as, by the address its codes go to. */
@@ -193,6 +194,13 @@ export function probePlan(
 				"because the probe cannot create one of its own.",
 		};
 	}
+	if (login && !login.includes("@")) {
+		return {
+			refuse:
+				`--login takes an email address, not "${login}". Sign-in mails a code to the address, ` +
+				"and there is no longer a way to sign in by username.",
+		};
+	}
 
 	const base = (get("base") ?? "http://localhost:8000").replace(/\/+$/, "");
 	return {
@@ -263,29 +271,37 @@ const RUN = new Date()
 const TAG = `abuse-probe-${RUN}`;
 
 /**
- * Sign in to your Anthers account, with a password that exists only as an argument.
+ * Sign in to your Anthers account with the emailed code — the only way in.
  *
- * It is passed in rather than read off `args` so there is no field anywhere holding it —
- * the value is prompted for in `main`, handed here, and goes out of scope when this
- * returns. Nothing writes it to disk, to the environment, or to the log.
+ * Asks the site to mail one, then asks you to type it, exactly as an ordinary sign-in
+ * does. Nothing here writes the code to disk, to the environment, or to the log.
  */
-async function signInAccount(login: string, password: string): Promise<string | null> {
-	const res = await call("/api/auth/sign-in", {
+async function signInAccount(email: string): Promise<string | null> {
+	const start = await call("/api/auth/signin/start", {
 		method: "POST",
-		body: JSON.stringify({ login, password }),
+		body: JSON.stringify({ email }),
 	});
-	if (res.status !== 200) {
-		log(`  ! sign-in to ${login} failed (${res.status}) — the in-app report cannot be filed`);
+	if (start.status !== 200) {
+		log(`  ! could not ask for a sign-in code for ${email} (${start.status})`);
 		return null;
 	}
-	return sessionCookie(res.setCookie);
+	const code = await promptHidden(`  code emailed to ${email}: `);
+	if (!code) return null;
+	const verify = await call("/api/auth/signin/verify", {
+		method: "POST",
+		body: JSON.stringify({ email, code }),
+	});
+	if (verify.status !== 200) {
+		log(`  ! sign-in to ${email} failed (${verify.status}) — the in-app report cannot be filed`);
+		return null;
+	}
+	return sessionCookie(verify.setCookie);
 }
 
 /**
  * Sign in to an admin account: ask for a code to be sent to it, then ask the person for the code.
  *
- * The code is read from the terminal without echoing, for the same reason the password is, and is
- * useless ten minutes later anyway.
+ * The code is read from the terminal without echoing, and is useless ten minutes later anyway.
  */
 async function signInAdminAccount(email: string): Promise<string | null> {
 	const start = await call("/api/admin/auth/signin/start", {
@@ -396,12 +412,10 @@ async function main() {
 	log(`  run tag: ${TAG}`);
 	log(`  filing ONE report on the ${args.path} path`);
 
-	// Asked for here and nowhere else. `signInAccount` takes the password as an argument so no
-	// field holds it, and the Anthers account is only needed to file the in-app report.
+	// Asked for here and nowhere else, and only needed to file the in-app report.
 	let accountCookie: string | null = null;
 	if (args.login && args.path === "in-app") {
-		const password = await promptHidden(`  password for ${args.login}: `);
-		accountCookie = password ? await signInAccount(args.login, password) : null;
+		accountCookie = await signInAccount(args.login);
 	}
 
 	// The admin account is what reads the answer back. Without it the report is still filed and

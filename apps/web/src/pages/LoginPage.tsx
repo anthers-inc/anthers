@@ -36,23 +36,17 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * So: **do not add a signup form here.** If this page needs a way onward for someone
  * without an account, it is a link to `/subscribe`.
  *
- * 🚨 **The password field is optional, and leaving it empty is a second way IN — never a
- * way to sign up** (2026-08-18). An account may hold no password at all, because the
- * signup ceremony makes one optional, and until now this page could not admit those
- * accounts at all: it pointed them at `/subscribe` in a footnote, which is a signup page
- * wearing a sign-in hat. Submitting with the password box empty now mails a
- * six-character code to the address typed above and opens the same field `/subscribe`
- * uses.
+ * 🚨 **Sign-in is the emailed code and nothing else (Parker, 2026-09-13).** No account
+ * holds a password, so there is no password field on this page and no route it could post
+ * to: the one form here asks for an email address, mails it a six-character code, and opens
+ * the same code field `/subscribe` uses.
  * - It posts to **`/auth/signin/*`, never `/auth/signup/*`.** The difference is the whole
  *   point: the signup pair *creates an account* for an address it doesn't know, which
  *   would make a mistyped address at the login page mint an account that never saw the
  *   terms. The signin pair refuses.
- * - It needs an **email address**, and says so when given a handle. The code is keyed on
- *   the address (`signup_codes.email`), and resolving a public username to a private
+ * - It needs an **email address**, and this page asks for nothing else. The code is keyed
+ *   on the address (`signup_codes.email`), and resolving a public username to a private
  *   mailbox would let anyone mail anyone by guessing handles.
- * - It is offered to **everyone**, not only to accounts without a password. Whether an
- *   account has one is not something this page may find out, and the emailed code has
- *   been available to every account through `/subscribe` since the ceremony shipped.
  *
  * 🚨 **Bluesky is a third way IN and is not a third way to sign up either** (2026-08-22).
  * It signs in an account whose identity is a Bluesky one, resumes an unfinished signup started
@@ -73,7 +67,7 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * for in height, at twice its own, since the content is centered.
  */
 export default function LoginPage() {
-	const { signIn, signInWithBluesky, refreshUser } = useAuth();
+	const { signInWithBluesky, refreshUser } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
 
@@ -90,8 +84,7 @@ export default function LoginPage() {
 	);
 	const redirectTo = nextParam || from || "/feed";
 
-	const [login, setLogin] = useState("");
-	const [loginPassword, setLoginPassword] = useState("");
+	const [email, setEmail] = useState("");
 	/** The address a code was just sent to, or null when no code is in flight. */
 	const [codeEmail, setCodeEmail] = useState<string | null>(null);
 
@@ -102,48 +95,34 @@ export default function LoginPage() {
 	const [loading, setLoading] = useState(false);
 
 	/** Ask for a code. Answers the same whatever it found, so there is nothing to branch on. */
-	const sendCode = useCallback(async (email: string) => {
-		const res = await client.api.auth.signin.start.$post({ json: { email } });
+	const sendCode = useCallback(async (address: string) => {
+		const res = await client.api.auth.signin.start.$post({ json: { email: address } });
 		if (!res.ok) throw new Error("That doesn't look like an email address we can reach.");
 	}, []);
 
+	/**
+	 * Ask for the code — the whole of what this form does. A wrong-looking address is
+	 * refused here, loosely; anything that gets past the shape check and fails at the
+	 * API comes back as an ordinary refusal.
+	 */
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setErrors({});
-		const identifier = login.trim();
+		const address = email.trim();
 
-		// An empty password is a request for a code, not a failed password. The field is not
-		// `required` for exactly this reason — the browser would otherwise refuse to submit
-		// and this branch could never be reached.
-		if (!loginPassword) {
-			if (!LOOKS_LIKE_EMAIL.test(identifier)) {
-				setErrors({
-					general:
-						"Signing in without a password needs your email address — that's where the code goes.",
-				});
-				return;
-			}
-			setLoading(true);
-			try {
-				await sendCode(identifier);
-				setCodeEmail(identifier);
-			} catch (err) {
-				setErrors({
-					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
-				});
-			} finally {
-				setLoading(false);
-			}
+		if (!LOOKS_LIKE_EMAIL.test(address)) {
+			setErrors({
+				general: "Sign-in is by emailed code, so it needs your email address.",
+			});
 			return;
 		}
-
 		setLoading(true);
 		try {
-			await signIn(identifier, loginPassword);
-			navigate(redirectTo, { replace: true });
+			await sendCode(address);
+			setCodeEmail(address);
 		} catch (err) {
 			setErrors({
-				general: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+				general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
 			});
 		} finally {
 			setLoading(false);
@@ -189,10 +168,9 @@ export default function LoginPage() {
 			}
 
 			await refreshUser();
-			// An account that never finished onboarding still owes a handle and the terms,
-			// and the emailed code is the only way it can come back at all — so this is the
-			// one door that routinely lands on someone who has neither. Where they were
-			// heading rides along, exactly as it does through the signup ceremony.
+			// An account that never finished onboarding still owes a handle and the terms, so
+			// this door has to be able to land there. Where they were heading rides along,
+			// exactly as it does through the signup ceremony.
 			navigate(body.needsOnboarding ? withNextPath("/welcome", nextParam || from) : redirectTo, {
 				replace: true,
 			});
@@ -269,40 +247,29 @@ export default function LoginPage() {
 								<span>{errors.general}</span>
 							</div>
 						)}
-						<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1">
-							<FormField label="Username or Email" required>
+						<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
+							<FormField
+								label="Email"
+								hint="We'll email you a six-character sign-in code — that's how signing in works."
+							>
+								{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
+								    email validation would fire *before* React sees the submit and say
+								    "please include an '@' in the email address", which is a message about
+								    syntax on a page whose real answer is about what signing in *is*. The
+								    loose shape check above is the one whose sentence shows. */}
 								<input
 									type="text"
+									inputMode="email"
 									className="input input-bordered w-full"
-									autoComplete="username"
-									value={login}
-									onChange={(e) => setLogin(e.target.value)}
+									autoComplete="email"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
 									required
 								/>
 							</FormField>
-							{/* 🚨 Not `required`, and that is the feature rather than a relaxation:
-							    the browser refusing to submit an empty box is what would make the
-							    code path unreachable. The hint is the only place this page says so,
-							    which is why it sits under the field rather than in a footnote. */}
-							<FormField
-								label="Password"
-								hint="Leave it empty and we'll email you a sign-in code instead."
-							>
-								<input
-									type="password"
-									className="input input-bordered w-full"
-									autoComplete="current-password"
-									value={loginPassword}
-									onChange={(e) => setLoginPassword(e.target.value)}
-								/>
-							</FormField>
-							{/* The label follows the field, because pressing "Log In" and being told
-							    to check your email is a worse surprise than a button that changes. */}
 							<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
 								{loading ? (
 									<span className="loading loading-spinner loading-sm" />
-								) : loginPassword ? (
-									"Log In"
 								) : (
 									"Email me a sign-in code"
 								)}
@@ -331,7 +298,7 @@ export default function LoginPage() {
 
 			{codeEmail && (
 				<EmailCodeModal
-					stepLabel="Sign in without a password"
+					stepLabel="Sign in with an emailed code"
 					lede={
 						<>
 							If there's an Anthers account for <strong className="break-all">{codeEmail}</strong>,

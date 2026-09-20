@@ -26,8 +26,6 @@ const PUBLIC_ID_BASE = 910000000;
 
 export const MEDIA_FIXTURE_USERNAME = "media_fixture";
 export const MEDIA_FIXTURE_EMAIL = "media_fixture@example.test";
-/** Long enough for the password policy; this account is never signed into by a human. */
-export const MEDIA_FIXTURE_PASSWORD = "mediafixturepassword123";
 export const MEDIA_FIXTURE_DISPLAY_NAME = "Media Fixture";
 
 /** Prefix every Work slug shares, so the fixture's footprint is one `like` away. */

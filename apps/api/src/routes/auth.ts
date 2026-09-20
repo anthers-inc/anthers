@@ -3,7 +3,7 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { MAX_PICKED_CREATORS, MAX_SIGNUP_AMOUNT } from "@anthers/shared/signup";
 import { zValidator } from "@hono/zod-validator";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
@@ -24,14 +24,12 @@ import {
 	createSession,
 	deleteSession,
 	getPendingDesktopAuth,
-	hashPassword,
 	listUserSessions,
 	redeemDesktopAuth,
 	revokeUserSession,
 	startDesktopAuth,
 	validateSession,
 	verifyEmailToken,
-	verifyPassword,
 } from "../services/auth.js";
 import {
 	sendSignInCodeEmail,
@@ -62,11 +60,6 @@ import {
 import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
-
-const signInSchema = z.object({
-	login: z.string(), // accepts username or email
-	password: z.string(),
-});
 
 /**
  * Both emailed-code doors take the same two shapes — `/signup/*` (which may create an
@@ -130,35 +123,27 @@ const emailCodeVerifySchema = z.object({
 	code: z.string().trim().length(6),
 });
 
-const claimUsernameSchema = z.object({
-	username: z
-		.string()
-		.min(3)
-		.max(150)
-		.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
-		.refine((name) => !isReservedUsername(name), "That username is reserved"),
-	/**
-	 * Optional, and that is the point rather than an omission.
-	 *
-	 * Someone who would rather sign in with an emailed code should not be made to invent
-	 * a password to get through onboarding — an unwanted password is one that gets reused
-	 * or written down. Leaving it unset is a supported end state; `POST /auth/signin/*` —
-	 * which is what `/login` does with an empty password field — is how those accounts come
-	 * back, and `/subscribe` signs a known address in as well.
-	 */
-	password: z.string().min(8).max(128).optional(),
-	acceptTerms: z.literal(true, {
-		errorMap: () => ({ message: "You need to accept the terms to create an account." }),
-	}),
-});
+const claimUsernameSchema = z
+	.object({
+		username: z
+			.string()
+			.min(3)
+			.max(150)
+			.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
+			.refine((name) => !isReservedUsername(name), "That username is reserved"),
+		acceptTerms: z.literal(true, {
+			errorMap: () => ({ message: "You need to accept the terms to create an account." }),
+		}),
+	})
+	// 🚨 **Strict, because of what is absent: `password`.** There is no credential to set —
+	// sign-in is the emailed code and nothing else — and the default of stripping unknown
+	// keys would claim the handle while silently ignoring one, which is the password
+	// sign-in living on as a half-works ghost. A caller that sends one is refused and keeps
+	// its account unclaimed, so it has to be told.
+	.strict();
 
 const verifyEmailSchema = z.object({
 	token: z.string().min(1),
-});
-
-const changePasswordSchema = z.object({
-	currentPassword: z.string(),
-	newPassword: z.string().min(8).max(128),
 });
 
 /** A PKCE challenge/code/verifier — all are hex tokens from `generateToken()`. */
@@ -604,7 +589,7 @@ const authRoutes = new Hono()
 		return c.json(minted.body, minted.status);
 	})
 
-	// ── Onboarding: claim the handle, and optionally set a password ──────────
+	// ── Onboarding: claim the handle ──────────────────────────────────────────
 	//
 	// The other half of the ceremony. The account already exists and is signed in, so
 	// this is an ordinary authenticated call — it just happens to be the one that makes
@@ -615,7 +600,7 @@ const authRoutes = new Hono()
 		zValidator("json", claimUsernameSchema, invalidBody),
 		async (c) => {
 			const sessionUser = c.get("user");
-			const { username, password } = c.req.valid("json");
+			const { username } = c.req.valid("json");
 
 			// Idempotent only in the trivial sense: claiming again is refused rather than
 			// silently renaming. A handle is a URL other people hold, and changing one is
@@ -636,10 +621,7 @@ const authRoutes = new Hono()
 
 			const [user] = await db
 				.update(users)
-				.set({
-					username,
-					...(password ? { passwordHash: await hashPassword(password) } : {}),
-				})
+				.set({ username })
 				.where(eq(users.id, sessionUser.id))
 				.returning();
 
@@ -647,40 +629,15 @@ const authRoutes = new Hono()
 		},
 	)
 
-	// ── Sign In (accepts username or email) ──────────────────────────────────
-	.post("/sign-in", zValidator("json", signInSchema, invalidBody), async (c) => {
-		const { login, password } = c.req.valid("json");
-
-		// Look up by username or email
-		const [user] = await db
-			.select()
-			.from(users)
-			.where(or(eq(users.username, login), eq(users.email, login)))
-			.limit(1);
-
-		if (!user?.passwordHash) {
-			return c.json({ error: "Invalid credentials" }, 401);
-		}
-
-		const valid = await verifyPassword(password, user.passwordHash);
-		if (!valid) {
-			return c.json({ error: "Invalid credentials" }, 401);
-		}
-
-		const token = await createSession(
-			user.id,
-			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
-			c.req.header("User-Agent"),
-		);
-		setSessionCookie(c, token);
-
-		return c.json({ user: serializeUser(user) });
-	})
-
-	// ── Sign In without a password (the emailed code, from /login) ───────────
+	// ── Sign In ───────────────────────────────────────────────────────────────
+	//
+	// 🚨 **An emailed code is the one and only way in.** There is no password sign-in —
+	// no route, no field, and no account holding a password — by Parker's decision
+	// (2026-09-13). What follows is the narrower half of the ceremony below, the one that
+	// can never mint an account.
 	//
 	// The same proof of address the signup ceremony uses, narrowed so that it can only ever
-	// sign someone in. `/login` leaves the password field empty and lands here.
+	// sign someone in. `/login` asks for an email address and lands here.
 	//
 	// 🚨 **Why this is not just `/signup/start` called from a second page.** That pair
 	// *creates an account* when the address is unknown, which is the one thing the login
@@ -848,34 +805,6 @@ const authRoutes = new Hono()
 		await sendVerificationEmail(user.email, user.username, verifyToken);
 		return c.json({ success: true });
 	})
-
-	// ── Change Password (authenticated) ──────────────────────────────────────
-	.post(
-		"/change-password",
-		requireAuth,
-		zValidator("json", changePasswordSchema, invalidBody),
-		async (c) => {
-			const user = c.get("user");
-			const { currentPassword, newPassword } = c.req.valid("json");
-
-			// Get full user record with password hash
-			const [fullUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
-
-			if (!fullUser?.passwordHash) {
-				return c.json({ error: "Cannot change password for ATProto-only accounts" }, 400);
-			}
-
-			const valid = await verifyPassword(currentPassword, fullUser.passwordHash);
-			if (!valid) {
-				return c.json({ error: "Current password is incorrect" }, 401);
-			}
-
-			const passwordHash = await hashPassword(newPassword);
-			await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
-
-			return c.json({ success: true });
-		},
-	)
 
 	// ── Devices / Sessions ───────────────────────────────────────────────────
 	// The revocation surface that makes long-lived desktop tokens safe to hand out:

@@ -17,10 +17,8 @@
  *
  * That second outcome is not a convenience bolted on. `/login` reaches it directly through
  * `issueSignInCode` below, which is the same proof narrowed to addresses that already have
- * an account. The signup ceremony makes a
- * password *optional*, and an account with no password and no emailed sign-in would be
- * one nobody could ever return to — the option would be a trap door rather than a
- * choice. It is also not a new grant of power: whoever reads an account's mailbox can
+ * an account — and it is the only way in at all, since no account holds a password.
+ * It is also not a new grant of power: whoever reads an account's mailbox can
  * already take it over through any emailed recovery, and this is that authority with a
  * short fuse and an attempt cap.
  *
@@ -219,8 +217,7 @@ export async function mintEmailedCode(
  *     route answers `{success:true}` either way); without this the timing would answer the
  *     question the body refuses to. ⚠️ It is a *close* match, not a constant-time one —
  *     argon2id dominates both sides and the mail send is deliberately off the response path,
- *     but this is a mitigation rather than a proof. (`POST /auth/sign-in` carries the
- *     same asymmetry, unmitigated; closing both properly is its own piece of work.)
+ *     but this is a mitigation rather than a proof.
  */
 export async function issueSignInCode(rawEmail: string, now = new Date()): Promise<IssuedCode> {
 	const email = normalizeEmail(rawEmail);

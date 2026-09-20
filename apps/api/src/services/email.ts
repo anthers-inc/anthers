@@ -253,7 +253,10 @@ export async function sendSignupCodeEmail(to: string, code: string): Promise<voi
  *
  * A separate template rather than a flag on the one above, because the sentence a
  * returning user needs is different: they did not ask to create anything, and telling
- * them "welcome, confirm your address" would be both wrong and alarming.
+ * them "welcome, confirm your address" would be both wrong and alarming. The same mail
+ * is what somebody who started a signup against this address learns from, so the ignore
+ * line covers both — a signup in progress against their address is canceled when they
+ * sign in, which is the only thing that signing in here causes.
  *
  * 🚨 What is *not* different is the API's response, which is identical in both cases.
  * The two templates exist so the mail is honest to the one person who can read it; the
@@ -264,7 +267,7 @@ export async function sendSignInCodeEmail(to: string, code: string): Promise<voi
 		"Your Anthers sign-in code",
 		`<p style="margin:0 0 18px;">You already have an Anthers account with this address. Enter this code to sign in:</p>
 		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:#ffffff;">${escapeHtml(code)}</p>
-		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in, you can ignore this email — and your account is unchanged.</p>`,
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in, somebody may have started signing up with your address — signing in cancels that signup, and nothing else changes. If it wasn't you, you can ignore this email.</p>`,
 	);
 	const { sent } = await sendEmail({ to, subject: `${code} is your Anthers sign-in code`, html });
 	if (!sent) console.info(`[email] sign-in code for ${to}: ${code}`);

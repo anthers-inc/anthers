@@ -35,7 +35,6 @@ describe("Auth System", () => {
 	let sessionCookie: string;
 	const username = `authtest_${testId}`;
 	const email = `authtest_${testId}@example.com`;
-	const password = "securepass123";
 
 	// ── Accounts are made by the ceremony, never by a password form ─────────────
 
@@ -46,7 +45,7 @@ describe("Auth System", () => {
 			const res = await jsonPost("/api/auth/sign-up", {
 				username: `nosignup_${testId}`,
 				email: `nosignup_${testId}@example.com`,
-				password,
+				password: "securepass123",
 				acceptTerms: true,
 			});
 			expect(res.status).toBe(404);
@@ -58,7 +57,7 @@ describe("Auth System", () => {
 		});
 
 		it("gives the fixture account a session", async () => {
-			sessionCookie = (await createAccount(username, { email, password })).cookie;
+			sessionCookie = (await createAccount(username, { email })).cookie;
 			const me = await makeRequest("/api/auth/me", { headers: { Cookie: sessionCookie } });
 			expect((await me.json()).user.emailVerified).toBe(false);
 		});
@@ -67,34 +66,15 @@ describe("Auth System", () => {
 	// ── Sign In ──────────────────────────────────────────────────────────────
 
 	describe("sign-in", () => {
-		it("signs in with username", async () => {
-			const res = await jsonPost("/api/auth/sign-in", { login: username, password });
-			expect(res.status).toBe(200);
-			const data = await res.json();
-			expect(data.user.username).toBe(username);
-			expect(res.headers.get("Set-Cookie")).toBeTruthy();
-		});
-
-		it("signs in with email", async () => {
-			const res = await jsonPost("/api/auth/sign-in", { login: email, password });
-			expect(res.status).toBe(200);
-			const data = await res.json();
-			expect(data.user.email).toBe(email);
-		});
-
-		it("rejects wrong password", async () => {
-			const res = await jsonPost("/api/auth/sign-in", { login: username, password: "wrongpass" });
-			expect(res.status).toBe(401);
-			const data = await res.json();
-			expect(data.error).toContain("Invalid");
-		});
-
-		it("rejects nonexistent user", async () => {
-			const res = await jsonPost("/api/auth/sign-in", {
-				login: "nonexistent",
-				password: "whatever",
-			});
-			expect(res.status).toBe(401);
+		it("has no password sign-in route — the emailed code is the only way in", async () => {
+			for (const body of [
+				{ login: username, password: "securepass123" },
+				{ login: email, password: "securepass123" },
+				{ login: "nonexistent", password: "whatever" },
+			]) {
+				const res = await jsonPost("/api/auth/sign-in", body);
+				expect(res.status).toBe(404);
+			}
 		});
 	});
 
@@ -182,61 +162,28 @@ describe("Auth System", () => {
 		});
 	});
 
-	// ── Password Reset ───────────────────────────────────────────────────────
+	// ── Passwords are gone, not resettable ─────────────────────────────────────
 
-	describe("password reset", () => {
-		it("has no reset routes, because a forgotten password is recovered by signing in with a code", async () => {
+	describe("passwords", () => {
+		it("has no password routes at all — sign-in is the emailed code", async () => {
 			expect((await jsonPost("/api/auth/request-password-reset", { email })).status).toBe(404);
 			expect(
 				(await jsonPost("/api/auth/reset-password", { token: "anything", password: "newpass123" }))
 					.status,
 			).toBe(404);
-		});
-	});
-
-	// ── Change Password ──────────────────────────────────────────────────────
-
-	describe("change password", () => {
-		it("requires authentication", async () => {
-			const res = await jsonPost("/api/auth/change-password", {
-				currentPassword: password,
-				newPassword: "anotherpass789",
-			});
-			expect(res.status).toBe(401);
-		});
-
-		it("rejects wrong current password", async () => {
-			const res = await makeRequest("/api/auth/change-password", {
+			// Authenticated, and still 404: the route is gone, not gated.
+			const changeRes = await makeRequest("/api/auth/change-password", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					Origin: "http://localhost:3000",
 					Cookie: sessionCookie,
 				},
-				body: JSON.stringify({
-					currentPassword: "wrongpassword",
-					newPassword: "anotherpass789",
-				}),
+				body: JSON.stringify({ currentPassword: "whatever", newPassword: "anotherpass789" }),
 			});
-			expect(res.status).toBe(401);
-		});
-
-		it("changes password with correct current password", async () => {
-			const res = await makeRequest("/api/auth/change-password", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Origin: "http://localhost:3000",
-					Cookie: sessionCookie,
-				},
-				body: JSON.stringify({
-					currentPassword: password,
-					newPassword: "finalpass000",
-				}),
-			});
-			expect(res.status).toBe(200);
-			const data = await res.json();
-			expect(data.success).toBe(true);
+			expect(changeRes.status).toBe(404);
+			const [row] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+			expect("passwordHash" in row).toBe(false);
 		});
 	});
 

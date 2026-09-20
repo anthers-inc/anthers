@@ -1936,10 +1936,10 @@ function SignupForm({
 			)}
 
 			<div className="p-6">
-				{/* The ONE field this page collects: the identity. Username and password are
-				    deliberately not asked for here — they cost nothing at the moment of decision and
-				    everything at the moment of doubt, so they move to onboarding, after the address
-				    is confirmed and after any charge. */}
+				{/* The ONE field this page collects: the identity. The username is
+				    deliberately not asked for here — it costs nothing at the moment of decision and
+				    everything at the moment of doubt, so it moves to onboarding, after the address
+				    is confirmed and after any charge. There is no password anywhere to move. */}
 				{/* ⚠️ **This card no longer has a "finishing a Bluesky signup" state**, because
 				    nobody comes back to this page to finish one. Coming back from bsky.social to
 				    a marketing page with a prefilled email box is exactly what Parker's

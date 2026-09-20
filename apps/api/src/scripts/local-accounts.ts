@@ -46,8 +46,6 @@ export interface LocalAccountOptions {
 	identity?: "hosted" | "brought";
 	/** The handle name to ask for. A name the server would refuse falls back to a generated one. */
 	handleName?: string;
-	/** Already hashed, so a caller making many accounts with one password hashes it once. */
-	passwordHash?: string;
 	emailVerified?: boolean;
 	fields?: LocalAccountFields;
 }
@@ -142,7 +140,6 @@ export async function createLocalAccount(opts: LocalAccountOptions): Promise<Use
 		.set({
 			...opts.fields,
 			username: opts.username,
-			...(opts.passwordHash !== undefined ? { passwordHash: opts.passwordHash } : {}),
 			emailVerified: opts.emailVerified ?? true,
 		})
 		.where(eq(users.id, created.user.id))

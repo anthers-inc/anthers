@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Signing in from `/login` with the password field left empty.
+ * Signing in from `/login`, which is the emailed code and nothing else.
  *
- * An account may hold no password at all — the signup ceremony makes one optional — and
- * until 2026-08-18 this page could not admit those accounts: it pointed them at
- * `/subscribe` in a footnote, which is the signup door wearing a sign-in hat. Submitting
- * with the box empty now mails a code and opens the same six-box field `/subscribe` uses.
+ * No account holds a password (Parker, 2026-09-13), so this page has no password field
+ * and no route it could post one to: the one form asks for an email address, mails it a
+ * six-character code, and opens the same six-box field `/subscribe` uses.
  *
  * ⚠️ **Completing a sign-in with the real code is `emailed-code.e2e.ts`'s job**, which reads the
- * code out of the session's mail catcher. This spec pins the page around it.
+ * code out of the session's mail catcher. This spec pins the page around it — including that
+ * the password field stayed gone (`input[type="password"]` on this page at all would be the
+ * old door rebuilt).
  *
  * It cannot assert the load-bearing property — that this door **never creates an
  * account** — because there is deliberately no way to ask the API whether an address is
@@ -17,10 +18,8 @@
  * assertion to protect: a `/login` that minted accounts would be the second signup door the
  * 2026-08-17 consolidation removed, and it would look perfectly correct from this page.
  *
- * So what is pinned here is the browser half: the field is genuinely optional (a `required`
- * attribute would make the whole path unreachable and nothing else would look wrong), the
- * page says what the button is about to do, a handle is not mistaken for an address, and a
- * refused code signs nobody in.
+ * So what is pinned here is the browser half: the page asks for an address and says what the
+ * button does, a handle is not mistaken for an address, and a refused code signs nobody in.
  */
 import { API_URL, expect, test } from "./fixtures";
 
@@ -28,36 +27,27 @@ import { API_URL, expect, test } from "./fixtures";
 const addr = () => `e2e-login-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
 test.describe("signing in with an emailed code", () => {
-	test("the password field is optional, and says what leaving it empty does", async ({ page }) => {
+	test("the card asks for an email address and offers no password field", async ({ page }) => {
 		await page.goto("/login");
 
-		const box = page.locator('input[type="password"]');
-		await expect(box).toHaveCount(1);
-		// 🚨 The whole path hangs off this attribute's absence. With `required` the browser
-		// refuses to submit and the code branch is unreachable — no error, no failing
-		// assertion anywhere else, just a button that appears to do nothing.
-		await expect(box).not.toHaveAttribute("required", /.*/);
+		// 🚨 The load-bearing absence: a password input on this page is the old door
+		// rebuilt. The form asks for the address the code goes to and nothing else.
+		await expect(page.locator('input[type="password"]')).toHaveCount(0);
+		await expect(page.locator('input[autocomplete="email"]')).toHaveCount(1);
 
-		await expect(page.getByText(/leave it empty/i)).toBeVisible();
-	});
-
-	test("the button follows the field, so nobody is surprised by an email", async ({ page }) => {
-		await page.goto("/login");
-
-		// Empty password: pressing this sends a code, and it says so. Being told to check
-		// your email after pressing "Log In" is the surprise this avoids.
+		await expect(page.getByText(/six-character sign-in code/i)).toBeVisible();
 		await expect(page.getByRole("button", { name: /email me a sign-in code/i })).toBeVisible();
-
-		await page.locator('input[type="password"]').fill("hunter22");
-		await expect(page.getByRole("button", { name: /^log in$/i })).toBeVisible();
 	});
 
-	test("a handle with no password is asked for an address instead", async ({ page }) => {
+	test("something that is not an address is asked for one", async ({ page }) => {
 		await page.goto("/login");
 
 		// The code is keyed on the email address, and resolving a public username to a
-		// private mailbox would let anyone mail anyone by guessing handles.
-		await page.locator('input[autocomplete="username"]').fill("alice");
+		// private mailbox would let anyone mail anyone by guessing handles. The shape check
+		// is the page's own, so the message is the page's own too — the input is
+		// deliberately not `type="email"`, which would answer with the browser's sentence
+		// about syntax instead.
+		await page.locator('input[autocomplete="email"]').fill("alice");
 		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 
 		await expect(page.getByText(/needs your email address/i)).toBeVisible();
@@ -68,7 +58,7 @@ test.describe("signing in with an emailed code", () => {
 	test("an address opens the code field, in place", async ({ page }) => {
 		await page.goto("/login");
 
-		await page.locator('input[autocomplete="username"]').fill(addr());
+		await page.locator('input[autocomplete="email"]').fill(addr());
 		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 
 		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
@@ -84,7 +74,7 @@ test.describe("signing in with an emailed code", () => {
 
 	test("a wrong code is refused, and signs nobody in", async ({ page }) => {
 		await page.goto("/login");
-		await page.locator('input[autocomplete="username"]').fill(addr());
+		await page.locator('input[autocomplete="email"]').fill(addr());
 		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 
 		// Wait for the autofocus rather than for the modal: `keyboard.type` goes wherever

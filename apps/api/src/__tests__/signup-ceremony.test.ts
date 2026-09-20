@@ -5,9 +5,9 @@
 //
 // Two doors onto one code table, and the difference between them is the property this file
 // exists to pin. `/auth/signup/*` (from `/subscribe`) may CREATE an account; `/auth/signin/*`
-// (from the empty password field on `/login`) never can. A login page that minted accounts
-// as a side effect of a mistyped address would be the second signup door the 2026-08-17
-// consolidation removed, and nothing about it would look wrong from either page.
+// (from `/login`) never can. A login page that minted accounts as a side effect of a mistyped
+// address would be the second signup door the 2026-08-17 consolidation removed, and nothing
+// about it would look wrong from either page.
 //
 // Tested against a real database because the interesting rules are all stateful — the
 // resend throttle, the attempt cap and the single-live-code invariant are each about what a
@@ -24,6 +24,12 @@ import { pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import {
+	clearPendingSignup,
+	handleReservedElsewhere,
+	issueCodeForPending,
+	startPendingSignup,
+} from "../services/pending-signups.js";
+import {
 	checkSignupCode,
 	generateSignupCode,
 	issueSignInCode,
@@ -34,7 +40,7 @@ import {
 	SIGNUP_CODE_TTL_MS,
 } from "../services/signup-codes.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { signUp } from "./signup-fixture";
+import { signUp, spendCode } from "./signup-fixture";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -295,6 +301,39 @@ describe("POST /auth/signup/verify", () => {
 		expect(rows).toHaveLength(1);
 	});
 
+	test("an existing account proving its address cancels the signup in progress, handle included", async () => {
+		// Somebody — possibly a stranger, possibly the owner who forgot — pressed
+		// *Create My Account* against an address that already has an account, and the
+		// handle they asked for is reserved against that pending row. The owner signing
+		// in by code must release both, and silently: the only sign they were ever here
+		// is the sign-in code email's own wording.
+		const email = addr("cancel-reservation");
+		await signUp(email);
+		const handle = `${RUN}held`.slice(0, 30);
+
+		const token = await startPendingSignup({ email, hostedHandle: handle });
+		expect(await handleReservedElsewhere(handle, undefined)).toBe(true);
+
+		// The owner spends the code the stranger's button press sent them (delivered as
+		// a sign-in code, since the address has an account).
+		await issueCodeForPending(token);
+		const res = await spendCode("/api/auth/signup/verify", email, token);
+
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { created: boolean };
+		expect(body.created).toBe(false);
+
+		// The row is gone, so the reservation is — and a name freed this way is
+		// reservable by the next person to ask, not only by nobody.
+		expect(await handleReservedElsewhere(handle, undefined)).toBe(false);
+		const reclaim = await startPendingSignup({
+			email: addr("cancel-reservation-next"),
+			hostedHandle: handle,
+		});
+		expect(reclaim).toBeTruthy();
+		await clearPendingSignup(reclaim);
+	});
+
 	test("a wrong code is refused with one message, whoever the address belongs to", async () => {
 		const registered = addr("msg-known");
 		await signUp(registered);
@@ -419,8 +458,7 @@ describe("POST /auth/signin/verify", () => {
 		};
 		expect(body.user.email).toBe(email);
 		// The ceremony leaves the handle for onboarding, so an account that has only ever
-		// been through it still owes one — and the emailed code is the ONLY way such an
-		// account comes back, since it has no password either.
+		// been through it still owes one — and this code is the way every account comes back.
 		expect(body.needsOnboarding).toBe(true);
 	});
 
@@ -499,7 +537,7 @@ describe("POST /auth/onboarding/claim", () => {
 		return { cookie, email };
 	}
 
-	test("claims the handle and leaves the password unset when none is given", async () => {
+	test("claims the handle, with no password on offer", async () => {
 		const { cookie, email } = await pendingAccount("claim");
 		const username = `${RUN}claim`.slice(0, 30);
 
@@ -512,26 +550,29 @@ describe("POST /auth/onboarding/claim", () => {
 
 		const [row] = await db.select().from(users).where(eq(users.email, email));
 		expect(row.username).toBe(username);
-		// The option has to actually be an option: an account that chose no password is
-		// a supported end state, not an unfinished one.
-		expect(row.passwordHash).toBeNull();
+		// Sign-in is the code and nothing else, so an account no longer has anything to
+		// leave unset — the users table has no credential column at all.
+		expect("passwordHash" in row).toBe(false);
 	});
 
-	test("sets a password when one is given, and it signs in", async () => {
+	test("a password sent anyway is refused, not silently accepted", async () => {
 		const { cookie } = await pendingAccount("claimpw");
 		const username = `${RUN}pw`.slice(0, 30);
 
-		await post(
+		const res = await post(
 			"/api/auth/onboarding/claim",
 			{ username, password: "correct horse battery", acceptTerms: true },
 			{ Cookie: cookie },
 		);
 
-		const signIn = await post("/api/auth/sign-in", {
-			login: username,
-			password: "correct horse battery",
-		});
-		expect(signIn.status).toBe(200);
+		// The schema rejects unknown keys — a credential sent to a route that has sworn
+		// off credentials is a caller operating on an assumption this API retired.
+		expect(res.status).toBe(400);
+		const [row] = await db
+			.select({ username: users.username })
+			.from(users)
+			.where(eq(users.username, username));
+		expect(row?.username ?? null).toBeNull();
 	});
 
 	test("a taken handle is refused and nothing is written", async () => {
