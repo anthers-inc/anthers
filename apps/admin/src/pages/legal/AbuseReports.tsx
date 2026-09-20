@@ -7,7 +7,7 @@
  * reason may point straight at the material, and the step the incident runbook gives an operator is
  * not to open it. Following a link from here would be exactly that, one click earlier.
  *
- * A report on a floor reason is emailed to the abuse inbox when it is filed, and whether that email
+ * A report on a legal reason is emailed to the abuse inbox when it is filed, and whether that email
  * arrived is asked of what the provider pushed back rather than assumed from the send. `delivered`
  * means the receiving server accepted it, not that anybody read it, and the screen says so beside
  * the answer because a message filed into spam is `delivered` too.
@@ -15,7 +15,7 @@
  * Closing has two outcomes and never a bare "done": resolved means something was done about what
  * the report named, dismissed means it was read and needed nothing.
  */
-import { isFloorReason, moderationReasonLabel } from "@anthers/shared/moderation";
+import { isLegalReason, moderationReasonLabel } from "@anthers/shared/moderation";
 import { useState } from "react";
 import { ErrorAlert, Loading, PageHeader } from "../../components/ui";
 import { adminPost, useAdminData } from "../../lib/load";
@@ -114,7 +114,7 @@ function ReportCard({ report, onClosed }: { report: AbuseReport; onClosed: () =>
 	const [checking, setChecking] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const floor = isFloorReason(report.reason);
+	const legal = isLegalReason(report.reason);
 	const open = report.status === "open";
 
 	async function close(outcome: "resolved" | "dismissed") {
@@ -140,7 +140,7 @@ function ReportCard({ report, onClosed }: { report: AbuseReport; onClosed: () =>
 				<span className={`badge badge-sm ${open ? "badge-warning" : "badge-ghost"}`}>
 					{STATUS_NAMES[report.status] ?? report.status}
 				</span>
-				<span className={`badge badge-sm ${floor ? "badge-error" : "badge-ghost"}`}>
+				<span className={`badge badge-sm ${legal ? "badge-error" : "badge-ghost"}`}>
 					{moderationReasonLabel(report.reason)}
 				</span>
 				<span className="text-xs text-base-content/50">Report #{report.id}</span>
@@ -185,11 +185,11 @@ function ReportCard({ report, onClosed }: { report: AbuseReport; onClosed: () =>
 					<span className="text-base-content/70">
 						{report.escalatedAt
 							? `An alert went to the abuse inbox on ${dateTime(report.escalatedAt)}.`
-							: floor
+							: legal
 								? "The alert to the abuse inbox has not been sent yet. On a public deployment the escalation sweep retries it."
 								: "This reason is not emailed to the abuse inbox."}
 					</span>
-					{(report.escalatedAt || floor) && !checking && (
+					{(report.escalatedAt || legal) && !checking && (
 						<button
 							type="button"
 							className="btn btn-xs btn-outline"

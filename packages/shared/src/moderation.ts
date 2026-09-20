@@ -294,8 +294,8 @@ export function moderationReasonLabel(value: string): string {
 }
 
 /**
- * The reasons that reach Anthers no matter who else holds the scope, and that a
- * scoped Keeper will never be able to dismiss away — the *Moderation & Reporting* page's floor.
+ * The reasons that reach Anthers immediately — they page a person rather than waiting in
+ * a queue — and that a Keeper never sees whichever scope they hold.
  *
  * ⭐ **It is the `law` group, plus one retired code**, and stating it that way is the
  * point: the grouping a reporter sees and the routing they cannot see are the same
@@ -307,19 +307,23 @@ export function moderationReasonLabel(value: string): string {
  * and a legacy row still has to escalate rather than going quiet. Removing it would make
  * the retirement of a *label* silently change the handling of *records*.
  *
- * This is the taxonomy half of the split. The routing half — who a non-floor report
+ * 🚨 **Two other rules' reasons must never join it.** `pornography` and `unrated-mature`
+ * go to Anthers' queue like everything non-legal, and adding them here would email abuse@
+ * for every mis-rated Work.
+ *
+ * This is the taxonomy half of the split. The routing half — who a community-norms report
  * goes to instead — waits on the Keeper appointment model, and does not gate this:
  * with no scopes yet, every report already reaches Anthers, and what was missing was
  * anybody being *told*.
  */
-export const FLOOR_MODERATION_REASONS: readonly string[] = [
+export const LEGAL_MODERATION_REASONS: readonly string[] = [
 	...reasonsInGroup("law").map((r) => r.value),
 	"sexual",
 ];
 
 /** Does this reason demand escalation out of the queue, rather than a queue entry alone? */
-export function isFloorReason(value: string): boolean {
-	return FLOOR_MODERATION_REASONS.includes(value);
+export function isLegalReason(value: string): boolean {
+	return LEGAL_MODERATION_REASONS.includes(value);
 }
 
 /**
