@@ -62,7 +62,7 @@
  * A generated-figures guard only covers what it is pointed at, and nothing said the
  * app was outside it.
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
@@ -78,6 +78,10 @@ import {
 	TIME_POOL_RATE,
 	timePoolFor,
 } from "../packages/shared/src/constants.js";
+import {
+	insideOrganization as insideOrganizationAt,
+	organizationDir,
+} from "../packages/shared/src/organization.js";
 import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
 import {
 	badgeTable,
@@ -128,8 +132,15 @@ const REPO = join(import.meta.dir, "..");
  * neither wiki, with the public-wiki scan (turned on because two pages claimed generated
  * figures that were hand-typed) quietly off. **A path that has moved and a path that was
  * never there must not look alike**, which is the discipline below.
+ *
+ * 🚨 **It fired once more from a worktree, which is why the organization is no longer derived
+ * from a path.** `make worktree` nests a checkout at `.worktrees/<name>`, so `join(REPO, "..")`
+ * lands on a directory with no `Anthers-*` siblings and `insideOrganization` answers false on
+ * the one machine that has the wiki. `organizationDir` resolves it through
+ * `git rev-parse --git-common-dir`, which names the main checkout from inside any worktree.
+ * It lives in `packages/shared/src/organization.ts` so the app's documentation checks share it.
  */
-const ORG = join(REPO, "..");
+const ORG = organizationDir(REPO);
 
 /** The public wiki: the documentation written to be read by anyone. */
 const PUBLIC_WIKI = join(ORG, "Anthers-Wiki");
@@ -154,23 +165,12 @@ const PRIVATE_WIKI = join(PUBLIC_WIKI, "Internal Wiki");
 
 /**
  * Whether this checkout sits inside the Anthers organization, which decides what a missing
- * wiki *means*.
- *
- * ⭐ **This is the absent-versus-broken discriminator, and it detects the thing itself
- * rather than a proxy for it.** A CI runner and a contributor's clone hold the repository
- * alone, so a missing wiki there is simply absent and skipping is correct. A checkout
- * sitting beside its sibling repositories is on a machine where the wikis are *expected*,
- * so a missing one there is broken and has to say so. The marker is any other `Anthers-*`
- * sibling, because the organization is exactly the directory that has them.
+ * wiki *means*. The implementation and its absent-versus-broken reasoning live in
+ * `packages/shared/src/organization.ts`; `REPO` here is anywhere inside the checkout, from which that
+ * module finds the organization.
  */
 function insideOrganization(): boolean {
-	try {
-		return readdirSync(ORG, { withFileTypes: true }).some(
-			(e) => e.isDirectory() && e.name.startsWith("Anthers-"),
-		);
-	} catch {
-		return false;
-	}
+	return insideOrganizationAt(REPO);
 }
 
 /**

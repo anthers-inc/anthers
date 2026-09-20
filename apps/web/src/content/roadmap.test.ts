@@ -25,6 +25,10 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
+	insideOrganization as insideOrganizationAt,
+	organizationDir,
+} from "@anthers/shared/organization";
+import {
 	allItems,
 	BUCKETS,
 	countIn,
@@ -129,28 +133,16 @@ describe("the roadmap is shaped the way the page renders it", () => {
 	});
 });
 
-const ORG = join(import.meta.dir, "../../../../..");
-
 /**
  * Whether this checkout sits inside the Anthers organization, which decides whether a
- * missing wiki is a skip or a failure. Mirrors `insideOrganization()` in
- * `scripts/econ-figures.ts`.
- *
- * 🚨 **This asked whether `Anthers-Wiki-Private` existed until 2026-09-03, which was the
- * wrong question and was about to answer itself wrongly.** That vault was being dissolved
- * into `Anthers-Wiki`, so deleting the last of it would have flipped this to `false` and
- * quietly switched every documentation check below into skip mode — on the one machine
- * that actually has a wiki to check against. The question is whether we are in the
- * organization, and the answer is any sibling named for it.
+ * missing wiki is a skip or a failure. Mirrors `econ-figures.ts`, and both now share
+ * `@anthers/shared/organization`, which resolves the organization through git so a worktree at
+ * `.worktrees/<name>` finds the one beside the main checkout rather than none.
  */
+const ORG = organizationDir(import.meta.dir);
+
 function insideOrganization(): boolean {
-	try {
-		return readdirSync(ORG, { withFileTypes: true }).some(
-			(e) => e.isDirectory() && e.name.startsWith("Anthers-"),
-		);
-	} catch {
-		return false;
-	}
+	return insideOrganizationAt(import.meta.dir);
 }
 
 /**

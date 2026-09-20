@@ -37,9 +37,10 @@ try {
 			"      Playwright version that wants a specific one. Another project installing a\n" +
 			"      different Playwright prunes builds its own version does not reference — so\n" +
 			"      installing browsers over there deletes them over here. `make` runs this\n" +
-			"      suite with PLAYWRIGHT_BROWSERS_PATH=0, which keeps them in node_modules\n" +
-			"      where nothing else can reach them; running `bunx playwright test` by hand\n" +
-			"      without it looks in the shared cache instead.",
+			"      suite with PLAYWRIGHT_BROWSERS_PATH pointed at a shared Anthers-owned\n" +
+			"      directory (~/.cache/ms-playwright-anthers), which every worktree of this\n" +
+			"      repository uses and nothing else can reach; running `bunx playwright test`\n" +
+			"      by hand without it looks in the machine-wide cache instead.",
 	);
 }
 
