@@ -52,7 +52,7 @@ const PRIVACY: LegalDocument = {
 		"Anthers is operated by **Anthers, Inc.**, a Colorado nonprofit corporation. You can reach us at privacy@anthers.org, or at PO Box 21233, Denver, CO 80221.",
 
 		"## What we collect",
-		"**Information you give us.** Your email address, your username, the handle of the identity your account is built on, and a password if you set one — passwords are optional here, and are stored only as a cryptographic hash, so we never hold your actual password. Optionally: a display name, bio, avatar, header image, website, and location. All optional fields are free text you choose, and anything you put in them is public.",
+		"**Information you give us.** Your email address, your username, and the handle of the identity your account is built on. Optionally: a display name, bio, avatar, header image, website, and location. All optional fields are free text you choose, and anything you put in them is public.",
 		"**A sign-in code, briefly, before there is an account.** When you start an account or sign in by email, we email you a six-character code and hold it — hashed, never in readable form — against that address for **ten minutes**, with a count of how many times it has been tried. Nothing else: no IP address, no name, and if you never finish, no account is created. See *How long we keep it*.",
 		"**Information created by using Anthers.** Your posts, Works, comments, reviews, follows, bookmarks, and projects.",
 		"**What you view, and for how long.** When you play, watch, read, or listen to a Work, we record each stretch of it as it happened: which Work it was, when it started and ended, whether the tab or app was in front, whether the Work was on screen and playing, how recently you had interacted, and which surface and device it came from. **We have to**: this is how creators get paid by time — two things playing at once each get half, in every tab and on every device — and there is no way to pay someone for the time you spend with their work without recording the time you spend with their work. **The record is yours to read**: every stretch, exactly as stored, is in [your settings](/settings), and in the copy of your data you can download there. See *How long we keep it* below.",
@@ -111,7 +111,7 @@ const PRIVACY: LegalDocument = {
 		"## Your rights",
 		"These rights are extended to everyone who uses Anthers, wherever you live.",
 		"- **Know** what we hold about you and why — this document, and on request the specifics.\n- **Get a copy** of your information and your content, in an openly readable format. It's in your settings, and it's immediate.\n- **Correct** anything inaccurate — most of it directly in your settings.\n- **Delete** your account and content — see below.\n- **Object** to a particular use, and ask us to stop.\n- **Complain** to your data protection authority, if you are somewhere that has one.",
-		"**What the copy of your data deliberately leaves out**, so that it is a decision rather than an omission you discover: your password and your session tokens, so that nothing in the file can be used to sign in as you; and anything that is somebody else's, including reports other people made about you, which would identify them.",
+		"**What the copy of your data deliberately leaves out**, so that it is a decision rather than an omission you discover: your session tokens, so that nothing in the file can be used to sign in as you; and anything that is somebody else's, including reports other people made about you, which would identify them.",
 		"We will not charge you for exercising these, and we will not treat you differently for it.",
 		"Two of them are buttons rather than requests: **downloading your data** and **deleting your account** both happen in [your settings](/settings), without asking us. For anything else, email us and we will respond **within 30 days**.",
 
@@ -119,7 +119,7 @@ const PRIVACY: LegalDocument = {
 		"Deleting is **scheduled, not instant**: you have **seven days** to change your mind, and signing back in is all it takes to cancel. Confirming signs you out of every device straight away. We show you exactly what will happen to your things — with the actual counts from your account — before you confirm, because a warning you can't check isn't consent.",
 		"We do not keep anything *because* a deletion is pending. The week is a grace period, not an archive.",
 		"**A legal hold is the one thing that postpones a deletion.** If your account is under one, as described under *How long we keep it*, the deletion waits for the hold to lift and then goes ahead by itself. It is postponed rather than canceled, and you do not have to ask again.",
-		"**Deleted outright:** your profile, email address, password, sessions, linked identities, follows, bookmarks, blocks, and viewing history — **including your avatar and header image, and the stored files of any Work nobody bought**.",
+		"**Deleted outright:** your profile, email address, sessions, linked identities, follows, bookmarks, blocks, and viewing history — **including your avatar and header image, and the stored files of any Work nobody bought**.",
 		"**Your comments and posts become anonymous rather than disappearing.** They're marked as deleted by their author, and your name comes off them. Conversations other people took part in stay readable — a thread full of holes is worse for everyone still in it, and replies to a removed comment would otherwise make no sense. If a specific comment or post contains information you need actually removed, tell us and we will remove it.",
 		"**Your reviews are deleted**, both whether you recommended the work and what you wrote about it. A creator's recommended share is recalculated without them.",
 		"**Your Works that nobody has bought are deleted.**",
@@ -134,7 +134,7 @@ const PRIVACY: LegalDocument = {
 		"Some things about this service are worth a parent knowing, and they're set out in plain language on our [page for parents and guardians](/parents) rather than buried here.",
 
 		"## Security",
-		"Passwords are hashed with argon2id. Sessions are opaque tokens you can review and revoke. Purchased and gated media is stored privately and every link to it is generated per request, after re-checking that you're allowed to have it. Card details never reach our servers.",
+		"Sign-in happens over an emailed code rather than a password, so there is no password to steal; the code is stored hashed with argon2id and is dead ten minutes after it was mailed. Sessions are opaque tokens you can review and revoke. Purchased and gated media is stored privately and every link to it is generated per request, after re-checking that you're allowed to have it. Card details never reach our servers.",
 		"No system is perfectly secure, and we will tell you promptly if something happens that affects you.",
 
 		"## Changes",
@@ -155,7 +155,7 @@ const TERMS: LegalDocument = {
 
 		"## Who can use Anthers",
 		"**You have to be 13 or older.** We don't ask your age and we don't verify it — see the [Privacy Policy](/privacy) for why — so this is a rule you're agreeing to keep rather than one we check.",
-		"You're responsible for what happens under your account, and for keeping your password to yourself. You can close your account at any time.",
+		"You're responsible for what happens under your account, and for keeping the email address behind it to yourself — the code we mail to it is how anybody signs in as you. You can close your account at any time.",
 		"**Publishing work is different, and it does require verification.** To publish anything on Anthers you have to complete payout setup, which means our payments provider confirms your identity and that you are an adult. Two consequences worth stating plainly: **people under 18 cannot publish here**, and at launch **creators must be in a country our payments provider can reach.** Both are covered in the [Creator Terms](/creator-terms).",
 
 		"## What you can expect from us",

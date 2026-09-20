@@ -36,6 +36,7 @@ import {
 	requestDeletion,
 	runDueDeletions,
 } from "../services/account-deletion.js";
+import { createSession } from "../services/auth.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -208,18 +209,14 @@ describe("the request is scheduled, informed, and reversible", () => {
 
 	it("lets them sign back in, tells them it's pending, and cancels", async () => {
 		// Signing back in IS the cancel path — a deletion you can only reverse by
-		// emailing support is not the "oops" window this was asked for.
-		const signIn = await req("/api/auth/sign-in", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({ login: leaverName, password: "testpass123", acceptTerms: true }),
-		});
-		expect(signIn.status).toBe(200);
-		leaver = signIn.headers.get("Set-Cookie")!.split(";")[0];
-
-		// And they're told, rather than having to remember unaided.
-		const me = await (await req("/api/accounts/me", { headers: { Cookie: leaver } })).json();
+		// emailing support is not the "oops" window this was asked for. What "signing back
+		// in" proves is a fresh session; sign-in itself is a code out of an inbox no test
+		// can read (fixtures.ts does it through the browser's mail catcher).
+		const reSession = `session=${await createSession(leaverId)}`;
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: reSession } })).json();
 		expect(me.user.deletionRequestedAt).toBeTruthy();
+
+		leaver = reSession;
 
 		const cancel = await post("/api/accounts/me/deletion/cancel", leaver);
 		expect(cancel.status).toBe(200);
@@ -348,13 +345,6 @@ describe("what 'deleted' means, table by table", () => {
 
 	it("detaches the buyer when it is the BUYER who leaves", async () => {
 		// The other direction, which is the one the decision was actually about.
-		const buyerCookie = await req("/api/auth/sign-in", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({ login: buyerName, password: "testpass123", acceptTerms: true }),
-		});
-		expect(buyerCookie.status).toBe(200);
-
 		await eraseAccount(buyerId);
 		expect(await idOf(buyerName)).toBeNull();
 

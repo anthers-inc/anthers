@@ -20,9 +20,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_VIEWER_PASSWORD, GAUNTLET_VIEWER_USERNAME } from "@anthers/db/gauntlet";
+import { GAUNTLET_VIEWER_EMAIL, GAUNTLET_VIEWER_USERNAME } from "@anthers/db/gauntlet";
 import { expect, test as setup } from "@playwright/test";
-import { API_URL, AUTH_STATE_PATH, WEB_ORIGIN } from "./fixtures";
+import { API_URL, AUTH_STATE_PATH, emailedCode, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -50,14 +50,18 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 	// wants one owner, and the setup project is it.
 	execFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
 
-	// Sign in exactly as the SPA would: same route, same Origin, real Set-Cookie.
-	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
+	// Sign in by the emailed code, because that is the only way in: ask the signin pair
+	// for one, read it out of the session's mail catcher, spend it for the Set-Cookie.
+	await fetch(`${API_URL}/api/auth/signin/start`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({
-			login: GAUNTLET_VIEWER_USERNAME,
-			password: GAUNTLET_VIEWER_PASSWORD,
-		}),
+		body: JSON.stringify({ email: GAUNTLET_VIEWER_EMAIL }),
+	});
+	const code = await emailedCode(GAUNTLET_VIEWER_EMAIL);
+	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
+		body: JSON.stringify({ email: GAUNTLET_VIEWER_EMAIL, code }),
 	});
 	expect(res.ok, `sign-in failed: ${res.status} ${await res.text().catch(() => "")}`).toBe(true);
 

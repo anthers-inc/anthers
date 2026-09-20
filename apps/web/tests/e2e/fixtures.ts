@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_CREATOR_PASSWORD, GAUNTLET_CREATOR_USERNAME } from "@anthers/db/gauntlet";
-import { MEDIA_FIXTURE_PASSWORD, MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
+import { GAUNTLET_CREATOR_EMAIL } from "@anthers/db/gauntlet";
+import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import { type BrowserContext, test as base, expect, type Page } from "@playwright/test";
 
 /**
@@ -65,21 +65,32 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
 /**
  * Sign an account in and put the session on `context`.
  *
- * Plain `fetch` plus an explicit cookie, exactly as `gauntlet.setup.ts` does it, and deliberately
- * not `page.request.post`: that threw an opaque `"/api/auth/sign-in" cannot be parsed as a URL`
- * even when handed an absolute one, and the setup file's approach is the one already proven
- * against this API.
+ * By the emailed code, because that is the only way anybody signs in: the fixture's address
+ * is posted to `/auth/signin/start`, the code is read back out of the session's mail catcher
+ * (where a person would read it), and `/auth/signin/verify` answers with the same
+ * Set-Cookie a real sign-in returns. Plain `fetch` plus an explicit cookie, exactly as
+ * `gauntlet.setup.ts` does it, and deliberately not `page.request.post`: that threw an
+ * opaque `"/api/auth/sign-in" cannot be parsed as a URL` even when handed an absolute one,
+ * and the setup file's approach is the one already proven against this API.
  *
  * Returns the raw token so a test can call the API as that account — cleanup, mostly — without
  * driving the browser.
  */
-async function signInAs(context: BrowserContext, login: string, password: string): Promise<string> {
-	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
+async function signInAs(context: BrowserContext, email: string): Promise<string> {
+	const start = await fetch(`${API_URL}/api/auth/signin/start`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({ login, password }),
+		body: JSON.stringify({ email }),
 	});
-	expect(res.ok, `sign-in as ${login} failed: ${res.status}`).toBe(true);
+	expect(start.ok, `asking for a sign-in code for ${email} failed: ${start.status}`).toBe(true);
+
+	const code = await emailedCode(email);
+	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
+		body: JSON.stringify({ email, code }),
+	});
+	expect(res.ok, `sign-in as ${email} failed: ${res.status}`).toBe(true);
 
 	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
 	expect(token, "no session cookie returned").toBeTruthy();
@@ -105,7 +116,7 @@ async function signInAs(context: BrowserContext, login: string, password: string
  * so anything behind the Studio's creator gate needs this instead.
  */
 export function signInAsCreator(context: BrowserContext): Promise<string> {
-	return signInAs(context, GAUNTLET_CREATOR_USERNAME, GAUNTLET_CREATOR_PASSWORD);
+	return signInAs(context, GAUNTLET_CREATOR_EMAIL);
 }
 
 /**
@@ -119,7 +130,7 @@ export function signInAsCreator(context: BrowserContext): Promise<string> {
  * cleaning up after itself each spec's own job.
  */
 export function signInAsMediaFixture(context: BrowserContext): Promise<string> {
-	return signInAs(context, MEDIA_FIXTURE_USERNAME, MEDIA_FIXTURE_PASSWORD);
+	return signInAs(context, MEDIA_FIXTURE_EMAIL);
 }
 
 export { expect };

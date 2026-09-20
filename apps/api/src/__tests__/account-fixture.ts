@@ -26,7 +26,8 @@
  * claimed through `/welcome`; and no welcome email is sent. A suite testing any of those drives the
  * ceremony routes themselves.
  *
- * The account gets a password, so a suite can still exercise `POST /api/auth/sign-in`.
+ * The session the fixture hands back is minted directly (`createSession`), not signed in — a
+ * password does not exist to exercise, and the emailed-code path has its own suites.
  */
 
 import type { users } from "@anthers/db/schema";
@@ -36,7 +37,7 @@ import {
 	type LocalAccountFields,
 } from "../scripts/local-accounts";
 import type { AtprotoIdentity } from "../services/atproto";
-import { createSession, hashPassword } from "../services/auth";
+import { createSession } from "../services/auth";
 
 /** The session's own hosting, as the preload set it, before any suite overrode it. */
 const SESSION_HOSTING = {
@@ -75,9 +76,6 @@ function setEnv(key: string, value: string | undefined): void {
 	else process.env[key] = value;
 }
 
-/** The password every fixture account is given unless a suite asks for another. */
-export const FIXTURE_PASSWORD = "testpass123";
-
 export interface FixtureAccount {
 	/** `session=<token>`, ready for a `Cookie` header. */
 	cookie: string;
@@ -91,24 +89,6 @@ export interface FixtureAccount {
 	handle: string;
 	/** The whole row as the fixture left it, for a suite that needs more than the above. */
 	user: typeof users.$inferSelect;
-}
-
-const passwordHashes = new Map<string, Promise<string>>();
-
-/**
- * The hash of a fixture password, computed once per password and shared.
- *
- * ⚠️ **argon2id takes about 90 ms by design**, and nearly every fixture account has the same
- * password, so hashing it per account added minutes of nothing to a run. One hash verifies against
- * every row that stores it.
- */
-function fixturePasswordHash(password: string): Promise<string> {
-	let hash = passwordHashes.get(password);
-	if (!hash) {
-		hash = hashPassword(password);
-		passwordHashes.set(password, hash);
-	}
-	return hash;
 }
 
 /**
@@ -133,7 +113,6 @@ export async function createAccount(
 	username: string | null,
 	opts: {
 		email?: string;
-		password?: string;
 		emailVerified?: boolean;
 		/** `hosted` (the default) is an identity Anthers issued; `brought` is one it holds no credential for. */
 		identity?: "hosted" | "brought";
@@ -146,13 +125,11 @@ export async function createAccount(
 ): Promise<FixtureAccount> {
 	const email =
 		opts.email ?? `${username ?? `unclaimed_${crypto.randomUUID().slice(0, 8)}`}@example.com`;
-	const passwordHash = await fixturePasswordHash(opts.password ?? FIXTURE_PASSWORD);
 	const user = await onSessionNetwork(() =>
 		createLocalAccount({
 			username,
 			email,
 			identity: opts.identity,
-			passwordHash,
 			emailVerified: opts.emailVerified ?? false,
 			fields: opts.fields,
 		}),

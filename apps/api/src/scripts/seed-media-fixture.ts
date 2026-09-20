@@ -31,7 +31,6 @@ import { assertDevCheckout } from "@anthers/db/dev-only";
 import {
 	MEDIA_FIXTURE_DISPLAY_NAME,
 	MEDIA_FIXTURE_EMAIL,
-	MEDIA_FIXTURE_PASSWORD,
 	MEDIA_FIXTURE_PROJECT,
 	MEDIA_FIXTURE_USERNAME,
 	MEDIA_FIXTURE_WORKS,
@@ -203,7 +202,6 @@ async function ensureCreator(): Promise<number> {
 		username: MEDIA_FIXTURE_USERNAME,
 		email: MEDIA_FIXTURE_EMAIL,
 		handleName: MEDIA_FIXTURE_USERNAME,
-		passwordHash: await Bun.password.hash(MEDIA_FIXTURE_PASSWORD, "argon2id"),
 		emailVerified: true,
 		fields: {
 			displayName: MEDIA_FIXTURE_DISPLAY_NAME,

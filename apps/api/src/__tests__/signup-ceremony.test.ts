@@ -5,9 +5,9 @@
 //
 // Two doors onto one code table, and the difference between them is the property this file
 // exists to pin. `/auth/signup/*` (from `/subscribe`) may CREATE an account; `/auth/signin/*`
-// (from the empty password field on `/login`) never can. A login page that minted accounts
-// as a side effect of a mistyped address would be the second signup door the 2026-08-17
-// consolidation removed, and nothing about it would look wrong from either page.
+// (from `/login`) never can. A login page that minted accounts as a side effect of a mistyped
+// address would be the second signup door the 2026-08-17 consolidation removed, and nothing
+// about it would look wrong from either page.
 //
 // Tested against a real database because the interesting rules are all stateful — the
 // resend throttle, the attempt cap and the single-live-code invariant are each about what a
@@ -459,8 +459,7 @@ describe("POST /auth/signin/verify", () => {
 		};
 		expect(body.user.email).toBe(email);
 		// The ceremony leaves the handle for onboarding, so an account that has only ever
-		// been through it still owes one — and the emailed code is the ONLY way such an
-		// account comes back, since it has no password either.
+		// been through it still owes one — and this code is the way every account comes back.
 		expect(body.needsOnboarding).toBe(true);
 	});
 
@@ -539,7 +538,7 @@ describe("POST /auth/onboarding/claim", () => {
 		return { cookie, email };
 	}
 
-	test("claims the handle and leaves the password unset when none is given", async () => {
+	test("claims the handle, with no password on offer", async () => {
 		const { cookie, email } = await pendingAccount("claim");
 		const username = `${RUN}claim`.slice(0, 30);
 
@@ -552,26 +551,29 @@ describe("POST /auth/onboarding/claim", () => {
 
 		const [row] = await db.select().from(users).where(eq(users.email, email));
 		expect(row.username).toBe(username);
-		// The option has to actually be an option: an account that chose no password is
-		// a supported end state, not an unfinished one.
-		expect(row.passwordHash).toBeNull();
+		// Sign-in is the code and nothing else, so an account no longer has anything to
+		// leave unset — the users table has no credential column at all.
+		expect("passwordHash" in row).toBe(false);
 	});
 
-	test("sets a password when one is given, and it signs in", async () => {
+	test("a password sent anyway is refused, not silently accepted", async () => {
 		const { cookie } = await pendingAccount("claimpw");
 		const username = `${RUN}pw`.slice(0, 30);
 
-		await post(
+		const res = await post(
 			"/api/auth/onboarding/claim",
 			{ username, password: "correct horse battery", acceptTerms: true },
 			{ Cookie: cookie },
 		);
 
-		const signIn = await post("/api/auth/sign-in", {
-			login: username,
-			password: "correct horse battery",
-		});
-		expect(signIn.status).toBe(200);
+		// The schema rejects unknown keys — a credential sent to a route that has sworn
+		// off credentials is a caller operating on an assumption this API retired.
+		expect(res.status).toBe(400);
+		const [row] = await db
+			.select({ username: users.username })
+			.from(users)
+			.where(eq(users.username, username));
+		expect(row?.username ?? null).toBeNull();
 	});
 
 	test("a taken handle is refused and nothing is written", async () => {

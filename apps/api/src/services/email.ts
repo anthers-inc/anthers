@@ -255,7 +255,7 @@ export async function sendSignupCodeEmail(to: string, code: string): Promise<voi
  * returning user needs is different: they did not ask to create anything, and telling
  * them "welcome, confirm your address" would be both wrong and alarming. The same mail
  * is what somebody who started a signup against this address learns from, so the ignore
- * line covers both — a signup in progress against their address is cancelled when they
+ * line covers both — a signup in progress against their address is canceled when they
  * sign in, which is the only thing that signing in here causes.
  *
  * 🚨 What is *not* different is the API's response, which is identical in both cases.

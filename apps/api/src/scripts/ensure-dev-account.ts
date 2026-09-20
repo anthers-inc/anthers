@@ -4,28 +4,24 @@
  * session's AT Protocol network.
  *
  * Every session starts from an empty database (`scripts/session.ts`), so this creates rather than
- * reconciles: the account matching your production username, email and password, pre-verified, with
- * the creator and admin flags `.env` asks for. Its purpose is credential parity — a session that
- * starts empty never costs you the ability to sign in with your usual combination.
+ * reconciles: the account matching your production username and email, pre-verified, with
+ * the creator and admin flags `.env` asks for. Sign-in is the emailed code, read from the
+ * session's mail catcher (make dev: http://localhost:8025) — no account holds a password, so
+ * there is nothing to put in `.env` for it.
  *
  * ⚠️ **Its handle is not your username when the server would refuse that name.** A handle may not
  * carry an underscore, and a few names are reserved outright (`parkerhdavis` among them), so the
  * account asks for `<username>-dev` instead — see `localHandleName`.
  *
- * 🚨 A `$` in DEV_ACCOUNT_PASSWORD is silently mangled. Bun's `.env` parser performs variable
- * expansion **even inside single quotes**, so `'p$ssw0rd'` loses everything from the `$` to the next
- * word boundary. Escape each as `\$`, or pick a password without one.
- *
  * Credentials come from the environment (Bun auto-loads .env, which is gitignored):
  *
  *   DEV_ACCOUNT_USERNAME   your prod username
  *   DEV_ACCOUNT_EMAIL      your prod email
- *   DEV_ACCOUNT_PASSWORD   your prod password
  *   DEV_ACCOUNT_CREATOR    optional, "true"/"false" (default true)
  *   DEV_ACCOUNT_ADMIN      optional, "true"/"false" (default false) — also give DEV_ACCOUNT_EMAIL a
  *                          super-admin account in the admin app, signed into by emailed code
  *
- * If any of the three required vars are unset, this is a silent no-op so a fresh clone without them
+ * If either required var is unset, this is a silent no-op so a fresh clone without them
  * still runs `make dev` cleanly. It never fails the session: an unexpected error is logged as a
  * warning and the dev servers still start.
  *
@@ -55,13 +51,12 @@ async function main() {
 
 	const username = process.env.DEV_ACCOUNT_USERNAME?.trim();
 	const email = process.env.DEV_ACCOUNT_EMAIL?.trim();
-	const password = process.env.DEV_ACCOUNT_PASSWORD;
 	const isCreator = (process.env.DEV_ACCOUNT_CREATOR ?? "true").toLowerCase() !== "false";
 	const isAdmin = (process.env.DEV_ACCOUNT_ADMIN ?? "false").toLowerCase() === "true";
 
-	if (!username || !email || !password) {
+	if (!username || !email) {
 		console.log(
-			`${TAG} DEV_ACCOUNT_{USERNAME,EMAIL,PASSWORD} not all set — skipping (add them to .env to enable).`,
+			`${TAG} DEV_ACCOUNT_{USERNAME,EMAIL} not both set — skipping (add them to .env to enable).`,
 		);
 		return;
 	}
@@ -87,7 +82,6 @@ async function main() {
 		username,
 		email,
 		handleName: username,
-		passwordHash: await Bun.password.hash(password, { algorithm: "argon2id" }),
 		emailVerified: true,
 		fields: { displayName: username, isCreator },
 	});

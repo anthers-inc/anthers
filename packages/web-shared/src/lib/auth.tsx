@@ -42,8 +42,12 @@ interface AuthContextValue {
 	user: User | null;
 	isLoading: boolean;
 	isAuthenticated: boolean;
-	signIn: (login: string, password: string) => Promise<void>;
 	/**
+	 * 🚨 **There is no `signIn` and no `signUp` on this context, and neither may come
+	 * back**, because both imply a *form*: a credential typed into a page. Sign-in is the
+	 * emailed code — `/login` drives `POST /auth/signin/*` itself — and signing up is the
+	 * ceremony below.
+	 *
 	 * 🚨 **There is no `signUp` here, and putting one back would rebuild a second signup
 	 * door** (removed 2026-08-17 with the Create Account card that was its only caller).
 	 *
@@ -53,10 +57,11 @@ interface AuthContextValue {
 	 * the session, and `/welcome` claims the username and takes terms acceptance. It lives in
 	 * `pages/SubscribePage.tsx` and `pages/FinishSignupPage.tsx` because the ordering matters.
 	 *
-	 * ⚠️ **There is no password sign-up route on the server either.** What must not come back
-	 * is a second place that mints accounts, in the UI or the API, since two doors have to keep
-	 * agreeing about terms, onboarding and where a new account lands, and the last pair had
-	 * already drifted. Tests make accounts with `apps/api/src/__tests__/account-fixture.ts`.
+	 * ⚠️ **There is no password sign-up route on the server either — and no password sign-in
+	 * route since 2026-09-20.** What must not come back is a second place that mints accounts,
+	 * in the UI or the API, since two doors have to keep agreeing about terms, onboarding and
+	 * where a new account lands, and the last pair had already drifted. Tests make accounts
+	 * with `apps/api/src/__tests__/account-fixture.ts`.
 	 */
 	signOut: () => Promise<void>;
 	/**
@@ -156,17 +161,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		}
 	}, [user?.themePreference]);
 
-	const signIn = useCallback(async (login: string, password: string) => {
-		const res = await client.api.auth["sign-in"].$post({
-			json: { login, password },
-		});
-		if (!res.ok) {
-			throw new Error(await errorText(res, "Sign in failed."));
-		}
-		const data = await res.json();
-		setUser(data.user as User);
-	}, []);
-
 	const signOut = useCallback(async () => {
 		await client.api.auth["sign-out"].$post();
 		setUser(null);
@@ -231,11 +225,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	return (
 		<AuthContext.Provider
 			value={{
-				user,
-				isLoading,
-				isAuthenticated: user !== null,
-				signIn,
-				signOut,
+			user,
+			isLoading,
+			isAuthenticated: user !== null,
+			signOut,
 				signInWithBluesky,
 				signUpWithBluesky,
 				grantPublishing,

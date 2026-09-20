@@ -85,7 +85,6 @@ async function makeLinkedUser(opts: { reconciled?: boolean } = {}) {
 		.values({
 			username: `er_${RUN}_${n}`,
 			email: `er_${RUN}_${n}@example.com`,
-			passwordHash: "x",
 			atprotoDid: did,
 			atprotoHandle: `er${n}.bsky.social`,
 			atprotoPdsUrl: "https://pds.example",

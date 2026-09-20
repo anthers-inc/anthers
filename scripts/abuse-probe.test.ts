@@ -51,12 +51,27 @@ describe("a password may not arrive on the command line", () => {
 		if (isRefusal(result)) expect(result.refuse).toContain("--admin-password");
 	});
 
-	it("still accepts the logins, which are not secrets", () => {
-		const result = plan([...ATTENDED.argv, "--login", "someone", "--admin", "op@example.com"]);
+	it("still accepts the addresses, which are not secrets", () => {
+		const result = plan([
+			...ATTENDED.argv,
+			"--login",
+			"someone@example.com",
+			"--admin",
+			"op@example.com",
+		]);
 		expect(isRefusal(result)).toBe(false);
 		if (isRefusal(result)) return;
-		expect(result.login).toBe("someone");
+		expect(result.login).toBe("someone@example.com");
 		expect(result.adminEmail).toBe("op@example.com");
+	});
+
+	it("refuses a --login that is not an address — a code can only be mailed to one", () => {
+		// Sign-in by username went away with passwords; a name handed here would be asked
+		// for a code mailed to nobody, which reads as the mail being broken rather than as
+		// the argument being wrong.
+		const result = plan([...ATTENDED.argv, "--login", "someone"]);
+		expect(isRefusal(result)).toBe(true);
+		if (isRefusal(result)) expect(result.refuse).toContain("email address");
 	});
 
 	for (const flag of ["--admin-login", "--admin-email"]) {
@@ -107,7 +122,7 @@ describe("one report per run", () => {
 		// two reports, because `path` is one value rather than two booleans — two alerts prove
 		// nothing the first did not, and each extra one teaches whoever reads that mailbox to
 		// skim it.
-		const result = plan([...ATTENDED.argv, "--path", "in-app", "--login", "op"]);
+		const result = plan([...ATTENDED.argv, "--path", "in-app", "--login", "op@example.com"]);
 		expect(isRefusal(result)).toBe(false);
 		if (!isRefusal(result)) expect(result.path).toBe("in-app");
 	});

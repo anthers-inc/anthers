@@ -1333,8 +1333,8 @@ function DataSection() {
 						{exporting ? "Preparing…" : "Download my data"}
 					</button>
 					<p className="text-xs text-base-content/60">
-						Everything we hold about you, as a JSON file. It does not include your password, or
-						anything that is someone else's.
+						Everything we hold about you, as a JSON file. Nothing in it could sign in as you, or
+						belongs to someone else.
 					</p>
 				</div>
 

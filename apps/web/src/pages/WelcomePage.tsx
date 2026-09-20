@@ -8,13 +8,10 @@
  * ask for**, because it costs nothing at the moment of decision and a great deal at the
  * moment of doubt. Somebody weighing $3 a month should not also be inventing a name.
  *
- * 🚨 **The password is optional, and the page has to make that believable.** An account
- * with no password is a supported end state, not an unfinished one — it signs in with an
- * emailed code, the same six characters that got it here. Presenting the field as
- * required-but-skippable (a grayed "skip" link under a filled-in form) would produce the
- * thing this is trying to avoid: an unwanted password, invented under mild pressure,
- * reused from somewhere else. So the choice is stated as two equal options and neither
- * is preselected as the "real" one.
+ * 🚨 **Sign-in is the emailed code and nothing else (Parker, 2026-09-13).** No password is
+ * set, offered or accepted — here or anywhere else. This page says so plainly, because the
+ * code that brought a person here is also how they come back tomorrow, and that is the
+ * moment to learn it: before the first session ends, not after.
  *
  * The handle cannot be changed here afterwards — see `POST /auth/onboarding/claim`,
  * which refuses a second claim. Renaming is a different feature with different
@@ -47,8 +44,6 @@ export default function WelcomePage() {
 	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 
 	const [username, setUsername] = useState("");
-	const [wantsPassword, setWantsPassword] = useState<boolean | null>(null);
-	const [password, setPassword] = useState("");
 	/**
 	 * 🚨 Real state, never a hardcoded `true`.
 	 *
@@ -125,17 +120,7 @@ export default function WelcomePage() {
 					? "Letters, numbers, hyphens and underscores only."
 					: null;
 
-	const passwordProblem =
-		wantsPassword === true && password.length > 0 && password.length < 8
-			? "At least eight characters."
-			: null;
-
-	const ready =
-		trimmed.length >= 3 &&
-		!handleProblem &&
-		acceptTerms &&
-		wantsPassword !== null &&
-		(wantsPassword === false || (password.length >= 8 && !passwordProblem));
+	const ready = trimmed.length >= 3 && !handleProblem && acceptTerms;
 
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -146,7 +131,6 @@ export default function WelcomePage() {
 			const res = await client.api.auth.onboarding.claim.$post({
 				json: {
 					username: trimmed,
-					...(wantsPassword && password ? { password } : {}),
 					// `acceptTerms as true` narrows the literal the schema demands; the value
 					// is the checkbox's, and `ready` already refuses to submit without it.
 					acceptTerms: acceptTerms as true,
@@ -242,63 +226,14 @@ export default function WelcomePage() {
 				</label>
 				{handleProblem && <p className="mt-1 text-xs text-error">{handleProblem}</p>}
 
-				<fieldset className="mt-8">
-					<legend className="text-sm font-semibold">How would you like to sign in?</legend>
-					<p className="mt-1 text-xs leading-relaxed text-base-content/50">
-						Both work the same on every device. You can add or change a password later in Settings.
-					</p>
-
-					<div className="mt-3 flex flex-col gap-2">
-						{/* Deliberately first. Someone who has just typed a code from an email has
-						    already used this method successfully once, and the option they have
-						    seen work is the honest default to offer. */}
-						<button
-							type="button"
-							className={`btn justify-start text-left ${wantsPassword === false ? "btn-primary" : "btn-outline"}`}
-							aria-pressed={wantsPassword === false}
-							onClick={() => setWantsPassword(false)}
-						>
-							<span>
-								Email me a code each time
-								<span className="block text-xs font-normal opacity-70">
-									No password to remember, or to lose.
-								</span>
-							</span>
-						</button>
-						<button
-							type="button"
-							className={`btn justify-start text-left ${wantsPassword === true ? "btn-primary" : "btn-outline"}`}
-							aria-pressed={wantsPassword === true}
-							onClick={() => setWantsPassword(true)}
-						>
-							<span>
-								Set a password
-								<span className="block text-xs font-normal opacity-70">
-									Sign in without waiting for email.
-								</span>
-							</span>
-						</button>
-					</div>
-
-					{wantsPassword === true && (
-						<div className="mt-3">
-							<label className="label px-0 pb-1" htmlFor="welcome-password">
-								<span className="text-sm font-semibold">Password</span>
-							</label>
-							<input
-								id="welcome-password"
-								type="password"
-								className="input input-bordered w-full"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								autoComplete="new-password"
-								minLength={8}
-								placeholder="At least 8 characters"
-							/>
-							{passwordProblem && <p className="mt-1 text-xs text-error">{passwordProblem}</p>}
-						</div>
-					)}
-				</fieldset>
+				{/* Sign-in is the emailed code and nothing else, so there is no choice to
+				    offer here — what this block does is say so, at the moment the account is
+				    finished, before the first session ends. The code that brought them here
+				    is the way back in, the same six characters each time. */}
+				<p className="mt-8 rounded-lg border border-base-300 p-3 text-sm leading-relaxed text-base-content/65">
+					From now on, signing in is a code emailed to your address — no password to remember,
+					or to lose. Same six characters, every device.
+				</p>
 
 				{/* The honest surface, not the enforcement — the API requires this too. It sits
 				    here rather than on /subscribe because that page collects an address and

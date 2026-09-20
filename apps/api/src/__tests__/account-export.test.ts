@@ -158,20 +158,15 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 describe("the export contains no credentials", () => {
-	it("carries neither the password hash nor any session token", async () => {
+	it("carries no password material and no session token", async () => {
 		const { text } = await rawExport(subject);
 
-		const [row] = await db
-			.select({ hash: users.passwordHash })
-			.from(users)
-			.where(eq(users.id, subjectId));
-		expect(row.hash).toBeTruthy();
-		// Asserted against the raw bytes, not the parsed shape: a field nobody thought
-		// to check still appears in the string.
-		expect(text).not.toContain(row.hash!);
+		// No account holds a password at all now, so what is asserted is the *shape*:
+		// a future credential column reintroduced on `users` must not leak into the
+		// export through a `select()` with no arguments.
 		expect(text).not.toContain("passwordHash");
 		expect(text).not.toContain("password_hash");
-		// The argon2id prefix, in case the hash is ever stored or re-encoded differently.
+		// The argon2id prefix, in case a hash shaped like one is ever present again.
 		expect(text).not.toContain("$argon2");
 
 		const sessionRows = await db

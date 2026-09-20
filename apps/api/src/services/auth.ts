@@ -21,14 +21,19 @@ export function generateToken(): string {
 	return (crypto.randomUUID() + crypto.randomUUID()).replaceAll("-", "");
 }
 
-// ─── Password Hashing ───────────────────────────────────────────────────────
+// ─── Code & PIN Hashing ─────────────────────────────────────────────────────
+//
+// No account holds a password — sign-in is the emailed code — so these serve the other
+// secrets of the same shape: the six-character codes (`services/signup-codes.ts`), the
+// parental-control PIN, and the admin app's own sign-in codes. argon2id, by name, so a
+// cheap digest cannot be substituted where the keyspace is small.
 
-/** Hash a password using Bun's built-in argon2id */
+/** Hash a short-lived secret using Bun's built-in argon2id */
 export async function hashPassword(password: string): Promise<string> {
 	return Bun.password.hash(password, { algorithm: "argon2id" });
 }
 
-/** Verify a password against a hash */
+/** Verify a secret against a hash */
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
 	return Bun.password.verify(password, hash);
 }

@@ -56,14 +56,10 @@ export const users = pgTable("users", {
 	 */
 	username: text("username").unique(),
 	email: text("email").notNull().unique(),
-	/**
-	 * Argon2id hash, or null.
-	 *
-	 * Null means **"chose not to set one"**, which is a supported end state rather than a
-	 * half-finished account. Those users sign in with an emailed code (`/auth/signup/*`),
-	 * which is why that pair signs in an existing account as well as creating a new one.
-	 */
-	passwordHash: text("password_hash"),
+	// 🚨 **No password column.** Sign-in is the emailed code and nothing else (Parker,
+	// 2026-09-13), so there is no credential this table could hold — the code that proves
+	// an address lives in `signup_codes`, keyed on the address itself, and is spent by
+	// being read.
 	displayName: text("display_name").default(""),
 	bio: text("bio").default(""),
 	isCreator: boolean("is_creator").default(false),

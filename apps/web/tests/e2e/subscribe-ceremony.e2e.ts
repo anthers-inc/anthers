@@ -115,25 +115,26 @@ test.describe("one signup door", () => {
 		expect(new URL(page.url()).pathname).toBe("/subscribe");
 	});
 
-	test("no page in the logged-out surface offers a second account form", async ({ page }) => {
-		// Asking for a password TWICE is the tell, and it is a structural one: the ceremony
-		// has no password step at all (the handle and an optional password are asked for at
-		// /welcome, after the account exists), and /login asks once. Two boxes on either
-		// page means a Create Account card has grown back, whatever its fields are called.
+	test("no page in the logged-out surface offers a password, or a second account form", async ({
+		page,
+	}) => {
+		// No password field ANYWHERE is the structural tell, on both of the failure shapes
+		// this guards: a Create Account card grown back (the signup door duplicating), and
+		// the password sign-in retired on 2026-09-20 returning as a field that posts to a
+		// route that no longer exists.
 		//
-		// ⚠️ The first draft of this asserted `getByLabel(/confirm password/i)` had count 0,
-		// which is a TAUTOLOGY: `FormField` renders its label as a *sibling* of the input
-		// with no `htmlFor`, so `getByLabel` matches nothing on this site whether or not a
-		// form is there. It passed against the deleted card as happily as against the live
-		// page. Count what the DOM actually contains.
+		// ⚠️ The first draft of this test asserted `getByLabel(/confirm password/i)` had
+		// count 0, which is a TAUTOLOGY: `FormField` renders its label as a *sibling* of
+		// the input with no `htmlFor`, so `getByLabel` matches nothing on this site whether
+		// or not a form is there. It passed against the deleted card as happily as against
+		// the live page. Count what the DOM actually contains.
 		for (const path of ["/subscribe", "/login"]) {
 			await page.goto(path);
 			await expect(page.locator("h1").first()).toBeVisible();
-			const passwords = await page.locator('input[type="password"]').count();
-			expect(
-				passwords,
-				`${path} asks for a password ${passwords}× — a signup form is back`,
-			).toBeLessThanOrEqual(1);
+			await expect(
+				page.locator('input[type="password"]'),
+				`${path} asks for a password — there is no password anywhere any more`,
+			).toHaveCount(0);
 			await expect(
 				page.getByText(/confirm password/i),
 				`${path} asks to confirm a password — a signup form is back`,
