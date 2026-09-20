@@ -23,10 +23,10 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles.js";
 import { type AdminFixture, createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { handleOf } from "./handles.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -101,7 +101,7 @@ let ratingId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerAName + '@example.com'}`, sql`${viewerBName + '@example.com'}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerAName + "@example.com"}`, sql`${viewerBName + "@example.com"}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -113,7 +113,9 @@ beforeAll(async () => {
 	await enablePayouts(viewerBName);
 	operator = await createAdminFixture("mod-operator");
 	admin = operator.cookie;
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + '@example.com'}`);
+	await db.execute(
+		sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + "@example.com"}`,
+	);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",

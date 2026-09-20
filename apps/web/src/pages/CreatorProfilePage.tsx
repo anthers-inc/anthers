@@ -1030,8 +1030,8 @@ export default function CreatorProfilePage() {
 					{blocked && (
 						<div className="alert alert-info mb-4">
 							<span>
-								You've blocked @{creator.handle}. Neither of you will see the other around
-								Anthers, and you're no longer following each other. You can undo this in Settings.
+								You've blocked @{creator.handle}. Neither of you will see the other around Anthers,
+								and you're no longer following each other. You can undo this in Settings.
 							</span>
 						</div>
 					)}

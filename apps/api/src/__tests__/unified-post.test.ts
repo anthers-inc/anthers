@@ -55,7 +55,9 @@ describe("Catalog vertical slice", () => {
 	let announcementSlug: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+		);
 	}, DB_SETUP_TIMEOUT);
 
 	// A setup step wearing a test's clothes: the cookies it assigns are what every test
@@ -72,7 +74,9 @@ describe("Catalog vertical slice", () => {
 			creatorId = creatorRow.id;
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
-			await db.execute(sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + '@example.com'}`);
+			await db.execute(
+				sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + "@example.com"}`,
+			);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();
 		},

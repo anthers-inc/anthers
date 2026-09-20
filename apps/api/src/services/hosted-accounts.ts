@@ -34,9 +34,9 @@ import {
 } from "@anthers/shared/handles";
 import { eq } from "drizzle-orm";
 import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js";
+import { holdFormerHandle } from "./atproto.js";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
-import { holdFormerHandle } from "./atproto.js";
 import { open, seal, secretBoxConfigured } from "./secret-box.js";
 
 /**

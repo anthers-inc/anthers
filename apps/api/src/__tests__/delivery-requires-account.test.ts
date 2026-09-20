@@ -78,7 +78,9 @@ describe("Consuming a Work requires an account", () => {
 	let assetId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+		);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
 		const [creator] = await db
@@ -155,7 +157,9 @@ describe("Consuming a Work requires an account", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+		);
 	});
 
 	// ── The four routes that hand something over ──────────────────────────────

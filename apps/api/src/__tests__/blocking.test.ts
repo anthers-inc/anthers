@@ -93,7 +93,10 @@ let workId: number;
 let postSlug: string;
 
 async function userId(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return row.id;
 }
 
@@ -107,7 +110,7 @@ async function clearBlocks() {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + '@example.com'}`, sql`${abeName + '@example.com'}`, sql`${beeName + '@example.com'}`, sql`${camName + '@example.com'}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + "@example.com"}`, sql`${abeName + "@example.com"}`, sql`${beeName + "@example.com"}`, sql`${camName + "@example.com"}`], sql`, `)})`,
 	);
 	host = await signUp(hostName);
 	await enablePayouts(hostName);
@@ -120,7 +123,7 @@ beforeAll(async () => {
 	// abe and bee are creators too, so the creator-listing and profile assertions have
 	// something to find them in.
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${hostName + '@example.com'}`, sql`${abeName + '@example.com'}`, sql`${beeName + '@example.com'}`], sql`, `)})`,
+		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${hostName + "@example.com"}`, sql`${abeName + "@example.com"}`, sql`${beeName + "@example.com"}`], sql`, `)})`,
 	);
 
 	abeId = await userId(abeName);

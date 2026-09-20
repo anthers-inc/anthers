@@ -11,8 +11,8 @@
 
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
-import { eq, inArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 /**
  * A drizzle condition matching one fixture account by the name it was created with, using its

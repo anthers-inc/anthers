@@ -41,9 +41,9 @@ import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../services/access";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { handleOf } from "./handles";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -80,7 +80,10 @@ const madeWorkIds: number[] = [];
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
 	const cookie = account.cookie;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return { cookie, id: row!.id };
 }
 
@@ -112,7 +115,7 @@ describe("what an Adult rating costs", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${readerName + '@example.com'}`, sql`${grownName + '@example.com'}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${readerName + "@example.com"}`, sql`${grownName + "@example.com"}`], sql`, `)})`,
 		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie } = await signUp(readerName));

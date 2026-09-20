@@ -67,7 +67,10 @@ async function signUp(username: string): Promise<string> {
 }
 
 async function idOf(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return row.id;
 }
 
@@ -141,7 +144,9 @@ function download(workId: number, assetId: number, cookie: string) {
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+	);
 	creatorCookie = await signUp(creatorName);
 	buyerCookie = await signUp(buyerName);
 	creatorId = await idOf(creatorName);
@@ -719,5 +724,7 @@ afterAll(async () => {
 	// Holds carry no FK to their subject, so deleting the users leaves them active — and a
 	// stale hold suspends real sweeps in later runs.
 	await db.execute(sql`DELETE FROM legal_holds WHERE reason LIKE 'Quarantine of Work %'`);
-	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+	);
 });

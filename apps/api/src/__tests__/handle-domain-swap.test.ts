@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { hostedAccounts, hostedIdentities, handleHistory, users } from "@anthers/db/schema";
+import { handleHistory, hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { createAccount } from "./account-fixture";
@@ -254,10 +254,7 @@ describe("a domain that has", () => {
 
 		// 🚨 And the OLD name is held in `handle_history` against this DID, with a future
 		// hold — so a `/@old` redirect can still find the account while links age out.
-		const [held] = await db
-			.select()
-			.from(handleHistory)
-			.where(eq(handleHistory.did, did));
+		const [held] = await db.select().from(handleHistory).where(eq(handleHistory.did, did));
 		expect(held.oldHandle).toBe(oldHandle);
 		expect(held.holdUntil.getTime()).toBeGreaterThan(Date.now());
 	});

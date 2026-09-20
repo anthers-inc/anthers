@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { sanitizeNextPath } from "@anthers/shared/next-path";
+import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { client } from "@anthers/web-shared/rpc";
@@ -152,7 +152,7 @@ export default function LoginPage() {
 				const body = (await res.json().catch(() => ({}))) as { error?: string };
 				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
 			}
-			const body = (await res.json()) as { resume: boolean };
+			const body = (await res.json()) as { resume: boolean; needsOnboarding?: boolean };
 
 			setCodeEmail(null);
 

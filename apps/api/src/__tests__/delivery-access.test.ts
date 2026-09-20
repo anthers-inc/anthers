@@ -28,8 +28,8 @@ import { assets, purchases, transcodingJobs, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -71,7 +71,9 @@ describe("Delivery-layer access", () => {
 	let freeAssetId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+		);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
 
@@ -158,10 +160,12 @@ describe("Delivery-layer access", () => {
 	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
 	// outlives its creator's account), so deleting the users alone orphans them instead.
 	afterAll(async () => {
-		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`;
+		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`;
 		await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
 		await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+		);
 	});
 
 	it("publishes a locked post and a free post over the same two items", async () => {});

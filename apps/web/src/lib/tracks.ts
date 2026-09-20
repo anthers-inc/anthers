@@ -33,8 +33,7 @@ type WorkWithCreator = Work & {
 
 export function trackFromWork(work: WorkWithCreator, creator?: TrackCreator | null): QueueTrack {
 	const handle = work.creator?.handle ?? creator?.handle ?? null;
-	const display =
-		work.creator?.displayName ?? creator?.displayName ?? handle ?? "Unknown creator";
+	const display = work.creator?.displayName ?? creator?.displayName ?? handle ?? "Unknown creator";
 
 	return {
 		workId: work.id,

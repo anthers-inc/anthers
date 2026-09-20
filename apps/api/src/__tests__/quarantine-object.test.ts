@@ -594,5 +594,5 @@ afterAll(async () => {
 	await db.execute(
 		sql`DELETE FROM legal_holds WHERE subject_type = 'user' AND subject_id = ${creatorId}`,
 	);
-	await db.execute(sql`DELETE FROM users WHERE email = ${creatorName + '@example.com'}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${creatorName + "@example.com"}`);
 });

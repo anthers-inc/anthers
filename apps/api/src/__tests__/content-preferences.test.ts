@@ -131,7 +131,7 @@ function withCards(fundings: string[]) {
 
 describe("adulthood verification by card funding", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email = ${personName + '@example.com'}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${personName + "@example.com"}`);
 		realClient = getStripe();
 		cookie = await signUp(personName);
 		const [row] = await db

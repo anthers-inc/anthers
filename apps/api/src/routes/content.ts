@@ -3442,7 +3442,7 @@ const contentRoutes = new Hono()
 			slug: row.slug,
 			publicId: row.publicId,
 			title: row.title,
-				sharedBy: row.sharerName || row.sharerHandle,
+			sharedBy: row.sharerName || row.sharerHandle,
 		});
 	})
 

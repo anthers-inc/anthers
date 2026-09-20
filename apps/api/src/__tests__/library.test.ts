@@ -124,7 +124,9 @@ async function canOpen(workId: number): Promise<boolean> {
 
 describe("the Library", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${readerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${readerName + "@example.com"}`], sql`, `)})`,
+		);
 		const creator = await signUp(creatorName);
 		await enablePayouts(creatorName);
 		const reader = await signUp(readerName);

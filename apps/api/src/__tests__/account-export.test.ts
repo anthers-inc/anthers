@@ -28,9 +28,9 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { handleOf } from "./handles";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -74,17 +74,22 @@ async function rawExport(cookie: string): Promise<{ res: Response; text: string 
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${subjectName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${subjectName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+	);
 	subject = await signUp(subjectName);
 	await enablePayouts(subjectName);
 	other = await signUp(otherName);
 	await enablePayouts(otherName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${subjectName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`,
+		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${subjectName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
 	);
 
 	const idOf = async (u: string) => {
-		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${u}@example.com`));
+		const [row] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.email, `${u}@example.com`));
 		return row.id;
 	};
 	subjectId = await idOf(subjectName);
@@ -133,7 +138,9 @@ beforeAll(async () => {
 	).toBe(201);
 
 	// The subject follows, blocks, and reports — all their own actions.
-	expect((await post(`/api/accounts/users/${await handleOf(otherName)}/follow`, subject)).status).toBe(201);
+	expect(
+		(await post(`/api/accounts/users/${await handleOf(otherName)}/follow`, subject)).status,
+	).toBe(201);
 	expect(
 		(
 			await post("/api/moderation/reports", subject, {

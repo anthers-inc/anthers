@@ -36,7 +36,7 @@ describe("Admin / ops console API", () => {
 	let plainToken: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email = ${plainName + '@example.com'}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${plainName + "@example.com"}`);
 		const plain = await createAccount(plainName);
 		plainCookie = plain.cookie;
 		plainToken = plain.token;

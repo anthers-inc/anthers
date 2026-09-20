@@ -162,7 +162,11 @@ describe("asking for an account writes it down", () => {
 	});
 
 	it("says nothing about whether the address already has an account", async () => {
-		await createAccount(`${RUN}known`, { email: addr("known"), emailVerified: true, identity: "brought" });
+		await createAccount(`${RUN}known`, {
+			email: addr("known"),
+			emailVerified: true,
+			identity: "brought",
+		});
 		const known = await begin({ email: addr("known") });
 		const stranger = await begin({ email: addr("stranger") });
 		// The moment these answer differently, this endpoint becomes a way to ask "is this

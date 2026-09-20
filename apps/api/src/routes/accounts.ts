@@ -610,7 +610,9 @@ const accountRoutes = new Hono()
 		const resolution = await resolveHandle(handle);
 		const account =
 			resolution.account ??
-			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
 
 		// A blocked profile is not found — the same answer a handle nobody has ever
 		// registered gets. It is the least informative response available: no
@@ -657,7 +659,9 @@ const accountRoutes = new Hono()
 		const resolution = await resolveHandle(handle);
 		const creator =
 			resolution.account ??
-			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
 
 		if (!creator) {
 			return c.json({ error: "User not found" }, 404);
@@ -704,7 +708,9 @@ const accountRoutes = new Hono()
 		const resolution = await resolveHandle(handle);
 		const creator =
 			resolution.account ??
-			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
 
 		if (!creator) {
 			return c.json({ error: "User not found" }, 404);
@@ -1139,7 +1145,9 @@ const accountRoutes = new Hono()
 		const resolution = await resolveHandle(handle);
 		const target =
 			resolution.account ??
-			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
 
 		if (!target) return c.json({ error: "User not found" }, 404);
 
@@ -1160,7 +1168,9 @@ const accountRoutes = new Hono()
 		const resolution = await resolveHandle(handle);
 		const target =
 			resolution.account ??
-			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
 
 		if (!target) return c.json({ error: "User not found" }, 404);
 

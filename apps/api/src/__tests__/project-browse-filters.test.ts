@@ -58,7 +58,9 @@ describe("project browse filters", () => {
 	let creatorHandle = "";
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+		);
 
 		const creatorAccount = await createAccount(creatorName);
 		creatorHandle = creatorAccount.handle;

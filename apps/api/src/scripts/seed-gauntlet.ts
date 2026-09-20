@@ -60,8 +60,8 @@ import {
 } from "@anthers/db/gauntlet";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like } from "drizzle-orm";
-import { createLocalAccount, localHandleName } from "./local-accounts.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
+import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
 const TAG = "[gauntlet]";
 

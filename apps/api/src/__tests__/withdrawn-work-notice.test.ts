@@ -96,7 +96,7 @@ async function noticesFor(userId: number) {
 describe("Withdrawing a purchased Work tells the people who bought it", () => {
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`, sql`${otherBuyerName + '@example.com'}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`, sql`${otherBuyerName + "@example.com"}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
 		await signUp(buyerName);
@@ -105,7 +105,7 @@ describe("Withdrawing a purchased Work tells the people who bought it", () => {
 			.select({ id: users.id, email: users.email })
 			.from(users)
 			.where(
-				sql`email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`, sql`${otherBuyerName + '@example.com'}`], sql`, `)})`,
+				sql`email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`, sql`${otherBuyerName + "@example.com"}`], sql`, `)})`,
 			);
 		creatorId = rows.find((r) => r.email === `${creatorName}@example.com`)!.id;
 		buyerId = rows.find((r) => r.email === `${buyerName}@example.com`)!.id;
@@ -114,7 +114,7 @@ describe("Withdrawing a purchased Work tells the people who bought it", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`, sql`${otherBuyerName + '@example.com'}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`, sql`${otherBuyerName + "@example.com"}`], sql`, `)})`,
 		);
 	});
 

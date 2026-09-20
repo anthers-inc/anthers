@@ -27,11 +27,7 @@ import { and, eq, gt } from "drizzle-orm";
 export async function accountByHandle(
 	handle: string,
 ): Promise<typeof users.$inferSelect | undefined> {
-	const [account] = await db
-		.select()
-		.from(users)
-		.where(eq(users.atprotoHandle, handle))
-		.limit(1);
+	const [account] = await db.select().from(users).where(eq(users.atprotoHandle, handle)).limit(1);
 	return account;
 }
 

@@ -328,10 +328,7 @@ export default function FinishSignupPage() {
 
 	/** Shared by the code path and the resumed path: an account now exists. */
 	const accountMade = useCallback(
-		async (result: {
-			picks: SignupPicks | null;
-			next: string | null;
-		}) => {
+		async (result: { picks: SignupPicks | null; next: string | null }) => {
 			await commit(result);
 		},
 		[commit],

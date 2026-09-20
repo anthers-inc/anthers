@@ -38,8 +38,8 @@ import {
 } from "../services/account-deletion.js";
 import { createSession } from "../services/auth.js";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -67,7 +67,10 @@ async function signUp(username: string): Promise<string> {
 }
 
 async function idOf(username: string): Promise<number | null> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return row?.id ?? null;
 }
 
@@ -95,7 +98,7 @@ let purchaseId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${leaverName + '@example.com'}`, sql`${stayerName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${leaverName + "@example.com"}`, sql`${stayerName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
 	);
 	leaver = await signUp(leaverName);
 	stayer = await signUp(stayerName);

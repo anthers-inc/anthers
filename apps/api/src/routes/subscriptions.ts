@@ -2048,7 +2048,9 @@ const subscriptionRoutes = new Hono()
 		const resolution = await resolveHandle(handle);
 		const creator =
 			resolution.account ??
-			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
 		// Get the creator's gates

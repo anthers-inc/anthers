@@ -18,8 +18,8 @@ import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { userIdByName } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { userIdByName } from "./handles.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
 
@@ -73,7 +73,7 @@ describe("votes", () => {
 	beforeAll(async () => {
 		await db.execute(
 			sql`DELETE FROM users WHERE email IN (${sql.join(
-				[creatorName, ...voterNames].map((n) => sql`${n + '@example.com'}`),
+				[creatorName, ...voterNames].map((n) => sql`${n + "@example.com"}`),
 				sql`, `,
 			)})`,
 		);

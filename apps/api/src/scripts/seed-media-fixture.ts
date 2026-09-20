@@ -51,10 +51,10 @@ import { processAudio } from "../jobs/process-audio.js";
 import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
+import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { storage } from "../services/storage/index.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
-import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
 
 const TAG = "[media-fixture]";
@@ -195,7 +195,12 @@ async function ensureCreator(): Promise<number> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, `${localHandleName(MEDIA_FIXTURE_USERNAME)}.${await hostedHandleSuffix()}`))
+		.where(
+			eq(
+				users.atprotoHandle,
+				`${localHandleName(MEDIA_FIXTURE_USERNAME)}.${await hostedHandleSuffix()}`,
+			),
+		)
 		.limit(1);
 	if (existing) return existing.id;
 

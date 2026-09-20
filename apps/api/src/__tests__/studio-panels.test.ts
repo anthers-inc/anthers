@@ -42,7 +42,10 @@ let userId: number;
 beforeAll(async () => {
 	const account = await createAccount(name);
 	cookie = account.cookie;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${name}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${name}@example.com`));
 	userId = row.id;
 }, DB_SETUP_TIMEOUT);
 

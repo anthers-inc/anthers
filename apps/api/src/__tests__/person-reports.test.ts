@@ -99,7 +99,7 @@ let commentId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + '@example.com'}`, sql`${reporterName + '@example.com'}`, sql`${subjectName + '@example.com'}`, sql`${ghostName + '@example.com'}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + "@example.com"}`, sql`${reporterName + "@example.com"}`, sql`${subjectName + "@example.com"}`, sql`${ghostName + "@example.com"}`], sql`, `)})`,
 	);
 	const host = await signUp(hostName);
 	reporter = await signUp(reporterName);
@@ -108,11 +108,17 @@ beforeAll(async () => {
 	await enablePayouts(hostName);
 	admin = (await createAdminFixture("pr-operator")).cookie;
 	await db.execute(
-		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE email = ${subjectName + '@example.com'}`,
+		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE email = ${subjectName + "@example.com"}`,
 	);
 
-	const [s] = await db.select().from(users).where(eq(users.email, `${subjectName}@example.com`));
-	const [g] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${ghostName}@example.com`));
+	const [s] = await db
+		.select()
+		.from(users)
+		.where(eq(users.email, `${subjectName}@example.com`));
+	const [g] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${ghostName}@example.com`));
 	subjectId = s.id;
 	subjectHandle = s.atprotoHandle;
 	ghostId = g.id;

@@ -23,9 +23,9 @@ import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
 import { hideSubject, restoreSubject } from "../services/moderation.js";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles";
 import { enablePayouts } from "./payouts-fixture.js";
 
 purgeAccountsCreatedHere();
@@ -58,7 +58,10 @@ function call(method: string, path: string, cookie: string, body?: unknown) {
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return { cookie: account.cookie, id: row.id };
 }
 
@@ -76,7 +79,9 @@ let postSlug = "";
 let commentId = 0;
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + '@example.com'}`, sql`${abeName + '@example.com'}`, sql`${beeName + '@example.com'}`], sql`, `)})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + "@example.com"}`, sql`${abeName + "@example.com"}`, sql`${beeName + "@example.com"}`], sql`, `)})`,
+	);
 	host = await signUp(hostName);
 	abe = await signUp(abeName);
 	bee = await signUp(beeName);
@@ -170,9 +175,10 @@ describe("what each route asks for", () => {
 
 	it("asks for a follow's record, and carries its address into the removal on unfollow", async () => {
 		sent = [];
-		expect((await call("POST", `/api/accounts/users/${await handleOf(hostName)}/follow`, abe.cookie)).status).toBe(
-			201,
-		);
+		expect(
+			(await call("POST", `/api/accounts/users/${await handleOf(hostName)}/follow`, abe.cookie))
+				.status,
+		).toBe(201);
 		const [row] = await db
 			.select({ id: follows.id })
 			.from(follows)
@@ -184,7 +190,8 @@ describe("what each route asks for", () => {
 
 		sent = [];
 		expect(
-			(await call("POST", `/api/accounts/users/${await handleOf(hostName)}/unfollow`, abe.cookie)).status,
+			(await call("POST", `/api/accounts/users/${await handleOf(hostName)}/unfollow`, abe.cookie))
+				.status,
 		).toBe(204);
 		expect(to(QUEUES.REMOVE_ATPROTO_RECORD)).toEqual([
 			{ ownerId: abe.id, collection: "org.anthers.follow", uri },
@@ -202,9 +209,10 @@ describe("what each route asks for", () => {
 		]);
 
 		sent = [];
-		expect((await call("POST", `/api/accounts/users/${await handleOf(beeName)}/block`, abe.cookie)).status).toBe(
-			201,
-		);
+		expect(
+			(await call("POST", `/api/accounts/users/${await handleOf(beeName)}/block`, abe.cookie))
+				.status,
+		).toBe(201);
 		expect(to(QUEUES.REMOVE_ATPROTO_RECORD)).toEqual([
 			{ ownerId: abe.id, collection: "org.anthers.follow", uri: abeFollowsBee },
 		]);

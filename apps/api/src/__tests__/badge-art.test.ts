@@ -100,7 +100,9 @@ describe("Creator Badge art", () => {
 		await db.execute(
 			sql`DELETE FROM legal_holds WHERE subject_type = 'user' AND subject_id = ${creatorId}`,
 		);
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+		);
 	});
 
 	it("🚨 never puts the storage key in a response, only whether art exists", async () => {

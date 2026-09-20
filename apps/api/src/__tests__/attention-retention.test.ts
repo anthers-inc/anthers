@@ -80,7 +80,10 @@ const OLD_DAY = daysAgo(100);
 const OLDER_DAY = daysAgo(120);
 
 async function idOf(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return row.id;
 }
 
@@ -116,12 +119,14 @@ async function seedEvent(
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerAName + '@example.com'}`, sql`${viewerBName + '@example.com'}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerAName + "@example.com"}`, sql`${viewerBName + "@example.com"}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await signUp(viewerAName);
 	await signUp(viewerBName);
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + '@example.com'}`);
+	await db.execute(
+		sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + "@example.com"}`,
+	);
 
 	creatorId = await idOf(creatorName);
 	viewerAId = await idOf(viewerAName);

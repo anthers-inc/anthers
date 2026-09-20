@@ -463,10 +463,7 @@ export const HANDLE_HOLD_DAYS = 90;
 export async function holdFormerHandle(did: string, oldHandle: string): Promise<void> {
 	if (!oldHandle) return;
 	const holdUntil = new Date(Date.now() + HANDLE_HOLD_DAYS * 24 * 60 * 60 * 1000);
-	await db
-		.insert(handleHistory)
-		.values({ oldHandle, did, holdUntil })
-		.onConflictDoNothing();
+	await db.insert(handleHistory).values({ oldHandle, did, holdUntil }).onConflictDoNothing();
 }
 
 /** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */

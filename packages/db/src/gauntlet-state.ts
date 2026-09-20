@@ -90,7 +90,11 @@ function currentBillingCycle(): string {
  */
 async function userIdByFixtureName(name: string, role: string, apiUrl: string): Promise<number> {
 	const handle = await gauntletHandle(apiUrl, name);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, handle)).limit(1);
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.atprotoHandle, handle))
+		.limit(1);
 	if (!row) throw new Error(`${role} "${handle}" not found. Run \`make gauntlet-reset\` first.`);
 	return row.id;
 }
@@ -104,7 +108,11 @@ async function main(): Promise<void> {
 	}
 	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
 	const viewerId = await userIdByFixtureName(viewerUsername, "Viewer", apiUrl);
-	const creatorId = await userIdByFixtureName(GAUNTLET_CREATOR_USERNAME, "Gauntlet creator", apiUrl);
+	const creatorId = await userIdByFixtureName(
+		GAUNTLET_CREATOR_USERNAME,
+		"Gauntlet creator",
+		apiUrl,
+	);
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
 	const supportBudget = numFlag("--support-budget", 0, 300);

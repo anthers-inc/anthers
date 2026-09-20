@@ -25,9 +25,9 @@ import { legalHolds, users } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles.js";
 import { type AdminFixture, createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -104,7 +104,9 @@ describe("the legal hold console", () => {
 
 	afterAll(async () => {
 		await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${plainName + '@example.com'}`, sql`${subjectName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${plainName + "@example.com"}`, sql`${subjectName + "@example.com"}`], sql`, `)})`,
+		);
 	});
 
 	it("admits no one who is not an operator, and is not advertised to a bearer credential", async () => {

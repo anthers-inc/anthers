@@ -735,6 +735,10 @@ export const hostedAccounts = pgTable("hosted_accounts", {
  * (a sign-in that finds the DID under a new handle) and `recordHandleChange` (a
  * swap the hub itself just made). Nothing else writes this table.
  */
+// org — the hub's cache of addresses a departed handle used to answer to, kept so an old
+// `/@handle` redirects rather than 404s while links age out. The identity itself is `node`
+// and lives wherever its repository does; this row is only the hub's record of a name it
+// once carried, so a split would leave it with the org beside the rest of its bookkeeping.
 export const handleHistory = pgTable("handle_history", {
 	id: serial("id").primaryKey(),
 	/** The address that used to reach the person, as it was at the time. */

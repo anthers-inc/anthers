@@ -136,7 +136,7 @@ let exhausted: { workId: number; jobId: number };
 let onceResumed: { workId: number; jobId: number };
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE email = ${ownerName + '@example.com'}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${ownerName + "@example.com"}`);
 	owner = await signUp(ownerName);
 
 	video = await makeJob({ title: "orphan-video", mediaType: "video", sourced: true });
@@ -175,9 +175,9 @@ beforeAll(async () => {
 // that cascade off works would survive with them, which is precisely the litter this sweep
 // exists to stop replaying on every `make dev`.
 afterAll(async () => {
-	const owners = sql`SELECT id FROM users WHERE email = ${ownerName + '@example.com'}`;
+	const owners = sql`SELECT id FROM users WHERE email = ${ownerName + "@example.com"}`;
 	await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
-	await db.execute(sql`DELETE FROM users WHERE email = ${ownerName + '@example.com'}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${ownerName + "@example.com"}`);
 });
 
 describe("resumeOrphanedTranscodes", () => {

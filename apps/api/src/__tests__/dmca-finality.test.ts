@@ -264,7 +264,9 @@ async function reloadPurchase(purchaseId: number) {
 const createdWorks: number[] = [];
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+	);
 	realClient = getStripe();
 	fake = fakeStripe();
 	setStripeClient(fake.client);
@@ -288,7 +290,9 @@ afterAll(async () => {
 		await db.delete(dmcaNotices).where(eq(dmcaNotices.workId, id));
 		await db.delete(works).where(eq(works.id, id));
 	}
-	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+	);
 });
 
 // ── The sweeps ───────────────────────────────────────────────────────────────

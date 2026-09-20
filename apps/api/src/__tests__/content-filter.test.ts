@@ -64,7 +64,10 @@ const workByTitle = new Map<string, { id: number; publicId: number }>();
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
 	if (username === creatorName) creatorHandle = account.handle;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${username}@example.com`));
 	return { cookie: account.cookie, id: row!.id };
 }
 
@@ -96,7 +99,9 @@ const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorHandle}
 
 describe("a reader's filter by kind of content", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${readerName + '@example.com'}`], sql`, `)})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${readerName + "@example.com"}`], sql`, `)})`,
+		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie, id: readerId } = await signUp(readerName));
 

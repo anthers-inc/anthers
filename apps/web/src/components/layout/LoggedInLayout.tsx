@@ -179,9 +179,7 @@ function LoggedInLayoutInner() {
 							<li>
 								<Link to="/purchases">Purchases</Link>
 							</li>
-							<li>
-								{user && <Link to={profileUrl(user.handle)}>Profile</Link>}
-							</li>
+							<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
 							<li>
 								<Link to="/settings">Settings</Link>
 							</li>

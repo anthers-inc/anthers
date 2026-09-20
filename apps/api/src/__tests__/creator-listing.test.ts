@@ -23,8 +23,8 @@ import { follows, posts, projects, users, works } from "@anthers/db/schema";
 import { and, eq, like } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
-import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -68,7 +68,10 @@ beforeAll(async () => {
 	await signUp(makerName);
 	fanCookie = await signUp(fanName);
 
-	const [maker] = await db.select().from(users).where(eq(users.email, `${makerName}@example.com`));
+	const [maker] = await db
+		.select()
+		.from(users)
+		.where(eq(users.email, `${makerName}@example.com`));
 	makerId = maker.id;
 	await db.update(users).set({ isCreator: true }).where(eq(users.id, makerId));
 

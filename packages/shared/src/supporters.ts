@@ -115,9 +115,7 @@ export function groupSupporters(
 		// lifetime total that put them in this band, and returning them unchanged satisfies
 		// `SupporterEntry[]` while shipping the figure straight into the JSON — a structural
 		// type strips nothing at runtime. The one place the amount is dropped is here.
-		out.push(
-			sortSupporters(merged).map(({ handle, displayName }) => ({ handle, displayName })),
-		);
+		out.push(sortSupporters(merged).map(({ handle, displayName }) => ({ handle, displayName })));
 	}
 	// Nothing can still be carried: the last band has no `i < length - 1` to defer on, so it
 	// always renders whatever it holds.

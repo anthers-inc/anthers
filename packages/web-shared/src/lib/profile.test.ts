@@ -16,8 +16,8 @@ import {
 	creatorProjectUrl,
 	creatorWorkUrl,
 	displayHandle,
-	profileUrl,
 	handleFromParam,
+	profileUrl,
 } from "./profile";
 
 describe("minting a profile URL", () => {
