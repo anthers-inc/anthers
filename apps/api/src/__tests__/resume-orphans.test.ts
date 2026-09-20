@@ -38,7 +38,11 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES } from "../jobs/queue";
-import { resumeOrphanedTranscodes, type SendJob } from "../jobs/resume-orphans";
+import {
+	MAX_TRANSCODE_RESUMES,
+	resumeOrphanedTranscodes,
+	type SendJob,
+} from "../jobs/resume-orphans";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -105,7 +109,11 @@ async function makeJob(opts: {
 
 function statusOf(jobId: number) {
 	return db
-		.select({ status: transcodingJobs.status, error: transcodingJobs.errorMessage })
+		.select({
+			status: transcodingJobs.status,
+			error: transcodingJobs.errorMessage,
+			resumeCount: transcodingJobs.resumeCount,
+		})
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.id, jobId))
 		.then((r) => r[0]);
@@ -124,6 +132,8 @@ let audio: { workId: number; jobId: number };
 let ebook: { workId: number; jobId: number };
 let unknown: { workId: number; jobId: number };
 let done: { workId: number; jobId: number };
+let exhausted: { workId: number; jobId: number };
+let onceResumed: { workId: number; jobId: number };
 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username = ${ownerName}`);
@@ -141,6 +151,20 @@ beforeAll(async () => {
 		sourced: true,
 		status: "completed",
 	});
+	// A job the sweep has already handed back enough times: the crash-loop case,
+	// where the file keeps taking the worker down and this boot is one past the bound.
+	exhausted = await makeJob({ title: "orphan-exhausted", mediaType: "video", sourced: true });
+	await db
+		.update(transcodingJobs)
+		.set({ resumeCount: MAX_TRANSCODE_RESUMES })
+		.where(eq(transcodingJobs.id, exhausted.jobId));
+	// One below the bound, so the same pass proves an ordinary retry still resumes and
+	// that resuming is what the count measures.
+	onceResumed = await makeJob({ title: "orphan-once-resumed", mediaType: "video", sourced: true });
+	await db
+		.update(transcodingJobs)
+		.set({ resumeCount: MAX_TRANSCODE_RESUMES - 1 })
+		.where(eq(transcodingJobs.id, onceResumed.jobId));
 
 	sent = [];
 	await resumeOrphanedTranscodes(recordingSend);
@@ -193,5 +217,32 @@ describe("resumeOrphanedTranscodes", () => {
 	it("leaves a completed job alone", async () => {
 		expect(sentFor(done.jobId)).toEqual([]);
 		expect((await statusOf(done.jobId)).status).toBe("completed");
+	});
+
+	it("gives up on a job that has already been resumed past the bound", async () => {
+		// The crash loop, ended: a file that took the worker down every time it ran does
+		// not get sent again once it has hit the bound. The message is for the creator,
+		// who is the one who can act on it — re-upload, or ask.
+		const row = await statusOf(exhausted.jobId);
+		expect(row.status).toBe("failed");
+		expect(row.error).toContain("interrupting the media worker");
+		expect(sentFor(exhausted.jobId)).toEqual([]);
+	});
+
+	it("resumes a job below the bound, and the count is what the resume spends", async () => {
+		// A deploy bounces the worker mid-transcode as a matter of course, so the first
+		// and second resumes must still happen — a bound of 1 would fail ordinary work
+		// every deploy, and the count rather than the status is the thing being tested.
+		const row = await statusOf(onceResumed.jobId);
+		expect(row.status).toBe("pending");
+		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
+		expect(sentFor(onceResumed.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+	});
+
+	it("a fresh job counts its own resume, and the unsent ones do not count", async () => {
+		expect((await statusOf(video.jobId)).resumeCount).toBe(1);
+		// An unsendable row was never handed back, so it must not be charged a resume —
+		// counting it would fail it forever for a reason it cannot act on.
+		expect((await statusOf(unknown.jobId)).resumeCount).toBe(0);
 	});
 });
