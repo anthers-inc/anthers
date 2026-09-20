@@ -27,10 +27,10 @@ import {
 } from "@anthers/db/schema";
 import {
 	type AttentionEventType,
-	CREDIT_WINDOW_SECONDS,
-	clampToWindow,
 	eventTypeFor,
 	isTimePoolEligible,
+	MAX_RANGE_SECONDS,
+	RANGE_LOOKBACK_SECONDS,
 } from "@anthers/shared/attention";
 import { isBadgeColor, isBadgeEmblem, isBadgeShape } from "@anthers/shared/badge-art";
 import {
@@ -73,6 +73,7 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { creditedSeconds } from "../services/attention-ranges.js";
 import {
 	ensureAnthersProduct,
 	ensureCreatorProduct,
@@ -1045,8 +1046,31 @@ const subscriptionRoutes = new Hono()
 						z.object({
 							creatorId: z.number().int(),
 							eventType: z.enum(["page_view", "play", "watch", "read", "listen"]),
-							durationSeconds: z.number().int().min(0).max(300).default(0),
+							/**
+							 * Duration of the range in seconds, as reported. Zero is a visit
+							 * ping (no time claimed). A claimed range carries `startedAt`/`endedAt`.
+							 */
+							durationSeconds: z.number().int().min(0).max(MAX_RANGE_SECONDS).default(0),
 							workId: z.number().int().optional(),
+							/**
+							 * Time is recorded as RANGES rather than durations: when this activity
+							 * started and ended, in real time. Required when `durationSeconds > 0`;
+							 * bounded server-side below (nothing after it was received, nothing
+							 * earlier than a flush could have covered).
+							 */
+							startedAt: z.number().int().positive().optional(),
+							endedAt: z.number().int().positive().optional(),
+							/**
+							 * A stable per-range id, so a retried flush is recognized as the same
+							 * range rather than counted twice. Required when `durationSeconds > 0`.
+							 */
+							clientId: z.string().max(128).optional(),
+							// The evidence on which the claim was judged live, reported for the record.
+							tabVisible: z.boolean().optional(),
+							elementVisible: z.boolean().optional(),
+							playing: z.boolean().optional(),
+							surface: z.string().max(64).optional(),
+							device: z.string().max(64).optional(),
 						}),
 					)
 					.max(50),
@@ -1063,13 +1087,42 @@ const subscriptionRoutes = new Hono()
 			const { events } = c.req.valid("json");
 
 			if (events.length === 0) {
-				return c.json({ recorded: 0, granted: 0, refused: 0, ineligible: 0 });
+				return c.json({ recorded: 0, ineligible: 0, malformed: 0 });
 			}
 
 			// Eligibility, re-decided server-side. A zero-duration event carries no time
 			// and cannot over-credit, so visit pings pass through untouched — they are
-			// deliberately the analytics signal for surfaces that earn nothing. Anything
-			// claiming *time* has to earn it, against four checks:
+			// deliberately the analytics signal for surfaces that earn nothing.
+			//
+			// A CLAIMED RANGE (durationSeconds > 0) must carry its client-supplied time
+			// window, because that window is the record: the equal-time principle is
+			// enforced by splitting overlapping ranges on read, which needs the range's
+			// real start and end. Three bounds, all against facts rather than claims:
+			//   1. `startedAt < endedAt` — a range is an interval, not a moment.
+			//   2. `endedAt <= now` — nothing ends in the future.
+			//   3. `startedAt >= now - RANGE_LOOKBACK_SECONDS` — nothing starts earlier
+			//      than an honest flush could have covered; a forged request can claim
+			//      at most the lookback, never settled history.
+			const receivedAt = Date.now();
+			const earliestStart = receivedAt - RANGE_LOOKBACK_SECONDS * 1_000;
+			const timed = events.filter((e) => e.durationSeconds > 0);
+			const malformed = timed.filter(
+				(e) =>
+					e.startedAt == null ||
+					e.endedAt == null ||
+					e.clientId == null ||
+					e.startedAt >= e.endedAt ||
+					e.endedAt > receivedAt ||
+					e.startedAt < earliestStart,
+			);
+			if (malformed.length > 0) {
+				console.warn(
+					`attention ranges: ${viaShareLink ? `a share link of user ${attributedTo}` : `user ${attributedTo}`} sent ${malformed.length} range(s) outside the bounds a flush could honestly cover — dropped`,
+				);
+			}
+			const wellFormed = events.filter((e) => e.durationSeconds <= 0 || !malformed.includes(e));
+
+			// Anything claiming *time* then has to earn it, against four checks:
 			//
 			//   1. It names a Work. A claim with no Work context is connective tissue by
 			//      definition (a post body, a profile, discovery) and those earn nothing.
@@ -1079,14 +1132,20 @@ const subscriptionRoutes = new Hono()
 			//      attribution is simply forged.
 			//   4. The Work's type earns this event type, and the viewer can actually
 			//      access it.
-			const timed = events.filter((e) => e.durationSeconds > 0);
 			const eligibility = await loadWorkEligibility(
-				[...new Set(timed.map((e) => e.workId).filter((id): id is number => id != null))],
+				[
+					...new Set(
+						wellFormed
+							.filter((e) => e.durationSeconds > 0)
+							.map((e) => e.workId)
+							.filter((id): id is number => id != null),
+					),
+				],
 				userId,
 				sharedBy,
 			);
 
-			const eligible = events.filter((e) => {
+			const eligible = wellFormed.filter((e) => {
 				if (e.durationSeconds <= 0) return true;
 				if (e.workId == null) return false;
 				const work = eligibility.get(e.workId);
@@ -1096,7 +1155,7 @@ const subscriptionRoutes = new Hono()
 				return work.accessible && work.earns.has(e.eventType);
 			});
 
-			const ineligible = events.length - eligible.length;
+			const ineligible = events.length - eligible.length - malformed.length;
 			if (ineligible > 0) {
 				console.warn(
 					`attention eligibility: ${viaShareLink ? `a share link of user ${attributedTo}` : `user ${attributedTo}`} submitted ${ineligible} of ${events.length} events that no Work entitles them to — dropped`,
@@ -1104,45 +1163,16 @@ const subscriptionRoutes = new Hono()
 			}
 
 			if (eligible.length === 0) {
-				return c.json({ recorded: 0, granted: 0, refused: 0, ineligible });
+				return c.json({ recorded: 0, ineligible: events.length, malformed: malformed.length });
 			}
 
-			// The wall-clock clamp. Everything upstream of here is client-supplied:
-			// the browser splits a tick between concurrent claims, but it only sees
-			// one tab, and a forged request sees nothing at all. Credited seconds in
-			// any rolling window can never exceed the seconds that actually elapsed,
-			// so five tabs, five devices, or a hand-written request all land against
-			// one budget. Honest use never reaches it — you cannot consume more than
-			// an hour of anything within an hour.
-			//
-			// ⚠️ **The clamp counts the attributed account's WHOLE window, share-link seconds
-			// included.** That is deliberate: it is a wall-clock bound, and wall clocks do not
-			// fork. Giving a share link its own window would hand every account a second hour
-			// per hour, which is the one thing this check exists to make impossible.
-			const windowStart = new Date(Date.now() - CREDIT_WINDOW_SECONDS * 1_000);
-			const [spent] = await db
-				.select({
-					total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int`,
-				})
-				.from(attentionEvents)
-				.where(
-					and(
-						eq(attentionEvents.userId, attributedTo),
-						gte(attentionEvents.createdAt, windowStart),
-					),
-				);
-
-			// Clamped over the ELIGIBLE set, so a rejected claim never eats another
-			// surface's budget on its way to being dropped.
-			const { events: allowed, granted, refused } = clampToWindow(eligible, spent?.total ?? 0);
-
-			if (refused > 0) {
-				console.warn(
-					`attention clamp: ${viaShareLink ? "share links of " : ""}user ${attributedTo} claimed ${granted + refused}s with ${spent?.total ?? 0}s already credited this window — refused ${refused}s`,
-				);
-			}
-
-			const rows = allowed.map((e) => ({
+			// Rows are written as REPORTED — ground truth, with no split applied here.
+			// The even split across tabs and devices happens on read, over the union of
+			// this account's ranges (`splitOverlappingRanges`), so the stored record stays
+			// lossless and a late-arriving range re-splits what it overlaps. Nothing a
+			// client sends can make the credited total exceed real elapsed time, because
+			// that is a read-side property of the split, not an intake check.
+			const rows = eligible.map((e) => ({
 				userId: attributedTo,
 				creatorId: e.creatorId,
 				eventType: e.eventType,
@@ -1152,9 +1182,21 @@ const subscriptionRoutes = new Hono()
 				// never Public Access consumption whatever they point at.
 				publicAccess: e.workId != null && (eligibility.get(e.workId)?.publicAccess ?? false),
 				viaShareLink,
+				startedAt: e.startedAt != null ? new Date(e.startedAt) : null,
+				endedAt: e.endedAt != null ? new Date(e.endedAt) : null,
+				clientId: e.clientId ?? null,
+				tabVisible: e.tabVisible ?? null,
+				elementVisible: e.elementVisible ?? null,
+				playing: e.playing ?? null,
+				surface: e.surface ?? null,
+				device: e.device ?? null,
 			}));
 
-			await db.insert(attentionEvents).values(rows);
+			// The unique index on (user_id, client_id) makes a retried flush idempotent:
+			// the second delivery of a batch conflicts on the ranges already recorded and
+			// records only the ones it had not. `DO NOTHING` rather than an error, because
+			// a retried honest flush is ordinary — the queue requeues on any failure.
+			await db.insert(attentionEvents).values(rows).onConflictDoNothing();
 
 			// The budget AFTER this batch, so a player can stop at the limit rather than
 			// discovering it on the next playlist request. Returned on every write because
@@ -1167,7 +1209,12 @@ const subscriptionRoutes = new Hono()
 				? shareLinkBudgetAsMeter(await loadShareLinkBudget(attributedTo))
 				: await loadPublicAccessBudget(attributedTo);
 
-			return c.json({ recorded: rows.length, granted, refused, ineligible, publicAccess: budget });
+			return c.json({
+				recorded: rows.length,
+				ineligible: events.length - eligible.length,
+				malformed: malformed.length,
+				publicAccess: budget,
+			});
 		},
 	)
 
@@ -1182,24 +1229,79 @@ const subscriptionRoutes = new Hono()
 		const cycleFrom = cycleStart(cycle);
 		const cycleTo = cycleEnd(cycle);
 
-		const [summary] = await db
-			.select({
-				totalSeconds: sql<number>`COALESCE(SUM(duration_seconds), 0)::float`,
-				eventCount: sql<number>`COUNT(*)::int`,
-			})
-			.from(attentionEvents)
-			.where(
-				and(
-					eq(attentionEvents.userId, user.id),
-					gte(attentionEvents.createdAt, cycleFrom),
-					lte(attentionEvents.createdAt, cycleTo),
+		// Ranges split on read: the person's real seconds, never more than elapsed time.
+		// Overlap, not containment — a range straddling the cycle's edge contributes
+		// its in-window share, which the split clips. Goes through the same helper as
+		// every other reader, so "time spent" means one thing everywhere.
+		const [totalSeconds, eventRows] = await Promise.all([
+			creditedSeconds(user.id, cycleFrom, cycleTo),
+			db
+				.select({ id: attentionEvents.id })
+				.from(attentionEvents)
+				.where(
+					and(
+						eq(attentionEvents.userId, user.id),
+						gte(attentionEvents.createdAt, cycleFrom),
+						lte(attentionEvents.createdAt, cycleTo),
+					),
 				),
-			);
+		]);
 
 		return c.json({
-			hoursUsed: Number((Number(summary.totalSeconds) / 3600).toFixed(2)),
-			eventCount: Number(summary.eventCount),
+			hoursUsed: Number((totalSeconds / 3600).toFixed(2)),
+			eventCount: eventRows.length,
 			cycleStart: cycle,
+		});
+	})
+
+	// ── The Person's Own Activity History ───────────────────────────────────────
+	/**
+	 * A person's own attention ranges, newest first — exactly the stored record.
+	 *
+	 * This is the account-settings answer to "what do you hold about what I watch":
+	 * the ranges as reported, with their evidence, unsplit and unsurprised. It paged
+	 * rather than windowed because the point is inspection, not a total.
+	 */
+	.get("/attention/history", requireAuth, async (c) => {
+		const user = c.get("user");
+		const page = Math.max(0, Number(c.req.query("page") ?? 0));
+		const pageSize = 50;
+
+		const rows = await db
+			.select({
+				id: attentionEvents.id,
+				creatorId: attentionEvents.creatorId,
+				workId: attentionEvents.workId,
+				eventType: attentionEvents.eventType,
+				durationSeconds: attentionEvents.durationSeconds,
+				startedAt: attentionEvents.startedAt,
+				endedAt: attentionEvents.endedAt,
+				tabVisible: attentionEvents.tabVisible,
+				elementVisible: attentionEvents.elementVisible,
+				playing: attentionEvents.playing,
+				surface: attentionEvents.surface,
+				device: attentionEvents.device,
+				workTitle: works.title,
+				workSlug: works.slug,
+				workPublicId: works.publicId,
+			})
+			.from(attentionEvents)
+			.leftJoin(works, eq(attentionEvents.workId, works.id))
+			.where(and(eq(attentionEvents.userId, user.id), sql`${attentionEvents.durationSeconds} > 0`))
+			.orderBy(sql`${attentionEvents.startedAt} DESC NULLS LAST, ${attentionEvents.createdAt} DESC`)
+			.limit(pageSize)
+			.offset(page * pageSize);
+
+		return c.json({
+			entries: rows.map((r) => ({
+				...r,
+				url:
+					r.workPublicId != null && r.workSlug != null
+						? `/works/${r.workSlug}-${r.workPublicId}`
+						: null,
+			})),
+			page,
+			hasMore: rows.length === pageSize,
 		});
 	})
 

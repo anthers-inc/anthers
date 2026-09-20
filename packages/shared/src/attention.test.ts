@@ -12,14 +12,15 @@ import { describe, expect, test } from "bun:test";
 import {
 	type AttentionClaim,
 	type AttentionContext,
-	CREDIT_WINDOW_SECONDS,
 	claimKey,
-	clampToWindow,
 	consumptionModeFor,
 	creditableClaims,
 	eventTypeFor,
 	IDLE_TIMEOUT_MS,
 	isTimePoolEligible,
+	MAX_RANGE_SECONDS,
+	RANGE_LOOKBACK_SECONDS,
+	splitOverlappingRanges,
 } from "./attention.js";
 import { WORK_TYPES } from "./content.js";
 
@@ -341,70 +342,143 @@ describe("element visibility — presence claims gated on the deliverable being 
 	});
 });
 
-describe("wall-clock clamp", () => {
-	const ev = (durationSeconds: number, tag = "x") => ({ durationSeconds, tag });
-
-	test("passes a batch through untouched when the window has room", () => {
-		const events = [ev(30), ev(30)];
-		const result = clampToWindow(events, 0);
-		expect(result.granted).toBe(60);
-		expect(result.refused).toBe(0);
-		expect(result.events).toEqual(events);
+describe("union-timeline split (equal-time on read)", () => {
+	const S = 1_000; // one second in ms
+	const range = (id: number, startS: number, endS: number) => ({
+		id,
+		startedAt: startS * S,
+		endedAt: endS * S,
 	});
 
-	test("refuses everything once the window is full", () => {
-		const result = clampToWindow([ev(30), ev(30)], CREDIT_WINDOW_SECONDS);
-		expect(result.granted).toBe(0);
-		expect(result.refused).toBe(60);
-		expect(result.events.map((e) => e.durationSeconds)).toEqual([0, 0]);
+	test("a single range inside the window is credited in full", () => {
+		const credited = splitOverlappingRanges([range(1, 10, 40)], 0, 100 * S);
+		expect(credited.get(1)).toBe(30);
 	});
 
-	test("trims the batch at the boundary rather than dropping it", () => {
-		// 40 seconds left in the window, 100 claimed.
-		const result = clampToWindow([ev(30), ev(30), ev(40)], CREDIT_WINDOW_SECONDS - 40);
-		expect(result.granted).toBe(40);
-		expect(result.refused).toBe(60);
-		expect(result.events.map((e) => e.durationSeconds)).toEqual([30, 10, 0]);
+	test("two identical overlapping ranges split every second evenly", () => {
+		// Both live for the same 60s — each gets 30s, and the total is exactly 60.
+		const credited = splitOverlappingRanges([range(1, 0, 60), range(2, 0, 60)], 0, 100 * S);
+		expect(credited.get(1)).toBe(30);
+		expect(credited.get(2)).toBe(30);
+		expect((credited.get(1) ?? 0) + (credited.get(2) ?? 0)).toBe(60);
 	});
 
-	test("a single oversized claim cannot exceed the window", () => {
-		const result = clampToWindow([ev(999_999)], 0);
-		expect(result.granted).toBe(CREDIT_WINDOW_SECONDS);
-		expect(result.events[0]?.durationSeconds).toBe(CREDIT_WINDOW_SECONDS);
+	test("the 21.03 case: video in one tab and an article in another for 30 min credit 30 min total", () => {
+		// The worked example from the task and the wiki: each tab honestly reports
+		// 30 minutes; the union timeline credits 30 minutes, not 60.
+		const credited = splitOverlappingRanges([range(1, 0, 1800), range(2, 0, 1800)], 0, 3600 * S);
+		expect(credited.get(1)).toBe(900);
+		expect(credited.get(2)).toBe(900);
 	});
 
-	test("five tabs claiming the same hour are clamped to one hour", () => {
-		// Each "tab" honestly reports a full hour; only an hour's worth survives.
-		const tabs = Array.from({ length: 5 }, () => ev(CREDIT_WINDOW_SECONDS));
-		const result = clampToWindow(tabs, 0);
-		expect(result.granted).toBe(CREDIT_WINDOW_SECONDS);
-		expect(result.refused).toBe(CREDIT_WINDOW_SECONDS * 4);
+	test("five tabs claiming the same hour credit one hour, not five", () => {
+		// The case the rolling-hour clamp existed to catch — now handled losslessly:
+		// each tab still earns a 1/5 share for creators, but the user is never
+		// credited more than the hour that actually passed.
+		const tabs = Array.from({ length: 5 }, (_, i) => range(i + 1, 0, 3600));
+		const credited = splitOverlappingRanges(tabs, 0, 3600 * S);
+		let total = 0;
+		for (let i = 1; i <= 5; i++) total += credited.get(i) ?? 0;
+		expect(total).toBe(3600);
 	});
 
-	test("zero-duration visit pings survive a full window", () => {
-		const result = clampToWindow([ev(0, "visit"), ev(0, "visit")], CREDIT_WINDOW_SECONDS);
-		expect(result.events).toHaveLength(2);
-		expect(result.granted).toBe(0);
-		expect(result.refused).toBe(0);
+	test("three-way partial overlap divides each span among whoever is live in it", () => {
+		// A: 0–60, B: 20–80, C: 40–100.
+		//   0–20:  A alone      -> A +20
+		//  20–40:  A,B          -> A +10, B +10
+		//  40–60:  A,B,C        -> A,B,C +6.67 each
+		//  60–80:  B,C          -> B,C +10 each
+		// 80–100:  C alone      -> C +20
+		const credited = splitOverlappingRanges(
+			[range(1, 0, 60), range(2, 20, 80), range(3, 40, 100)],
+			0,
+			200 * S,
+		);
+		expect(credited.get(1)).toBeCloseTo(20 + 10 + 20 / 3, 5);
+		expect(credited.get(2)).toBeCloseTo(10 + 20 / 3 + 10, 5);
+		expect(credited.get(3)).toBeCloseTo(20 / 3 + 10 + 20, 5);
+		// And the total is exactly the 100 real seconds.
+		const total = (credited.get(1) ?? 0) + (credited.get(2) ?? 0) + (credited.get(3) ?? 0);
+		expect(total).toBeCloseTo(100, 5);
 	});
 
-	test("preserves order and every non-duration field", () => {
-		const result = clampToWindow([ev(30, "a"), ev(30, "b")], CREDIT_WINDOW_SECONDS - 30);
-		expect(result.events.map((e) => e.tag)).toEqual(["a", "b"]);
+	test("credit never exceeds real elapsed time, regardless of overlap density", () => {
+		// Adversarial: ten ranges all live for a full hour — the total is still one hour.
+		const ranges = Array.from({ length: 10 }, (_, i) => range(i + 1, 0, 3600));
+		const credited = splitOverlappingRanges(ranges, 0, 3600 * S);
+		let total = 0;
+		for (const [, v] of credited) total += v;
+		expect(total).toBeCloseTo(3600, 5);
 	});
 
-	test("treats an over-full window as full, not as negative budget", () => {
-		const result = clampToWindow([ev(30)], CREDIT_WINDOW_SECONDS + 500);
-		expect(result.granted).toBe(0);
-		expect(result.refused).toBe(30);
+	test("non-overlapping ranges are unaffected by each other", () => {
+		const credited = splitOverlappingRanges([range(1, 0, 30), range(2, 100, 160)], 0, 200 * S);
+		expect(credited.get(1)).toBe(30);
+		expect(credited.get(2)).toBe(60);
 	});
 
-	test("ignores a negative already-credited total", () => {
-		const result = clampToWindow([ev(30)], -100);
-		expect(result.granted).toBe(30);
+	test("a late-arriving range re-splits what it overlaps — the whole point of splitting on read", () => {
+		// First the meter would have credited A in full; once B is recorded, both halve.
+		const ranges = [range(1, 0, 60)];
+		const before = splitOverlappingRanges(ranges, 0, 100 * S);
+		expect(before.get(1)).toBe(60);
+		const after = splitOverlappingRanges([...ranges, range(2, 0, 60)], 0, 100 * S);
+		expect(after.get(1)).toBe(30);
 	});
 
-	test("an empty batch is handled", () => {
-		expect(clampToWindow([], 0)).toEqual({ events: [], granted: 0, refused: 0 });
+	test("a range straddling the window boundary contributes only its in-window share", () => {
+		// Range runs 90–150s; window is 0–120s → only 90–120 counts (30s).
+		const credited = splitOverlappingRanges([range(1, 90, 150)], 0, 120 * S);
+		expect(credited.get(1)).toBe(30);
+	});
+
+	test("a range entirely before the window contributes nothing", () => {
+		const credited = splitOverlappingRanges([range(1, 0, 30)], 100 * S, 200 * S);
+		expect(credited.get(1)).toBeUndefined();
+	});
+
+	test("a range entirely after the window contributes nothing", () => {
+		const credited = splitOverlappingRanges([range(1, 300, 360)], 0, 100 * S);
+		expect(credited.get(1)).toBeUndefined();
+	});
+
+	test("an empty input credits nothing", () => {
+		expect(splitOverlappingRanges([], 0, 100 * S).size).toBe(0);
+	});
+
+	test("an inverted window credits nothing", () => {
+		expect(splitOverlappingRanges([range(1, 0, 60)], 100 * S, 0).size).toBe(0);
+	});
+
+	test("a zero-length window credits nothing", () => {
+		expect(splitOverlappingRanges([range(1, 0, 60)], 50 * S, 50 * S).size).toBe(0);
+	});
+
+	test("string ids work the same as number ids", () => {
+		const credited = splitOverlappingRanges(
+			[
+				{ id: "a", startedAt: 0, endedAt: 60 * S },
+				{ id: "b", startedAt: 0, endedAt: 60 * S },
+			],
+			0,
+			100 * S,
+		);
+		expect(credited.get("a")).toBe(30);
+		expect(credited.get("b")).toBe(30);
+	});
+
+	test("contiguous ranges that touch but do not overlap each credit in full", () => {
+		// A ends exactly when B starts — the shared boundary has zero width, so
+		// neither splits and both are fully credited.
+		const credited = splitOverlappingRanges([range(1, 0, 30), range(2, 30, 60)], 0, 100 * S);
+		expect(credited.get(1)).toBe(30);
+		expect(credited.get(2)).toBe(30);
+	});
+
+	test("RANGE_LOOKBACK_SECONDS and MAX_RANGE_SECONDS bound what a range may claim", () => {
+		// These constants exist so a forged "I watched all day" claim is bounded at
+		// intake; pin them so a future change is deliberate.
+		expect(RANGE_LOOKBACK_SECONDS).toBe(1_800);
+		expect(MAX_RANGE_SECONDS).toBe(600);
 	});
 });

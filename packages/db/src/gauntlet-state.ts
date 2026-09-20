@@ -144,23 +144,32 @@ async function main(): Promise<void> {
 			.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
 
 		if (watchedMinutes > 0) {
-			// The endpoint caps one event at 300s, so a realistic month is many rows. Match
-			// that shape rather than writing one enormous row — the sum is the same, but a
-			// single 10-hour event is not a thing the app can produce, and a bug that only
-			// bites on row counts would slip past a fixture that never makes any.
-			const CHUNK = 300;
+			// The endpoint caps one range at 600s, so a realistic month is many rows. Match
+			// that shape rather than writing one enormous row — and lay them END TO END,
+			// not overlapping: the meter reads ranges through the cross-tab split, so a
+			// stack of identical windows would be divided by the row count and the
+			// fixture would under-spend by exactly that factor. Consecutive ranges ending
+			// now, walking backwards, credit in full.
+			const CHUNK = 600;
 			let left = watchedMinutes * 60;
+			let end = Date.now();
 			const rows: (typeof attentionEvents.$inferInsert)[] = [];
 			while (left > 0) {
 				const durationSeconds = Math.min(CHUNK, left);
+				const endedAt = new Date(end);
+				const startedAt = new Date(end - durationSeconds * 1_000);
 				rows.push({
 					userId: viewerId,
 					creatorId,
-					eventType: "video_watch",
+					eventType: "watch",
 					durationSeconds,
+					startedAt,
+					endedAt,
+					clientId: `gauntlet-${viewerId}-${rows.length}`,
 					publicAccess: true,
 				});
 				left -= durationSeconds;
+				end -= durationSeconds * 1_000;
 			}
 			for (let i = 0; i < rows.length; i += 500) {
 				await db.insert(attentionEvents).values(rows.slice(i, i + 500));

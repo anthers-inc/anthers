@@ -22,13 +22,14 @@
  */
 
 import { db } from "@anthers/db/client";
-import { attentionDaily, attentionEvents, posts, projects, works } from "@anthers/db/schema";
+import { attentionDaily, posts, projects, works } from "@anthers/db/schema";
 import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { creatorAnalyticsRanges } from "../services/attention-ranges.js";
 
 /** One Work's attention over the analytics period, merged across the raw and rolled-up tables. */
 interface WorkStats {
@@ -52,19 +53,11 @@ const integrationRoutes = new Hono()
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-		const [overview] = await db
-			.select({
-				totalEvents: sql<number>`COUNT(*)::int`,
-				totalDuration: sql<number>`COALESCE(SUM(duration_seconds), 0)::float`,
-				uniqueViewers: sql<number>`COUNT(DISTINCT user_id)::int`,
-				views: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'page_view'))::int`,
-				plays: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'play'))::int`,
-				watches: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'watch'))::int`,
-				reads: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'read'))::int`,
-				listens: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'listen'))::int`,
-			})
-			.from(attentionEvents)
-			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)));
+		// Raw ranges, split per viewer on read: a creator's totals can never include
+		// the same real second twice from one account.
+		const rawGroups = await creatorAnalyticsRanges(user.id, since, () => "all");
+		const raw = rawGroups[0] ?? { totalSeconds: 0, eventCount: 0, viewers: new Set<number>() };
+		const byType = await creatorAnalyticsRanges(user.id, since, (r) => r.eventType);
 
 		// The rolled-up half of the same window. Counts and seconds add across the two
 		// tables because the prune job deletes exactly what it summarized — an event is
@@ -87,6 +80,8 @@ const integrationRoutes = new Hono()
 				),
 			);
 
+		const typeTotal = (t: string) => Number(byType.find((g) => g.key === t)?.eventCount ?? 0);
+
 		// Content counts
 		const [projectCount] = await db
 			.select({ count: sql<number>`COUNT(*)::int` })
@@ -101,22 +96,22 @@ const integrationRoutes = new Hono()
 		return c.json({
 			period,
 			events: {
-				total: Number(overview.totalEvents) + Number(rolled.totalEvents),
-				views: Number(overview.views) + Number(rolled.views),
-				plays: Number(overview.plays) + Number(rolled.plays),
-				watches: Number(overview.watches) + Number(rolled.watches),
-				reads: Number(overview.reads) + Number(rolled.reads),
-				listens: Number(overview.listens) + Number(rolled.listens),
+				total: raw.eventCount + Number(rolled.totalEvents),
+				views: typeTotal("page_view") + Number(rolled.views),
+				plays: typeTotal("play") + Number(rolled.plays),
+				watches: typeTotal("watch") + Number(rolled.watches),
+				reads: typeTotal("read") + Number(rolled.reads),
+				listens: typeTotal("listen") + Number(rolled.listens),
 			},
 			totalDurationHours: Number(
-				((Number(overview.totalDuration) + Number(rolled.totalDuration)) / 3600).toFixed(2),
+				((raw.totalSeconds + Number(rolled.totalDuration)) / 3600).toFixed(2),
 			),
 			// Deliberately NOT summed with the rollup — see the module note. Daily distinct
 			// counts can't be added into a period total without counting a returning viewer
 			// once per day, and there is no identity left to deduplicate against. Reporting
 			// it over the raw window and naming that window is the honest version; the
 			// alternative is a bigger number that means nothing.
-			uniqueViewers: Number(overview.uniqueViewers),
+			uniqueViewers: raw.viewers.size,
 			uniqueViewersWindowDays: Math.min(period, ATTENTION_RAW_RETENTION_DAYS),
 			contentCounts: {
 				projects: Number(projectCount.count),
@@ -145,27 +140,43 @@ const integrationRoutes = new Hono()
 		const result: (WorkStats & { type: "work" })[] = [];
 
 		if (type === "all" || type === "posts" || type === "works") {
-			const postStats = await db
-				.select({
-					workId: attentionEvents.workId,
-					publicId: works.publicId,
-					postTitle: works.title,
-					postSlug: works.slug,
-					eventCount: sql<number>`COUNT(*)::int`,
-					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::float`,
+			// Raw ranges, split per viewer, grouped per Work.
+			const rawGroups = await creatorAnalyticsRanges(
+				user.id,
+				since,
+				(r) => `w:${r.workId ?? "none"}`,
+			);
+			const workIds = rawGroups
+				.map((g) => (g.key.startsWith("w:") ? Number(g.key.slice(2)) : null))
+				.filter((id): id is number => id != null && !Number.isNaN(id));
+			const workRows =
+				workIds.length > 0
+					? await db
+							.select({
+								id: works.id,
+								publicId: works.publicId,
+								title: works.title,
+								slug: works.slug,
+							})
+							.from(works)
+							.where(inArray(works.id, workIds))
+					: [];
+			const workMeta = new Map(workRows.map((w) => [w.id, w]));
+			const postStats = rawGroups
+				.map((g) => {
+					const id = g.key.startsWith("w:") ? Number(g.key.slice(2)) : null;
+					const meta = id != null ? workMeta.get(id) : undefined;
+					if (id == null || !meta) return null;
+					return {
+						workId: id,
+						publicId: meta.publicId,
+						postTitle: meta.title,
+						postSlug: meta.slug,
+						eventCount: g.eventCount,
+						totalDuration: g.totalSeconds,
+					};
 				})
-				.from(attentionEvents)
-				.innerJoin(works, eq(attentionEvents.workId, works.id))
-				.where(
-					and(
-						eq(attentionEvents.creatorId, user.id),
-						gte(attentionEvents.createdAt, since),
-						sql`${attentionEvents.workId} IS NOT NULL`,
-					),
-				)
-				.groupBy(attentionEvents.workId, works.publicId, works.title, works.slug)
-				.orderBy(desc(sql`COUNT(*)`))
-				.limit(50);
+				.filter((r): r is NonNullable<typeof r> => r != null);
 
 			// The rolled-up half, keyed the same way so the two merge per Work.
 			const rolledStats = await db
@@ -224,21 +235,41 @@ const integrationRoutes = new Hono()
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-		// Group attention events by UTC calendar day of their timestamp.
-		const dateExpr = sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
-		const timeseries = await db
-			.select({
-				date: dateExpr,
-				views: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'page_view'))::int`,
-				plays: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'play'))::int`,
-				watches: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'watch'))::int`,
-				reads: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'read'))::int`,
-				listens: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'listen'))::int`,
-			})
-			.from(attentionEvents)
-			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)))
-			.groupBy(dateExpr)
-			.orderBy(dateExpr);
+		// Group attention events by the UTC day the time was SPENT, not recorded.
+		const rawSeries = await creatorAnalyticsRanges(user.id, since, (r) => r.day as `d:${string}`);
+		const timeseries = rawSeries.map((g) => ({
+			date: g.key.slice(2),
+			views: 0,
+			plays: 0,
+			watches: 0,
+			reads: 0,
+			listens: 0,
+		}));
+		// Fold event types into per-day counts — one groupBy pass by day, one per type.
+		const byDayType = await creatorAnalyticsRanges(
+			user.id,
+			since,
+			(r) => `${r.day}:${r.eventType}`,
+		);
+		const perDay = new Map(timeseries.map((t) => [t.date, t]));
+		for (const g of byDayType) {
+			const [date, type] = g.key.split(":") as [string, string];
+			const row = perDay.get(date) ?? {
+				date,
+				views: 0,
+				plays: 0,
+				watches: 0,
+				reads: 0,
+				listens: 0,
+			};
+			if (type === "page_view") row.views += g.eventCount;
+			else if (type === "play") row.plays += g.eventCount;
+			else if (type === "watch") row.watches += g.eventCount;
+			else if (type === "read") row.reads += g.eventCount;
+			else if (type === "listen") row.listens += g.eventCount;
+			perDay.set(date, row);
+		}
+		const timeseriesRows = [...perDay.values()].sort((a, b) => a.date.localeCompare(b.date));
 
 		// The rolled-up half. `attention_daily.day` is already the UTC calendar day the
 		// expression above derives, so the two series share a key and merge by date.
@@ -271,7 +302,7 @@ const integrationRoutes = new Hono()
 				listens: number;
 			}
 		>();
-		for (const r of [...timeseries, ...rolledSeries]) {
+		for (const r of [...timeseriesRows, ...rolledSeries]) {
 			const row = byDate.get(r.date) ?? {
 				date: r.date,
 				views: 0,

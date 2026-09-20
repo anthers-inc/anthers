@@ -11,11 +11,11 @@
  * said `post_id`. It is now structural — a claim names a Work or it is not a claim about
  * anything that earns — which is what these tests pin.
  *
- * The wall-clock clamp is not a substitute and never was: it bounds *volume* — you cannot
- * be credited more seconds than have elapsed — and has nothing to say about *attribution*.
- * A hand-written request could sit inside the clamp perfectly while crediting `read`
- * seconds against a creator who had nothing to do with the Work. These tests are about
- * attribution.
+ * The range bounds are not a substitute for eligibility and never were: they bound
+ * *when* a claim could have happened — nothing in the future, nothing older than a
+ * flush — and have nothing to say about *attribution*. A hand-written request could
+ * carry a perfectly formed range while crediting `read` seconds against a creator who
+ * had nothing to do with the Work. These tests are about attribution.
  *
  * Policy itself lives in `packages/shared/src/attention.ts` and is unit-tested there; what's
  * asserted here is that the endpoint actually consults it.
@@ -53,13 +53,32 @@ type Event = {
 	eventType: string;
 	durationSeconds: number;
 	workId?: number;
+	startedAt?: number;
+	endedAt?: number;
+	clientId?: string;
 };
+
+/**
+ * A timed claim has to carry the range it claims happened: start/end within the
+ * flush lookback, and a clientId. These helpers decorate the old duration-only
+ * fixtures so eligibility — not the range bounds — is what decides each case.
+ */
+function withRange(e: Event, i: number): Event {
+	if (e.durationSeconds <= 0) return e;
+	const now = Date.now();
+	return {
+		...e,
+		startedAt: now - e.durationSeconds * 1_000 - 1_000,
+		endedAt: now - 1_000,
+		clientId: `elig-${Date.now().toString(36)}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+	};
+}
 
 async function claim(cookie: string, events: Event[]) {
 	const res = await req("/api/subscriptions/attention", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ events }),
+		body: JSON.stringify({ events: events.map(withRange) }),
 	});
 	expect(res.status).toBe(200);
 	return res.json();

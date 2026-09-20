@@ -531,6 +531,39 @@ export const attentionEvents = pgTable(
 		 * here and the stamp does it instead.
 		 */
 		viaShareLink: boolean("via_share_link").notNull().default(false),
+		/**
+		 * The range the client actually reported: when this activity started and ended,
+		 * in real time. **Ground truth, never a derivative** — the even split across
+		 * overlapping ranges is computed on read (`splitOverlappingRanges` in
+		 * `@anthers/shared/attention`), so a change to the analysis method is a code
+		 * change, not a migration of stored totals.
+		 *
+		 * Bounds enforced at intake: `ended_at <= received_at`, `started_at >= received_at
+		 * - RANGE_LOOKBACK_SECONDS`, and the pair unique on `(user_id, client_id)`, so a
+		 * forged request can claim at most the lookback, and a retried flush cannot
+		 * double-count.
+		 */
+		startedAt: timestamp("started_at", { withTimezone: true }),
+		endedAt: timestamp("ended_at", { withTimezone: true }),
+		/**
+		 * A stable, client-generated id for the range (one per claim per consecutive
+		 * stretch). It exists so a retried flush is recognized as the same range rather
+		 * than counted twice — the split's dedupe guarantee, rather than a behavioral one.
+		 */
+		clientId: text("client_id"),
+		/**
+		 * The evidence as reported at the time: whether the tab/app was in front, whether
+		 * the Work's deliverable was on screen, whether it was playing, and which surface
+		 * and device it came from. What a person sees in their account activity history is
+		 * exactly these columns — the record is the history, not a summary of it.
+		 */
+		tabVisible: boolean("tab_visible"),
+		elementVisible: boolean("element_visible"),
+		playing: boolean("playing"),
+		/** Which surface raised the claim: a route family, a player, or the mini-player. */
+		surface: text("surface"),
+		/** Broad device class — `desktop`, `mobile`, or the desktop shell. */
+		device: text("device"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
@@ -538,6 +571,12 @@ export const attentionEvents = pgTable(
 		index("idx_attention_creator_date").on(table.creatorId, table.createdAt),
 		// work_id is ON DELETE SET NULL: deleting a Work rewrites every event naming it.
 		index("idx_attention_work").on(table.workId),
+		// The read-side split queries by user over a time window.
+		index("idx_attention_user_started").on(table.userId, table.startedAt),
+		// A retried flush carrying the same client id is one range, never two.
+		uniqueIndex("uq_attention_user_client")
+			.on(table.userId, table.clientId)
+			.where(sql`${table.clientId} IS NOT NULL`),
 	],
 );
 

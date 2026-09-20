@@ -1081,6 +1081,136 @@ interface DeletionPreview {
 	hostedHandles: string[];
 }
 
+interface ActivityEntry {
+	id: number;
+	creatorId: number;
+	workId: number | null;
+	eventType: string;
+	durationSeconds: number;
+	startedAt: string | null;
+	endedAt: string | null;
+	tabVisible: boolean | null;
+	elementVisible: boolean | null;
+	playing: boolean | null;
+	surface: string | null;
+	device: string | null;
+	workTitle: string | null;
+	url: string | null;
+}
+
+/**
+ * Activity history — a person's own attention ranges, exactly as recorded.
+ *
+ * This is the answer the Privacy Policy points at: the record of what was watched is
+ * not a hidden analytics byproduct, it is the viewer's own file, and they can read
+ * every row of it here. Nothing about it is computed for display — what is stored
+ * is what is shown, evidence included, which is what makes the record inspectable
+ * rather than a summary somebody chose to write.
+ *
+ * The entries are ranges, and each one says so: when it started, when it ended,
+ * whether the Work was playing, and which device it came from. Where two ranges
+ * overlap (a video in one tab and an article in another), both are listed whole —
+ * the even split between them is a payment calculation, not what happened, and a
+ * history that showed only the split would be narrating the ledger rather than
+ * the activity.
+ */
+function ActivityHistorySection() {
+	const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [page, setPage] = useState(0);
+	const [hasMore, setHasMore] = useState(false);
+	const [loading, setLoading] = useState(false);
+
+	const load = (p: number) => {
+		setLoading(true);
+		setError(null);
+		apiFetch(`/api/subscriptions/attention/history?page=${p}`)
+			.then((r) => (r.ok ? r.json() : Promise.reject(new Error("Could not load your activity."))))
+			.then((d) => {
+				const body = d as { entries: ActivityEntry[]; hasMore: boolean };
+				setEntries((prev) => (p === 0 ? body.entries : [...(prev ?? []), ...body.entries]));
+				setHasMore(body.hasMore);
+				setPage(p);
+			})
+			.catch((e) => setError(e instanceof Error ? e.message : "Could not load your activity."))
+			.finally(() => setLoading(false));
+	};
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: load-and-append on mount only; `load` closes over `page`, which the Load More path passes explicitly.
+	useEffect(() => load(0), []);
+
+	const verbFor = (eventType: string) =>
+		eventType === "watch"
+			? "Watched"
+			: eventType === "listen"
+				? "Listened to"
+				: eventType === "read"
+					? "Read"
+					: eventType === "play"
+						? "Played"
+						: "Visited";
+
+	const describeEvidence = (e: ActivityEntry): string => {
+		const bits: string[] = [];
+		if (e.device) bits.push(e.device === "desktop-shell" ? "desktop app" : e.device);
+		if (e.playing === false) bits.push("paused");
+		if (e.tabVisible === false) bits.push("in the background");
+		return bits.length > 0 ? ` (${bits.join(", ")})` : "";
+	};
+
+	return (
+		<div className="card bg-base-200 mb-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Your activity history</h3>
+				<p className="text-sm text-base-content/60">
+					Every stretch of time Anthers holds about what you watched, read, heard or played —
+					exactly as it is stored. This record is also what the Time Pool divides by and what your
+					export contains.
+				</p>
+				{error && (
+					<div className="alert alert-error mt-2">
+						<span>{error}</span>
+					</div>
+				)}
+				{entries == null ? (
+					<p className="text-sm text-base-content/50">Loading…</p>
+				) : entries.length === 0 ? (
+					<p className="text-sm text-base-content/50">Nothing recorded yet.</p>
+				) : (
+					<ul className="mt-2 space-y-1.5">
+						{entries.map((e) => (
+							<li key={e.id} className="text-sm">
+								<span className="text-base-content/70">{formatWhen(e.startedAt)}</span>
+								{" — "}
+								{verbFor(e.eventType)}{" "}
+								{e.url ? (
+									<Link to={e.url} className="link">
+										{e.workTitle ?? "a Work"}
+									</Link>
+								) : (
+									<span>{e.workTitle ?? "a Work"}</span>
+								)}{" "}
+								for {Math.max(1, Math.round(e.durationSeconds / 60))} min
+								<span className="text-base-content/50">{describeEvidence(e)}</span>
+							</li>
+						))}
+					</ul>
+				)}
+				{hasMore && (
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm w-fit mt-2"
+						disabled={loading}
+						onClick={() => load(page + 1)}
+					>
+						{loading ? "Loading…" : "Show older"}
+					</button>
+				)}
+			</div>
+		</div>
+	);
+}
+
 interface DeletionState {
 	scheduledFor: string | null;
 	graceDays: number;
@@ -1499,6 +1629,9 @@ export default function SettingsPage() {
 			{/* Blocked accounts — the only place a block can be lifted, since a blocked
 			    profile no longer resolves. */}
 			<BlockedSection />
+
+			{/* The person's own attention record — what the Privacy Policy says they can read. */}
+			<ActivityHistorySection />
 
 			{/* Export and deletion — the controls Privacy Policy and /parents describe. */}
 			<DataSection />

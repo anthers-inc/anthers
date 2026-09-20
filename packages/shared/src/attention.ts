@@ -15,8 +15,9 @@
  *
  * 2. **The equal-time principle: a minute is a minute.** Which means, read
  *    strictly, that a user's real minute can never become two credited minutes.
- *    Concurrent claims therefore *split* the tick rather than each taking it
- *    whole — see `creditableClaims`.
+ *    Concurrent claims within a tab *split* the tick rather than each taking it
+ *    whole — see `creditableClaims` — and ranges across tabs and devices are
+ *    split on the server, on read — see `splitOverlappingRanges`.
  *
  * What differs by media type is only the *evidence* we require before crediting
  * a second. Video and audio can legitimately be consumed passively (audio-only,
@@ -126,62 +127,97 @@ export interface AttentionContext {
 	msSinceInteraction: number;
 }
 
-// ── The wall-clock clamp (server side) ───────────────────────────────────────
+// ── The union-timeline split (server side) ─────────────────────────────────
 
 /**
- * The rolling window over which a user's credited seconds may not exceed elapsed
- * real seconds. One hour: long enough that ordinary batching and brief network
- * gaps never brush it, short enough that no one can bank idle time and spend it.
+ * One recorded range of attention, as the client reported it. The server splits
+ * overlapping ranges on *read* rather than at intake, so the database holds ground
+ * truth and the analysis method can change without losing information.
  */
-export const CREDIT_WINDOW_SECONDS = 3_600;
-
-/** Anything carrying a duration the clamp can trim. */
-export interface CreditableEvent {
-	durationSeconds: number;
-}
-
-export interface ClampResult<T> {
-	/** The same events in the same order, with durations trimmed to fit the budget. */
-	events: T[];
-	/** Seconds actually credited. */
-	granted: number;
-	/** Seconds refused because the window was already full. */
-	refused: number;
+export interface AttentionRange {
+	/** The range's own server row id, or any unique identity the caller assigns. */
+	id: number | string;
+	/** UTC epoch milliseconds when the activity started (client-reported, server-bounded). */
+	startedAt: number;
+	/** UTC epoch milliseconds when the activity ended (client-reported, server-bounded). */
+	endedAt: number;
 }
 
 /**
- * Trim a batch of attention events so a user can never be credited more seconds
- * than have actually elapsed.
- *
- * Everything upstream of this is client-supplied and therefore advisory: the
- * browser splits ticks between concurrent claims, but it only sees one tab, and
- * a forged request sees nothing at all. This is the backstop that makes the
- * equal-time principle true rather than merely intended — five tabs, five
- * devices, or a hand-written `curl` all land against the same budget.
- *
- * Zero-duration events (visit pings) pass through untouched: they carry no time,
- * so they cannot over-credit, and they're the analytics signal for surfaces that
- * deliberately earn nothing.
+ * How far back in time a range may start, relative to when the server receives it.
+ * A range can only arrive after it happened, so a start time earlier than this
+ * could never have been covered by an honest flush — it is either a bug or a
+ * forged request. Thirty minutes covers the worst honest case (a long offline
+ * session draining a full queue of 30-second-cadence flushes) while keeping a
+ * forged range from reaching back into settled history and re-splitting it.
  */
-export function clampToWindow<T extends CreditableEvent>(
-	events: T[],
-	alreadyCreditedSeconds: number,
-	windowSeconds: number = CREDIT_WINDOW_SECONDS,
-): ClampResult<T> {
-	let budget = Math.max(0, windowSeconds - Math.max(0, alreadyCreditedSeconds));
-	let granted = 0;
-	let refused = 0;
+export const RANGE_LOOKBACK_SECONDS = 1_800;
 
-	const trimmed = events.map((event) => {
-		const wanted = Math.max(0, event.durationSeconds);
-		const give = Math.min(wanted, budget);
-		budget -= give;
-		granted += give;
-		refused += wanted - give;
-		return give === event.durationSeconds ? event : { ...event, durationSeconds: give };
-	});
+/**
+ * The longest a single reported range may run. Ten minutes is long enough that an
+ * honest continuous session flushes several ranges within it, short enough that a
+ * forged "I watched this all day" claim is bounded at intake.
+ */
+export const MAX_RANGE_SECONDS = 600;
 
-	return { events: trimmed, granted, refused };
+/**
+ * Split overlapping ranges so that every second of real elapsed time is credited
+ * at most once, divided evenly among the ranges live in it.
+ *
+ * This is the read-side heart of the equal-time principle. The browser already
+ * splits a tick between concurrent claims in one tab, but it only sees one tab;
+ * the server is the only place every tab and every device are visible at once, so
+ * the union timeline is built here. Five tabs, two devices, or a hand-written
+ * request all draw on the same seconds — nothing a client sends can credit more
+ * than one second per second of real time.
+ *
+ * Ranges are clipped to [windowStart, windowEnd] before splitting, so a range
+ * straddling a meter boundary contributes only its in-window share. Returns
+ * fractional seconds (they are split, not rounded) so callers sum exactly.
+ *
+ * Nothing is written back: the stored rows remain ground truth as reported, and
+ * this function is the only place the derivative is computed.
+ */
+export function splitOverlappingRanges(
+	ranges: AttentionRange[],
+	windowStart: number,
+	windowEnd: number,
+): Map<number | string, number> {
+	const credited = new Map<number | string, number>();
+	if (ranges.length === 0 || windowEnd <= windowStart) return credited;
+
+	// Clip every range to the window and drop whatever lands entirely outside it.
+	const clipped: Array<{ id: number | string; start: number; end: number }> = [];
+	for (const r of ranges) {
+		const start = Math.max(r.startedAt, windowStart);
+		const end = Math.min(r.endedAt, windowEnd);
+		if (end > start) clipped.push({ id: r.id, start, end });
+	}
+	if (clipped.length === 0) return credited;
+
+	// The union timeline: every boundary at which the live set changes.
+	const boundaries = new Set<number>();
+	for (const r of clipped) {
+		boundaries.add(r.start);
+		boundaries.add(r.end);
+	}
+	const points = [...boundaries].sort((a, b) => a - b);
+
+	// Sweep adjacent boundary pairs. Within [points[i], points[i+1]) the live set is
+	// constant, so that span divides evenly among however many ranges cover it.
+	for (let i = 0; i + 1 < points.length; i++) {
+		const spanStart = points[i] as number;
+		const spanEnd = points[i + 1] as number;
+		if (spanEnd <= spanStart) continue;
+		const live = clipped.filter((r) => r.start <= spanStart && r.end >= spanEnd);
+		if (live.length === 0) continue;
+		const share = (spanEnd - spanStart) / 1_000 / live.length;
+		for (const r of live) {
+			credited.set(r.id, (credited.get(r.id) ?? 0) + share);
+		}
+	}
+
+	return credited;
 }
 
 /** The dedupe key: one credit per creator/post pair per tick, never two. */

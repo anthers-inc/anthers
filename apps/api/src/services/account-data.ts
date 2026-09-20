@@ -220,6 +220,15 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			workId: e.workId,
 			eventType: e.eventType,
 			durationSeconds: e.durationSeconds,
+			// The range as recorded — the person's own activity history is exactly the
+			// stored record, evidence included, not a summary made for export.
+			startedAt: e.startedAt,
+			endedAt: e.endedAt,
+			tabVisible: e.tabVisible,
+			elementVisible: e.elementVisible,
+			playing: e.playing,
+			surface: e.surface,
+			device: e.device,
 			createdAt: e.createdAt,
 		})),
 

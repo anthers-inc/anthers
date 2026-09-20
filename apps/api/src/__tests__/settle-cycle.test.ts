@@ -19,7 +19,6 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	accounts,
-	attentionEvents,
 	creatorCredits,
 	crfLedger,
 	invoiceLines,
@@ -37,6 +36,7 @@ import app from "../index";
 import { distributePool } from "../jobs/distribute-pool";
 import { settleCycle } from "../jobs/settle-cycle";
 import { createAccount } from "./account-fixture";
+import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 purgeAccountsCreatedHere();
@@ -143,14 +143,14 @@ async function watch(
 	seconds: number,
 	opts: { publicAccess?: boolean; viaShareLink?: boolean } = {},
 ) {
-	await db.insert(attentionEvents).values({
+	await insertAttentionRange({
 		userId,
 		creatorId,
 		eventType: "watch",
-		durationSeconds: seconds,
+		seconds,
 		publicAccess: opts.publicAccess ?? true,
 		viaShareLink: opts.viaShareLink ?? false,
-		createdAt: WATCHED_AT,
+		endsAt: WATCHED_AT,
 	});
 }
 

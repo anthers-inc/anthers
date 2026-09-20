@@ -56,7 +56,8 @@ import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
-import { and, eq, gte, isNull, lt, sum } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { creditedSecondsByCreator } from "../services/attention-ranges.js";
 
 export interface DistributePoolData {
 	/** If set, distribute for a single account. Otherwise all active accounts. */
@@ -165,22 +166,14 @@ export async function computeMonth(input: {
 	// is attributed to the sharer — that is what makes it attributable at all — so without a
 	// boundary a link that went viral would dilute what the sharer's *own* watching pays the
 	// creators they deliberately chose. See `SHARE_LINK_POOL_FRACTION`.
-	const attentionRows = await db
-		.select({
-			creatorId: attentionEvents.creatorId,
-			viaShareLink: attentionEvents.viaShareLink,
-			totalSeconds: sum(attentionEvents.durationSeconds).as("total_seconds"),
-		})
-		.from(attentionEvents)
-		.where(
-			and(
-				eq(attentionEvents.userId, input.userId),
-				eq(attentionEvents.publicAccess, true),
-				gte(attentionEvents.createdAt, start),
-				lt(attentionEvents.createdAt, end),
-			),
-		)
-		.groupBy(attentionEvents.creatorId, attentionEvents.viaShareLink);
+	//
+	// The seconds themselves come from the read-side split: overlapping ranges across
+	// every tab and device share each second evenly, so this month holds at most one
+	// second per second of the viewer's real elapsed time, however many clients
+	// reported (`services/attention-ranges.ts`).
+	const attentionRows = await creditedSecondsByCreator(input.userId, start, end, [
+		eq(attentionEvents.publicAccess, true),
+	]);
 
 	/** The viewer's own watching, and what their links funded — each split within itself. */
 	const own = new Map<number, number>();
@@ -188,7 +181,7 @@ export async function computeMonth(input: {
 	let totalOwn = 0;
 	let totalShared = 0;
 	for (const row of attentionRows) {
-		const seconds = Number(row.totalSeconds);
+		const seconds = row.totalSeconds;
 		if (seconds <= 0) continue;
 		const bucket = row.viaShareLink ? shared : own;
 		bucket.set(row.creatorId, (bucket.get(row.creatorId) ?? 0) + seconds);

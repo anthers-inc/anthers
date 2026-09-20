@@ -149,8 +149,19 @@ beforeAll(async () => {
 		[viewerA, 120],
 		[viewerB, 45],
 	] as const) {
+		const now = Date.now();
 		const res = await post("/api/subscriptions/attention", cookie, {
-			events: [{ creatorId, eventType: "watch", durationSeconds: seconds, workId }],
+			events: [
+				{
+					creatorId,
+					eventType: "watch",
+					durationSeconds: seconds,
+					workId,
+					startedAt: now - (seconds + 1) * 1_000,
+					endedAt: now - 1_000,
+					clientId: `ap-${Math.random().toString(36).slice(2)}`,
+				},
+			],
 		});
 		expect(res.status).toBe(200);
 	}

@@ -28,7 +28,8 @@ import {
 	type ParentalList,
 	type ParentalPolicy,
 } from "@anthers/shared/parental-controls";
-import { and, eq, gte, type SQL, sql } from "drizzle-orm";
+import { eq, type SQL, sql } from "drizzle-orm";
+import { creditedSeconds } from "./attention-ranges.js";
 import { hashPassword, verifyPassword } from "./auth.js";
 
 /** Four to eight digits. Anything else is not a pin and is refused before it is hashed. */
@@ -225,17 +226,11 @@ export async function consumedSeconds(
 	scope: { creatorId?: number | null; workType?: string | null } = {},
 	now: Date = new Date(),
 ): Promise<ConsumedSeconds> {
+	// Ranges split on read: a child consuming two Works at once in two tabs or on two
+	// devices is consuming one second per second of real time, and the caps should see
+	// it that way. Every attention row counts, `public_access` or not (the note above).
 	const total = (from: Date, extra?: ReturnType<typeof eq>) =>
-		db
-			.select({ total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int` })
-			.from(attentionEvents)
-			.where(
-				and(
-					eq(attentionEvents.userId, userId),
-					gte(attentionEvents.createdAt, from),
-					...(extra ? [extra] : []),
-				),
-			);
+		creditedSeconds(userId, from, now, extra ? [extra] : []);
 
 	const today = dayStart(now);
 	const [day, week, month, scoped] = await Promise.all([
@@ -245,16 +240,14 @@ export async function consumedSeconds(
 		// The scoped figure is only ever a *daily* one, because the per-key caps are daily. A
 		// creator scope wins over a type scope when both are given, matching `dailyCapFor`'s
 		// order — the creator rule is the more specific thing a guardian said.
-		scope.creatorId != null
-			? total(today, eq(attentionEvents.creatorId, scope.creatorId))
-			: Promise.resolve([{ total: 0 }]),
+		scope.creatorId != null ? total(today, eq(attentionEvents.creatorId, scope.creatorId)) : 0,
 	]);
 
 	return {
-		day: Number(day[0]?.total ?? 0),
-		week: Number(week[0]?.total ?? 0),
-		month: Number(month[0]?.total ?? 0),
-		scopedDay: Number(scoped[0]?.total ?? 0),
+		day,
+		week,
+		month,
+		scopedDay: scoped,
 	};
 }
 

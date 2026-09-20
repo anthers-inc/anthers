@@ -12,19 +12,14 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import {
-	accounts,
-	attentionEvents,
-	poolDistributions,
-	seedAllocations,
-	stickers,
-} from "@anthers/db/schema";
+import { accounts, poolDistributions, seedAllocations, stickers } from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import { distributePool } from "../jobs/distribute-pool";
 import { createAccount } from "./account-fixture";
+import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -67,6 +62,14 @@ async function seedCycle(
 	return { userId, accountId: acct.id };
 }
 
+/**
+ * A per-viewer cursor for fixture ranges: each watch for a given user ends where
+ * the previous one began, so fixture time never overlaps. Overlapping is the
+ * cross-tab case — the split divides it — and a fixture that stacks identical
+ * windows would be asserting a split, not a straightforward spend.
+ */
+const watchCursor = new Map<number, number>();
+
 /** Seconds this viewer spent with this creator, inside the cycle, flagged or not. */
 async function watch(
 	userId: number,
@@ -75,15 +78,17 @@ async function watch(
 	publicAccess: boolean,
 	viaShareLink = false,
 ): Promise<void> {
-	await db.insert(attentionEvents).values({
+	// Inside the cycle under test — the cursor starts mid-cycle and walks backwards.
+	const end = watchCursor.get(userId) ?? Date.parse("2031-03-15T12:00:00Z");
+	watchCursor.set(userId, end - seconds * 1_000);
+	await insertAttentionRange({
 		userId,
 		creatorId,
 		eventType: "watch",
-		durationSeconds: seconds,
+		seconds,
 		publicAccess,
 		viaShareLink,
-		// Inside the cycle under test — the column defaults to now(), which is not.
-		createdAt: new Date("2031-03-15T12:00:00Z"),
+		endsAt: new Date(end),
 	});
 }
 
