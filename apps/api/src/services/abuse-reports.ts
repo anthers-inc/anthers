@@ -27,8 +27,8 @@
 import { db } from "@anthers/db/client";
 import { abuseReports, works } from "@anthers/db/schema";
 import {
-	FLOOR_MODERATION_REASONS,
-	isFloorReason,
+	isLegalReason,
+	LEGAL_MODERATION_REASONS,
 	moderationReasonLabel,
 } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
@@ -77,7 +77,7 @@ export async function resolveReportedWork(url: string): Promise<number | null> {
 }
 
 /**
- * File a report and, for a floor-level reason, tell a human out of band.
+ * File a report and, for a legal reason, tell a human out of band.
  *
  * Not idempotent, unlike `fileReport`. That one deduplicates on (reporter, subject) so a
  * single account cannot inflate the count the queue sorts by — a defense that needs an
@@ -99,7 +99,7 @@ export async function fileAbuseReport(input: FileAbuseReportInput): Promise<{ re
 		.returning({ id: abuseReports.id });
 
 	// Committed first, sent second — see the module note.
-	if (isFloorReason(input.reason)) await escalateAbuseReport(row.id);
+	if (isLegalReason(input.reason)) await escalateAbuseReport(row.id);
 
 	return { reportId: row.id };
 }
@@ -127,7 +127,7 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 
 	if (!report) return false;
 	if (report.escalatedAt) return true; // Already told somebody; don't tell them twice.
-	if (!isFloorReason(report.reason)) return false;
+	if (!isLegalReason(report.reason)) return false;
 
 	const label = moderationReasonLabel(report.reason);
 	const subject = `[Anthers] Public report: ${label}`;
@@ -164,7 +164,7 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
  *
  * ⚠️ Ignores `status`, like its `moderation_reports` counterpart: a report an operator
  * resolved still gets its alert, because *"somebody dismissed it before anyone outside the
- * console was told"* is precisely the hole the floor exists to close.
+ * console was told"* is precisely the hole the alert exists to close.
  */
 export async function pendingAbuseEscalations(): Promise<number[]> {
 	const rows = await db
@@ -173,7 +173,7 @@ export async function pendingAbuseEscalations(): Promise<number[]> {
 		.where(
 			and(
 				isNull(abuseReports.escalatedAt),
-				inArray(abuseReports.reason, [...FLOOR_MODERATION_REASONS]),
+				inArray(abuseReports.reason, [...LEGAL_MODERATION_REASONS]),
 			),
 		)
 		.orderBy(abuseReports.createdAt);
@@ -182,7 +182,7 @@ export async function pendingAbuseEscalations(): Promise<number[]> {
 
 /** Retry every public report that has not reached a person yet. Returns how many did. */
 export async function runAbuseEscalationSweep(): Promise<number> {
-	// Same refusal as the floor sweep — see `abuseAlertsEnabled`.
+	// Same refusal as the escalation sweep — see `abuseAlertsEnabled`.
 	if (!abuseAlertsEnabled()) return 0;
 	const ids = await pendingAbuseEscalations();
 	let sent = 0;
@@ -232,8 +232,8 @@ export async function redactClosedAbuseReports(
  *
  * ⚠️ **Closing a report does not un-owe its alert**, and that asymmetry is deliberate.
  * `pendingAbuseEscalations` ignores `status` on purpose, because *"somebody dismissed it
- * before anyone outside the console was told"* is precisely the hole the floor exists to
- * close. So a dismissed floor report still gets its email.
+ * before anyone outside the console was told"* is precisely the hole the alert exists to
+ * close. So a dismissed legal report still gets its email.
  */
 export async function closeAbuseReport(input: {
 	reportId: number;

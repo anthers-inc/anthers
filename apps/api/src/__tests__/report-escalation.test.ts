@@ -8,7 +8,7 @@
  * asserted "the alert arrived" would be asserting on a stub and would pass against
  * an implementation that never composed a message at all. What is worth pinning is
  * the decision the code makes: *which* reports are owed an alert, that a filed
- * floor report is one of them, and that an ordinary report is not.
+ * legal report is one of them, and that an ordinary report is not.
  *
  * 🚨 The case this file exists for is `sexual`. Its own hint in the reason taxonomy
  * reads "Explicit sexual material, or any sexual content involving minors", so a
@@ -20,7 +20,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { comments, moderationReports } from "@anthers/db/schema";
-import { FLOOR_MODERATION_REASONS, isFloorReason } from "@anthers/shared/moderation";
+import { isLegalReason, LEGAL_MODERATION_REASONS } from "@anthers/shared/moderation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { loadQueue, pendingEscalations } from "../services/moderation.js";
@@ -135,36 +135,36 @@ async function escalatedAt(reportId: number): Promise<Date | null> {
 	return row?.escalatedAt ?? null;
 }
 
-describe.skipIf(SKIP_ABUSE_TESTS)("The floor taxonomy", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("The legal taxonomy", () => {
 	it("names every reason that must reach a person, retired codes included", () => {
 		// Asserted individually rather than as a set: a set comparison written against
 		// the implementation would agree with whatever the implementation says, and the
 		// entire point of this list is which entries are easy to leave out.
-		expect(isFloorReason("csam")).toBe(true);
-		expect(isFloorReason("illegal")).toBe(true);
-		expect(isFloorReason("violence")).toBe(true);
-		// 🚨 Retired from the picker and NOT from the floor. Rows carrying `sexual` were
+		expect(isLegalReason("csam")).toBe(true);
+		expect(isLegalReason("illegal")).toBe(true);
+		expect(isLegalReason("violence")).toBe(true);
+		// 🚨 Retired from the picker and NOT from the legal set. Rows carrying `sexual` were
 		// written while it was the code the form steered a child-safety reporter toward,
 		// and a legacy row still has to escalate rather than going quiet — retiring a
 		// label must not silently change the handling of records.
-		expect(isFloorReason("sexual")).toBe(true);
-		expect(FLOOR_MODERATION_REASONS).toHaveLength(4);
+		expect(isLegalReason("sexual")).toBe(true);
+		expect(LEGAL_MODERATION_REASONS).toHaveLength(4);
 	});
 
-	it("leaves the reasons an operator can answer in their own time off the floor", () => {
-		expect(isFloorReason("spam")).toBe(false);
-		expect(isFloorReason("harassment")).toBe(false);
-		expect(isFloorReason("other")).toBe(false);
+	it("leaves the reasons an operator can answer in their own time off the legal set", () => {
+		expect(isLegalReason("spam")).toBe(false);
+		expect(isLegalReason("harassment")).toBe(false);
+		expect(isLegalReason("other")).toBe(false);
 		// ⚠️ The two halves of the split sexual reason land on opposite sides, which is the
 		// whole reason the split needed mitigations. Pornography is a rule-break an operator
 		// answers in their own time; the crime summons somebody.
-		expect(isFloorReason("pornography")).toBe(false);
-		expect(isFloorReason("unrated-mature")).toBe(false);
+		expect(isLegalReason("pornography")).toBe(false);
+		expect(isLegalReason("unrated-mature")).toBe(false);
 	});
 });
 
-describe.skipIf(SKIP_ABUSE_TESTS)("Filing a floor report", () => {
-	it("marks every floor reason as owed an alert, csam included", async () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Filing a legal report", () => {
+	it("marks every legal reason as owed an alert, csam included", async () => {
 		const filed: number[] = [];
 		const reasons = ["illegal", "csam", "violence"];
 		for (let i = 0; i < reasons.length; i++) {
@@ -184,8 +184,8 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Filing a floor report", () => {
 		expect(pending).not.toContain(reportId);
 	});
 
-	it("selects a floor report even after an operator has resolved it", async () => {
-		// The hole the floor exists to close: somebody clears it inside the console
+	it("selects a legal report even after an operator has resolved it", async () => {
+		// The hole the alert exists to close: somebody clears it inside the console
 		// before anyone outside was told. Status is deliberately not part of the
 		// selection, so a resolved report is still owed its alert.
 		const row = await fixtureReport("csam", commentIds[1]);
@@ -210,8 +210,8 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Filing a floor report", () => {
 
 describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 	/**
-	 * 🚨 The operator queue is the one place a floor report is looked at, and until
-	 * `floorAlerted` existed it could not say whether anybody outside the console had been
+	 * 🚨 The operator queue is the one place a legal report is looked at, and until
+	 * `legalAlerted` existed it could not say whether anybody outside the console had been
 	 * told. Both failure modes the `escalated_at` stamp exists to separate were therefore
 	 * invisible from the surface that most needed them.
 	 *
@@ -223,7 +223,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 		return queue.find((i) => i.subjectType === "comment" && i.subjectId === commentId);
 	}
 
-	it("says a floor report has not reached a human, and then that it has", async () => {
+	it("says a legal report has not reached a human, and then that it has", async () => {
 		const target = commentIds[0]; // the `illegal` report
 		await db
 			.update(moderationReports)
@@ -231,7 +231,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 			.where(
 				and(eq(moderationReports.subjectType, "comment"), eq(moderationReports.subjectId, target)),
 			);
-		expect((await itemFor(target))?.floorAlerted).toBe(false);
+		expect((await itemFor(target))?.legalAlerted).toBe(false);
 
 		const when = new Date();
 		await db
@@ -241,17 +241,17 @@ describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 				and(eq(moderationReports.subjectType, "comment"), eq(moderationReports.subjectId, target)),
 			);
 		const after = await itemFor(target);
-		expect(after?.floorAlerted).toBe(true);
+		expect(after?.legalAlerted).toBe(true);
 		expect(after?.lastEscalatedAt).toBe(when.toISOString());
 	});
 
-	it("stays silent about a subject nobody filed a floor report against", async () => {
+	it("stays silent about a subject nobody filed a legal report against", async () => {
 		// The `spam` report. Null rather than false, because "no alert was owed" and "an
 		// alert was owed and never went" are different facts, and collapsing them would
 		// make every ordinary report read as a failure.
 		const item = await itemFor(commentIds[3]);
 		expect(item).toBeDefined();
-		expect(item?.floorAlerted).toBeNull();
+		expect(item?.legalAlerted).toBeNull();
 		expect(item?.lastEscalatedAt).toBeNull();
 	});
 });
@@ -259,7 +259,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 /**
  * 🚨 **Teardown, moved out of a closing `it` on 2026-08-26.** As a test it read as tidy and
  * tested nothing, it sorted among the real tests as though it were one, and a suite that bailed
- * early never reached it — so a failing run left its floor reports behind, which is exactly the
+ * early never reached it — so a failing run left its legal reports behind, which is exactly the
  * run you least want littering. `afterAll` happens whatever the tests did.
  *
  * ⚠️ And it deletes the REPORTS, which the old version did not: `reporter_id` is `set null`
