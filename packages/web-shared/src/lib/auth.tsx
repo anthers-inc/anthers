@@ -225,10 +225,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	return (
 		<AuthContext.Provider
 			value={{
-			user,
-			isLoading,
-			isAuthenticated: user !== null,
-			signOut,
+				user,
+				isLoading,
+				isAuthenticated: user !== null,
+				signOut,
 				signInWithBluesky,
 				signUpWithBluesky,
 				grantPublishing,

@@ -231,8 +231,8 @@ export default function WelcomePage() {
 				    finished, before the first session ends. The code that brought them here
 				    is the way back in, the same six characters each time. */}
 				<p className="mt-8 rounded-lg border border-base-300 p-3 text-sm leading-relaxed text-base-content/65">
-					From now on, signing in is a code emailed to your address — no password to remember,
-					or to lose. Same six characters, every device.
+					From now on, signing in is a code emailed to your address — no password to remember, or to
+					lose. Same six characters, every device.
 				</p>
 
 				{/* The honest surface, not the enforcement — the API requires this too. It sits

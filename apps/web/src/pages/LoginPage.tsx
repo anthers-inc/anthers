@@ -262,7 +262,11 @@ export default function LoginPage() {
 								/>
 							</FormField>
 							<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
-								{loading ? <span className="loading loading-spinner loading-sm" /> : "Email me a sign-in code"}
+								{loading ? (
+									<span className="loading loading-spinner loading-sm" />
+								) : (
+									"Email me a sign-in code"
+								)}
 							</button>
 						</form>
 

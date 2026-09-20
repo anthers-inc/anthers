@@ -20,7 +20,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_VIEWER_EMAIL, GAUNTLET_VIEWER_USERNAME } from "@anthers/db/gauntlet";
+import { GAUNTLET_VIEWER_EMAIL } from "@anthers/db/gauntlet";
 import { expect, test as setup } from "@playwright/test";
 import { API_URL, AUTH_STATE_PATH, emailedCode, WEB_ORIGIN } from "./fixtures";
 

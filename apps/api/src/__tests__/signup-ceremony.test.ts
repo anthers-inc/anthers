@@ -24,6 +24,12 @@ import { pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import {
+	clearPendingSignup,
+	handleReservedElsewhere,
+	issueCodeForPending,
+	startPendingSignup,
+} from "../services/pending-signups.js";
+import {
 	checkSignupCode,
 	generateSignupCode,
 	issueSignInCode,
@@ -33,15 +39,8 @@ import {
 	SIGNUP_CODE_RESEND_MS,
 	SIGNUP_CODE_TTL_MS,
 } from "../services/signup-codes.js";
-import {
-	clearPendingSignup,
-	handleReservedElsewhere,
-	issueCodeForPending,
-	startPendingSignup,
-} from "../services/pending-signups.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { pendingCookie, spendCode } from "./signup-fixture";
-import { signUp } from "./signup-fixture";
+import { signUp, spendCode } from "./signup-fixture";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();

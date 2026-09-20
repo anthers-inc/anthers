@@ -93,14 +93,12 @@ test.describe("logging in with Bluesky", () => {
 
 	test("canceling leaves the sign-in form exactly as it was", async ({ page }) => {
 		await page.goto("/login");
-		await page.locator('input[autocomplete="username"]').first().fill("alice@example.com");
+		await page.locator('input[type="email"]').fill("alice@example.com");
 
 		await page.getByRole("button", { name: /log in with bluesky/i }).click();
 		await page.getByRole("button", { name: /^cancel$/i }).click();
 
 		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
-		await expect(page.locator('input[autocomplete="username"]').first()).toHaveValue(
-			"alice@example.com",
-		);
+		await expect(page.locator('input[type="email"]')).toHaveValue("alice@example.com");
 	});
 });

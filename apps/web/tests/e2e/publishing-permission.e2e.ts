@@ -71,7 +71,6 @@ async function signUpWithBluesky(
 	await page.keyboard.type(await emailedCode(address));
 	await expect(page).toHaveURL(/\/welcome/, { timeout: 15_000 });
 	await page.locator("#welcome-username").fill(name);
-	await page.getByRole("button", { name: /email me a code each time/i }).click();
 	await page.getByRole("checkbox", { name: /13 or older/i }).check();
 	await page.getByRole("button", { name: "Finish setting up" }).click();
 	await expect(page.getByText(`You're in, @${name}`)).toBeVisible({ timeout: 15_000 });

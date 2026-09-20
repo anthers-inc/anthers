@@ -83,7 +83,7 @@ test("an emailed code signs an existing account in from /login", async ({ page }
 	});
 
 	await page.goto("/login");
-	await page.locator('input[autocomplete="username"]').fill(address);
+	await page.locator('input[type="email"]').fill(address);
 	await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 	await typeCode(page, await emailedCode(address));
 

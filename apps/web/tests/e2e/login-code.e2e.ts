@@ -43,9 +43,12 @@ test.describe("signing in with an emailed code", () => {
 		await page.goto("/login");
 
 		// The code is keyed on the email address, and resolving a public username to a
-		// private mailbox would let anyone mail anyone by guessing handles.
+		// private mailbox would let anyone mail anyone by guessing handles. The browser's
+		// own email validation would block this submit before React ever sees it, so the
+		// form is submitted past that layer — what is being tested is the page's message,
+		// not the attribute.
 		await page.locator('input[type="email"]').fill("alice");
-		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
+		await page.evaluate(() => document.querySelector("form")?.requestSubmit());
 
 		await expect(page.getByText(/needs your email address/i)).toBeVisible();
 		// And no code was asked for: the modal must not open on a request we never sent.
