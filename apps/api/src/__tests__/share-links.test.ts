@@ -214,6 +214,20 @@ describe("Share links", () => {
 		expect(body).not.toHaveProperty("access");
 	});
 
+	it("mints a link and an embed from the SAME token, pointed at their two shapes", async () => {
+		// An embed is a share link rendered as a player, so the two URLs are built from one
+		// token and differ only in which page renders it. Minting a separate embed token
+		// would be a second pool, a second gate and a second thing to revoke.
+		const res = await req(`/api/content/works/${openId}/share-link`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, Cookie: sharerCookie },
+		});
+		expect(res.status).toBe(201);
+		const body = await res.json();
+		expect(body.url).toBe(`${ORIGIN}/s/${openToken}`);
+		expect(body.embedUrl).toBe(`${ORIGIN}/embed/${openToken}`);
+	});
+
 	// ── The four things it must not become ────────────────────────────────────
 
 	it("🚨 cannot open a GATED Work, even with a token minted for it", async () => {
