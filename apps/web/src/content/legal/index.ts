@@ -134,7 +134,7 @@ const PRIVACY: LegalDocument = {
 		"Some things about this service are worth a parent knowing, and they're set out in plain language on our [page for parents and guardians](/parents) rather than buried here.",
 
 		"## Security",
-		"Sign-in happens over an emailed code rather than a password, so there is no password to steal; the code is stored hashed with argon2id and is dead ten minutes after it was mailed. Sessions are opaque tokens you can review and revoke. Purchased and gated media is stored privately and every link to it is generated per request, after re-checking that you're allowed to have it. Card details never reach our servers.",
+		"Sign-in happens over a code we email you, so there is no password to steal; the code is stored hashed with argon2id and is dead ten minutes after it was mailed. Sessions are opaque tokens you can review and revoke. Purchased and gated media is stored privately and every link to it is generated per request, after re-checking that you're allowed to have it. Card details never reach our servers.",
 		"No system is perfectly secure, and we will tell you promptly if something happens that affects you.",
 
 		"## Changes",
