@@ -98,16 +98,22 @@ function LoggedInLayoutInner() {
 			    the basket, which belong to user mode. */}
 			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
 				<div className="navbar-start gap-1">
-					{!onboarding && (
-						<button
-							type="button"
-							className="btn btn-ghost btn-sm btn-square"
-							onClick={toggleSidebar}
-							aria-label="Toggle sidebar"
-						>
-							<Bars3Icon className="w-5 h-5" />
-						</button>
-					)}
+					{/* Kept MOUNTED through onboarding as invisible rather than removed from the
+					    tree: a button that appears after auth resolves remounts navbar-start's
+					    children, and that remounts the drawer-closed state over the one the
+					    provider already opened. `sidebar-phone.authed.e2e.ts` is the guard —
+					    it measures the sidebar's width, and the remount's signature there is a
+					    closed sidebar on a desktop that should have started open. */}
+					<button
+						type="button"
+						className={`btn btn-ghost btn-sm btn-square ${onboarding ? "invisible pointer-events-none" : ""}`}
+						onClick={toggleSidebar}
+						aria-label="Toggle sidebar"
+						aria-hidden={onboarding || undefined}
+						tabIndex={onboarding ? -1 : undefined}
+					>
+						<Bars3Icon className="w-5 h-5" />
+					</button>
 					<Link to={studio ? studioUrl("/") : "/feed"} className="btn btn-ghost px-2 gap-2">
 						<Logo variant="oneline" className="h-9" />
 						{studio && <span className="text-lg font-bold text-primary">Studio</span>}
