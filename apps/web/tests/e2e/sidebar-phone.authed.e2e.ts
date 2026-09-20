@@ -86,8 +86,16 @@ test.describe("on a desktop", () => {
 		await page.goto("/feed");
 		await expect(toggle(page)).toBeVisible();
 
-		const { mainLeft, asideWidth } = await layout(page);
-		expect(asideWidth).toBe(256);
+		// Polled rather than read once: while the account is still loading the sidebar
+		// is deliberately collapsed (a handle-less account has nothing it points at), so
+		// when auth resolves the drawer ANIMATES open over 200ms and a single read lands
+		// mid-transition. The phone tests above already poll for the same reason.
+		await expect
+			.poll(async () => (await layout(page)).asideWidth, {
+				message: "the sidebar never opened beside the page",
+			})
+			.toBe(256);
+		const { mainLeft } = await layout(page);
 		expect(mainLeft, "the sidebar is over the page rather than beside it").toBe(256);
 	});
 });

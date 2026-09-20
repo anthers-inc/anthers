@@ -77,6 +77,13 @@ function LoggedInLayoutInner() {
 	const mode = useAppMode(isCreator);
 	const studio = mode === "studio";
 
+	// An account that has not finished onboarding owns nothing the sidebar points at:
+	// Feed, Library and Discover are all behind ProtectedRoute, which bounces a
+	// handle-less account straight back here — so every link it offers is a dead end
+	// wearing a nav item. The sidebar stays out of the way until there is an account
+	// to navigate with. The toggle button is part of its chrome and goes with it.
+	const onboarding = !user?.username;
+
 	const handleLogout = async () => {
 		await signOut();
 		navigate("/");
@@ -91,11 +98,19 @@ function LoggedInLayoutInner() {
 			    the basket, which belong to user mode. */}
 			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
 				<div className="navbar-start gap-1">
+					{/* Kept MOUNTED through onboarding as invisible rather than removed from the
+					    tree: a button that appears after auth resolves remounts navbar-start's
+					    children, and that remounts the drawer-closed state over the one the
+					    provider already opened. `sidebar-phone.authed.e2e.ts` is the guard —
+					    it measures the sidebar's width, and the remount's signature there is a
+					    closed sidebar on a desktop that should have started open. */}
 					<button
 						type="button"
-						className="btn btn-ghost btn-sm btn-square"
+						className={`btn btn-ghost btn-sm btn-square ${onboarding ? "invisible pointer-events-none" : ""}`}
 						onClick={toggleSidebar}
 						aria-label="Toggle sidebar"
+						aria-hidden={onboarding || undefined}
+						tabIndex={onboarding ? -1 : undefined}
 					>
 						<Bars3Icon className="w-5 h-5" />
 					</button>
@@ -208,7 +223,7 @@ function LoggedInLayoutInner() {
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
 				    is also what decides that a phone starts with it closed. */}
 				<aside
-					className={`${sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
+					className={`${!onboarding && sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
 				>
 					<div className="w-64 h-full flex flex-col overflow-y-auto">
 						{isCreator && (
@@ -270,7 +285,7 @@ function LoggedInLayoutInner() {
 				</aside>
 
 				{/* The drawer's backdrop on a phone: a tap on the covered page closes it. */}
-				{sidebarOpen && (
+				{!onboarding && sidebarOpen && (
 					<button
 						type="button"
 						aria-label="Close sidebar"
@@ -285,7 +300,7 @@ function LoggedInLayoutInner() {
 					size, so wide inner grids/tables can't blow the page wider than the
 					viewport on mobile — the same guard LoggedOutLayout's <main> carries. */}
 				<main
-					className={`flex-1 min-w-0 overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+					className={`flex flex-1 min-w-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
 				>
 					<RouteSuspense>
 						<Outlet />

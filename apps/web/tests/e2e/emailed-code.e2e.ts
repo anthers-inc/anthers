@@ -47,6 +47,17 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 	// A new account owes a username, so the ceremony's last page is next.
 	await expect(page).toHaveURL(/\/welcome/, { timeout: 15_000 });
 
+	// And the ceremony is all that is on it. Every sidebar destination is behind
+	// ProtectedRoute, which sends a handle-less account straight back here — so on this
+	// page the nav is a list of dead ends, and LoggedInLayout leaves it out until there
+	// is an account to navigate with. (Pinned here because this is the one existing walk
+	// that lands on /welcome as a nameless account; the toggle lives in the header.)
+	//
+	// 🚨 The nav's existence is asserted by an element that only renders with it — not by
+	// the links, which sit inside a `w-0` collapsed aside and so are in the DOM either
+	// way. The hamburger button that opens the drawer goes away with its chrome.
+	await expect(page.getByRole("button", { name: /toggle sidebar/i })).toHaveCount(0);
+
 	const me = (await (await page.request.get(`${API_URL}/api/auth/me`)).json()) as {
 		user: { email: string; atprotoHandle: string; atprotoDid: string } | null;
 	};
