@@ -229,17 +229,140 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
  */
 export function purgeAccountsCreatedHere(): void {
 	let highWater = 0;
+	let worksWater = 0;
+	let postsWater = 0;
+	let commentsWater = 0;
+	let reviewsWater = 0;
 
 	beforeAll(async () => {
-		const [row] = await db.select({ id: users.id }).from(users).orderBy(desc(users.id)).limit(1);
-		highWater = row?.id ?? 0;
+		const [row, w, p, cmt, rv] = await Promise.all([
+			db.select({ id: users.id }).from(users).orderBy(desc(users.id)).limit(1),
+			db.select({ id: works.id }).from(works).orderBy(desc(works.id)).limit(1),
+			db.select({ id: posts.id }).from(posts).orderBy(desc(posts.id)).limit(1),
+			db.select({ id: comments.id }).from(comments).orderBy(desc(comments.id)).limit(1),
+			db.select({ id: reviews.id }).from(reviews).orderBy(desc(reviews.id)).limit(1),
+		]);
+		highWater = row[0]?.id ?? 0;
+		worksWater = w[0]?.id ?? 0;
+		postsWater = p[0]?.id ?? 0;
+		commentsWater = cmt[0]?.id ?? 0;
+		reviewsWater = rv[0]?.id ?? 0;
 	});
 
 	// In `afterAll` rather than a closing `it`, so a suite that bails early still cleans up.
+	//
+	// The content sweep rides the same marks and files in the same place, because the
+	// reason it exists is the accounts one cannot see it: a suite that exercises account
+	// erasure is asserting that removal is a state and never a delete, so the Work, the
+	// purchase, and the comment all outlive the account they belonged to — by design —
+	// and a purge keyed on `users` cannot find them. Found the hard way: the suites
+	// insert through the POST /api/content/works route or the shared fixture, and the
+	// content sits above the works water mark while its creator row is already gone.
 	afterAll(async () => {
-		const created = await db.select({ id: users.id }).from(users).where(gt(users.id, highWater));
+		const [created, madeWorks, madePosts, madeComments, madeReviews] = await Promise.all([
+			db.select({ id: users.id }).from(users).where(gt(users.id, highWater)),
+			db.select({ id: works.id }).from(works).where(gt(works.id, worksWater)),
+			db.select({ id: posts.id }).from(posts).where(gt(posts.id, postsWater)),
+			db.select({ id: comments.id }).from(comments).where(gt(comments.id, commentsWater)),
+			db.select({ id: reviews.id }).from(reviews).where(gt(reviews.id, reviewsWater)),
+		]);
+		await purgeContentByIds(
+			madeWorks.map((r) => r.id),
+			madePosts.map((r) => r.id),
+			madeComments.map((r) => r.id),
+			madeReviews.map((r) => r.id),
+		);
 		await purgeAccountIds(created.map((r) => r.id));
 	});
+}
+
+/**
+ * The content half of the sweep, factored out of `purgeAccountsCreatedHere` because it
+ * has to exist as a thing on its own: a suite asserts orphaning as a *behavior*, and the
+ * rows that behavior leaves cannot be discovered from the account that made them.
+ *
+ * Deleting in dependency order because each of the pointing tables carries `set null` or
+ * no FK at all on its subject, and the subject is what is going away — the same shape the
+ * account half handles for people.
+ */
+async function purgeContentByIds(
+	workIds: number[],
+	postIds: number[],
+	commentIds: number[],
+	reviewIds: number[],
+): Promise<void> {
+	if (commentIds.length > 0) {
+		await db
+			.delete(moderationActions)
+			.where(
+				and(
+					eq(moderationActions.subjectType, "comment"),
+					inArray(moderationActions.subjectId, commentIds),
+				),
+			);
+		await db
+			.delete(votes)
+			.where(and(eq(votes.subjectType, "comment"), inArray(votes.subjectId, commentIds)));
+		await db.delete(comments).where(inArray(comments.id, commentIds));
+	}
+	if (reviewIds.length > 0) {
+		await db
+			.delete(moderationActions)
+			.where(
+				and(
+					eq(moderationActions.subjectType, "rating"),
+					inArray(moderationActions.subjectId, reviewIds),
+				),
+			);
+		await db.delete(reviews).where(inArray(reviews.id, reviewIds));
+	}
+	if (workIds.length > 0) {
+		await purgeWorkIds(workIds);
+	}
+	if (postIds.length > 0) {
+		await db
+			.delete(moderationReports)
+			.where(
+				and(
+					eq(moderationReports.subjectType, "post"),
+					inArray(moderationReports.subjectId, postIds),
+				),
+			);
+		await db.delete(posts).where(inArray(posts.id, postIds));
+	}
+}
+
+/**
+ * Delete Works by id, with the rows that would otherwise orphan pointing at them.
+ *
+ * A Work's own variants (`assets`, `media_scans`, `transcoding_jobs`, `library_items`,
+ * `work_pages`, share links) cascade. What does not is the dependency-order pass every
+ * other sweep in this file already follows: a purchase (outlives the Work in production,
+ * not in a fixture), the ledger rows that name it (`SET NULL` would strand them), the
+ * quarantine finding, and a moderation report whose subject is the Work.
+ *
+ * Exported for `work-fixtures.ts`, whose `insertWork` is how most Works arrive in a test
+ * at all — a sweep keyed on the account that made the content cannot reach those, which
+ * is the finding this exists to answer.
+ */
+export async function purgeWorkIds(workIds: number[]): Promise<void> {
+	if (workIds.length === 0) return;
+	const purchasesHere = await db
+		.select({ id: purchases.id })
+		.from(purchases)
+		.where(inArray(purchases.workId, workIds));
+	const purchaseIds = purchasesHere.map((r) => r.id);
+	if (purchaseIds.length > 0) {
+		await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, purchaseIds));
+	}
+	await db.delete(purchases).where(inArray(purchases.workId, workIds));
+	await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));
+	await db
+		.delete(moderationReports)
+		.where(
+			and(eq(moderationReports.subjectType, "work"), inArray(moderationReports.subjectId, workIds)),
+		);
+	await db.delete(works).where(inArray(works.id, workIds));
 }
 
 /**
