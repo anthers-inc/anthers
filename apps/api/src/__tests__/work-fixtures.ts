@@ -14,6 +14,7 @@
  * staging is the thing being tested.
  */
 
+import { afterAll } from "bun:test";
 import { db } from "@anthers/db/client";
 import type { SeedAccessRow } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
@@ -21,6 +22,25 @@ import { needsChosenThumbnail } from "@anthers/shared/content";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
+import { purgeWorkIds } from "./cleanup";
+
+/**
+ * Every Work this file's suites inserted, swept when the file ends.
+ *
+ * A Work written here exists for the account an erasure suite deletes as its test — and
+ * `purgeAccountsCreatedHere` then cannot reach it, because reaching a Work through a
+ * deleted account is precisely the impossibility those suites assert. The ids are tracked
+ * at insert and taken back in `afterAll`, where a suite that bails early still runs them.
+ *
+ * 🚨 **Registered at MODULE scope, which is per test file.** Bun gives each file its own
+ * instance of every import, so this list and this `afterAll` belong to the file that is
+ * running — never to a neighbor — on the same sequential-file guarantee the other purges
+ * in `cleanup.ts` carry.
+ */
+const insertedWorkIds: number[] = [];
+afterAll(async () => {
+	await purgeWorkIds(insertedWorkIds);
+});
 
 /**
  * A random starting point for this module instance, and a counter from there.
@@ -137,6 +157,7 @@ export async function insertWork(fixture: WorkFixture) {
 			metadata: fixture.metadata ?? {},
 		})
 		.returning();
+	insertedWorkIds.push(row.id);
 	return row;
 }
 

@@ -37,14 +37,13 @@ import {
 	runDueDeletions,
 } from "../services/account-deletion.js";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere, purgeContentCreatedHere } from "./cleanup";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
-purgeContentCreatedHere();
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
