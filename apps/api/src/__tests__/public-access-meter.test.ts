@@ -95,12 +95,20 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 
 /** Put `seconds` of Public Access on the clock for a viewer, this month. */
 async function spend(userId: number, seconds: number, publicAccess = true) {
+	// A range, matching the model: the interval just ended, running `seconds` long.
+	// Duration-only rows are pre-range history; a fixture that needs the split to see
+	// its spend has to record the window, which is all the meter reads.
+	const endedAt = new Date();
+	const startedAt = new Date(endedAt.getTime() - seconds * 1_000);
 	await db.insert(attentionEvents).values({
 		userId,
 		creatorId,
 		workId: paWorkId,
 		eventType: "watch",
 		durationSeconds: seconds,
+		startedAt,
+		endedAt,
+		clientId: `fixture-${userId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
 		publicAccess,
 	});
 }
@@ -342,14 +350,26 @@ describe("the stamp is taken at write time", () => {
 		const { cookie, id } = await signUp(`pam_write_${run}`);
 		await setSupport(id, 0);
 
-		const post = (workId: number) =>
-			req("/api/subscriptions/attention", {
+		const post = (workId: number) => {
+			const now = Date.now();
+			return req("/api/subscriptions/attention", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 				body: JSON.stringify({
-					events: [{ creatorId, workId, eventType: "watch", durationSeconds: 120 }],
+					events: [
+						{
+							creatorId,
+							workId,
+							eventType: "watch",
+							durationSeconds: 120,
+							startedAt: now - 121_000,
+							endedAt: now - 1_000,
+							clientId: `pam-${Math.random().toString(36).slice(2)}`,
+						},
+					],
 				}),
 			});
+		};
 
 		// The commons: counted.
 		expect((await post(paWorkId)).status).toBe(200);
@@ -386,11 +406,22 @@ describe("the stamp is taken at write time", () => {
 			ON CONFLICT DO NOTHING
 		`);
 
+		const now = Date.now();
 		const res = await req("/api/subscriptions/attention", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 			body: JSON.stringify({
-				events: [{ creatorId, workId: gatedWorkId, eventType: "watch", durationSeconds: 300 }],
+				events: [
+					{
+						creatorId,
+						workId: gatedWorkId,
+						eventType: "watch",
+						durationSeconds: 300,
+						startedAt: now - 301_000,
+						endedAt: now - 1_000,
+						clientId: `pam-cleared-${Math.random().toString(36).slice(2)}`,
+					},
+				],
 			}),
 		});
 		// Eligible and recorded — the creator is paid for this time.

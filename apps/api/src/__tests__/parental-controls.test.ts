@@ -19,6 +19,7 @@ import { accounts, attentionEvents, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -437,12 +438,12 @@ describe("Parental controls", () => {
 		).json();
 		expect(before.work.bodyHtml).toBe("<p>the-prose</p>");
 
-		await db.insert(attentionEvents).values({
+		await insertAttentionRange({
 			userId: childId,
 			creatorId,
 			workId: textId,
 			eventType: "read",
-			durationSeconds: 1800,
+			seconds: 1800,
 			publicAccess: true,
 		});
 
@@ -467,12 +468,12 @@ describe("Parental controls", () => {
 			pin: PIN,
 			limits: { daily: 600, weekly: null, monthly: null },
 		});
-		await db.insert(attentionEvents).values({
+		await insertAttentionRange({
 			userId: childId,
 			creatorId,
 			workId: textId,
 			eventType: "read",
-			durationSeconds: 600,
+			seconds: 600,
 			// Not the commons — gated work they cleared, or bought.
 			publicAccess: false,
 		});
@@ -490,12 +491,12 @@ describe("Parental controls", () => {
 			pin: PIN,
 			limits: { daily: 60, weekly: null, monthly: null },
 		});
-		await db.insert(attentionEvents).values({
+		await insertAttentionRange({
 			userId: childId,
 			creatorId,
 			workId: videoId,
 			eventType: "watch",
-			durationSeconds: 60,
+			seconds: 60,
 			publicAccess: true,
 		});
 
@@ -520,12 +521,12 @@ describe("Parental controls", () => {
 				rules: [{ key: String(creatorId), allow: true, dailySeconds: 600 }],
 			},
 		});
-		await db.insert(attentionEvents).values({
+		await insertAttentionRange({
 			userId: childId,
 			creatorId,
 			workId: textId,
 			eventType: "read",
-			durationSeconds: 600,
+			seconds: 600,
 			publicAccess: true,
 		});
 

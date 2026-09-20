@@ -61,7 +61,8 @@
 import { db } from "@anthers/db";
 import { attentionEvents } from "@anthers/db/schema";
 import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
-import { inArray, lt, type SQL, sql } from "drizzle-orm";
+import { inArray, type SQL, sql } from "drizzle-orm";
+import { creditedSecondsForRollup, visitPingsForRollup } from "../services/attention-ranges.js";
 import { allHeldSubjectIds } from "../services/legal-hold.js";
 
 export interface PruneAttentionData {
@@ -111,12 +112,16 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 	// is exactly the corruption the paragraph above describes, and a hold is a reason to
 	// prune part of a day. Excluding in the HAVING also means a held day does not consume
 	// a slot against `maxDays`, so a long-running hold cannot starve the backlog.
+	//
+	// Days are named by the range's real time (started_at), not when it was recorded —
+	// what is being retained and rolled up is when the watching happened.
+	const RANGE_START_DAY = sql`to_char(COALESCE(${attentionEvents.startedAt}, ${attentionEvents.createdAt} - make_interval(secs => COALESCE(${attentionEvents.durationSeconds}, 0))) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
 	const dayRows = await db
-		.select({
-			day: sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
-		})
+		.select({ day: sql<string>`${RANGE_START_DAY}` })
 		.from(attentionEvents)
-		.where(lt(attentionEvents.createdAt, cutoff))
+		.where(
+			sql`COALESCE(${attentionEvents.startedAt}, ${attentionEvents.createdAt} - make_interval(secs => COALESCE(${attentionEvents.durationSeconds}, 0))) < ${cutoffIso}::timestamptz`,
+		)
 		.groupBy(sql`1`)
 		.having(rowIsHeld ? sql`bool_or(${rowIsHeld}) = false` : undefined)
 		.orderBy(sql`1`)
@@ -124,44 +129,109 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 
 	// Reported so a held backlog is visible in the logs rather than looking like an idle
 	// job. Skipped entirely when nothing is held, which is every ordinary run.
-	const daysHeld = rowIsHeld ? await countHeldDays(cutoff, rowIsHeld) : 0;
+	const daysHeld = rowIsHeld ? await countHeldDays(cutoff, rowIsHeld, RANGE_START_DAY) : 0;
 
 	let rowsAggregated = 0;
 	let rowsDeleted = 0;
 
 	for (const { day } of dayRows) {
+		// Aggregate → upsert → delete, all inside one transaction for this day. A
+		// crash anywhere rolls the whole day back and the next run redoes it.
+		const dayStartUtc = new Date(`${day}T00:00:00Z`);
+		const dayEndUtc = new Date(dayStartUtc.getTime() + 24 * 3_600_000);
+
+		// 🚨 The rollup happens per ACCOUNT, because the split it applies is a property
+		// of one person's overlapping ranges — their own tabs and devices sharing each
+		// second evenly. Summing raw durations across people never overlaps in a way
+		// the split is about; summing ONE person does. So the day's viewers are
+		// enumerated, each split against themselves, and contributions are accumulated
+		// per (creator, Work, event type) — while `unique_viewers` still counts people,
+		// not their seconds.
+		const viewers = await db
+			.select({ userId: attentionEvents.userId })
+			.from(attentionEvents)
+			.where(sql`${RANGE_START_DAY} = ${day}`)
+			.groupBy(attentionEvents.userId);
+
 		await db.transaction(async (tx) => {
-			// Aggregate → upsert → delete, all inside one transaction for this day. A
-			// crash anywhere rolls the whole day back and the next run redoes it.
-			const inserted = await tx.execute(sql`
-				INSERT INTO attention_daily
-					(creator_id, work_id, day, event_type, event_count, total_seconds, unique_viewers)
-				SELECT
-					creator_id,
-					work_id,
-					to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
-					event_type,
-					count(*)::int,
-					COALESCE(sum(duration_seconds), 0)::int,
-					count(DISTINCT user_id)::int
-				FROM attention_events
-				WHERE created_at < ${cutoffIso}::timestamptz
-				  AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = ${day}
-				GROUP BY creator_id, work_id, day, event_type
-				-- Must name the same expression as the unique index, COALESCE included, or
-				-- Postgres finds no matching arbiter and raises rather than upserting.
-				ON CONFLICT (creator_id, COALESCE(work_id, -1), day, event_type) DO UPDATE SET
-					event_count = excluded.event_count,
-					total_seconds = excluded.total_seconds,
-					unique_viewers = excluded.unique_viewers
-				RETURNING id
-			`);
-			rowsAggregated += rowCount(inserted);
+			// Accumulate this day's rows per group. `event_count` counts every row
+			// (ranges and visit pings alike — the analytics signal), `total_seconds` is
+			// the split time, and each group remembers which people it saw.
+			const groups = new Map<
+				string,
+				{
+					creatorId: number;
+					workId: number | null;
+					eventType: string;
+					eventCount: number;
+					totalSeconds: number;
+					viewers: Set<number>;
+				}
+			>();
+			const tally = (g: {
+				creatorId: number;
+				workId: number | null;
+				eventType: string;
+				userId: number;
+				seconds: number;
+				events: number;
+			}) => {
+				const key = `${g.creatorId}:${g.workId ?? "none"}:${g.eventType}`;
+				const held = groups.get(key);
+				if (held) {
+					held.totalSeconds += g.seconds;
+					held.eventCount += g.events;
+					held.viewers.add(g.userId);
+				} else {
+					groups.set(key, {
+						creatorId: g.creatorId,
+						workId: g.workId,
+						eventType: g.eventType,
+						eventCount: g.events,
+						totalSeconds: g.seconds,
+						viewers: new Set([g.userId]),
+					});
+				}
+			};
+
+			for (const { userId } of viewers) {
+				// Timed ranges, split against this viewer's own other ranges for the day.
+				// Each returned group is one row per range, so a group's rows are counted
+				// as the events they were.
+				for (const g of await creditedSecondsForRollup(userId, dayStartUtc, dayEndUtc)) {
+					tally({ ...g, userId, seconds: g.totalSeconds, events: g.rangeCount });
+				}
+				// Zero-duration visit pings carry no time and enter the split nowhere, but
+				// they are the analytics signal for surfaces that earn nothing — count them.
+				for (const ping of await visitPingsForRollup(userId, dayStartUtc, dayEndUtc)) {
+					tally({ ...ping, userId, seconds: 0, events: ping.eventCount });
+				}
+			}
+
+			for (const g of groups.values()) {
+				// Must name the same expression as the unique index, COALESCE included, or
+				// Postgres finds no matching arbiter and raises rather than upserting. The
+				// upsert OVERWRITES rather than adds, so a re-run re-derives the same
+				// totals from whatever rows remain instead of doubling them.
+				await tx.execute(sql`
+					INSERT INTO attention_daily
+						(creator_id, work_id, day, event_type, event_count, total_seconds, unique_viewers)
+					VALUES (
+						${g.creatorId}, ${g.workId}, ${day}, ${g.eventType}, ${g.eventCount},
+						${Math.round(g.totalSeconds)}, ${g.viewers.size}
+					)
+					ON CONFLICT (creator_id, COALESCE(work_id, -1), day, event_type) DO UPDATE SET
+						event_count = excluded.event_count,
+						total_seconds = excluded.total_seconds,
+						unique_viewers = excluded.unique_viewers
+				`);
+			}
+			rowsAggregated += groups.size;
 
 			const deleted = await tx.execute(sql`
 				DELETE FROM attention_events
-				WHERE created_at < ${cutoffIso}::timestamptz
-				  AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = ${day}
+				WHERE to_char(COALESCE(started_at, created_at - make_interval(secs => COALESCE(duration_seconds, 0))) AT TIME ZONE 'UTC', 'YYYY-MM-DD') = ${day}
+				  AND COALESCE(started_at, created_at - make_interval(secs => COALESCE(duration_seconds, 0))) < ${cutoffIso}::timestamptz
 				RETURNING id
 			`);
 			rowsDeleted += rowCount(deleted);
@@ -189,13 +259,13 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 }
 
 /** How many prunable UTC days are being left alone for a hold. */
-async function countHeldDays(cutoff: Date, rowIsHeld: SQL): Promise<number> {
+async function countHeldDays(cutoff: Date, rowIsHeld: SQL, dayExpr: SQL): Promise<number> {
 	const rows = await db
-		.select({
-			day: sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
-		})
+		.select({ day: sql<string>`${dayExpr}` })
 		.from(attentionEvents)
-		.where(lt(attentionEvents.createdAt, cutoff))
+		.where(
+			sql`COALESCE(${attentionEvents.startedAt}, ${attentionEvents.createdAt} - make_interval(secs => COALESCE(${attentionEvents.durationSeconds}, 0))) < ${cutoff.toISOString()}::timestamptz`,
+		)
 		.groupBy(sql`1`)
 		.having(sql`bool_or(${rowIsHeld}) = true`);
 	return rows.length;

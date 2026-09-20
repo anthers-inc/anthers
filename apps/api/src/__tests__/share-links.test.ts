@@ -35,6 +35,7 @@ import { SHARED_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -321,7 +322,17 @@ describe("Share links", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
 			body: JSON.stringify({
-				events: [{ creatorId, eventType: "watch", durationSeconds: 60, workId: openId }],
+				events: [
+					{
+						creatorId,
+						eventType: "watch",
+						durationSeconds: 60,
+						workId: openId,
+						startedAt: Date.now() - (60 + 1) * 1_000,
+						endedAt: Date.now() - 1_000,
+						clientId: `sl-${Math.random().toString(36).slice(2)}`,
+					},
+				],
 			}),
 		});
 		expect(res.status).toBe(200);
@@ -352,7 +363,17 @@ describe("Share links", () => {
 				Cookie: creatorCookie,
 			},
 			body: JSON.stringify({
-				events: [{ creatorId, eventType: "watch", durationSeconds: 5, workId: openId }],
+				events: [
+					{
+						creatorId,
+						eventType: "watch",
+						durationSeconds: 5,
+						workId: openId,
+						startedAt: Date.now() - (5 + 1) * 1_000,
+						endedAt: Date.now() - 1_000,
+						clientId: `sl-${Math.random().toString(36).slice(2)}`,
+					},
+				],
 			}),
 		});
 		expect(res.status).toBe(200);
@@ -390,7 +411,17 @@ describe("Share links", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
 			body: JSON.stringify({
-				events: [{ creatorId: sharerId, eventType: "read", durationSeconds: 30, workId: mine.id }],
+				events: [
+					{
+						creatorId: sharerId,
+						eventType: "read",
+						durationSeconds: 30,
+						workId: mine.id,
+						startedAt: Date.now() - (30 + 1) * 1_000,
+						endedAt: Date.now() - 1_000,
+						clientId: `sl-${Math.random().toString(36).slice(2)}`,
+					},
+				],
 			}),
 		});
 
@@ -417,12 +448,12 @@ describe("Share links", () => {
 			...OPEN,
 		});
 		const token = await forceLink(otherId, spender.id);
-		await db.insert(attentionEvents).values({
+		await insertAttentionRange({
 			userId: otherId,
 			creatorId,
 			workId: spender.id,
 			eventType: "read",
-			durationSeconds: SHARED_PUBLIC_ACCESS_SECONDS,
+			seconds: SHARED_PUBLIC_ACCESS_SECONDS,
 			publicAccess: true,
 			viaShareLink: true,
 		});

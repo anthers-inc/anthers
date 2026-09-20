@@ -36,7 +36,8 @@ import {
 	type ShareLinkBudget,
 	shareLinkBudget,
 } from "@anthers/shared/public-access";
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { creditedSeconds } from "./attention-ranges";
 
 /**
  * The window a free account's ten hours are counted over.
@@ -58,25 +59,19 @@ function monthEnd(now: Date = new Date()): Date {
 /**
  * Public Access seconds this viewer has watched in the current calendar month.
  *
- * Reads the stamped `public_access` flag rather than joining to `works` and re-deciding —
- * see the column's own note. A viewer with no attention rows sums to zero.
+ * Ranges split on read: overlapping ranges across every tab and device share each
+ * second evenly, so the meter can never be charged more than one second per second
+ * of real time. Reads the stamped `public_access` flag rather than joining to
+ * `works` and re-deciding — see the column's own note. A viewer with no attention
+ * rows amounts to zero.
  */
 export async function publicAccessSecondsThisMonth(
 	userId: number,
 	now: Date = new Date(),
 ): Promise<number> {
-	const [row] = await db
-		.select({ total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int` })
-		.from(attentionEvents)
-		.where(
-			and(
-				eq(attentionEvents.userId, userId),
-				eq(attentionEvents.publicAccess, true),
-				gte(attentionEvents.createdAt, monthStart(now)),
-				lt(attentionEvents.createdAt, monthEnd(now)),
-			),
-		);
-	return Number(row?.total ?? 0);
+	return creditedSeconds(userId, monthStart(now), monthEnd(now), [
+		eq(attentionEvents.publicAccess, true),
+	]);
 }
 
 /**
@@ -123,18 +118,9 @@ export async function shareLinkSecondsThisMonth(
 	sharerId: number,
 	now: Date = new Date(),
 ): Promise<number> {
-	const [row] = await db
-		.select({ total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int` })
-		.from(attentionEvents)
-		.where(
-			and(
-				eq(attentionEvents.userId, sharerId),
-				eq(attentionEvents.viaShareLink, true),
-				gte(attentionEvents.createdAt, monthStart(now)),
-				lt(attentionEvents.createdAt, monthEnd(now)),
-			),
-		);
-	return Number(row?.total ?? 0);
+	return creditedSeconds(sharerId, monthStart(now), monthEnd(now), [
+		eq(attentionEvents.viaShareLink, true),
+	]);
 }
 
 /**

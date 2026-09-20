@@ -84,17 +84,33 @@ async function idOf(username: string): Promise<number> {
 	return row.id;
 }
 
-/** Insert a raw attention row directly, back-dated — the endpoint always stamps now(). */
+/**
+ * Insert a raw attention RANGE directly, back-dated — the endpoint always stamps
+ * now(). The row carries its real window, which is what the rollup splits on: on
+ * `day`, ending at noon UTC minus `offsetSeconds`, running `durationSeconds` long.
+ * Two rows for one person on one day pass different offsets — same-person ranges
+ * that overlap SPLIT, and these fixtures mean full credit, not a division.
+ */
 async function seedEvent(
 	userId: number,
 	day: string,
 	eventType: string,
 	durationSeconds: number,
 	work: number | null = workId,
+	offsetSeconds = 0,
 ) {
+	const endsAt = new Date(`${day}T12:00:00Z`);
+	endsAt.setUTCSeconds(endsAt.getUTCSeconds() - offsetSeconds);
+	const startsAt = new Date(endsAt.getTime() - durationSeconds * 1_000);
 	await db.execute(sql`
-		INSERT INTO attention_events (user_id, creator_id, work_id, event_type, duration_seconds, created_at)
-		VALUES (${userId}, ${creatorId}, ${work}, ${eventType}, ${durationSeconds}, ${`${day}T12:00:00Z`})
+		INSERT INTO attention_events
+			(user_id, creator_id, work_id, event_type, duration_seconds, started_at, ended_at, created_at, client_id)
+		VALUES (
+			${userId}, ${creatorId}, ${work}, ${eventType}, ${durationSeconds},
+			${startsAt.toISOString()}::timestamptz, ${endsAt.toISOString()}::timestamptz,
+			${endsAt.toISOString()},
+			${`ret-${userId}-${day}-${eventType}-${offsetSeconds}-${durationSeconds}`}
+		)
 	`);
 }
 
@@ -118,12 +134,13 @@ beforeAll(async () => {
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;
 
-	// Two viewers on one day, one viewer twice on another, plus a null-Work visit ping —
-	// which is the row the COALESCE key exists for.
+	// Two viewers on one day, one viewer twice on another (back-to-back, never
+	// overlapping — same-person overlap is the split, not this fixture's subject),
+	// plus a null-Work visit ping — which is the row the COALESCE key exists for.
 	await seedEvent(viewerAId, OLD_DAY, "watch", 120);
 	await seedEvent(viewerBId, OLD_DAY, "watch", 45);
 	await seedEvent(viewerAId, OLDER_DAY, "watch", 30);
-	await seedEvent(viewerAId, OLDER_DAY, "watch", 10);
+	await seedEvent(viewerAId, OLDER_DAY, "watch", 10, workId, 30);
 	await seedEvent(viewerAId, OLD_DAY, "page_view", 0, null);
 }, DB_SETUP_TIMEOUT);
 

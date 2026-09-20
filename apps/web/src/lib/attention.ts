@@ -30,8 +30,7 @@ import { useShareToken } from "./share-link";
 
 const TICK_MS = 1_000;
 const FLUSH_INTERVAL_MS = 30_000;
-/** The API caps a single event at 300s and a batch at 50 (`routes/subscriptions.ts`). */
-const MAX_EVENT_SECONDS = 300;
+/** The API caps a batch at 50 and a single range at MAX_RANGE_SECONDS (`routes/subscriptions.ts`). */
 const MAX_EVENTS_PER_REQUEST = 50;
 /** Backstop so a long offline stretch can't grow the queue without bound. */
 const MAX_PENDING_EVENTS = 500;
@@ -76,14 +75,42 @@ interface AttentionEvent {
 	workId?: number | null;
 	eventType: ReturnType<typeof eventTypeFor>;
 	durationSeconds: number;
+	/** The range's real window (epoch ms). Present on every timed event. */
+	startedAt?: number;
+	endedAt?: number;
+	/** Stable per-range identity, so a retried flush is one range, never two. */
+	clientId?: string;
+	// The evidence at the time of the range, for the record.
+	tabVisible?: boolean;
+	elementVisible?: boolean;
+	playing?: boolean;
+	surface?: string;
+	device?: string;
 }
 
 // ── Module state ─────────────────────────────────────────────────────────────
 
 /** Live claims by registration id. */
 const claims = new Map<number, AttentionClaim>();
-/** Fractional seconds earned per creator/post pair, awaiting a whole-second flush. */
+/**
+ * Fractional seconds earned per creator/post pair within the current open range.
+ * A range opens when the pair starts earning and closes on pause, hide, idle,
+ * unmount or flush — so the record is real time spent, not a duration total.
+ */
 const accrued = new Map<string, { claim: AttentionClaim; seconds: number }>();
+/** The open range per claim pair: when this consecutive stretch of earning began. */
+const openRanges = new Map<
+	string,
+	{
+		claim: AttentionClaim;
+		clientId: string;
+		startedAt: number;
+		// The latest evidence snapshot, carried into the closing record.
+		tabVisible?: boolean;
+		elementVisible?: boolean;
+		playing?: boolean;
+	}
+>();
 let pendingEvents: AttentionEvent[] = [];
 
 let nextId = 1;
@@ -149,26 +176,67 @@ function bindListeners() {
 		if (document.visibilityState === "visible") {
 			markInteraction();
 		} else {
-			flushAccrued();
+			// Hidden: presence-mode claims stop earning, which the next tick sees as
+			// dead keys and closes their ranges; flush what is closed.
+			closeAllRanges();
 			void flushEvents();
 		}
 	});
 }
 
+/** Close every open range (tab hiding, engine stopping) so no time is left open. */
+function closeAllRanges() {
+	const now = Date.now();
+	for (const key of [...openRanges.keys()]) closeRange(key, now);
+	// Drop accrued fractional remainders for keys whose range just closed.
+	for (const [key] of accrued) accrued.delete(key);
+}
+
 // ── The ticker ───────────────────────────────────────────────────────────────
 
 function tick() {
-	const credited = creditableClaims([...claims.values()], {
-		visible: typeof document === "undefined" || document.visibilityState === "visible",
-		msSinceInteraction: Date.now() - lastInteractionAt,
-	});
-	if (credited.length === 0) return;
+	const visible = typeof document === "undefined" || document.visibilityState === "visible";
+	const msSinceInteraction = Date.now() - lastInteractionAt;
+	const credited = creditableClaims([...claims.values()], { visible, msSinceInteraction });
 
-	// Split the tick evenly: a user's real second never becomes two credited
-	// seconds, however many things are playing at once.
+	// Split the tick evenly across this tab's credited claims, as before. What changes
+	// is what each claim does with its share: rather than accruing toward a whole-second
+	// duration ping, a claim accumulates contiguous credited ticks into an OPEN RANGE.
+	// Ranges from separate tabs and devices are split on the server, on read.
+	const now = Date.now();
+	const liveKeys = new Set(credited.map(claimKey));
+
+	// Close any range whose claim stopped earning this tick (paused, hidden, idle,
+	// unmounted) — a gap of even one tick ends the consecutive stretch.
+	for (const [key, _range] of openRanges) {
+		if (!liveKeys.has(key)) closeRange(key, now);
+	}
+	// Also close accrued entries for dead keys below, as before.
+	for (const [key] of accrued) if (!liveKeys.has(key)) accrued.delete(key);
+
+	if (credited.length === 0) return;
 	const share = TICK_MS / 1_000 / credited.length;
 	for (const claim of credited) {
 		const key = claimKey(claim);
+		if (!openRanges.has(key)) {
+			openRanges.set(key, {
+				claim,
+				clientId:
+					typeof crypto !== "undefined" && crypto.randomUUID
+						? crypto.randomUUID()
+						: `r-${now.toString(36)}-${Math.random().toString(36).slice(2)}`,
+				startedAt: now,
+				tabVisible: visible,
+				elementVisible: claim.elementVisible,
+				playing: claim.playing,
+			});
+		} else {
+			const r = openRanges.get(key)!;
+			// Keep the evidence current over the range's life.
+			r.tabVisible = visible;
+			r.elementVisible = claim.elementVisible;
+			r.playing = claim.playing;
+		}
 		const entry = accrued.get(key);
 		if (entry) {
 			entry.claim = claim;
@@ -179,25 +247,70 @@ function tick() {
 	}
 }
 
-/** Move whole accrued seconds into pending events, carrying the fraction forward. */
-function flushAccrued() {
-	const liveKeys = new Set([...claims.values()].map(claimKey));
+/**
+ * Close the open range for a claim pair: what fractional time it actually earned
+ * this stretch becomes the reported durationSeconds, and the range's real window
+ * is [StartedAt, now]. A sub-second remainder that never reached a whole second
+ * still closes the range — the split divides real time, and a 0.4s stretch is
+ * still half of a contested 0.8s.
+ */
+function closeRange(key: string, endedAt: number) {
+	const range = openRanges.get(key);
+	if (!range) return;
+	openRanges.delete(key);
+	const entry = accrued.get(key);
+	const seconds = entry ? entry.seconds : 0;
+	accrued.delete(key);
 
-	for (const [key, entry] of accrued) {
-		const whole = Math.floor(entry.seconds);
-		if (whole > 0) {
-			entry.seconds -= whole;
-			pushEvent({
-				creatorId: entry.claim.creatorId,
-				workId: entry.claim.workId,
-				eventType: eventTypeFor(entry.claim.contentType),
-				durationSeconds: Math.min(whole, MAX_EVENT_SECONDS),
-			});
-		}
-		// Drop sub-second remainders for pairs nothing is claiming any more, so a
-		// long browsing session doesn't accumulate dead keys.
-		if (entry.seconds < 1 && !liveKeys.has(key)) accrued.delete(key);
+	// Sub-tick or empty ranges (opened and closed within a second with less than a
+	// tick's worth of credit) are noise the read side can never need; drop them.
+	if (seconds < 0.5) return;
+
+	pushEvent({
+		creatorId: range.claim.creatorId,
+		workId: range.claim.workId,
+		eventType: eventTypeFor(range.claim.contentType),
+		durationSeconds: Math.floor(seconds),
+		startedAt: range.startedAt,
+		endedAt,
+		clientId: range.clientId,
+		tabVisible: range.tabVisible,
+		elementVisible: range.elementVisible,
+		playing: range.playing,
+		surface: currentSurface(),
+		device: currentDevice(),
+	});
+}
+
+/**
+ * Which surface raised the claims — the coarse route family, for the record a
+ * person reads back in their activity history. This is the pathname's first
+ * segment rather than a route id, because a range should say "you were on a Work
+ * page" and not enumerate routes.
+ */
+function currentSurface(): string {
+	if (typeof window === "undefined") return "web";
+	const first = window.location.pathname.split("/").filter(Boolean)[0];
+	switch (first) {
+		case "works":
+			return "work";
+		case "posts":
+			return "post";
+		case "library":
+			return "library";
+		case "studio":
+			return "studio";
+		default:
+			return first ? `web:${first.slice(0, 32)}` : "web";
 	}
+}
+
+/** Broad device class for the record: the desktop shell, or touch vs not. */
+function currentDevice(): string {
+	if (typeof navigator === "undefined") return "desktop";
+	// The desktop shell names itself on `globalThis.__ANTHERS_DESKTOP__` (see rpc.ts).
+	if ("__ANTHERS_DESKTOP__" in (window as object)) return "desktop-shell";
+	return navigator.maxTouchPoints > 0 ? "mobile" : "desktop";
 }
 
 function pushEvent(event: AttentionEvent) {
@@ -225,6 +338,16 @@ async function flushEvents() {
 					eventType: e.eventType,
 					durationSeconds: e.durationSeconds,
 					...(e.workId != null ? { workId: e.workId } : {}),
+					// The range's real window and identity — present on every timed event,
+					// omitted on zero-duration visit pings.
+					...(e.startedAt != null ? { startedAt: e.startedAt } : {}),
+					...(e.endedAt != null ? { endedAt: e.endedAt } : {}),
+					...(e.clientId != null ? { clientId: e.clientId } : {}),
+					...(e.tabVisible != null ? { tabVisible: e.tabVisible } : {}),
+					...(e.elementVisible != null ? { elementVisible: e.elementVisible } : {}),
+					...(e.playing != null ? { playing: e.playing } : {}),
+					...(e.surface != null ? { surface: e.surface } : {}),
+					...(e.device != null ? { device: e.device } : {}),
 				})),
 			},
 		});
@@ -254,7 +377,10 @@ function startEngine() {
 	if (!ticker) ticker = setInterval(tick, TICK_MS);
 	if (!flusher) {
 		flusher = setInterval(() => {
-			flushAccrued();
+			// A long-lived range is flushed periodically rather than only at its end, so a
+			// crash mid-session doesn't lose hours, and each flush closes and reopens the
+			// range: the server's per-flush rows stay short, well under MAX_RANGE_SECONDS.
+			closeAllRanges();
 			void flushEvents();
 		}, FLUSH_INTERVAL_MS);
 	}
@@ -262,7 +388,7 @@ function startEngine() {
 
 function stopEngineIfIdle() {
 	if (claims.size > 0) return;
-	flushAccrued();
+	closeAllRanges();
 	void flushEvents();
 	if (ticker) {
 		clearInterval(ticker);

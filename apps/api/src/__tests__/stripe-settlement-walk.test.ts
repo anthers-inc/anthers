@@ -26,7 +26,6 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	accounts,
-	attentionEvents,
 	creatorCredits,
 	crfLedger,
 	invoiceLines,
@@ -45,6 +44,7 @@ import { syncSubscriptionToAccount } from "../services/billing";
 import { recordPaidInvoice } from "../services/invoices";
 import { applyReductionsToInvoice } from "../services/support-reductions";
 import { createAccount } from "./account-fixture";
+import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 purgeAccountsCreatedHere();
@@ -201,13 +201,13 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 
 		// ── Both months settled ──
 		for (const month of [first.row.billingCycle, renewal.row.billingCycle]) {
-			await db.insert(attentionEvents).values({
+			await insertAttentionRange({
 				userId: supporter.userId,
 				creatorId: creator.userId,
 				eventType: "watch",
-				durationSeconds: 1800,
+				seconds: 1800,
 				publicAccess: true,
-				createdAt: new Date(`${month.slice(0, 8)}10T12:00:00Z`),
+				endsAt: new Date(`${month.slice(0, 8)}10T12:00:00Z`),
 			});
 		}
 		await settleCycle({
