@@ -107,3 +107,61 @@ test("an album plays straight from the shelf", async ({ page }) => {
 	await expect(bar).toBeVisible();
 	await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
 });
+
+test("the music lens's spoken-word dial re-scopes the view without touching the shelf", async ({
+	page,
+}) => {
+	await page.goto("/library");
+	await saveFixtures(page);
+
+	// A view change, not a container change — the same invariant the lens itself is
+	// held to: toggling the dial off and on must leave the shelf holding exactly what
+	// it held. The toggle lives only on the music lens.
+	const before = await shelfCount(page);
+	await page.goto("/library?lens=music");
+
+	const dial = page.getByRole("checkbox", { name: /include spoken word/i });
+	await expect(dial).toBeVisible();
+	await expect(dial).not.toBeChecked(); // music by default
+	// Click through the wrapping <label> text rather than `.check()` on the input: the
+	// daisyUI toggle re-skins the control, and the accessible surface a finger or a
+	// reader lands on is the labeled row, which is what the assertion is about.
+	await page.getByText("Include spoken word", { exact: true }).click();
+	await expect(page).toHaveURL(/spoken=1/);
+	await page.getByText("Include spoken word", { exact: true }).click();
+	await expect(page).toHaveURL(/^(?!.*spoken=1).*$/);
+
+	expect(await shelfCount(page), "the dial changed what is IN the Library").toBe(before);
+});
+
+test("the video lens organizes the shelf as a watchlist", async ({ page }) => {
+	await page.goto("/library");
+	await saveFixtures(page);
+
+	// The video fixture is a Work, saved as itself — the lens reads the same `visible`
+	// list the shelf does rather than fetching, so saving it is the whole setup.
+	const cookies = await page.context().cookies();
+	const session = cookies.find((c) => c.name === "session")?.value;
+	const video = await fetch(
+		`${API_URL}/api/content/works/${mediaFixtureWork("video").slug}-${mediaFixtureWork("video").publicId}`,
+	).then((r) => r.json());
+	await fetch(`${API_URL}/api/content/library`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${session}`,
+		},
+		body: JSON.stringify({ workId: video.work.id }),
+	});
+
+	await page.goto("/library?lens=video");
+	await expect(page.getByRole("heading", { name: "Watchlist" })).toBeVisible();
+	await expect(page.getByText(mediaFixtureWork("video").title).first()).toBeVisible();
+
+	// Same rejection of "it's just a filter" as the music lens: the media tabs are a
+	// second, competing way to narrow the same list, and so are gone under a lens.
+	await expect(
+		page.getByRole("tablist", { name: "Media type" }).getByRole("tab", { name: "Video" }),
+	).toBeHidden();
+});
