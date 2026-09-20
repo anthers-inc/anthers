@@ -603,6 +603,10 @@ export const transcodingJobs = pgTable(
 		hlsManifestUrl: text("hls_manifest_url").default(""),
 		outputFileUrl: text("output_file_url").default(""),
 		waveformData: jsonb("waveform_data"),
+		// How many times the boot sweep has handed this job back to a handler. The bound the
+		// row's own life is measured against: a file that cannot fit any worker, or is
+		// genuinely corrupt, would otherwise be resumed on every restart forever.
+		resumeCount: integer("resume_count").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
