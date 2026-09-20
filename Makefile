@@ -106,7 +106,21 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # including after a crash, which the next session cleans up. Every email the servers send lands in
 # the session's mail catcher at http://localhost:8025 rather than in a real inbox. Anything set up by hand during a session is gone when it ends; a file-change restart
 # under `bun --watch` is not an end.
+# 🚨 Refuse a second dev session BEFORE touching anything. Two parallel sessions landed this:
+# `dev-local` used to kill whatever held ports 8000/3000/3001 and only *then* run `session.ts
+# dev`, which refuses a second dev — so a second `make dev` took the first's servers down and
+# started nothing, the worst of both outcomes. The pid-file probe below runs first, so a live dev
+# session makes the command fail loudly and harm nothing. The kill loop stays, but only for ports
+# orphaned by an interrupted run — where no live pid file exists to refuse on.
 dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
+	@for PIDFILE in .dev.pid .dev-api.pid; do \
+		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
+		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
+			echo "  -> A dev session is already running (pid $$DEV_PID, $$PIDFILE)."; \
+			echo "     Refusing to start a second and take its ports. 'make down' stops it first."; \
+			exit 1; \
+		fi; \
+	done
 	@KILLED=0; \
 	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
