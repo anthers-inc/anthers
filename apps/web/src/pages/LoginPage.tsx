@@ -247,13 +247,19 @@ export default function LoginPage() {
 								<span>{errors.general}</span>
 							</div>
 						)}
-						<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1">
+						<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
 							<FormField
 								label="Email"
 								hint="We'll email you a six-character sign-in code — that's how signing in works."
 							>
+								{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
+								    email validation would fire *before* React sees the submit and say
+								    "please include an '@' in the email address", which is a message about
+								    syntax on a page whose real answer is about what signing in *is*. The
+								    loose shape check above is the one whose sentence shows. */}
 								<input
-									type="email"
+									type="text"
+									inputMode="email"
 									className="input input-bordered w-full"
 									autoComplete="email"
 									value={email}

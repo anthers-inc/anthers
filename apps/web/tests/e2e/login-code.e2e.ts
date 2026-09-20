@@ -33,7 +33,7 @@ test.describe("signing in with an emailed code", () => {
 		// 🚨 The load-bearing absence: a password input on this page is the old door
 		// rebuilt. The form asks for the address the code goes to and nothing else.
 		await expect(page.locator('input[type="password"]')).toHaveCount(0);
-		await expect(page.locator('input[type="email"]')).toHaveCount(1);
+		await expect(page.locator('input[autocomplete="email"]')).toHaveCount(1);
 
 		await expect(page.getByText(/six-character sign-in code/i)).toBeVisible();
 		await expect(page.getByRole("button", { name: /email me a sign-in code/i })).toBeVisible();
@@ -43,12 +43,12 @@ test.describe("signing in with an emailed code", () => {
 		await page.goto("/login");
 
 		// The code is keyed on the email address, and resolving a public username to a
-		// private mailbox would let anyone mail anyone by guessing handles. The browser's
-		// own email validation would block this submit before React ever sees it, so the
-		// form is submitted past that layer — what is being tested is the page's message,
-		// not the attribute.
-		await page.locator('input[type="email"]').fill("alice");
-		await page.evaluate(() => document.querySelector("form")?.requestSubmit());
+		// private mailbox would let anyone mail anyone by guessing handles. The shape check
+		// is the page's own, so the message is the page's own too — the input is
+		// deliberately not `type="email"`, which would answer with the browser's sentence
+		// about syntax instead.
+		await page.locator('input[autocomplete="email"]').fill("alice");
+		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 
 		await expect(page.getByText(/needs your email address/i)).toBeVisible();
 		// And no code was asked for: the modal must not open on a request we never sent.
@@ -58,7 +58,7 @@ test.describe("signing in with an emailed code", () => {
 	test("an address opens the code field, in place", async ({ page }) => {
 		await page.goto("/login");
 
-		await page.locator('input[type="email"]').fill(addr());
+		await page.locator('input[autocomplete="email"]').fill(addr());
 		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 
 		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
@@ -74,7 +74,7 @@ test.describe("signing in with an emailed code", () => {
 
 	test("a wrong code is refused, and signs nobody in", async ({ page }) => {
 		await page.goto("/login");
-		await page.locator('input[type="email"]').fill(addr());
+		await page.locator('input[autocomplete="email"]').fill(addr());
 		await page.getByRole("button", { name: /email me a sign-in code/i }).click();
 
 		// Wait for the autofocus rather than for the modal: `keyboard.type` goes wherever
