@@ -26,12 +26,17 @@ import { eraseAccount } from "../services/account-deletion.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import { liftHold, placeHold } from "../services/legal-hold.js";
 import { createAdminFixture } from "./admin-fixture";
-import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import {
+	purgeAccountsCreatedHere,
+	purgeAdminAccountsCreatedHere,
+	purgeContentCreatedHere,
+} from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeContentCreatedHere();
 purgeAdminAccountsCreatedHere();
 
 const RUN = Date.now().toString(36);

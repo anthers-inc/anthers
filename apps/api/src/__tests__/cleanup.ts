@@ -243,6 +243,121 @@ export function purgeAccountsCreatedHere(): void {
 }
 
 /**
+ * The same high-water sweep, for the content a suite created — not the accounts.
+ *
+ * 🚨 **This exists for the suites whose PASSING test orphans a row by design.** A suite
+ * that exercises account erasure is asserting "removal is a state, never a delete" — the
+ * Work, the purchase, the comment all outlive the account they belonged to, which is the
+ * behavior under test. `purgeAccountsCreatedHere` then cannot reach them, because reaching
+ * them through the account is the thing the test just proved is impossible. So they leak:
+ * 25 Works and the rows that follow them, per run, measured 2026-09-19.
+ *
+ * The sweep marks the highest `works.id` and `posts.id` at file start and deletes what
+ * sits above them at file end — content ids rather than account ids, which is the whole
+ * of the difference. Deleting a Work cascades its own assets, scans, transcode jobs and
+ * library rows, and any purchase or moderation action that pointed at it goes too: a test
+ * fixture's row is owed nothing. High-water marks on `comments` and `reviews` cover a
+ * suite that wrote somebody else's thread the same way.
+ */
+export function purgeContentCreatedHere(): void {
+	let worksWater = 0;
+	let postsWater = 0;
+	let commentsWater = 0;
+	let reviewsWater = 0;
+
+	beforeAll(async () => {
+		const [w, p, cmt, rv] = await Promise.all([
+			db.select({ id: works.id }).from(works).orderBy(desc(works.id)).limit(1),
+			db.select({ id: posts.id }).from(posts).orderBy(desc(posts.id)).limit(1),
+			db.select({ id: comments.id }).from(comments).orderBy(desc(comments.id)).limit(1),
+			db.select({ id: reviews.id }).from(reviews).orderBy(desc(reviews.id)).limit(1),
+		]);
+		worksWater = w[0]?.id ?? 0;
+		postsWater = p[0]?.id ?? 0;
+		commentsWater = cmt[0]?.id ?? 0;
+		reviewsWater = rv[0]?.id ?? 0;
+	});
+
+	afterAll(async () => {
+		const [madeWorks, madePosts, madeComments, madeReviews] = await Promise.all([
+			db.select({ id: works.id }).from(works).where(gt(works.id, worksWater)),
+			db.select({ id: posts.id }).from(posts).where(gt(posts.id, postsWater)),
+			db.select({ id: comments.id }).from(comments).where(gt(comments.id, commentsWater)),
+			db.select({ id: reviews.id }).from(reviews).where(gt(reviews.id, reviewsWater)),
+		]);
+		const workIds = madeWorks.map((r) => r.id);
+		const postIds = madePosts.map((r) => r.id);
+		const commentIds = madeComments.map((r) => r.id);
+		const reviewIds = madeReviews.map((r) => r.id);
+
+		// What pointed at the content first, while the pointer still resolves.
+		// `moderation_actions`, `moderation_reports`, `votes` and `stickers` each name a
+		// subject polymorphically or through a `set null` column, which is the same
+		// orphan-by-design shape the accounts purge handles for people.
+		if (commentIds.length > 0) {
+			await db
+				.delete(moderationActions)
+				.where(
+					and(
+						eq(moderationActions.subjectType, "comment"),
+						inArray(moderationActions.subjectId, commentIds),
+					),
+				);
+			await db
+				.delete(votes)
+				.where(and(eq(votes.subjectType, "comment"), inArray(votes.subjectId, commentIds)));
+			await db.delete(comments).where(inArray(comments.id, commentIds));
+		}
+		if (reviewIds.length > 0) {
+			await db
+				.delete(moderationActions)
+				.where(
+					and(
+						eq(moderationActions.subjectType, "rating"),
+						inArray(moderationActions.subjectId, reviewIds),
+					),
+				);
+			await db.delete(reviews).where(inArray(reviews.id, reviewIds));
+		}
+		if (workIds.length > 0) {
+			// A purchase on the Work outlives it by design in production; a fixture's does
+			// not. The ledger rows that name those purchases go first — `SET NULL` would
+			// strand them, which is the lesson the account half of this file already paid.
+			const purchasesHere = await db
+				.select({ id: purchases.id })
+				.from(purchases)
+				.where(inArray(purchases.workId, workIds));
+			const purchaseIds = purchasesHere.map((r) => r.id);
+			if (purchaseIds.length > 0) {
+				await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, purchaseIds));
+			}
+			await db.delete(purchases).where(inArray(purchases.workId, workIds));
+			await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));
+			await db
+				.delete(moderationReports)
+				.where(
+					and(
+						eq(moderationReports.subjectType, "work"),
+						inArray(moderationReports.subjectId, workIds),
+					),
+				);
+			await db.delete(works).where(inArray(works.id, workIds));
+		}
+		if (postIds.length > 0) {
+			await db
+				.delete(moderationReports)
+				.where(
+					and(
+						eq(moderationReports.subjectType, "post"),
+						inArray(moderationReports.subjectId, postIds),
+					),
+				);
+			await db.delete(posts).where(inArray(posts.id, postIds));
+		}
+	});
+}
+
+/**
  * Take back every admin account a suite created, on success or failure.
  *
  * The same high-water shape as `purgeAccountsCreatedHere`, for the same reason: a suite that makes an

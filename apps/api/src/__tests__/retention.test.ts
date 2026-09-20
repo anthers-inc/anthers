@@ -40,12 +40,17 @@ import {
 } from "../services/retention";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
-import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import {
+	purgeAccountsCreatedHere,
+	purgeAdminAccountsCreatedHere,
+	purgeContentCreatedHere,
+} from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
+purgeContentCreatedHere();
 purgeAdminAccountsCreatedHere();
 
 const run = crypto.randomUUID().slice(0, 8);
