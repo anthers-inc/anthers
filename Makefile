@@ -6,6 +6,7 @@
         verify verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
         spec-diff spec-apply deploy-status webhook-check stripe-walk dev-local \
+        worktree worktrees worktree-remove \
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -46,16 +47,21 @@ endif
 API_PORT ?= 8000
 
 # ─── Playwright browsers ───
-# 🚨 **Browsers live in THIS repo, not the machine-wide cache** — locally. Playwright keys
-# them by BUILD number and prunes builds its own version does not reference, so installing
-# browsers for another project deletes the one pinned here. That happened on 2026-09-04 and
-# presented as 162 tests failing in two milliseconds each.
+# 🚨 **Browsers live with Anthers, not the machine-wide cache** — locally, and shared by every
+# worktree. Playwright keys them by BUILD number and prunes builds its own version does not
+# reference, so installing browsers for another project deletes the one pinned here. That
+# happened on 2026-09-04 and presented as 162 tests failing in two milliseconds each.
+#
+# The shared `~/.cache/ms-playwright-anthers` keeps that property — another project's install
+# still cannot reach it — while every worktree of this repository shares one copy instead of
+# downloading its own into node_modules, which `make worktree` would otherwise cost ~646 MB a
+# piece. The path names Anthers so a stale pruning script from elsewhere has no reason to look.
 #
 # ⚠️ **Not in CI, deliberately.** A runner is ephemeral and has no other project to collide
-# with, and `ci.yml` caches `~/.cache/ms-playwright` keyed on the lockfile — moving the
-# binaries into node_modules would defeat that cache for no benefit.
+# with, and `ci.yml` caches `~/.cache/ms-playwright` keyed on the lockfile — pointing that cache
+# at a second directory would defeat it for no benefit.
 ifndef CI
-export PLAYWRIGHT_BROWSERS_PATH := 0
+export PLAYWRIGHT_BROWSERS_PATH := $(HOME)/.cache/ms-playwright-anthers
 endif
 
 WEB_PORT ?= 3000
@@ -106,7 +112,21 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # including after a crash, which the next session cleans up. Every email the servers send lands in
 # the session's mail catcher at http://localhost:8025 rather than in a real inbox. Anything set up by hand during a session is gone when it ends; a file-change restart
 # under `bun --watch` is not an end.
+# 🚨 Refuse a second dev session BEFORE touching anything. Two parallel sessions landed this:
+# `dev-local` used to kill whatever held ports 8000/3000/3001 and only *then* run `session.ts
+# dev`, which refuses a second dev — so a second `make dev` took the first's servers down and
+# started nothing, the worst of both outcomes. The pid-file probe below runs first, so a live dev
+# session makes the command fail loudly and harm nothing. The kill loop stays, but only for ports
+# orphaned by an interrupted run — where no live pid file exists to refuse on.
 dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
+	@for PIDFILE in .dev.pid .dev-api.pid; do \
+		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
+		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
+			echo "  -> A dev session is already running (pid $$DEV_PID, $$PIDFILE)."; \
+			echo "     Refusing to start a second and take its ports. 'make down' stops it first."; \
+			exit 1; \
+		fi; \
+	done
 	@KILLED=0; \
 	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
@@ -176,6 +196,27 @@ down: ## Stop everything
 	if [ "$$FOUND" = "0" ]; then \
 		echo "  -> No dev servers running"; \
 	fi
+
+# ─── Worktrees: one checkout per task (scripts/worktree.ts) ───────────────────
+# A parallel working environment as a feature of the repository rather than of any one
+# harness — Claude Code, OpenCode and a plain terminal all build the same worktree from the
+# same command. `NAME` is a named variable (like APPLY=1 / CHECK=1 above), never a bare word:
+# Make reads a bare word as a goal, so `make worktree signup-page` would ask for a target
+# called `signup-page` rather than pass the name.
+#
+# The branch is named exactly for the task and tracks nothing (see scripts/worktree.ts), and
+# removal refuses on work it would lose unless FORCE=1.
+
+worktree: ## Create or reopen .worktrees/NAME on branch NAME (FROM=<ref> to change the base)
+	@test -n "$(NAME)" || { echo "usage: make worktree NAME=<name> [FROM=<ref>]"; exit 1; }
+	bun run scripts/worktree.ts create "$(NAME)" $(if $(FROM),--from $(FROM),)
+
+worktrees: ## List every worktree with its branch
+	@bun run scripts/worktree.ts list
+
+worktree-remove: ## Remove .worktrees/NAME, refusing on work that would be lost (FORCE=1 to override)
+	@test -n "$(NAME)" || { echo "usage: make worktree-remove NAME=<name> [FORCE=1]"; exit 1; }
+	bun run scripts/worktree.ts remove "$(NAME)" $(if $(FORCE),--force,)
 
 # ─── Sessions: the database and the AT Protocol network (scripts/session.ts) ───
 # There is no standing dev database. Each `make dev` and each test run brings up its own Postgres

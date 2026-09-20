@@ -14,10 +14,17 @@
  * player bar), which is precisely why the library work had to happen *with* the music work
  * rather than after it. A second lens is a new component, not a refactor of this one.
  *
- * Customization is deliberately **presets only** for now (Parker, 2026-08-13): one built
- * experience per lens, no user-facing arrangement. The dial between "pick a preset",
- * "rearrange one" and "compose one from parts" gets decided when there are two real lenses
- * to generalize from rather than one to argue about.
+ * Customization is deliberately **presets with preset dials** (Parker, 2026-09-20): the
+ * lens is a built experience over a filter the lens itself defines, and any knob it
+ * exposes is a fixed control we designed rather than an arbitrary filter builder. The
+ * first such dial is {@link MusicLensProps.includeSpoken} — off by default, so the lens
+ * is music by default, and on it widens the same view to spoken-word audio for the
+ * listener who wants one shelf of everything they listen to.
+ *
+ * 🚨 **A dial is a lens control, and the lens invariants still hold.** Toggling it is a
+ * view change, not a container change: turning include-spoken on and back off must leave
+ * the shelf holding exactly what it held — the toggle re-scopes what the lens *draws on*,
+ * it never adds or removes anything *from* the Library.
  */
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -53,7 +60,18 @@ export interface LensItem {
 	project?: LensProject | null;
 }
 
-export default function MusicLens({ items }: { items: LensItem[] }) {
+export interface MusicLensProps {
+	items: LensItem[];
+	/**
+	 * The lens's one preset dial over its own filter (Parker, 2026-09-20): when on,
+	 * spoken-word `audio` Works join the record collection for the listener who wants
+	 * one shelf of everything they listen to. Off by default — the music lens is music
+	 * by default, and spoken word's home is its own lens.
+	 */
+	includeSpoken: boolean;
+}
+
+export default function MusicLens({ items, includeSpoken }: MusicLensProps) {
 	const player = useMediaPlayer();
 	/** Which saved album is being fetched, so its play button can show it is working. */
 	const [loadingAlbum, setLoadingAlbum] = useState<number | null>(null);
@@ -61,9 +79,14 @@ export default function MusicLens({ items }: { items: LensItem[] }) {
 	const albums = items.map((i) => i.project).filter((p): p is LensProject => p?.isAlbum === true);
 
 	// Saved music Works, in shelf order. These are the "singles" — tracks kept on their
-	// own, as opposed to records kept whole.
+	// own, as opposed to records kept whole. The toggle widens the same list to spoken
+	// word; albums stay albums, since a spoken-word Collection would be its own kind of
+	// saved Project rather than sneaking in as one.
+	const SINGLES_TYPES: ReadonlySet<string> = includeSpoken
+		? new Set(["music", "audio"])
+		: new Set(["music"]);
 	const singles: QueueTrack[] = items
-		.filter((i) => i.kind === "work" && i.work?.type === "music")
+		.filter((i) => i.kind === "work" && i.work != null && SINGLES_TYPES.has(i.work.type))
 		.map((i) =>
 			trackFromWork(i.work as Work, {
 				id: i.work?.creatorId ?? null,
@@ -112,10 +135,13 @@ export default function MusicLens({ items }: { items: LensItem[] }) {
 		return (
 			<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
 				<MusicalNoteIcon className="mx-auto size-10 text-base-content/20" />
-				<h2 className="mt-3 text-lg font-bold">No music kept yet</h2>
+				<h2 className="mt-3 text-lg font-bold">
+					{includeSpoken ? "Nothing to listen to kept yet" : "No music kept yet"}
+				</h2>
 				<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
-					Save an album or a track and it lands here — free work included. You don't have to buy
-					something to keep it.
+					{includeSpoken
+						? "Save an album, a track or an episode and it lands here — free work included. You don't have to buy something to keep it."
+						: "Save an album or a track and it lands here — free work included. You don't have to buy something to keep it."}
 				</p>
 				<Link to="/discover" className="btn btn-primary btn-sm mt-4">
 					Find something to listen to
@@ -151,7 +177,7 @@ export default function MusicLens({ items }: { items: LensItem[] }) {
 				<section>
 					<div className="mb-3 flex items-center justify-between gap-3">
 						<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-							Tracks
+							{includeSpoken ? "Tracks & Episodes" : "Tracks"}
 						</h2>
 						<div className="flex items-center gap-1">
 							<button

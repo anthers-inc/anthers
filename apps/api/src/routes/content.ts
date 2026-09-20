@@ -1952,6 +1952,18 @@ function shareUrl(token: string): string {
 }
 
 /**
+ * The address of the same share rendered as an embeddable player.
+ *
+ * An embed is a share link that renders in a player: it carries the identical opaque
+ * token, and `/embed/:token` answers with the Work's player page instead of a redirect to
+ * its full page. Every access, metering and attribution question is answered from the
+ * token exactly as it is for the link — this URL only changes what the page looks like.
+ */
+function embedUrl(token: string): string {
+	return `${publicOrigin()}/embed/${token}`;
+}
+
+/**
  * Decide where a Work's media should be delivered from. In S3 mode ALL video and audio
  * goes through the access-checked endpoints, because access is enforced live at request
  * time — which is the only way it *can* work: media is processed when a Work is uploaded
@@ -3362,7 +3374,14 @@ const contentRoutes = new Hono()
 				409,
 			);
 		}
-		return c.json({ token: result.link.token, url: shareUrl(result.link.token) }, 201);
+		return c.json(
+			{
+				token: result.link.token,
+				url: shareUrl(result.link.token),
+				embedUrl: embedUrl(result.link.token),
+			},
+			201,
+		);
 	})
 
 	/** Stop a link working. The token is retired rather than freed. */

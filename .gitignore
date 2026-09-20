@@ -23,6 +23,12 @@ data/*
 # ─── Dev Runtime ───
 .dev*.pid
 
+# ─── Worktrees ───
+# Each `make worktree` nests a parallel checkout here. The leading dot does real work:
+# Bun's test discovery and TypeScript's default include both skip hidden directories, so
+# the main checkout's `bun test` and root tsconfig never wander into a worktree.
+.worktrees/
+
 # ─── IDE ───
 .vscode/
 .idea/

@@ -27,7 +27,8 @@
 		"./signup": "./src/signup.ts",
 		"./figures": "./src/figures.generated.ts",
 		"./lexicons": "./src/lexicons.ts",
-		"./studio-panels": "./src/studio-panels.ts"
+		"./studio-panels": "./src/studio-panels.ts",
+		"./organization": "./src/organization.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

@@ -110,6 +110,7 @@ const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalcul
 const WikiPage = lazy(() => import("./pages/WikiPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
+const EmbedWorkPage = lazy(() => import("./pages/EmbedWorkPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 /**
@@ -151,6 +152,15 @@ export default function App() {
 				it at all means you're already authorized, so the panel is just a preview.
 			*/}
 				<Route path="/site-gate" element={<SiteGatePanel />} />
+
+				{/*
+				An embeddable player for a shared Work, rendered bare so a third-party site can
+				iframe it. Like /site-gate it sits outside every shell — the whole point is that
+				a page embedding it gets the player and none of the site's chrome. An embed is a
+				share link rendered as a player; the access rules are identical and live on the
+				server, so this route never interprets the token itself.
+			*/}
+				<Route path="/embed/:token" element={<EmbedWorkPage />} />
 
 				{/*
 				Marketing / logged-out layout

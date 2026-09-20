@@ -1,0 +1,10 @@
+# ─── Files `make worktree` copies into a fresh worktree ───
+#
+# One gitignore-style pattern per line. Every path listed here is gitignored (that is the
+# point — the files a worktree cannot get from git because they are never committed), and
+# `scripts/worktree.ts` copies each match from the main checkout into the new one.
+#
+# Kept deliberately short. Anything a worktree can regenerate cheaper than copy
+# (node_modules, the Playwright browser) is NOT here, because the shared browser directory
+# and Bun's hardlink cache make those near-free.
+.env
