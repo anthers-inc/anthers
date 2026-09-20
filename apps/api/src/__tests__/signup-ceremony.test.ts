@@ -33,7 +33,14 @@ import {
 	SIGNUP_CODE_RESEND_MS,
 	SIGNUP_CODE_TTL_MS,
 } from "../services/signup-codes.js";
+import {
+	clearPendingSignup,
+	handleReservedElsewhere,
+	issueCodeForPending,
+	startPendingSignup,
+} from "../services/pending-signups.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { pendingCookie, spendCode } from "./signup-fixture";
 import { signUp } from "./signup-fixture";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -293,6 +300,39 @@ describe("POST /auth/signup/verify", () => {
 
 		const rows = await db.select().from(users).where(eq(users.email, email));
 		expect(rows).toHaveLength(1);
+	});
+
+	test("an existing account proving its address cancels the signup in progress, handle included", async () => {
+		// Somebody — possibly a stranger, possibly the owner who forgot — pressed
+		// *Create My Account* against an address that already has an account, and the
+		// handle they asked for is reserved against that pending row. The owner signing
+		// in by code must release both, and silently: the only sign they were ever here
+		// is the sign-in code email's own wording.
+		const email = addr("cancel-reservation");
+		await signUp(email);
+		const handle = `${RUN}held`.slice(0, 30);
+
+		const token = await startPendingSignup({ email, hostedHandle: handle });
+		expect(await handleReservedElsewhere(handle, undefined)).toBe(true);
+
+		// The owner spends the code the stranger's button press sent them (delivered as
+		// a sign-in code, since the address has an account).
+		await issueCodeForPending(token);
+		const res = await spendCode("/api/auth/signup/verify", email, token);
+
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { created: boolean };
+		expect(body.created).toBe(false);
+
+		// The row is gone, so the reservation is — and a name freed this way is
+		// reservable by the next person to ask, not only by nobody.
+		expect(await handleReservedElsewhere(handle, undefined)).toBe(false);
+		const reclaim = await startPendingSignup({
+			email: addr("cancel-reservation-next"),
+			hostedHandle: handle,
+		});
+		expect(reclaim).toBeTruthy();
+		await clearPendingSignup(reclaim);
 	});
 
 	test("a wrong code is refused with one message, whoever the address belongs to", async () => {
