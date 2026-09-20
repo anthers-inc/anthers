@@ -1445,6 +1445,19 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (the wiki's *How Anthers Talks About Itself*; wiki: The Anthers PDS and Creator Nodes § Where This Stands)",
 	},
 	{
+		// `Keeper` retired as the platform-governance role term on 2026-09-20 — community
+		// moderators are called moderators, on purpose, and a special noun for them is the
+		// retirement's whole point. The pattern is case-SENSITIVE and non-negated: the
+		// discriminator between the retired noun and ordinary English is capitalization
+		// (beekeeper, groundskeeper, shopkeeper are lowercase compounds, and the storage
+		// ladder's *its keepers* is lowercase too). The negation carve-out the other
+		// entries carry is deliberately absent — unlike a mechanism, a retired NAME is
+		// never correct in published copy even to deny, because a page is not where the
+		// vocabulary's history lives.
+		pattern: /\bKeepers?\b/g,
+		why: "Keeper retired as the role term 2026-09-20 — a creator's appointed moderator is a moderator; name the role plainly",
+	},
+	{
 		// The second mechanism the code never had, and the one that had spread furthest: a
 		// /for-creators pricing card, a ✓ in the itch comparison, the demo storefront, and
 		// the sentence the creator reads directly above the price field all promised

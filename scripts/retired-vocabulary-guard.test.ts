@@ -50,6 +50,11 @@ const RETIRED = [
 	/\bBadge plans?\b/,
 	/\bpay-what-you-want\b|\bpwyw\b/i,
 	/\bbandwidth (?:allowance|wallet|floor|line|term)\b/i,
+	// `Keeper` is capitalized and never possessive-shaped, which is what separates the retired
+	// role term from ordinary English — beekeeper, groundskeeper, shopkeeper are lowercase
+	// compound words and out of reach, and the storage ladder's *"its keepers"* usage is
+	// lowercase too. What this matches is the platform-governance noun.
+	/\bKeepers?\b/,
 ];
 
 const ROOTS = [

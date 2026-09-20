@@ -84,8 +84,8 @@ export const moderationReports = pgTable(
 		status: text("status").notNull().default("open"), // open | resolved | dismissed
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		/**
-		 * The Anthers account that resolved the report. Reserved for a creator's Keepers, who
-		 * moderate their community from their own accounts; nothing writes it until Keeper
+		 * The Anthers account that resolved the report. Reserved for a creator's moderators, who
+		 * moderate their community from their own accounts; nothing writes it until moderator
 		 * appointments are built, because every resolution today is made by an admin account.
 		 */
 		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
@@ -187,9 +187,9 @@ export const moderationActions = pgTable(
 		// outlives the account that made it.
 		//
 		// Two actor columns, for the two holders of authority. `actor_id` is an Anthers account and is
-		// reserved for a creator's Keepers, who act on the main site as themselves; nothing writes it
-		// until Keeper appointments are built. `admin_actor_id` is an admin account, which is who acts
-		// for Anthers. Both null means the action was automated.
+		// reserved for a creator's moderators, who act on the main site as themselves; nothing writes
+		// it until moderator appointments are built. `admin_actor_id` is an admin account, which is
+		// who acts for Anthers. Both null means the action was automated.
 		actorId: integer("actor_id").references(() => users.id, { onDelete: "set null" }),
 		adminActorId: integer("admin_actor_id").references(() => adminAccounts.id, {
 			onDelete: "set null",

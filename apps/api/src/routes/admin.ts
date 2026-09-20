@@ -741,9 +741,9 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// ── DMCA ────────────────────────────────────────────────────────────────────
 	// The operator's DMCA queue, separate from the moderation queue. Different
-	// clocks, different record, and — per the Keepers model — non-delegable floor
-	// work. Open to every admin account today, under the admin app's Legal section, so
-	// a later split by capability is one check per section.
+	// clocks, different record, and — per the appointment model — never delegated to a
+	// community moderator. Open to every admin account today, under the admin app's Legal
+	// section, so a later split by capability is one check per section.
 	//
 	// 🚨 A user report is NOT a DMCA notice. The moderation queue carries `illegal`
 	// and `other` reasons, and an operator seeing a copyright complaint filed that
@@ -972,7 +972,7 @@ const adminRoutes = new Hono<AdminEnv>()
 	// arrives. § 6.4 of the Legal Request and Preservation Policy names placing a
 	// hold as a step in the procedure; this is the step.
 	//
-	// Non-delegable floor work under the Keepers model, like the DMCA queue above: open to
+	// Non-delegable work under the appointment model, like the DMCA queue above: open to
 	// every admin account today, under the admin app's Legal section.
 	.get("/legal-holds", async (c) => c.json({ holds: await loadHolds() }))
 
