@@ -33,7 +33,7 @@ const testId = crypto.randomUUID().slice(0, 8);
 
 describe("Auth System", () => {
 	let sessionCookie: string;
-	const username = `authtest_${testId}`;
+	const atproto_handle = `authtest_${testId}`;
 	const email = `authtest_${testId}@example.com`;
 
 	// ── Accounts are made by the ceremony, never by a password form ─────────────
@@ -52,7 +52,7 @@ describe("Auth System", () => {
 			const rows = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.username, `nosignup_${testId}`));
+				.where(eq(users.atprotoHandle, `nosignup_${testId}`));
 			expect(rows).toEqual([]);
 		});
 
@@ -117,7 +117,7 @@ describe("Auth System", () => {
 			const [userRow] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.username, username))
+				.where(eq(users.atprotoHandle, username))
 				.limit(1);
 
 			// The token a verification email would carry, minted the way the resend route mints it.

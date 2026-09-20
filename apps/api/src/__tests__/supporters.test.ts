@@ -28,20 +28,20 @@ const req = (path: string, options?: RequestInit) =>
 
 const RUN = crypto.randomUUID().slice(0, 8);
 
-async function signUp(username: string) {
-	return (await createAccount(username)).cookie;
+async function signUp(name: string) {
+	return createAccount(name);
 }
 
-async function idOf(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+async function idOf(handle: string): Promise<number> {
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, handle));
 	return row.id;
 }
 
 /** Somebody who gave `perCycle` for `cycles` months, and has now stopped. */
 async function supporter(tag: string, perCycle: number, cycles: number, listed = true) {
-	const username = `sup_${tag}_${RUN}`;
-	const cookie = await signUp(username);
-	const userId = await idOf(username);
+	const account = await signUp(`sup_${tag}_${RUN}`);
+	const { cookie, handle } = account;
+	const userId = account.userId;
 	await db
 		.insert(accounts)
 		.values({ userId, anthersSupport: "0.00", isActive: true, listedAsSupporter: listed })
@@ -53,7 +53,7 @@ async function supporter(tag: string, perCycle: number, cycles: number, listed =
 			anthersSupport: perCycle.toFixed(2),
 		});
 	}
-	return { username, userId, cookie };
+	return { handle, userId, cookie };
 }
 
 async function page() {
@@ -65,8 +65,8 @@ async function page() {
 const flatNames = (groups: { username: string }[][]) => groups.flat().map((e) => e.username);
 
 describe("the supporters page", () => {
-	let stopped: { username: string };
-	let optedOut: { username: string };
+	let stopped: { handle: string };
+	let optedOut: { handle: string };
 
 	beforeAll(async () => {
 		// Three current supporters so a band is never smaller than the minimum, plus the two
@@ -96,29 +96,28 @@ describe("the supporters page", () => {
 		const [acct] = await db
 			.select({ now: accounts.anthersSupport })
 			.from(accounts)
-			.where(eq(accounts.userId, await idOf(stopped.username)));
+			.where(eq(accounts.userId, await idOf(stopped.handle)));
 		expect(Number(acct.now)).toBe(0);
-		expect(flatNames((await page()).groups)).toContain(stopped.username);
+		expect(flatNames((await page()).groups)).toContain(stopped.handle);
 	});
 
 	it("🚨 leaves out anybody who opted out", async () => {
-		expect(flatNames((await page()).groups)).not.toContain(optedOut.username);
+		expect(flatNames((await page()).groups)).not.toContain(optedOut.handle);
 	});
 
 	it("leaves out an account that has never given anything", async () => {
-		const username = `sup_never_${RUN}`;
-		await signUp(username);
-		const userId = await idOf(username);
+		const account = await signUp(`sup_never_${RUN}`);
+		const userId = account.userId;
 		await db
 			.insert(accounts)
 			.values({ userId, anthersSupport: "0.00", isActive: true })
 			.onConflictDoNothing();
-		expect(flatNames((await page()).groups)).not.toContain(username);
+		expect(flatNames((await page()).groups)).not.toContain(account.handle);
 	});
 
 	it("⭐ lists somebody by default, and lets them take themselves off", async () => {
 		const person = await supporter("toggle", 12, 6);
-		expect(flatNames((await page()).groups)).toContain(person.username);
+		expect(flatNames((await page()).groups)).toContain(person.handle);
 
 		const off = await req("/api/subscriptions/supporters/listing", {
 			method: "PATCH",
@@ -127,7 +126,7 @@ describe("the supporters page", () => {
 		});
 		expect(off.status).toBe(200);
 		expect((await off.json()).listed).toBe(false);
-		expect(flatNames((await page()).groups)).not.toContain(person.username);
+		expect(flatNames((await page()).groups)).not.toContain(person.handle);
 
 		// And back on, because a decision a person cannot reverse is not a preference.
 		const on = await req("/api/subscriptions/supporters/listing", {
@@ -136,7 +135,7 @@ describe("the supporters page", () => {
 			body: JSON.stringify({ listed: true }),
 		});
 		expect(on.status).toBe(200);
-		expect(flatNames((await page()).groups)).toContain(person.username);
+		expect(flatNames((await page()).groups)).toContain(person.handle);
 	});
 
 	it("reports the current setting to the person it belongs to", async () => {

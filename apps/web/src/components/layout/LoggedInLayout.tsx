@@ -77,13 +77,6 @@ function LoggedInLayoutInner() {
 	const mode = useAppMode(isCreator);
 	const studio = mode === "studio";
 
-	// An account that has not finished onboarding owns nothing the sidebar points at:
-	// Feed, Library and Discover are all behind ProtectedRoute, which bounces a
-	// handle-less account straight back here — so every link it offers is a dead end
-	// wearing a nav item. The sidebar stays out of the way until there is an account
-	// to navigate with. The toggle button is part of its chrome and goes with it.
-	const onboarding = !user?.username;
-
 	const handleLogout = async () => {
 		await signOut();
 		navigate("/");
@@ -98,19 +91,19 @@ function LoggedInLayoutInner() {
 			    the basket, which belong to user mode. */}
 			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
 				<div className="navbar-start gap-1">
-					{/* Kept MOUNTED through onboarding as invisible rather than removed from the
-					    tree: a button that appears after auth resolves remounts navbar-start's
+					{/* Kept MOUNTED through the auth load as invisible rather than removed from
+					    the tree: a button that appears after auth resolves remounts navbar-start's
 					    children, and that remounts the drawer-closed state over the one the
 					    provider already opened. `sidebar-phone.authed.e2e.ts` is the guard —
 					    it measures the sidebar's width, and the remount's signature there is a
 					    closed sidebar on a desktop that should have started open. */}
 					<button
 						type="button"
-						className={`btn btn-ghost btn-sm btn-square ${onboarding ? "invisible pointer-events-none" : ""}`}
+						className={`btn btn-ghost btn-sm btn-square ${!user ? "invisible pointer-events-none" : ""}`}
 						onClick={toggleSidebar}
 						aria-label="Toggle sidebar"
-						aria-hidden={onboarding || undefined}
-						tabIndex={onboarding ? -1 : undefined}
+						aria-hidden={!user || undefined}
+						tabIndex={!user ? -1 : undefined}
 					>
 						<Bars3Icon className="w-5 h-5" />
 					</button>
@@ -175,13 +168,8 @@ function LoggedInLayoutInner() {
 						    `.dropdown` keeps matching `:focus-within` on its own. */}
 						<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
 							<li className="menu-title px-4 py-1">
-								{/* An account that hasn't finished onboarding has no handle to print and
-								    no profile to link to, so the menu offers the way to get one instead
-								    of a dead `@` and a link to `/null`. In practice `RequireOnboarding`
-								    redirects before this renders — this is what it degrades to if that
-								    guard is ever removed. */}
 								<span className="text-xs text-base-content/50">
-									{user?.username ? displayHandle(user.username) : "Finish setting up"}
+									{user ? displayHandle(user.handle) : ""}
 								</span>
 							</li>
 							<div className="divider my-0 px-2" />
@@ -192,11 +180,7 @@ function LoggedInLayoutInner() {
 								<Link to="/purchases">Purchases</Link>
 							</li>
 							<li>
-								{user?.username ? (
-									<Link to={profileUrl(user.username)}>Profile</Link>
-								) : (
-									<Link to="/welcome">Pick your username</Link>
-								)}
+								{user && <Link to={profileUrl(user.handle)}>Profile</Link>}
 							</li>
 							<li>
 								<Link to="/settings">Settings</Link>
@@ -223,7 +207,7 @@ function LoggedInLayoutInner() {
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
 				    is also what decides that a phone starts with it closed. */}
 				<aside
-					className={`${!onboarding && sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
+					className={`${user && sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
 				>
 					<div className="w-64 h-full flex flex-col overflow-y-auto">
 						{isCreator && (
@@ -285,7 +269,7 @@ function LoggedInLayoutInner() {
 				</aside>
 
 				{/* The drawer's backdrop on a phone: a tap on the covered page closes it. */}
-				{!onboarding && sidebarOpen && (
+				{user && sidebarOpen && (
 					<button
 						type="button"
 						aria-label="Close sidebar"

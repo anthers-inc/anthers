@@ -61,13 +61,13 @@ function useThread(): ThreadState {
 /**
  * The name a comment is shown under.
  *
- * 🚨 A tombstone — `username` null — is an author who deleted their account, and the comment
+ * 🚨 A tombstone — `handle` null — is an author who deleted their account, and the comment
  * stayed so the thread still reads. Says only WHO, never WHY: a removal by moderation is a
  * `RemovedComment` and is drawn as one, and conflating them would tell readers a user deleted
  * something they did not.
  */
 function authorOf(comment: Comment): string {
-	return comment.username ?? "deleted by user";
+	return comment.handle ?? "deleted by user";
 }
 
 export default function CommentThread({ subject }: CommentThreadProps) {

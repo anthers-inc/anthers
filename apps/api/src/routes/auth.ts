@@ -16,7 +16,6 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
-import { isReservedUsername } from "../reserved-usernames.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
@@ -123,28 +122,24 @@ const emailCodeVerifySchema = z.object({
 	code: z.string().trim().length(6),
 });
 
-const claimUsernameSchema = z
+const verifyEmailSchema = z.object({
+	token: z.string().min(1),
+});
+
+/**
+ * The only claim onboarding makes. `acceptTerms` must be literally `true` — the schema
+ * is a literal rather than a boolean because `false` is not a value to record quietly,
+ * and a request that omits it is one that never asked. 🚨 **Strict** for the same reason
+ * the ceremony's doors are: an unknown key reaching this route is a caller operating on
+ * an assumption this API does not share, and it is refused rather than stripped.
+ */
+const acceptTermsSchema = z
 	.object({
-		username: z
-			.string()
-			.min(3)
-			.max(150)
-			.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
-			.refine((name) => !isReservedUsername(name), "That username is reserved"),
 		acceptTerms: z.literal(true, {
 			errorMap: () => ({ message: "You need to accept the terms to create an account." }),
 		}),
 	})
-	// 🚨 **Strict, because of what is absent: `password`.** There is no credential to set —
-	// sign-in is the emailed code and nothing else — and the default of stripping unknown
-	// keys would claim the handle while silently ignoring one, which is the password
-	// sign-in living on as a half-works ghost. A caller that sends one is refused and keeps
-	// its account unclaimed, so it has to be told.
 	.strict();
-
-const verifyEmailSchema = z.object({
-	token: z.string().min(1),
-});
 
 /** A PKCE challenge/code/verifier — all are hex tokens from `generateToken()`. */
 const hexToken = z
@@ -173,7 +168,7 @@ const desktopExchangeSchema = z.object({
 function serializeUser(user: typeof users.$inferSelect) {
 	return {
 		id: user.id,
-		username: user.username,
+		handle: user.atprotoHandle,
 		email: user.email,
 		displayName: user.displayName,
 		bio: user.bio,
@@ -185,8 +180,10 @@ function serializeUser(user: typeof users.$inferSelect) {
 		emailVerified: user.emailVerified,
 		themePreference: user.themePreference,
 		atprotoDid: user.atprotoDid,
-		atprotoHandle: user.atprotoHandle,
 		createdAt: user.createdAt,
+		// Null until the first run accepts the terms on `/welcome` — the signal every
+		// "still needs onboarding" check reads.
+		termsAcceptedAt: user.termsAcceptedAt,
 	};
 }
 
@@ -300,11 +297,9 @@ async function mintFromProvedAddress(c: Context, email: string, pendingToken: st
 			body: {
 				user: serializeUser(existing),
 				created: false,
-				// Onboarding is unfinished business for anyone without a username, which includes a
-				// returning user who abandoned it last time.
-				needsOnboarding: existing.username === null,
 				picks: spent?.picks ?? null,
 				next: spent?.next || null,
+				needsOnboarding: existing.termsAcceptedAt === null,
 			},
 		};
 	}
@@ -342,11 +337,12 @@ async function mintFromProvedAddress(c: Context, email: string, pendingToken: st
 		body: {
 			user: serializeUser(user),
 			created: true,
-			needsOnboarding: true,
 			// What the signup was carrying, so the finishing page commits the choices somebody
 			// made minutes ago rather than asking for them again.
 			picks: spent?.picks ?? null,
 			next: spent?.next || null,
+			// A brand-new account has always earned the first run on `/welcome`.
+			needsOnboarding: true,
 		},
 	};
 }
@@ -589,42 +585,24 @@ const authRoutes = new Hono()
 		return c.json(minted.body, minted.status);
 	})
 
-	// ── Onboarding: claim the handle ──────────────────────────────────────────
+	// ── Onboarding: accept the terms ───────────────────────────────────────────
 	//
-	// The other half of the ceremony. The account already exists and is signed in, so
-	// this is an ordinary authenticated call — it just happens to be the one that makes
-	// the account visible to anybody else.
+	// The one thing onboarding still asks, now that the handle arrives with the identity
+	// rather than being claimed afterwards. The account already exists and is signed in,
+	// so this is an ordinary authenticated call — but it is the gate the minors posture
+	// rests on: the assertion that the account holder is 13 or older is a term only once
+	// it has been *accepted*, and that happens here and nowhere else.
 	.post(
-		"/onboarding/claim",
+		"/onboarding/accept-terms",
 		requireAuth,
-		zValidator("json", claimUsernameSchema, invalidBody),
+		zValidator("json", acceptTermsSchema, invalidBody),
 		async (c) => {
 			const sessionUser = c.get("user");
-			const { username } = c.req.valid("json");
-
-			// Idempotent only in the trivial sense: claiming again is refused rather than
-			// silently renaming. A handle is a URL other people hold, and changing one is
-			// a different feature with different consequences (redirects, impersonation
-			// of the vacated name) that this endpoint should not quietly become.
-			if (sessionUser.username !== null) {
-				return c.json({ error: "You've already chosen a username." }, 409);
-			}
-
-			const [taken] = await db
-				.select({ id: users.id })
-				.from(users)
-				.where(eq(users.username, username))
-				.limit(1);
-			if (taken) {
-				return c.json({ error: "Username already taken" }, 409);
-			}
-
 			const [user] = await db
 				.update(users)
-				.set({ username })
+				.set({ termsAcceptedAt: new Date() })
 				.where(eq(users.id, sessionUser.id))
 				.returning();
-
 			return c.json({ user: serializeUser(user) });
 		},
 	)
@@ -708,7 +686,7 @@ const authRoutes = new Hono()
 			const resumed = await resumeByProvedAddress(result.email);
 			if (resumed) {
 				setPendingSignupCookie(c, resumed.token);
-				return c.json({ user: null, needsOnboarding: true, resume: true });
+				return c.json({ user: null, resume: true });
 			}
 
 			// Reachable only by someone holding a live code for an address with no account and
@@ -730,13 +708,12 @@ const authRoutes = new Hono()
 		setSessionCookie(c, token);
 
 		// One shape for both outcomes. Two `c.json` calls returning different objects give the
-		// RPC client a union type that every caller then has to narrow by hand.
+		// RPC client a union type that every caller then has to narrow by hand. `needsOnboarding`
+		// is the terms gate: a signed-in account that never accepted them is sent to `/welcome`.
 		return c.json({
 			user: serializeUser(user),
-			// Someone who abandoned onboarding still owes a handle, and the code is the only
-			// way that account comes back at all — so this door has to be able to say so.
-			needsOnboarding: user.username === null,
 			resume: false,
+			needsOnboarding: user.termsAcceptedAt === null,
 		});
 	})
 
@@ -802,7 +779,7 @@ const authRoutes = new Hono()
 		}
 
 		const verifyToken = await createEmailVerificationToken(user.id);
-		await sendVerificationEmail(user.email, user.username, verifyToken);
+		await sendVerificationEmail(user.email, user.handle, verifyToken);
 		return c.json({ success: true });
 	})
 

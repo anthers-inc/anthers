@@ -89,9 +89,9 @@ export default function PlayerBar() {
 						>
 							{track.title}
 						</Link>
-						{track.creatorUsername ? (
+						{track.creatorHandle ? (
 							<Link
-								to={profileUrl(track.creatorUsername)}
+								to={profileUrl(track.creatorHandle)}
 								className="block truncate text-xs text-base-content/55 hover:text-primary hover:underline"
 							>
 								{track.creator}

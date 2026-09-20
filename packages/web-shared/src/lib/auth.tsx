@@ -9,19 +9,8 @@ import { applyTheme, storeTheme, type Theme } from "./theme";
  */
 export interface User {
 	id: number;
-	/**
-	 * Null until onboarding claims one — see `hasOnboarded` below.
-	 *
-	 * 🚨 This is the **signed-in** user, which is the one shape where a null handle is a
-	 * live state rather than an impossibility: the signup ceremony creates and signs in
-	 * the account the moment its emailed code is verified, and asks for a name after. The
-	 * public shapes (`PublicUser`, `Creator` in `lib/types.ts`) stay `string`, because the
-	 * API refuses to serialize an unclaimed account into either — so a null reaches the
-	 * browser for *yourself* and never for anybody else.
-	 *
-	 * Anything building a profile link out of this has to route to onboarding instead.
-	 */
-	username: string | null;
+	/** The account's ATProto handle — every account has one; there is no separate username. */
+	handle: string;
 	email: string;
 	displayName: string | null;
 	bio: string | null;
@@ -32,9 +21,10 @@ export interface User {
 	location: string | null;
 	emailVerified: boolean | null;
 	themePreference: Theme | null;
-	/** Every account holds exactly one ATProto identity, so both are always present. */
+	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
-	atprotoHandle: string;
+	/** When the terms (and the 13+ assertion) were accepted; null until `/welcome` finishes onboarding. */
+	termsAcceptedAt: string | null;
 	createdAt: string;
 }
 
@@ -54,7 +44,7 @@ interface AuthContextValue {
 	 * Signing up is a *ceremony*, not a call: `POST /auth/signup/begin` writes a pending signup
 	 * holding the chosen identity, `/finish` proves the address with an emailed code,
 	 * `/signup/verify` (or `/signup/complete`) creates the account with its identity and issues
-	 * the session, and `/welcome` claims the username and takes terms acceptance. It lives in
+	 * the session, and `/welcome` closes out the first run. It lives in
 	 * `pages/SubscribePage.tsx` and `pages/FinishSignupPage.tsx` because the ordering matters.
 	 *
 	 * ⚠️ **There is no password sign-up route on the server either — and no password sign-in
@@ -83,8 +73,7 @@ interface AuthContextValue {
 	 * difference is worth being precise about, because it looks like one.** It mints
 	 * nothing: it starts an OAuth round trip whose callback parks the proved identity on the
 	 * pending signup, and the account — if there is to be one — is created server-side by
-	 * `/auth/signup/verify` or `/signup/complete`, which leave `username` null so that `/welcome`
-	 * still claims it and still takes the terms.
+	 * `/auth/signup/verify` or `/signup/complete`.
 	 * It also lives on **`/subscribe`**, the one signup page, rather than adding a second
 	 * place in the UI that people can join from. What the deleted `signUp` did that this
 	 * does not is create an account straight from a form, with its own idea of onboarding.

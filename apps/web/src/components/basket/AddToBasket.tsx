@@ -22,7 +22,7 @@ interface AddToBasketProps {
 	slug: string;
 	title: string;
 	price: string;
-	creatorUsername: string;
+	creatorHandle: string;
 	thumbnail?: string | null;
 }
 
@@ -76,7 +76,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 						slug: props.slug,
 						title: props.title,
 						price: props.price,
-						creatorUsername: props.creatorUsername,
+						creatorHandle: props.creatorHandle,
 						thumbnail: props.thumbnail ?? null,
 					});
 					setReplaced(r.replacedCreator ?? null);
@@ -86,7 +86,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 			</button>
 			{notice}
 			<p className="text-xs text-base-content/50">
-				Buying several things from {props.creatorUsername} together sends them more: the card fee is
+				Buying several things from {props.creatorHandle} together sends them more: the card fee is
 				charged once per purchase, not once per item.
 			</p>
 		</div>

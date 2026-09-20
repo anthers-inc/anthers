@@ -200,7 +200,7 @@ function DevicesSection() {
 
 interface BlockedUser {
 	id: number;
-	username: string;
+	handle: string;
 	displayName: string | null;
 	createdAt: string;
 }
@@ -519,7 +519,7 @@ function BlockedSection() {
 		setLifting(u.id);
 		setError(null);
 		try {
-			const res = await apiFetch(`/api/accounts/users/${u.username}/unblock`, { method: "POST" });
+			const res = await apiFetch(`/api/accounts/users/${u.handle}/unblock`, { method: "POST" });
 			if (!res.ok) throw new Error("Failed to unblock.");
 			setBlocks((prev) => prev?.filter((b) => b.id !== u.id) ?? null);
 		} catch (err) {
@@ -555,9 +555,9 @@ function BlockedSection() {
 						{blocks.map((b) => (
 							<li key={b.id} className="flex items-center gap-3 py-3">
 								<div className="min-w-0 flex-1">
-									<div className="font-medium truncate">{b.displayName || b.username}</div>
+									<div className="font-medium truncate">{b.displayName || b.handle}</div>
 									<div className="text-xs text-base-content/50 truncate">
-										@{b.username} · blocked {formatWhen(b.createdAt)}
+										@{b.handle} · blocked {formatWhen(b.createdAt)}
 									</div>
 								</div>
 								<button
@@ -632,7 +632,7 @@ function IdentitySection() {
 	// ⚠️ Waits for the suffix rather than guessing, so a hosted identity is never shown for a frame
 	// as one somebody brought, or the reverse.
 	if (!user || suffix === null) return null;
-	const handle = user.atprotoHandle;
+	const handle = user.handle;
 	const hosted = !!suffix && handle.endsWith(`.${suffix}`);
 
 	if (!hosted) return <BroughtIdentityCard handle={handle} did={user.atprotoDid} />;

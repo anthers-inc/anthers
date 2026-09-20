@@ -34,7 +34,8 @@ import { devCheckoutRoot } from "@anthers/db/dev-only";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { createAdminAccount, findAdminAccountByEmail } from "../services/admin-accounts.js";
-import { createLocalAccount } from "./local-accounts.js";
+import { hostedHandleSuffix } from "../services/hosted-accounts.js";
+import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
 const TAG = "[dev-account]";
 
@@ -68,10 +69,14 @@ async function main() {
 		console.log(`${TAG} created a super-admin account for ${email} in the admin app.`);
 	}
 
+	// The account's lookup key is the handle its creation actually wrote: the preferred name
+	// when the server would issue it, or the `-dev` fallback `localHandleName` picks when it
+	// would not. Reconciling on the plain username would miss a fallback row every time.
+	const handle = `${localHandleName(username)}.${await hostedHandleSuffix()}`;
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, username))
+		.where(eq(users.atprotoHandle, handle))
 		.limit(1);
 	if (existing) {
 		console.log(`${TAG} "${username}" already exists in this session.`);
@@ -79,7 +84,6 @@ async function main() {
 	}
 
 	const user = await createLocalAccount({
-		username,
 		email,
 		handleName: username,
 		emailVerified: true,

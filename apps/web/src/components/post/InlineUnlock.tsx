@@ -37,7 +37,7 @@ function seedsToGo(moreNeeded: number): string {
 
 /** Only the creator identity is needed — this works for any gated thing. */
 interface UnlockSubject {
-	creator?: { username: string; displayName?: string | null } | null;
+	creator?: { handle: string; displayName?: string | null } | null;
 }
 
 export default function InlineUnlock({
@@ -49,8 +49,8 @@ export default function InlineUnlock({
 }) {
 	const location = useLocation();
 
-	const creatorName = post.creator?.displayName || post.creator?.username || "this creator";
-	const creatorUsername = post.creator?.username;
+	const creatorName = post.creator?.displayName || post.creator?.handle || "this creator";
+	const creatorHandle = post.creator?.handle;
 
 	/*
 	 * Not logged in → both doors, and both of them come back here.
@@ -141,14 +141,14 @@ export default function InlineUnlock({
 					: `Support ${creatorName} monthly to unlock this post and their other members-only work.`
 			}
 		>
-			{creatorRoute && creatorUsername ? (
-				<Link to={`${profileUrl(creatorUsername)}?tab=badges`} className="btn btn-primary btn-wide">
+			{creatorRoute && creatorHandle ? (
+				<Link to={`${profileUrl(creatorHandle)}?tab=badges`} className="btn btn-primary btn-wide">
 					{`Unlock with ${seedsToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
 				</Link>
 			) : null}
 
-			{!creatorRoute && creatorUsername ? (
-				<Link to={`${profileUrl(creatorUsername)}?tab=badges`} className="btn btn-primary btn-wide">
+			{!creatorRoute && creatorHandle ? (
+				<Link to={`${profileUrl(creatorHandle)}?tab=badges`} className="btn btn-primary btn-wide">
 					Join to unlock
 				</Link>
 			) : null}

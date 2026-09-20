@@ -8,7 +8,7 @@
  * path that does either went untested wherever one was used. The test fixture
  * (`__tests__/account-fixture.ts`) wraps this; the seeds `make dev` runs call it directly.
  *
- *   bun run db:local-account --username e2e_reader --email e2e_reader@example.com --session
+ *   bun run db:local-account --name e2e_reader --email e2e_reader@example.com --session
  *
  * The command line prints the account as JSON, for a browser spec that cannot import the API.
  *
@@ -39,8 +39,6 @@ export type LocalAccountFields = Omit<
 >;
 
 export interface LocalAccountOptions {
-	/** Null for an account that has not claimed a username yet, as the ceremony leaves one. */
-	username: string | null;
 	email: string;
 	/** `hosted` (the default) is an identity Anthers issued; `brought` is one it holds no credential for. */
 	identity?: "hosted" | "brought";
@@ -57,8 +55,8 @@ function generatedHandleName(): string {
 
 /**
  * The handle name to ask for: the preferred one when the server would issue it, otherwise that
- * name with `-dev` on the end, otherwise a generated one. An Anthers username may carry an
- * underscore, and a few are reserved outright — `parkerhdavis` among them.
+ * name with `-dev` on the end, otherwise a generated one. An Anthers handle name may not
+ * carry an underscore, and a few are reserved outright — `parkerhdavis` among them.
  */
 export function localHandleName(preferred?: string): string {
 	if (!preferred) return generatedHandleName();
@@ -139,7 +137,6 @@ export async function createLocalAccount(opts: LocalAccountOptions): Promise<Use
 		.update(users)
 		.set({
 			...opts.fields,
-			username: opts.username,
 			emailVerified: opts.emailVerified ?? true,
 		})
 		.where(eq(users.id, created.user.id))
@@ -154,15 +151,14 @@ function flag(name: string): string | undefined {
 
 async function main(): Promise<void> {
 	assertDevCheckout();
-	const username = flag("username");
-	if (!username)
+	const name = flag("username") ?? flag("name");
+	if (!name)
 		throw new Error(
-			"usage: bun run db:local-account --username <name> [--email <address>] [--creator] [--session]",
+			"usage: bun run db:local-account --name <name> [--email <address>] [--creator] [--session]",
 		);
 	const user = await createLocalAccount({
-		username,
-		email: flag("email") ?? `${username}@example.com`,
-		handleName: username,
+		email: flag("email") ?? `${name}@example.com`,
+		handleName: name,
 		fields: {
 			isCreator: process.argv.includes("--creator"),
 		},
@@ -171,9 +167,8 @@ async function main(): Promise<void> {
 	console.log(
 		JSON.stringify({
 			userId: user.id,
-			username: user.username,
-			did: user.atprotoDid,
 			handle: user.atprotoHandle,
+			did: user.atprotoDid,
 			...(session ? { session } : {}),
 		}),
 	);

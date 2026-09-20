@@ -80,7 +80,7 @@ const OLD_DAY = daysAgo(100);
 const OLDER_DAY = daysAgo(120);
 
 async function idOf(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	return row.id;
 }
 
@@ -116,12 +116,12 @@ async function seedEvent(
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
+		sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
 	await signUp(viewerAName);
 	await signUp(viewerBName);
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
+	await db.execute(sql`UPDATE users SET is_creator = true WHERE atproto_handle = ${creatorName}`);
 
 	creatorId = await idOf(creatorName);
 	viewerAId = await idOf(viewerAName);

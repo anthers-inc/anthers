@@ -100,7 +100,7 @@ let ratingId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
+		sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -112,7 +112,7 @@ beforeAll(async () => {
 	await enablePayouts(viewerBName);
 	operator = await createAdminFixture("mod-operator");
 	admin = operator.cookie;
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
+	await db.execute(sql`UPDATE users SET is_creator = true WHERE atproto_handle = ${creatorName}`);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
@@ -305,7 +305,7 @@ describe("The operator queue", () => {
 		const [reporter] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, viewerAName))
+			.where(eq(users.atprotoHandle, viewerAName))
 			.limit(1);
 		const [{ maxId }] = await db
 			.select({ maxId: sql<number>`coalesce(max(${comments.id}), 0)` })

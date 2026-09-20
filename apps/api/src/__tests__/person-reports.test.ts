@@ -97,7 +97,7 @@ let commentId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${hostName}, ${reporterName}, ${subjectName}, ${ghostName})`,
+		sql`DELETE FROM users WHERE atproto_handle IN (${hostName}, ${reporterName}, ${subjectName}, ${ghostName})`,
 	);
 	const host = await signUp(hostName);
 	reporter = await signUp(reporterName);
@@ -106,11 +106,11 @@ beforeAll(async () => {
 	await enablePayouts(hostName);
 	admin = (await createAdminFixture("pr-operator")).cookie;
 	await db.execute(
-		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE username = ${subjectName}`,
+		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE atproto_handle = ${subjectName}`,
 	);
 
-	const [s] = await db.select({ id: users.id }).from(users).where(eq(users.username, subjectName));
-	const [g] = await db.select({ id: users.id }).from(users).where(eq(users.username, ghostName));
+	const [s] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, subjectName));
+	const [g] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, ghostName));
 	subjectId = s.id;
 	ghostId = g.id;
 
@@ -187,7 +187,7 @@ describe("filing a report about a person", () => {
 		const [me] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, reporterName));
+			.where(eq(users.atprotoHandle, reporterName));
 		const self = await post("/api/moderation/reports", reporter, {
 			subjectType: "user",
 			subjectId: me.id,

@@ -215,7 +215,7 @@ export default function WorkPage() {
 	 * creator spends in their own catalog draws nothing from the Time Pool (`distribute-pool`).
 	 */
 	const canAccess = access ? access.canAccess : isOwner;
-	const creatorName = work.creator?.displayName || work.creator?.username || "this creator";
+	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
 
 	return (
 		<WorkColumn type={work.type}>
@@ -289,13 +289,13 @@ export default function WorkPage() {
 										onPurchaseComplete={refetch}
 									/>
 									{/* Only where there is actually a charge to share. */}
-									{work.creatorHasStripe && access.price && work.creator?.username && (
+									{work.creatorHasStripe && access.price && work.creator?.handle && (
 										<AddToBasket
 											workId={work.id}
 											slug={work.slug ?? ""}
 											title={work.title ?? "Untitled"}
 											price={access.price}
-											creatorUsername={work.creator.username}
+											creatorHandle={work.creator.handle}
 											thumbnail={work.thumbnail}
 										/>
 									)}

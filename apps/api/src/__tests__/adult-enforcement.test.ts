@@ -79,7 +79,7 @@ const madeWorkIds: number[] = [];
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
 	const cookie = account.cookie;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	return { cookie, id: row!.id };
 }
 
@@ -111,7 +111,7 @@ describe("what an Adult rating costs", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${creatorName}, ${readerName}, ${grownName})`,
+			sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${readerName}, ${grownName})`,
 		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie } = await signUp(readerName));
@@ -453,7 +453,7 @@ describe("what an Adult rating costs", () => {
 			const [reader] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.username, readerName));
+				.where(eq(users.atprotoHandle, readerName));
 			readerId = reader.id;
 			await db.insert(shareLinks).values([
 				{ token, workId: adultWork.id, sharerId: grownId },

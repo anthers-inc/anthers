@@ -52,7 +52,7 @@ export function supporterBand(lifetimeDollars: number): number {
 
 /** One person as the page knows them: a name, and nothing about what they gave. */
 export interface SupporterEntry {
-	username: string;
+	handle: string;
 	displayName: string | null;
 }
 
@@ -66,7 +66,7 @@ export interface SupporterEntry {
  */
 export function sortSupporters(entries: SupporterEntry[]): SupporterEntry[] {
 	return [...entries].sort((a, b) =>
-		(a.displayName ?? a.username).localeCompare(b.displayName ?? b.username, undefined, {
+		(a.displayName ?? a.handle).localeCompare(b.displayName ?? b.handle, undefined, {
 			sensitivity: "base",
 		}),
 	);
@@ -116,7 +116,7 @@ export function groupSupporters(
 		// `SupporterEntry[]` while shipping the figure straight into the JSON — a structural
 		// type strips nothing at runtime. The one place the amount is dropped is here.
 		out.push(
-			sortSupporters(merged).map(({ username, displayName }) => ({ username, displayName })),
+			sortSupporters(merged).map(({ handle, displayName }) => ({ handle, displayName })),
 		);
 	}
 	// Nothing can still be carried: the last band has no `i < length - 1` to defer on, so it

@@ -338,7 +338,7 @@ describe("a reader's comments, reviews, votes and follows", () => {
 		expect(vote.status).toBe(409);
 
 		const [creatorRow] = await db
-			.select({ username: users.username })
+			.select({ username: users.atprotoHandle })
 			.from(users)
 			.where(eq(users.id, granted.id));
 		const follow = await call(

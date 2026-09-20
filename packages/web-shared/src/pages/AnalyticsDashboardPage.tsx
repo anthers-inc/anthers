@@ -244,7 +244,7 @@ function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] 
 											<div>
 												{item.type === "project" && item.slug ? (
 													<Link
-														to={creatorProjectUrl(user?.username ?? "", item.slug)}
+														to={creatorProjectUrl(user?.handle ?? "", item.slug)}
 														className="link link-hover text-sm font-medium"
 													>
 														{item.title}
@@ -264,7 +264,7 @@ function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] 
 												item.type === "work" && item.publicId != null ? (
 													<Link
 														to={creatorWorkUrl(
-															user?.username ?? "",
+															user?.handle ?? "",
 															`${item.slug ?? ""}-${item.publicId}`,
 														)}
 														className="link link-hover text-sm font-medium"

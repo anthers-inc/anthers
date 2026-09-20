@@ -486,14 +486,12 @@ const atprotoRoutes = new Hono()
 			);
 			setSessionCookie(c, sessionToken);
 
+			// The onboarding flag that used to ride this response is gone: identity and
+			// account are created together now, so there is no signed-in account still
+			// owing a handle for the front end to chase.
 			return back({
 				success: "login",
 				next,
-				// An account can be signed in and still owe a handle — the signup ceremony
-				// creates it before asking for one, and nothing forces the question later. The
-				// emailed-code door already reports this; a second door that did not would send
-				// those accounts somewhere they cannot be linked to from.
-				onboarding: user.username === null ? "1" : undefined,
 			});
 		} catch (err) {
 			// 🚨 **Pressing Deny at the consent screen arrives here, as an error, and for the

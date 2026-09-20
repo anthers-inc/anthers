@@ -82,7 +82,7 @@ let workId: number;
 let postSlug: string;
 
 async function userId(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	return row.id;
 }
 
@@ -96,7 +96,7 @@ async function clearBlocks() {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${hostName}, ${abeName}, ${beeName}, ${camName})`,
+		sql`DELETE FROM users WHERE atproto_handle IN (${hostName}, ${abeName}, ${beeName}, ${camName})`,
 	);
 	host = await signUp(hostName);
 	await enablePayouts(hostName);
@@ -109,7 +109,7 @@ beforeAll(async () => {
 	// abe and bee are creators too, so the creator-listing and profile assertions have
 	// something to find them in.
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE username IN (${hostName}, ${abeName}, ${beeName})`,
+		sql`UPDATE users SET is_creator = true WHERE atproto_handle IN (${hostName}, ${abeName}, ${beeName})`,
 	);
 
 	abeId = await userId(abeName);

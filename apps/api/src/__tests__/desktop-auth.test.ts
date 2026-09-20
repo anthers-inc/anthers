@@ -84,7 +84,7 @@ describe("Desktop auth", () => {
 	let cookie: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username = ${userName}`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${userName}`);
 		cookie = await signUp(userName);
 	}, DB_SETUP_TIMEOUT);
 
@@ -327,7 +327,7 @@ describe("Desktop auth", () => {
 
 	it("cannot revoke another user's session", async () => {
 		const strangerName = `desk_other_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${strangerName}`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${strangerName}`);
 		const strangerCookie = await signUp(strangerName);
 		const stranger = await enroll(strangerCookie, "stranger-device");
 

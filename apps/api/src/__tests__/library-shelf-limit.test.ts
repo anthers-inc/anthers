@@ -42,7 +42,7 @@ async function shelf(): Promise<{
 beforeAll(async () => {
 	const account = await createAccount(readerName);
 	cookie = account.cookie;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, readerName));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, readerName));
 	readerId = row.id;
 
 	// One more entry than the shelf holds, saved in order 1..N.

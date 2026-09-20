@@ -16,7 +16,7 @@ import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/
 
 export interface User {
 	id: number;
-	username: string;
+	handle: string;
 	email?: string; // Only in /me (private)
 	displayName: string | null;
 	bio: string | null;
@@ -27,7 +27,6 @@ export interface User {
 	location: string | null;
 	emailVerified?: boolean | null; // Only in /me (private)
 	atprotoDid: string | null;
-	atprotoHandle: string | null;
 	createdAt: string;
 }
 
@@ -45,7 +44,7 @@ export interface PublicUser extends User {
 }
 
 export interface Creator {
-	username: string;
+	handle: string;
 	displayName: string | null;
 	avatar?: string | null;
 	/** Whether this creator can receive direct-purchase payouts (connected + payouts enabled). */
@@ -500,7 +499,7 @@ export interface ProjectWork extends Work {
  */
 export interface Comment {
 	id: number;
-	/** Null exactly when `username` is — the author deleted their account. */
+	/** Null exactly when `handle` is — the author deleted their account. */
 	userId: number | null;
 	/** `post` for a comment on a post, `comment` for a reply, and `work` only on older rows. */
 	subjectType: string;
@@ -516,9 +515,9 @@ export interface Comment {
 	 * a promise the server never made, and it turned every renderer into a crash waiting for
 	 * the first deleted account.
 	 */
-	username: string | null;
+	handle: string | null;
 	avatar: string | null;
-	/** True exactly when `username` is null. Says WHO left, never why. */
+	/** True exactly when `handle` is null. Says WHO left, never why. */
 	deletedByAuthor?: boolean;
 	/**
 	 * The published score: upvotes minus downvotes, floored at zero.
@@ -579,7 +578,7 @@ export interface Review {
 	/** "" for rows written before reviews required text — render the verdict alone. */
 	body: string;
 	createdAt: string;
-	username: string;
+	handle: string;
 	avatar: string | null;
 }
 
@@ -779,7 +778,7 @@ export interface SeedAllocation {
 	createdAt: string;
 	updatedAt: string;
 	creator?: {
-		username: string;
+		handle: string;
 		displayName: string | null;
 	};
 }
@@ -855,7 +854,7 @@ export interface Bookmark {
 		thumbnail: string | null;
 	} | null;
 	creator?: {
-		username: string;
+		handle: string;
 		displayName: string | null;
 		avatar: string | null;
 	} | null;

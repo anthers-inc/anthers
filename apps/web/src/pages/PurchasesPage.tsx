@@ -122,12 +122,12 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 							)}
 
 							{/* Creator → profile link. A support top-up has no creator side. */}
-							{p.creator?.username ? (
+							{p.creator?.handle ? (
 								<Link
-									to={profileUrl(p.creator.username)}
+									to={profileUrl(p.creator.handle)}
 									className="text-sm text-base-content/50 link link-hover"
 								>
-									@{p.creator.username}
+									@{p.creator.handle}
 								</Link>
 							) : (
 								p.type === "seeds" && (

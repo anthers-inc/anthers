@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
+import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
@@ -58,7 +58,6 @@ export default function ATProtoCallbackPage() {
 	// Sanitized here as well as in the API. This is the value `navigate()` is actually
 	// given, and the last read is the one that decides where a browser goes.
 	const next = sanitizeNextPath(searchParams.get("next"));
-	const needsOnboarding = searchParams.get("onboarding") === "1";
 
 	useEffect(() => {
 		if (errorParam) {
@@ -70,12 +69,10 @@ export default function ATProtoCallbackPage() {
 		// components on auth state — so it is the last thing before navigating, and nothing
 		// may be queued after. The same ordering bug cost `/subscribe` a real defect.
 		if (success === "login") {
+			// Every account carries its handle from creation now — there is no usernameless
+			// state left to route around, so a login lands where it was headed, or the feed.
 			refreshUser().then(() => {
-				// An account that never claimed a username still owes one, and it cannot be
-				// linked to or found until it does.
-				navigate(needsOnboarding ? withNextPath("/welcome", next) : (next ?? "/feed"), {
-					replace: true,
-				});
+				navigate(next ?? "/feed", { replace: true });
 			});
 			return;
 		}
@@ -119,7 +116,7 @@ export default function ATProtoCallbackPage() {
 		}
 
 		setError("We didn't get an answer back from Bluesky. Please try again.");
-	}, [success, errorParam, next, needsOnboarding, refreshUser, navigate]);
+	}, [success, errorParam, next, refreshUser, navigate]);
 
 	if (error) {
 		// The one error worth routing differently: there is nothing wrong to retry, there is

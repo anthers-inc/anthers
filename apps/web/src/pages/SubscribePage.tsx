@@ -226,7 +226,7 @@ function initialsOf(name: string): string {
 
 /** A creator's display name, falling back to the handle that always exists. */
 function nameOf(creator: PublicUser): string {
-	return creator.displayName || creator.username;
+	return creator.displayName || creator.handle;
 }
 
 /** The step marker — numbered because the page really is a sequence. */
@@ -1071,7 +1071,7 @@ function CreatorFinder({
 	creators: PublicUser[];
 	loading: boolean;
 	picks: Picks;
-	onToggle: (username: string, kind: "follow" | "seed") => void;
+	onToggle: (handle: string, kind: "follow" | "seed") => void;
 }) {
 	const [query, setQuery] = useState("");
 	const [medium, setMedium] = useState<string | null>(null);
@@ -1083,7 +1083,7 @@ function CreatorFinder({
 			return creators
 				.filter(
 					(c) =>
-						c.username.toLowerCase().includes(q) || (c.displayName ?? "").toLowerCase().includes(q),
+						c.handle.toLowerCase().includes(q) || (c.displayName ?? "").toLowerCase().includes(q),
 				)
 				.slice(0, HANDFUL);
 		}
@@ -1163,8 +1163,8 @@ function CreatorFinder({
 					</p>
 				) : (
 					shown.map((creator) => {
-						const followed = picks.follow.includes(creator.username);
-						const seeded = picks.seed.includes(creator.username);
+						const followed = picks.follow.includes(creator.handle);
+						const seeded = picks.seed.includes(creator.handle);
 						return (
 							<div
 								key={creator.id}
@@ -1188,7 +1188,7 @@ function CreatorFinder({
 									)}
 									<span className="min-w-0">
 										<Link
-											to={profileUrl(creator.username)}
+											to={profileUrl(creator.handle)}
 											className="block truncate text-sm font-bold hover:underline"
 										>
 											{nameOf(creator)}
@@ -1197,7 +1197,7 @@ function CreatorFinder({
 											{(creator.mediums ?? [])
 												.map((m) => MEDIUMS.find((x) => x.key === m)?.label ?? m)
 												.slice(0, 2)
-												.join(" · ") || displayHandle(creator.username)}
+												.join(" · ") || displayHandle(creator.handle)}
 										</span>
 									</span>
 								</div>
@@ -1206,7 +1206,7 @@ function CreatorFinder({
 										type="button"
 										className={`btn btn-xs rounded-full ${followed ? "btn-outline btn-primary" : "btn-outline"}`}
 										aria-pressed={followed}
-										onClick={() => onToggle(creator.username, "follow")}
+										onClick={() => onToggle(creator.handle, "follow")}
 									>
 										{followed ? "✓ Following" : "Follow"}
 									</button>
@@ -1214,7 +1214,7 @@ function CreatorFinder({
 										type="button"
 										className={`btn btn-xs rounded-full ${seeded ? "btn-primary" : "btn-outline"}`}
 										aria-pressed={seeded}
-										onClick={() => onToggle(creator.username, "seed")}
+										onClick={() => onToggle(creator.handle, "seed")}
 									>
 										{seeded ? "✓ Supporting" : "Support"}
 									</button>
@@ -1936,10 +1936,9 @@ function SignupForm({
 			)}
 
 			<div className="p-6">
-				{/* The ONE field this page collects: the identity. The username is
-				    deliberately not asked for here — it costs nothing at the moment of decision and
-				    everything at the moment of doubt, so it moves to onboarding, after the address
-				    is confirmed and after any charge. There is no password anywhere to move. */}
+				{/* The ONE field this page collects: the identity, which is also the account's
+				    handle and its address here — there is no separate username to ask for at
+				    onboarding, and no password anywhere to move. The terms wait for /welcome. */}
 				{/* ⚠️ **This card no longer has a "finishing a Bluesky signup" state**, because
 				    nobody comes back to this page to finish one. Coming back from bsky.social to
 				    a marketing page with a prefilled email box is exactly what Parker's
@@ -2285,23 +2284,23 @@ export default function SubscribePage() {
 		};
 	}, []);
 
-	const toggleCreator = useCallback((username: string, kind: "follow" | "seed") => {
+	const toggleCreator = useCallback((handle: string, kind: "follow" | "seed") => {
 		setPicks((prev) => {
 			const follow = new Set(prev.follow);
 			const seed = new Set(prev.seed);
 			if (kind === "seed") {
-				if (seed.has(username)) {
-					seed.delete(username);
+				if (seed.has(handle)) {
+					seed.delete(handle);
 				} else {
-					seed.add(username);
+					seed.add(handle);
 					// Directing support to someone follows them too; the reverse isn't implied.
-					follow.add(username);
+					follow.add(handle);
 				}
-			} else if (follow.has(username)) {
-				follow.delete(username);
-				seed.delete(username);
+			} else if (follow.has(handle)) {
+				follow.delete(handle);
+				seed.delete(handle);
 			} else {
-				follow.add(username);
+				follow.add(handle);
 			}
 			return { ...prev, follow: [...follow], seed: [...seed] };
 		});
@@ -2321,7 +2320,7 @@ export default function SubscribePage() {
 		);
 	}, []);
 
-	const byUsername = useMemo(() => new Map(creators.map((c) => [c.username, c])), [creators]);
+	const byHandle = useMemo(() => new Map(creators.map((c) => [c.handle, c])), [creators]);
 
 	/**
 	 * 🚨 **The displayed total and the charged total are the SAME function**, and were two
@@ -2342,16 +2341,16 @@ export default function SubscribePage() {
 	 *
 	 * There is ONE list and ONE total now. `directed` also carries the creator ids the
 	 * charge needs, which closes a second, quieter divergence: the display used to count
-	 * `picks.seed` while the charge dropped any username missing from `byUsername`, so a
+	 * `picks.seed` while the charge dropped any handle missing from `byHandle`, so a
 	 * pick made before the creator list loaded was quotable and unbillable.
 	 */
 	const directed = useMemo(
 		() =>
 			picks.seed
-				.map((username) => byUsername.get(username))
+				.map((handle) => byHandle.get(handle))
 				.filter((creator): creator is PublicUser => !!creator)
 				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE })),
-		[picks.seed, byUsername],
+		[picks.seed, byHandle],
 	);
 
 	const total = supportTotal(picks.anthers, directed);
@@ -2381,16 +2380,16 @@ export default function SubscribePage() {
 	/** Step 2's answers — one line per creator, whether followed or backed. */
 	const creatorLines: PickLine[] = useMemo(
 		() =>
-			picks.follow.map((username) => {
-				const creator = byUsername.get(username);
+			picks.follow.map((handle) => {
+				const creator = byHandle.get(handle);
 				return {
-					key: username,
-					label: creator ? nameOf(creator) : username,
-					sub: picks.seed.includes(username) ? "following · supporting" : "following",
-					amount: picks.seed.includes(username) ? PUBLIC_ACCESS_PRICE : 0,
+					key: handle,
+					label: creator ? nameOf(creator) : handle,
+					sub: picks.seed.includes(handle) ? "following · supporting" : "following",
+					amount: picks.seed.includes(handle) ? PUBLIC_ACCESS_PRICE : 0,
 				};
 			}),
-		[picks.follow, picks.seed, byUsername],
+		[picks.follow, picks.seed, byHandle],
 	);
 
 	/**
@@ -2451,10 +2450,10 @@ export default function SubscribePage() {
 		try {
 			// Following costs nothing, so it is applied straight away rather than waiting on
 			// a charge that may not even happen.
-			for (const username of picks.follow) {
-				const creator = byUsername.get(username);
+			for (const handle of picks.follow) {
+				const creator = byHandle.get(handle);
 				if (!creator || creator.isFollowing) continue;
-				await client.api.accounts.users[":username"].follow.$post({ param: { username } });
+				await client.api.accounts.users[":handle"].follow.$post({ param: { handle } });
 			}
 
 			// 🚨 `directed` and `total` come from the component, NOT from a second
@@ -2505,7 +2504,7 @@ export default function SubscribePage() {
 		} finally {
 			setBusy(false);
 		}
-	}, [directed, total, leave, next, picks, byUsername]);
+	}, [directed, total, leave, next, picks, byHandle]);
 
 	/**
 	 * Ask for the account — the pending one — and hand the visitor to the page that

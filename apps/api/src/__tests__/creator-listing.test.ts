@@ -67,7 +67,7 @@ beforeAll(async () => {
 	await signUp(makerName);
 	fanCookie = await signUp(fanName);
 
-	const [maker] = await db.select().from(users).where(eq(users.username, makerName));
+	const [maker] = await db.select().from(users).where(eq(users.atprotoHandle, makerName));
 	makerId = maker.id;
 	await db.update(users).set({ isCreator: true }).where(eq(users.id, makerId));
 

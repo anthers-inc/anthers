@@ -133,7 +133,7 @@ export default function PostPage() {
 				query: purgeMedia ? { purgeMedia: "true" } : {},
 			});
 			if (res.status === 204 || res.ok) {
-				navigate(post.creator?.username ? profileUrl(post.creator.username) : "/");
+				navigate(post.creator?.handle ? profileUrl(post.creator.handle) : "/");
 			}
 		} finally {
 			setActioning(false);
@@ -162,20 +162,20 @@ export default function PostPage() {
 					{post.creator?.avatar ? (
 						<img
 							src={post.creator.avatar}
-							alt={post.creator?.username}
+							alt={post.creator?.handle}
 							className="w-10 h-10 rounded-full object-cover"
 						/>
 					) : (
 						<div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center font-bold">
-							{(post.creator?.username ?? "?").charAt(0).toUpperCase()}
+							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
 						</div>
 					)}
 					<div>
 						<Link
-							to={profileUrl(post.creator?.username ?? "")}
+							to={profileUrl(post.creator?.handle ?? "")}
 							className="font-medium link link-hover"
 						>
-							{post.creator?.displayName || post.creator?.username}
+							{post.creator?.displayName || post.creator?.handle}
 						</Link>
 						<p className="text-base-content/50 text-xs">
 							{date}

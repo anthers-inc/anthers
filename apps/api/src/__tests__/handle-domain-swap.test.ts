@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
+import { hostedAccounts, hostedIdentities, handleHistory, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { createAccount } from "./account-fixture";
@@ -48,6 +48,7 @@ beforeAll(async () => {
 afterAll(async () => {
 	restore("HOSTED_PDS_URL", before.url);
 	restore("HOSTED_ACCOUNT_KEY", before.key);
+	await db.delete(handleHistory).where(like(handleHistory.did, `did:plc:${RUN}%`));
 	await db.delete(hostedIdentities).where(like(hostedIdentities.did, `did:plc:${RUN}%`));
 	await db.delete(hostedAccounts).where(like(hostedAccounts.did, `did:plc:${RUN}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
@@ -225,7 +226,7 @@ describe("a domain that has not proved itself yet", () => {
 
 describe("a domain that has", () => {
 	it("takes the new handle everywhere the hub keeps one", async () => {
-		const { userId, did } = await makeAccount("proved");
+		const { userId, did, handle: oldHandle } = await makeAccount("proved");
 		const result = await swapHostedHandle(
 			userId,
 			{ handle: "alice.example.com" },
@@ -247,6 +248,15 @@ describe("a domain that has", () => {
 			.from(users)
 			.where(eq(users.id, userId));
 		expect(account.handle).toBe("alice.example.com");
+
+		// 🚨 And the OLD name is held in `handle_history` against this DID, with a future
+		// hold — so a `/@old` redirect can still find the account while links age out.
+		const [held] = await db
+			.select()
+			.from(handleHistory)
+			.where(eq(handleHistory.did, did));
+		expect(held.oldHandle).toBe(oldHandle);
+		expect(held.holdUntil.getTime()).toBeGreaterThan(Date.now());
 	});
 
 	// ⭐ Changing a handle writes a PLC operation, so the identity's head moves — and

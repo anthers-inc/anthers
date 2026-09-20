@@ -10,7 +10,7 @@
  * PAR, handle resolution and DID resolution. All of that is now the SDK's.
  */
 import { db } from "@anthers/db";
-import { users, works } from "@anthers/db/schema";
+import { handleHistory, users, works } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
@@ -444,6 +444,31 @@ export async function isCreatorIdentity(didOrHandle: string): Promise<boolean> {
 	}
 }
 
+/** How long an address somebody changed away from keeps routing to them. */
+export const HANDLE_HOLD_DAYS = 90;
+
+/**
+ * Hold a handle a DID just left behind, so its old address redirects for a while.
+ *
+ * Called by exactly the two places that watch a handle move under a stable DID —
+ * `findUserByAtprotoDid` below on a sign-in, and `recordHandleChange` in
+ * `hosted-accounts.ts` when the hub makes the move itself. The row is what makes an
+ * old `/@handle` a redirect rather than a 404; it is a cache of the directory and is
+ * read only when a live handle has already resolved to nothing, so a name somebody
+ * new has taken wins over it without this function being involved.
+ *
+ * A no-op when there is no old handle to hold, or when the old address is one this
+ * table already holds — a handle held once is not extended by moving again.
+ */
+export async function holdFormerHandle(did: string, oldHandle: string): Promise<void> {
+	if (!oldHandle) return;
+	const holdUntil = new Date(Date.now() + HANDLE_HOLD_DAYS * 24 * 60 * 60 * 1000);
+	await db
+		.insert(handleHistory)
+		.values({ oldHandle, did, holdUntil })
+		.onConflictDoNothing();
+}
+
 /** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */
 export async function findUserByAtprotoDid(
 	identity: AtprotoIdentity,
@@ -463,6 +488,7 @@ export async function findUserByAtprotoDid(
 	if (existing.atprotoPdsUrl !== identity.pdsUrl) updates.atprotoPdsUrl = identity.pdsUrl;
 	if (displayName && !existing.displayName) updates.displayName = displayName;
 	if (Object.keys(updates).length > 0) {
+		if (updates.atprotoHandle) await holdFormerHandle(existing.atprotoDid, existing.atprotoHandle);
 		await db.update(users).set(updates).where(eq(users.id, existing.id));
 	}
 	return { ...existing, ...updates };

@@ -71,7 +71,7 @@ describe("votes", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${sql.join(
+			sql`DELETE FROM users WHERE atproto_handle IN (${sql.join(
 				[creatorName, ...voterNames].map((n) => sql`${n}`),
 				sql`, `,
 			)})`,
@@ -83,7 +83,7 @@ describe("votes", () => {
 		const [creator] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, creatorName));
+			.where(eq(users.atprotoHandle, creatorName));
 		// Written directly: a comment thread needs a post to hang off, not a published one, and
 		// publishing would drag payout setup into a suite about votes.
 		postSlug = `votes-${id}`;
@@ -268,7 +268,7 @@ describe("a Work is reviewed, never voted on or commented on", () => {
 		const [voter] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, `votes_work_${id}`));
+			.where(eq(users.atprotoHandle, `votes_work_${id}`));
 		const work = await insertWork({ creatorId: voter.id, type: "text", title: `No votes ${id}` });
 
 		const vote = await req("/api/content/votes", {

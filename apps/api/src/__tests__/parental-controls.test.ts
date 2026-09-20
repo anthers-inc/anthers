@@ -66,18 +66,18 @@ describe("Parental controls", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${childName}, ${creatorName}, ${otherCreatorName})`,
+			sql`DELETE FROM users WHERE atproto_handle IN (${childName}, ${creatorName}, ${otherCreatorName})`,
 		);
 		child = await signUp(childName);
 		creatorCookie = await signUp(creatorName);
 		await signUp(otherCreatorName);
 		const rows = await db
-			.select({ id: users.id, username: users.username })
+			.select({ id: users.id, username: users.atprotoHandle })
 			.from(users)
-			.where(sql`username IN (${childName}, ${creatorName}, ${otherCreatorName})`);
-		childId = rows.find((r) => r.username === childName)!.id;
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		otherCreatorId = rows.find((r) => r.username === otherCreatorName)!.id;
+			.where(sql`atproto_handle IN (${childName}, ${creatorName}, ${otherCreatorName})`);
+		childId = rows.find((r) => r.atproto_handle === childName)!.id;
+		creatorId = rows.find((r) => r.atproto_handle === creatorName)!.id;
+		otherCreatorId = rows.find((r) => r.atproto_handle === otherCreatorName)!.id;
 
 		videoId = (
 			await insertWork({
@@ -115,7 +115,7 @@ describe("Parental controls", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${childName}, ${creatorName}, ${otherCreatorName})`,
+			sql`DELETE FROM users WHERE atproto_handle IN (${childName}, ${creatorName}, ${otherCreatorName})`,
 		);
 	});
 

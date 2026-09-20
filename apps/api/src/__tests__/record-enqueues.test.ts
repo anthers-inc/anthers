@@ -57,7 +57,7 @@ function call(method: string, path: string, cookie: string, body?: unknown) {
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	return { cookie: account.cookie, id: row.id };
 }
 
@@ -75,7 +75,7 @@ let postSlug = "";
 let commentId = 0;
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username IN (${hostName}, ${abeName}, ${beeName})`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${hostName}, ${abeName}, ${beeName})`);
 	host = await signUp(hostName);
 	abe = await signUp(abeName);
 	bee = await signUp(beeName);

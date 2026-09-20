@@ -22,19 +22,19 @@ import type { QueueTrack } from "./music-queue";
 /** How a creator is identified on a track, when the Work does not carry it. */
 export interface TrackCreator {
 	id?: number | null;
-	username?: string | null;
+	handle?: string | null;
 	displayName?: string | null;
 }
 
 /** The Work shape these read — the serialized viewer form, with an optional creator. */
 type WorkWithCreator = Work & {
-	creator?: { username?: string | null; displayName?: string | null } | null;
+	creator?: { handle?: string | null; displayName?: string | null } | null;
 };
 
 export function trackFromWork(work: WorkWithCreator, creator?: TrackCreator | null): QueueTrack {
-	const username = work.creator?.username ?? creator?.username ?? null;
+	const handle = work.creator?.handle ?? creator?.handle ?? null;
 	const display =
-		work.creator?.displayName ?? creator?.displayName ?? username ?? "Unknown creator";
+		work.creator?.displayName ?? creator?.displayName ?? handle ?? "Unknown creator";
 
 	return {
 		workId: work.id,
@@ -42,7 +42,7 @@ export function trackFromWork(work: WorkWithCreator, creator?: TrackCreator | nu
 		publicId: work.publicId ?? 0,
 		title: work.title || "Untitled",
 		creator: display,
-		creatorUsername: username,
+		creatorHandle: handle,
 		creatorId: work.creatorId ?? creator?.id ?? null,
 		thumbnail: work.thumbnail || null,
 		durationSeconds: work.durationSeconds ?? null,

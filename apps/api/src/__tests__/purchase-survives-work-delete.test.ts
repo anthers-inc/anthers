@@ -57,15 +57,15 @@ describe("A purchase survives the Work being deleted", () => {
 	let buyerId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${buyerName})`);
 		creatorCookie = await signUp(creatorName);
 		buyerCookie = await signUp(buyerName);
 		const rows = await db
-			.select({ id: users.id, username: users.username })
+			.select({ id: users.id, username: users.atprotoHandle })
 			.from(users)
-			.where(sql`${users.username} IN (${creatorName}, ${buyerName})`);
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		buyerId = rows.find((r) => r.username === buyerName)!.id;
+			.where(sql`${users.atprotoHandle} IN (${creatorName}, ${buyerName})`);
+		creatorId = rows.find((r) => r.atproto_handle === creatorName)!.id;
+		buyerId = rows.find((r) => r.atproto_handle === buyerName)!.id;
 	}, DB_SETUP_TIMEOUT);
 
 	/** A released Work with one completed purchase against it. */

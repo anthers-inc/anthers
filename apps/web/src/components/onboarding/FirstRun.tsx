@@ -95,7 +95,7 @@ function Actions({
 	);
 }
 
-export default function FirstRun({ arrival, username }: { arrival: Arrival; username: string }) {
+export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle: string }) {
 	if (arrival.kind === "supporting") {
 		const backing =
 			arrival.creators > 0
@@ -104,7 +104,7 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 		return (
 			<div>
 				<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-					You're in, @{username}
+					You're in, @{handle}
 				</p>
 				<h1 style={serif} className="mt-2 text-3xl font-light leading-tight sm:text-4xl">
 					You're all set up
@@ -132,7 +132,7 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 		return (
 			<div>
 				<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-					You're in, @{username}
+					You're in, @{handle}
 				</p>
 				<h1 style={serif} className="mt-2 text-3xl font-light leading-tight sm:text-4xl">
 					Free, forever — starting now
@@ -167,7 +167,7 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 	return (
 		<div>
 			<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-				You're in, @{username}
+				You're in, @{handle}
 			</p>
 			<h1 style={serif} className="mt-2 text-3xl font-light leading-tight sm:text-4xl">
 				Welcome to Anthers

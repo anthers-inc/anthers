@@ -46,7 +46,7 @@ function claim(cookie: string, username: string, extra: Record<string, unknown>)
 /** The account's handle, which stays null for as long as no claim has succeeded. */
 async function handleOf(userId: number) {
 	const [row] = await db
-		.select({ username: users.username })
+		.select({ username: users.atprotoHandle })
 		.from(users)
 		.where(eq(users.id, userId));
 	return row?.username ?? null;
@@ -83,7 +83,7 @@ describe("nobody gets an account without accepting the terms", () => {
 describe("data-rights requests", () => {
 	it("stamps a 30-day deadline at creation and acknowledges it", async () => {
 		const name = `rt_req_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${name}`);
 		const { cookie } = await createAccount(name);
 
 		const before = Date.now();
@@ -117,7 +117,7 @@ describe("data-rights requests", () => {
 
 	it("rejects an unknown kind rather than storing it", async () => {
 		const name = `rt_bad_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${name}`);
 		const { cookie } = await createAccount(name);
 
 		const res = await req("/api/accounts/me/rights-requests", {

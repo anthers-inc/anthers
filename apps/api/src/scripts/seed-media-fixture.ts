@@ -53,7 +53,8 @@ import { transcodeVideo } from "../jobs/transcode-video.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { storage } from "../services/storage/index.js";
 import { syncWorkListing } from "../services/work-listing.js";
-import { createLocalAccount } from "./local-accounts.js";
+import { createLocalAccount, localHandleName } from "./local-accounts.js";
+import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
 
 const TAG = "[media-fixture]";
@@ -194,12 +195,11 @@ async function ensureCreator(): Promise<number> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, MEDIA_FIXTURE_USERNAME))
+		.where(eq(users.atprotoHandle, `${localHandleName(MEDIA_FIXTURE_USERNAME)}.${await hostedHandleSuffix()}`))
 		.limit(1);
 	if (existing) return existing.id;
 
 	const created = await createLocalAccount({
-		username: MEDIA_FIXTURE_USERNAME,
 		email: MEDIA_FIXTURE_EMAIL,
 		handleName: MEDIA_FIXTURE_USERNAME,
 		emailVerified: true,

@@ -73,17 +73,17 @@ async function rawExport(cookie: string): Promise<{ res: Response; text: string 
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username IN (${subjectName}, ${otherName})`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${subjectName}, ${otherName})`);
 	subject = await signUp(subjectName);
 	await enablePayouts(subjectName);
 	other = await signUp(otherName);
 	await enablePayouts(otherName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE username IN (${subjectName}, ${otherName})`,
+		sql`UPDATE users SET is_creator = true WHERE atproto_handle IN (${subjectName}, ${otherName})`,
 	);
 
 	const idOf = async (u: string) => {
-		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, u));
+		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, u));
 		return row.id;
 	};
 	subjectId = await idOf(subjectName);

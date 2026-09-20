@@ -31,7 +31,7 @@ import { eq } from "drizzle-orm";
  * of them do not keep the id. Idempotent, so a suite that calls it twice is fine.
  */
 export async function enablePayouts(username: string): Promise<void> {
-	const [user] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [user] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	if (!user) throw new Error(`enablePayouts: no user named ${username}`);
 	await enablePayoutsFor(user.id);
 }

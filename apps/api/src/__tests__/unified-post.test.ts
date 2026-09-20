@@ -51,7 +51,7 @@ describe("Catalog vertical slice", () => {
 	let announcementSlug: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${otherName})`);
 	}, DB_SETUP_TIMEOUT);
 
 	// A setup step wearing a test's clothes: the cookies it assigns are what every test
@@ -64,11 +64,11 @@ describe("Catalog vertical slice", () => {
 			const [creatorRow] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.username, creatorName));
+				.where(eq(users.atprotoHandle, creatorName));
 			creatorId = creatorRow.id;
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
-			await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
+			await db.execute(sql`UPDATE users SET is_creator = true WHERE atproto_handle = ${creatorName}`);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();
 		},

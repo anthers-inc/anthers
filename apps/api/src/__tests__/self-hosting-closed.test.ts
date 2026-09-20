@@ -36,16 +36,16 @@ function req(path: string, options?: RequestInit) {
 }
 
 const id = crypto.randomUUID().slice(0, 8);
-const username = `shc_${id}`;
+const atproto_handle = `shc_${id}`;
 let cookie: string;
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username = ${username}`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${username}`);
 	cookie = (await createAccount(username)).cookie;
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username = ${username}`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${username}`);
 });
 
 describe("the self-hosting flag cannot be set by request", () => {
@@ -91,7 +91,7 @@ describe("the self-hosting flag cannot be set by request", () => {
 		});
 		const rows = await db.execute(
 			sql`SELECT a.is_self_hosting FROM accounts a
-			    JOIN users u ON u.id = a.user_id WHERE u.username = ${username}`,
+			    JOIN users u ON u.id = a.user_id WHERE u.atproto_handle = ${username}`,
 		);
 		// Either no account row was created, or it exists and the flag is still false.
 		for (const row of rows) expect(row.is_self_hosting).toBeFalsy();

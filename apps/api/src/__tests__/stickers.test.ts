@@ -60,7 +60,7 @@ describe("giving a Sticker", () => {
 		giverCookie = await signUp(`stk_giver_${RUN}`);
 		await signUp(`stk_creator_${RUN}`);
 		await signUp(`stk_other_${RUN}`);
-		const rows = await db.select({ id: users.id, username: users.username }).from(users);
+		const rows = await db.select({ id: users.id, username: users.atprotoHandle }).from(users);
 		const byName = new Map(rows.map((r) => [r.username, r.id]));
 		giverId = byName.get(`stk_giver_${RUN}`)!;
 		creatorId = byName.get(`stk_creator_${RUN}`)!;
@@ -332,7 +332,7 @@ describe("a free account", () => {
 		const [user] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, `stk_free_${RUN}`));
+			.where(eq(users.atprotoHandle, `stk_free_${RUN}`));
 		await db
 			.insert(accounts)
 			.values({
@@ -351,7 +351,7 @@ describe("a free account", () => {
 		const [target] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, `stk_freetarget_${RUN}`));
+			.where(eq(users.atprotoHandle, `stk_freetarget_${RUN}`));
 		const work = await insertWork({ creatorId: target.id, type: "text", title: `Free ${RUN}` });
 
 		const res = await give(cookie, {
@@ -385,7 +385,7 @@ describe("the Stickers on a page", () => {
 	beforeAll(async () => {
 		cookie = await signUp(`stk_show_${RUN}`);
 		await signUp(`stk_showcreator_${RUN}`);
-		const rows = await db.select({ id: users.id, username: users.username }).from(users);
+		const rows = await db.select({ id: users.id, username: users.atprotoHandle }).from(users);
 		const byName = new Map(rows.map((r) => [r.username, r.id]));
 		giverId = byName.get(`stk_show_${RUN}`)!;
 		creatorId = byName.get(`stk_showcreator_${RUN}`)!;

@@ -39,7 +39,7 @@ const testDids: string[] = [];
 afterAll(async () => {
 	for (const k of testKeys) await db.delete(atprotoOauthState).where(eq(atprotoOauthState.key, k));
 	for (const d of testDids) await db.delete(atprotoSessions).where(eq(atprotoSessions.did, d));
-	await db.delete(users).where(like(users.username, `${RUN}%`));
+	await db.delete(users).where(like(users.atprotoHandle, `${RUN}%`));
 	await db.delete(users).where(like(users.email, `%${RUN}%`));
 });
 

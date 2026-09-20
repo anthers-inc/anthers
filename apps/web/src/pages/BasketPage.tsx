@@ -43,7 +43,7 @@ export default function BasketPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
-	const creator = items[0]?.creatorUsername ?? null;
+	const creator = items[0]?.creatorHandle ?? null;
 
 	const refresh = useCallback(async () => {
 		if (count === 0) {
@@ -110,7 +110,7 @@ export default function BasketPage() {
 				{items.map((item) => (
 					<li key={item.workId} className="flex items-center gap-3 p-3">
 						<div className="min-w-0 flex-1">
-							<Link to={creatorWorkUrl(item.creatorUsername, item.slug)} className="link-hover">
+							<Link to={creatorWorkUrl(item.creatorHandle, item.slug)} className="link-hover">
 								<span className="block truncate text-sm font-medium">{item.title}</span>
 							</Link>
 						</div>

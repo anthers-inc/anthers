@@ -253,7 +253,7 @@ describe("POST /auth/signup/start tells the caller nothing", () => {
 });
 
 describe("POST /auth/signup/verify", () => {
-	test("creates the account, verified, nameless, holding its identity, and signed in", async () => {
+	test("creates the account, verified, holding its identity, and signed in", async () => {
 		const email = addr("create");
 
 		const res = await signUp(email);
@@ -262,16 +262,14 @@ describe("POST /auth/signup/verify", () => {
 		const body = (await res.json()) as {
 			user: {
 				id: number;
-				username: string | null;
+				handle: string;
 				emailVerified: boolean;
 				atprotoDid: string | null;
 			};
 			created: boolean;
-			needsOnboarding: boolean;
 		};
 		expect(body.created).toBe(true);
-		expect(body.needsOnboarding).toBe(true);
-		expect(body.user.username).toBeNull();
+		expect(typeof body.user.handle).toBe("string");
 		expect(body.user.atprotoDid?.startsWith("did:plc:")).toBe(true);
 
 		// Verified from the first instant: the code they just typed IS the verification,
@@ -454,29 +452,8 @@ describe("POST /auth/signin/verify", () => {
 
 		const body = (await res.json()) as {
 			user: { email: string };
-			needsOnboarding: boolean;
 		};
 		expect(body.user.email).toBe(email);
-		// The ceremony leaves the handle for onboarding, so an account that has only ever
-		// been through it still owes one — and this code is the way every account comes back.
-		expect(body.needsOnboarding).toBe(true);
-	});
-
-	test("says onboarding is done once a handle is claimed", async () => {
-		const email = await accountFor("siv-named");
-		const first = await issueSignInCode(email);
-		const signedIn = await post("/api/auth/signin/verify", { email, code: first.code });
-		const cookie = (signedIn.headers.get("Set-Cookie") ?? "").split(";")[0];
-
-		await post(
-			"/api/auth/onboarding/claim",
-			{ username: `${RUN}named`.slice(0, 30), acceptTerms: true },
-			{ Cookie: cookie },
-		);
-
-		const again = await issueSignInCode(email);
-		const res = await post("/api/auth/signin/verify", { email, code: again.code });
-		expect(((await res.json()) as { needsOnboarding: boolean }).needsOnboarding).toBe(false);
 	});
 
 	test("🚨 a valid code for an address with no account creates NOTHING", async () => {
@@ -528,178 +505,25 @@ describe("POST /auth/signin/verify", () => {
 	});
 });
 
-describe("POST /auth/onboarding/claim", () => {
-	/** Walk the ceremony to a signed-in, nameless account and return its cookie. */
-	async function pendingAccount(tag: string): Promise<{ cookie: string; email: string }> {
-		const email = addr(tag);
-		const res = await signUp(email);
-		const cookie = (res.headers.get("Set-Cookie") ?? "").match(/session=[^;]+/)?.[0] ?? "";
-		return { cookie, email };
-	}
-
-	test("claims the handle, with no password on offer", async () => {
-		const { cookie, email } = await pendingAccount("claim");
-		const username = `${RUN}claim`.slice(0, 30);
-
-		const res = await post(
-			"/api/auth/onboarding/claim",
-			{ username, acceptTerms: true },
-			{ Cookie: cookie },
-		);
-		expect(res.status).toBe(200);
-
-		const [row] = await db.select().from(users).where(eq(users.email, email));
-		expect(row.username).toBe(username);
-		// Sign-in is the code and nothing else, so an account no longer has anything to
-		// leave unset — the users table has no credential column at all.
-		expect("passwordHash" in row).toBe(false);
-	});
-
-	test("a password sent anyway is refused, not silently accepted", async () => {
-		const { cookie } = await pendingAccount("claimpw");
-		const username = `${RUN}pw`.slice(0, 30);
-
-		const res = await post(
-			"/api/auth/onboarding/claim",
-			{ username, password: "correct horse battery", acceptTerms: true },
-			{ Cookie: cookie },
-		);
-
-		// The schema rejects unknown keys — a credential sent to a route that has sworn
-		// off credentials is a caller operating on an assumption this API retired.
-		expect(res.status).toBe(400);
-		const [row] = await db
-			.select({ username: users.username })
-			.from(users)
-			.where(eq(users.username, username));
-		expect(row?.username ?? null).toBeNull();
-	});
-
-	test("a taken handle is refused and nothing is written", async () => {
-		const { cookie: firstCookie } = await pendingAccount("dup1");
-		const { cookie: secondCookie, email: secondEmail } = await pendingAccount("dup2");
-		const username = `${RUN}dup`.slice(0, 30);
-
-		await post(
-			"/api/auth/onboarding/claim",
-			{ username, acceptTerms: true },
-			{ Cookie: firstCookie },
-		);
-		const res = await post(
-			"/api/auth/onboarding/claim",
-			{ username, acceptTerms: true },
-			{ Cookie: secondCookie },
-		);
-
-		expect(res.status).toBe(409);
-		const [row] = await db.select().from(users).where(eq(users.email, secondEmail));
-		expect(row.username).toBeNull();
-	});
-
-	test("claiming twice is refused — a handle is not renamed through this door", async () => {
-		const { cookie } = await pendingAccount("twice");
-		const first = `${RUN}t1`.slice(0, 30);
-		const second = `${RUN}t2`.slice(0, 30);
-
-		await post(
-			"/api/auth/onboarding/claim",
-			{ username: first, acceptTerms: true },
-			{ Cookie: cookie },
-		);
-		const res = await post(
-			"/api/auth/onboarding/claim",
-			{ username: second, acceptTerms: true },
-			{ Cookie: cookie },
-		);
-
-		// Renaming has consequences this endpoint should not quietly acquire: other
-		// people hold the old URL, and the vacated name becomes impersonatable.
-		expect(res.status).toBe(409);
-	});
-
-	test("a reserved handle is refused", async () => {
-		const { cookie } = await pendingAccount("reserved");
-		const res = await post(
-			"/api/auth/onboarding/claim",
-			{ username: "moderation", acceptTerms: true },
-			{ Cookie: cookie },
-		);
-		// Impersonation is the only thing left that reserves a name: somebody posting as
-		// "moderation" borrows an authority they do not have.
-		expect(res.status).toBe(400);
-	});
-
-	test("🚨 a handle that is also a page is NOT refused", async () => {
-		// This endpoint carries its own copy of the `isReservedUsername` refine, separately
-		// from sign-up, so the two can disagree — and a blacklist growing back in one of
-		// them would be invisible from the other. Profiles live at `/@name`, so "settings"
-		// is an ordinary handle.
-		const { cookie } = await pendingAccount("page-named");
-		const res = await post(
-			"/api/auth/onboarding/claim",
-			{ username: "settings", acceptTerms: true },
-			{ Cookie: cookie },
-		);
-		expect(res.status).toBe(200);
-	});
-
-	test("requires a signed-in account", async () => {
-		const res = await post("/api/auth/onboarding/claim", {
-			username: `${RUN}anon`.slice(0, 30),
-			acceptTerms: true,
-		});
-		expect(res.status).toBe(401);
-	});
-
-	/**
-	 * 🚨 The 13+ floor is the one thing Anthers asserts about age, and **an unaccepted
-	 * assertion is not one** — the phrase lived in a document no user had ever seen,
-	 * which made it closer to a wish than a term.
-	 *
-	 * The ceremony moves where this has to be asked. `/subscribe` collects an identity and
-	 * nothing else, `/finish` an address, and `/signup/verify` creates the account the moment
-	 * the code checks out — so **onboarding is the only place left**, and if it does not ask,
-	 * nobody ever agreed to anything.
-	 */
-	test("refuses to claim a handle without the terms actually being accepted", async () => {
-		const { cookie, email } = await pendingAccount("terms");
-		const username = `${RUN}terms`.slice(0, 30);
-
-		const missing = await post("/api/auth/onboarding/claim", { username }, { Cookie: cookie });
-		expect(missing.status).toBe(400);
-
-		// `false` is not a value to accept and quietly record — it is a request that
-		// cannot be granted, which is why the schema is a literal rather than a boolean.
-		const refused = await post(
-			"/api/auth/onboarding/claim",
-			{ username, acceptTerms: false },
-			{ Cookie: cookie },
-		);
-		expect(refused.status).toBe(400);
-
-		// And neither attempt wrote anything.
-		const [row] = await db.select().from(users).where(eq(users.email, email));
-		expect(row.username).toBeNull();
-	});
-});
-
-describe("a pending account has no public existence", () => {
-	test("it is absent from the creator listing even when flagged a creator", async () => {
+describe("a pending account has no hidden public existence", () => {
+	test("a fresh account is a creator in the listing only once flagged one", async () => {
 		const email = addr("ghost");
 		await signUp(email);
 
-		// Force the one state that could leak: a creator with no handle. Nothing in the
-		// app can reach this, which is exactly why it is worth asserting — the listing
-		// must not depend on onboarding having run.
+		const before = (await (await app.request("/api/accounts/creators")).json()) as {
+			creators: { id: number; handle: string }[];
+		};
+		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+		expect(before.creators.some((c) => c.id === row.id)).toBe(false);
+
 		await db.update(users).set({ isCreator: true }).where(eq(users.email, email));
 
-		const res = await app.request("/api/accounts/creators");
-		const body = (await res.json()) as { creators: { id: number; username: string }[] };
-
-		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
-		expect(body.creators.some((c) => c.id === row.id)).toBe(false);
+		const after = (await (await app.request("/api/accounts/creators")).json()) as {
+			creators: { id: number; handle: string }[];
+		};
+		expect(after.creators.some((c) => c.id === row.id)).toBe(true);
 		// And nothing in the payload carries a null handle, which is the shape the
-		// browser's `PublicUser.username: string` promises.
-		expect(body.creators.every((c) => typeof c.username === "string")).toBe(true);
+		// browser's `PublicUser.handle: string` promises.
+		expect(after.creators.every((c) => typeof c.handle === "string")).toBe(true);
 	});
 });

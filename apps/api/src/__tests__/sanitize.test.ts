@@ -101,7 +101,7 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		'<img src="x" onerror="alert(1)">';
 
 	async function signUpAndGetCookie(): Promise<string> {
-		const username = `xss_${testId}`;
+		const atproto_handle = `xss_${testId}`;
 		const { cookie } = await createAccount(username);
 		// Publishing takes a fully set-up creator.
 		await enablePayouts(username);

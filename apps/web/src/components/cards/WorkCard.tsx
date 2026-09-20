@@ -22,12 +22,12 @@ import PricingBadge from "../ui/PricingBadge";
 
 /** Who the support would go to, for a card's unlock copy. */
 function cardCreatorName(work: WorkCardItem): string {
-	return work.creator?.displayName || work.creator?.username || "this creator";
+	return work.creator?.displayName || work.creator?.handle || "this creator";
 }
 
 /** A Work as the Catalog lists it, plus the creator the listing joins on. */
 type WorkCardItem = Work & {
-	creator?: { username: string; displayName?: string | null; avatar?: string | null };
+	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
 };
 
 /**
@@ -148,15 +148,15 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					{post.creator?.avatar ? (
 						<img
 							src={post.creator.avatar}
-							alt={post.creator.username}
+							alt={post.creator.handle}
 							className="w-6 h-6 rounded-full object-cover"
 						/>
 					) : (
 						<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold">
-							{(post.creator?.username ?? "?").charAt(0).toUpperCase()}
+							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
 						</div>
 					)}
-					<span className="text-sm text-base-content/70">{post.creator?.username}</span>
+					<span className="text-sm text-base-content/70">{post.creator?.handle}</span>
 					<span className="text-xs text-base-content/40 ml-auto">{date}</span>
 				</div>
 

@@ -57,6 +57,8 @@ import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { storage } from "../services/storage/index.js";
+import { hostedHandleSuffix } from "../services/hosted-accounts.js";
+import { localHandleName } from "./local-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
 
 const TAG = "[gauntlet-media]";
@@ -134,7 +136,7 @@ async function creatorId(): Promise<number | null> {
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, GAUNTLET_CREATOR_USERNAME))
+		.where(eq(users.atprotoHandle, `${localHandleName(GAUNTLET_CREATOR_USERNAME)}.${await hostedHandleSuffix()}`))
 		.limit(1);
 	return row?.id ?? null;
 }

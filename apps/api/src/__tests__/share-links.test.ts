@@ -95,18 +95,18 @@ describe("Share links", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${sharerName}, ${creatorName}, ${otherName})`,
+			sql`DELETE FROM users WHERE atproto_handle IN (${sharerName}, ${creatorName}, ${otherName})`,
 		);
 		sharerCookie = await signUp(sharerName);
 		creatorCookie = await signUp(creatorName);
 		await signUp(otherName);
 		const rows = await db
-			.select({ id: users.id, username: users.username })
+			.select({ id: users.id, username: users.atprotoHandle })
 			.from(users)
-			.where(sql`username IN (${sharerName}, ${creatorName}, ${otherName})`);
-		sharerId = rows.find((r) => r.username === sharerName)!.id;
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		otherId = rows.find((r) => r.username === otherName)!.id;
+			.where(sql`atproto_handle IN (${sharerName}, ${creatorName}, ${otherName})`);
+		sharerId = rows.find((r) => r.atproto_handle === sharerName)!.id;
+		creatorId = rows.find((r) => r.atproto_handle === creatorName)!.id;
+		otherId = rows.find((r) => r.atproto_handle === otherName)!.id;
 
 		const open = await insertWork({
 			creatorId,
@@ -160,7 +160,7 @@ describe("Share links", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${sharerName}, ${creatorName}, ${otherName})`,
+			sql`DELETE FROM users WHERE atproto_handle IN (${sharerName}, ${creatorName}, ${otherName})`,
 		);
 	});
 

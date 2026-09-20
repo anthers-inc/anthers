@@ -47,12 +47,12 @@ export default function ParentalControlsSection() {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [saved, setSaved] = useState(false);
-	const [username, setUsername] = useState("");
+	const [handleInput, setHandleInput] = useState("");
 	/**
 	 * Creator id → the name to show.
 	 *
-	 * The rules store **ids**, not handles, and that is deliberate: a creator who changes their
-	 * username must not silently fall off a guardian's list. The cost is that the panel has to
+	 * The rules store **ids**, not handles, and that is deliberate: a creator whose handle
+	 * changes must not silently fall off a guardian's list. The cost is that the panel has to
 	 * look names up to be readable, which is what this is; a rule whose name has not arrived
 	 * shows its id rather than disappearing.
 	 */
@@ -97,7 +97,7 @@ export default function ParentalControlsSection() {
 
 	/** Resolve a handle to an id, then add it to the list in whichever direction it runs. */
 	const addCreator = async () => {
-		const handle = username.trim();
+		const handle = handleInput.trim();
 		if (!handle) return;
 		setBusy(true);
 		setError(null);
@@ -107,14 +107,14 @@ export default function ParentalControlsSection() {
 				setError(`No creator called ${displayHandle(handle)}.`);
 				return;
 			}
-			const { user } = (await res.json()) as { user: { id: number; username: string } };
+			const { user } = (await res.json()) as { user: { id: number; handle: string } };
 			const key = String(user.id);
 			const current = policy?.creators ?? { defaultAllow: true, rules: [] };
 			if (current.rules.some((r) => r.key === key)) {
-				setUsername("");
+				setHandleInput("");
 				return;
 			}
-			setNames((n) => ({ ...n, [key]: user.username }));
+			setNames((n) => ({ ...n, [key]: user.handle }));
 			await save({
 				creators: {
 					...current,
@@ -123,7 +123,7 @@ export default function ParentalControlsSection() {
 					rules: [...current.rules, { key, allow: !current.defaultAllow, dailySeconds: null }],
 				},
 			});
-			setUsername("");
+			setHandleInput("");
 		} catch {
 			setError("That couldn't be looked up.");
 		} finally {
@@ -358,12 +358,12 @@ export default function ParentalControlsSection() {
 					</p>
 					<div className="flex flex-wrap items-end gap-2">
 						<label className="form-control">
-							<span className="label-text text-xs">Add by username</span>
+							<span className="label-text text-xs">Add by handle</span>
 							<input
 								type="text"
-								value={username}
-								onChange={(e) => setUsername(e.target.value.replace(/^@/, ""))}
-								placeholder="creator"
+								value={handleInput}
+								onChange={(e) => setHandleInput(e.target.value.replace(/^@/, ""))}
+								placeholder="creator.anthers.social"
 								className="input input-bordered input-sm w-52"
 								disabled={busy || !pin}
 							/>
@@ -372,7 +372,7 @@ export default function ParentalControlsSection() {
 							type="button"
 							className="btn btn-sm"
 							onClick={addCreator}
-							disabled={busy || !pin || !username.trim()}
+							disabled={busy || !pin || !handleInput.trim()}
 						>
 							Add
 						</button>

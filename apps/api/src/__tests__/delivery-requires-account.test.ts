@@ -78,13 +78,13 @@ describe("Consuming a Work requires an account", () => {
 	let assetId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
 		const [creator] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, creatorName))
+			.where(eq(users.atprotoHandle, creatorName))
 			.limit(1);
 		creatorId = creator!.id;
 
@@ -155,7 +155,7 @@ describe("Consuming a Work requires an account", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
 	});
 
 	// ── The four routes that hand something over ──────────────────────────────

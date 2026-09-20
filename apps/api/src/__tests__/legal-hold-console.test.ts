@@ -50,7 +50,7 @@ async function userId(username: string): Promise<number> {
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, username))
+		.where(eq(users.atprotoHandle, username))
 		.limit(1);
 	return row.id;
 }
@@ -103,7 +103,7 @@ describe("the legal hold console", () => {
 
 	afterAll(async () => {
 		await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
-		await db.execute(sql`DELETE FROM users WHERE username IN (${plainName}, ${subjectName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${plainName}, ${subjectName})`);
 	});
 
 	it("admits no one who is not an operator, and is not advertised to a bearer credential", async () => {

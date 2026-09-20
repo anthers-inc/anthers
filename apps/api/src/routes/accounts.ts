@@ -21,11 +21,11 @@
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change either rung, or any kind of content
  *   GET    /creators                — list all creators
- *   GET    /users/:username         — public user profile
- *   POST   /users/:username/follow  — follow a creator
- *   POST   /users/:username/unfollow — unfollow a creator
- *   POST   /users/:username/block   — block a user
- *   POST   /users/:username/unblock — lift a block
+ *   GET    /users/:handle         — public user profile
+ *   POST   /users/:handle/follow  — follow a creator
+ *   POST   /users/:handle/unfollow — unfollow a creator
+ *   POST   /users/:handle/block   — block a user
+ *   POST   /users/:handle/unblock — lift a block
  *
  * **Blocking lives here, not under `/moderation`.** A block is a relationship
  * primitive between two accounts — the same shape as a follow and its opposite — and
@@ -56,7 +56,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
-import { type ClaimedUser, embedCreator, hasHandle } from "../lib/handles.js";
+import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import { buildAccountExport } from "../services/account-data.js";
 import {
@@ -94,7 +94,7 @@ import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.
 
 /** Public user profile shape (for lists and public profiles) */
 function serializePublicUser(
-	user: ClaimedUser,
+	user: typeof users.$inferSelect,
 	extra: {
 		followerCount: number;
 		projectCount: number;
@@ -106,7 +106,7 @@ function serializePublicUser(
 	return {
 		...(extra.mediums ? { mediums: extra.mediums } : {}),
 		id: user.id,
-		username: user.username,
+		handle: user.atprotoHandle,
 		displayName: user.displayName,
 		bio: user.bio,
 		isCreator: user.isCreator,
@@ -115,7 +115,6 @@ function serializePublicUser(
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		atprotoDid: user.atprotoDid,
-		atprotoHandle: user.atprotoHandle,
 		createdAt: user.createdAt,
 		followerCount: extra.followerCount,
 		projectCount: extra.projectCount,
@@ -127,7 +126,7 @@ function serializePublicUser(
 function serializePrivateUser(user: typeof users.$inferSelect) {
 	return {
 		id: user.id,
-		username: user.username,
+		handle: user.atprotoHandle,
 		email: user.email,
 		displayName: user.displayName,
 		bio: user.bio,
@@ -139,7 +138,6 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		emailVerified: user.emailVerified,
 		themePreference: user.themePreference,
 		atprotoDid: user.atprotoDid,
-		atprotoHandle: user.atprotoHandle,
 		createdAt: user.createdAt,
 		// Surfaced on /me because the cancel path runs through signing back in: someone
 		// who changes their mind has to be TOLD a deletion is pending the moment they
@@ -375,16 +373,12 @@ const accountRoutes = new Hono()
 			// someone with no profile — but this list is built from a join, and "it can't
 			// happen because of what another function does" is the reasoning the block
 			// filter above already refuses to rely on.
-			users: followedUsers.flatMap((row) =>
-				hasHandle(row.user)
-					? [
-							serializePublicUser(row.user, {
-								followerCount: Number(row.followerCount),
-								projectCount: Number(row.projectCount),
-								isFollowing: true, // by definition, you follow everyone in this list
-							}),
-						]
-					: [],
+			users: followedUsers.map((row) =>
+				serializePublicUser(row.user, {
+					followerCount: Number(row.followerCount),
+					projectCount: Number(row.projectCount),
+					isFollowing: true, // by definition, you follow everyone in this list
+				}),
 			),
 		});
 	})
@@ -436,7 +430,7 @@ const accountRoutes = new Hono()
 				: await db
 						.select({
 							post: posts,
-							creatorUsername: users.username,
+							creatorHandle: users.atprotoHandle,
 							creatorDisplayName: users.displayName,
 							creatorAvatar: users.avatar,
 						})
@@ -452,7 +446,7 @@ const accountRoutes = new Hono()
 				: await db
 						.select({
 							work: works,
-							creatorUsername: users.username,
+							creatorHandle: users.atprotoHandle,
 							creatorDisplayName: users.displayName,
 							creatorAvatar: users.avatar,
 						})
@@ -506,7 +500,7 @@ const accountRoutes = new Hono()
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
 					creator: embedCreator({
-						username: row.creatorUsername,
+						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,
 						avatar: row.creatorAvatar,
 					}),
@@ -540,7 +534,7 @@ const accountRoutes = new Hono()
 					releasedAt: w.releasedAt,
 					createdAt: w.createdAt,
 					creator: embedCreator({
-						username: row.creatorUsername,
+						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,
 						avatar: row.creatorAvatar,
 					}),
@@ -594,84 +588,76 @@ const accountRoutes = new Hono()
 			.where(and(eq(users.isCreator, true), notBlockedBy(currentUserId, users.id)));
 
 		return c.json({
-			creators: creatorList.flatMap((row) =>
-				hasHandle(row.user)
-					? [
-							serializePublicUser(row.user, {
-								followerCount: Number(row.followerCount),
-								projectCount: Number(row.projectCount),
-								isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
-								mediums: row.mediums ?? [],
-							}),
-						]
-					: [],
+			creators: creatorList.map((row) =>
+				serializePublicUser(row.user, {
+					followerCount: Number(row.followerCount),
+					projectCount: Number(row.projectCount),
+					isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
+					mediums: row.mediums ?? [],
+				}),
 			),
 		});
 	})
 
 	// ── Public User Profile ──────────────────────────────────────────────────
-	.get("/users/:username", async (c) => {
-		const { username } = c.req.param();
+	.get("/users/:handle", async (c) => {
+		const handle = c.req.param("handle");
 		const currentUserId = await getOptionalUserId(c);
 
-		const result = await db
+		// Resolve the address first: a handle that moved falls through to the account it
+		// moved to, because naming somebody by a name they left is still naming them. The
+		// browser-side redirect to the new address is the SPA's business, not this API's.
+		const resolution = await resolveHandle(handle);
+		const account =
+			resolution.account ??
+			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+
+		// A blocked profile is not found — the same answer a handle nobody has ever
+		// registered gets. It is the least informative response available: no
+		// blocked-state screen, no "this user has blocked you", nothing that states the
+		// block. That is not the same as concealing it, and we don't claim it is; a
+		// profile that used to load and now 404s is inferrable. What Anthers holds is
+		// that it never *says* so, and offers no surface reporting who blocked whom.
+		if (!account || (currentUserId != null && (await isBlocked(currentUserId, account.id)))) {
+			return c.json({ error: "User not found" }, 404);
+		}
+
+		const [row] = await db
 			.select({
-				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${account.id})`.as(
 						"follower_count",
 					),
-				projectCount: publishedProjectCount.as("project_count"),
-				...(currentUserId
-					? {
-							isFollowing:
-								sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${currentUserId} AND creator_id = ${usersId})`.as(
-									"is_following",
-								),
-						}
-					: {}),
+				projectCount:
+					sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = ${account.id} AND is_published = true)`.as(
+						"project_count",
+					),
+				isFollowing: currentUserId
+					? sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${currentUserId} AND creator_id = ${account.id})`
+					: sql<boolean>`false`,
 			})
 			.from(users)
-			// A blocked profile is not found — the same answer a username nobody has ever
-			// registered gets. It is the least informative response available: no
-			// blocked-state screen, no "this user has blocked you", nothing that states the
-			// block. That is not the same as concealing it, and we don't claim it is; a
-			// profile that used to load and now 404s is inferrable. What Anthers holds is
-			// that it never *says* so, and offers no surface reporting who blocked whom.
-			.where(and(eq(users.username, username), notBlockedBy(currentUserId, users.id)))
+			.where(eq(users.id, account.id))
 			.limit(1);
 
-		if (result.length === 0) {
-			return c.json({ error: "User not found" }, 404);
-		}
-
-		const row = result[0];
-		// Unreachable through this route — the lookup matched on the handle, so a row with
-		// none cannot come back — but the 404 is the correct answer to "show me the profile
-		// of an account that has not claimed a name", and stating it is cheaper than
-		// asserting the row's shape and being wrong later.
-		if (!hasHandle(row.user)) {
-			return c.json({ error: "User not found" }, 404);
-		}
 		return c.json({
-			user: serializePublicUser(row.user, {
-				followerCount: Number(row.followerCount),
-				projectCount: Number(row.projectCount),
-				isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
+			user: serializePublicUser(account, {
+				followerCount: Number(row?.followerCount ?? 0),
+				projectCount: Number(row?.projectCount ?? 0),
+				isFollowing: Boolean(row?.isFollowing),
 			}),
 		});
 	})
 
 	// ── Follow ───────────────────────────────────────────────────────────────
-	.post("/users/:username/follow", requireAuth, async (c) => {
+	.post("/users/:handle/follow", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { username } = c.req.param();
+		const handle = c.req.param("handle");
 
-		const [creator] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.username, username))
-			.limit(1);
+		const resolution = await resolveHandle(handle);
+		const creator =
+			resolution.account ??
+			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
 
 		if (!creator) {
 			return c.json({ error: "User not found" }, 404);
@@ -711,15 +697,14 @@ const accountRoutes = new Hono()
 	})
 
 	// ── Unfollow ─────────────────────────────────────────────────────────────
-	.post("/users/:username/unfollow", requireAuth, async (c) => {
+	.post("/users/:handle/unfollow", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { username } = c.req.param();
+		const handle = c.req.param("handle");
 
-		const [creator] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.username, username))
-			.limit(1);
+		const resolution = await resolveHandle(handle);
+		const creator =
+			resolution.account ??
+			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
 
 		if (!creator) {
 			return c.json({ error: "User not found" }, 404);
@@ -1139,7 +1124,7 @@ const accountRoutes = new Hono()
 		c.header("Content-Type", "application/json; charset=utf-8");
 		c.header(
 			"Content-Disposition",
-			`attachment; filename="anthers-export-${sessionUser.username}-${stamp}.json"`,
+			`attachment; filename="anthers-export-${sessionUser.handle}-${stamp}.json"`,
 		);
 		// Never cached: it is personal data, and a shared or proxy cache holding it is
 		// the failure this header exists for.
@@ -1147,15 +1132,14 @@ const accountRoutes = new Hono()
 		return c.body(JSON.stringify(data, null, 2));
 	})
 
-	.post("/users/:username/block", requireAuth, async (c) => {
+	.post("/users/:handle/block", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { username } = c.req.param();
+		const handle = c.req.param("handle");
 
-		const [target] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.username, username))
-			.limit(1);
+		const resolution = await resolveHandle(handle);
+		const target =
+			resolution.account ??
+			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
 
 		if (!target) return c.json({ error: "User not found" }, 404);
 
@@ -1165,19 +1149,18 @@ const accountRoutes = new Hono()
 		return c.json({ blocked: true }, 201);
 	})
 
-	.post("/users/:username/unblock", requireAuth, async (c) => {
+	.post("/users/:handle/unblock", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { username } = c.req.param();
+		const handle = c.req.param("handle");
 
 		// Resolved WITHOUT the block filter — deliberately. Every other lookup of a
-		// username goes through `notBlockedBy`, which would make the blocked user
+		// handle goes through `notBlockedBy`, which would make the blocked user
 		// invisible to the one person who needs to name them: their blocker. Unblocking
 		// is the one operation where the block must not hide its own subject.
-		const [target] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.username, username))
-			.limit(1);
+		const resolution = await resolveHandle(handle);
+		const target =
+			resolution.account ??
+			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
 
 		if (!target) return c.json({ error: "User not found" }, 404);
 

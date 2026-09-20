@@ -101,7 +101,7 @@ function allKeys(value: unknown, out: string[] = []): string[] {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
+		sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -109,10 +109,10 @@ beforeAll(async () => {
 	await enablePayouts(viewerAName);
 	const viewerB = await signUp(viewerBName);
 	await enablePayouts(viewerBName);
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
+	await db.execute(sql`UPDATE users SET is_creator = true WHERE atproto_handle = ${creatorName}`);
 
 	const idOf = async (username: string) => {
-		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 		return row.id;
 	};
 	creatorId = await idOf(creatorName);
@@ -234,10 +234,10 @@ describe("creator analytics never expose per-viewer identity", () => {
 		// The other half of the same promise. Analytics filter on `creatorId`, so a
 		// creator with no attention of their own must see zero rather than the platform's.
 		const otherName = `apriv_other_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${otherName}`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${otherName}`);
 		const other = await signUp(otherName);
 		await enablePayouts(otherName);
-		await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${otherName}`);
+		await db.execute(sql`UPDATE users SET is_creator = true WHERE atproto_handle = ${otherName}`);
 
 		const overview = await (await req(ANALYTICS_ROUTES[0], { headers: { Cookie: other } })).json();
 		expect(overview.uniqueViewers).toBe(0);

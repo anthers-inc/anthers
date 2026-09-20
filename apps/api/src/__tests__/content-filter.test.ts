@@ -63,7 +63,7 @@ const workByTitle = new Map<string, { id: number; publicId: number }>();
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const { cookie } = await createAccount(username);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	return { cookie, id: row!.id };
 }
 
@@ -94,7 +94,7 @@ const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorName}`,
 
 describe("a reader's filter by kind of content", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${readerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${readerName})`);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie, id: readerId } = await signUp(readerName));
 

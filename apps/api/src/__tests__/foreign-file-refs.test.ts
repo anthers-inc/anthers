@@ -72,7 +72,7 @@ async function createWork(cookie: string, body: Record<string, unknown>) {
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username IN (${victimName}, ${attackerName})`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${victimName}, ${attackerName})`);
 	for (const [name, set] of [
 		[victimName, (v: typeof victim) => (victim = v)],
 		[attackerName, (v: typeof attacker) => (attacker = v)],

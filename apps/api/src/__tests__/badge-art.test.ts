@@ -80,7 +80,7 @@ describe("Creator Badge art", () => {
 		const [row] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, creatorName));
+			.where(eq(users.atprotoHandle, creatorName));
 		creatorId = row.id;
 		gateId = await makeGate(creatorCookie, `Rung ${RUN}`);
 	}, DB_SETUP_TIMEOUT);
@@ -100,7 +100,7 @@ describe("Creator Badge art", () => {
 		await db.execute(
 			sql`DELETE FROM legal_holds WHERE subject_type = 'user' AND subject_id = ${creatorId}`,
 		);
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${otherName})`);
 	});
 
 	it("🚨 never puts the storage key in a response, only whether art exists", async () => {

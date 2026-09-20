@@ -99,7 +99,7 @@ async function view(workId: number, cookie: string, query = "") {
 
 describe("creator preview", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${strangerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${strangerName})`);
 		creatorCookie = await signUp(creatorName);
 		await enablePayouts(creatorName);
 		strangerCookie = await signUp(strangerName);

@@ -66,7 +66,7 @@ async function signUp(username: string): Promise<string> {
 }
 
 async function idOf(username: string): Promise<number | null> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
 	return row?.id ?? null;
 }
 
@@ -94,7 +94,7 @@ let purchaseId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${leaverName}, ${stayerName}, ${buyerName})`,
+		sql`DELETE FROM users WHERE atproto_handle IN (${leaverName}, ${stayerName}, ${buyerName})`,
 	);
 	leaver = await signUp(leaverName);
 	stayer = await signUp(stayerName);

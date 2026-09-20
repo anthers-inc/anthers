@@ -70,14 +70,14 @@ describe("Delivery-layer access", () => {
 	let freeAssetId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
 
 		const [creator] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, creatorName))
+			.where(eq(users.atprotoHandle, creatorName))
 			.limit(1);
 		creatorId = creator.id;
 
@@ -157,10 +157,10 @@ describe("Delivery-layer access", () => {
 	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
 	// outlives its creator's account), so deleting the users alone orphans them instead.
 	afterAll(async () => {
-		const owners = sql`SELECT id FROM users WHERE username IN (${creatorName}, ${viewerName})`;
+		const owners = sql`SELECT id FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`;
 		await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
 		await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
 	});
 
 	it("publishes a locked post and a free post over the same two items", async () => {});
@@ -415,7 +415,7 @@ describe("Delivery-layer access", () => {
 		const [buyer] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, viewerName))
+			.where(eq(users.atprotoHandle, viewerName))
 			.limit(1);
 
 		const [purchase] = await db

@@ -184,11 +184,11 @@ export async function describeSubject(
 	switch (subjectType) {
 		case "user": {
 			const [row] = await db
-				.select({ username: users.username })
-				.from(users)
-				.where(eq(users.id, subjectId))
-				.limit(1);
-			return row ? `@${row.username}` : null;
+.select({ handle: users.atprotoHandle })
+			.from(users)
+			.where(eq(users.id, subjectId))
+			.limit(1);
+		return row ? `@${row.handle}` : null;
 		}
 		case "work": {
 			const [row] = await db

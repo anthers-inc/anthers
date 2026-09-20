@@ -57,7 +57,7 @@ describe("project browse filters", () => {
 	let cookie: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
 
 		cookie = (await createAccount(creatorName)).cookie;
 		await enablePayouts(creatorName);

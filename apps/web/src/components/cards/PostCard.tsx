@@ -22,16 +22,16 @@ export default function PostCard({ post }: { post: PostListItem }) {
 					{post.creator?.avatar ? (
 						<img
 							src={post.creator.avatar}
-							alt={post.creator.username}
+							alt={post.creator.handle}
 							className="w-8 h-8 rounded-full object-cover"
 						/>
 					) : (
 						<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold">
-							{(post.creator?.username ?? "?").charAt(0).toUpperCase()}
+							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
 						</div>
 					)}
 					<div>
-						<span className="text-sm font-medium">{post.creator?.username}</span>
+						<span className="text-sm font-medium">{post.creator?.handle}</span>
 						<span className="text-xs text-base-content/50 ml-2">{date}</span>
 					</div>
 				</div>

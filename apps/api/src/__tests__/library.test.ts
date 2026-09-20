@@ -124,7 +124,7 @@ async function canOpen(workId: number): Promise<boolean> {
 
 describe("the Library", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${readerName})`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${readerName})`);
 		const creator = await signUp(creatorName);
 		await enablePayouts(creatorName);
 		const reader = await signUp(readerName);

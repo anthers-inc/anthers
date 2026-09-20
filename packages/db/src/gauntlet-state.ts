@@ -27,7 +27,12 @@
 import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
 import { assertDevCheckout } from "./dev-only.js";
-import { DOWNLOAD_PRICE, GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "./gauntlet.js";
+import {
+	DOWNLOAD_PRICE,
+	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_SLUG_PREFIX,
+	gauntletHandle,
+} from "./gauntlet.js";
 import {
 	accounts,
 	attentionEvents,
@@ -79,13 +84,14 @@ function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-async function userIdByUsername(username: string, role: string): Promise<number> {
-	const [row] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.username, username))
-		.limit(1);
-	if (!row) throw new Error(`${role} "${username}" not found. Run \`make gauntlet-reset\` first.`);
+/**
+ * The fixture's username is the preferred NAME the account was created with; the lookup key
+ * is the handle the server issued for it — see `gauntletHandle`./
+ */
+async function userIdByFixtureName(name: string, role: string, apiUrl: string): Promise<number> {
+	const handle = await gauntletHandle(apiUrl, name);
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, handle)).limit(1);
+	if (!row) throw new Error(`${role} "${handle}" not found. Run \`make gauntlet-reset\` first.`);
 	return row.id;
 }
 
@@ -96,8 +102,9 @@ async function main(): Promise<void> {
 	if (!viewerUsername) {
 		throw new Error("Pass --user <username> or set DEV_ACCOUNT_USERNAME in .env.");
 	}
-	const viewerId = await userIdByUsername(viewerUsername, "Viewer");
-	const creatorId = await userIdByUsername(GAUNTLET_CREATOR_USERNAME, "Gauntlet creator");
+	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
+	const viewerId = await userIdByFixtureName(viewerUsername, "Viewer", apiUrl);
+	const creatorId = await userIdByFixtureName(GAUNTLET_CREATOR_USERNAME, "Gauntlet creator", apiUrl);
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
 	const supportBudget = numFlag("--support-budget", 0, 300);

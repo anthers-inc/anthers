@@ -34,7 +34,7 @@ import SanitizedHtml from "../ui/SanitizedHtml";
 
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
 export type WorkDetail = Work & {
-	creator?: { username: string; displayName: string | null; avatar: string | null };
+	creator?: { handle: string; displayName: string | null; avatar: string | null };
 	/** Whether the creator can actually take a direct payment (Connect onboarded). */
 	creatorHasStripe?: boolean;
 	/**
@@ -163,25 +163,25 @@ interface WorkHeaderProps {
 
 /** The kind, the creator, the title, the dates and the rating, in that order. */
 export function WorkHeader({ work, title, titleAside, dates, rating }: WorkHeaderProps) {
-	const creatorName = work.creator?.displayName || work.creator?.username || "this creator";
+	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
 	return (
 		<header className="space-y-3">
 			<div className="flex flex-wrap items-center gap-3">
 				<ContentTypeBadge contentType={work.type} />
 				{work.creator && (
 					<Link
-						to={profileUrl(work.creator.username)}
+						to={profileUrl(work.creator.handle)}
 						className="flex items-center gap-2 text-sm hover:underline"
 					>
 						{work.creator.avatar ? (
 							<img
 								src={work.creator.avatar}
-								alt={work.creator.username}
+								alt={work.creator.handle}
 								className="w-6 h-6 rounded-full object-cover"
 							/>
 						) : (
 							<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold">
-								{work.creator.username.charAt(0).toUpperCase()}
+								{work.creator.handle.charAt(0).toUpperCase()}
 							</div>
 						)}
 						{creatorName}

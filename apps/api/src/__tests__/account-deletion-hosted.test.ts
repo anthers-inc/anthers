@@ -66,7 +66,7 @@ let deferHandle: string;
 let strandDid: string;
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username IN (${unreachableName}, ${strandedName})`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${unreachableName}, ${strandedName})`);
 	// Real identities on the session's server, sealed under the key this file set — so the one
 	// that is meant to be openable is.
 	const defer = await createAccount(unreachableName);

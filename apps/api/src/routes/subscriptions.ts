@@ -64,6 +64,7 @@ import { createMiddleware } from "hono/factory";
 import sharp from "sharp";
 import type Stripe from "stripe";
 import { z } from "zod";
+import { accountByHandle, resolveHandle } from "../lib/handles.js";
 import { getStripe } from "../lib/stripe.js";
 import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import {
@@ -762,7 +763,7 @@ const subscriptionRoutes = new Hono()
 			const creators =
 				directed.length > 0
 					? await db
-							.select({ id: users.id, username: users.username })
+							.select({ id: users.id, handle: users.atprotoHandle })
 							.from(users)
 							.where(
 								inArray(
@@ -771,7 +772,7 @@ const subscriptionRoutes = new Hono()
 								),
 							)
 					: [];
-			const byId = new Map(creators.map((u) => [u.id, u.username ?? String(u.id)]));
+			const byId = new Map(creators.map((u) => [u.id, u.handle]));
 			const picks: { creatorId: number; product: string; amount: number }[] = [];
 			for (const d of directed) {
 				const handle = byId.get(d.creatorId);
@@ -1313,7 +1314,7 @@ const subscriptionRoutes = new Hono()
 		const result = await db
 			.select({
 				distribution: poolDistributions,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
@@ -1338,7 +1339,7 @@ const subscriptionRoutes = new Hono()
 			distributions: result.map((r) => ({
 				...r.distribution,
 				creator: {
-					username: r.creatorUsername,
+					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
 					avatar: r.creatorAvatar,
 				},
@@ -1400,7 +1401,7 @@ const subscriptionRoutes = new Hono()
 		const result = await db
 			.select({
 				seed: seedAllocations,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 			})
 			.from(seedAllocations)
@@ -1415,7 +1416,7 @@ const subscriptionRoutes = new Hono()
 			seeds: result.map((r) => ({
 				...r.seed,
 				creator: {
-					username: r.creatorUsername,
+					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
 				},
 			})),
@@ -1549,9 +1550,9 @@ const subscriptionRoutes = new Hono()
 
 	// ── Creator Gates ────────────────────────────────────────────────────────
 	.get("/gates", async (c) => {
-		const creatorUsername = c.req.query("creator");
+		const creatorHandle = c.req.query("creator");
 
-		if (!creatorUsername) {
+		if (!creatorHandle) {
 			// If no creator specified, require auth and return own gates
 			const userId = await getOptionalUserId(c);
 			if (!userId) return c.json({ error: "Unauthorized" }, 401);
@@ -1568,7 +1569,7 @@ const subscriptionRoutes = new Hono()
 		const [creator] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, creatorUsername))
+			.where(eq(users.atprotoHandle, creatorHandle))
 			.limit(1);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
@@ -1821,7 +1822,7 @@ const subscriptionRoutes = new Hono()
 	.get("/supporters", async (c) => {
 		const rows = await db
 			.select({
-				username: users.username,
+				handle: users.atprotoHandle,
 				displayName: users.displayName,
 				lifetime: sql<string>`COALESCE(SUM(${accountCycles.anthersSupport}), 0)`,
 			})
@@ -1829,18 +1830,18 @@ const subscriptionRoutes = new Hono()
 			.innerJoin(users, eq(users.id, accountCycles.userId))
 			.innerJoin(accounts, eq(accounts.userId, accountCycles.userId))
 			.where(eq(accounts.listedAsSupporter, true))
-			.groupBy(users.id, users.username, users.displayName)
+			.groupBy(users.id, users.atprotoHandle, users.displayName)
 			.having(sql`COALESCE(SUM(${accountCycles.anthersSupport}), 0) > 0`);
 
-		// ⚠️ **A supporter with no name at all is left off rather than rendered blank.**
-		// `users.username` is nullable, so a row can reach here with nothing to display —
-		// and an empty line on a thank-you page is worse than an absence, because it looks
-		// like the page is broken rather than like somebody is missing.
+		// ⚠️ **A supporter with no name at all is left off rather than rendered blank** — an
+		// empty line on a thank-you page is worse than an absence, because it looks like the
+		// page is broken rather than like somebody is missing. `atprotoHandle` is never null,
+		// so this now only drops a row when both name fields would render as nothing.
 		const named = rows.flatMap((r) => {
-			const username = r.username ?? "";
+			const handle = r.handle;
 			const displayName = r.displayName || null;
-			if (!username && !displayName) return [];
-			return [{ username, displayName, lifetimeDollars: Number(r.lifetime) }];
+			if (!handle && !displayName) return [];
+			return [{ handle, displayName, lifetimeDollars: Number(r.lifetime) }];
 		});
 
 		return c.json({ groups: groupSupporters(named) });
@@ -2038,16 +2039,16 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Creator Status (for the creator page's Badge + directed-support display) ──
-	.get("/creator-status/:username", async (c) => {
-		const { username } = c.req.param();
+	.get("/creator-status/:handle", async (c) => {
+		const handle = c.req.param("handle");
 		const currentUserId = await getOptionalUserId(c);
 
-		// Look up the creator
-		const [creator] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.username, username))
-			.limit(1);
+		// Look up the creator, following a stale handle to the account's current one
+		// (a renamed account is still the one being asked about).
+		const resolution = await resolveHandle(handle);
+		const creator =
+			resolution.account ??
+			(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
 		// Get the creator's gates

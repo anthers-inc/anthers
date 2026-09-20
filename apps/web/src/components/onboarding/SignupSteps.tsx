@@ -11,11 +11,9 @@
  * steps and marks the finished ones is the smallest thing that makes progress legible.
  *
  * ⚠️ **Two routes, one shell** (Parker's call, 2026-08-26). `/finish` proves the address and
- * takes any payment; `/welcome` claims the handle and presents the terms. They stay separate
- * routes because `/welcome` has a job that has nothing to do with signing up — it is where
- * any signed-in account still owing a handle is sent, from anywhere — and folding it into
- * the finishing page would make that page reachable as a second door. Wearing the same
- * chrome is what makes them read as one flow anyway.
+ * takes any payment; `/welcome` closes out the first run. There is no longer a name step —
+ * the account's handle is its ATProto identity from creation, so the rail ends at payment.
+ * Wearing the same chrome is what makes them read as one flow anyway.
  *
  * ⚠️ **The rail is decoration in the strict sense: it never gates anything.** What a person
  * may do next is decided by the pending signup and the session, server-side. A step drawn as
@@ -48,13 +46,11 @@ export function signupSteps(input: {
 	bluesky: "done" | "current" | "todo" | null;
 	address: "done" | "current" | "todo";
 	payment: "done" | "current" | "todo" | null;
-	username: "done" | "current" | "todo";
 }): SignupStep[] {
 	const steps: SignupStep[] = [];
 	if (input.bluesky) steps.push({ key: "bluesky", label: "Bluesky", state: input.bluesky });
 	steps.push({ key: "address", label: "Your Email", state: input.address });
 	if (input.payment) steps.push({ key: "payment", label: "Payment", state: input.payment });
-	steps.push({ key: "username", label: "Your Username", state: input.username });
 	return steps;
 }
 
