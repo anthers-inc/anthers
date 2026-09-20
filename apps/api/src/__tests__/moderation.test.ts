@@ -385,7 +385,7 @@ describe("Hiding a comment", () => {
 		expect(actions[0].note).toBe("follower farm");
 		expect(actions[0].actorRole).toBe("operator");
 		expect(actions[0].adminActorId).toBe(operator.id);
-		// `actor_id` names an Anthers account and is kept for Keepers, so an operator's
+		// `actor_id` names an Anthers account and is kept for moderators, so an operator's
 		// decision must not land there.
 		expect(actions[0].actorId).toBeNull();
 	});

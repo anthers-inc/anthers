@@ -11,8 +11,8 @@
  * separate sessions, is what makes that route not exist rather than merely be guarded.
  *
  * Community authority is the other holder, and it deliberately stays on Anthers accounts: a
- * creator's Keepers act on the main site as themselves. The division is written up in the wiki's
- * *Keepers → Who Handles What*.
+ * creator's moderators act on the main site as themselves. The division is written up in the
+ * wiki's *Moderators → Who Handles What*.
  *
  * The one writer of every table here is `apps/api/src/services/admin-accounts.ts`, apart from
  * the emailed codes, whose hardening lives with the main site's in `services/signup-codes.ts` so

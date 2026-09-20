@@ -295,7 +295,7 @@ export function moderationReasonLabel(value: string): string {
 
 /**
  * The reasons that reach Anthers immediately — they page a person rather than waiting in
- * a queue — and that a Keeper never sees whichever scope they hold.
+ * a queue — and that a community moderator never sees, whichever scope they hold.
  *
  * ⭐ **It is the `law` group, plus one retired code**, and stating it that way is the
  * point: the grouping a reporter sees and the routing they cannot see are the same
@@ -312,7 +312,7 @@ export function moderationReasonLabel(value: string): string {
  * for every mis-rated Work.
  *
  * This is the taxonomy half of the split. The routing half — who a community-norms report
- * goes to instead — waits on the Keeper appointment model, and does not gate this:
+ * goes to instead — waits on the moderator appointment model, and does not gate this:
  * with no scopes yet, every report already reaches Anthers, and what was missing was
  * anybody being *told*.
  */
