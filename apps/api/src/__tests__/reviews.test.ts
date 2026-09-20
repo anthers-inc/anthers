@@ -58,7 +58,7 @@ interface ReviewList {
 	count: number;
 	userVerdict: string | null;
 	userReview: string | null;
-	reviews: { id: number; verdict: string; body: string; username: string }[];
+	reviews: { id: number; verdict: string; body: string; handle: string }[];
 }
 
 const readReviews = async (cookie?: string): Promise<ReviewList> => {

@@ -62,7 +62,7 @@ interface QueueItem {
 	totalReports: number;
 	reasons: string[];
 	details: string[];
-	author: { username: string } | null;
+	author: { handle: string } | null;
 	context: { kind: "post" | "work"; slug: string } | null;
 	lastAction: { action: string; reason: string; actor: string | null } | null;
 }

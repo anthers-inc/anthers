@@ -274,7 +274,7 @@ describe("what 'deleted' means, table by table", () => {
 		const list = (await res.json()).comments as {
 			id: number;
 			body: string;
-			username: string | null;
+			handle: string | null;
 			deletedByAuthor: boolean;
 		}[];
 

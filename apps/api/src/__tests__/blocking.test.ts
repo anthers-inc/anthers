@@ -260,7 +260,7 @@ describe("blocking is symmetric", () => {
 		const after = (await (await get(`/api/content/works/${workId}/reviews`, abe)).json()) as {
 			average: number;
 			count: number;
-			reviews: { username: string }[];
+			reviews: { handle: string }[];
 		};
 
 		// The list shrank; the aggregate did not. A per-viewer average would mean two
@@ -323,7 +323,7 @@ describe("blocking and following", () => {
 
 		const feed = await get("/api/accounts/me/feed", abe);
 		expect(feed.status).toBe(200);
-		const creators = ((await feed.json()).entries as { creator: { username: string } }[]).map(
+		const creators = ((await feed.json()).entries as { creator: { handle: string } }[]).map(
 			(e) => e.creator.handle,
 		);
 		expect(creators).not.toContain(H(beeName));

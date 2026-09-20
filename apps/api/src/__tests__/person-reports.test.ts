@@ -67,7 +67,7 @@ interface QueueItem {
 	openReports: number;
 	reasons: string[];
 	details: string[];
-	author: { username: string } | null;
+	author: { handle: string } | null;
 	context: { kind: string; slug: string; title: string } | null;
 }
 
