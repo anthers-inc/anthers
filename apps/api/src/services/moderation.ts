@@ -38,9 +38,9 @@ import {
 } from "@anthers/db/schema";
 import { verdictLabel } from "@anthers/shared/content";
 import {
-	FLOOR_MODERATION_REASONS,
-	isFloorReason,
+	isLegalReason,
 	isModeratableContent,
+	LEGAL_MODERATION_REASONS,
 	MODERATION_NOTE_MAX,
 	type ModerationActionType,
 	type ModerationActorRole,
@@ -194,17 +194,17 @@ export async function fileReport(input: {
 		.returning({ id: moderationReports.id });
 
 	// The row is committed before anything is sent, and that ordering is the design.
-	// A floor report that reaches the database and fails to reach a person is late;
+	// A legal report that reaches the database and fails to reach a person is late;
 	// one that fails to reach the database because an email provider was down is
 	// gone. `escalateReport` swallows its own failure for the same reason — the
 	// sweep below re-selects anything still unescalated.
-	if (isFloorReason(input.reason)) await escalateReport(row.id);
+	if (isLegalReason(input.reason)) await escalateReport(row.id);
 
 	return { reportId: row.id };
 }
 
 /**
- * Tell a human, out of band, that a floor-level report exists.
+ * Tell a human, out of band, that a legal report exists.
  *
  * 🚨 **What this deliberately does not carry.** The reported content never appears in
  * the message — not the comment text, not the reporter's quotation of it, not a
@@ -236,7 +236,7 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 
 	if (!report) return false;
 	if (report.escalatedAt) return true; // Already told somebody; don't tell them twice.
-	if (!isFloorReason(report.reason)) return false;
+	if (!isLegalReason(report.reason)) return false;
 
 	const label = moderationReasonLabel(report.reason);
 	const subject = `[Anthers] Floor report: ${label} on ${report.subjectType} ${report.subjectId}`;
@@ -255,7 +255,7 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 
 	// The provider's id is stored beside the stamp, because the stamp alone can only ever
 	// say "Resend accepted it". With the id, `GET /api/admin/escalation-delivery` can ask
-	// what actually became of the message — which is the question the floor is about.
+	// what actually became of the message — which is the question the alert exists to answer.
 	await db
 		.update(moderationReports)
 		.set({ escalatedAt: new Date(), escalationMessageId: messageId })
@@ -269,7 +269,7 @@ export async function escalateReport(reportId: number): Promise<boolean> {
  *
  * ⚠️ It deliberately ignores `status`. A report an operator has already resolved still
  * gets its alert, because "somebody dismissed it before anyone outside the console was
- * told" is precisely the hole the floor exists to close.
+ * told" is precisely the hole the alert exists to close.
  */
 export async function pendingEscalations(): Promise<number[]> {
 	const rows = await db
@@ -278,14 +278,14 @@ export async function pendingEscalations(): Promise<number[]> {
 		.where(
 			and(
 				isNull(moderationReports.escalatedAt),
-				inArray(moderationReports.reason, [...FLOOR_MODERATION_REASONS]),
+				inArray(moderationReports.reason, [...LEGAL_MODERATION_REASONS]),
 			),
 		)
 		.orderBy(moderationReports.createdAt);
 	return rows.map((r) => r.id);
 }
 
-/** Retry every floor report that has not reached a person yet. Returns how many did. */
+/** Retry every legal report that has not reached a person yet. Returns how many did. */
 export async function runEscalationSweep(): Promise<number> {
 	// Nothing this process can do about them — see `abuseAlertsEnabled`. Refusing here rather
 	// than once per row is the difference between one log line and hundreds, every five
@@ -556,20 +556,20 @@ export interface QueueItem {
 	reasons: string[];
 	details: string[];
 	/**
-	 * Whether every floor-level report on this subject has actually reached a human, and
+	 * Whether every legal report on this subject has actually reached a human, and
 	 * when the last one did.
 	 *
 	 * 🚨 **An operator could not tell before this existed.** `escalated_at` is the only
 	 * record that somebody outside the console was told, and the console — the one place a
-	 * floor report is looked at — did not read it. So the two failure modes the stamp
+	 * legal report is looked at — did not read it. So the two failure modes the stamp
 	 * exists to separate were both invisible from here: an alert that never sent, and an
 	 * alert that sent to a mailbox nobody was watching.
 	 *
-	 * `null` on a subject with no floor-level reports at all, which is the ordinary case
+	 * `null` on a subject with no legal reports at all, which is the ordinary case
 	 * and is deliberately distinct from `false`.
 	 */
-	floorAlerted: boolean | null;
-	/** When the most recent floor report on this subject was escalated, or null. */
+	legalAlerted: boolean | null;
+	/** When the most recent legal report on this subject was escalated, or null. */
 	lastEscalatedAt: string | null;
 	lastAction: {
 		action: string;
@@ -747,7 +747,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			totalReports: 0,
 			reasons: [],
 			details: [],
-			floorAlerted: null,
+			legalAlerted: null,
 			lastEscalatedAt: null,
 			lastAction: null,
 		};
@@ -967,18 +967,18 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		if (!item.reasons.includes(r.reason)) item.reasons.push(r.reason);
 		if (r.details) item.details.push(r.details);
 
-		// Only floor reasons are ever owed an alert, so only they may answer this. An
+		// Only legal reasons are ever owed an alert, so only they may answer this. An
 		// ordinary report has a permanently null `escalated_at`, and folding those in would
 		// make every spam report read as "nobody was told" — which is true and is not a
 		// problem, and would bury the case where it IS a problem.
-		if (!isFloorReason(r.reason)) continue;
+		if (!isLegalReason(r.reason)) continue;
 		if (r.escalatedAt) {
 			const stamp = r.escalatedAt.toISOString();
 			if (!item.lastEscalatedAt || stamp > item.lastEscalatedAt) item.lastEscalatedAt = stamp;
 		}
-		// False wins over true: one un-alerted floor report is the thing worth surfacing,
+		// False wins over true: one un-alerted legal report is the thing worth surfacing,
 		// however many of its neighbors went out.
-		item.floorAlerted = item.floorAlerted === false ? false : Boolean(r.escalatedAt);
+		item.legalAlerted = item.legalAlerted === false ? false : Boolean(r.escalatedAt);
 	}
 
 	// 4. Attach the most recent decision, so a hidden item shows who hid it and why.

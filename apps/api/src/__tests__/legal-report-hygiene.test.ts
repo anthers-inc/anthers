@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * No suite manufactures a floor report unless it was asked to.
+ * No suite manufactures a legal report unless it was asked to.
  *
- * 🚨 **A floor report is a request for a person to stop what they are doing and look.** Filing
+ * 🚨 **A legal report is a request for a person to stop what they are doing and look.** Filing
  * one from a test that is not about reporting is not a tidiness problem — it puts a demand for
  * immediate human review into a queue whose whole value is that everything in it is real.
  * Parker's rule, 2026-08-26: *"abuse report tests should NEVER be automatic, only on explicit
@@ -13,7 +13,7 @@
  * `report-escalation`, `escalation-delivery` and `abuse-reports` are the tests *about* abuse
  * reports, and gating them still left `illegal` and `sexual` reports appearing on every run —
  * from `legal-hold`, `quarantine`, `retention`, `dmca-finality` and `dmca`, none of which is
- * about escalation and four of which had picked a floor reason arbitrarily. A reason is not an
+ * about escalation and four of which had picked a legal reason arbitrarily. A reason is not an
  * inert string: choosing `illegal` over `spam` is choosing to summon somebody.
  *
  * ⭐ **A source check rather than a database check, deliberately.** Asserting "the table is
@@ -28,12 +28,12 @@
  */
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { FLOOR_MODERATION_REASONS } from "@anthers/shared/moderation";
+import { LEGAL_MODERATION_REASONS } from "@anthers/shared/moderation";
 
 /**
  * Suites whose subject IS abuse reporting, and which are gated behind `RUN_ABUSE_TESTS=1`.
  *
- * ⚠️ Adding a name here is a decision to let a file file floor reports, so it must come with
+ * ⚠️ Adding a name here is a decision to let a file file legal reports, so it must come with
  * the gate — the check below verifies that rather than taking the list's word for it.
  */
 const GATED = new Set([
@@ -43,7 +43,7 @@ const GATED = new Set([
 ]);
 
 /**
- * Files that file a floor report on purpose and clean it up again.
+ * Files that file a legal report on purpose and clean it up again.
  *
  * `dmca.test.ts` reports a Work as `illegal` because that is the closest reason to a copyright
  * claim, and the point of the test is that a report is not a takedown. It deletes the row in
@@ -53,15 +53,15 @@ const CLEANS_UP = new Set(["dmca.test.ts"]);
 
 const DIR = import.meta.dir;
 /** ⚠️ This file quotes the shape it is looking for, so it would report itself. */
-const SELF = "floor-report-hygiene.test.ts";
+const SELF = "legal-report-hygiene.test.ts";
 const suites = readdirSync(DIR).filter((f) => f.endsWith(".test.ts") && f !== SELF);
 
 /** `reason: "illegal"` and friends — the shape that files one, not a mention in prose. */
 const FILES_A_FLOOR_REPORT = new RegExp(
-	`reason:\\s*["'](${FLOOR_MODERATION_REASONS.join("|")})["']`,
+	`reason:\\s*["'](${LEGAL_MODERATION_REASONS.join("|")})["']`,
 );
 
-describe("floor reports are never filed by accident", () => {
+describe("legal reports are never filed by accident", () => {
 	it("finds the suites at all, so a broken glob cannot pass silently", () => {
 		expect(suites.length).toBeGreaterThan(20);
 	});
@@ -74,7 +74,7 @@ describe("floor reports are never filed by accident", () => {
 
 		expect(
 			offenders,
-			"these file a report that demands immediate human review. Use a non-floor reason " +
+			"these file a report that demands immediate human review. Use a non-legal reason " +
 				"if the reason is incidental, clean it up if it is not, or gate the suite behind " +
 				"RUN_ABUSE_TESTS=1 if its subject really is abuse reporting.",
 		).toEqual([]);

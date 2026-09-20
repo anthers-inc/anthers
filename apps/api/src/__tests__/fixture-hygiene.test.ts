@@ -19,7 +19,7 @@
  * account it never removes?
  *
  * Same family as `scripts/stripe-redirect-guard.test.ts`, `scripts/profile-url-guard.test.ts`
- * and `floor-report-hygiene.test.ts`: where a design says a thing does not happen, the absence
+ * and `legal-report-hygiene.test.ts`: where a design says a thing does not happen, the absence
  * needs a test, because a new one arrives silently.
  */
 import { describe, expect, it } from "bun:test";

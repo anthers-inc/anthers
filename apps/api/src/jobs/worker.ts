@@ -275,7 +275,7 @@ async function start() {
 		}
 	});
 
-	// Retry floor-report alerts that never went out. Logs only when it actually sent
+	// Retry legal-report alerts that never went out. Logs only when it actually sent
 	// something — a five-minute "0 pending" line would bury everything else in the
 	// worker log within a day, and this is a log somebody has to be able to read.
 	await queue.work(QUEUES.ESCALATE_REPORTS, async (jobs) => {
@@ -288,7 +288,7 @@ async function start() {
 			const sentPublic = await runAbuseEscalationSweep();
 			if (sent > 0 || sentPublic > 0) {
 				console.log(
-					`[escalate-reports] job ${job.id}: escalated ${sent} floor report(s) and ${sentPublic} public report(s)`,
+					`[escalate-reports] job ${job.id}: escalated ${sent} legal report(s) and ${sentPublic} public report(s)`,
 				);
 			}
 		}

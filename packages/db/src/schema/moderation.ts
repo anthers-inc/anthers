@@ -104,7 +104,7 @@ export const moderationReports = pgTable(
 		/**
 		 * When somebody was actually told, out of band, that this report exists.
 		 *
-		 * Only floor-level reasons (`FLOOR_MODERATION_REASONS`) ever get a value here;
+		 * Only floor-level reasons (`LEGAL_MODERATION_REASONS`) ever get a value here;
 		 * everything else stays null forever and is answered by an operator opening the
 		 * console. **Null on a floor report means the alert has not gone out yet**, which
 		 * is what the retry sweep selects on.
