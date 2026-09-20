@@ -396,7 +396,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "share-links",
 						title: "Sharing Something You Found",
 						blurb:
-							"A link opens what you could already open, and nothing more. A gated Work stays gated.",
+							"A link or an embed opens what you could already open, and nothing more. A gated Work stays gated.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "20.02", title: "Share Links" },

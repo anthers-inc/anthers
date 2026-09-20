@@ -34,9 +34,16 @@ function sharedBudgetLabel(): string {
 
 export default function ShareLinkButton({ workId }: { workId: number }) {
 	const [url, setUrl] = useState<string | null>(null);
+	const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+	/** Which shape of the share to show: the address alone, or it rendered as a player. */
+	const [shape, setShape] = useState<"link" | "embed">("link");
 	const [copied, setCopied] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+
+	/** The iframe a third-party page pastes to render the player — the embed's whole output. */
+	const embedSnippet = (embed: string) =>
+		`<iframe src="${embed}" style="width:100%;aspect-ratio:16/9;border:0" allowfullscreen title="Anthers"></iframe>`;
 
 	const make = async () => {
 		setLoading(true);
@@ -50,11 +57,15 @@ export default function ShareLinkButton({ workId }: { workId: number }) {
 				setError(body?.error ?? "Couldn't make a link just now. Please try again.");
 				return;
 			}
-			const { url: link } = (await res.json()) as { url: string };
+			const { url: link, embedUrl: embed } = (await res.json()) as {
+				url: string;
+				embedUrl: string;
+			};
 			setUrl(link);
+			setEmbedUrl(embed);
 			// A clipboard write can be refused (permissions, an insecure origin, a browser that
-			// wants a fresher gesture), and the link is on screen either way — so a failure here
-			// costs nothing and must not be reported as one.
+			// wants a fresher gesture), and the thing to copy is on screen either way — so a
+			// failure here costs nothing and must not be reported as one.
 			try {
 				await navigator.clipboard.writeText(link);
 				setCopied(true);
@@ -86,14 +97,36 @@ export default function ShareLinkButton({ workId }: { workId: number }) {
 		);
 	}
 
+	const shown = shape === "embed" && embedUrl ? embedSnippet(embedUrl) : (url ?? "");
+	const shownLabel = shape === "embed" ? "Embed code" : "Share link";
+
 	return (
 		<div className="w-full space-y-2 rounded-lg border border-base-300 bg-base-200/60 p-3">
+			{/* One share, two shapes. Both are the same link underneath; the embed only changes
+			    what it renders into. */}
+			<div className="flex gap-1" role="tablist" aria-label="Share as">
+				{(["link", "embed"] as const).map((s) => (
+					<button
+						key={s}
+						type="button"
+						role="tab"
+						aria-selected={shape === s}
+						className={`btn btn-xs ${shape === s ? "btn-primary" : "btn-ghost"}`}
+						onClick={() => {
+							setShape(s);
+							setCopied(false);
+						}}
+					>
+						{s === "link" ? "Link" : "Embed"}
+					</button>
+				))}
+			</div>
 			<div className="flex items-center gap-2">
 				<input
 					type="text"
 					readOnly
-					value={url}
-					aria-label="Share link"
+					value={shown}
+					aria-label={shownLabel}
 					className="input input-sm input-bordered flex-1 font-mono text-xs"
 					onFocus={(e) => e.currentTarget.select()}
 				/>
@@ -101,7 +134,7 @@ export default function ShareLinkButton({ workId }: { workId: number }) {
 					type="button"
 					className="btn btn-sm gap-1"
 					onClick={() => {
-						navigator.clipboard.writeText(url).then(
+						navigator.clipboard.writeText(shown).then(
 							() => setCopied(true),
 							() => {},
 						);
@@ -112,9 +145,11 @@ export default function ShareLinkButton({ workId }: { workId: number }) {
 				</button>
 			</div>
 			<p className="text-xs text-base-content/60">
-				Anyone with this link can watch without an account. Their time counts as yours and is paid
-				to the creator — from a separate {sharedBudgetLabel()} a month, so it never touches your{" "}
-				{FREE_PUBLIC_ACCESS_HOURS} free hours.
+				{shape === "embed"
+					? "Paste this into any page to play the work there. Anyone watching counts as your share — from the same separate "
+					: "Anyone with this link can watch without an account. Their time counts as yours and is paid to the creator — from a separate "}
+				{sharedBudgetLabel()} a month, so it never touches your {FREE_PUBLIC_ACCESS_HOURS} free
+				hours.
 			</p>
 		</div>
 	);
