@@ -51,6 +51,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
+import VideoLens from "../components/library/VideoLens";
 import { removeItem, setHidden } from "../lib/library";
 
 const MEDIA_TABS = [
@@ -231,6 +232,14 @@ export default function LibraryPage() {
 	 * shelf entry can be a thing somebody paid for.
 	 */
 	const lens = searchParams.get("lens") ?? "";
+	/**
+	 * The music lens's one preset dial over its own filter: widen the same view to spoken
+	 * word. Off by default — the lens *is* music by default — and switching it is a view
+	 * change with the same invariant as the lens itself: never a change to what the shelf
+	 * holds. Only the music lens reads this today; a future spoken-word lens would ship
+	 * the same control in reverse if it earns one.
+	 */
+	const includeSpoken = searchParams.get("spoken") === "1";
 
 	/*
 	 * 🚨 Always fetch the WHOLE shelf, hidden included, and filter for display below.
@@ -333,6 +342,15 @@ export default function LibraryPage() {
 						<MusicalNoteIcon className="size-4" />
 						Music
 					</button>
+					<button
+						type="button"
+						role="tab"
+						className={`tab gap-1.5 ${lens === "video" ? "tab-active" : ""}`}
+						onClick={() => setParam("lens", "video")}
+					>
+						<VideoCameraIcon className="size-4" />
+						Video
+					</button>
 				</div>
 			</div>
 
@@ -384,10 +402,32 @@ export default function LibraryPage() {
 			</div>
 
 			{lens === "music" ? (
-				// The lens draws on the same `visible` list the shelf does — it reorganizes
-				// what is there rather than fetching a different corpus, which is what keeps
-				// "a lens is a view" true rather than merely stated.
-				<MusicLens items={visible as LensItem[]} />
+				<>
+					{/* The lens's one dial — a preset control over the filter the lens itself
+					    defines (Parker, 2026-09-20). This is a control ON the lens rather than
+					    a second lens, so it lives inside the lens block, beside the view it
+					    re-scopes. */}
+					<label className="mb-4 flex w-fit cursor-pointer items-center gap-2 text-sm">
+						<input
+							type="checkbox"
+							className="toggle toggle-sm"
+							checked={includeSpoken}
+							onChange={(e) => setParam("spoken", e.target.checked ? "1" : "")}
+						/>
+						Include spoken word
+					</label>
+					{/* The lens draws on the same `visible` list the shelf does — it reorganizes
+					    what is there rather than fetching a different corpus, which is what
+					    keeps "a lens is a view" true rather than merely stated. The toggle is
+					    passed in so the same rule holds of it: toggling re-scopes the view,
+					    never the shelf. */}
+					<MusicLens items={visible as LensItem[]} includeSpoken={includeSpoken} />
+				</>
+			) : lens === "video" ? (
+				// Same rule as the music lens: the lens reorganizes what is on the shelf,
+				// never fetches a different corpus. Drawing on `visible` is what keeps
+				// "a lens is a view" true of the whole family of them.
+				<VideoLens items={visible as LensItem[]} />
 			) : filtered.length === 0 ? (
 				<EmptyState
 					title={
