@@ -155,8 +155,15 @@ export async function emailedCode(address: string, timeoutMs = 15_000): Promise<
 		const res = await fetch(
 			`${MAIL_CATCHER_URL}/api/v1/search?query=${encodeURIComponent(`to:"${address}"`)}`,
 		);
-		const body = (await res.json()) as { messages?: { Subject: string }[] };
-		const code = body.messages
+		const body = (await res.json()) as { messages?: { Subject: string; Date?: string }[] };
+		// The NEWEST one, not the first: identical subject lines from repeated sign-ins and
+		// re-sends share the query, and under load the fresh email can take a moment to land
+		// while the search is already answering. Reading an earlier message spends a code
+		// that has since been replaced, and the verify refuses it — flaky by construction.
+		const newest = body.messages
+			?.slice()
+			.sort((a, b) => new Date(b.Date ?? 0).getTime() - new Date(a.Date ?? 0).getTime());
+		const code = newest
 			?.map((message) => message.Subject.match(/^([A-Z0-9]{6}) is your Anthers/)?.[1])
 			.find(Boolean);
 		if (code) return code;
