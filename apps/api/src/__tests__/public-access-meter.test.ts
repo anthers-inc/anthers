@@ -89,7 +89,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	const [{ id }] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, username));
+		.where(eq(users.email, `${username}@example.com`));
 	return { cookie: account.cookie, id };
 }
 
@@ -154,7 +154,7 @@ async function setSupport(userId: number, anthersSupport: number) {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName}, ${seededName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`, sql`${seededName + '@example.com'}`], sql`, `)})`,
 	);
 	({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 	({ cookie: viewerCookie, id: viewerId } = await signUp(viewerName));

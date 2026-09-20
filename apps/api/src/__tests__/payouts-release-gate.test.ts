@@ -56,7 +56,7 @@ const payerName = `paypayer_${id}`;
 
 async function signUp(username: string): Promise<{ cookie: string; userId: number }> {
 	const account = await createAccount(username);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
 	return { cookie: account.cookie, userId: row!.id };
 }
 
@@ -69,7 +69,7 @@ describe("publishing requires a fully set-up creator", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE atproto_handle IN (${noneName}, ${heldName}, ${readyName}, ${payerName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${noneName + '@example.com'}`, sql`${heldName + '@example.com'}`, sql`${readyName + '@example.com'}`, sql`${payerName + '@example.com'}`], sql`, `)})`,
 		);
 		none = await signUp(noneName);
 		held = await signUp(heldName);

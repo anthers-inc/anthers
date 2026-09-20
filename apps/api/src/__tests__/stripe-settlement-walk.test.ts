@@ -124,7 +124,7 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 		const now = new Date();
 		const supporter = await createAccount(`walk_sup_${crypto.randomUUID().slice(0, 6)}`);
 		const creator = await createAccount(`walk_cre_${crypto.randomUUID().slice(0, 6)}`);
-		creatorNames.push(creator.username ?? "");
+		creatorNames.push(creator.name);
 		await db.update(users).set({ emailVerified: true }).where(eq(users.id, supporter.userId));
 
 		const clock = await stripe.testHelpers.testClocks.create({

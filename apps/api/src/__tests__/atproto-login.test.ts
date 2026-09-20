@@ -51,7 +51,12 @@ beforeAll(() => {
 		identityResolver: {
 			resolve: async (didOrHandle: string) => ({
 				did: didOrHandle,
-				handle: `${RUN}.bsky.social`,
+				// 🚨 One handle per DID, not one for the suite. The reconciliation on sign-in
+				// writes this back onto the account, and two identities answering to the same
+				// handle is a state `users.atproto_handle` now forbids outright — a fake that
+				// hands every DID the same name manufactures exactly the collision it exists
+				// to rule out. Deriving it from the DID keeps each identity distinct.
+				handle: `${RUN}${didOrHandle.replace(/^did:plc:/, "")}.bsky.social`,
 				didDoc: {
 					service: [
 						{
@@ -115,10 +120,10 @@ async function makeUser(tag: string, values: Partial<typeof users.$inferInsert> 
 	const [user] = await db
 		.insert(users)
 		.values({
-			username: `${RUN}${tag}`,
 			email: `${RUN}${tag}@example.test`,
 			emailVerified: true,
 			atprotoDid: did(tag),
+			atprotoHandle: `${RUN}${tag}.bsky.social`,
 			...values,
 		})
 		.returning();
@@ -166,20 +171,20 @@ describe("where a sign-in lands", () => {
 		expect(url.searchParams.get("next")).toBeNull();
 	});
 
-	it("says so when the account still owes a handle", async () => {
-		// The signup ceremony creates and signs in an account before asking for a name, and
-		// nothing forces the question later — so this state outlives the flow that made it.
-		await db
-			.insert(users)
-			.values({ email: `${RUN}onb@example.test`, emailVerified: true, atprotoDid: did("onb") })
-			.returning();
+	it("signs in cleanly — every account holds its identity, so no onboarding chase", async () => {
+		// Identity and account are created together in the signup ceremony, so the callback
+		// never lands a signed-in account that still owes something — there is no
+		// `onboarding` flag left to set, and none comes back.
+		const user = await makeUser("onb");
 
 		const url = await runCallback({
 			did: did("onb"),
 			state: JSON.stringify({ intent: "login", next: "/works/x-1" }),
 		});
-		expect(url.searchParams.get("onboarding")).toBe("1");
+		expect(url.searchParams.get("success")).toBe("login");
+		expect(url.searchParams.get("onboarding")).toBeNull();
 		expect(url.searchParams.get("next")).toBe("/works/x-1");
+		expect(user.id).toBeGreaterThan(0);
 	});
 
 	it("asks a reader for their own records and nothing else", async () => {

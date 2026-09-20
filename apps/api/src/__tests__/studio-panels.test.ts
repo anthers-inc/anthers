@@ -30,7 +30,7 @@ purgeAccountsCreatedHere();
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
 const run = crypto.randomUUID().slice(0, 8);
-const atproto_handle = `panels_${run}`;
+const name = `panels${run}`;
 
 function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
@@ -40,9 +40,9 @@ let cookie: string;
 let userId: number;
 
 beforeAll(async () => {
-	const account = await createAccount(username);
+	const account = await createAccount(name);
 	cookie = account.cookie;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${name}@example.com`));
 	userId = row.id;
 }, DB_SETUP_TIMEOUT);
 

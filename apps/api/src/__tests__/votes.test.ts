@@ -18,6 +18,7 @@ import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { userIdByName } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
@@ -71,8 +72,8 @@ describe("votes", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE atproto_handle IN (${sql.join(
-				[creatorName, ...voterNames].map((n) => sql`${n}`),
+			sql`DELETE FROM users WHERE email IN (${sql.join(
+				[creatorName, ...voterNames].map((n) => sql`${n + '@example.com'}`),
 				sql`, `,
 			)})`,
 		);
@@ -80,10 +81,7 @@ describe("votes", () => {
 		voterCookies = [];
 		for (const name of voterNames) voterCookies.push(await signUp(name));
 
-		const [creator] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.atprotoHandle, creatorName));
+		const creator = { id: await userIdByName(creatorName) };
 		// Written directly: a comment thread needs a post to hang off, not a published one, and
 		// publishing would drag payout setup into a suite about votes.
 		postSlug = `votes-${id}`;
@@ -265,10 +263,7 @@ describe("a Work is reviewed, never voted on or commented on", () => {
 	// a deliberate change here rather than a route quietly added back.
 	it("refuses a vote on a Work, and has no comment thread for one", async () => {
 		const cookie = await signUp(`votes_work_${id}`);
-		const [voter] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.atprotoHandle, `votes_work_${id}`));
+		const voter = { id: await userIdByName(`votes_work_${id}`) };
 		const work = await insertWork({ creatorId: voter.id, type: "text", title: `No votes ${id}` });
 
 		const vote = await req("/api/content/votes", {

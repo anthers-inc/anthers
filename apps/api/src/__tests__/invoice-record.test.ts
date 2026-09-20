@@ -154,11 +154,11 @@ beforeAll(async () => {
 	const [s] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, `inv_sub_${run}`));
+		.where(eq(users.email, `inv_sub_${run}@example.com`));
 	const [c] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, `inv_creator_${run}`));
+		.where(eq(users.email, `inv_creator_${run}@example.com`));
 	supporterId = s.id;
 	creatorId = c.id;
 	void supporter;

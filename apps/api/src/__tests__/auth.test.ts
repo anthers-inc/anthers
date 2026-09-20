@@ -33,8 +33,8 @@ const testId = crypto.randomUUID().slice(0, 8);
 
 describe("Auth System", () => {
 	let sessionCookie: string;
-	const atproto_handle = `authtest_${testId}`;
-	const email = `authtest_${testId}@example.com`;
+	const name = `auth${testId}`;
+	const email = `${name}@example.com`;
 
 	// ── Accounts are made by the ceremony, never by a password form ─────────────
 
@@ -52,12 +52,12 @@ describe("Auth System", () => {
 			const rows = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.atprotoHandle, `nosignup_${testId}`));
+				.where(eq(users.email, `nosignup_${testId}@example.com`));
 			expect(rows).toEqual([]);
 		});
 
 		it("gives the fixture account a session", async () => {
-			sessionCookie = (await createAccount(username, { email })).cookie;
+			sessionCookie = (await createAccount(name, { email })).cookie;
 			const me = await makeRequest("/api/auth/me", { headers: { Cookie: sessionCookie } });
 			expect((await me.json()).user.emailVerified).toBe(false);
 		});
@@ -68,7 +68,7 @@ describe("Auth System", () => {
 	describe("sign-in", () => {
 		it("has no password sign-in route — the emailed code is the only way in", async () => {
 			for (const body of [
-				{ login: username, password: "securepass123" },
+				{ login: name, password: "securepass123" },
 				{ login: email, password: "securepass123" },
 				{ login: "nonexistent", password: "whatever" },
 			]) {
@@ -88,7 +88,7 @@ describe("Auth System", () => {
 			expect(res.status).toBe(200);
 			const data = await res.json();
 			expect(data.user).toBeTruthy();
-			expect(data.user.username).toBe(username);
+			expect(data.user.email).toBe(email);
 			expect(data.user.createdAt).toBeTruthy();
 		});
 
@@ -117,7 +117,7 @@ describe("Auth System", () => {
 			const [userRow] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.atprotoHandle, username))
+				.where(eq(users.email, email))
 				.limit(1);
 
 			// The token a verification email would carry, minted the way the resend route mints it.
@@ -182,7 +182,7 @@ describe("Auth System", () => {
 				body: JSON.stringify({ currentPassword: "whatever", newPassword: "anotherpass789" }),
 			});
 			expect(changeRes.status).toBe(404);
-			const [row] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+			const [row] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 			expect("passwordHash" in row).toBe(false);
 		});
 	});

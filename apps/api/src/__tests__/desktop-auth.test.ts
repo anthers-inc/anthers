@@ -84,7 +84,7 @@ describe("Desktop auth", () => {
 	let cookie: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${userName}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${userName + '@example.com'}`);
 		cookie = await signUp(userName);
 	}, DB_SETUP_TIMEOUT);
 
@@ -93,7 +93,7 @@ describe("Desktop auth", () => {
 	it("mints a desktop token through the browser handoff", async () => {
 		const { token, user } = await enroll(cookie, "test-thinkpad");
 		expect(token).toMatch(/^[0-9a-f]{64}$/);
-		expect(user.username).toBe(userName);
+		expect(user.handle).toContain(userName.replace(/_/g, "-"));
 	});
 
 	it("shows the pending request's label to the authorize page, then 404s once used", async () => {
@@ -233,7 +233,7 @@ describe("Desktop auth", () => {
 		const { token } = await enroll(cookie, "get-test");
 		const res = await desktopReq("/api/auth/me", token);
 		expect(res.status).toBe(200);
-		expect((await res.json()).user.username).toBe(userName);
+		expect((await res.json()).user.handle).toContain(userName.replace(/_/g, "-"));
 	});
 
 	it("authenticates a MUTATION with no cookie and no Origin — the CSRF skip", async () => {
@@ -321,13 +321,13 @@ describe("Desktop auth", () => {
 		// ...and the browser session that enrolled it is untouched, which is the whole
 		// point of minting a separate credential per device.
 		const stillFine = await req("/api/auth/me", { headers: { Cookie: cookie } });
-		expect((await stillFine.json()).user.username).toBe(userName);
+		expect((await stillFine.json()).user.handle).toContain(userName.replace(/_/g, "-"));
 		expect(keeper.token).toBeTruthy();
 	});
 
 	it("cannot revoke another user's session", async () => {
 		const strangerName = `desk_other_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${strangerName}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${strangerName + '@example.com'}`);
 		const strangerCookie = await signUp(strangerName);
 		const stranger = await enroll(strangerCookie, "stranger-device");
 
@@ -344,7 +344,7 @@ describe("Desktop auth", () => {
 
 		// Still alive.
 		const alive = await desktopReq("/api/auth/me", mine.token);
-		expect((await alive.json()).user.username).toBe(userName);
+		expect((await alive.json()).user.handle).toContain(userName.replace(/_/g, "-"));
 	});
 
 	it("signs out the desktop session without touching the browser's", async () => {
@@ -357,6 +357,6 @@ describe("Desktop auth", () => {
 		expect((await dead.json()).user).toBeNull();
 
 		const browser = await req("/api/auth/me", { headers: { Cookie: cookie } });
-		expect((await browser.json()).user.username).toBe(userName);
+		expect((await browser.json()).user.handle).toContain(userName.replace(/_/g, "-"));
 	});
 });

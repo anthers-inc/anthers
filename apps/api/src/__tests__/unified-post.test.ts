@@ -34,12 +34,16 @@ function req(path: string, options?: RequestInit) {
 }
 
 async function signUp(username: string) {
-	return (await createAccount(username)).cookie;
+	const account = await createAccount(username);
+	if (username === creatorName) creatorHandle = account.handle;
+	return account.cookie;
 }
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `creator_${id}`;
 const otherName = `viewer_${id}`;
+
+let creatorHandle: string;
 
 describe("Catalog vertical slice", () => {
 	let creatorCookie: string;
@@ -51,7 +55,7 @@ describe("Catalog vertical slice", () => {
 	let announcementSlug: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${otherName})`);
+		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`);
 	}, DB_SETUP_TIMEOUT);
 
 	// A setup step wearing a test's clothes: the cookies it assigns are what every test
@@ -64,11 +68,11 @@ describe("Catalog vertical slice", () => {
 			const [creatorRow] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.atprotoHandle, creatorName));
+				.where(eq(users.email, `${creatorName}@example.com`));
 			creatorId = creatorRow.id;
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
-			await db.execute(sql`UPDATE users SET is_creator = true WHERE atproto_handle = ${creatorName}`);
+			await db.execute(sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + '@example.com'}`);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();
 		},
@@ -121,7 +125,7 @@ describe("Catalog vertical slice", () => {
 		});
 		expect(detail.status).toBe(404);
 
-		const catalog = await req(`/api/content/catalog/${creatorName}`, {
+		const catalog = await req(`/api/content/catalog/${creatorHandle}`, {
 			headers: { Cookie: otherCookie },
 		});
 		expect(catalog.status).toBe(200);
@@ -174,7 +178,7 @@ describe("Catalog vertical slice", () => {
 		// The point of the whole exercise: the Catalog reads as a body of work in the order
 		// it was made, not the order it happened to be uploaded. Both were uploaded within
 		// seconds of each other; the 2015 game still sorts last.
-		const res = await req(`/api/content/catalog/${creatorName}`, {
+		const res = await req(`/api/content/catalog/${creatorHandle}`, {
 			headers: { Cookie: otherCookie },
 		});
 		expect(res.status).toBe(200);
@@ -190,7 +194,7 @@ describe("Catalog vertical slice", () => {
 	});
 
 	it("sorts by release date when asked instead", async () => {
-		const res = await req(`/api/content/catalog/${creatorName}?sort=released`, {
+		const res = await req(`/api/content/catalog/${creatorHandle}?sort=released`, {
 			headers: { Cookie: otherCookie },
 		});
 		const { works: listed } = await res.json();
@@ -200,7 +204,7 @@ describe("Catalog vertical slice", () => {
 	});
 
 	it("filters the Catalog by type", async () => {
-		const res = await req(`/api/content/catalog/${creatorName}?type=game`, {
+		const res = await req(`/api/content/catalog/${creatorHandle}?type=game`, {
 			headers: { Cookie: otherCookie },
 		});
 		const { works: listed } = await res.json();
@@ -307,7 +311,7 @@ describe("Catalog vertical slice", () => {
 		// Without this a creator who only ever adds to their Catalog is invisible to their
 		// own followers, and a post becomes the price of being seen — exactly the coupling
 		// the Catalog/Posts split removes.
-		const follow = await req(`/api/accounts/users/${creatorName}/follow`, {
+		const follow = await req(`/api/accounts/users/${creatorHandle}/follow`, {
 			method: "POST",
 			headers: { Origin: ORIGIN, Cookie: otherCookie },
 		});

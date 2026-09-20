@@ -62,9 +62,10 @@ const madeWorkIds: number[] = [];
 const workByTitle = new Map<string, { id: number; publicId: number }>();
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
-	const { cookie } = await createAccount(username);
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
-	return { cookie, id: row!.id };
+	const account = await createAccount(username);
+	if (username === creatorName) creatorHandle = account.handle;
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
+	return { cookie: account.cookie, id: row!.id };
 }
 
 function preferences(cookie?: string) {
@@ -90,11 +91,12 @@ async function said(path: string, cookie?: string): Promise<string> {
 	return JSON.stringify(await res.json());
 }
 
-const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorName}`, cookie);
+let creatorHandle = "";
+const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorHandle}`, cookie);
 
 describe("a reader's filter by kind of content", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${readerName})`);
+		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${readerName + '@example.com'}`], sql`, `)})`);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie, id: readerId } = await signUp(readerName));
 
@@ -214,7 +216,7 @@ describe("a reader's filter by kind of content", () => {
 		it("leaves out a project holding only Works the reader hid", async () => {
 			// The project listing writes its condition in raw SQL over its own alias, which is the
 			// call most easily left reading the wrong column.
-			const path = `/api/content/projects?creator=${creatorName}`;
+			const path = `/api/content/projects?creator=${creatorHandle}`;
 			expect(await said(path, readerCookie)).not.toContain(`Violent-only project ${run}`);
 			expect(await said(path)).toContain(`Violent-only project ${run}`);
 		});

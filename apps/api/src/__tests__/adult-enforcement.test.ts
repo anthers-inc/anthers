@@ -41,6 +41,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../services/access";
 import { createAccount } from "./account-fixture";
+import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -79,7 +80,7 @@ const madeWorkIds: number[] = [];
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
 	const cookie = account.cookie;
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
 	return { cookie, id: row!.id };
 }
 
@@ -93,7 +94,7 @@ async function makeWork(fixture: Parameters<typeof insertWork>[0]) {
 async function catalogTitles(cookie?: string): Promise<string[]> {
 	const headers: Record<string, string> = { Origin: ORIGIN };
 	if (cookie) headers.Cookie = cookie;
-	const res = await req(`/api/content/catalog/${creatorName}`, { headers });
+	const res = await req(`/api/content/catalog/${await handleOf(creatorName)}`, { headers });
 	expect(res.status).toBe(200);
 	const body = (await res.json()) as { works: { title: string }[] };
 	return body.works.map((w) => w.title);
@@ -111,7 +112,7 @@ describe("what an Adult rating costs", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${readerName}, ${grownName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${readerName + '@example.com'}`, sql`${grownName + '@example.com'}`], sql`, `)})`,
 		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie } = await signUp(readerName));
@@ -453,7 +454,7 @@ describe("what an Adult rating costs", () => {
 			const [reader] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.atprotoHandle, readerName));
+				.where(eq(users.email, `${readerName}@example.com`));
 			readerId = reader.id;
 			await db.insert(shareLinks).values([
 				{ token, workId: adultWork.id, sharerId: grownId },
@@ -506,7 +507,7 @@ describe("what an Adult rating costs", () => {
 
 		it("🚨 leaves a project holding only Adult work out of the listing, except for those who may see it", async () => {
 			const project = `Adult-only project ${run}`;
-			const path = `/api/content/projects?creator=${creatorName}`;
+			const path = `/api/content/projects?creator=${await handleOf(creatorName)}`;
 			expect(await titlesIn(path)).not.toContain(project);
 			expect(await titlesIn(path, readerCookie)).not.toContain(project);
 			expect(await titlesIn(path, grownCookie)).toContain(project);

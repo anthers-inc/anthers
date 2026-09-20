@@ -25,6 +25,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { handleOf } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -81,7 +82,7 @@ let workId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerAName + '@example.com'}`, sql`${viewerBName + '@example.com'}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -166,7 +167,7 @@ describe("A verdict cannot be left without words", () => {
 		// Trimmed on the way in, so leading/trailing space never reaches a reader.
 		expect(list.reviews[0].body).toBe("the pacing is the thing — nothing overstays");
 		expect(list.reviews[0].verdict).toBe("recommended");
-		expect(list.reviews[0].username).toBe(viewerAName);
+		expect(list.reviews[0].handle).toBe(await handleOf(viewerAName));
 	});
 });
 
@@ -198,7 +199,7 @@ describe("Editing a review", () => {
 			.where(
 				and(
 					eq(reviews.workId, workId),
-					eq(reviews.userId, sql`(SELECT id FROM users WHERE atproto_handle = ${viewerAName})`),
+					eq(reviews.userId, sql`(SELECT id FROM users WHERE email = ${viewerAName + '@example.com'})`),
 				),
 			)
 			.limit(1);
@@ -226,7 +227,7 @@ describe("Reviews written before text was required", () => {
 	it("still render and still count, with an empty body", async () => {
 		// Insert the legacy shape directly — the API can no longer produce it.
 		const [viewer] = (await db.execute(
-			sql`SELECT id FROM users WHERE atproto_handle = ${viewerBName}`,
+			sql`SELECT id FROM users WHERE email = ${viewerBName + '@example.com'}`,
 		)) as unknown as { id: number }[];
 		await db.insert(reviews).values({ userId: viewer.id, workId, verdict: "recommended" });
 

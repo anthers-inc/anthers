@@ -188,7 +188,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	const [row] = await db
 		.update(users)
 		.set({ emailVerified: true })
-		.where(eq(users.atprotoHandle, username))
+		.where(eq(users.email, `${username}@example.com`))
 		.returning({ id: users.id });
 	return { cookie, id: row.id };
 }
@@ -264,7 +264,7 @@ async function reloadPurchase(purchaseId: number) {
 const createdWorks: number[] = [];
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${buyerName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`);
 	realClient = getStripe();
 	fake = fakeStripe();
 	setStripeClient(fake.client);
@@ -288,7 +288,7 @@ afterAll(async () => {
 		await db.delete(dmcaNotices).where(eq(dmcaNotices.workId, id));
 		await db.delete(works).where(eq(works.id, id));
 	}
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${buyerName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`);
 });
 
 // ── The sweeps ───────────────────────────────────────────────────────────────

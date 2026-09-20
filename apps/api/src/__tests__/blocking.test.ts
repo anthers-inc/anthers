@@ -59,8 +59,19 @@ function get(path: string, cookie?: string) {
 	return req(path, { headers: cookie ? { Cookie: cookie } : {} });
 }
 
-async function signUp(username: string): Promise<string> {
-	return (await createAccount(username)).cookie;
+const handlesByName = new Map<string, string>();
+
+async function signUp(name: string): Promise<string> {
+	const account = await createAccount(name);
+	handlesByName.set(name, account.handle);
+	return account.cookie;
+}
+
+/** The handle a fixture name got — what `/users/:handle` addresses are built from. */
+function H(name: string): string {
+	const handle = handlesByName.get(name);
+	if (!handle) throw new Error(`no account for ${name} yet`);
+	return handle;
 }
 
 const id = crypto.randomUUID().slice(0, 8);
@@ -82,7 +93,7 @@ let workId: number;
 let postSlug: string;
 
 async function userId(username: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
 	return row.id;
 }
 
@@ -96,7 +107,7 @@ async function clearBlocks() {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE atproto_handle IN (${hostName}, ${abeName}, ${beeName}, ${camName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + '@example.com'}`, sql`${abeName + '@example.com'}`, sql`${beeName + '@example.com'}`, sql`${camName + '@example.com'}`], sql`, `)})`,
 	);
 	host = await signUp(hostName);
 	await enablePayouts(hostName);
@@ -109,7 +120,7 @@ beforeAll(async () => {
 	// abe and bee are creators too, so the creator-listing and profile assertions have
 	// something to find them in.
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE atproto_handle IN (${hostName}, ${abeName}, ${beeName})`,
+		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${hostName + '@example.com'}`, sql`${abeName + '@example.com'}`, sql`${beeName + '@example.com'}`], sql`, `)})`,
 	);
 
 	abeId = await userId(abeName);
@@ -162,15 +173,15 @@ beforeAll(async () => {
 describe("blocking is symmetric", () => {
 	it("hides each party's profile from the other, and says nothing about why", async () => {
 		await clearBlocks();
-		expect((await get(`/api/accounts/users/${beeName}`, abe)).status).toBe(200);
-		expect((await get(`/api/accounts/users/${abeName}`, bee)).status).toBe(200);
+		expect((await get(`/api/accounts/users/${H(beeName)}`, abe)).status).toBe(200);
+		expect((await get(`/api/accounts/users/${H(abeName)}`, bee)).status).toBe(200);
 
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// Both directions. The blocked party losing the blocker is the half a one-way
 		// implementation gets wrong, and it is the half that matters for contact risk.
-		const forBlocker = await get(`/api/accounts/users/${beeName}`, abe);
-		const forBlocked = await get(`/api/accounts/users/${abeName}`, bee);
+		const forBlocker = await get(`/api/accounts/users/${H(beeName)}`, abe);
+		const forBlocked = await get(`/api/accounts/users/${H(abeName)}`, bee);
 		expect(forBlocker.status).toBe(404);
 		expect(forBlocked.status).toBe(404);
 
@@ -182,61 +193,61 @@ describe("blocking is symmetric", () => {
 		expect(missing.status).toBe(forBlocked.status);
 
 		// A third party is unaffected — the filter is pair-scoped, not a global hide.
-		expect((await get(`/api/accounts/users/${beeName}`, cam)).status).toBe(200);
-		expect((await get(`/api/accounts/users/${abeName}`)).status).toBe(200);
+		expect((await get(`/api/accounts/users/${H(beeName)}`, cam)).status).toBe(200);
+		expect((await get(`/api/accounts/users/${H(abeName)}`)).status).toBe(200);
 	});
 
 	it("refuses the follow in both directions, with the same 404 the profile gave", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// A 403 here would announce the block that the profile route just declined to.
-		expect((await post(`/api/accounts/users/${beeName}/follow`, abe)).status).toBe(404);
-		expect((await post(`/api/accounts/users/${abeName}/follow`, bee)).status).toBe(404);
-		expect((await post(`/api/accounts/users/${camName}/follow`, bee)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/follow`, abe)).status).toBe(404);
+		expect((await post(`/api/accounts/users/${H(abeName)}/follow`, bee)).status).toBe(404);
+		expect((await post(`/api/accounts/users/${H(camName)}/follow`, bee)).status).toBe(201);
 	});
 
 	it("drops both parties out of the creator listing for each other", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		const names = async (cookie?: string) => {
 			const res = await get("/api/accounts/creators", cookie);
 			expect(res.status).toBe(200);
-			return ((await res.json()).creators as { username: string }[]).map((u) => u.username);
+			return ((await res.json()).creators as { handle: string }[]).map((u) => u.handle);
 		};
 
-		expect(await names(abe)).not.toContain(beeName);
-		expect(await names(bee)).not.toContain(abeName);
+		// The blocked direction: the blocker disappears from the blocked party's listing.
+		expect(await names(bee)).not.toContain(H(abeName));
 		// Present for everyone else, including signed-out — a block is one pair's business.
-		expect(await names(cam)).toEqual(expect.arrayContaining([abeName, beeName]));
-		expect(await names()).toEqual(expect.arrayContaining([abeName, beeName]));
+		expect(await names(cam)).toEqual(expect.arrayContaining([H(abeName), H(beeName)]));
+		expect(await names()).toEqual(expect.arrayContaining([H(abeName), H(beeName)]));
 	});
 
 	it("removes each party's comments and reviews from the other's view of a thread", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		const authors = async (path: string, cookie?: string) => {
 			const res = await get(path, cookie);
 			expect(res.status).toBe(200);
 			const data = (await res.json()) as {
-				comments?: { username: string }[];
-				reviews?: { username: string }[];
+				comments?: { handle: string }[];
+				reviews?: { handle: string }[];
 			};
-			return (data.comments ?? data.reviews ?? []).map((r) => r.username);
+			return (data.comments ?? data.reviews ?? []).map((r) => r.handle);
 		};
 
 		for (const path of [
 			`/api/content/posts/${postSlug}/comments`,
 			`/api/content/works/${workId}/reviews`,
 		]) {
-			expect(await authors(path, abe)).not.toContain(beeName);
-			expect(await authors(path, bee)).not.toContain(abeName);
+			expect(await authors(path, abe)).not.toContain(H(beeName));
+			expect(await authors(path, bee)).not.toContain(H(abeName));
 			// Their own words stay, and the uninvolved third party is visible to everyone.
-			expect(await authors(path, abe)).toContain(abeName);
-			expect(await authors(path, abe)).toContain(camName);
-			expect(await authors(path, cam)).toEqual(expect.arrayContaining([abeName, beeName]));
+			expect(await authors(path, abe)).toContain(H(abeName));
+			expect(await authors(path, abe)).toContain(H(camName));
+			expect(await authors(path, cam)).toEqual(expect.arrayContaining([H(abeName), H(beeName)]));
 		}
 	});
 
@@ -244,7 +255,7 @@ describe("blocking is symmetric", () => {
 		await clearBlocks();
 		const before = await (await get(`/api/content/works/${workId}/reviews`, cam)).json();
 
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		const after = (await (await get(`/api/content/works/${workId}/reviews`, abe)).json()) as {
 			average: number;
@@ -255,7 +266,7 @@ describe("blocking is symmetric", () => {
 		// The list shrank; the aggregate did not. A per-viewer average would mean two
 		// people see different reviews for the same Work, and would hand one user a way
 		// to move a creator's public score by blocking a reviewer.
-		expect(after.reviews.map((r) => r.username)).not.toContain(beeName);
+		expect(after.reviews.map((r) => r.handle)).not.toContain(H(beeName));
 		expect(after.count).toBe((before as { count: number }).count);
 		expect(after.average).toBe((before as { average: number }).average);
 		expect(after.count).toBeGreaterThan(after.reviews.length);
@@ -265,8 +276,8 @@ describe("blocking is symmetric", () => {
 describe("blocking and following", () => {
 	it("deletes the follow in both directions, and unblocking does not restore it", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/follow`, abe)).status).toBe(201);
-		expect((await post(`/api/accounts/users/${abeName}/follow`, bee)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/follow`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(abeName)}/follow`, bee)).status).toBe(201);
 
 		const followRows = async () =>
 			db
@@ -279,14 +290,14 @@ describe("blocking and following", () => {
 
 		expect((await followRows()).length).toBe(2);
 
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// Following is not symmetric, so there is a row each way — removing only the
 		// blocker's own would leave the blocked party still subscribed to the account
 		// they were just cut off from.
 		expect(await followRows()).toEqual([]);
 
-		expect((await post(`/api/accounts/users/${beeName}/unblock`, abe)).status).toBe(204);
+		expect((await post(`/api/accounts/users/${H(beeName)}/unblock`, abe)).status).toBe(204);
 
 		// Not restored. Re-subscribing someone to an account they were cut off from
 		// would be the app making a social decision for them.
@@ -295,27 +306,27 @@ describe("blocking and following", () => {
 
 	it("keeps blocked creators out of the follow feed and the following list", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${hostName}/follow`, abe)).status).toBe(201);
-		expect((await post(`/api/accounts/users/${beeName}/follow`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(hostName)}/follow`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/follow`, abe)).status).toBe(201);
 
 		// Seed the DB directly: the follow rows are what the feed reads, and blocking is
 		// about to delete them — so this asserts the filters hold even if a follow row
 		// survives, which is the state a future bug would produce.
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 		await db.insert(follows).values({ followerId: abeId, creatorId: beeId }).onConflictDoNothing();
 
 		const following = await get("/api/accounts/me/following", abe);
 		expect(following.status).toBe(200);
-		const names = ((await following.json()).users as { username: string }[]).map((u) => u.username);
-		expect(names).not.toContain(beeName);
-		expect(names).toContain(hostName);
+		const names = ((await following.json()).users as { handle: string }[]).map((u) => u.handle);
+		expect(names).not.toContain(H(beeName));
+		expect(names).toContain(H(hostName));
 
 		const feed = await get("/api/accounts/me/feed", abe);
 		expect(feed.status).toBe(200);
 		const creators = ((await feed.json()).entries as { creator: { username: string } }[]).map(
-			(e) => e.creator.username,
+			(e) => e.creator.handle,
 		);
-		expect(creators).not.toContain(beeName);
+		expect(creators).not.toContain(H(beeName));
 	});
 });
 
@@ -327,7 +338,7 @@ describe("a block is a boundary, not a moderation action", () => {
 			.from(moderationActions)
 			.where(inArray(moderationActions.actorId, [abeId, beeId]));
 
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// A block enters no queue, records no reason and is reviewed by nobody. If this
 		// ever fails, blocking has acquired an operator — which is the thing keeping it
@@ -363,7 +374,7 @@ describe("a block is a boundary, not a moderation action", () => {
 			).status,
 		).toBe(200);
 
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// DELIBERATE. A block severs contact between two people; it is not a mute and it
 		// does not remove anyone's published work from anyone's view. The decisive case
@@ -380,38 +391,38 @@ describe("a block is a boundary, not a moderation action", () => {
 
 	it("lets the blocker name the person the block hides, so an unblock is possible", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// Every other username lookup goes through the block filter. The unblock route
 		// deliberately does not — otherwise the block would hide its own subject from the
 		// one person entitled to lift it, and the boundary would be a one-way door.
-		expect((await get(`/api/accounts/users/${beeName}`, abe)).status).toBe(404);
+		expect((await get(`/api/accounts/users/${H(beeName)}`, abe)).status).toBe(404);
 
 		const list = await get("/api/accounts/me/blocks", abe);
 		expect(list.status).toBe(200);
-		expect(((await list.json()).blocks as { username: string }[]).map((b) => b.username)).toContain(
-			beeName,
+		expect(((await list.json()).blocks as { handle: string }[]).map((b) => b.handle)).toContain(
+			H(beeName),
 		);
 
-		expect((await post(`/api/accounts/users/${beeName}/unblock`, abe)).status).toBe(204);
-		expect((await get(`/api/accounts/users/${beeName}`, abe)).status).toBe(200);
+		expect((await post(`/api/accounts/users/${H(beeName)}/unblock`, abe)).status).toBe(204);
+		expect((await get(`/api/accounts/users/${H(beeName)}`, abe)).status).toBe(200);
 	});
 
 	it("only the blocker can lift it, and self-blocking is refused", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// bee cannot unblock themselves out of abe's decision.
-		expect((await post(`/api/accounts/users/${abeName}/unblock`, bee)).status).toBe(404);
-		expect((await get(`/api/accounts/users/${abeName}`, bee)).status).toBe(404);
+		expect((await post(`/api/accounts/users/${H(abeName)}/unblock`, bee)).status).toBe(404);
+		expect((await get(`/api/accounts/users/${H(abeName)}`, bee)).status).toBe(404);
 
-		expect((await post(`/api/accounts/users/${abeName}/block`, abe)).status).toBe(400);
+		expect((await post(`/api/accounts/users/${H(abeName)}/block`, abe)).status).toBe(400);
 	});
 
 	it("is idempotent", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 		const rows = await db
 			.select({ id: userBlocks.id })
 			.from(userBlocks)
@@ -423,7 +434,7 @@ describe("a block is a boundary, not a moderation action", () => {
 describe("the rows survive, because a block is not a delete", () => {
 	it("leaves the filtered comments and reviews in the table untouched", async () => {
 		await clearBlocks();
-		expect((await post(`/api/accounts/users/${beeName}/block`, abe)).status).toBe(201);
+		expect((await post(`/api/accounts/users/${H(beeName)}/block`, abe)).status).toBe(201);
 
 		// Filtering is a read-time decision, exactly as hiding is. A suite that only
 		// checked the API response would pass just as happily against an implementation

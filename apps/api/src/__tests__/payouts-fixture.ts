@@ -23,17 +23,20 @@
 import { db } from "@anthers/db/client";
 import { stripeAccounts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { userByName } from "./handles";
 
 /**
  * Put this account in creator mode with a connected Stripe account that Stripe is happy with.
  *
- * Takes a username because that is what the fixtures have to hand at setup time, and most
- * of them do not keep the id. Idempotent, so a suite that calls it twice is fine.
+ * Takes the name the account fixture was created with, which is what the fixtures have to hand
+ * at setup time, and most of them do not keep the id. The lookup is by the fixture's
+ * deterministic email, because the handle a name actually got is not always derivable from the
+ * name — `localHandleName` rewrites a name the server would refuse (over 18 characters, say),
+ * so an exact handle match built from the name finds nothing. Idempotent, so a suite that
+ * calls it twice is fine.
  */
-export async function enablePayouts(username: string): Promise<void> {
-	const [user] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
-	if (!user) throw new Error(`enablePayouts: no user named ${username}`);
-	await enablePayoutsFor(user.id);
+export async function enablePayouts(name: string): Promise<void> {
+	await enablePayoutsFor((await userByName(name)).id);
 }
 
 /** The same, when the caller already has the id. */

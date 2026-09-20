@@ -28,6 +28,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -73,17 +74,17 @@ async function rawExport(cookie: string): Promise<{ res: Response; text: string 
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${subjectName}, ${otherName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${subjectName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`);
 	subject = await signUp(subjectName);
 	await enablePayouts(subjectName);
 	other = await signUp(otherName);
 	await enablePayouts(otherName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE atproto_handle IN (${subjectName}, ${otherName})`,
+		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${subjectName + '@example.com'}`, sql`${otherName + '@example.com'}`], sql`, `)})`,
 	);
 
 	const idOf = async (u: string) => {
-		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, u));
+		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${u}@example.com`));
 		return row.id;
 	};
 	subjectId = await idOf(subjectName);
@@ -132,7 +133,7 @@ beforeAll(async () => {
 	).toBe(201);
 
 	// The subject follows, blocks, and reports — all their own actions.
-	expect((await post(`/api/accounts/users/${otherName}/follow`, subject)).status).toBe(201);
+	expect((await post(`/api/accounts/users/${await handleOf(otherName)}/follow`, subject)).status).toBe(201);
 	expect(
 		(
 			await post("/api/moderation/reports", subject, {
@@ -251,7 +252,7 @@ describe("the export is complete, readable, and handed over safely", () => {
 		const { res } = await rawExport(subject);
 		const disposition = res.headers.get("Content-Disposition") ?? "";
 		expect(disposition).toContain("attachment");
-		expect(disposition).toContain(subjectName);
+		expect(disposition).toContain(await handleOf(subjectName));
 		// A shared or proxy cache holding this file is the failure the header prevents.
 		expect(res.headers.get("Cache-Control")).toContain("no-store");
 	});
@@ -259,7 +260,7 @@ describe("the export is complete, readable, and handed over safely", () => {
 	it("includes the user's profile, content, money and viewing history", async () => {
 		const data = JSON.parse((await rawExport(subject)).text);
 
-		expect(data.profile.username).toBe(subjectName);
+		expect(data.profile.handle).toBe(await handleOf(subjectName));
 		expect(data.profile.email).toBe(`${subjectName}@example.com`);
 
 		expect(data.content.works.some((w: { id: number }) => w.id === workId)).toBe(true);
@@ -299,8 +300,8 @@ describe("the export is complete, readable, and handed over safely", () => {
 	it("gives each user their own data and nobody else's", async () => {
 		const mine = JSON.parse((await rawExport(subject)).text);
 		const theirs = JSON.parse((await rawExport(other)).text);
-		expect(mine.profile.username).toBe(subjectName);
-		expect(theirs.profile.username).toBe(otherName);
+		expect(mine.profile.handle).toBe(await handleOf(subjectName));
+		expect(theirs.profile.handle).toBe(await handleOf(otherName));
 		expect(theirs.profile.email).not.toBe(mine.profile.email);
 	});
 });

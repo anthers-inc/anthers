@@ -38,6 +38,7 @@ import {
 } from "../services/account-deletion.js";
 import { createSession } from "../services/auth.js";
 import { createAccount } from "./account-fixture";
+import { handleOf } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -66,7 +67,7 @@ async function signUp(username: string): Promise<string> {
 }
 
 async function idOf(username: string): Promise<number | null> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, username));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${username}@example.com`));
 	return row?.id ?? null;
 }
 
@@ -94,7 +95,7 @@ let purchaseId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE atproto_handle IN (${leaverName}, ${stayerName}, ${buyerName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${leaverName + '@example.com'}`, sql`${stayerName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`,
 	);
 	leaver = await signUp(leaverName);
 	stayer = await signUp(stayerName);
@@ -280,12 +281,12 @@ describe("what 'deleted' means, table by table", () => {
 		const tombstone = list.find((c) => c.id === leaverCommentId);
 		expect(tombstone).toBeDefined();
 		expect(tombstone!.body).toContain(`LEAVER-SAID-${id}`);
-		expect(tombstone!.username).toBeNull();
+		expect(tombstone!.handle).toBeNull();
 		expect(tombstone!.deletedByAuthor).toBe(true);
 
 		// And the third party's is still attributed, in the same thread.
 		const kept = list.find((c) => c.id === stayerCommentId);
-		expect(kept!.username).toBe(stayerName);
+		expect(kept!.handle).toBe(await handleOf(stayerName));
 		expect(kept!.deletedByAuthor).toBe(false);
 	});
 

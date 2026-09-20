@@ -20,6 +20,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { handleOf } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -99,7 +100,7 @@ async function view(workId: number, cookie: string, query = "") {
 
 describe("creator preview", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${strangerName})`);
+		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`);
 		creatorCookie = await signUp(creatorName);
 		await enablePayouts(creatorName);
 		strangerCookie = await signUp(strangerName);
@@ -211,7 +212,7 @@ describe("creator preview", () => {
 	// ── The catalog, which is where a creator actually looks ───────────────────
 
 	it("applies to the creator's whole Catalog at once", async () => {
-		const res = await req(`/api/content/catalog/${creatorName}?previewAs=0`, {
+		const res = await req(`/api/content/catalog/${await handleOf(creatorName)}?previewAs=0`, {
 			headers: { Cookie: creatorCookie },
 		});
 		expect(res.status).toBe(200);

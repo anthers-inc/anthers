@@ -56,7 +56,7 @@ describe("Catalog CRUD and post links", () => {
 	let postSlug: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${ownerName}, ${strangerName})`);
+		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${ownerName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`);
 	}, DB_SETUP_TIMEOUT);
 
 	// A setup step wearing a test's clothes: the cookies it assigns are what every test
@@ -69,7 +69,7 @@ describe("Catalog CRUD and post links", () => {
 			strangerCookie = await signUp(strangerName);
 			await enablePayouts(strangerName);
 			await db.execute(
-				sql`UPDATE users SET is_creator = true WHERE atproto_handle IN (${ownerName}, ${strangerName})`,
+				sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${ownerName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`,
 			);
 			expect(ownerCookie).toBeTruthy();
 			expect(strangerCookie).toBeTruthy();

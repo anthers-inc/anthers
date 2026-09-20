@@ -69,7 +69,7 @@ function release(workId: number) {
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${creatorName}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${creatorName + '@example.com'}`);
 	const account = await createAccount(creatorName);
 	cookie = account.cookie;
 	creatorId = account.userId as number;

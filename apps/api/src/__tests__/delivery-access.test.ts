@@ -28,6 +28,7 @@ import { assets, purchases, transcodingJobs, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { handleOf } from "./handles";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -70,14 +71,14 @@ describe("Delivery-layer access", () => {
 	let freeAssetId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
 
 		const [creator] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.atprotoHandle, creatorName))
+			.where(eq(users.email, `${creatorName}@example.com`))
 			.limit(1);
 		creatorId = creator.id;
 
@@ -157,10 +158,10 @@ describe("Delivery-layer access", () => {
 	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
 	// outlives its creator's account), so deleting the users alone orphans them instead.
 	afterAll(async () => {
-		const owners = sql`SELECT id FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`;
+		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`;
 		await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
 		await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${viewerName})`);
+		await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${viewerName + '@example.com'}`], sql`, `)})`);
 	});
 
 	it("publishes a locked post and a free post over the same two items", async () => {});
@@ -352,7 +353,7 @@ describe("Delivery-layer access", () => {
 	it("withholds media URLs from a denied viewer across the whole Catalog listing", async () => {
 		// The listing is a second door at the same rows, and a batch endpoint is exactly
 		// where a per-item check gets forgotten.
-		const res = await req(`/api/content/catalog/${creatorName}`, {
+		const res = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
 			headers: { Cookie: viewerCookie },
 		});
 		expect(res.status).toBe(200);
@@ -367,10 +368,10 @@ describe("Delivery-layer access", () => {
 	});
 
 	it("hides unreleased Works from the public Catalog but shows them to the creator", async () => {
-		const publicView = await req(`/api/content/catalog/${creatorName}`, {
+		const publicView = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
 			headers: { Cookie: viewerCookie },
 		});
-		const ownerView = await req(`/api/content/catalog/${creatorName}`, {
+		const ownerView = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
 			headers: { Cookie: creatorCookie },
 		});
 		const pub = (await publicView.json()).works as { visibility: string }[];
@@ -382,7 +383,7 @@ describe("Delivery-layer access", () => {
 	// ── The follow feed ────────────────────────────────────────────────────────
 
 	it("never ships post bodies through the follow feed", async () => {
-		const follow = await req(`/api/accounts/users/${creatorName}/follow`, {
+		const follow = await req(`/api/accounts/users/${await handleOf(creatorName)}/follow`, {
 			method: "POST",
 			headers: { Origin: ORIGIN, Cookie: viewerCookie },
 		});
@@ -415,7 +416,7 @@ describe("Delivery-layer access", () => {
 		const [buyer] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.atprotoHandle, viewerName))
+			.where(eq(users.email, `${viewerName}@example.com`))
 			.limit(1);
 
 		const [purchase] = await db

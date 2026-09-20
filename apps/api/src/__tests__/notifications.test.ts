@@ -57,13 +57,13 @@ let soldWorkId: number;
 let purchaseId: number;
 
 async function idOf(u: string): Promise<number | null> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, u));
+	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, `${u}@example.com`));
 	return row?.id ?? null;
 }
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE atproto_handle IN (${recipientName}, ${creatorName}, ${buyerName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${recipientName + '@example.com'}`, sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`], sql`, `)})`,
 	);
 	recipient = await signUp(recipientName);
 	await signUp(creatorName);

@@ -78,8 +78,11 @@ function router(
 	opts: {
 		updateError?: { error: string; message?: string; status?: number };
 		nodeDown?: boolean;
+		/** The handle the directory reports the identity holding, post-change. */
+		handle?: string;
 	} = {},
 ): typeof fetch {
+	const newHandle = opts.handle ?? "alice.example.com";
 	return (async (input: string | URL) => {
 		const url = String(input);
 		if (url.startsWith(`${plcDirectoryUrl()}/`)) {
@@ -92,7 +95,7 @@ function router(
 					cid: "after",
 					nullified: false,
 					operation: {
-						alsoKnownAs: ["at://alice.example.com"],
+						alsoKnownAs: [`at://${newHandle}`],
 						rotationKeys: ["did:key:zAnthersOnline"],
 						services: { atproto_pds: { endpoint: "https://anthers.test" } },
 					},
@@ -264,23 +267,27 @@ describe("a domain that has", () => {
 	// Anthers doing it is what it exists to catch. This one moved because Anthers did it.
 	it("moves the watcher's baseline, so the next sweep sees no change", async () => {
 		const { userId, did } = await makeAccount("baseline");
-		await swapHostedHandle(userId, { handle: "alice.example.com" }, { fetchImpl: router() });
+		await swapHostedHandle(
+			userId,
+			{ handle: "baseline.example.com" },
+			{ fetchImpl: router({ handle: "baseline.example.com" }) },
+		);
 
 		const [row] = await db
 			.select({ head: hostedIdentities.headCid, handle: hostedIdentities.handle })
 			.from(hostedIdentities)
 			.where(eq(hostedIdentities.did, did));
 		expect(row.head).toBe("after");
-		expect(row.handle).toBe("alice.example.com");
+		expect(row.handle).toBe("baseline.example.com");
 	});
 
 	it("takes a name however somebody typed it", async () => {
 		const { userId } = await makeAccount("typed");
 		const result = await swapHostedHandle(
 			userId,
-			{ handle: "  @Alice.Example.Com.  " },
-			{ fetchImpl: router() },
+			{ handle: "  @Typed.Example.Com.  " },
+			{ fetchImpl: router({ handle: "typed.example.com" }) },
 		);
-		expect(result).toEqual({ status: "swapped", handle: "alice.example.com" });
+		expect(result).toEqual({ status: "swapped", handle: "typed.example.com" });
 	});
 });

@@ -75,13 +75,13 @@ let owner: string;
 let stranger: string;
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${ownerName}, ${strangerName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${ownerName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`);
 	owner = await signUp(ownerName);
 	await enablePayouts(ownerName);
 	stranger = await signUp(strangerName);
 	await enablePayouts(strangerName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE atproto_handle IN (${ownerName}, ${strangerName})`,
+		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${ownerName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`,
 	);
 }, DB_SETUP_TIMEOUT);
 
@@ -95,10 +95,10 @@ beforeAll(async () => {
 // outlives its creator's account), so deleting the users alone orphans them rather than
 // removing them — and the transcoding_jobs that cascade off works would survive with them.
 afterAll(async () => {
-	const owners = sql`SELECT id FROM users WHERE atproto_handle IN (${ownerName}, ${strangerName})`;
+	const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${ownerName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`;
 	await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
 	await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${ownerName}, ${strangerName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${ownerName + '@example.com'}`, sql`${strangerName + '@example.com'}`], sql`, `)})`);
 });
 
 describe("Release-readiness gate", () => {

@@ -155,7 +155,7 @@ async function reloadReport(id: number) {
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${reporterName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${reporterName + '@example.com'}`], sql`, `)})`);
 	creatorId = (
 		await createAccount(creatorName, { emailVerified: true, fields: { isCreator: true } })
 	).userId;
@@ -173,7 +173,7 @@ afterAll(async () => {
 	for (const id of createdReports)
 		await db.delete(moderationReports).where(eq(moderationReports.id, id));
 	await db.delete(works).where(eq(works.id, workId));
-	await db.execute(sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${reporterName})`);
+	await db.execute(sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${reporterName + '@example.com'}`], sql`, `)})`);
 });
 
 describe("the cutoff", () => {

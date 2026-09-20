@@ -19,6 +19,7 @@ import { stickerBudgetFor } from "@anthers/shared/constants";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { userIdByName } from "./handles.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -60,11 +61,9 @@ describe("giving a Sticker", () => {
 		giverCookie = await signUp(`stk_giver_${RUN}`);
 		await signUp(`stk_creator_${RUN}`);
 		await signUp(`stk_other_${RUN}`);
-		const rows = await db.select({ id: users.id, username: users.atprotoHandle }).from(users);
-		const byName = new Map(rows.map((r) => [r.username, r.id]));
-		giverId = byName.get(`stk_giver_${RUN}`)!;
-		creatorId = byName.get(`stk_creator_${RUN}`)!;
-		strangerId = byName.get(`stk_other_${RUN}`)!;
+		giverId = await userIdByName(`stk_giver_${RUN}`);
+		creatorId = await userIdByName(`stk_creator_${RUN}`);
+		strangerId = await userIdByName(`stk_other_${RUN}`);
 		// A Sticker only reaches a creator who can be paid, which publishing already required.
 		await enablePayoutsFor(creatorId);
 
@@ -332,7 +331,7 @@ describe("a free account", () => {
 		const [user] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.atprotoHandle, `stk_free_${RUN}`));
+			.where(eq(users.email, `stk_free_${RUN}@example.com`));
 		await db
 			.insert(accounts)
 			.values({
@@ -351,7 +350,7 @@ describe("a free account", () => {
 		const [target] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.atprotoHandle, `stk_freetarget_${RUN}`));
+			.where(eq(users.email, `stk_freetarget_${RUN}@example.com`));
 		const work = await insertWork({ creatorId: target.id, type: "text", title: `Free ${RUN}` });
 
 		const res = await give(cookie, {
@@ -385,10 +384,8 @@ describe("the Stickers on a page", () => {
 	beforeAll(async () => {
 		cookie = await signUp(`stk_show_${RUN}`);
 		await signUp(`stk_showcreator_${RUN}`);
-		const rows = await db.select({ id: users.id, username: users.atprotoHandle }).from(users);
-		const byName = new Map(rows.map((r) => [r.username, r.id]));
-		giverId = byName.get(`stk_show_${RUN}`)!;
-		creatorId = byName.get(`stk_showcreator_${RUN}`)!;
+		giverId = await userIdByName(`stk_show_${RUN}`);
+		creatorId = await userIdByName(`stk_showcreator_${RUN}`);
 		await enablePayoutsFor(creatorId);
 		await db
 			.insert(accounts)

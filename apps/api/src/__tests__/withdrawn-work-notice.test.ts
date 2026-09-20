@@ -96,23 +96,25 @@ async function noticesFor(userId: number) {
 describe("Withdrawing a purchased Work tells the people who bought it", () => {
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${buyerName}, ${otherBuyerName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`, sql`${otherBuyerName + '@example.com'}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
 		await signUp(buyerName);
 		await signUp(otherBuyerName);
 		const rows = await db
-			.select({ id: users.id, username: users.atprotoHandle })
+			.select({ id: users.id, email: users.email })
 			.from(users)
-			.where(inArray(users.atprotoHandle, [creatorName, buyerName, otherBuyerName]));
-		creatorId = rows.find((r) => r.atproto_handle === creatorName)!.id;
-		buyerId = rows.find((r) => r.atproto_handle === buyerName)!.id;
-		otherBuyerId = rows.find((r) => r.atproto_handle === otherBuyerName)!.id;
+			.where(
+				sql`email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`, sql`${otherBuyerName + '@example.com'}`], sql`, `)})`,
+			);
+		creatorId = rows.find((r) => r.email === `${creatorName}@example.com`)!.id;
+		buyerId = rows.find((r) => r.email === `${buyerName}@example.com`)!.id;
+		otherBuyerId = rows.find((r) => r.email === `${otherBuyerName}@example.com`)!.id;
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE atproto_handle IN (${creatorName}, ${buyerName}, ${otherBuyerName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + '@example.com'}`, sql`${buyerName + '@example.com'}`, sql`${otherBuyerName + '@example.com'}`], sql`, `)})`,
 		);
 	});
 

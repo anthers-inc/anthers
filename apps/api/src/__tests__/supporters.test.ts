@@ -32,9 +32,9 @@ async function signUp(name: string) {
 	return createAccount(name);
 }
 
-async function idOf(handle: string): Promise<number> {
-	const [row] = await db.select({ id: users.id }).from(users).where(eq(users.atprotoHandle, handle));
-	return row.id;
+async function idOf(userId: number): Promise<number> {
+	// Kept as a function so the call site reads the same as it did under usernames.
+	return userId;
 }
 
 /** Somebody who gave `perCycle` for `cycles` months, and has now stopped. */
@@ -59,13 +59,13 @@ async function supporter(tag: string, perCycle: number, cycles: number, listed =
 async function page() {
 	const res = await req("/api/subscriptions/supporters");
 	expect(res.status).toBe(200);
-	return (await res.json()) as { groups: { username: string; displayName: string | null }[][] };
+	return (await res.json()) as { groups: { handle: string; displayName: string | null }[][] };
 }
 
-const flatNames = (groups: { username: string }[][]) => groups.flat().map((e) => e.username);
+const flatNames = (groups: { handle?: string }[][]) => groups.flat().map((e) => e.handle);
 
 describe("the supporters page", () => {
-	let stopped: { handle: string };
+	let stopped: { handle: string; userId: number };
 	let optedOut: { handle: string };
 
 	beforeAll(async () => {
@@ -85,7 +85,7 @@ describe("the supporters page", () => {
 		for (const group of groups) {
 			for (const entry of group) {
 				// The exact serialized shape — anything else here is money leaving the server.
-				expect(Object.keys(entry).sort()).toEqual(["displayName", "username"]);
+				expect(Object.keys(entry).sort()).toEqual(["displayName", "handle"]);
 			}
 		}
 	});
@@ -96,7 +96,7 @@ describe("the supporters page", () => {
 		const [acct] = await db
 			.select({ now: accounts.anthersSupport })
 			.from(accounts)
-			.where(eq(accounts.userId, await idOf(stopped.handle)));
+			.where(eq(accounts.userId, stopped.userId));
 		expect(Number(acct.now)).toBe(0);
 		expect(flatNames((await page()).groups)).toContain(stopped.handle);
 	});

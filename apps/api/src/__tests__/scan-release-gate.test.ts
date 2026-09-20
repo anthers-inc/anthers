@@ -86,7 +86,7 @@ describe("release waits for a safety scan, and gives way", () => {
 	const workIds: number[] = [];
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE atproto_handle = ${creatorName}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${creatorName + '@example.com'}`);
 		creator = await signUp(creatorName);
 		await enablePayouts(creatorName);
 	}, DB_SETUP_TIMEOUT);
