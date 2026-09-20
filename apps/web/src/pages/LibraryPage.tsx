@@ -24,6 +24,12 @@
  */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
+import { contentNoteLabel } from "@anthers/shared/content-rating";
+import {
+	coverFor,
+	MaturityVeil,
+	useContentPreferences,
+} from "@anthers/web-shared/content-preferences";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -90,7 +96,7 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 	const project = item.project;
 
 	const title = work?.title ?? project?.title ?? "Untitled";
-	const cover = work?.thumbnail ?? project?.coverImage ?? null;
+	const rawCover = work?.thumbnail ?? project?.coverImage ?? null;
 	const to =
 		work?.publicId != null
 			? workUrl({ slug: work.slug, publicId: work.publicId })
@@ -101,6 +107,13 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 	// A shelf entry the viewer cannot currently open — saved free and later gated, or
 	// refunded. Stated rather than hidden: it is still theirs to see, just not to open.
 	const locked = item.kind === "work" && work?.access?.canAccess === false;
+
+	// A cover is covered here the same way a card covers it — the rung the reader blurs,
+	// and each kind of content they asked to cover. The shelf is not exempt: a reader who
+	// blurs a rung or a kind expects it covered wherever it appears, their own shelf
+	// included. Projects carry no rating, so an album's cover renders as-is.
+	const { prefs } = useContentPreferences();
+	const cover = work ? coverFor(prefs, work) : null;
 
 	const act = async (fn: () => Promise<unknown>) => {
 		setBusy(true);
@@ -114,10 +127,21 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 
 	const body = (
 		<>
-			{cover ? (
-				<figure>
-					<img src={cover} alt="" className="h-40 w-full object-cover" />
-				</figure>
+			{rawCover ? (
+				cover ? (
+					<MaturityVeil
+						maturity={work?.maturity}
+						notes={(work?.maturityNotes ?? []).map(contentNoteLabel)}
+						because={cover.byRung ? undefined : cover.byNotes.map(contentNoteLabel)}
+						className="h-40 w-full"
+					>
+						<img src={rawCover} alt="" className="h-full w-full object-cover" />
+					</MaturityVeil>
+				) : (
+					<figure>
+						<img src={rawCover} alt="" className="h-40 w-full object-cover" />
+					</figure>
+				)
 			) : (
 				<div className="flex h-40 w-full items-center justify-center bg-base-300">
 					<span className="text-sm text-base-content/30">No thumbnail</span>

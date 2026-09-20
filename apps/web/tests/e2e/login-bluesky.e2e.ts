@@ -70,7 +70,20 @@ test.describe("logging in with Bluesky", () => {
 		// the red asterisk on the required field behind the backdrop — so the assertion
 		// passed on whichever element rendered first, which for one run was the asterisk. A
 		// selector that can match furniture is a selector that can pass without the feature.
-		await expect(page.locator(".modal-box .text-error")).toHaveText(/couldn't find that handle/i);
+		//
+		// ⚠️ The 20s timeout is the fix for the "deterministically fails on main" version of
+		// this spec, and the number is the point, not sloppiness. The refusal is produced by
+		// the OAuth client's `authorize()` walking the SDK's full resolution chain for
+		// `.invalid` — first asking the session's Bluesky stand-in, then the DoH DNS leg,
+		// then a `.well-known` HTTP fetch that waits out the 10s fetch timeout before the
+		// whole chain settles and returns `HandleNotFound`. Measured end to end at
+		// **10.5s** on this runner, so the default 5s assertion expired while the refusal
+		// was still legitimately in flight. The handle is not cached: `authorize()` resolves
+		// it fresh every time, so the cost repeats on every run. Anything materially over
+		// 20s is genuinely stuck, not merely slow.
+		await expect(page.locator(".modal-box .text-error")).toHaveText(/couldn't find that handle/i, {
+			timeout: 20_000,
+		});
 		// Still here, and still signed out. A failed handoff that navigated anyway would be
 		// a worse bug than the refusal it is reporting.
 		expect(new URL(page.url()).pathname).toBe("/login");
