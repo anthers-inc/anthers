@@ -32,7 +32,7 @@ import { assets, crfLedger, purchases, users } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
@@ -273,6 +273,20 @@ beforeEach(async () => {
 	fake.reset();
 	// The cap is counted across a buyer's whole history, so a test that leaves
 	// refunded rows behind silently changes the arithmetic of every later one.
+	// The ledger rows that name those purchases go first — `crf_ledger.purchase_id`
+	// is `set null`, so dropping the purchase orphans the entry rather than taking it.
+	const prior = await db
+		.select({ id: purchases.id })
+		.from(purchases)
+		.where(or(eq(purchases.buyerId, buyerId), eq(purchases.buyerId, otherId)));
+	if (prior.length > 0) {
+		await db.delete(crfLedger).where(
+			inArray(
+				crfLedger.purchaseId,
+				prior.map((p) => p.id),
+			),
+		);
+	}
 	await db.delete(purchases).where(eq(purchases.buyerId, buyerId));
 	await db.delete(purchases).where(eq(purchases.buyerId, otherId));
 });

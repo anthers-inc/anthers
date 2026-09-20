@@ -41,6 +41,7 @@ import {
 	adminSessions,
 	comments,
 	creatorCredits,
+	crfLedger,
 	dmcaNotices,
 	invoices,
 	legalHolds,
@@ -148,7 +149,18 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			);
 
 		// Money. A purchase outlives the Work, the creator and the buyer by design, so it is
-		// reachable from none of them once they are gone.
+		// reachable from none of them once they are gone. The CRF ledger's only FK is
+		// `purchase_id → purchases ON DELETE SET NULL`, so dropping a purchase without first
+		// taking the ledger rows that point at it does not clean them up — it *orphans* them
+		// here, which is how this purge's own pass was the largest single source of residue.
+		const ownedPurchases = await db
+			.select({ id: purchases.id })
+			.from(purchases)
+			.where(or(inArray(purchases.buyerId, ids), inArray(purchases.creatorId, ids)));
+		const purchaseIds = ownedPurchases.map((p) => p.id);
+		if (purchaseIds.length > 0) {
+			await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, purchaseIds));
+		}
 		await db
 			.delete(purchases)
 			.where(or(inArray(purchases.buyerId, ids), inArray(purchases.creatorId, ids)));
@@ -174,6 +186,15 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 
 		// Anything still pointing at a Work this account owns, before the Work itself goes.
 		if (workIds.length > 0) {
+			const workPurchaseIds = (
+				await db
+					.select({ id: purchases.id })
+					.from(purchases)
+					.where(inArray(purchases.workId, workIds))
+			).map((p) => p.id);
+			if (workPurchaseIds.length > 0) {
+				await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, workPurchaseIds));
+			}
 			await db.delete(purchases).where(inArray(purchases.workId, workIds));
 			await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));
 			await db.delete(dmcaNotices).where(inArray(dmcaNotices.workId, workIds));
