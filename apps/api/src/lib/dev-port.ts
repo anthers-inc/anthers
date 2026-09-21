@@ -19,7 +19,11 @@
 /** Best-effort identity of the process holding `port`, for error messages. */
 function portHolder(port: number): string {
 	const proc = Bun.spawnSync(["lsof", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fp"]);
-	const pid = proc.stdout.toString().split("\n").find((l) => l.startsWith("p"))?.slice(1);
+	const pid = proc.stdout
+		.toString()
+		.split("\n")
+		.find((l) => l.startsWith("p"))
+		?.slice(1);
 	if (!pid) return "unknown process";
 	const cmd = Bun.spawnSync(["ps", "-o", "comm=", "-p", pid]);
 	const name = cmd.exitCode === 0 ? cmd.stdout.toString().trim() : "unknown";
