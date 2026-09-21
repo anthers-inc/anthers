@@ -18,6 +18,14 @@
 # The one exception is a push whose every changed file is markdown, which runs
 # `make verify-docs` — the checks that read markdown at all — instead. See `docs_only` below.
 #
+# The full suite runs in a detached worktree at the push's head rather than in this checkout,
+# which frees the working copy during the hold and verifies the tree being pushed rather than
+# whichever checkout the push was launched from — two backgrounded pushes collided with a
+# `git checkout` mid-verify on 2026-09-19, and a hold that long is easily misread as a broken
+# push. The worktree is built on demand and removed when the suite finishes; a warm second
+# checkout would drift, and drift in the thing doing the verifying is its own class of bug.
+# The docs-only fast path stays here — it is cheap and reads only markdown.
+#
 # Escape hatch: `git push --no-verify`. Use it for a WIP branch nobody builds on; don't use
 # it for anything heading at `main`, which is the one case this catches.
 
@@ -45,11 +53,13 @@ zero="0000000000000000000000000000000000000000"
 refs_seen=0
 has_content=0
 docs_only=1
+push_head=""
 while read -r _local_ref local_sha _remote_ref remote_sha; do
 	refs_seen=$((refs_seen + 1))
 	[ -z "$local_sha" ] && continue
 	[ "$local_sha" = "$zero" ] && continue
 	has_content=1
+	push_head="$local_sha"
 	[ "$docs_only" -eq 1 ] || continue
 
 	# A branch new to the remote has no remote tip, so it is measured from where it left
@@ -80,11 +90,71 @@ target=verify
 if [ "$refs_seen" -gt 0 ] && [ "$docs_only" -eq 1 ]; then
 	target=verify-docs
 	printf '\033[36m→ pre-push: only markdown changed, so running `make verify-docs` before pushing to %s\033[0m\n' "$remote"
-else
-	printf '\033[36m→ pre-push: running `make verify` before pushing to %s\033[0m\n' "$remote"
 fi
 
-if make "$target"; then
+if [ "$target" = "verify-docs" ]; then
+	if make "$target"; then
+		printf '\033[32m✓ pre-push: %s passed\033[0m\n' "$target"
+		exit 0
+	fi
+
+	printf '\n\033[31m✗ pre-push: %s FAILED — push aborted.\033[0m\n' "$target"
+	printf '  Fix it, or bypass deliberately with: git push --no-verify\n'
+	exit 1
+fi
+
+# `make verify` runs in a detached worktree at the push's head — see the header. Built on
+# demand and removed when the suite finishes.
+printf '\033[36m→ pre-push: running `make verify` before pushing to %s (in a detached worktree at the push'\''s head)\033[0m\n' "$remote"
+
+worktree_dir=".worktrees/pre-push-verify"
+push_head_rev="HEAD"
+if [ -n "$push_head" ]; then
+	push_head_rev="$push_head"
+else
+	# No stdin from git is not a reason to test the empty tree; refuse rather than guess.
+	printf '\n\033[31m✗ pre-push: git supplied no reference list, so there is no tree to verify — refusing to test this checkout instead of the push\033[0m\n'
+	printf '  If this push is deliberate and the tree is right, bypass with: git push --no-verify\n'
+	exit 1
+fi
+
+# A git hook inherits the pusher's GIT_DIR, which points at the repository that pushed rather
+# than this checkout — any git worktree command run under it would act there instead. Scrub
+# it. The same failure made the test suite rewrite the real repository.
+git_clean() {
+	env -i PATH="$PATH" HOME="$HOME" git "$@"
+}
+
+cleanup_worktree() {
+	git_clean worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
+	git_clean worktree prune >/dev/null 2>&1 || true
+}
+trap cleanup_worktree EXIT INT TERM
+
+# A stale entry means a previous push died holding this worktree; refuse to remove it out
+# from under a running suite and prune any bookkeeping entry instead.
+if git_clean worktree list --porcelain | grep -q "^worktree .*${worktree_dir}$"; then
+	git_clean worktree prune >/dev/null 2>&1 || true
+	if git_clean worktree list --porcelain | grep -q "^worktree .*${worktree_dir}$"; then
+		printf '\n\033[31m✗ pre-push: %s is already checked out — another verify may still be running\033[0m\n' "$worktree_dir"
+		exit 1
+	fi
+fi
+
+git_clean worktree prune >/dev/null 2>&1 || true
+if ! git_clean worktree add --detach "$worktree_dir" "$push_head_rev" >/dev/null; then
+	printf '\n\033[31m✗ pre-push: could not check out %s in %s\033[0m\n' "$push_head_rev" "$worktree_dir"
+	exit 1
+fi
+
+# Install into the worktree; the shared Bun cache hardlinks the packages, so it is seconds
+# rather than minutes (PR #287 measured ~0.14s).
+if ! (cd "$worktree_dir" && bun install) >/dev/null 2>&1; then
+	printf '\n\033[31m✗ pre-push: bun install failed in %s\033[0m\n' "$worktree_dir"
+	exit 1
+fi
+
+if (cd "$worktree_dir" && make "$target"); then
 	printf '\033[32m✓ pre-push: %s passed\033[0m\n' "$target"
 	exit 0
 fi
