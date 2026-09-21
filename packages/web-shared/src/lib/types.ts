@@ -580,6 +580,17 @@ export interface Review {
 	createdAt: string;
 	handle: string;
 	avatar: string | null;
+	/**
+	 * Readers' judgment of this review, as a net floored at zero.
+	 *
+	 * ⭐ **Helpfulness sorts and never weights.** This moves a review up the list; it has
+	 * no effect on the recommended share, where every visible review still counts once.
+	 * The same number a post or a comment publishes — a reviewer sees their own raw
+	 * counts the way a commenter does, through the vote read.
+	 */
+	score: number;
+	/** What this viewer did to this review: `up`, `down`, or nothing yet. */
+	viewerVote: "up" | "down" | null;
 }
 
 export interface ReviewAggregate {
@@ -593,10 +604,26 @@ export interface ReviewAggregate {
 	/** How many of `count` recommended it — the numerator, for "18 of 20". */
 	recommended: number;
 	count: number;
+	/**
+	 * The same share over the reviews from a recent window — the reader's choice of week,
+	 * month or year (default month). `recommendedPercent` is null when the window holds
+	 * too few reviews to mean anything, distinguishable from All-Time's null.
+	 */
+	recent: {
+		window: "week" | "month" | "year";
+		recommendedPercent: number | null;
+		recommended: number;
+		count: number;
+	};
 	/** The viewer's own verdict, shown even if their review is hidden. */
 	userVerdict: string | null;
 	/** The viewer's own review text, so the form can open pre-filled for an edit. */
 	userReview: string | null;
+	/**
+	 * Newest first from the server. The client's two sorts — Helpful by default and
+	 * Newest as the alternative — are presentations of this one payload rather than two
+	 * different answers.
+	 */
 	reviews: Review[];
 }
 

@@ -82,6 +82,41 @@ export function recommendedPercent(recommended: number, total: number): number |
 	return Math.round((recommended / total) * 100);
 }
 
+/**
+ * The windows a Recent review share may be read over.
+ *
+ * Named rather than milliseconds so the wire format is a word a reader sees ("past month")
+ * rather than a number nobody can check. `REVIEW_WINDOW_MS` is the matching duration for
+ * the SQL `>=` comparison, and `reviewWindowSince` derives the cutoff timestamp from it —
+ * both live here so the API and any client cannot come to disagree about what a window
+ * means.
+ *
+ * ⭐ **Steam's shape, reader-selectable rather than fixed** (Parker, 2026-09-21): All-Time
+ * is always shown beside the Recent share rather than replacing it, and the Recent window
+ * is the reader's choice — Steam's fixed 30 days becomes *our* default because it is the
+ * figure a reader coming from Steam already understands, not because a fixed one was ever
+ * settled. A work too young or too thinly reviewed for a window simply has no Recent share
+ * for it: `recommendedPercent` returns null, and that null is what the UI renders around.
+ */
+export const REVIEW_WINDOWS = ["week", "month", "year"] as const;
+export type ReviewWindow = (typeof REVIEW_WINDOWS)[number];
+
+export const REVIEW_WINDOW_MS: Record<ReviewWindow, number> = {
+	week: 7 * 24 * 60 * 60 * 1000,
+	month: 30 * 24 * 60 * 60 * 1000,
+	year: 365 * 24 * 60 * 60 * 1000,
+};
+
+/**
+ * The earliest `createdAt` a review in `window` may carry, as a `Date`.
+ *
+ * ⚠️ Computed against the CALLER's clock rather than the database's `now()`, so a request
+ * whose two halves ran either side of midnight does not split one window in two.
+ */
+export function reviewWindowSince(window: ReviewWindow, now: Date = new Date()): Date {
+	return new Date(now.getTime() - REVIEW_WINDOW_MS[window]);
+}
+
 /** A comment's body. Matches the limit the comment route has always enforced. */
 export const COMMENT_MAX = 10000;
 
