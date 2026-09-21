@@ -28,10 +28,12 @@
 /**
  * The NSIDs published under anthers.org whose records Anthers writes.
  *
- * ⚠️ **The reader collections are published and deliberately absent.** `org.anthers.comment`,
- * `review`, `vote` and `follow` wait on reusing a hosted account's session across writes: the
- * reference PDS allows thirty new sessions in five minutes per account, a reader may cast thirty
- * votes a minute, and every write opens one today. They are added in the change that lands that.
+ * ⭐ **The reader collections are written only because the hosted writer reuses its session.**
+ * `org.anthers.comment`, `review`, `vote` and `follow` are high-frequency — a reader's pooled
+ * activity spends writes across all of them — and the reference PDS limits `createSession` to
+ * thirty in five minutes and three hundred a day per account. They could not be written while
+ * every write opened a fresh login; `services/hosted-session-store.ts` is what made that one
+ * login per account rather than one per write.
  */
 export const PUBLISHED_LEXICONS: ReadonlySet<string> = new Set([
 	"org.anthers.work",
@@ -39,6 +41,10 @@ export const PUBLISHED_LEXICONS: ReadonlySet<string> = new Set([
 	"org.anthers.project",
 	"org.anthers.userPermissions",
 	"org.anthers.creatorPermissions",
+	"org.anthers.comment",
+	"org.anthers.review",
+	"org.anthers.vote",
+	"org.anthers.follow",
 ]);
 
 let override: ReadonlySet<string> | undefined;

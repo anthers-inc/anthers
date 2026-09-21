@@ -698,6 +698,21 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	/** The account's password at the node, sealed by `services/secret-box.ts`. */
 	sealedPassword: text("sealed_password").notNull(),
 	/**
+	 * The live PDS session for this account, sealed by `services/secret-box.ts` — a JSON string
+	 * holding `accessJwt`, `refreshJwt` and `expiresAt`, null until the writer has opened one.
+	 *
+	 * ⚠️ **A second credential-equivalent in a row designed to stay narrow, added on purpose.**
+	 * A `refreshJwt` is a standing login and an `accessJwt` a live one, so sealing them here
+	 * under the same `HOSTED_ACCOUNT_KEY` as the password is the cost of reusing a session
+	 * across writes instead of spending one of the account's 300 daily `createSession`s on
+	 * every record. A copy of this table without the key is still just a list of DIDs.
+	 *
+	 * 🚨 **Written only by `services/hosted-session-store.ts`** — the one-writer rule for this
+	 * table now covers two columns, and a second writer putting a stale pair back would
+	 * re-introduce exactly the per-write logins this exists to remove.
+	 */
+	sealedSession: text("sealed_session"),
+	/**
 	 * The `did:key:` of the recovery key the account holder took, once they have taken one.
 	 *
 	 * ⚠️ **The PUBLIC half, and it is not a secret** — it is in the public PLC log the moment

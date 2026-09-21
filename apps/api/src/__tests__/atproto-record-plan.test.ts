@@ -233,23 +233,38 @@ describe("syncing a record", () => {
 });
 
 describe("a collection whose Lexicon is not published", () => {
-	// The real set, for this block only.
-	beforeAll(() => setPublishedLexiconsForTesting(undefined));
+	// 🚨 **The draft has to be constructed now.** Every reader schema is genuinely published, so
+	// no collection is unpublished under the real set any longer — and the gate's behavior is
+	// still worth pinning, because it is what protects the NEXT schema that arrives as a draft.
+	// These tests therefore run with `comment` made a draft by hand. The first test restores the
+	// real set to snapshot what is actually published; the rest leave `comment` unpublished.
+	beforeAll(() =>
+		setPublishedLexiconsForTesting(EVERY_COLLECTION.filter((c) => c !== "org.anthers.comment")),
+	);
 	afterAll(() => setPublishedLexiconsForTesting(EVERY_COLLECTION));
 
 	it("writes under exactly the published schemas it has chosen to", async () => {
-		expect([...PUBLISHED_LEXICONS].sort()).toEqual([
-			"org.anthers.creatorPermissions",
-			"org.anthers.post",
-			"org.anthers.project",
-			"org.anthers.userPermissions",
-			"org.anthers.work",
-		]);
-		// And each names a schema this repository actually holds, so a typo cannot open the gate
-		// for a collection nobody wrote.
-		for (const nsid of PUBLISHED_LEXICONS) {
-			const path = `lexicons/${nsid.split(".").slice(0, -1).join("/")}/${nsid.split(".").at(-1)}.json`;
-			expect((await Bun.file(path).json()).id).toBe(nsid);
+		setPublishedLexiconsForTesting(undefined);
+		try {
+			expect([...PUBLISHED_LEXICONS].sort()).toEqual([
+				"org.anthers.comment",
+				"org.anthers.creatorPermissions",
+				"org.anthers.follow",
+				"org.anthers.post",
+				"org.anthers.project",
+				"org.anthers.review",
+				"org.anthers.userPermissions",
+				"org.anthers.vote",
+				"org.anthers.work",
+			]);
+			// And each names a schema this repository actually holds, so a typo cannot open the gate
+			// for a collection nobody wrote.
+			for (const nsid of PUBLISHED_LEXICONS) {
+				const path = `lexicons/${nsid.split(".").slice(0, -1).join("/")}/${nsid.split(".").at(-1)}.json`;
+				expect((await Bun.file(path).json()).id).toBe(nsid);
+			}
+		} finally {
+			setPublishedLexiconsForTesting(EVERY_COLLECTION.filter((c) => c !== "org.anthers.comment"));
 		}
 	});
 
