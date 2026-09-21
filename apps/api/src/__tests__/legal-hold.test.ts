@@ -137,7 +137,7 @@ async function seedRedactableReport(reporterId: number, subjectId: number): Prom
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username LIKE ${`hold_%_${id}`}`);
+	await db.execute(sql`DELETE FROM users WHERE atproto_handle LIKE ${`hold_%_${id}`}`);
 	for (const name of names) userIds.push(await signUp(name));
 	operatorId = (await createAdminFixture("hold-operator")).id;
 }, DB_SETUP_TIMEOUT);
@@ -329,7 +329,7 @@ describe("Cleanup", () => {
 		await db.delete(legalHolds).where(inArray(legalHolds.subjectId, userIds));
 		await db.execute(sql`DELETE FROM legal_holds WHERE reason LIKE '%fixture%'`);
 		await db.delete(attentionDaily).where(eq(attentionDaily.creatorId, userIds[4]));
-		await db.execute(sql`DELETE FROM users WHERE username LIKE ${`hold_%_${id}`}`);
+		await db.execute(sql`DELETE FROM users WHERE atproto_handle LIKE ${`hold_%_${id}`}`);
 		expect(true).toBe(true);
 	});
 });

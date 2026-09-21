@@ -97,7 +97,9 @@ function noticeBody(targetWorkId: number, overrides: Partial<Record<string, unkn
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherCreatorName})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
+	);
 	const creatorAccount = await createAccount(creatorName);
 	creator = creatorAccount.cookie;
 	creatorToken = creatorAccount.token;
@@ -158,7 +160,9 @@ afterAll(async () => {
 	);
 	await db.execute(sql`DELETE FROM dmca_notices WHERE work_id IN (${workId}, ${otherWorkId})`);
 	await db.execute(sql`DELETE FROM works WHERE id IN (${workId}, ${otherWorkId})`);
-	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherCreatorName})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
+	);
 });
 
 describe("DMCA notice intake", () => {

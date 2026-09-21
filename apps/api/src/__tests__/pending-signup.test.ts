@@ -162,7 +162,11 @@ describe("asking for an account writes it down", () => {
 	});
 
 	it("says nothing about whether the address already has an account", async () => {
-		await createAccount(null, { email: addr("known"), emailVerified: true, identity: "brought" });
+		await createAccount(`${RUN}known`, {
+			email: addr("known"),
+			emailVerified: true,
+			identity: "brought",
+		});
 		const known = await begin({ email: addr("known") });
 		const stranger = await begin({ email: addr("stranger") });
 		// The moment these answer differently, this endpoint becomes a way to ask "is this
@@ -194,7 +198,7 @@ describe("finishing it in the same browser", () => {
 			next: string | null;
 		};
 		expect(body.created).toBe(true);
-		// 🚨 Still owes a handle and the terms. `username` staying null is the single field
+		// 🚨 Still owes the terms. `termsAcceptedAt` staying null is the single field
 		// that makes an account `needsOnboarding` and routes it to `/welcome`, which is the
 		// only place the 13+ assertion is ever presented.
 		expect(body.needsOnboarding).toBe(true);
@@ -205,7 +209,7 @@ describe("finishing it in the same browser", () => {
 			.select()
 			.from(users)
 			.where(eq(users.email, addr("finish")));
-		expect(user.username).toBeNull();
+		expect(user.termsAcceptedAt).toBeNull();
 		expect(user.atprotoDid, "created holding its identity").toBe(did("finish"));
 		// A spent row cannot be replayed onto a second account.
 		expect(await readPendingSignup(token)).toBeUndefined();
@@ -293,7 +297,7 @@ describe("resuming it in another browser", () => {
 			.select()
 			.from(users)
 			.where(eq(users.email, addr("proved")));
-		expect(user.username, "a resumed signup owes a handle like every other one").toBeNull();
+		expect(user.termsAcceptedAt, "a resumed signup owes the terms like every other one").toBeNull();
 
 		// Spent. A back button cannot mint a second account from the same stamp.
 		const again = await app.request("/api/auth/signup/complete", {
@@ -611,7 +615,11 @@ describe("an abandoned signup does not linger", () => {
 		// that account's credential, and the expiring signup beside it says nothing about it.
 		const [owner] = await db
 			.insert(users)
-			.values({ email: addr("claimed"), atprotoDid: did("claimed") })
+			.values({
+				email: addr("claimed"),
+				atprotoDid: did("claimed"),
+				atprotoHandle: `${RUN}claimed.bsky.social`,
+			})
 			.returning();
 		await db
 			.insert(atprotoSessions)

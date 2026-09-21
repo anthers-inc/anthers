@@ -159,25 +159,28 @@ export default function FinishSignupPage() {
 	 * state update would not have landed, and the account would be left on this page instead
 	 * of being sent to onboarding. The same shape `/subscribe` uses, for the same reason.
 	 */
-	const owedOnboarding = useRef(false);
 	const destination = useRef<string | null>(null);
 
 	// ── What this browser is finishing ───────────────────────────────────────
 	useEffect(() => {
 		if (isLoading) return;
 
-		// 🚨 Somebody already signed in has nothing to finish here. An account that still owes
-		// a handle goes to onboarding rather than being shown a code box for an address it has
-		// already proved — which is what a reload after verifying looks like.
+		// 🚨 Somebody already signed in has nothing to finish here — a reload after
+		// verifying looks like this — so they go on to the first-run state instead of being
+		// shown a code box for an address they have already proved. The test for "still owes
+		// the first run" is the terms, not the handle: the handle now arrives with the
+		// identity, so `user.handle` is always set and cannot tell onboarding from done.
+		// (It also fires the moment the verify's Set-Cookie updates the auth context, ahead
+		// of `commit`'s own navigation, so getting it wrong loses the race to `/`.)
 		if (user) {
-			navigate(user.username ? "/" : "/welcome", { replace: true });
+			navigate(user.termsAcceptedAt ? "/" : "/welcome", { replace: true });
 			return;
 		}
 
 		let live = true;
 		/*
 		 * 🚨 **Both requests are awaited before this page becomes interactive, and the creator
-		 * list is the one that matters.** A pick is stored as a username and the charge needs
+		 * list is the one that matters.** A pick is stored as a handle and the charge needs
 		 * the creator's id, so the list is what turns one into the other — and a page that
 		 * accepted a code while it was still in flight would either quote support it then
 		 * failed to bill, or bill support it never showed. `/subscribe` carries the same
@@ -243,7 +246,7 @@ export default function FinishSignupPage() {
 	const picks = pending?.picks ?? EMPTY_PICKS;
 	const next = sanitizeNextPath(pending?.next || undefined);
 
-	const byUsername = new Map(creators.map((c) => [c.username, c]));
+	const byHandle = new Map(creators.map((c) => [c.handle, c]));
 	/**
 	 * 🚨 **One list, and the charge and the summary are both built from it.** `/subscribe`
 	 * derived what it displayed and what it billed by two routes until 2026-08-16 and quoted
@@ -251,7 +254,7 @@ export default function FinishSignupPage() {
 	 * the defect.
 	 */
 	const directed = picks.seed
-		.map((username) => byUsername.get(username))
+		.map((handle) => byHandle.get(handle))
 		.filter((creator): creator is PublicUser => !!creator)
 		.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
 	const total = supportTotal(picks.anthers, directed);
@@ -287,15 +290,15 @@ export default function FinishSignupPage() {
 			destination.current = landing;
 
 			const chosenDirected = chosen.seed
-				.map((username) => byUsername.get(username))
+				.map((handle) => byHandle.get(handle))
 				.filter((creator): creator is PublicUser => !!creator)
 				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
 			const chosenTotal = supportTotal(chosen.anthers, chosenDirected);
 
-			for (const username of chosen.follow) {
-				const creator = byUsername.get(username);
+			for (const handle of chosen.follow) {
+				const creator = byHandle.get(handle);
 				if (!creator || creator.isFollowing) continue;
-				await client.api.accounts.users[":username"].follow.$post({ param: { username } });
+				await client.api.accounts.users[":handle"].follow.$post({ param: { handle } });
 			}
 
 			if (chosenTotal === 0) {
@@ -324,17 +327,12 @@ export default function FinishSignupPage() {
 				preview,
 			});
 		},
-		[byUsername, leave, next, picks],
+		[byHandle, leave, next, picks],
 	);
 
 	/** Shared by the code path and the resumed path: an account now exists. */
 	const accountMade = useCallback(
-		async (result: {
-			needsOnboarding: boolean;
-			picks: SignupPicks | null;
-			next: string | null;
-		}) => {
-			owedOnboarding.current = result.needsOnboarding;
+		async (result: { picks: SignupPicks | null; next: string | null }) => {
 			await commit(result);
 		},
 		[commit],
@@ -497,7 +495,6 @@ export default function FinishSignupPage() {
 		bluesky: pending.atprotoHandle ? "done" : null,
 		address: "current",
 		payment: total > 0 ? "todo" : null,
-		username: "todo",
 	});
 
 	return (
@@ -710,7 +707,7 @@ export default function FinishSignupPage() {
 
 			{error && <p className="mt-4 text-sm text-error">{error}</p>}
 
-			<ChosenSummary picks={picks} byUsername={byUsername} total={total} />
+			<ChosenSummary picks={picks} byHandle={byHandle} total={total} />
 
 			<button
 				type="button"
@@ -728,26 +725,18 @@ export default function FinishSignupPage() {
 					preview={charge.preview}
 					onComplete={() => {
 						setCharge(null);
-						// A brand-new account owes a handle before anything else, including before
-						// the page that would show off the support it just bought — which is a poor
-						// place to discover you have no profile.
-						void leave(
-							owedOnboarding.current
-								? withNextPath("/welcome", destination.current)
-								: (destination.current ?? "/subscription"),
-						);
+						// A brand-new account gets the first-run state before anything else,
+						// including before the page that would show off the support it just
+						// bought — see FirstRun.tsx for why.
+						void leave(withNextPath("/welcome", destination.current));
 					}}
 					onClose={() => {
 						setCharge(null);
 						// The card was declined or dismissed — but the account exists and is signed
-						// in, because confirming the address made it. That is the correct outcome and
-						// takes no unwinding: they have a free account, and the only thing still owed
-						// is the handle.
-						void leave(
-							owedOnboarding.current
-								? withNextPath("/welcome", destination.current)
-								: (destination.current ?? "/"),
-						);
+						// in, because confirming the address made it. That is the correct outcome
+						// and takes no unwinding: they have a free account, and support can be
+						// added from `/subscription` afterwards.
+						void leave(withNextPath("/welcome", destination.current));
 					}}
 				/>
 			)}
@@ -766,11 +755,11 @@ export default function FinishSignupPage() {
  */
 function ChosenSummary({
 	picks,
-	byUsername,
+	byHandle,
 	total,
 }: {
 	picks: SignupPicks;
-	byUsername: Map<string | null, PublicUser>;
+	byHandle: Map<string | null, PublicUser>;
 	total: number;
 }) {
 	const nothing = picks.anthers === 0 && picks.follow.length === 0;
@@ -802,13 +791,13 @@ function ChosenSummary({
 						{picks.anthers > 0 ? amountLabel(picks.anthers) : "Free"}
 					</strong>
 				</li>
-				{picks.follow.map((username) => {
-					const creator = byUsername.get(username);
-					const backing = picks.seed.includes(username);
+				{picks.follow.map((handle) => {
+					const creator = byHandle.get(handle);
+					const backing = picks.seed.includes(handle);
 					return (
-						<li key={username} className="flex items-baseline gap-3">
+						<li key={handle} className="flex items-baseline gap-3">
 							<span className="min-w-0">
-								{creator?.displayName || creator?.username || username}
+								{creator?.displayName || creator?.handle || handle}
 								<span className="block text-xs text-base-content/45">
 									{backing ? "following · supporting" : "following"}
 								</span>

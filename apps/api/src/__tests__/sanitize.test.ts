@@ -101,10 +101,10 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		'<img src="x" onerror="alert(1)">';
 
 	async function signUpAndGetCookie(): Promise<string> {
-		const username = `xss_${testId}`;
-		const { cookie } = await createAccount(username);
+		const name = `xss${testId}`;
+		const { cookie } = await createAccount(name);
 		// Publishing takes a fully set-up creator.
-		await enablePayouts(username);
+		await enablePayouts(name);
 		return cookie;
 	}
 

@@ -12,7 +12,11 @@
  * viewer the `authed` project signs in as. The viewer's setting is put back afterward, since other
  * walks share the account.
  */
+
+import { gauntletHandle } from "@anthers/db/gauntlet";
+import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
+import { profileUrl } from "@anthers/web-shared/profile";
 import type { BrowserContext } from "@playwright/test";
 import {
 	API_URL,
@@ -29,6 +33,7 @@ const GENTLE = `${TITLE_PREFIX}the picnic ${Date.now()}`;
 
 let creatorContext: BrowserContext | null = null;
 let creatorSession = "";
+let creatorProfile = "";
 
 function asCreator(path: string, init: RequestInit = {}): Promise<Response> {
 	return fetch(`${API_URL}${path}`, {
@@ -92,6 +97,9 @@ test("a reader who blurs or hides violence meets it covered, then not at all", a
 }) => {
 	creatorContext = await browser.newContext();
 	creatorSession = await signInAsMediaFixture(creatorContext);
+	// The profile URL is the issued handle — the name this spec asked for is not it
+	// (`media_fixture` respells under the handle rules), so resolve rather than type it.
+	creatorProfile = profileUrl(await gauntletHandle(API_URL, MEDIA_FIXTURE_USERNAME));
 	await sweep();
 	await release(VIOLENT, { ...rowsRatedAs("general"), violence: "general" });
 	await release(GENTLE, rowsRatedAs("general"));
@@ -108,7 +116,7 @@ test("a reader who blurs or hides violence meets it covered, then not at all", a
 	const card = (title: string) => page.locator(".card").filter({ hasText: title });
 
 	await violence("Blur");
-	await page.goto("/@media_fixture");
+	await page.goto(creatorProfile);
 	// Covered, and the cover names the kind of content rather than the rating, which is General.
 	await expect(card(VIOLENT)).toContainText("Violence");
 	await expect(card(VIOLENT)).toContainText("Show anyway");
@@ -116,7 +124,7 @@ test("a reader who blurs or hides violence meets it covered, then not at all", a
 	await expect(card(GENTLE)).not.toContainText("Show anyway");
 
 	await violence("Hide");
-	await page.goto("/@media_fixture");
+	await page.goto(creatorProfile);
 	await expect(card(GENTLE)).toBeVisible();
 	await expect(card(VIOLENT)).toHaveCount(0);
 

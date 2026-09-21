@@ -101,7 +101,7 @@ import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
-import { embedCreator } from "../lib/handles.js";
+import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import {
@@ -382,7 +382,7 @@ async function listComments(
 	// tombstone promise failing in the one place it is supposed to hold: the thread.
 	const [rows, blocked] = await Promise.all([
 		db
-			.select({ comment: comments, username: users.username, avatar: users.avatar })
+			.select({ comment: comments, handle: users.atprotoHandle, avatar: users.avatar })
 			.from(comments)
 			.leftJoin(users, eq(comments.userId, users.id))
 			.where(inArray(comments.id, ids)),
@@ -433,7 +433,7 @@ async function listComments(
 		return {
 			...r.comment,
 			removed: false as const,
-			username: r.username,
+			handle: r.handle,
 			avatar: r.avatar,
 			// 🚨 Says only WHO, never WHY. A moderation removal is the `removed` entry above;
 			// this flag means the author left. Conflating the two would have us telling readers
@@ -1933,17 +1933,17 @@ function publicOrigin(): string {
 /** The display name of whoever shared a link, for the recipient's banner. */
 async function sharerName(sharerId: number): Promise<string | null> {
 	const [row] = await db
-		.select({ displayName: users.displayName, username: users.username })
+		.select({ displayName: users.displayName, handle: users.atprotoHandle })
 		.from(users)
 		.where(eq(users.id, sharerId))
 		.limit(1);
-	return row ? row.displayName || row.username : null;
+	return row ? row.displayName || row.handle : null;
 }
 
 /**
  * The address of a share link, as somebody would paste it.
  *
- * Short and opaque on purpose: it carries no Work id, no slug and no username, so the URL
+ * Short and opaque on purpose: it carries no Work id, no slug and no handle, so the URL
  * itself says nothing about what is behind it until somebody follows it. `/s/:token` resolves
  * to the Work's canonical page, which is where every access question is asked.
  */
@@ -2048,7 +2048,7 @@ const contentRoutes = new Hono()
 			const [user] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.username, creator))
+				.where(eq(users.atprotoHandle, creator))
 				.limit(1);
 			if (!user) return c.json({ posts: [] });
 			conditions.push(eq(posts.creatorId, user.id));
@@ -2101,7 +2101,7 @@ const contentRoutes = new Hono()
 		const result = await db
 			.select({
 				post: posts,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
@@ -2157,7 +2157,7 @@ const contentRoutes = new Hono()
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
 					creator: embedCreator({
-						username: r.creatorUsername,
+						handle: r.creatorHandle,
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
 					}),
@@ -2279,7 +2279,7 @@ const contentRoutes = new Hono()
 		const [creator] = post.creatorId
 			? await db
 					.select({
-						username: users.username,
+						handle: users.atprotoHandle,
 						displayName: users.displayName,
 						avatar: users.avatar,
 					})
@@ -2537,7 +2537,7 @@ const contentRoutes = new Hono()
 			// to name — see `reader-record-listing.ts` for what happens while it does not.
 			void queueRecordSync("comment", comment.id);
 
-			return c.json({ comment: { ...comment, username: user.username } }, 201);
+			return c.json({ comment: { ...comment, handle: user.handle } }, 201);
 		},
 	)
 
@@ -2709,7 +2709,7 @@ const contentRoutes = new Hono()
 				verdict: reviews.verdict,
 				body: reviews.body,
 				createdAt: reviews.createdAt,
-				username: users.username,
+				handle: users.atprotoHandle,
 				avatar: users.avatar,
 			})
 			.from(reviews)
@@ -3284,7 +3284,7 @@ const contentRoutes = new Hono()
 		const [creator] = work.creatorId
 			? await db
 					.select({
-						username: users.username,
+						handle: users.atprotoHandle,
 						displayName: users.displayName,
 						avatar: users.avatar,
 					})
@@ -3422,7 +3422,7 @@ const contentRoutes = new Hono()
 				takedownStatus: works.takedownStatus,
 				quarantineStatus: works.quarantineStatus,
 				sharerName: users.displayName,
-				sharerUsername: users.username,
+				sharerHandle: users.atprotoHandle,
 			})
 			.from(works)
 			.innerJoin(users, eq(users.id, link.sharerId))
@@ -3442,7 +3442,7 @@ const contentRoutes = new Hono()
 			slug: row.slug,
 			publicId: row.publicId,
 			title: row.title,
-			sharedBy: row.sharerName || row.sharerUsername,
+			sharedBy: row.sharerName || row.sharerHandle,
 		});
 	})
 
@@ -3475,7 +3475,7 @@ const contentRoutes = new Hono()
 		)`;
 
 		const rows = await db
-			.select({ work: works, username: users.username, displayName: users.displayName })
+			.select({ work: works, handle: users.atprotoHandle, displayName: users.displayName })
 			.from(works)
 			.innerJoin(users, eq(works.creatorId, users.id))
 			.where(
@@ -3502,7 +3502,7 @@ const contentRoutes = new Hono()
 		await Promise.all(rows.map((r) => resolveWorkThumbnail(r.work)));
 
 		return c.json({
-			works: rows.map(({ work, username, displayName }) => ({
+			works: rows.map(({ work, handle, displayName }) => ({
 				publicId: work.publicId,
 				slug: work.slug,
 				title: work.title,
@@ -3510,7 +3510,7 @@ const contentRoutes = new Hono()
 				thumbnail: work.thumbnail,
 				durationSeconds: work.durationSeconds,
 				estimatedReadMinutes: work.estimatedReadMinutes,
-				creator: { username, displayName },
+				creator: { handle, displayName },
 			})),
 		});
 	})
@@ -3523,17 +3523,23 @@ const contentRoutes = new Hono()
 	 * `sort=released` gives "what's new here" instead. Works with no Created date fall back
 	 * to their release date so they can't vanish to the bottom.
 	 */
-	.get("/catalog/:username", zValidator("query", catalogQuerySchema), async (c) => {
-		const username = c.req.param("username");
+	.get("/catalog/:handle", zValidator("query", catalogQuerySchema), async (c) => {
+		const handle = c.req.param("handle");
 		const sort = c.req.query("sort") ?? "authored";
 		const type = c.req.query("type");
 
-		const [creator] = await db
-			.select({ id: users.id, username: users.username, displayName: users.displayName })
-			.from(users)
-			.where(eq(users.username, username))
-			.limit(1);
-		if (!creator) return c.json({ error: "Creator not found" }, 404);
+		const resolution = await resolveHandle(handle);
+		const account =
+			resolution.account ??
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
+		if (!account) return c.json({ error: "Creator not found" }, 404);
+		const creator = {
+			id: account.id,
+			handle: account.atprotoHandle,
+			displayName: account.displayName,
+		};
 
 		const viewerId = await getOptionalUserId(c);
 		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
@@ -4202,7 +4208,7 @@ const contentRoutes = new Hono()
 			const [user] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.username, creator))
+				.where(eq(users.atprotoHandle, creator))
 				.limit(1);
 			if (!user) return c.json({ projects: [] });
 			conditions.push(eq(projects.creatorId, user.id));
@@ -4343,7 +4349,7 @@ const contentRoutes = new Hono()
 		const result = await db
 			.select({
 				project: projects,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 				postCount: sql<number>`(SELECT COUNT(*)::int FROM project_posts WHERE project_id = ${projectsId})`,
@@ -4359,7 +4365,7 @@ const contentRoutes = new Hono()
 				...r.project,
 				postCount: Number(r.postCount),
 				creator: embedCreator({
-					username: r.creatorUsername,
+					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
 					avatar: r.creatorAvatar,
 				}),
@@ -4415,7 +4421,7 @@ const contentRoutes = new Hono()
 		const result = await db
 			.select({
 				project: projects,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
@@ -4431,7 +4437,7 @@ const contentRoutes = new Hono()
 			.select({
 				post: posts,
 				sortOrder: projectPosts.sortOrder,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
@@ -4484,7 +4490,7 @@ const contentRoutes = new Hono()
 			project: {
 				...row.project,
 				creator: embedCreator({
-					username: row.creatorUsername,
+					handle: row.creatorHandle,
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				}),
@@ -4514,7 +4520,7 @@ const contentRoutes = new Hono()
 					publishedAt: m.post.publishedAt,
 					sortOrder: m.sortOrder,
 					creator: embedCreator({
-						username: m.creatorUsername,
+						handle: m.creatorHandle,
 						displayName: m.creatorDisplayName,
 						avatar: m.creatorAvatar,
 					}),
@@ -5011,7 +5017,7 @@ const contentRoutes = new Hono()
 				workPublicId: works.publicId,
 				workType: works.type,
 				workThumbnail: works.thumbnail,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
@@ -5048,7 +5054,7 @@ const contentRoutes = new Hono()
 					: null,
 				creator: r.bookmark.creatorId
 					? {
-							username: r.creatorUsername,
+							handle: r.creatorHandle,
 							displayName: r.creatorDisplayName,
 							avatar: r.creatorAvatar,
 						}
@@ -5192,7 +5198,7 @@ const contentRoutes = new Hono()
 						title: projects.title,
 						coverImage: projects.coverImage,
 						creatorId: projects.creatorId,
-						creatorUsername: users.username,
+						creatorHandle: users.atprotoHandle,
 						creatorDisplayName: users.displayName,
 					})
 					.from(projects)

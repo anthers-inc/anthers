@@ -105,7 +105,7 @@ export async function calculateCrfSubsidies() {
 	const creators = await db
 		.selectDistinct({
 			id: users.id,
-			username: users.username,
+			handle: users.atprotoHandle,
 			isSelfHosting: accounts.isSelfHosting,
 		})
 		.from(users)
@@ -198,7 +198,7 @@ export async function calculateCrfSubsidies() {
 		// Record the subsidy outflow against the charitable ledger
 		await db.insert(crfLedger).values({
 			amount: subsidy.neg().toString(),
-			description: `hosting subsidy for ${creator.username} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,
+			description: `hosting subsidy for ${creator.handle} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,
 		});
 
 		totalSubsidy = totalSubsidy.plus(subsidy);

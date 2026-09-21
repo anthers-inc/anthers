@@ -150,7 +150,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	const [row] = await db
 		.update(users)
 		.set({ emailVerified: true })
-		.where(eq(users.username, username))
+		.where(eq(users.email, `${username}@example.com`))
 		.returning({ id: users.id });
 	return { cookie: account.cookie, id: row.id };
 }

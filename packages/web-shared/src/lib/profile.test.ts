@@ -16,8 +16,8 @@ import {
 	creatorProjectUrl,
 	creatorWorkUrl,
 	displayHandle,
+	handleFromParam,
 	profileUrl,
-	usernameFromHandleParam,
 } from "./profile";
 
 describe("minting a profile URL", () => {
@@ -38,27 +38,27 @@ describe("minting a profile URL", () => {
 });
 
 describe("reading a :handle route param", () => {
-	it("returns the bare username", () => {
-		expect(usernameFromHandleParam("@parker")).toBe("parker");
+	it("returns the bare handle", () => {
+		expect(handleFromParam("@parker")).toBe("parker");
 	});
 
 	it("round-trips with profileUrl, so the two cannot drift apart", () => {
 		const name = "anthers-parker";
-		expect(usernameFromHandleParam(profileUrl(name).slice(1))).toBe(name);
+		expect(handleFromParam(profileUrl(name).slice(1))).toBe(name);
 	});
 
 	it("🚨 refuses a segment that is not a handle, which is what makes a 404 possible", () => {
 		// Each of these is a real path that reaches the `/:handle` route because the router
-		// matches any single root segment. Returning a username for one would put them all
+		// matches any single root segment. Returning a handle for one would put them all
 		// back to rendering a profile lookup.
-		expect(usernameFromHandleParam("about")).toBeNull();
-		expect(usernameFromHandleParam("studio")).toBeNull();
-		expect(usernameFromHandleParam("demo-user")).toBeNull();
+		expect(handleFromParam("about")).toBeNull();
+		expect(handleFromParam("studio")).toBeNull();
+		expect(handleFromParam("demo-user")).toBeNull();
 	});
 
 	it("refuses a bare @ and a missing param", () => {
-		expect(usernameFromHandleParam("@")).toBeNull();
-		expect(usernameFromHandleParam(undefined)).toBeNull();
+		expect(handleFromParam("@")).toBeNull();
+		expect(handleFromParam(undefined)).toBeNull();
 	});
 });
 
@@ -73,7 +73,7 @@ describe("why the @ is in the value rather than the pattern", () => {
 	it("matches the pattern we do use, and hands back the @ for us to strip", () => {
 		const match = matchPath("/:handle", "/@parker");
 		expect(match?.params.handle).toBe("@parker");
-		expect(usernameFromHandleParam(match?.params.handle)).toBe("parker");
+		expect(handleFromParam(match?.params.handle)).toBe("parker");
 	});
 
 	it("matches the nested creator routes the same way", () => {

@@ -60,9 +60,19 @@ import {
 } from "@anthers/db/gauntlet";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like } from "drizzle-orm";
-import { createLocalAccount } from "./local-accounts.js";
+import { hostedHandleSuffix } from "../services/hosted-accounts.js";
+import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
 const TAG = "[gauntlet]";
+
+/**
+ * The handle account creation actually wrote for a fixture name — the preferred name when
+ * the server would issue it, or the `-dev` fallback `localHandleName` picks. The username
+ * column is gone; the handle is an account's lookup key.
+ */
+async function fixtureHandle(name: string): Promise<string> {
+	return `${localHandleName(name)}.${await hostedHandleSuffix()}`;
+}
 
 /**
  * Local content root, the same directory the API's LocalStorageService reads. Only used when the
@@ -92,12 +102,11 @@ async function ensureViewer(): Promise<void> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, GAUNTLET_VIEWER_USERNAME))
+		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_VIEWER_USERNAME)))
 		.limit(1);
 	if (existing) return;
 
 	const created = await createLocalAccount({
-		username: GAUNTLET_VIEWER_USERNAME,
 		email: GAUNTLET_VIEWER_EMAIL,
 		handleName: GAUNTLET_VIEWER_USERNAME,
 		// Pre-verified: checkout and support carry requireVerified, and there is no email loop to
@@ -108,6 +117,9 @@ async function ensureViewer(): Promise<void> {
 			displayName: "Gauntlet Viewer",
 			bio: "The harness's viewer for automated User Gauntlet walks.",
 			isCreator: false,
+			// Terms accepted: the walk drives the app itself, whose guarded routes a
+			// terms-owing account never reaches; onboarding has its own suites.
+			termsAcceptedAt: new Date(),
 		},
 	});
 	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
@@ -118,12 +130,11 @@ async function ensureCreator(): Promise<number> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, GAUNTLET_CREATOR_USERNAME))
+		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_CREATOR_USERNAME)))
 		.limit(1);
 	if (existing) return existing.id;
 
 	const created = await createLocalAccount({
-		username: GAUNTLET_CREATOR_USERNAME,
 		email: GAUNTLET_CREATOR_EMAIL,
 		handleName: GAUNTLET_CREATOR_USERNAME,
 		emailVerified: true,
@@ -131,6 +142,8 @@ async function ensureCreator(): Promise<number> {
 			displayName: "Gauntlet Creator",
 			bio: "A fixture creator for the User Gauntlet. Every post below sits on a known rung of the ladder.",
 			isCreator: true,
+			// Terms accepted, as with the viewer — the fixture drives the app, not onboarding.
+			termsAcceptedAt: new Date(),
 		},
 	});
 	console.log(`${TAG} created creator "${GAUNTLET_CREATOR_USERNAME}" (id ${created.id})`);
@@ -396,7 +409,7 @@ async function clean(): Promise<void> {
 	const [creator] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, GAUNTLET_CREATOR_USERNAME))
+		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_CREATOR_USERNAME)))
 		.limit(1);
 	if (!creator) {
 		console.log(`${TAG} nothing to clean — no "${GAUNTLET_CREATOR_USERNAME}".`);
@@ -425,10 +438,11 @@ async function main(): Promise<void> {
 	}
 
 	const viewerUsername = resolveViewerUsername();
+	const viewerHandle = await fixtureHandle(viewerUsername);
 	const [viewer] = await db
-		.select({ id: users.id, username: users.username })
+		.select({ id: users.id, handle: users.atprotoHandle })
 		.from(users)
-		.where(eq(users.username, viewerUsername))
+		.where(eq(users.atprotoHandle, viewerHandle))
 		.limit(1);
 	if (!viewer) {
 		throw new Error(
@@ -452,7 +466,7 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`  Creator  /${GAUNTLET_CREATOR_USERNAME}  (${GAUNTLET_POSTS.length} posts)`);
 	console.log(
-		`  Viewer   ${viewer.username}  —  Free badge · giving $0 · not following · nothing purchased`,
+		`  Viewer   ${viewer.handle}  —  Free badge · giving $0 · not following · nothing purchased`,
 	);
 	console.log("");
 	for (const spec of GAUNTLET_POSTS) {

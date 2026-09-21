@@ -22,9 +22,8 @@
  * is deliberately left alone: a suite that sets its own key reads the credential back with it.
  *
  * ⚠️ **What the ceremony does and this does not**: `email_verified` is put back to false unless a
- * suite asks otherwise, because the suites built on this assert the unverified walls; no handle is
- * claimed through `/welcome`; and no welcome email is sent. A suite testing any of those drives the
- * ceremony routes themselves.
+ * suite asks otherwise, because the suites built on this assert the unverified walls; and no
+ * welcome email is sent. A suite testing either drives the ceremony routes themselves.
  *
  * The session the fixture hands back is minted directly (`createSession`), not signed in — a
  * password does not exist to exercise, and the emailed-code path has its own suites.
@@ -82,11 +81,12 @@ export interface FixtureAccount {
 	/** The session token alone, for a suite that sends it as a bearer token. */
 	token: string;
 	userId: number;
-	username: string | null;
 	email: string;
 	/** The identity the hosting server issued, and the handle it issued it under. */
 	did: string;
 	handle: string;
+	/** The short name the suite asked for — the account's handle is `<name>.<hosted suffix>`. */
+	name: string;
 	/** The whole row as the fixture left it, for a suite that needs more than the above. */
 	user: typeof users.$inferSelect;
 }
@@ -102,15 +102,15 @@ export function broughtIdentity(): Promise<AtprotoIdentity> {
 /**
  * Create an account with a live session.
  *
- * The email defaults to `<username>@example.com`, which is what the suites used when they
- * signed up through HTTP, so a suite that already deletes by that address keeps working.
+ * `name` is the handle name to ask the session's server for — the account's handle comes back
+ * as `<name>.<hosted suffix>` (or a fallback when the name is refused; see `localHandleName`).
+ * There is no username, and no usernameless account: every account's identity names it.
  *
- * Pass `null` for an account that has not claimed a username yet — the state the ceremony leaves
- * somebody in until `/welcome` — so a suite can drive the claim, and the terms acceptance that
- * rides on it, through the real route.
+ * The email defaults to `<name>@example.com`, which is what the suites used when they
+ * signed up through HTTP, so a suite that already deletes by that address keeps working.
  */
 export async function createAccount(
-	username: string | null,
+	name: string,
 	opts: {
 		email?: string;
 		emailVerified?: boolean;
@@ -123,12 +123,11 @@ export async function createAccount(
 		fields?: LocalAccountFields;
 	} = {},
 ): Promise<FixtureAccount> {
-	const email =
-		opts.email ?? `${username ?? `unclaimed_${crypto.randomUUID().slice(0, 8)}`}@example.com`;
+	const email = opts.email ?? `${name}@example.com`;
 	const user = await onSessionNetwork(() =>
 		createLocalAccount({
-			username,
 			email,
+			handleName: name,
 			identity: opts.identity,
 			emailVerified: opts.emailVerified ?? false,
 			fields: opts.fields,
@@ -139,10 +138,10 @@ export async function createAccount(
 		cookie: `session=${token}`,
 		token,
 		userId: user.id,
-		username,
 		email,
 		did: user.atprotoDid,
-		handle: user.atprotoHandle ?? "",
+		handle: user.atprotoHandle,
+		name,
 		user,
 	};
 }

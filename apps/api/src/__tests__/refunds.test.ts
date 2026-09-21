@@ -164,7 +164,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	const [row] = await db
 		.update(users)
 		.set({ emailVerified: true })
-		.where(eq(users.username, username))
+		.where(eq(users.email, `${username}@example.com`))
 		.returning({ id: users.id });
 	return { cookie, id: row.id };
 }
@@ -255,7 +255,7 @@ async function reload(id: number) {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName}, ${otherName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 	);
 
 	realClient = getStripe();
@@ -296,7 +296,7 @@ afterAll(async () => {
 	if (previousWebhookSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
 	else process.env.STRIPE_WEBHOOK_SECRET = previousWebhookSecret;
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName}, ${otherName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 	);
 });
 

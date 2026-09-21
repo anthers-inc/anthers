@@ -34,6 +34,7 @@ import {
 } from "@anthers/shared/handles";
 import { eq } from "drizzle-orm";
 import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js";
+import { holdFormerHandle } from "./atproto.js";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { open, seal, secretBoxConfigured } from "./secret-box.js";
@@ -540,7 +541,11 @@ export async function swapHostedHandle(
 	}
 
 	const [row] = await db
-		.select({ did: hostedAccounts.did, sealedPassword: hostedAccounts.sealedPassword })
+		.select({
+			did: hostedAccounts.did,
+			handle: hostedAccounts.handle,
+			sealedPassword: hostedAccounts.sealedPassword,
+		})
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.userId, userId))
 		.limit(1);
@@ -619,12 +624,13 @@ export async function swapHostedHandle(
 		return { status: "unproven", handle: wanted, did: row.did };
 	}
 
-	await recordHandleChange(row.did, userId, wanted, doFetch);
+	await recordHandleChange(row.did, userId, row.handle, wanted, doFetch);
 	return { status: "swapped", handle: wanted };
 }
 
 /**
- * Write the new handle everywhere the hub keeps one, and move the watcher's baseline.
+ * Write the new handle everywhere the hub keeps one, hold the old one, and move the
+ * watcher's baseline.
  *
  * ⭐ **The baseline is the part that would page somebody.** Changing a handle writes a PLC
  * operation, so the identity's head moves — and `watch-identities` alerts on a moved head,
@@ -635,9 +641,11 @@ export async function swapHostedHandle(
 async function recordHandleChange(
 	did: string,
 	userId: number,
+	oldHandle: string,
 	handle: string,
 	doFetch: typeof fetch,
 ): Promise<void> {
+	await holdFormerHandle(did, oldHandle);
 	await db.update(hostedAccounts).set({ handle }).where(eq(hostedAccounts.did, did));
 	await db.update(users).set({ atprotoHandle: handle }).where(eq(users.id, userId));
 

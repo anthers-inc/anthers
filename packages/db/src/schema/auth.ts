@@ -35,26 +35,6 @@ import { adminAccounts } from "./admin.js";
 // the person, not the org, and the org's flags are columns on someone else's record.
 export const users = pgTable("users", {
 	id: serial("id").primaryKey(),
-	/**
-	 * The handle, and the `/@username` profile URL. **Null until onboarding claims one.**
-	 *
-	 * The signup ceremony creates the account the moment an emailed code is verified —
-	 * before a username has been chosen — so that payment is an ordinary authenticated
-	 * call rather than a second half-built identity. That leaves a real window where an
-	 * account exists with no handle, and the column has to be able to say so.
-	 *
-	 * A shared `PENDING` literal was considered and does not work: this column is unique,
-	 * so every pending account would collide on the index, while Postgres allows many
-	 * nulls under one. An email-as-placeholder was rejected for a worse reason — this
-	 * value is the public profile URL and a field in `serializePublicUser`, so it would
-	 * publish the address.
-	 *
-	 * Nothing strands: sign-in already accepts an email *or* a username, so someone who
-	 * abandons onboarding can come back and finish. What null costs is that every public
-	 * surface has to refuse an account that has not claimed one — see `publicHandle()` in
-	 * `routes/accounts.ts` and the `/@username` route's own guard.
-	 */
-	username: text("username").unique(),
 	email: text("email").notNull().unique(),
 	// 🚨 **No password column.** Sign-in is the emailed code and nothing else (Parker,
 	// 2026-09-13), so there is no credential this table could hold — the code that proves
@@ -82,7 +62,21 @@ export const users = pgTable("users", {
 	 * creates the row, which is what lets this column refuse a null.
 	 */
 	atprotoDid: text("atproto_did").notNull().unique(),
-	atprotoHandle: text("atproto_handle").default(""),
+	/**
+	 * The identity's current ATProto handle, and this account's public address here.
+	 *
+	 * The handle is the profile URL (`/@alice.anthers.social`) and the thing every
+	 * user-facing lookup keys on, in place of a separate username — a handle already
+	 * names its own namespace, so a bare second name was one identity doing two jobs.
+	 * It is a **label the DID claims and can move**: the person changes it at their
+	 * server, and the change is reconciled here by the OAuth sign-in
+	 * (`findUserByAtprotoDid`) or the hosted swap (`recordHandleChange`), which is why
+	 * a stale address redirects rather than 404s — see `handle_history` below.
+	 *
+	 * Not null because nothing creates an account before its identity exists: sign-in
+	 * accepts handle *or* email, and every public surface can assume one is present.
+	 */
+	atprotoHandle: text("atproto_handle").notNull().unique(),
 	atprotoPdsUrl: text("atproto_pds_url").default(""),
 	/**
 	 * When this account is due to be erased. Null means no deletion is pending.
@@ -100,6 +94,21 @@ export const users = pgTable("users", {
 	 * remaining life is bookkeeping rather than continued use.
 	 */
 	deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+	/**
+	 * When the account holder accepted the Terms of Service, including the 13+ assertion.
+	 * **Null until onboarding completes** — the account exists the moment the emailed
+	 * code checks out (so payment is an ordinary authenticated call), and the terms are
+	 * presented once the first run lands on `/welcome`, which is the only place
+	 * acceptance is asked. An unaccepted account is signed in but unfinished: every
+	 * surface routes it back to `/welcome`, and `needsOnboarding` is this being null.
+	 *
+	 * This is the one thing Anthers asserts about a person's age, and **an unaccepted
+	 * assertion is not one** — the 13+ floor lived in a document nobody had seen until
+	 * acceptance was enforced at the API rather than assumed from the form. The
+	 * timestamp is stored rather than a boolean because when acceptance happened is
+	 * itself the answer a dispute would ask for.
+	 */
+	termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
 	/**
 	 * Whether ACTIVITY email is wanted. Defaults on; the user may turn it off.
 	 *
@@ -705,6 +714,39 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	recoveryKey: text("recovery_key"),
 	/** When it was seated, for the holder to recognize rather than for anything to branch on. */
 	recoveryKeySeatedAt: timestamp("recovery_key_seated_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * A handle a DID used to answer to, held for a while as a redirect.
+ *
+ * When an identity's handle moves — any move, whether Anthers hosted it or not — the
+ * old address keeps routing to the same person until this row expires, then falls to
+ * an ordinary 404. The row carries the DID rather than the user id because the truth
+ * it caches is in the directory, and the person the address belongs to is whichever
+ * account that DID currently names.
+ *
+ * 🚨 **This is a cache of the directory, consulted on a miss, never the truth.** A
+ * handler first asks what a handle resolves to now, and only looks here when the
+ * answer is nothing — so a handle somebody new has claimed wins over a stale row that
+ * happens to outlive its usefulness, and nothing here decides who holds a name.
+ *
+ * Two writers, both of which know old and new at one point: `findUserByAtprotoDid`
+ * (a sign-in that finds the DID under a new handle) and `recordHandleChange` (a
+ * swap the hub itself just made). Nothing else writes this table.
+ */
+// org — the hub's cache of addresses a departed handle used to answer to, kept so an old
+// `/@handle` redirects rather than 404s while links age out. The identity itself is `node`
+// and lives wherever its repository does; this row is only the hub's record of a name it
+// once carried, so a split would leave it with the org beside the rest of its bookkeeping.
+export const handleHistory = pgTable("handle_history", {
+	id: serial("id").primaryKey(),
+	/** The address that used to reach the person, as it was at the time. */
+	oldHandle: text("old_handle").notNull().unique(),
+	/** The identity it belonged to — the person, in the only form that does not move. */
+	did: text("did").notNull(),
+	/** When the redirect lapses and the address stops routing anywhere. */
+	holdUntil: timestamp("hold_until", { withTimezone: true }).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

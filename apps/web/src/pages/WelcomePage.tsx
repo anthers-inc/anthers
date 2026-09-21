@@ -1,22 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Onboarding (route: `/welcome`) — the second half of the signup ceremony.
+ * Onboarding (route: `/welcome`) — the closing beat of the signup ceremony.
  *
  * By the time anyone lands here the account exists, the address is confirmed, and any
- * charge has been taken. What is still owed is the handle, and that ordering is the
- * design rather than an accident: **a username is the one thing `/subscribe` refuses to
- * ask for**, because it costs nothing at the moment of decision and a great deal at the
- * moment of doubt. Somebody weighing $3 a month should not also be inventing a name.
+ * charge has been taken. There is no longer anything to *claim*: a person is addressed by
+ * their ATProto handle, which the account carries from the moment it is created, so the
+ * username-claim form this page was built around (and `POST /auth/onboarding/claim` behind
+ * it) is gone. What onboarding still asks for is the one thing that cannot arrive with the
+ * identity: acceptance of the terms, including the 13+ assertion.
+ *
+ * 🚨 **Terms acceptance is the point of the page, not a courtesy on it.** The 13+ floor is
+ * the one thing Anthers asserts about a person's age, and an unaccepted assertion is not
+ * one — so acceptance is enforced at the API (`POST /auth/onboarding/accept-terms`) and
+ * this form is its only face. An account that has not accepted is signed in but unfinished:
+ * it is routed here from anywhere until `termsAcceptedAt` is set.
  *
  * 🚨 **Sign-in is the emailed code and nothing else (Parker, 2026-09-13).** No password is
  * set, offered or accepted — here or anywhere else. This page says so plainly, because the
  * code that brought a person here is also how they come back tomorrow, and that is the
  * moment to learn it: before the first session ends, not after.
  *
- * The handle cannot be changed here afterwards — see `POST /auth/onboarding/claim`,
- * which refuses a second claim. Renaming is a different feature with different
- * consequences (other people hold the old URL; the vacated name becomes impersonatable)
- * and this page should not quietly become it.
+ * 🚨 **The default is still not to navigate.** Sending a brand-new account to its own
+ * empty profile is the thing this page exists to stop (see `FirstRun.tsx`). A sanitized
+ * `?next=` is the one exception — an explicit destination means a person trying to *do*
+ * something, and a welcome screen interrupts it.
  */
 
 import { sanitizeNextPath } from "@anthers/shared/next-path";
@@ -26,9 +33,6 @@ import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useRef, useState } from "react";
 import FirstRun, { type Arrival, readArrival } from "../components/onboarding/FirstRun";
 import SignupSteps, { signupSteps } from "../components/onboarding/SignupSteps";
-
-/** Mirrors the API's rule, so the message arrives before the round trip rather than after. */
-const HANDLE_RE = /^[a-zA-Z0-9_-]+$/;
 
 export default function WelcomePage() {
 	const { user, isLoading, refreshUser } = useAuth();
@@ -43,7 +47,6 @@ export default function WelcomePage() {
 	 */
 	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 
-	const [username, setUsername] = useState("");
 	/**
 	 * 🚨 Real state, never a hardcoded `true`.
 	 *
@@ -54,9 +57,9 @@ export default function WelcomePage() {
 	 * reproduces exactly the problem the requirement exists to solve, while looking
 	 * compliant from the server's side.
 	 *
-	 * This is the *only* place the ceremony can ask. `/subscribe` collects an address and
-	 * nothing else, and the account is created the moment the code checks out — so
-	 * onboarding is where the terms are presented and agreed to.
+	 * This is the *only* place the ceremony asks. `/subscribe` collects an identity and
+	 * nothing else, and the account is created the moment the code checks out — so the
+	 * first run is where the terms are presented and agreed to.
 	 */
 	const [acceptTerms, setAcceptTerms] = useState(false);
 	const [busy, setBusy] = useState(false);
@@ -64,11 +67,6 @@ export default function WelcomePage() {
 
 	/*
 	 * A signed-out visitor has nothing to onboard.
-	 *
-	 * ⚠️ Note what is NOT here any more: this used to bounce an account that already had
-	 * a handle to its own profile. It no longer does, because claiming a handle is only
-	 * the first half of this route — the second is the first-run state below, which an
-	 * onboarded account is exactly the audience for. Every signup door now ends here.
 	 */
 	useEffect(() => {
 		if (isLoading) return;
@@ -76,63 +74,24 @@ export default function WelcomePage() {
 	}, [isLoading, user, navigate]);
 
 	/**
-	 * Offer the handle's own name as the username, for an account that arrived with one.
-	 *
-	 * ⭐ **Signing up starts by picking a handle, so asking for a second name unprompted is
-	 * asking somebody to name themselves twice.** Prefilling makes it one choice they confirm.
-	 *
-	 * ⚠️ **A suggestion rather than a derivation, and the alphabets are why.** A handle is a
-	 * domain name and a username is not: usernames allow underscores and handles do not,
-	 * the two reserved lists differ, and somebody arriving with `alice.bsky.social` may find
-	 * `alice` already taken here. So the field is seeded and stays editable, and the claim is
-	 * checked exactly as it always was — nothing here may assume the suggestion is available.
-	 *
-	 * Only the first label is taken: `alice.anthers.social` suggests `alice`, not the domain.
-	 * It seeds once, and never overwrites something already typed.
-	 */
-	const seeded = useRef(false);
-	useEffect(() => {
-		if (seeded.current || !user?.atprotoHandle) return;
-		seeded.current = true;
-		const suggestion = user.atprotoHandle.split(".")[0]?.replace(/[^a-zA-Z0-9_-]/g, "") ?? "";
-		if (suggestion.length >= 3) setUsername((current) => current || suggestion);
-	}, [user?.atprotoHandle]);
-
-	/**
 	 * What this account chose on the way in, captured **once, on mount**.
 	 *
-	 * A ref rather than state read at render time: claiming a handle re-renders this
-	 * component, and re-reading then would be reading the same storage twice for no
-	 * reason. Capturing on mount also means the answer is stable across the claim step,
-	 * which is the whole point — the person who arrives having paid is still the person
-	 * who paid after they pick a name.
+	 * A ref rather than state read at render time: the answer must be stable across
+	 * re-renders — the person who arrives having paid is still the person who paid.
 	 */
 	const arrival = useRef<Arrival | null>(null);
 	arrival.current ??= readArrival();
 
-	const trimmed = username.trim();
-	const handleProblem =
-		trimmed.length === 0
-			? null
-			: trimmed.length < 3
-				? "At least three characters."
-				: !HANDLE_RE.test(trimmed)
-					? "Letters, numbers, hyphens and underscores only."
-					: null;
-
-	const ready = trimmed.length >= 3 && !handleProblem && acceptTerms;
-
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!ready || busy) return;
+		if (!acceptTerms || busy) return;
 		setBusy(true);
 		setError(null);
 		try {
-			const res = await client.api.auth.onboarding.claim.$post({
+			const res = await client.api.auth.onboarding["accept-terms"].$post({
 				json: {
-					username: trimmed,
 					// `acceptTerms as true` narrows the literal the schema demands; the value
-					// is the checkbox's, and `ready` already refuses to submit without it.
+					// is the checkbox's, and the button refuses to submit without it.
 					acceptTerms: acceptTerms as true,
 				},
 			});
@@ -143,21 +102,20 @@ export default function WelcomePage() {
 				return;
 			}
 			/*
-			 * Deliberately no navigation *by default*: refreshing the user makes
-			 * `user.username` non-null, and this component then renders the first-run state
-			 * in place. Sending them to their own brand-new, empty profile is the thing this
+			 * Deliberately no navigation *by default*: refreshing the user sets
+			 * `termsAcceptedAt`, and this component then renders the first-run state in
+			 * place. Sending them to their own brand-new, empty profile is the thing this
 			 * page exists to stop.
 			 *
 			 * 🚨 **`?next=` is the one exception, and it is not a weakening of that rule.**
 			 * First-run answers *"what now?"* for somebody who has no answer of their own. A
 			 * visitor who arrived from a gated post has one — it is the reason they made an
 			 * account ninety seconds ago — and showing them an orientation screen instead
-			 * loses it. That was the old signup form's rule too: an explicit destination
-			 * means a person trying to *do* something, and a welcome screen interrupts it.
+			 * loses it.
 			 *
-			 * ⚠️ What is NOT skippable is this page's *form*. The account was created before
-			 * onboarding, so the handle and the terms are still owed and the navigation only
-			 * happens after `claim` succeeds. A `next` must never become a way around it.
+			 * ⚠️ What is NOT skippable is this page's *form*. The terms are still owed and
+			 * the navigation only happens after acceptance succeeds. A `next` must never
+			 * become a way around it.
 			 */
 			await refreshUser();
 			if (next) {
@@ -172,20 +130,18 @@ export default function WelcomePage() {
 
 	if (isLoading || !user) return null;
 
-	if (user.username) {
+	// The terms are accepted — onboarding is done. Render the first-run state in place.
+	if (user.termsAcceptedAt) {
 		return (
 			<div className="mx-auto min-w-0 w-full max-w-lg px-6 py-12 sm:py-20">
-				<FirstRun arrival={arrival.current ?? { kind: "cold" }} username={user.username} />
+				<FirstRun arrival={arrival.current ?? { kind: "cold" }} handle={user.handle} />
 			</div>
 		);
 	}
 
 	return (
-		// ⚠️ **The rail is the same one `/finish` wears** (Parker, 2026-08-26). These stay two
-		// routes because this one has a job that has nothing to do with signing up — it is
-		// where any signed-in account still owing a handle is sent, from anywhere — and folding
-		// it into the finishing page would make that page reachable as a second door. Sharing
-		// the chrome is what makes them read as one flow anyway.
+		// ⚠️ **The rail is the same one `/finish` wears** (Parker, 2026-08-26). Sharing the
+		// chrome is what makes the flow read as one flow even though its steps span routes.
 		//
 		// 🚨 The earlier steps are drawn as **done** rather than omitted. Somebody arriving
 		// here has confirmed an address and possibly paid; a rail that started at this step
@@ -196,47 +152,26 @@ export default function WelcomePage() {
 				bluesky: null,
 				address: "done",
 				payment: null,
-				username: "current",
 			})}
 			eyebrow="One Last Thing"
-			title="Pick your username"
+			title="Welcome to Anthers"
 		>
 			<p className="mt-3 text-base leading-relaxed text-base-content/65">
-				It's how people find you, and it's the address of your profile. Choose carefully — this one
-				can't be changed later.
+				Just the terms to agree to, and you're in.
 			</p>
 
 			<form onSubmit={submit} className="mt-8">
-				<label className="label px-0 pb-1" htmlFor="welcome-username">
-					<span className="text-sm font-semibold">Username</span>
-				</label>
-				<label className="input input-bordered flex items-center gap-1">
-					<span className="text-base-content/40">anthers.org/</span>
-					<input
-						id="welcome-username"
-						className="min-w-0 grow"
-						value={username}
-						onChange={(e) => setUsername(e.target.value)}
-						autoComplete="username"
-						// biome-ignore lint/a11y/noAutofocus: this step's one field, so arriving here is the intent to fill it in.
-						autoFocus
-						maxLength={150}
-						placeholder="yourname"
-					/>
-				</label>
-				{handleProblem && <p className="mt-1 text-xs text-error">{handleProblem}</p>}
-
 				{/* Sign-in is the emailed code and nothing else, so there is no choice to
 				    offer here — what this block does is say so, at the moment the account is
 				    finished, before the first session ends. The code that brought them here
 				    is the way back in, the same six characters each time. */}
-				<p className="mt-8 rounded-lg border border-base-300 p-3 text-sm leading-relaxed text-base-content/65">
+				<p className="rounded-lg border border-base-300 p-3 text-sm leading-relaxed text-base-content/65">
 					Signing in is a code emailed to your address — same six characters, every device, nothing
 					to remember or lose.
 				</p>
 
 				{/* The honest surface, not the enforcement — the API requires this too. It sits
-				    here rather than on /subscribe because that page collects an address and
+				    here rather than on /subscribe because that page collects an identity and
 				    nothing else, and this is the first moment the ceremony can ask. */}
 				<label className="mt-8 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3">
 					<input
@@ -263,7 +198,7 @@ export default function WelcomePage() {
 				<button
 					type="submit"
 					className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
-					disabled={!ready || busy}
+					disabled={!acceptTerms || busy}
 				>
 					{busy ? "Saving…" : "Finish setting up"}
 				</button>

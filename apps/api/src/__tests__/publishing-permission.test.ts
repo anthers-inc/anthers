@@ -338,12 +338,12 @@ describe("a reader's comments, reviews, votes and follows", () => {
 		expect(vote.status).toBe(409);
 
 		const [creatorRow] = await db
-			.select({ username: users.username })
+			.select({ handle: users.atprotoHandle })
 			.from(users)
 			.where(eq(users.id, granted.id));
 		const follow = await call(
 			"POST",
-			`/api/accounts/users/${creatorRow.username}/follow`,
+			`/api/accounts/users/${creatorRow.handle}/follow`,
 			reader.cookie,
 		);
 		expect(follow.status).toBe(409);

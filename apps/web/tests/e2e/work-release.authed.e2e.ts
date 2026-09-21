@@ -22,6 +22,7 @@
  * on pg-boss, and the release-readiness gate (which applies only to processed types) stays
  * out of the way of the thing being tested.
  */
+import { gauntletHandle } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
@@ -83,6 +84,8 @@ test.describe.configure({ mode: "serial" });
  * must clean up after itself, which the sweep at the top of the test does.
  */
 const CREATOR = MEDIA_FIXTURE_USERNAME;
+/** The creator's issued handle, which is what the public Catalog route keys on now. */
+let creatorHandle = "";
 
 /** The card for our Work, found by its unique title rather than by position in the grid. */
 const cardFor = (page: import("@playwright_test").Page) =>
@@ -117,6 +120,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	context,
 }) => {
 	const session = await signInAsMediaFixture(context);
+	creatorHandle = await gauntletHandle(API_URL, CREATOR);
 
 	// ── Sweep ───────────────────────────────────────────────────────────────
 	// A previous run that crashed after Create leaves a `Release walk %` Work on the shared
@@ -234,7 +238,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// specific assertion would have retried its way to the same red with nothing to learn
 	// from it.
 	const catalogWork = () =>
-		fetch(`${API_URL}/api/content/catalog/${CREATOR}`)
+		fetch(`${API_URL}/api/content/catalog/${creatorHandle}`)
 			.then((r) => r.json() as Promise<{ works: PublicWork[] }>)
 			.then((cat) => cat.works.find((w) => w.title === TITLE));
 

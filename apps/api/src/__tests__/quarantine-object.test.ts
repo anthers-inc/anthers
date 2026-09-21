@@ -87,7 +87,7 @@ beforeAll(async () => {
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, creatorName));
+		.where(eq(users.email, `${creatorName}@example.com`));
 	creatorId = row.id;
 	operatorId = (await createAdminFixture("qo-operator")).id;
 }, DB_SETUP_TIMEOUT);
@@ -594,5 +594,5 @@ afterAll(async () => {
 	await db.execute(
 		sql`DELETE FROM legal_holds WHERE subject_type = 'user' AND subject_id = ${creatorId}`,
 	);
-	await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${`${creatorName}@example.com`}`);
 });

@@ -525,7 +525,7 @@ export interface QueueItem {
 	verdict: string | null;
 	moderationStatus: string;
 	createdAt: string;
-	author: { id: number; username: string } | null;
+	author: { id: number; handle: string } | null;
 	/**
 	 * Where the item lives, so an operator can go read it in context.
 	 *
@@ -729,7 +729,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		r: {
 			id: number;
 			userId: number | null;
-			username: string | null;
+			handle: string | null;
 			moderationStatus: string;
 			createdAt: Date;
 		},
@@ -740,7 +740,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			subjectId: r.id,
 			moderationStatus: r.moderationStatus,
 			createdAt: r.createdAt.toISOString(),
-			author: r.username && r.userId != null ? { id: r.userId, username: r.username } : null,
+			author: r.handle && r.userId != null ? { id: r.userId, handle: r.handle } : null,
 			context,
 			moderatable: isModeratableContent(subjectType),
 			openReports: 0,
@@ -758,7 +758,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			.select({
 				id: comments.id,
 				userId: comments.userId,
-				username: users.username,
+				handle: users.atprotoHandle,
 				subjectType: comments.subjectType,
 				subjectId: comments.subjectId,
 				moderationStatus: comments.moderationStatus,
@@ -804,7 +804,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			.select({
 				id: reviews.id,
 				userId: reviews.userId,
-				username: users.username,
+				handle: users.atprotoHandle,
 				workId: reviews.workId,
 				moderationStatus: reviews.moderationStatus,
 				createdAt: reviews.createdAt,
@@ -842,7 +842,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		const rows = await db
 			.select({
 				id: users.id,
-				username: users.username,
+				handle: users.atprotoHandle,
 				displayName: users.displayName,
 				bio: users.bio,
 				createdAt: users.createdAt,
@@ -856,7 +856,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			// rather than a handle, so this has to render rather than crash. The id is the
 			// only thing an operator can act on, so the id is what it says; the empty slug
 			// is how the console is told there is nowhere to go.
-			const handle = r.username ? `@${r.username}` : `account #${r.id}`;
+			const handle = r.handle ? `@${r.handle}` : `account #${r.id}`;
 			const label = r.displayName ? `${r.displayName} (${handle})` : handle;
 			items.set(key("user", r.id), {
 				...base(
@@ -864,11 +864,11 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 					{
 						id: r.id,
 						userId: r.id,
-						username: r.username,
+						handle: r.handle,
 						moderationStatus: "visible",
 						createdAt: r.createdAt,
 					},
-					{ kind: "profile", slug: r.username ?? "", title: label },
+					{ kind: "profile", slug: r.handle ?? "", title: label },
 				),
 				excerpt: r.bio ? `${label} — ${r.bio}` : label,
 				verdict: null,
@@ -894,7 +894,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			.select({
 				id: works.id,
 				creatorId: works.creatorId,
-				username: users.username,
+				handle: users.atprotoHandle,
 				slug: works.slug,
 				title: works.title,
 				description: works.description,
@@ -911,7 +911,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 					{
 						id: r.id,
 						userId: r.creatorId,
-						username: r.username,
+						handle: r.handle,
 						// A Work's own removal states live in `takedown_status` and
 						// `quarantine_status`, neither of which is this column's vocabulary.
 						moderationStatus: "visible",

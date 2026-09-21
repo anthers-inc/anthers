@@ -148,7 +148,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 
 		profile: {
 			id: user.id,
-			username: user.username,
+			handle: user.atprotoHandle,
 			email: user.email,
 			displayName: user.displayName,
 			bio: user.bio,

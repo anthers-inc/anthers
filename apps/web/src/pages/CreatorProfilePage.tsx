@@ -4,7 +4,7 @@ import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/cons
 import { isListened } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
-import { displayHandle, usernameFromHandleParam } from "@anthers/web-shared/profile";
+import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
 import {
 	INTERACTION_PERMISSION_HINT,
 	useInteractionPermissionMissing,
@@ -42,7 +42,7 @@ import { useReportVisit } from "../lib/attention";
 
 /** A Work as the public Catalog listing returns it. */
 type CatalogWork = Work & {
-	creator?: { username: string; displayName?: string | null; avatar?: string | null };
+	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
 };
 
 type Tab = "all" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
@@ -348,11 +348,11 @@ function BadgesTab({
 const TABS: Tab[] = ["all", "games", "videos", "audio", "writing", "badges", "about"];
 
 export default function CreatorProfilePage() {
-	const { handle } = useParams<{ handle: string }>();
+	const { handle: handleParam } = useParams<{ handle: string }>();
 	// The route param carries the `@`; everything below this line — the API calls, the
-	// ownership check, the printed byline — wants the bare username. `HandleRoute` has already
+	// ownership check, the printed byline — wants the bare handle. `HandleRoute` has already
 	// turned away a segment without one, so in practice this never falls back.
-	const username = usernameFromHandleParam(handle) ?? undefined;
+	const handle = handleFromParam(handleParam) ?? undefined;
 	const { isAuthenticated, user: currentUser, refreshUser } = useAuth();
 	const followPermissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -381,7 +381,7 @@ export default function CreatorProfilePage() {
 	/** Set once a block succeeds — the profile 404s on reload, so we say so before then. */
 	const [blocked, setBlocked] = useState(false);
 
-	const isOwnProfile = currentUser?.username === username;
+	const isOwnProfile = currentUser?.handle === handle;
 	const preview = usePreviewQuery();
 	/** Stable string for the preview, so the load effect re-runs on value not identity. */
 	const _previewKey = JSON.stringify(preview);
@@ -398,11 +398,11 @@ export default function CreatorProfilePage() {
 	 * the ladder has to reflect it without a reload.
 	 */
 	const refreshCreatorStatus = useCallback(async () => {
-		if (!username) return;
-		const res = await apiFetch(`/api/subscriptions/creator-status/${username}`, {});
+		if (!handle) return;
+		const res = await apiFetch(`/api/subscriptions/creator-status/${handle}`, {});
 		if (!res.ok) return;
 		setCreatorStatus((await res.json()) as CreatorStatus);
-	}, [username]);
+	}, [handle]);
 
 	// Edit mode state
 	const [editing, setEditing] = useState(false);
@@ -507,8 +507,8 @@ export default function CreatorProfilePage() {
 			await refreshUser();
 
 			// Re-fetch the profile data to reflect changes
-			const creatorRes = await client.api.accounts.users[":username"].$get({
-				param: { username: username! },
+			const creatorRes = await client.api.accounts.users[":handle"].$get({
+				param: { handle: handle! },
 			});
 			if (creatorRes.ok) {
 				const { user } = await creatorRes.json();
@@ -525,22 +525,22 @@ export default function CreatorProfilePage() {
 	};
 
 	useEffect(() => {
-		if (!username) return;
+		if (!handle) return;
 		setLoading(true);
 
 		Promise.all([
-			client.api.accounts.users[":username"].$get({ param: { username } }).then(async (res) => {
+			client.api.accounts.users[":handle"].$get({ param: { handle } }).then(async (res) => {
 				if (!res.ok) throw new Error("Failed to load creator profile.");
 				return res.json();
 			}),
-			client.api.content.projects.$get({ query: { creator: username } }).then((res) => res.json()),
-			client.api.content.posts.$get({ query: { creator: username } }).then((res) => res.json()),
-			client.api.content.catalog[":username"]
+			client.api.content.projects.$get({ query: { creator: handle } }).then((res) => res.json()),
+			client.api.content.posts.$get({ query: { creator: handle } }).then((res) => res.json()),
+			client.api.content.catalog[":handle"]
 				// The preview reaches the server, which re-resolves each Work with a
 				// substituted context — the frontend never decides a gate itself.
-				.$get({ param: { username }, query: preview })
+				.$get({ param: { handle }, query: preview })
 				.then(async (res) => (res.ok ? await res.json() : { works: [] })),
-			apiFetch(`/api/subscriptions/creator-status/${username}`, {})
+			apiFetch(`/api/subscriptions/creator-status/${handle}`, {})
 				.then((res) => (res.ok ? res.json() : null))
 				.catch(() => null),
 		])
@@ -556,7 +556,7 @@ export default function CreatorProfilePage() {
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
-	}, [username, preview]);
+	}, [handle, preview]);
 
 	/**
 	 * Block this person. Confirmed first, because it is the one control here that
@@ -564,10 +564,10 @@ export default function CreatorProfilePage() {
 	 * Settings, is not reachable from this page once the profile stops resolving.
 	 */
 	const handleBlock = async () => {
-		if (!username) return;
+		if (!handle) return;
 		setBlocking(true);
 		try {
-			const res = await apiFetch(`/api/accounts/users/${username}/block`, { method: "POST" });
+			const res = await apiFetch(`/api/accounts/users/${handle}/block`, { method: "POST" });
 			if (!res.ok) return;
 			setConfirmingBlock(false);
 			setBlocked(true);
@@ -578,17 +578,17 @@ export default function CreatorProfilePage() {
 	};
 
 	const handleFollow = async () => {
-		if (!isAuthenticated || !username) return;
+		if (!isAuthenticated || !handle) return;
 		try {
 			if (isFollowing) {
-				await client.api.accounts.users[":username"].unfollow.$post({
-					param: { username },
+				await client.api.accounts.users[":handle"].unfollow.$post({
+					param: { handle },
 				});
 				setIsFollowing(false);
 				setFollowerCount((c) => c - 1);
 			} else {
-				const res = await client.api.accounts.users[":username"].follow.$post({
-					param: { username },
+				const res = await client.api.accounts.users[":handle"].follow.$post({
+					param: { handle },
 				});
 				// Only a follow that was kept reads as one. A refusal — no permission to write the
 				// follow's record, say — would otherwise show "Following" for something that is not.
@@ -709,7 +709,7 @@ export default function CreatorProfilePage() {
 									/>
 								) : (
 									<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-										{(editDisplayName || creator.username).charAt(0).toUpperCase()}
+										{(editDisplayName || creator.handle).charAt(0).toUpperCase()}
 									</div>
 								)}
 								<label className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
@@ -729,7 +729,7 @@ export default function CreatorProfilePage() {
 								</label>
 							</div>
 							<div className="flex-1 pt-4 w-full">
-								<p className="text-base-content/60 mb-3">@{creator.username}</p>
+								<p className="text-base-content/60 mb-3">@{creator.handle}</p>
 							</div>
 						</div>
 
@@ -803,18 +803,18 @@ export default function CreatorProfilePage() {
 						{creator.avatar ? (
 							<img
 								src={creator.avatar}
-								alt={creator.displayName || creator.username}
+								alt={creator.displayName || creator.handle}
 								className="w-24 h-24 rounded-full object-cover border-4 border-base-100"
 							/>
 						) : (
 							<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-								{(creator.displayName || creator.username).charAt(0).toUpperCase()}
+								{(creator.displayName || creator.handle).charAt(0).toUpperCase()}
 							</div>
 						)}
 						<div className="flex-1 pt-4">
-							<h1 className="text-2xl font-bold">{creator.displayName || creator.username}</h1>
+							<h1 className="text-2xl font-bold">{creator.displayName || creator.handle}</h1>
 							<p className="text-base-content/60">
-								@{creator.username} · {followerCount} followers
+								@{creator.handle} · {followerCount} followers
 							</p>
 							{creator.bio && <p className="mt-2 text-sm max-w-2xl">{creator.bio}</p>}
 							<div className="flex items-center gap-4 mt-2 text-sm text-base-content/60">
@@ -875,7 +875,7 @@ export default function CreatorProfilePage() {
 											type="button"
 											tabIndex={0}
 											className="btn btn-ghost btn-square"
-											aria-label={`More options for ${creator.username}`}
+											aria-label={`More options for ${creator.handle}`}
 										>
 											<EllipsisHorizontalIcon className="w-5 h-5" />
 										</button>
@@ -883,12 +883,12 @@ export default function CreatorProfilePage() {
 											<li>
 												<button type="button" onClick={() => setConfirmingBlock(true)}>
 													<NoSymbolIcon className="w-4 h-4" />
-													Block @{creator.username}
+													Block @{creator.handle}
 												</button>
 											</li>
 											<li>
 												<button type="button" onClick={() => setReporting(true)}>
-													Report @{creator.username}
+													Report @{creator.handle}
 												</button>
 											</li>
 										</ul>
@@ -954,7 +954,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No content yet"
-								description={`${creator.displayName || creator.username} hasn't published anything yet.`}
+								description={`${creator.displayName || creator.handle} hasn't published anything yet.`}
 							/>
 						))}
 
@@ -968,7 +968,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No games yet"
-								description={`${creator.displayName || creator.username} hasn't published any games.`}
+								description={`${creator.displayName || creator.handle} hasn't published any games.`}
 							/>
 						))}
 
@@ -982,7 +982,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No videos yet"
-								description={`${creator.displayName || creator.username} hasn't published any videos.`}
+								description={`${creator.displayName || creator.handle} hasn't published any videos.`}
 							/>
 						))}
 
@@ -996,7 +996,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No audio yet"
-								description={`${creator.displayName || creator.username} hasn't published any audio.`}
+								description={`${creator.displayName || creator.handle} hasn't published any audio.`}
 							/>
 						))}
 
@@ -1010,7 +1010,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No writing yet"
-								description={`${creator.displayName || creator.username} hasn't published any articles.`}
+								description={`${creator.displayName || creator.handle} hasn't published any articles.`}
 							/>
 						))}
 
@@ -1020,7 +1020,7 @@ export default function CreatorProfilePage() {
 							unlockedGates={creatorStatus?.unlockedGates ?? []}
 							heldBadge={creatorStatus?.badge ?? "free"}
 							userSeed={creatorStatus?.seedAmount ?? "0.00"}
-							creatorName={creator.displayName || creator.username}
+							creatorName={creator.displayName || creator.handle}
 							creatorId={creator.id}
 							canGiveSeeds={isAuthenticated && !isOwnProfile}
 							onGiven={refreshCreatorStatus}
@@ -1030,8 +1030,8 @@ export default function CreatorProfilePage() {
 					{blocked && (
 						<div className="alert alert-info mb-4">
 							<span>
-								You've blocked @{creator.username}. Neither of you will see the other around
-								Anthers, and you're no longer following each other. You can undo this in Settings.
+								You've blocked @{creator.handle}. Neither of you will see the other around Anthers,
+								and you're no longer following each other. You can undo this in Settings.
 							</span>
 						</div>
 					)}
@@ -1071,7 +1071,7 @@ export default function CreatorProfilePage() {
 			{confirmingBlock && (
 				<div className="modal modal-open">
 					<div className="modal-box">
-						<h3 className="text-lg font-bold">Block @{creator.username}?</h3>
+						<h3 className="text-lg font-bold">Block @{creator.handle}?</h3>
 						<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
 							<li>Neither of you will see the other's profile, comments or reviews.</li>
 							<li>Any follows between you are removed, in both directions.</li>
@@ -1110,7 +1110,7 @@ export default function CreatorProfilePage() {
 				<ReportDialog
 					subjectType="user"
 					subjectId={creator.id}
-					label={displayHandle(creator.username)}
+					label={displayHandle(creator.handle)}
 					onClose={() => setReporting(false)}
 				/>
 			)}

@@ -9,8 +9,8 @@ import { Navigate, useParams } from "react-router-dom";
 /**
  * Legacy /discover/:slug redirect.
  *
- * Fetches the project to resolve the creator username, then redirects
- * to the canonical /@username/:slug URL on the creator's site.
+ * Fetches the project to resolve the creator's handle, then redirects
+ * to the canonical /@handle/:slug URL on the creator's site.
  */
 export default function ProjectRedirect() {
 	const { slug } = useParams<{ slug: string }>();
@@ -27,8 +27,8 @@ export default function ProjectRedirect() {
 					return;
 				}
 				const { project } = await res.json();
-				if (project.creator?.username) {
-					setTarget(creatorProjectUrl(project.creator.username, project.slug));
+				if (project.creator?.handle) {
+					setTarget(creatorProjectUrl(project.creator.handle, project.slug));
 				} else {
 					setNotFound(true);
 				}

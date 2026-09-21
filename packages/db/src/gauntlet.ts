@@ -37,6 +37,29 @@ export const GAUNTLET_CREATOR_EMAIL = `${GAUNTLET_PREFIX}creator@example.test`;
 export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
 export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
 
+/**
+ * The handle a fixture account actually holds, for a harness that cannot import the API's
+ * seed script. The username concept is gone: accounts created by `seed-gauntlet.ts` are
+ * addressed by the handle the server issued for their name — the handle-safe spelling
+ * (lowercase, underscores and other non-handle characters to dashes, the `-dev` fallback
+ * `localHandleName` applies to a name a handle cannot carry) under the hosted suffix the
+ * session's identity node publishes.
+ *
+ * Resolves the suffix from `GET /api/atproto/config` rather than guessing it, because a
+ * guessed suffix is exactly the disagreement `hostedHandleSuffix` exists to rule out —
+ * and a `.test` guess would pass here while the session answered something else.
+ */
+export async function gauntletHandle(apiUrl: string, fixtureName: string): Promise<string> {
+	const res = await fetch(`${apiUrl}/api/atproto/config`);
+	if (!res.ok) throw new Error(`/api/atproto/config answered ${res.status}`);
+	const { hostedHandleSuffix } = (await res.json()) as { hostedHandleSuffix: string };
+	const name = fixtureName
+		.toLowerCase()
+		.replace(/[^a-z0-9-]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	return `${name}.${hostedHandleSuffix}`;
+}
+
 /** Post slugs share this prefix so the fixture can find and replace exactly its own rows. */
 export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
 

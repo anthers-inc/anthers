@@ -133,7 +133,7 @@ export default function ProjectFormPage() {
 					return;
 				}
 				const { project } = (await res.json()) as { project: Project };
-				navigate(creatorProjectUrl(user?.username ?? "me", project.slug));
+				navigate(creatorProjectUrl(user?.handle ?? "me", project.slug));
 				// ^ Editing ends at the public page: the creator already had the shelf in front
 				// of them, so what they want to see is the result.
 			} else {
@@ -214,7 +214,7 @@ export default function ProjectFormPage() {
 							placeholder="my-project"
 						/>
 						<p className="text-xs text-base-content/50 mt-1">
-							URL: /{user?.username ?? "you"}/{projectSlug || "..."}
+							URL: /@{user?.handle ?? "you"}/{projectSlug || "..."}
 						</p>
 					</FormField>
 				)}

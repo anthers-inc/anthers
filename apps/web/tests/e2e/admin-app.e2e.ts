@@ -17,6 +17,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
+import { gauntletHandle } from "@anthers/db/gauntlet";
 import {
 	adminAccountEvents,
 	adminAccounts,
@@ -25,7 +26,7 @@ import {
 	users,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { ADMIN_ORIGIN, emailedCode, expect, test, trackErrorsStrict } from "./fixtures";
+import { ADMIN_ORIGIN, API_URL, emailedCode, expect, test, trackErrorsStrict } from "./fixtures";
 
 const RUN = Date.now().toString(36);
 const OPERATOR_EMAIL = `e2e-operator-${RUN}@example.com`;
@@ -34,6 +35,8 @@ const SUBJECT = `e2e_held_${RUN}`;
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 let subjectId = 0;
+/** The subject account's issued handle, which is what a hold's label now prints. */
+let subjectHandle = "";
 
 test.beforeAll(async () => {
 	execFileSync(
@@ -53,13 +56,17 @@ test.beforeAll(async () => {
 			.trim()
 			.split("\n")
 			.at(-1) as string,
-	) as { userId: number };
+	) as { userId: number; handle: string };
 	subjectId = made.userId;
+	subjectHandle = made.handle;
 });
 
 test.afterAll(async () => {
 	await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
-	await db.delete(users).where(eq(users.username, SUBJECT));
+	// Accounts are keyed by their handle now; the seed stamps this subject's name through
+	// the same handle-safe spelling every fixture uses, so resolve it the way they do.
+	const handle = await gauntletHandle(API_URL, SUBJECT);
+	await db.delete(users).where(eq(users.atprotoHandle, handle));
 	const operators = await db
 		.select({ id: adminAccounts.id })
 		.from(adminAccounts)
@@ -101,7 +108,7 @@ test("an operator signs in by emailed code, places a hold and lifts it", async (
 	await holds.getByRole("button", { name: "Place Hold" }).click();
 
 	// The label, not a tick: it is what tells an operator they held the account they meant.
-	await expect(page.getByText(`Held @${SUBJECT}.`)).toBeVisible();
+	await expect(page.getByText(`Held @${subjectHandle}.`)).toBeVisible();
 
 	const row = holds.locator("tr", { hasText: `E2E preservation, run ${RUN}` }).first();
 	await expect(row).toBeVisible();

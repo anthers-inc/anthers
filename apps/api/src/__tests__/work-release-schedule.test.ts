@@ -74,7 +74,9 @@ async function makeDue(workId: number): Promise<Date> {
 }
 
 beforeAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${unpaidName})`);
+	await db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${unpaidName}@example.com`}`], sql`, `)})`,
+	);
 	const a = await createAccount(creatorName);
 	await enablePayouts(creatorName);
 	creator = { id: a.userId as number, cookie: a.cookie };

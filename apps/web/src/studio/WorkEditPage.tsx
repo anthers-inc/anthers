@@ -622,9 +622,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		...current,
 		sourceKey:
 			type === "image" && current.sourceKey ? keyToPreview(current.sourceKey) : current.sourceKey,
-		creator: user?.username
+		creator: user?.handle
 			? {
-					username: user.username,
+					handle: user.handle,
 					displayName: user.displayName ?? null,
 					avatar: user.avatar ?? null,
 				}

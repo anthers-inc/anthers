@@ -66,7 +66,7 @@ interface QueueItem {
 	openReports: number;
 	reasons: string[];
 	details: string[];
-	author: { username: string } | null;
+	author: { handle: string } | null;
 	context: { kind: string; slug: string; title: string } | null;
 }
 
@@ -84,6 +84,7 @@ const id = crypto.randomUUID().slice(0, 8);
 const hostName = `pr_host_${id}`;
 const reporterName = `pr_reporter_${id}`;
 const subjectName = `pr_subject_${id}`;
+let subjectHandle: string;
 /** Reported, then deleted — the orphan case. */
 const ghostName = `pr_ghost_${id}`;
 
@@ -97,7 +98,7 @@ let commentId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${hostName}, ${reporterName}, ${subjectName}, ${ghostName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${hostName}@example.com`}`, sql`${`${reporterName}@example.com`}`, sql`${`${subjectName}@example.com`}`, sql`${`${ghostName}@example.com`}`], sql`, `)})`,
 	);
 	const host = await signUp(hostName);
 	reporter = await signUp(reporterName);
@@ -106,12 +107,19 @@ beforeAll(async () => {
 	await enablePayouts(hostName);
 	admin = (await createAdminFixture("pr-operator")).cookie;
 	await db.execute(
-		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE username = ${subjectName}`,
+		sql`UPDATE users SET display_name = 'Subject Person', bio = 'a bio line' WHERE email = ${`${subjectName}@example.com`}`,
 	);
 
-	const [s] = await db.select({ id: users.id }).from(users).where(eq(users.username, subjectName));
-	const [g] = await db.select({ id: users.id }).from(users).where(eq(users.username, ghostName));
+	const [s] = await db
+		.select()
+		.from(users)
+		.where(eq(users.email, `${subjectName}@example.com`));
+	const [g] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, `${ghostName}@example.com`));
 	subjectId = s.id;
+	subjectHandle = s.atprotoHandle;
 	ghostId = g.id;
 
 	const postRes = await post("/api/content/posts", host, {
@@ -187,7 +195,7 @@ describe("filing a report about a person", () => {
 		const [me] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, reporterName));
+			.where(eq(users.email, `${reporterName}@example.com`));
 		const self = await post("/api/moderation/reports", reporter, {
 			subjectType: "user",
 			subjectId: me.id,
@@ -240,11 +248,11 @@ describe("the person report in the operator queue", () => {
 		expect(item!.details.join(" ")).toContain("across threads");
 		// The subject IS the author: a person's report is about them, not about
 		// something of theirs.
-		expect(item!.author?.username).toBe(subjectName);
+		expect(item!.author?.handle).toBe(subjectHandle);
 		expect(item!.context).toEqual({
 			kind: "profile",
-			slug: subjectName,
-			title: `Subject Person (@${subjectName})`,
+			slug: subjectHandle,
+			title: `Subject Person (@${subjectHandle})`,
 		});
 		expect(item!.excerpt).toContain("a bio line");
 		expect(summary.reportedPeople).toBeGreaterThan(0);

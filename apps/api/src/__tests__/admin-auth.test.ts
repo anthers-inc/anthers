@@ -252,7 +252,7 @@ describe("nothing that opens an Anthers account opens the admin app", () => {
 	beforeAll(async () => {
 		email = addr("both");
 		await createAdminAccount({ email, displayName: "Both" }, null);
-		siteCookie = (await createAccount(null, { email })).cookie;
+		siteCookie = (await createAccount(`both${Date.now().toString(36)}`, { email })).cookie;
 	});
 
 	test("the site's session cookie does not reach /me", async () => {

@@ -27,7 +27,7 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * 🚨 **This was `AuthPage`, a card that toggled between logging in and a four-field
  * Create Account form, and the form is GONE (2026-08-17).** There is one signup door now
  * and it is `/subscribe` — an identity (an Anthers handle or Bluesky), then an email address
- * and a code at `/finish`, then `/welcome` for the username and the terms. `/signup` redirects there. The old card asked for username + email +
+ * and a code at `/finish`, then `/welcome` for the first-run. `/signup` redirects there. The old card asked for a username + email +
  * password + confirm before an account existed at all, which is the cost this platform
  * decided not to charge at the moment of decision; keeping it alive as a second door
  * meant two flows that had to agree about terms acceptance, onboarding and where a new
@@ -45,7 +45,7 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *   would make a mistyped address at the login page mint an account that never saw the
  *   terms. The signin pair refuses.
  * - It needs an **email address**, and this page asks for nothing else. The code is keyed
- *   on the address (`signup_codes.email`), and resolving a public username to a private
+ *   on the address (`signup_codes.email`), and resolving a public handle to a private
  *   mailbox would let anyone mail anyone by guessing handles.
  *
  * 🚨 **Bluesky is a third way IN and is not a third way to sign up either** (2026-08-22).
@@ -152,7 +152,7 @@ export default function LoginPage() {
 				const body = (await res.json().catch(() => ({}))) as { error?: string };
 				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
 			}
-			const body = (await res.json()) as { needsOnboarding: boolean; resume: boolean };
+			const body = (await res.json()) as { resume: boolean; needsOnboarding?: boolean };
 
 			setCodeEmail(null);
 
@@ -168,9 +168,9 @@ export default function LoginPage() {
 			}
 
 			await refreshUser();
-			// An account that never finished onboarding still owes a handle and the terms, so
-			// this door has to be able to land there. Where they were heading rides along,
-			// exactly as it does through the signup ceremony.
+			// An account that never finished onboarding still owes the terms, so this door
+			// has to be able to land there. Where they were heading rides along, exactly as
+			// it does through the signup ceremony.
 			navigate(body.needsOnboarding ? withNextPath("/welcome", nextParam || from) : redirectTo, {
 				replace: true,
 			});

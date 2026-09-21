@@ -152,7 +152,7 @@ async function stageVideo(label: string): Promise<{ workId: number; key: string 
 describe("scanStoredVideo — object in, rows out", () => {
 	beforeAll(async () => {
 		await db
-			.execute(`DELETE FROM users WHERE username = '${creatorName}'` as unknown as never)
+			.execute(`DELETE FROM users WHERE atproto_handle = '${creatorName}'` as unknown as never)
 			.catch(() => {});
 		creatorId = (await createAccount(creatorName, { fields: { isCreator: true } })).userId;
 	}, DB_SETUP_TIMEOUT);

@@ -27,6 +27,7 @@ import app from "../index";
 import { createAccount } from "./account-fixture";
 import { type AdminFixture, createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -50,7 +51,7 @@ async function userId(username: string): Promise<number> {
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, username))
+		.where(eq(users.email, `${username}@example.com`))
 		.limit(1);
 	return row.id;
 }
@@ -103,7 +104,9 @@ describe("the legal hold console", () => {
 
 	afterAll(async () => {
 		await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
-		await db.execute(sql`DELETE FROM users WHERE username IN (${plainName}, ${subjectName})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${plainName}@example.com`}`, sql`${`${subjectName}@example.com`}`], sql`, `)})`,
+		);
 	});
 
 	it("admits no one who is not an operator, and is not advertised to a bearer credential", async () => {
@@ -166,7 +169,7 @@ describe("the legal hold console", () => {
 		const body = (await res.json()) as { holdId: number; subjectLabel: string };
 		// The label is the whole safety property — it is what lets somebody notice they
 		// preserved the wrong account.
-		expect(body.subjectLabel).toBe(`@${subjectName}`);
+		expect(body.subjectLabel).toBe(`@${await handleOf(subjectName)}`);
 
 		const [row] = await db
 			.select({ expiresAt: legalHolds.expiresAt, placedBy: legalHolds.placedBy })
@@ -185,7 +188,7 @@ describe("the legal hold console", () => {
 		const hold = (await listHolds(adminCookie)).find((h) => h.subjectId === subjectId);
 		expect(hold).toBeDefined();
 		expect(hold!.state).toBe("active");
-		expect(hold!.subjectLabel).toBe(`@${subjectName}`);
+		expect(hold!.subjectLabel).toBe(`@${await handleOf(subjectName)}`);
 		expect(hold!.placedBy).toBe(operator.displayName);
 		expect(hold!.liftedBy).toBeNull();
 	});

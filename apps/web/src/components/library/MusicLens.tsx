@@ -45,7 +45,7 @@ export interface LensProject {
 	title: string;
 	coverImage: string | null;
 	creatorId: number | null;
-	creatorUsername: string | null;
+	creatorHandle: string | null;
 	creatorDisplayName: string | null;
 	trackCount: number;
 	isAlbum: boolean;
@@ -108,14 +108,14 @@ export default function MusicLens({ items, includeSpoken }: MusicLensProps) {
 			});
 			if (!res.ok) return;
 			const { project: full } = (await res.json()) as unknown as {
-				project: { works?: Work[]; creator?: { username?: string; displayName?: string } };
+				project: { works?: Work[]; creator?: { handle?: string; displayName?: string } };
 			};
 			const tracks = (full.works ?? [])
 				.filter((w) => w.type === "music")
 				.map((w) =>
 					trackFromWork(w, {
 						id: project.creatorId,
-						username: project.creatorUsername,
+						handle: project.creatorHandle,
 						displayName: project.creatorDisplayName,
 					}),
 				);
@@ -288,12 +288,12 @@ function AlbumCard({
 					{album.title}
 				</Link>
 				<div className="flex items-center gap-1.5 text-xs text-base-content/55">
-					{album.creatorUsername ? (
+					{album.creatorHandle ? (
 						<Link
-							to={profileUrl(album.creatorUsername)}
+							to={profileUrl(album.creatorHandle)}
 							className="min-w-0 truncate hover:text-primary hover:underline"
 						>
-							{album.creatorDisplayName || album.creatorUsername}
+							{album.creatorDisplayName || album.creatorHandle}
 						</Link>
 					) : (
 						<span className="min-w-0 truncate">Unknown artist</span>

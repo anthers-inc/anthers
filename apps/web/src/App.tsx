@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { usernameFromHandleParam } from "@anthers/web-shared/profile";
+import { handleFromParam } from "@anthers/web-shared/profile";
 import { lazy } from "react";
 import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
@@ -129,7 +129,7 @@ const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
  */
 function HandleRoute() {
 	const { handle } = useParams<{ handle: string }>();
-	return usernameFromHandleParam(handle) ? <Outlet /> : <NotFoundPage />;
+	return handleFromParam(handle) ? <Outlet /> : <NotFoundPage />;
 }
 
 /**
@@ -196,8 +196,7 @@ export default function App() {
 					</Route>
 					<Route path="/wiki/*" element={<WikiPage />} />
 					{/* Logging in to an account that already exists. Signing UP is /subscribe —
-					    one door, one ceremony (email → code → /welcome for the handle and the
-					    terms). The four-field Create Account card was deleted 2026-08-17; see
+					    one door, one ceremony (email → code → /welcome to land). The four-field Create Account card was deleted 2026-08-17; see
 					    pages/LoginPage.tsx. /signup is kept as a redirect because it is the URL
 					    people (and old links, and the browser's own autofill heuristics) expect. */}
 					<Route path="/login" element={<LoginPage />} />
@@ -389,7 +388,7 @@ export default function App() {
 					</Route>
 
 					{/* Creator site routes. `/@name` is a person, `/name` is a page, and the two
-					no longer compete for the same segment — which is what lets a username be
+					no longer compete for the same segment — which is what lets a handle be
 					anything at all rather than anything not on a blacklist.
 
 					Nested under one guard rather than repeated four times: `HandleRoute` is the

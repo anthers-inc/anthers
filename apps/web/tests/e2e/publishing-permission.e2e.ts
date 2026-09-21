@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
 import { atprotoSessions, users } from "@anthers/db/schema";
+import { profileUrl } from "@anthers/web-shared/profile";
 import type { Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { emailedCode, expect, test } from "./fixtures";
@@ -38,12 +39,13 @@ async function atConsent(page: Page, password: string): Promise<void> {
 
 /**
  * An account holding an identity on the Bluesky stand-in, made the way anybody makes one: the
- * Bluesky door, its consent, the emailed code and a username.
+ * Bluesky door, its consent, the emailed code and the terms. The handle is the one that was
+ * brought — there is nothing left to claim.
  */
 async function signUpWithBluesky(
 	page: Page,
 	prefix: string,
-): Promise<{ name: string; handle: string; password: string; did: string }> {
+): Promise<{ handle: string; password: string; did: string }> {
 	const server = process.env.BLUESKY_STAND_IN_URL;
 	expect(server, "the browser suite runs with the session's Bluesky stand-in").toBeTruthy();
 
@@ -70,11 +72,10 @@ async function signUpWithBluesky(
 	await expect(page.locator('input[aria-label="Code character 1 of 6"]')).toBeFocused();
 	await page.keyboard.type(await emailedCode(address));
 	await expect(page).toHaveURL(/\/welcome/, { timeout: 15_000 });
-	await page.locator("#welcome-username").fill(name);
 	await page.getByRole("checkbox", { name: /13 or older/i }).check();
 	await page.getByRole("button", { name: "Finish setting up" }).click();
-	await expect(page.getByText(`You're in, @${name}`)).toBeVisible({ timeout: 15_000 });
-	return { name, handle, password, did };
+	await expect(page.getByText(`You're in, @${handle}`)).toBeVisible({ timeout: 15_000 });
+	return { handle, password, did };
 }
 
 test("a creator who denies the publishing permission is warned until they give it", async ({
@@ -126,15 +127,23 @@ test("a reader whose permission lapsed cannot follow until they give it, and com
 	const { did, password } = await signUpWithBluesky(page, "pr");
 
 	// Somebody to follow, and a lapse: the stored grant narrowed to identity alone, which is where
-	// a permission withdrawn at the reader's own server leaves it.
+	// a permission withdrawn at the reader's own server leaves it. The creator is addressed by the
+	// handle the seed prints — an account holds no username, so building the URL from the requested
+	// name would 404 on the underscores this spec stamps in.
 	const creator = `prc${Date.now().toString(36)}`;
-	execFileSync("bun", ["run", "db:local-account", "--username", creator, "--creator"], {
-		cwd: REPO_ROOT,
-		encoding: "utf8",
-	});
+	const made = JSON.parse(
+		execFileSync("bun", ["run", "db:local-account", "--name", creator, "--creator"], {
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+		})
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { handle: string };
+	const creatorUrl = profileUrl(made.handle);
 	await db.update(atprotoSessions).set({ scope: "atproto" }).where(eq(atprotoSessions.did, did));
 
-	await page.goto(`${ORIGIN}/@${creator}`);
+	await page.goto(`${ORIGIN}${creatorUrl}`);
 	const banner = page.getByRole("alert").filter({ hasText: BANNER_TEXT });
 	await expect(banner).toBeVisible();
 	await expect(banner).toContainText("you can't comment, review, vote or follow");
@@ -146,7 +155,7 @@ test("a reader whose permission lapsed cannot follow until they give it, and com
 	await page.getByRole("button", { name: "Authorize", exact: true }).click();
 
 	// Back where they were rather than in a Studio a reader does not have.
-	await expect(page).toHaveURL(new RegExp(`/@${creator}$`), { timeout: 15_000 });
+	await expect(page).toHaveURL(new RegExp(`${creatorUrl}$`), { timeout: 15_000 });
 	await page.waitForLoadState("networkidle");
 	await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
 	await expect(follow).toBeEnabled();

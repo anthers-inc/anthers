@@ -37,6 +37,7 @@ import app from "../index";
 import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -95,18 +96,20 @@ describe("Share links", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${sharerName}, ${creatorName}, ${otherName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${sharerName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 		);
 		sharerCookie = await signUp(sharerName);
 		creatorCookie = await signUp(creatorName);
 		await signUp(otherName);
 		const rows = await db
-			.select({ id: users.id, username: users.username })
+			.select({ id: users.id, email: users.email })
 			.from(users)
-			.where(sql`username IN (${sharerName}, ${creatorName}, ${otherName})`);
-		sharerId = rows.find((r) => r.username === sharerName)!.id;
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		otherId = rows.find((r) => r.username === otherName)!.id;
+			.where(
+				sql`email IN (${sql.join([sql`${`${sharerName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
+			);
+		sharerId = rows.find((r) => r.email === `${sharerName}@example.com`)!.id;
+		creatorId = rows.find((r) => r.email === `${creatorName}@example.com`)!.id;
+		otherId = rows.find((r) => r.email === `${otherName}@example.com`)!.id;
 
 		const open = await insertWork({
 			creatorId,
@@ -160,7 +163,7 @@ describe("Share links", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${sharerName}, ${creatorName}, ${otherName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${sharerName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 		);
 	});
 
@@ -181,7 +184,7 @@ describe("Share links", () => {
 		const { work } = await res.json();
 		expect(work.bodyHtml).toBe(TEXT_BODY);
 		expect(work.access.canAccess).toBe(true);
-		expect(work.sharedBy).toBe(sharerName);
+		expect(work.sharedBy).toBe(await handleOf(sharerName));
 	});
 
 	/** A link for the text Work, minted the ordinary way. */
@@ -209,7 +212,7 @@ describe("Share links", () => {
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.workId).toBe(openId);
-		expect(body.sharedBy).toBe(sharerName);
+		expect(body.sharedBy).toBe(await handleOf(sharerName));
 		expect(body).not.toHaveProperty("bodyHtml");
 		expect(body).not.toHaveProperty("access");
 	});

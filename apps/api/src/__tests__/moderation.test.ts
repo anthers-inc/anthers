@@ -26,6 +26,7 @@ import { createAccount } from "./account-fixture";
 import { type AdminFixture, createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { handleOf } from "./handles.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -61,7 +62,7 @@ interface QueueItem {
 	totalReports: number;
 	reasons: string[];
 	details: string[];
-	author: { username: string } | null;
+	author: { handle: string } | null;
 	context: { kind: "post" | "work"; slug: string } | null;
 	lastAction: { action: string; reason: string; actor: string | null } | null;
 }
@@ -100,7 +101,7 @@ let ratingId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerAName}, ${viewerBName})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -112,7 +113,9 @@ beforeAll(async () => {
 	await enablePayouts(viewerBName);
 	operator = await createAdminFixture("mod-operator");
 	admin = operator.cookie;
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
+	await db.execute(
+		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
+	);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
@@ -287,7 +290,7 @@ describe("The operator queue", () => {
 		expect(entry?.excerpt).toContain("cheap followers");
 		expect(entry?.openReports).toBe(1);
 		expect(entry?.reasons).toContain("harassment");
-		expect(entry?.author?.username).toBe(viewerAName);
+		expect(entry?.author?.handle).toBe(await handleOf(viewerAName));
 		// The queue names WHERE the item lives, and that is no longer always a post — so
 		// the context carries its kind. A comment on a post reads as one.
 		expect(entry?.context?.kind).toBe("post");
@@ -305,7 +308,7 @@ describe("The operator queue", () => {
 		const [reporter] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, viewerAName))
+			.where(eq(users.email, `${viewerAName}@example.com`))
 			.limit(1);
 		const [{ maxId }] = await db
 			.select({ maxId: sql<number>`coalesce(max(${comments.id}), 0)` })

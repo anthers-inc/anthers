@@ -25,9 +25,9 @@ export interface SignupPicks {
 	 * "hasn't said" state left for this to carry.
 	 */
 	anthers: number;
-	/** Usernames to follow. Following costs nothing and is applied first. */
+	/** Creator handles to follow. Following costs nothing and is applied first. */
 	follow: string[];
-	/** Usernames to support directly, at the Public Access price each. */
+	/** Creator handles to support directly, at the Public Access price each. */
 	seed: string[];
 }
 

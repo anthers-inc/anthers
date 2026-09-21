@@ -18,7 +18,7 @@ import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
 
 interface Supporter {
-	username: string;
+	handle: string;
 	displayName: string | null;
 }
 
@@ -84,8 +84,8 @@ export default function SupportersPage() {
 				>
 					<ul className="flex flex-wrap gap-x-6 gap-y-2">
 						{group.map((person) => (
-							<li key={person.username || person.displayName} className="text-base-content/80">
-								{person.displayName || person.username}
+							<li key={person.handle || person.displayName} className="text-base-content/80">
+								{person.displayName || person.handle}
 							</li>
 						))}
 					</ul>

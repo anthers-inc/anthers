@@ -118,10 +118,10 @@ export default function ProjectPage() {
 							<p className="text-sm text-base-content/70 mb-3">
 								by{" "}
 								<Link
-									to={profileUrl(project.creator.username)}
+									to={profileUrl(project.creator.handle)}
 									className="link link-hover font-medium"
 								>
-									{project.creator.displayName || project.creator.username}
+									{project.creator.displayName || project.creator.handle}
 								</Link>
 							</p>
 						)}
@@ -160,16 +160,16 @@ export default function ProjectPage() {
 							creator={
 								project.creator && (
 									<Link
-										to={profileUrl(project.creator.username)}
+										to={profileUrl(project.creator.handle)}
 										className="hover:text-primary hover:underline"
 									>
-										{project.creator.displayName || project.creator.username}
+										{project.creator.displayName || project.creator.handle}
 									</Link>
 								)
 							}
 							tracks={tracksFrom(works, {
 								id: project.creatorId,
-								username: project.creator?.username,
+								handle: project.creator?.handle,
 								displayName: project.creator?.displayName,
 							})}
 							// People keep albums, not four loose tracks — so the record itself is

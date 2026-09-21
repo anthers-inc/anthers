@@ -24,11 +24,12 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { purchases, users, works } from "@anthers/db/schema";
+import { purchases, works } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf, userIdByName } from "./handles";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -57,15 +58,13 @@ describe("A purchase survives the Work being deleted", () => {
 	let buyerId: number;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
+		);
 		creatorCookie = await signUp(creatorName);
 		buyerCookie = await signUp(buyerName);
-		const rows = await db
-			.select({ id: users.id, username: users.username })
-			.from(users)
-			.where(sql`${users.username} IN (${creatorName}, ${buyerName})`);
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		buyerId = rows.find((r) => r.username === buyerName)!.id;
+		creatorId = await userIdByName(creatorName);
+		buyerId = await userIdByName(buyerName);
 	}, DB_SETUP_TIMEOUT);
 
 	/** A released Work with one completed purchase against it. */
@@ -162,7 +161,7 @@ describe("A purchase survives the Work being deleted", () => {
 		expect(stranger.status).toBe(404);
 
 		// And it is out of the public Catalog, which filters *for* released.
-		const catalog = await req(`/api/content/catalog/${creatorName}`, {
+		const catalog = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
 			headers: { Cookie: strangerCookie },
 		});
 		const listed = (await catalog.json()).works as { id: number }[];
@@ -224,7 +223,7 @@ describe("A purchase survives the Work being deleted", () => {
 		expect(row.work.publicId).toBeNull();
 		expect(row.workPublicId).toBe(work.publicId);
 		// The creator is resolved from purchases.creatorId, not through the dead Work.
-		expect(row.creator.username).toBe(creatorName);
+		expect(row.creator.handle).toBe(await handleOf(creatorName));
 	});
 
 	it("counts the sale toward the creator's earnings even once the Work row is gone", async () => {
@@ -334,7 +333,7 @@ describe("A purchase survives the Work being deleted", () => {
 		const row = (await res.json()).purchases.find((p: { id: number }) => p.id === seedBuy.id) as {
 			type: string;
 			work: { title: null; publicId: null };
-			creator: { username: null };
+			creator: { handle: null };
 		};
 
 		expect(row).toBeTruthy();
@@ -342,7 +341,7 @@ describe("A purchase survives the Work being deleted", () => {
 		// Nothing to name, nothing to open, nobody to credit.
 		expect(row.work.title).toBeNull();
 		expect(row.work.publicId).toBeNull();
-		expect(row.creator.username).toBeNull();
+		expect(row.creator.handle).toBeNull();
 	});
 
 	it("leaves a Work nobody bought deletable without a force flag", async () => {

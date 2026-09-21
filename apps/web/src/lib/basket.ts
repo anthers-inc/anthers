@@ -30,7 +30,7 @@ export interface BasketItem {
 	slug: string;
 	title: string;
 	price: string;
-	creatorUsername: string;
+	creatorHandle: string;
 	thumbnail?: string | null;
 }
 
@@ -93,10 +93,10 @@ export function useBasket() {
 		// A different creator means a different charge. Replace rather than reject: the
 		// buyer's most recent intent is the one to honor, and telling them at the moment
 		// they click is far better than at checkout.
-		const clashed = current.length > 0 && current[0].creatorUsername !== item.creatorUsername;
+		const clashed = current.length > 0 && current[0].creatorHandle !== item.creatorHandle;
 		const next = clashed ? [item] : [...current, item];
 		write(next);
-		return { ok: true as const, replacedCreator: clashed ? current[0].creatorUsername : null };
+		return { ok: true as const, replacedCreator: clashed ? current[0].creatorHandle : null };
 	}, []);
 
 	const remove = useCallback((workId: number) => {

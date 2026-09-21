@@ -142,7 +142,7 @@ export default function SearchBar() {
 									return (
 										<li key={project.id}>
 											<Link
-												to={creatorProjectUrl(project.creator?.username ?? "unknown", project.slug)}
+												to={creatorProjectUrl(project.creator?.handle ?? "unknown", project.slug)}
 												className="flex items-center gap-3 px-3 py-2"
 												onClick={() => {
 													setFocused(false);
@@ -164,7 +164,7 @@ export default function SearchBar() {
 													<p className="text-sm font-medium truncate">{project.title}</p>
 													{project.creator && (
 														<p className="text-xs text-base-content/50 truncate">
-															{project.creator.displayName || project.creator.username}
+															{project.creator.displayName || project.creator.handle}
 														</p>
 													)}
 												</div>

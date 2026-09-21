@@ -192,17 +192,17 @@ export default function WorkReviews({ workId }: { workId: number }) {
 							{review.avatar ? (
 								<img
 									src={review.avatar}
-									alt={review.username}
+									alt={review.handle}
 									className="w-8 h-8 rounded-full object-cover flex-shrink-0"
 								/>
 							) : (
 								<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-									{review.username.charAt(0).toUpperCase()}
+									{review.handle.charAt(0).toUpperCase()}
 								</div>
 							)}
 							<div className="flex-1">
 								<div className="flex items-center gap-2 text-sm">
-									<span className="font-medium">{review.username}</span>
+									<span className="font-medium">{review.handle}</span>
 									<span
 										className={
 											review.verdict === "recommended"
@@ -222,7 +222,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 											className="ml-auto text-base-content/30 hover:text-base-content/70"
 											onClick={() => setReportingReview(review.id)}
 											title="Report this review"
-											aria-label={`Report ${review.username}'s review`}
+											aria-label={`Report ${review.handle}'s review`}
 										>
 											<FlagIcon className="w-3.5 h-3.5" />
 										</button>

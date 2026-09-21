@@ -580,7 +580,7 @@ const paymentRoutes = new Hono()
 				// buyer's card is the only surface that can tell them the clock exists.
 				workWithdrawnAt: works.withdrawnAt,
 				workCoverImage: works.thumbnail,
-				creatorUsername: users.username,
+				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
@@ -611,7 +611,7 @@ const paymentRoutes = new Hono()
 					type: r.purchase.workType,
 				},
 				creator: {
-					username: r.creatorUsername,
+					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
 					avatar: r.creatorAvatar,
 				},

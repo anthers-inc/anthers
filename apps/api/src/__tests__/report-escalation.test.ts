@@ -65,10 +65,12 @@ const commentIds: number[] = [];
 beforeAll(async () => {
 	if (SKIP_ABUSE_TESTS) return;
 	await db.execute(
-		sql`DELETE FROM users WHERE username IN (${creatorName}, ${reporterNames[0]}, ${reporterNames[1]}, ${reporterNames[2]}, ${reporterNames[3]})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${reporterNames[0]}@example.com`}`, sql`${`${reporterNames[1]}@example.com`}`, sql`${`${reporterNames[2]}@example.com`}`, sql`${`${reporterNames[3]}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE username = ${creatorName}`);
+	await db.execute(
+		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
+	);
 	for (const name of reporterNames) reporters.push(await signUp(name));
 
 	const postRes = await post("/api/content/posts", creator, {

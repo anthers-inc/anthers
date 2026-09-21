@@ -40,7 +40,7 @@ function track(n: number, locked = false): QueueTrack {
 		publicId: 1000 + n,
 		title: `Track ${n}`,
 		creator: "A Creator",
-		creatorUsername: "creator",
+		creatorHandle: "creator",
 		creatorId: 7,
 		thumbnail: null,
 		durationSeconds: 180,

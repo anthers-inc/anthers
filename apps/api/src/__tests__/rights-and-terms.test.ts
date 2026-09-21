@@ -34,56 +34,54 @@ function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
-/** Claim a handle as a fixture account that has not claimed one, with whatever terms field is given. */
-function claim(cookie: string, username: string, extra: Record<string, unknown>) {
-	return req("/api/auth/onboarding/claim", {
+/** Accept the terms as a fixture account, with whatever body is given. */
+function acceptTerms(cookie: string, body: Record<string, unknown>) {
+	return req("/api/auth/onboarding/accept-terms", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ username, ...extra }),
+		body: JSON.stringify(body),
 	});
 }
 
-/** The account's handle, which stays null for as long as no claim has succeeded. */
-async function handleOf(userId: number) {
+/** The account's termsAcceptedAt, which stays null until acceptance has succeeded. */
+async function termsAcceptedAtOf(userId: number) {
 	const [row] = await db
-		.select({ username: users.username })
+		.select({ termsAcceptedAt: users.termsAcceptedAt })
 		.from(users)
 		.where(eq(users.id, userId));
-	return row?.username ?? null;
+	return row?.termsAcceptedAt ?? null;
 }
 
-// Terms are accepted where an account is finished — claiming its handle on `/welcome` — which
+// Terms are accepted where an account is finished — onboarding's `/welcome` — which
 // is the step every signup door passes through.
 describe("nobody gets an account without accepting the terms", () => {
-	it("refuses a claim that omits acceptance, and claims nothing", async () => {
-		const account = await createAccount(null);
-		const res = await claim(account.cookie, `rt_omit_${id}`, {});
+	it("refuses a request that omits acceptance, and records nothing", async () => {
+		const account = await createAccount(`rt_omit_${id}`);
+		const res = await acceptTerms(account.cookie, {});
 		expect(res.status).toBe(400);
-		// A 400 that still claimed the handle would be the worst of both.
-		expect(await handleOf(account.userId)).toBeNull();
+		// A 400 that still counted as acceptance would be the worst of both.
+		expect(await termsAcceptedAtOf(account.userId)).toBeNull();
 	});
 
 	it("refuses an explicit refusal rather than recording it", async () => {
 		// `false` is not a value to store, it is a request that cannot be granted.
-		const account = await createAccount(null);
-		expect((await claim(account.cookie, `rt_false_${id}`, { acceptTerms: false })).status).toBe(
-			400,
-		);
-		expect(await handleOf(account.userId)).toBeNull();
+		const account = await createAccount(`rt_false_${id}`);
+		expect((await acceptTerms(account.cookie, { acceptTerms: false })).status).toBe(400);
+		expect(await termsAcceptedAtOf(account.userId)).toBeNull();
 	});
 
-	it("accepts a claim that accepts", async () => {
-		const account = await createAccount(null);
-		const res = await claim(account.cookie, `rt_ok_${id}`, { acceptTerms: true });
+	it("accepts a request that accepts", async () => {
+		const account = await createAccount(`rt_ok_${id}`);
+		const res = await acceptTerms(account.cookie, { acceptTerms: true });
 		expect(res.status).toBe(200);
-		expect(await handleOf(account.userId)).toBe(`rt_ok_${id}`);
+		expect(await termsAcceptedAtOf(account.userId)).not.toBeNull();
 	});
 });
 
 describe("data-rights requests", () => {
 	it("stamps a 30-day deadline at creation and acknowledges it", async () => {
 		const name = `rt_req_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${`${name}@example.com`}`);
 		const { cookie } = await createAccount(name);
 
 		const before = Date.now();
@@ -117,7 +115,7 @@ describe("data-rights requests", () => {
 
 	it("rejects an unknown kind rather than storing it", async () => {
 		const name = `rt_bad_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE username = ${name}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${`${name}@example.com`}`);
 		const { cookie } = await createAccount(name);
 
 		const res = await req("/api/accounts/me/rights-requests", {

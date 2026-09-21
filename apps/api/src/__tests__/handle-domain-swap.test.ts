@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
+import { handleHistory, hostedAccounts, hostedIdentities, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { createAccount } from "./account-fixture";
@@ -48,6 +48,7 @@ beforeAll(async () => {
 afterAll(async () => {
 	restore("HOSTED_PDS_URL", before.url);
 	restore("HOSTED_ACCOUNT_KEY", before.key);
+	await db.delete(handleHistory).where(like(handleHistory.did, `did:plc:${RUN}%`));
 	await db.delete(hostedIdentities).where(like(hostedIdentities.did, `did:plc:${RUN}%`));
 	await db.delete(hostedAccounts).where(like(hostedAccounts.did, `did:plc:${RUN}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
@@ -77,8 +78,11 @@ function router(
 	opts: {
 		updateError?: { error: string; message?: string; status?: number };
 		nodeDown?: boolean;
+		/** The handle the directory reports the identity holding, post-change. */
+		handle?: string;
 	} = {},
 ): typeof fetch {
+	const newHandle = opts.handle ?? "alice.example.com";
 	return (async (input: string | URL) => {
 		const url = String(input);
 		if (url.startsWith(`${plcDirectoryUrl()}/`)) {
@@ -91,7 +95,7 @@ function router(
 					cid: "after",
 					nullified: false,
 					operation: {
-						alsoKnownAs: ["at://alice.example.com"],
+						alsoKnownAs: [`at://${newHandle}`],
 						rotationKeys: ["did:key:zAnthersOnline"],
 						services: { atproto_pds: { endpoint: "https://anthers.test" } },
 					},
@@ -225,7 +229,7 @@ describe("a domain that has not proved itself yet", () => {
 
 describe("a domain that has", () => {
 	it("takes the new handle everywhere the hub keeps one", async () => {
-		const { userId, did } = await makeAccount("proved");
+		const { userId, did, handle: oldHandle } = await makeAccount("proved");
 		const result = await swapHostedHandle(
 			userId,
 			{ handle: "alice.example.com" },
@@ -247,6 +251,12 @@ describe("a domain that has", () => {
 			.from(users)
 			.where(eq(users.id, userId));
 		expect(account.handle).toBe("alice.example.com");
+
+		// 🚨 And the OLD name is held in `handle_history` against this DID, with a future
+		// hold — so a `/@old` redirect can still find the account while links age out.
+		const [held] = await db.select().from(handleHistory).where(eq(handleHistory.did, did));
+		expect(held.oldHandle).toBe(oldHandle);
+		expect(held.holdUntil.getTime()).toBeGreaterThan(Date.now());
 	});
 
 	// ⭐ Changing a handle writes a PLC operation, so the identity's head moves — and
@@ -254,23 +264,27 @@ describe("a domain that has", () => {
 	// Anthers doing it is what it exists to catch. This one moved because Anthers did it.
 	it("moves the watcher's baseline, so the next sweep sees no change", async () => {
 		const { userId, did } = await makeAccount("baseline");
-		await swapHostedHandle(userId, { handle: "alice.example.com" }, { fetchImpl: router() });
+		await swapHostedHandle(
+			userId,
+			{ handle: "baseline.example.com" },
+			{ fetchImpl: router({ handle: "baseline.example.com" }) },
+		);
 
 		const [row] = await db
 			.select({ head: hostedIdentities.headCid, handle: hostedIdentities.handle })
 			.from(hostedIdentities)
 			.where(eq(hostedIdentities.did, did));
 		expect(row.head).toBe("after");
-		expect(row.handle).toBe("alice.example.com");
+		expect(row.handle).toBe("baseline.example.com");
 	});
 
 	it("takes a name however somebody typed it", async () => {
 		const { userId } = await makeAccount("typed");
 		const result = await swapHostedHandle(
 			userId,
-			{ handle: "  @Alice.Example.Com.  " },
-			{ fetchImpl: router() },
+			{ handle: "  @Typed.Example.Com.  " },
+			{ fetchImpl: router({ handle: "typed.example.com" }) },
 		);
-		expect(result).toEqual({ status: "swapped", handle: "alice.example.com" });
+		expect(result).toEqual({ status: "swapped", handle: "typed.example.com" });
 	});
 });

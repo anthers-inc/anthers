@@ -307,7 +307,7 @@ export default function CatalogPage() {
 									<tr key={project.id}>
 										<td>
 											<Link
-												to={creatorProjectUrl(user?.username ?? "", project.slug)}
+												to={creatorProjectUrl(user?.handle ?? "", project.slug)}
 												className="link link-hover font-medium"
 											>
 												{project.title}

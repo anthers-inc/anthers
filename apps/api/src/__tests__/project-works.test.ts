@@ -95,7 +95,9 @@ async function orderOf(slug: string, cookie?: string): Promise<string[]> {
 
 describe("a Project's Works", () => {
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${strangerName})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
+		);
 		const cookie = await signUp(creatorName);
 		await enablePayouts(creatorName);
 		strangerCookie = await signUp(strangerName);

@@ -76,12 +76,15 @@ async function realPostCount(projectId: number): Promise<number> {
 	return rows.length;
 }
 
+let creatorHandle = "";
+
 beforeAll(async () => {
-	const { userId } = await createAccount(`counts_${SUFFIX}`, {
+	const { userId, handle } = await createAccount(`counts_${SUFFIX}`, {
 		email: `counts_${SUFFIX}@example.test`,
 		emailVerified: true,
 		fields: { isCreator: true },
 	});
+	creatorHandle = handle;
 	creatorId = userId;
 	madeUsers.push(userId);
 }, DB_SETUP_TIMEOUT);
@@ -127,7 +130,7 @@ describe("project listing — postCount", () => {
 			const truthB = await realPostCount(projB.id);
 			expect({ a: truthA, b: truthB }).toEqual({ a: 3, b: 1 });
 
-			const res = await app.request(`/api/content/projects?creator=counts_${SUFFIX}`, {
+			const res = await app.request(`/api/content/projects?creator=${creatorHandle}`, {
 				headers: { Origin: "http://localhost:3000" },
 			});
 			expect(res.status).toBe(200);

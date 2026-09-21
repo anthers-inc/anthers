@@ -41,7 +41,7 @@ async function seedBasketAndReload(page: Page, count: number): Promise<void> {
 		slug: `basket-test-${i}`,
 		title: `Basket test ${i}`,
 		price: "1.00",
-		creatorUsername: "media_fixture",
+		creatorHandle: "media_fixture",
 	}));
 	await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
 		key: BASKET_KEY,

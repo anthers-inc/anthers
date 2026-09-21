@@ -806,7 +806,7 @@ export async function loadQuarantineFindings(
 			workId: mediaQuarantine.workId,
 			workTitle: works.title,
 			uploaderId: mediaQuarantine.uploaderId,
-			uploaderName: users.username,
+			uploaderName: users.atprotoHandle,
 			originalKey: mediaQuarantine.originalKey,
 			objectKind: mediaQuarantine.objectKind,
 			source: mediaQuarantine.source,

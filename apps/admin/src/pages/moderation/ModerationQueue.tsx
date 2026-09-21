@@ -55,7 +55,7 @@ interface QueueItem {
 	score: number | null;
 	moderationStatus: string;
 	createdAt: string;
-	author: { id: number; username: string } | null;
+	author: { id: number; handle: string } | null;
 	/**
 	 * Where the item lives. `kind` matters: a comment can sit on a Post or a Work, a
 	 * review only on a Work, and a reported person on their own profile — linking every
@@ -327,7 +327,7 @@ export default function ModerationQueue() {
 											</a>
 										)}
 									</td>
-									<td className="text-sm">{item.author?.username ?? "—"}</td>
+									<td className="text-sm">{item.author?.handle ?? "—"}</td>
 									<td>
 										{item.totalReports === 0 ? (
 											<span className="text-base-content/40">—</span>

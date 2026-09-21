@@ -37,7 +37,7 @@ export interface QueueTrack {
 	title: string;
 	/** Display name of the creator, for the bar's second line. */
 	creator: string;
-	creatorUsername: string | null;
+	creatorHandle: string | null;
 	/** Whose Time Pool minutes this earns. Null suspends the claim. */
 	creatorId: number | null;
 	thumbnail: string | null;

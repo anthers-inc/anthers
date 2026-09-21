@@ -239,7 +239,7 @@ function TimePoolPie({ rows, totalTime }: { rows: CreatorRow[]; totalTime: numbe
 
 interface CreatorRow {
 	creatorId: number;
-	username: string;
+	handle: string;
 	displayName: string | null;
 	avatar: string | null;
 	timeSeconds: number;
@@ -254,7 +254,7 @@ interface CreatorRow {
 }
 
 function initials(row: CreatorRow): string {
-	return (row.displayName || row.username)
+	return (row.displayName || row.handle)
 		.split(/\s+/)
 		.map((w) => w[0])
 		.join("")
@@ -333,16 +333,16 @@ export default function SubscriptionPage() {
 			setDistributions(rows);
 
 			// Fetch each creator's gates for the gate hints.
-			const usernames = rows.map((d) => d.creator?.username).filter(Boolean) as string[];
+			const handles = rows.map((d) => d.creator?.handle).filter(Boolean) as string[];
 			const gatesMap = new Map<string, CreatorGate[]>();
 			const gateResults = await Promise.allSettled(
-				usernames.map(async (u) => ({
-					username: u,
+				handles.map(async (u) => ({
+					handle: u,
 					gates: (await getJson<{ gates: CreatorGate[] }>(`gates?creator=${u}`)).gates,
 				})),
 			);
 			for (const r of gateResults) {
-				if (r.status === "fulfilled") gatesMap.set(r.value.username, r.value.gates);
+				if (r.status === "fulfilled") gatesMap.set(r.value.handle, r.value.gates);
 			}
 			setCreatorGatesMap(gatesMap);
 		}
@@ -384,7 +384,7 @@ export default function SubscriptionPage() {
 			const key = d.creatorId ?? -d.id;
 			map.set(key, {
 				creatorId: d.creatorId ?? 0,
-				username: d.creator?.username ?? "",
+				handle: d.creator?.handle ?? "",
 				displayName: d.creator?.displayName ?? (d.creatorId === null ? "Deleted creator" : null),
 				avatar: d.creator?.avatar ?? null,
 				timeSeconds: d.attentionSeconds ?? 0,
@@ -403,7 +403,7 @@ export default function SubscriptionPage() {
 			} else {
 				map.set(s.creatorId, {
 					creatorId: s.creatorId,
-					username: s.creator?.username ?? "",
+					handle: s.creator?.handle ?? "",
 					displayName: s.creator?.displayName ?? null,
 					avatar: null,
 					timeSeconds: 0,
@@ -417,7 +417,7 @@ export default function SubscriptionPage() {
 		}
 		for (const row of map.values()) {
 			row.pendingSeed = pendingSeeds.get(row.creatorId) ?? row.committedSeed;
-			row.gates = creatorGatesMap.get(row.username) ?? [];
+			row.gates = creatorGatesMap.get(row.handle) ?? [];
 		}
 		return Array.from(map.values()).sort(
 			(a, b) => b.poolAmount + b.pendingSeed - (a.poolAmount + a.pendingSeed),
@@ -720,10 +720,10 @@ export default function SubscriptionPage() {
 												style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
 											/>
 											<Link
-												to={profileUrl(row.username)}
+												to={profileUrl(row.handle)}
 												className="text-base-content/70 truncate flex-1 link-hover"
 											>
-												{row.displayName || row.username}
+												{row.displayName || row.handle}
 											</Link>
 											<span className="text-base-content/40 tabular-nums">{pct}%</span>
 											<span className="tabular-nums text-success">{fmt(row.poolAmount)}</span>
@@ -795,10 +795,10 @@ export default function SubscriptionPage() {
 														)}
 													</div>
 													<Link
-														to={profileUrl(row.username)}
+														to={profileUrl(row.handle)}
 														className="text-xs text-base-content/70 truncate flex-1 link-hover"
 													>
-														{row.displayName || row.username}
+														{row.displayName || row.handle}
 													</Link>
 													{canEdit ? (
 														<SupportStepper

@@ -86,12 +86,12 @@ let creatorCookie: string;
 
 beforeAll(async () => {
 	if (SKIP_ABUSE_TESTS) return;
-	await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${`${creatorName}@example.com`}`);
 	creatorCookie = await signUp(creatorName);
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, creatorName));
+		.where(eq(users.email, `${creatorName}@example.com`));
 	creatorId = row.id;
 	operatorId = (await createAdminFixture("abuse-operator")).id;
 
@@ -400,5 +400,5 @@ afterAll(async () => {
 		sql`DELETE FROM abuse_reports WHERE url = 'https://anthers.org/posts/something'`,
 	);
 	await db.execute(sql`DELETE FROM legal_holds WHERE reason = 'abuse retention fixture'`);
-	await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${`${creatorName}@example.com`}`);
 });

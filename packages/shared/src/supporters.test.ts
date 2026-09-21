@@ -17,7 +17,7 @@ import {
 } from "./supporters";
 
 const person = (displayName: string, lifetimeDollars: number) => ({
-	username: displayName.toLowerCase(),
+	handle: displayName.toLowerCase(),
 	displayName,
 	lifetimeDollars,
 });
@@ -43,7 +43,7 @@ describe("grouping supporters", () => {
 		]);
 		for (const group of groups) {
 			for (const entry of group) {
-				expect(Object.keys(entry).sort()).toEqual(["displayName", "username"]);
+				expect(Object.keys(entry).sort()).toEqual(["displayName", "handle"]);
 			}
 		}
 	});
@@ -78,12 +78,12 @@ describe("grouping supporters", () => {
 		expect(groups[0].map((e) => e.displayName)).toEqual(["adam", "Mary", "Zoe"]);
 	});
 
-	it("falls back to the username when somebody has no display name", () => {
+	it("falls back to the handle when somebody has no display name", () => {
 		const sorted = sortSupporters([
-			{ username: "zed", displayName: null },
-			{ username: "amy", displayName: null },
+			{ handle: "zed", displayName: null },
+			{ handle: "amy", displayName: null },
 		]);
-		expect(sorted.map((e) => e.username)).toEqual(["amy", "zed"]);
+		expect(sorted.map((e) => e.handle)).toEqual(["amy", "zed"]);
 	});
 
 	it("returns nothing at all rather than empty groups when nobody is listed", () => {

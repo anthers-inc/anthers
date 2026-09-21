@@ -60,7 +60,6 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { and, desc, eq, gt, inArray, or } from "drizzle-orm";
-
 /**
  * Remove fixture accounts and everything of theirs that would otherwise survive them.
  *
@@ -73,21 +72,25 @@ import { and, desc, eq, gt, inArray, or } from "drizzle-orm";
  * cascades its assets, reviews, pages, scans, transcode jobs and share links, but `set null`s
  * the purchases and quarantine findings that have to outlive it.
  */
-export async function purgeFixtureAccounts(usernames: string[]): Promise<void> {
-	if (usernames.length === 0) return;
-	const accounts = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(inArray(users.username, usernames));
-	await purgeAccountIds(accounts.map((a) => a.id));
+export async function purgeFixtureAccounts(names: string[]): Promise<void> {
+	if (names.length === 0) return;
+	// Callers pass the short NAME they gave `createAccount`; the row is keyed on the issued
+	// handle `<name>.<suffix>`, whose first label is that name (handle names are one label,
+	// so this never collides with a longer name sharing a prefix).
+	const wanted = new Set(names);
+	const accounts = await db.select({ id: users.id, handle: users.atprotoHandle }).from(users);
+	await purgeAccountIds(
+		accounts.filter((a) => wanted.has(a.handle.split(".")[0])).map((a) => a.id),
+	);
 }
 
 /**
  * The same purge, addressed by id.
  *
- * ⚠️ **An account with no username is still an account.** `users.username` is null between the
- * moment a signup's emailed code is verified and the moment onboarding claims a handle, so a
- * name-keyed purge silently skips every fixture left mid-ceremony. Ids do not have that gap.
+ * ⚠️ **Handles are normalized, and the name a suite typed is not always the name that was
+ * issued** — `localHandleName` rewrites a name the server would refuse and renames an
+ * underscore to a dash. Callers that know the user id (which is every caller of
+ * `createAccount`, since it returns one) purge by id and sidestep the whole question.
  */
 export async function purgeAccountIds(ids: number[]): Promise<void> {
 	if (ids.length > 0) {

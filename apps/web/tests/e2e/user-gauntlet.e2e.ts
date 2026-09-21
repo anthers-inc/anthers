@@ -32,6 +32,7 @@ import {
 	GAUNTLET_CREATOR_USERNAME,
 	GAUNTLET_POSTS,
 	GAUNTLET_VIEWER_USERNAME,
+	gauntletHandle,
 	gauntletPost,
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
@@ -69,6 +70,11 @@ const ALLOWED = [NAVIGATION_ABORTED_FETCH];
 /** slug → numeric post id, resolved once from the live API (the access route keys on id). */
 const workIds: Record<string, number> = {};
 
+/** The fixture accounts' real handles, resolved in beforeAll — the username column is gone,
+ *  so profiles are addressed by the handle the server issued for each fixture name. */
+let creatorHandle = "";
+let viewerHandle = "";
+
 function staircaseRow(state: string): StaircaseState {
 	const row = EXPECTED_STAIRCASE.find((r) => r.state === state);
 	if (!row) throw new Error(`No staircase state "${state}"`);
@@ -83,6 +89,7 @@ function staircaseRow(state: string): StaircaseState {
 async function expectStaircase(page: Page, stateName: string): Promise<void> {
 	const row = staircaseRow(stateName);
 	const observed: Record<string, string> = {};
+
 	for (const post of GAUNTLET_POSTS) {
 		const res = await page.request.get(`${API_URL}/api/subscriptions/access/${workIds[post.key]}`);
 		expect(res.ok(), `access lookup failed for ${post.key}: ${res.status()}`).toBe(true);
@@ -312,6 +319,9 @@ test.beforeAll(async () => {
 		);
 	}
 
+	creatorHandle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	viewerHandle = await gauntletHandle(API_URL, GAUNTLET_VIEWER_USERNAME);
+
 	for (const post of GAUNTLET_POSTS) {
 		// The fixture's subject is the WORK — the staircase this walks is an access
 		// staircase, and access lives on the Work. Each also has an announcement post.
@@ -398,7 +408,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 test("rung 2 — follow: the feed fills, access does not change", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 
-	await page.goto(profileUrl(GAUNTLET_CREATOR_USERNAME));
+	await page.goto(profileUrl(creatorHandle));
 	await page.getByRole("button", { name: "Follow", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
 
@@ -425,9 +435,9 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	await page.getByPlaceholder("Write a comment...").fill(commentText);
 	await page.getByRole("button", { name: "Post comment" }).click();
 	await expect(page.getByText(commentText)).toBeVisible();
-	// Exact match: the nav renders a (hidden) "@gauntlet_viewer" that substring-matching
-	// would find first; the comment author span is the bare username.
-	await expect(page.getByText(GAUNTLET_VIEWER_USERNAME, { exact: true })).toBeVisible();
+	// The comment author span is the bare handle; exact match so a substring can't land
+	// on another mention of it elsewhere on the page.
+	await expect(page.getByText(viewerHandle, { exact: true })).toBeVisible();
 
 	// The negative the spec says to RECORD, not assume: can a user comment on a post they
 	// cannot access? The comment route carries requireAuth and no access check, so the
@@ -512,7 +522,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
-		await page.goto(`${profileUrl(GAUNTLET_CREATOR_USERNAME)}?tab=badges`);
+		await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
 		await page.getByLabel("Monthly amount").fill(String(seeds));
 		await page.getByRole("button", { name: `Give $${added.toFixed(2)}` }).click();
 		// The give settles when the button returns to its resting label.
@@ -527,7 +537,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 
 test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	await page.goto(`${profileUrl(GAUNTLET_CREATOR_USERNAME)}?tab=badges`);
+	await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
 	// The full ladder is committed; within the cycle the control's floor IS that amount.
 	await expect(page.getByRole("button", { name: "Give less" })).toBeDisabled();
 	expect(errors).toEqual([]);

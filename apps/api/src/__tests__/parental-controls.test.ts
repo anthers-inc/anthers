@@ -15,12 +15,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, attentionEvents, users } from "@anthers/db/schema";
+import { accounts, attentionEvents } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf, userIdByName } from "./handles";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -66,18 +67,14 @@ describe("Parental controls", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${childName}, ${creatorName}, ${otherCreatorName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${childName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
 		);
 		child = await signUp(childName);
 		creatorCookie = await signUp(creatorName);
 		await signUp(otherCreatorName);
-		const rows = await db
-			.select({ id: users.id, username: users.username })
-			.from(users)
-			.where(sql`username IN (${childName}, ${creatorName}, ${otherCreatorName})`);
-		childId = rows.find((r) => r.username === childName)!.id;
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		otherCreatorId = rows.find((r) => r.username === otherCreatorName)!.id;
+		childId = await userIdByName(childName);
+		creatorId = await userIdByName(creatorName);
+		otherCreatorId = await userIdByName(otherCreatorName);
 
 		videoId = (
 			await insertWork({
@@ -115,7 +112,7 @@ describe("Parental controls", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${childName}, ${creatorName}, ${otherCreatorName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${childName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
 		);
 	});
 
@@ -355,7 +352,9 @@ describe("Parental controls", () => {
 		// ...and it is not on the shelf either. Both are needed: the resolver stops it being
 		// opened, this stops it being advertised.
 		const catalog = await (
-			await req(`/api/content/catalog/${creatorName}`, { headers: { Cookie: child } })
+			await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
+				headers: { Cookie: child },
+			})
 		).json();
 		expect(catalog.works.map((w: { id: number }) => w.id)).not.toContain(textId);
 

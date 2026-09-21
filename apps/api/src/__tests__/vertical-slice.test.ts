@@ -22,6 +22,7 @@ function makeRequest(path: string, options?: RequestInit) {
 const testId = crypto.randomUUID().slice(0, 8);
 const testUsername = `test_${testId}`;
 const testEmail = `test_${testId}@example.com`;
+let testHandle: string;
 
 describe("Vertical Slice", () => {
 	let sessionCookie: string;
@@ -41,7 +42,9 @@ describe("Vertical Slice", () => {
 	it("a fixture account gets a working session", async () => {
 		// Signing up is the emailed-code ceremony, which a test cannot read, so the account is
 		// written directly; what this slice checks is that the session it gets is a real one.
-		sessionCookie = (await createAccount(testUsername, { email: testEmail })).cookie;
+		const account = await createAccount(testUsername, { email: testEmail });
+		testHandle = account.handle;
+		sessionCookie = account.cookie;
 		expect(sessionCookie).toStartWith("session=");
 	});
 
@@ -52,7 +55,7 @@ describe("Vertical Slice", () => {
 		expect(res.status).toBe(200);
 		const data = await res.json();
 		expect(data.user).toBeTruthy();
-		expect(data.user!.username).toBe(testUsername);
+		expect(data.user!.handle).toBe(testHandle);
 		// Phase 2: /me now returns full profile
 		expect(data.user!.email).toBe(testEmail);
 		expect(data.user!.emailVerified).toBe(false);

@@ -51,9 +51,10 @@ import { processAudio } from "../jobs/process-audio.js";
 import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
+import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { storage } from "../services/storage/index.js";
 import { syncWorkListing } from "../services/work-listing.js";
-import { createLocalAccount } from "./local-accounts.js";
+import { createLocalAccount, localHandleName } from "./local-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
 
 const TAG = "[media-fixture]";
@@ -194,12 +195,16 @@ async function ensureCreator(): Promise<number> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, MEDIA_FIXTURE_USERNAME))
+		.where(
+			eq(
+				users.atprotoHandle,
+				`${localHandleName(MEDIA_FIXTURE_USERNAME)}.${await hostedHandleSuffix()}`,
+			),
+		)
 		.limit(1);
 	if (existing) return existing.id;
 
 	const created = await createLocalAccount({
-		username: MEDIA_FIXTURE_USERNAME,
 		email: MEDIA_FIXTURE_EMAIL,
 		handleName: MEDIA_FIXTURE_USERNAME,
 		emailVerified: true,
@@ -207,6 +212,9 @@ async function ensureCreator(): Promise<number> {
 			displayName: MEDIA_FIXTURE_DISPLAY_NAME,
 			bio: "A fixture creator whose Works carry real, playable media.",
 			isCreator: true,
+			// Terms accepted: the authed suites signed in as this fixture drive the app
+			// itself, not onboarding, and a terms-owing account is rerouted to /welcome.
+			termsAcceptedAt: new Date(),
 		},
 	});
 	console.log(`${TAG} created creator "${MEDIA_FIXTURE_USERNAME}" (id ${created.id})`);

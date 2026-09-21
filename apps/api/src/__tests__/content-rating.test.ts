@@ -74,7 +74,9 @@ describe("content ratings", () => {
 	const created: number[] = [];
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${strangerName})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
+		);
 		creator = await signUp(creatorName);
 		await enablePayouts(creatorName);
 		const strangerAccount = await createAccount(strangerName);
@@ -85,7 +87,7 @@ describe("content ratings", () => {
 		const [row] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.username, creatorName));
+			.where(eq(users.email, `${creatorName}@example.com`));
 		creatorId = row!.id;
 	}, DB_SETUP_TIMEOUT);
 

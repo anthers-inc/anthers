@@ -9,7 +9,7 @@ import { RectangleStackIcon } from "@heroicons/react/24/outline";
 export default function ProjectCard({ project }: { project: Project }) {
 	return (
 		<Link
-			to={creatorProjectUrl(project.creator?.username ?? "unknown", project.slug)}
+			to={creatorProjectUrl(project.creator?.handle ?? "unknown", project.slug)}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
 		>
 			{project.coverImage ? (
@@ -30,7 +30,7 @@ export default function ProjectCard({ project }: { project: Project }) {
 				<p className="text-xs text-base-content/60">
 					by{" "}
 					<span className="font-medium text-base-content/80">
-						{project.creator?.displayName || project.creator?.username}
+						{project.creator?.displayName || project.creator?.handle}
 					</span>
 				</p>
 				{project.shortDescription && (

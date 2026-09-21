@@ -77,7 +77,10 @@ beforeAll(() => {
 		identityResolver: {
 			resolve: async (didOrHandle: string) => ({
 				did: didOrHandle,
-				handle: `${RUN}.bsky.social`,
+				// One handle per DID — the same reason the login suite's fake derives
+				// one: reconciliation writes this back, and a shared handle across fake
+				// identities is now a state users.atproto_handle refuses outright.
+				handle: `${RUN}${didOrHandle.replace(/^did:plc:/, "").replace(RUN, "")}.bsky.social`,
 				didDoc: {
 					service: [
 						{
@@ -286,7 +289,12 @@ describe("a PDS calling an address confirmed proves nothing", () => {
 		// through — no scolding, and no second account.
 		const [existing] = await db
 			.insert(users)
-			.values({ email: addr("again"), emailVerified: true, atprotoDid: did("again") })
+			.values({
+				email: addr("again"),
+				emailVerified: true,
+				atprotoDid: did("again"),
+				atprotoHandle: `${RUN}again.bsky.social`,
+			})
 			.returning();
 
 		const { url } = await runCallback({ did: did("again") });
@@ -334,7 +342,7 @@ describe("no answer a PDS can give creates an account", () => {
 		// The interesting one. The PDS says this address is confirmed — but its claim is
 		// somebody else's assertion, and taking over an existing account on the strength of
 		// it would be a takeover. The emailed code settles it instead.
-		const { did: ownDid } = await createAccount(null, {
+		const { did: ownDid } = await createAccount(`${RUN}acct`, {
 			email: addr("taken"),
 			emailVerified: true,
 			identity: "brought",
@@ -362,7 +370,7 @@ describe("no answer a PDS can give creates an account", () => {
 			pending: { atprotoHandle: string | null; email: string | null };
 		};
 		expect(body.pending.email).toBe(addr("prefill"));
-		expect(body.pending.atprotoHandle).toBe(`${RUN}.bsky.social`);
+		expect(body.pending.atprotoHandle).toBe(`${RUN}prefill.bsky.social`);
 	});
 
 	it("posts the code on the way back, so the person lands on the code box", async () => {
@@ -422,7 +430,10 @@ describe("the sign-in door still cannot sign anyone up", () => {
 describe("the proved identity on a pending signup", () => {
 	const identity = (tag: string) => ({
 		did: did(tag),
-		handle: "someone.bsky.social",
+		// Distinct per identity for the same reason the resolver fake above derives one:
+		// a created account takes this handle onto its row, and users.atproto_handle is
+		// unique — two parked identities sharing a name now collide the way real ones do.
+		handle: `${RUN}${tag}.bsky.social`,
 		pdsUrl: "https://pds.example",
 	});
 
@@ -437,7 +448,7 @@ describe("the proved identity on a pending signup", () => {
 			.where(eq(users.email, addr("attach")));
 		// Created WITH it, in the same row — never an account first and an identity after.
 		expect(user.atprotoDid).toBe(did("attach"));
-		expect(user.atprotoHandle).toBe("someone.bsky.social");
+		expect(user.atprotoHandle).toBe(`${RUN}attach.bsky.social`);
 		expect(user.atprotoPdsUrl).toBe("https://pds.example");
 	});
 
@@ -461,7 +472,11 @@ describe("the proved identity on a pending signup", () => {
 	it("refuses rather than steals a DID another account already holds", async () => {
 		const [owner] = await db
 			.insert(users)
-			.values({ email: addr("owner"), atprotoDid: did("contested") })
+			.values({
+				email: addr("owner"),
+				atprotoDid: did("contested"),
+				atprotoHandle: `${RUN}owner.bsky.social`,
+			})
 			.returning();
 
 		const token = await startPendingSignup({ identity: identity("contested") });
@@ -548,7 +563,7 @@ describe("finishing a parked signup through the emailed code", () => {
 			.from(users)
 			.where(eq(users.email, addr("finish")));
 		expect(user.atprotoDid).toBe(did("finish"));
-		expect(user.username).toBeNull();
+		expect(user.termsAcceptedAt).toBeNull();
 
 		// The token is spent and the cookie cleared, so a back button cannot replay it.
 		expect(await readPendingSignup(token)).toBeUndefined();
@@ -559,7 +574,7 @@ describe("finishing a parked signup through the emailed code", () => {
 		// 🚨 The collision case. A code we sent and they read proves the mailbox, so they are
 		// signed in to the account it belongs to — but that account already holds its one
 		// identity, and attaching a second would silently swap who it is on the network.
-		const { did: ownDid } = await createAccount(null, {
+		const { did: ownDid } = await createAccount(`${RUN}retacct`, {
 			email: addr("returning"),
 			emailVerified: true,
 			identity: "brought",

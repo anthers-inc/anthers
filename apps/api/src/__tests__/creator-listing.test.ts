@@ -24,6 +24,7 @@ import { and, eq, like } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { handleOf } from "./handles";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -67,7 +68,10 @@ beforeAll(async () => {
 	await signUp(makerName);
 	fanCookie = await signUp(fanName);
 
-	const [maker] = await db.select().from(users).where(eq(users.username, makerName));
+	const [maker] = await db
+		.select()
+		.from(users)
+		.where(eq(users.email, `${makerName}@example.com`));
 	makerId = maker.id;
 	await db.update(users).set({ isCreator: true }).where(eq(users.id, makerId));
 
@@ -118,7 +122,7 @@ beforeAll(async () => {
 		},
 	]);
 
-	await req(`/api/accounts/users/${makerName}/follow`, {
+	await req(`/api/accounts/users/${await handleOf(makerName)}/follow`, {
 		method: "POST",
 		headers: { Origin: ORIGIN, Cookie: fanCookie },
 	});

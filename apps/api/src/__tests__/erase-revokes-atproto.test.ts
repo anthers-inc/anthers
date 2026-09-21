@@ -83,7 +83,6 @@ async function makeLinkedUser(opts: { reconciled?: boolean } = {}) {
 	const [user] = await db
 		.insert(users)
 		.values({
-			username: `er_${RUN}_${n}`,
 			email: `er_${RUN}_${n}@example.com`,
 			atprotoDid: did,
 			atprotoHandle: `er${n}.bsky.social`,

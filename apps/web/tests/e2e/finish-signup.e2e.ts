@@ -95,7 +95,7 @@ test.describe("it cannot be an entry point", () => {
 });
 
 test.describe("a person can see where they are", () => {
-	test("the rail names the steps, and the last of them is on the next page", async ({ page }) => {
+	test("the rail names the steps, and the username claim is not one of them", async ({ page }) => {
 		await startSignup(page);
 
 		// ⚠️ Scoped by the rail's accessible name rather than by `listitem` alone: this site
@@ -103,11 +103,12 @@ test.describe("a person can see where they are", () => {
 		// means to report a missing step.
 		const steps = page.getByRole("list", { name: "Signup Progress" });
 		await expect(steps.getByText("Your Email", { exact: true })).toBeVisible();
-		// ⭐ **`/welcome`'s step is drawn here.** The two pages are separate routes because
-		// `/welcome` has a job that has nothing to do with signing up — it is where any
-		// signed-in account still owing a handle is sent, from anywhere — and sharing the rail
-		// is what makes them read as one flow anyway.
-		await expect(steps.getByText("Your Username", { exact: true })).toBeVisible();
+		// ⭐ **The rail ends here.** The username step is gone — the handle arrives with the
+		// identity rather than being claimed on `/welcome` — and the terms the ceremony still
+		// owes are shared chrome there rather than a rail step of their own. What is pinned
+		// below is that the username rung stays gone: a "Your Username" step regrowing would
+		// say the old claim flow was back.
+		await expect(steps.getByText("Your Username", { exact: true })).toHaveCount(0);
 	});
 
 	test("the choices made a moment ago are read back, not left behind", async ({ page }) => {

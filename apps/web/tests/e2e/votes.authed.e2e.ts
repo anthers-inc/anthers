@@ -14,11 +14,15 @@
  * what is on screen.
  */
 import { db } from "@anthers/db/client";
-import { GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "@anthers/db/gauntlet";
+import {
+	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_SLUG_PREFIX,
+	gauntletHandle,
+} from "@anthers/db/gauntlet";
 import { comments, posts, users, votes } from "@anthers/db/schema";
 import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, like } from "drizzle-orm";
-import { expect, signInAsCreator, test } from "./fixtures";
+import { API_URL, expect, signInAsCreator, test } from "./fixtures";
 
 /**
  * The gauntlet's free post, which its own fixture calls "the gauntlet's comment target".
@@ -70,11 +74,12 @@ test.beforeAll(async () => {
 
 	// ⭐ ORDINARY is the signed-in creator's own, BURIED is a tombstone. The pair covers
 	// both author states in one thread: the breakdown an author is owed, and the null
-	// username that a deleted account leaves behind.
+	// author that a deleted account leaves behind. The creator is found by its handle —
+	// the username column is gone.
 	const [author] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, GAUNTLET_CREATOR_USERNAME));
+		.where(eq(users.atprotoHandle, await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME)));
 	const made = await db
 		.insert(comments)
 		.values([

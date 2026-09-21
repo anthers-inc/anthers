@@ -55,11 +55,16 @@ async function listSlugs(query: string): Promise<string[]> {
 
 describe("project browse filters", () => {
 	let cookie: string;
+	let creatorHandle = "";
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
+		);
 
-		cookie = (await createAccount(creatorName)).cookie;
+		const creatorAccount = await createAccount(creatorName);
+		creatorHandle = creatorAccount.handle;
+		cookie = creatorAccount.cookie;
 		await enablePayouts(creatorName);
 
 		const auth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie };
@@ -179,13 +184,13 @@ describe("project browse filters", () => {
 		// `popular` sorts these zero-view fixtures off the end — a true result that
 		// would read as a broken filter.
 		for (const sort of ["newest", "popular", "most_recommended"]) {
-			const slugs = await listSlugs(`creator=${creatorName}&sort=${sort}`);
+			const slugs = await listSlugs(`creator=${creatorHandle}&sort=${sort}`);
 			expect(slugs.sort()).toEqual([...mine.values()].sort());
 		}
 		// An unknown sort falls back to newest rather than erroring, so an older client
 		// still gets a list. `trending` is exactly that case: it was removed from the
 		// sidebar because `works.view_count` is a lifetime counter with no window.
-		const fallback = await listSlugs(`creator=${creatorName}&sort=trending`);
+		const fallback = await listSlugs(`creator=${creatorHandle}&sort=trending`);
 		expect(fallback.sort()).toEqual([...mine.values()].sort());
 	});
 
@@ -212,7 +217,7 @@ describe("project browse filters", () => {
 		// required. Without one, duration is ignored rather than guessed at.
 		expect(await listSlugs("media_type=audio&duration=short")).toEqual([mine.get("audio")!]);
 		expect(await listSlugs("media_type=audio&duration=long")).toEqual([]);
-		expect((await listSlugs(`creator=${creatorName}&duration=short`)).sort()).toEqual(
+		expect((await listSlugs(`creator=${creatorHandle}&duration=short`)).sort()).toEqual(
 			[...mine.values()].sort(),
 		);
 	});
@@ -241,6 +246,6 @@ describe("project browse filters", () => {
 
 	it("still honors the filters that already worked", async () => {
 		expect(await listSlugs(`search=Filt audio ${id}`)).toEqual([mine.get("audio")!]);
-		expect((await listSlugs(`creator=${creatorName}`)).sort()).toEqual([...mine.values()].sort());
+		expect((await listSlugs(`creator=${creatorHandle}`)).sort()).toEqual([...mine.values()].sort());
 	});
 });

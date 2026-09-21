@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { notifications, purchases, users, works } from "@anthers/db/schema";
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -96,23 +96,25 @@ async function noticesFor(userId: number) {
 describe("Withdrawing a purchased Work tells the people who bought it", () => {
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName}, ${otherBuyerName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${otherBuyerName}@example.com`}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
 		await signUp(buyerName);
 		await signUp(otherBuyerName);
 		const rows = await db
-			.select({ id: users.id, username: users.username })
+			.select({ id: users.id, email: users.email })
 			.from(users)
-			.where(inArray(users.username, [creatorName, buyerName, otherBuyerName]));
-		creatorId = rows.find((r) => r.username === creatorName)!.id;
-		buyerId = rows.find((r) => r.username === buyerName)!.id;
-		otherBuyerId = rows.find((r) => r.username === otherBuyerName)!.id;
+			.where(
+				sql`email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${otherBuyerName}@example.com`}`], sql`, `)})`,
+			);
+		creatorId = rows.find((r) => r.email === `${creatorName}@example.com`)!.id;
+		buyerId = rows.find((r) => r.email === `${buyerName}@example.com`)!.id;
+		otherBuyerId = rows.find((r) => r.email === `${otherBuyerName}@example.com`)!.id;
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE username IN (${creatorName}, ${buyerName}, ${otherBuyerName})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${otherBuyerName}@example.com`}`], sql`, `)})`,
 		);
 	});
 
