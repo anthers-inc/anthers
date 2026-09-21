@@ -2757,16 +2757,20 @@ const contentRoutes = new Hono()
 		// Every visible review counts once. Helpfulness sorts the list and never weights one
 		// review above another in either share — see `recommendedPercent`.
 		const recommendedCount = sql`case when ${reviews.verdict} = 'recommended' then 1 end`;
+		// The window cutoff crosses the wire as an ISO string with the cast naming its type,
+		// because this driver's raw template cannot serialize a `Date` it cannot infer a
+		// type for — inside a FILTER clause it falls back to treating it as a string.
+		const since = reviewWindowSince(window).toISOString();
 		const [agg] = await db
 			.select({
 				recommended: count(recommendedCount).mapWith(Number),
 				count: count(reviews.id),
 				recentRecommended:
-					sql<number>`count(${recommendedCount}) filter (where ${reviews.createdAt} >= ${reviewWindowSince(window)})`.mapWith(
+					sql<number>`count(${recommendedCount}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
 						Number,
 					),
 				recentCount:
-					sql<number>`count(${reviews.id}) filter (where ${reviews.createdAt} >= ${reviewWindowSince(window)})`.mapWith(
+					sql<number>`count(${reviews.id}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
 						Number,
 					),
 			})
@@ -2872,6 +2876,11 @@ const contentRoutes = new Hono()
 		//
 		// ⚠️ Editing rewrites the published record at the same address rather than writing
 		// a second one, so a link to a review keeps working.
+		const existing = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(and(eq(reviews.userId, user.id), eq(reviews.workId, work.id)))
+			.limit(1);
 		const [review] = await db
 			.insert(reviews)
 			.values({ userId: user.id, workId: work.id, verdict, body: body.trim() })
@@ -2881,10 +2890,14 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
-		// The reviewer's own upvote starts the review at 1 — saying something at all says
-		// it is worth reading. The unique index turns this into a no-op on an edit, so an
-		// edit never resurrects a vote the reviewer withdrew. See `authorUpvote`.
-		await authorUpvote("review", review.id, user.id);
+		// The reviewer's own upvote starts a NEW review at 1 — saying something at all says
+		// it is worth reading. An EDIT is explicitly not a re-upvote: the reviewer may have
+		// withdrawn or flipped theirs, and rewriting their words must not silently take that
+		// back. The `existing` pre-read makes the two branches; the unique index makes the
+		// insert idempotent, so a race between them still lands one vote.
+		if (existing.length === 0) {
+			await authorUpvote("review", review.id, user.id);
+		}
 
 		void queueRecordSync("review", review.id);
 

@@ -13,14 +13,16 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, posts, votes } from "@anthers/db/schema";
+import { comments, posts, reviews, votes } from "@anthers/db/schema";
+import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { userIdByName } from "./handles.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { enablePayouts } from "./payouts-fixture.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
@@ -280,5 +282,79 @@ describe("a Work is reviewed, never voted on or commented on", () => {
 			body: JSON.stringify({ body: "hello" }),
 		});
 		expect(comment.status).toBe(404);
+	});
+});
+
+describe("a review takes votes, as helpfulness", () => {
+	// Reviews are the one votable thing that is not a post or a comment: marking a review
+	// helpful is the same record and the same gesture as voting a comment up. The list it
+	// sorts is tested in reviews.test.ts; this is the door itself.
+	it("accepts an up or down on a review, one per person", async () => {
+		const cookie = await signUp(`votes_rv_${id}`);
+		const voter = { id: await userIdByName(`votes_rv_${id}`) };
+		const work = await insertWork({ creatorId: voter.id, type: "text", title: `Reviews ${id}` });
+		const [review] = await db
+			.insert(reviews)
+			.values({ userId: voter.id, workId: work.id, verdict: "recommended", body: "it holds up" })
+			.returning({ id: reviews.id });
+
+		const vote = (direction: "up" | "down") =>
+			req("/api/content/votes", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+				body: JSON.stringify({ subjectType: "review", subjectId: review.id, direction }),
+			});
+		expect((await vote("up")).status).toBe(200);
+		expect((await vote("down")).status).toBe(200);
+		const rows = await db
+			.select({ direction: votes.direction })
+			.from(votes)
+			.where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, review.id)));
+		expect(rows).toHaveLength(1);
+		expect(rows[0].direction).toBe("down");
+
+		await db.delete(votes).where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, review.id)));
+		await db.delete(reviews).where(eq(reviews.id, review.id));
+	});
+
+	it("404s on a review that is not there", async () => {
+		const res = await req("/api/content/votes", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: await signUp(`votes_rv404_${id}`) },
+			body: JSON.stringify({ subjectType: "review", subjectId: 2_000_000_000, direction: "up" }),
+		});
+		expect(res.status).toBe(404);
+	});
+});
+
+describe("the author's own upvote", () => {
+	// Settled 2026-09-21: posting something says the author thinks it is worth reading, so
+	// a new post or comment starts at 1 and a 0 always means a reader said no. Reviews are
+	// covered in reviews.test.ts beside the section they sort.
+	it("starts a new post at 1, cast by its creator", async () => {
+		const cookie = await signUp(`votes_post_${id}`);
+		// A post's create is gated on payout setup, which this suite is not about.
+		await enablePayouts(`votes_post_${id}`);
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({
+				title: `Auto ${id}`,
+				body: "hello",
+				isPublished: false,
+				maturityRows: rowsRatedAs("general"),
+			}),
+		});
+		expect(res.status).toBe(201);
+		const postId = (await res.json()).post.id as number;
+		const [row] = await db
+			.select()
+			.from(votes)
+			.where(and(eq(votes.subjectType, "post"), eq(votes.subjectId, postId)));
+		expect(row, "the creator's own upvote").toBeDefined();
+		expect(row.direction).toBe("up");
+		expect(row.userId).toBe(await userIdByName(`votes_post_${id}`));
+		await db.delete(votes).where(eq(votes.id, row.id));
+		await db.delete(posts).where(eq(posts.id, postId));
 	});
 });

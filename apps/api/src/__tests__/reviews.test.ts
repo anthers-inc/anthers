@@ -19,7 +19,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { reviews } from "@anthers/db/schema";
+import { reviews, users, votes } from "@anthers/db/schema";
 import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
@@ -56,9 +56,22 @@ interface ReviewList {
 	recommendedPercent: number | null;
 	recommended: number;
 	count: number;
+	recent: {
+		window: string;
+		recommendedPercent: number | null;
+		recommended: number;
+		count: number;
+	};
 	userVerdict: string | null;
 	userReview: string | null;
-	reviews: { id: number; verdict: string; body: string; handle: string }[];
+	reviews: {
+		id: number;
+		verdict: string;
+		body: string;
+		handle: string;
+		score: number;
+		viewerVote: "up" | "down" | null;
+	}[];
 }
 
 const readReviews = async (cookie?: string): Promise<ReviewList> => {
@@ -242,5 +255,182 @@ describe("Reviews written before text was required", () => {
 		// rather than an empty quote.
 		expect(list.reviews[0].body).toBe("");
 		expect(list.reviews[0].verdict).toBe("recommended");
+	});
+});
+
+describe("Helpfulness — reviews sort by it and are never weighted by it", () => {
+	it("carries a floored net and the viewer's own vote on every review", async () => {
+		// The viewerB review from the block above is the subject. Three fresh readers
+		// vote on it: two up and one down lands it at 1, which the REVIEWER sees
+		// decomposed and everybody else sees as one number.
+		const reviewId = (await readReviews()).reviews[0].id;
+		expect(reviewId, "the legacy review id").toBeGreaterThan(0);
+		const voterNames = ["h_a", "h_b", "h_c"].map((n) => `rv_${n}_${id}`);
+		const cookies: string[] = [];
+		for (const name of voterNames) cookies.push(await signUp(name));
+
+		const vote = async (cookie: string, direction: "up" | "down") =>
+			req("/api/content/votes", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+				body: JSON.stringify({ subjectType: "review", subjectId: reviewId, direction }),
+			});
+		expect((await vote(cookies[0], "up")).status).toBe(200);
+		expect((await vote(cookies[1], "up")).status).toBe(200);
+		expect((await vote(cookies[2], "down")).status).toBe(200);
+
+		const anonymous = await readReviews();
+		const entry = anonymous.reviews.find((r) => r.id === reviewId)!;
+		// Two up and one down is a net of 1. This review predates the author auto-upvote (the
+		// row was inserted directly above), so nothing else is in the tally.
+		expect(entry.score).toBe(1);
+		expect(entry.viewerVote).toBeNull();
+		expect(entry).not.toHaveProperty("up");
+		expect(entry).not.toHaveProperty("down");
+
+		// A voter sees their own; the aggregate is untouched — 100% recommended from one
+		// review however many votes the review draws.
+		const asVoter = await readReviews(cookies[2]);
+		expect(asVoter.reviews[0].viewerVote).toBe("down");
+		expect(asVoter.recommendedPercent).toBe(100);
+		expect(asVoter.count).toBe(1);
+
+		// The reviewer sees the figures behind it, as a commenter does on their own.
+		const own = await req(`/api/content/votes?subjectType=review&subjectId=${reviewId}`, {
+			headers: { Cookie: _viewerB },
+		});
+		expect(own.status).toBe(200);
+		const ownJson = await own.json();
+		expect(ownJson).toHaveProperty("up");
+		expect(ownJson).toHaveProperty("down");
+		// And nobody else does.
+		const other = await req(`/api/content/votes?subjectType=review&subjectId=${reviewId}`, {
+			headers: { Cookie: cookies[0] },
+		});
+		expect(await other.json()).not.toHaveProperty("up");
+	});
+
+	it("refuses a vote on a hidden review, which would be voting on something no reader can see", async () => {
+		// viewerA's review was hidden in the editing block above and is still there.
+		const [hidden] = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(and(eq(reviews.workId, workId), eq(reviews.moderationStatus, "hidden")))
+			.limit(1);
+		const cookie = await signUp(`rv_hidden_${id}`);
+		const res = await req("/api/content/votes", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ subjectType: "review", subjectId: hidden.id, direction: "up" }),
+		});
+		expect(res.status).toBe(404);
+	});
+});
+
+describe("The reviewer's own upvote", () => {
+	// Reddit's rule, settled 2026-09-21: posting something says the author thinks it is
+	// worth reading, so a new review starts at 1 and a 0 always means a reader said no.
+	it("starts a new review at 1, cast by its author", async () => {
+		const cookie = await signUp(`rv_auto_${id}`);
+		const res = await post(`/api/content/works/${workId}/reviews`, cookie, {
+			verdict: "not-recommended",
+			body: "the tutorial lies about the second boss",
+		});
+		expect(res.status).toBe(201);
+		const reviewId = (await res.json()).review.id as number;
+
+		const list = await readReviews();
+		const entry = list.reviews.find((r) => r.id === reviewId)!;
+		expect(entry.score).toBe(1);
+		const asAuthor = await readReviews(cookie);
+		expect(asAuthor.reviews.find((r) => r.id === reviewId)!.viewerVote).toBe("up");
+	});
+
+	it("does not resurrect a withdrawn vote when the review is edited", async () => {
+		const cookie = await signUp(`rv_edit_${id}`);
+		const res = await post(`/api/content/works/${workId}/reviews`, cookie, {
+			verdict: "recommended",
+			body: "short and it knows when to end",
+		});
+		const reviewId = (await res.json()).review.id as number;
+
+		// The author takes their vote back — a deliberate nothing rather than a down.
+		const gone = await req("/api/content/votes", {
+			method: "DELETE",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ subjectType: "review", subjectId: reviewId }),
+		});
+		expect(gone.status).toBe(200);
+
+		// Editing must not put it back — the upsert's author-upvote is insert-only.
+		const edit = await post(`/api/content/works/${workId}/reviews`, cookie, {
+			verdict: "recommended",
+			body: "still true after the patch",
+		});
+		expect(edit.status).toBe(201);
+		const [row] = await db
+			.select({ id: votes.id })
+			.from(votes)
+			.where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, reviewId)));
+		expect(row, "no vote row after a withdrawn-vote edit").toBeUndefined();
+		const list = await readReviews();
+		expect(list.reviews.find((r) => r.id === reviewId)!.score).toBe(0);
+	});
+});
+
+describe("The Recent share", () => {
+	// A reader-selectable window beside All Time (Parker, 2026-09-13): the same proportion
+	// over only the reviews inside it, or null rather than 0 when the window is empty.
+	it("computes over the chosen window and nowhere else", async () => {
+		// viewerB's review above is "recommended" and is the only one we move. Everything
+		// else on this Work was written this run and is recent by construction.
+		const [bRow] = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.innerJoin(users, eq(reviews.userId, users.id))
+			.where(
+				and(eq(reviews.workId, workId), eq(users.atprotoHandle, await handleOf(viewerBName))),
+			)
+			.limit(1);
+		const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000); // outside the month
+		await db.update(reviews).set({ createdAt: old }).where(eq(reviews.id, bRow.id));
+
+		const readWindow = async (window: string) => {
+			const res = await req(`/api/content/works/${workId}/reviews?window=${window}`);
+			expect(res.status).toBe(200);
+			return (await res.json()).recent as {
+				window: string;
+				recommendedPercent: number | null;
+				recommended: number;
+				count: number;
+			};
+		};
+
+		// All Time unchanged — the move is a window matter, not a count matter: the
+		// visible set is viewerB (recommended) plus this block's two (1 of 2 recommended).
+		const all = await readReviews();
+		expect(all.count).toBe(3);
+		expect(all.recommendedPercent).toBe(67);
+
+		// Over the month, only the two fresh rows count: 1 of 2 = 50%.
+		const month = await readWindow("month");
+		expect(month.window).toBe("month");
+		expect(month.count).toBe(2);
+		expect(month.recommendedPercent).toBe(50);
+
+		// Over the year the moved row is back inside: 2 of 3 = 67%.
+		const year = await readWindow("year");
+		expect(year.count).toBe(3);
+		expect(year.recommendedPercent).toBe(67);
+
+		// The default when no window is asked for is the month.
+		const defaultRes = await req(`/api/content/works/${workId}/reviews`);
+		expect((await defaultRes.json()).recent.window).toBe("month");
+
+		// And an unknown window is a bad request rather than a silent guess.
+		expect((await req(`/api/content/works/${workId}/reviews?window=decade`)).status).toBe(400);
+
+		// Put the row back so nothing after this suite reads a backdated fixture.
+		await db.update(reviews).set({ createdAt: new Date() }).where(eq(reviews.id, bRow.id));
 	});
 });
