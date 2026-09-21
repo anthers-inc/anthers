@@ -57,7 +57,9 @@ import {
 	processingFor,
 	REVIEW_MAX,
 	REVIEW_MIN,
+	REVIEW_WINDOWS,
 	recommendedPercent,
+	reviewWindowSince,
 	WORK_TYPES,
 } from "@anthers/shared/content";
 import {
@@ -262,6 +264,16 @@ async function ownsSubject(
 			.limit(1);
 		return row?.userId === viewerId;
 	}
+	if (subjectType === "review") {
+		// The reviewer is the subject's author: they see the raw counts exactly as a
+		// commenter does on their own comment.
+		const [row] = await db
+			.select({ userId: reviews.userId })
+			.from(reviews)
+			.where(eq(reviews.id, subjectId))
+			.limit(1);
+		return row?.userId === viewerId;
+	}
 	const [row] = await db
 		.select({ creatorId: posts.creatorId })
 		.from(posts)
@@ -279,6 +291,14 @@ async function votableExists(subjectType: VoteSubject, subjectId: number): Promi
 			.limit(1);
 		return Boolean(row);
 	}
+	if (subjectType === "review") {
+		const [row] = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(and(eq(reviews.id, subjectId), visibleReview))
+			.limit(1);
+		return Boolean(row);
+	}
 	const [row] = await db
 		.select({ id: posts.id })
 		.from(posts)
@@ -287,8 +307,17 @@ async function votableExists(subjectType: VoteSubject, subjectId: number): Promi
 	return Boolean(row);
 }
 
-/** What a vote may be attached to: a post, or a comment. A Work is reviewed, never voted on. */
-const VOTE_SUBJECTS = ["post", "comment"] as const;
+/**
+ * What a vote may be attached to: a post, a comment, or a review.
+ *
+ * A Work is reviewed, never voted on — its aggregate is the reviews' verdicts, so a
+ * second opinion channel on the same subject would be two answers to one question. A
+ * review, by contrast, is a person's statement rather than a thing, and other readers
+ * mark it helpful the same way they vote a comment up: one vote record, one gesture.
+ * Helpfulness *sorts* the review list and never weights the aggregate — see
+ * `recommendedPercent` in `@anthers/shared/content`.
+ */
+const VOTE_SUBJECTS = ["post", "comment", "review"] as const;
 type VoteSubject = (typeof VOTE_SUBJECTS)[number];
 
 const NO_VOTES: VoteTally = { up: 0, down: 0 };
@@ -305,6 +334,31 @@ const voteQuerySchema = z.object({
 const voteSchema = voteTargetSchema.extend({
 	direction: z.string().refine(isVoteDirection, "A vote is up or down"),
 });
+
+/**
+ * The vote the author of a post, a comment or a review is taken to have cast on their own
+ * thing, written when the thing is created.
+ *
+ * ⭐ **Reddit's rule, applied uniformly** (Parker, 2026-09-21): writing something at all is
+ * the author saying it is worth reading, so it starts at 1 rather than 0, and a net of 0
+ * then always means at least one reader moved it down rather than ambiguity between "nobody
+ * voted" and "the one voter went home". The row is an ordinary vote — same unique index,
+ * same record sync — so withdrawing it or flipping it to down is just the vote route.
+ *
+ * ⚠️ Written best-effort AFTER the thing exists, not in its transaction: the row must never
+ * be why creating a post, comment or review fails. The unique index makes a double-write
+ * a no-op, so `onConflictDoNothing` rather than an upsert — there is nothing to flip.
+ */
+async function authorUpvote(subjectType: VoteSubject, subjectId: number, userId: number) {
+	try {
+		await db
+			.insert(votes)
+			.values({ userId, subjectType, subjectId, direction: "up" })
+			.onConflictDoNothing();
+	} catch (error) {
+		console.error(`author upvote on ${subjectType} ${subjectId} failed:`, error);
+	}
+}
 
 /**
  * The upvote and downvote totals for a set of subjects, plus the viewer’s own vote.
@@ -2231,6 +2285,10 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
+		// The creator's own upvote starts the post at 1 — posting it at all says it is worth
+		// reading. See `authorUpvote`.
+		await authorUpvote("post", post.id, user.id);
+
 		await setPostWorkRefs(post.id, data.workIds);
 
 		// Optionally attach to a Project the creator owns.
@@ -2533,6 +2591,10 @@ const contentRoutes = new Hono()
 				)
 				.returning();
 
+			// The author's own upvote lands on the new comment itself — posting it at all says
+			// it is worth reading. See `authorUpvote`.
+			await authorUpvote("comment", comment.id, user.id);
+
 			// The record goes in the commenter's own repository, once the post has a record for it
 			// to name — see `reader-record-listing.ts` for what happens while it does not.
 			void queueRecordSync("comment", comment.id);
@@ -2541,11 +2603,13 @@ const contentRoutes = new Hono()
 		},
 	)
 
-	// ── Votes (posts and comments) ─────────────────────────────────────────
+	// ── Votes (posts, comments and reviews) ────────────────────────────────────
 	//
 	// One like or one dislike per person per thing. The published score is the net floored
 	// at zero and it is also the ranking key — see `@anthers/shared/votes` for why those
-	// have to be the same number. A Work is never voted on; it is reviewed.
+	// have to be the same number. A Work is never voted on; it is reviewed. A review IS
+	// voted on, as helpfulness — the same record, the same gesture, asked as "was this
+	// helpful?" rather than "did you like this?".
 
 	/**
 	 * The vote state of one subject.
@@ -2670,85 +2734,123 @@ const contentRoutes = new Hono()
 	//
 	// The route path stays `/reviews` (and the table stays `reviews`): "review" is a copy
 	// rule, not a schema rule, exactly like the Seed vocabulary changes.
-	.get("/works/:id/reviews", async (c) => {
-		const work = await findWorkRow(c.req.param("id"));
-		if (!work) return c.json({ error: "Work not found" }, 404);
+	.get(
+		"/works/:id/reviews",
+		zValidator("query", z.object({ window: z.enum(REVIEW_WINDOWS).optional() })),
+		async (c) => {
+			const work = await findWorkRow(c.req.param("id"));
+			if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const currentUserId = await getOptionalUserId(c);
+			const currentUserId = await getOptionalUserId(c);
+			const window = c.req.valid("query").window ?? "month";
 
-		// The aggregate is deliberately NOT filtered by blocks, unlike the review list
-		// below. A score is a fact about the Work, not about who is reading it: making it
-		// viewer-dependent would mean two people see different reviews for the same thing,
-		// and it would let one user move a creator's public average by blocking a
-		// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
-		// over nine listed reviews — which is already true of a hidden review, and is the right
-		// side of the trade.
-		// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
-		// so the public figure is the share who recommended it — "94% recommended" — which
-		// is an honest statistic where a mean of stars was arithmetic performed on guesses.
-		// Every visible review counts once. Reviews cannot be voted on, so nothing weights one
-		// review above another here or in the list below, which is newest first.
-		const [agg] = await db
-			.select({
-				recommended: count(sql`case when ${reviews.verdict} = 'recommended' then 1 end`).mapWith(
-					Number,
-				),
-				count: count(reviews.id),
-			})
-			.from(reviews)
-			.where(and(eq(reviews.workId, work.id), visibleReview));
-
-		// The written reviews themselves. Hidden ones are withheld here for the same
-		// reason they're excluded from the aggregate — this is a public read. Blocked
-		// pairs are withheld for a different reason: a review carries a name and words,
-		// so it is a place two people meet.
-		const reviewRows = await db
-			.select({
-				id: reviews.id,
-				userId: reviews.userId,
-				verdict: reviews.verdict,
-				body: reviews.body,
-				createdAt: reviews.createdAt,
-				handle: users.atprotoHandle,
-				avatar: users.avatar,
-			})
-			.from(reviews)
-			.innerJoin(users, eq(reviews.userId, users.id))
-			.where(
-				and(
-					eq(reviews.workId, work.id),
-					visibleReview,
-					notBlockedBy(currentUserId, reviews.userId),
-				),
-			)
-			.orderBy(desc(reviews.createdAt));
-
-		let userVerdict: string | null = null;
-		let userReview: string | null = null;
-		if (currentUserId) {
-			// Deliberately unfiltered by moderation status: the verdict and words a
-			// viewer submitted shouldn't silently change under them. Their review
-			// simply stops counting and stops appearing to everyone else.
-			const [row] = await db
-				.select({ verdict: reviews.verdict, body: reviews.body })
+			// The aggregate is deliberately NOT filtered by blocks, unlike the review list
+			// below. A score is a fact about the Work, not about who is reading it: making it
+			// viewer-dependent would mean two people see different reviews for the same thing,
+			// and it would let one user move a creator's public average by blocking a
+			// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
+			// over nine listed reviews — which is already true of a hidden review, and is the right
+			// side of the trade.
+			// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
+			// so the public figure is the share who recommended it — "94% recommended" — which
+			// is an honest statistic where a mean of stars was arithmetic performed on guesses.
+			// Every visible review counts once. Helpfulness sorts the list and never weights one
+			// review above another in either share — see `recommendedPercent`.
+			const recommendedCount = sql`case when ${reviews.verdict} = 'recommended' then 1 end`;
+			// The window cutoff crosses the wire as an ISO string with the cast naming its type,
+			// because this driver's raw template cannot serialize a `Date` it cannot infer a
+			// type for — inside a FILTER clause it falls back to treating it as a string.
+			const since = reviewWindowSince(window).toISOString();
+			const [agg] = await db
+				.select({
+					recommended: count(recommendedCount).mapWith(Number),
+					count: count(reviews.id),
+					recentRecommended:
+						sql<number>`count(${recommendedCount}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
+							Number,
+						),
+					recentCount:
+						sql<number>`count(${reviews.id}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
+							Number,
+						),
+				})
 				.from(reviews)
-				.where(and(eq(reviews.workId, work.id), eq(reviews.userId, currentUserId)))
-				.limit(1);
-			userVerdict = row?.verdict ?? null;
-			userReview = row?.body ?? null;
-		}
+				.where(and(eq(reviews.workId, work.id), visibleReview));
 
-		return c.json({
-			recommendedPercent: recommendedPercent(agg.recommended, Number(agg.count)),
-			recommended: agg.recommended,
-			count: Number(agg.count),
-			userVerdict,
-			userReview,
-			// `body` is null on rows written before reviews required text. They still
-			// render and still count; the client shows the verdict without a quote.
-			reviews: reviewRows.map((r) => ({ ...r, body: r.body ?? "" })),
-		});
-	})
+			// The written reviews themselves. Hidden ones are withheld here for the same
+			// reason they're excluded from the aggregate — this is a public read. Blocked
+			// pairs are withheld for a different reason: a review carries a name and words,
+			// so it is a place two people meet.
+			const reviewRows = await db
+				.select({
+					id: reviews.id,
+					userId: reviews.userId,
+					verdict: reviews.verdict,
+					body: reviews.body,
+					createdAt: reviews.createdAt,
+					handle: users.atprotoHandle,
+					avatar: users.avatar,
+				})
+				.from(reviews)
+				.innerJoin(users, eq(reviews.userId, users.id))
+				.where(
+					and(
+						eq(reviews.workId, work.id),
+						visibleReview,
+						notBlockedBy(currentUserId, reviews.userId),
+					),
+				);
+
+			// Each review's helpfulness, in the same grouped read a comment thread uses. The
+			// viewer's own votes ride along so the buttons open in the right state.
+			const reviewIds = reviewRows.map((r) => r.id);
+			const { tallies, mine } = await voteTallies("review", reviewIds, currentUserId);
+
+			let userVerdict: string | null = null;
+			let userReview: string | null = null;
+			if (currentUserId) {
+				// Deliberately unfiltered by moderation status: the verdict and words a
+				// viewer submitted shouldn't silently change under them. Their review
+				// simply stops counting and stops appearing to everyone else.
+				const [row] = await db
+					.select({ verdict: reviews.verdict, body: reviews.body })
+					.from(reviews)
+					.where(and(eq(reviews.workId, work.id), eq(reviews.userId, currentUserId)))
+					.limit(1);
+				userVerdict = row?.verdict ?? null;
+				userReview = row?.body ?? null;
+			}
+
+			return c.json({
+				recommendedPercent: recommendedPercent(agg.recommended, Number(agg.count)),
+				recommended: agg.recommended,
+				count: Number(agg.count),
+				recent: {
+					window,
+					recommendedPercent: recommendedPercent(agg.recentRecommended, agg.recentCount),
+					recommended: agg.recentRecommended,
+					count: agg.recentCount,
+				},
+				userVerdict,
+				userReview,
+				// `body` is null on rows written before reviews required text. They still
+				// render and still count; the client shows the verdict without a quote. Newest
+				// first at this layer so Helpful-first and Newest-first are the CLIENT's two
+				// presentations of one payload rather than two queries that could disagree.
+				reviews: reviewRows
+					.map((r) => ({
+						...r,
+						body: r.body ?? "",
+						// The scorer hides nothing. A reviewer's net shows like a commenter's does,
+						// and they see their own raw counts the same way — `ownsSubject` already
+						// treats a review's author as its owner.
+						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
+						viewerVote: mine.get(r.id) ?? null,
+					}))
+					.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+			});
+		},
+	)
 
 	.post("/works/:id/reviews", requireAuth, zValidator("json", createReviewSchema), async (c) => {
 		const user = c.get("user");
@@ -2773,6 +2875,11 @@ const contentRoutes = new Hono()
 		//
 		// ⚠️ Editing rewrites the published record at the same address rather than writing
 		// a second one, so a link to a review keeps working.
+		const existing = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(and(eq(reviews.userId, user.id), eq(reviews.workId, work.id)))
+			.limit(1);
 		const [review] = await db
 			.insert(reviews)
 			.values({ userId: user.id, workId: work.id, verdict, body: body.trim() })
@@ -2781,6 +2888,15 @@ const contentRoutes = new Hono()
 				set: { verdict, body: body.trim() },
 			})
 			.returning();
+
+		// The reviewer's own upvote starts a NEW review at 1 — saying something at all says
+		// it is worth reading. An EDIT is explicitly not a re-upvote: the reviewer may have
+		// withdrawn or flipped theirs, and rewriting their words must not silently take that
+		// back. The `existing` pre-read makes the two branches; the unique index makes the
+		// insert idempotent, so a race between them still lands one vote.
+		if (existing.length === 0) {
+			await authorUpvote("review", review.id, user.id);
+		}
 
 		void queueRecordSync("review", review.id);
 

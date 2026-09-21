@@ -73,6 +73,14 @@ export async function subjectRecordUri(
 				.limit(1);
 			return row?.uri ?? null;
 		}
+		case "review": {
+			const [row] = await db
+				.select({ uri: reviews.atprotoUri })
+				.from(reviews)
+				.where(eq(reviews.id, subjectId))
+				.limit(1);
+			return row?.uri ?? null;
+		}
 		default:
 			return null;
 	}
