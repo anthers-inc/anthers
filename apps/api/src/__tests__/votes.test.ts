@@ -21,8 +21,8 @@ import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { userIdByName } from "./handles.js";
-import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { enablePayouts } from "./payouts-fixture.js";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
@@ -313,14 +313,20 @@ describe("a review takes votes, as helpfulness", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0].direction).toBe("down");
 
-		await db.delete(votes).where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, review.id)));
+		await db
+			.delete(votes)
+			.where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, review.id)));
 		await db.delete(reviews).where(eq(reviews.id, review.id));
 	});
 
 	it("404s on a review that is not there", async () => {
 		const res = await req("/api/content/votes", {
 			method: "PUT",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: await signUp(`votes_rv404_${id}`) },
+			headers: {
+				"Content-Type": "application/json",
+				Origin: ORIGIN,
+				Cookie: await signUp(`votes_rv404_${id}`),
+			},
 			body: JSON.stringify({ subjectType: "review", subjectId: 2_000_000_000, direction: "up" }),
 		});
 		expect(res.status).toBe(404);

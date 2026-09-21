@@ -40,11 +40,11 @@ import {
 	useInteractionPermissionMissing,
 } from "@anthers/web-shared/publishing";
 import { client } from "@anthers/web-shared/rpc";
-import type { ReviewAggregate, Review } from "@anthers/web-shared/types";
+import type { Review, ReviewAggregate } from "@anthers/web-shared/types";
 import { FlagIcon, HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import ReportDialog from "../ui/ReportDialog";
 import VoteControl from "../post/VoteControl";
+import ReportDialog from "../ui/ReportDialog";
 
 /** The two orders the section knows. Helpful is the default; Newest is the alternative. */
 type ReviewSort = "helpful" | "newest";
@@ -136,7 +136,9 @@ export default function WorkReviews({ workId }: { workId: number }) {
 			filter === "all" ? agg.reviews : agg.reviews.filter((r) => r.verdict === filter);
 		const byDate = (a: Review, b: Review) =>
 			new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-		return [...filtered].sort(sort === "newest" ? byDate : (a, b) => b.score - a.score || byDate(a, b));
+		return [...filtered].sort(
+			sort === "newest" ? byDate : (a, b) => b.score - a.score || byDate(a, b),
+		);
 	}, [agg, filter, sort]);
 
 	if (!agg) return null;
@@ -273,7 +275,11 @@ export default function WorkReviews({ workId }: { workId: number }) {
 						<span className="inline-flex items-center gap-1">
 							<button
 								type="button"
-								className={sort === "helpful" ? "font-semibold" : "text-base-content/50 hover:text-base-content"}
+								className={
+									sort === "helpful"
+										? "font-semibold"
+										: "text-base-content/50 hover:text-base-content"
+								}
 								onClick={() => setSort("helpful")}
 								aria-pressed={sort === "helpful"}
 							>
@@ -282,7 +288,11 @@ export default function WorkReviews({ workId }: { workId: number }) {
 							<span className="text-base-content/30">·</span>
 							<button
 								type="button"
-								className={sort === "newest" ? "font-semibold" : "text-base-content/50 hover:text-base-content"}
+								className={
+									sort === "newest"
+										? "font-semibold"
+										: "text-base-content/50 hover:text-base-content"
+								}
 								onClick={() => setSort("newest")}
 								aria-pressed={sort === "newest"}
 							>

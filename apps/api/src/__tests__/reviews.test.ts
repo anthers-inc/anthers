@@ -388,9 +388,7 @@ describe("The Recent share", () => {
 			.select({ id: reviews.id })
 			.from(reviews)
 			.innerJoin(users, eq(reviews.userId, users.id))
-			.where(
-				and(eq(reviews.workId, workId), eq(users.atprotoHandle, await handleOf(viewerBName))),
-			)
+			.where(and(eq(reviews.workId, workId), eq(users.atprotoHandle, await handleOf(viewerBName))))
 			.limit(1);
 		const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000); // outside the month
 		await db.update(reviews).set({ createdAt: old }).where(eq(reviews.id, bRow.id));

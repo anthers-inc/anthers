@@ -58,8 +58,8 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 	REVIEW_WINDOWS,
-	reviewWindowSince,
 	recommendedPercent,
+	reviewWindowSince,
 	WORK_TYPES,
 } from "@anthers/shared/content";
 import {
@@ -2738,120 +2738,119 @@ const contentRoutes = new Hono()
 		"/works/:id/reviews",
 		zValidator("query", z.object({ window: z.enum(REVIEW_WINDOWS).optional() })),
 		async (c) => {
-		const work = await findWorkRow(c.req.param("id"));
-		if (!work) return c.json({ error: "Work not found" }, 404);
+			const work = await findWorkRow(c.req.param("id"));
+			if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const currentUserId = await getOptionalUserId(c);
-		const window = c.req.valid("query").window ?? "month";
+			const currentUserId = await getOptionalUserId(c);
+			const window = c.req.valid("query").window ?? "month";
 
-		// The aggregate is deliberately NOT filtered by blocks, unlike the review list
-		// below. A score is a fact about the Work, not about who is reading it: making it
-		// viewer-dependent would mean two people see different reviews for the same thing,
-		// and it would let one user move a creator's public average by blocking a
-		// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
-		// over nine listed reviews — which is already true of a hidden review, and is the right
-		// side of the trade.
-		// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
-		// so the public figure is the share who recommended it — "94% recommended" — which
-		// is an honest statistic where a mean of stars was arithmetic performed on guesses.
-		// Every visible review counts once. Helpfulness sorts the list and never weights one
-		// review above another in either share — see `recommendedPercent`.
-		const recommendedCount = sql`case when ${reviews.verdict} = 'recommended' then 1 end`;
-		// The window cutoff crosses the wire as an ISO string with the cast naming its type,
-		// because this driver's raw template cannot serialize a `Date` it cannot infer a
-		// type for — inside a FILTER clause it falls back to treating it as a string.
-		const since = reviewWindowSince(window).toISOString();
-		const [agg] = await db
-			.select({
-				recommended: count(recommendedCount).mapWith(Number),
-				count: count(reviews.id),
-				recentRecommended:
-					sql<number>`count(${recommendedCount}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
-						Number,
-					),
-				recentCount:
-					sql<number>`count(${reviews.id}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
-						Number,
-					),
-			})
-			.from(reviews)
-			.where(and(eq(reviews.workId, work.id), visibleReview));
-
-		// The written reviews themselves. Hidden ones are withheld here for the same
-		// reason they're excluded from the aggregate — this is a public read. Blocked
-		// pairs are withheld for a different reason: a review carries a name and words,
-		// so it is a place two people meet.
-		const reviewRows = await db
-			.select({
-				id: reviews.id,
-				userId: reviews.userId,
-				verdict: reviews.verdict,
-				body: reviews.body,
-				createdAt: reviews.createdAt,
-				handle: users.atprotoHandle,
-				avatar: users.avatar,
-			})
-			.from(reviews)
-			.innerJoin(users, eq(reviews.userId, users.id))
-			.where(
-				and(
-					eq(reviews.workId, work.id),
-					visibleReview,
-					notBlockedBy(currentUserId, reviews.userId),
-				),
-			);
-
-		// Each review's helpfulness, in the same grouped read a comment thread uses. The
-		// viewer's own votes ride along so the buttons open in the right state.
-		const reviewIds = reviewRows.map((r) => r.id);
-		const { tallies, mine } = await voteTallies("review", reviewIds, currentUserId);
-
-		let userVerdict: string | null = null;
-		let userReview: string | null = null;
-		if (currentUserId) {
-			// Deliberately unfiltered by moderation status: the verdict and words a
-			// viewer submitted shouldn't silently change under them. Their review
-			// simply stops counting and stops appearing to everyone else.
-			const [row] = await db
-				.select({ verdict: reviews.verdict, body: reviews.body })
+			// The aggregate is deliberately NOT filtered by blocks, unlike the review list
+			// below. A score is a fact about the Work, not about who is reading it: making it
+			// viewer-dependent would mean two people see different reviews for the same thing,
+			// and it would let one user move a creator's public average by blocking a
+			// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
+			// over nine listed reviews — which is already true of a hidden review, and is the right
+			// side of the trade.
+			// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
+			// so the public figure is the share who recommended it — "94% recommended" — which
+			// is an honest statistic where a mean of stars was arithmetic performed on guesses.
+			// Every visible review counts once. Helpfulness sorts the list and never weights one
+			// review above another in either share — see `recommendedPercent`.
+			const recommendedCount = sql`case when ${reviews.verdict} = 'recommended' then 1 end`;
+			// The window cutoff crosses the wire as an ISO string with the cast naming its type,
+			// because this driver's raw template cannot serialize a `Date` it cannot infer a
+			// type for — inside a FILTER clause it falls back to treating it as a string.
+			const since = reviewWindowSince(window).toISOString();
+			const [agg] = await db
+				.select({
+					recommended: count(recommendedCount).mapWith(Number),
+					count: count(reviews.id),
+					recentRecommended:
+						sql<number>`count(${recommendedCount}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
+							Number,
+						),
+					recentCount:
+						sql<number>`count(${reviews.id}) filter (where ${reviews.createdAt} >= ${since}::timestamptz)`.mapWith(
+							Number,
+						),
+				})
 				.from(reviews)
-				.where(and(eq(reviews.workId, work.id), eq(reviews.userId, currentUserId)))
-				.limit(1);
-			userVerdict = row?.verdict ?? null;
-			userReview = row?.body ?? null;
-		}
+				.where(and(eq(reviews.workId, work.id), visibleReview));
 
-		return c.json({
-			recommendedPercent: recommendedPercent(agg.recommended, Number(agg.count)),
-			recommended: agg.recommended,
-			count: Number(agg.count),
-			recent: {
-				window,
-				recommendedPercent: recommendedPercent(agg.recentRecommended, agg.recentCount),
-				recommended: agg.recentRecommended,
-				count: agg.recentCount,
-			},
-			userVerdict,
-			userReview,
-			// `body` is null on rows written before reviews required text. They still
-			// render and still count; the client shows the verdict without a quote. Newest
-			// first at this layer so Helpful-first and Newest-first are the CLIENT's two
-			// presentations of one payload rather than two queries that could disagree.
-			reviews: reviewRows
-				.map((r) => ({
-					...r,
-					body: r.body ?? "",
-					// The scorer hides nothing. A reviewer's net shows like a commenter's does,
-					// and they see their own raw counts the same way — `ownsSubject` already
-					// treats a review's author as its owner.
-					score: commentScore(tallies.get(r.id) ?? NO_VOTES),
-					viewerVote: mine.get(r.id) ?? null,
-				}))
-				.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-		});
+			// The written reviews themselves. Hidden ones are withheld here for the same
+			// reason they're excluded from the aggregate — this is a public read. Blocked
+			// pairs are withheld for a different reason: a review carries a name and words,
+			// so it is a place two people meet.
+			const reviewRows = await db
+				.select({
+					id: reviews.id,
+					userId: reviews.userId,
+					verdict: reviews.verdict,
+					body: reviews.body,
+					createdAt: reviews.createdAt,
+					handle: users.atprotoHandle,
+					avatar: users.avatar,
+				})
+				.from(reviews)
+				.innerJoin(users, eq(reviews.userId, users.id))
+				.where(
+					and(
+						eq(reviews.workId, work.id),
+						visibleReview,
+						notBlockedBy(currentUserId, reviews.userId),
+					),
+				);
+
+			// Each review's helpfulness, in the same grouped read a comment thread uses. The
+			// viewer's own votes ride along so the buttons open in the right state.
+			const reviewIds = reviewRows.map((r) => r.id);
+			const { tallies, mine } = await voteTallies("review", reviewIds, currentUserId);
+
+			let userVerdict: string | null = null;
+			let userReview: string | null = null;
+			if (currentUserId) {
+				// Deliberately unfiltered by moderation status: the verdict and words a
+				// viewer submitted shouldn't silently change under them. Their review
+				// simply stops counting and stops appearing to everyone else.
+				const [row] = await db
+					.select({ verdict: reviews.verdict, body: reviews.body })
+					.from(reviews)
+					.where(and(eq(reviews.workId, work.id), eq(reviews.userId, currentUserId)))
+					.limit(1);
+				userVerdict = row?.verdict ?? null;
+				userReview = row?.body ?? null;
+			}
+
+			return c.json({
+				recommendedPercent: recommendedPercent(agg.recommended, Number(agg.count)),
+				recommended: agg.recommended,
+				count: Number(agg.count),
+				recent: {
+					window,
+					recommendedPercent: recommendedPercent(agg.recentRecommended, agg.recentCount),
+					recommended: agg.recentRecommended,
+					count: agg.recentCount,
+				},
+				userVerdict,
+				userReview,
+				// `body` is null on rows written before reviews required text. They still
+				// render and still count; the client shows the verdict without a quote. Newest
+				// first at this layer so Helpful-first and Newest-first are the CLIENT's two
+				// presentations of one payload rather than two queries that could disagree.
+				reviews: reviewRows
+					.map((r) => ({
+						...r,
+						body: r.body ?? "",
+						// The scorer hides nothing. A reviewer's net shows like a commenter's does,
+						// and they see their own raw counts the same way — `ownsSubject` already
+						// treats a review's author as its owner.
+						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
+						viewerVote: mine.get(r.id) ?? null,
+					}))
+					.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+			});
 		},
 	)
-
 
 	.post("/works/:id/reviews", requireAuth, zValidator("json", createReviewSchema), async (c) => {
 		const user = c.get("user");
