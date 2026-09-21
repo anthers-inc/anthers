@@ -39,7 +39,7 @@ describe("an address whose owner renamed", () => {
 		const reconciled = await findUserByAtprotoDid({
 			did: account.did,
 			handle: newHandle,
-			pdsUrl: account.user.atprotoPdsUrl,
+			pdsUrl: account.user.atprotoPdsUrl ?? "https://anthers.test",
 		});
 		expect(reconciled?.id).toBe(account.userId);
 
@@ -99,7 +99,7 @@ describe("an address whose owner renamed", () => {
 		await findUserByAtprotoDid({
 			did: account.did,
 			handle: `${RUN}lapsed.example.com`,
-			pdsUrl: account.user.atprotoPdsUrl,
+			pdsUrl: account.user.atprotoPdsUrl ?? "https://anthers.test",
 		});
 
 		// The lapse, simulated the honest way: the row says what it would say the day after
