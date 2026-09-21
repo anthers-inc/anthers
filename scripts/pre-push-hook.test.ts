@@ -30,6 +30,7 @@ let dir: string;
 let repo: string;
 let stubBin: string;
 let makeLog: string;
+let worktreeDir: string;
 
 /**
  * The environment every git command and hook run in this file gets: this process's, minus git's own
@@ -72,6 +73,8 @@ function commit(files: Record<string, string | null>): string {
 /** Run the hook with these ref lines on stdin; report which `make` target it ran, if any. */
 function push(stdin: string, makeExit = 0): { exitCode: number; target: string | null } {
 	writeFileSync(makeLog, "");
+	writeFileSync(cwdLog, "");
+	writeFileSync(treeLog, "");
 	const res = Bun.spawnSync(["sh", HOOK, "origin", "git@example.invalid:repo.git"], {
 		cwd: repo,
 		stdin: new TextEncoder().encode(stdin),
@@ -87,6 +90,25 @@ function push(stdin: string, makeExit = 0): { exitCode: number; target: string |
 	return { exitCode: res.exitCode, target: logged === "" ? null : logged };
 }
 
+let cwdLog: string;
+
+/**
+ * Where the stubbed `make` was reached — the repo root for the docs-only fast path, the
+ * ephemeral worktree for the full suite. The verify side keeps the working copy free, so
+ * these must never agree when the full suite runs.
+ */
+function makeCwd(): string {
+	return readFileSync(cwdLog, "utf8").trim();
+}
+
+/** The files the suite saw at its execution point — one per line, relative to its root. */
+function capturedFiles(): string[] {
+	const raw = readFileSync(treeLog, "utf8").trim();
+	return raw === "" ? [] : raw.split("\n");
+}
+
+let treeLog: string;
+
 const line = (local: string, remote: string, ref = "refs/heads/topic") =>
 	`${ref} ${local} ${ref} ${remote}\n`;
 
@@ -97,12 +119,27 @@ beforeAll(() => {
 	repo = join(dir, "repo");
 	stubBin = join(dir, "bin");
 	makeLog = join(dir, "make.log");
+	cwdLog = join(dir, "cwd.log");
+	treeLog = join(dir, "tree.json");
+	worktreeDir = join(repo, ".worktrees", "pre-push-verify");
 	Bun.spawnSync(["mkdir", "-p", repo, stubBin]);
 	writeFileSync(
 		join(stubBin, "make"),
-		`#!/bin/sh\nprintf '%s' "$*" > "${makeLog}"\nexit "$STUB_MAKE_EXIT"\n`,
+		`#!/bin/sh
+# The verify side of the hook runs in a detached worktree, so make logs where it was reached
+# and which files were there — the tests use that to prove the suite runs against the pushed
+# head rather than the checkout it was launched from.
+printf '%s' "$*" > "${makeLog}"
+printf '%s' "$(pwd)" > "${cwdLog}"
+find . -type f ! -path "./.git/*" ! -path "./.worktrees/*" ! -path "./node_modules/*" | sort > "${treeLog}"
+exit "$STUB_MAKE_EXIT"
+`,
 	);
 	chmodSync(join(stubBin, "make"), 0o755);
+	// The hook runs `bun install` in the worktree before the suite; stubbing it keeps the
+	// sandbox from running a real package manager against a fixture.
+	writeFileSync(join(stubBin, "bun"), "#!/bin/sh\nexit 0\n");
+	chmodSync(join(stubBin, "bun"), 0o755);
 
 	// Before anything writes: an empty temporary directory is not a repository, so if git finds one
 	// here, something is pointing it at a real repository and every write below would land there.
@@ -200,12 +237,58 @@ describe("everything else runs the whole suite", () => {
 		expect(push(stdin).target).toBe("verify");
 	});
 
-	it("an empty ref list, which is not the same as nothing to push", () => {
-		expect(push("").target).toBe("verify");
-	});
-
 	it("still skips a push of nothing but deletions", () => {
 		expect(push(line(ZERO, base))).toEqual({ exitCode: 0, target: null });
+	});
+});
+
+describe("the full suite runs in a detached worktree at the push's head", () => {
+	it("makes the worktree, installs into it, and runs the suite there", () => {
+		git("checkout", "-q", "-b", "in-worktree", base);
+		commit({ "code.ts": "export const inWorktree = true;\n", "in-worktree.txt": "here\n" });
+		const res = push(line(git("rev-parse", "HEAD"), base));
+		expect(res.target).toBe("verify");
+		expect(makeCwd()).toBe(worktreeDir);
+		expect(capturedFiles()).toContain("./in-worktree.txt");
+	});
+
+	it("keeps the working copy free — the suite never runs in it", () => {
+		git("checkout", "-q", "-b", "free-cwd-branch", base);
+		commit({ "code.ts": "export const free = 1;\n" });
+		push(line(git("rev-parse", "HEAD"), base));
+		expect(makeCwd()).not.toBe(repo);
+	});
+
+	it("runs the tree being pushed, not the checkout it was launched from", () => {
+		git("checkout", "-q", "-b", "head-tree", base);
+		commit({ "head-marker.txt": "staged\n" });
+		writeFileSync(join(repo, "dirty-marker.txt"), "uncommitted\n");
+		push(line(git("rev-parse", "HEAD"), base));
+		expect(capturedFiles()).toContain("./head-marker.txt");
+		expect(capturedFiles()).not.toContain("./dirty-marker.txt");
+		git("rm", "-f", "-q", "--ignore-unmatch", "dirty-marker.txt");
+	});
+
+	it("removes the worktree when the suite finishes", () => {
+		git("checkout", "-q", "-b", "cleanup", base);
+		commit({ "code.ts": "export const gone = 1;\n" });
+		push(line(git("rev-parse", "HEAD"), base));
+		expect(Bun.spawnSync(["test", "-e", worktreeDir]).exitCode).toBe(1);
+	});
+
+	it("verifies the pushed commit, not the branch the working copy happens to be on", () => {
+		git("checkout", "-q", "-b", "decoupled-branch", base);
+		commit({ "decoupled-marker.txt": "on the pushed head\n" });
+		const head = git("rev-parse", "HEAD");
+		git("checkout", "-q", "main");
+		push(line(head, base));
+		expect(capturedFiles()).toContain("./decoupled-marker.txt");
+	});
+});
+
+describe("an empty ref list", () => {
+	it("refuses rather than testing the current checkout instead of the push", () => {
+		expect(push("").exitCode).toBe(1);
 	});
 });
 
