@@ -260,7 +260,11 @@ export async function emailedCode(
 		// same second and made this read an already-replaced code.
 		const newest = body.messages;
 		const arrivedAt = (m: { Created?: string | number }) =>
-			m.Created == null ? 0 : typeof m.Created === "number" ? m.Created : new Date(m.Created).getTime();
+			m.Created == null
+				? 0
+				: typeof m.Created === "number"
+					? m.Created
+					: new Date(m.Created).getTime();
 		const fresh = (newest ?? []).filter((m) =>
 			sentAtOrAfter === undefined ? true : arrivedAt(m) >= sentAtOrAfter,
 		);
