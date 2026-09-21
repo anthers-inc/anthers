@@ -135,6 +135,7 @@ async function withSignInLock<T>(email: string, work: () => Promise<T>): Promise
  */
 async function signInAs(context: BrowserContext, email: string): Promise<string> {
 	return withSignInLock(email, async () => {
+		const startedAt = Date.now();
 		const start = await fetch(`${API_URL}/api/auth/signin/start`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
@@ -142,7 +143,28 @@ async function signInAs(context: BrowserContext, email: string): Promise<string>
 		});
 		expect(start.ok, `asking for a sign-in code for ${email} failed: ${start.status}`).toBe(true);
 
-		const code = await emailedCode(email);
+		/*
+		 * A throttled `start` sends nothing: the API keeps one live code per address and
+		 * re-issues it no often than once a minute, answering 200 either way so the timing
+		 * cannot be told apart. Between two sign-ins that lands the second caller reading
+		 * the FIRST caller's still-warm email — which is a code that verify spends and
+		 * burns, and the read arrives too late. When nothing new shows up quickly, the
+		 * honest wait is the throttle window and another start, so the code being read is
+		 * always one *this* sign-in minted.
+		 */
+		const code = await emailedCode(email, 3_000, startedAt).catch(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 61_000));
+			const againStartedAt = Date.now();
+			const again = await fetch(`${API_URL}/api/auth/signin/start`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
+				body: JSON.stringify({ email }),
+			});
+			expect(again.ok, `re-asking for a sign-in code for ${email} failed: ${again.status}`).toBe(
+				true,
+			);
+			return emailedCode(email, 15_000, againStartedAt);
+		});
 		const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
@@ -210,8 +232,16 @@ export const MAIL_CATCHER_URL = process.env.MAIL_CATCHER_URL ?? "";
  * hashed at rest, and an endpoint that handed it back would be a door nobody should have, so the
  * only honest way to read one is where a person reads it — the inbox. Waits, because the API posts
  * the email after answering the request that asked for it.
+ *
+ * `sentAtOrAfter` narrows the read to mail that exists *because of this request*: any older
+ * message in the inbox is another send's leftover or another sign-in's, and reading it picks
+ * up a code that has already been spent.
  */
-export async function emailedCode(address: string, timeoutMs = 15_000): Promise<string> {
+export async function emailedCode(
+	address: string,
+	timeoutMs = 15_000,
+	sentAtOrAfter?: number,
+): Promise<string> {
 	if (!MAIL_CATCHER_URL) {
 		throw new Error("no MAIL_CATCHER_URL — run the browser suite in a session (make test-e2e)");
 	}
@@ -229,8 +259,13 @@ export async function emailedCode(address: string, timeoutMs = 15_000): Promise<
 		// seconds only — is what used to pick the wrong one when two sign-ins landed in the
 		// same second and made this read an already-replaced code.
 		const newest = body.messages;
-		const code = newest
-			?.map((message) => message.Subject.match(/^([A-Z0-9]{6}) is your Anthers/)?.[1])
+		const arrivedAt = (m: { Created?: string | number }) =>
+			m.Created == null ? 0 : typeof m.Created === "number" ? m.Created : new Date(m.Created).getTime();
+		const fresh = (newest ?? []).filter((m) =>
+			sentAtOrAfter === undefined ? true : arrivedAt(m) >= sentAtOrAfter,
+		);
+		const code = fresh
+			.map((message) => message.Subject.match(/^([A-Z0-9]{6}) is your Anthers/)?.[1])
 			.find(Boolean);
 		if (code) return code;
 		if (Date.now() > deadline) throw new Error(`no code arrived for ${address}`);
