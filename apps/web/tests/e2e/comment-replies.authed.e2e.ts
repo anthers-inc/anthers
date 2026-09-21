@@ -12,10 +12,14 @@
  * comment whose body starts `E2E ` on the same fixture post, and the two specs may run at once.
  */
 import { db } from "@anthers/db/client";
-import { GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "@anthers/db/gauntlet";
+import {
+	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_SLUG_PREFIX,
+	gauntletHandle,
+} from "@anthers/db/gauntlet";
 import { comments, posts, users } from "@anthers/db/schema";
 import { and, eq, inArray, like } from "drizzle-orm";
-import { expect, signInAsCreator, test } from "./fixtures";
+import { API_URL, expect, signInAsCreator, test } from "./fixtures";
 
 /** The gauntlet's free post; see `votes.authed.e2e.ts` for why the slug carries `-post`. */
 const POST_SLUG = `${GAUNTLET_SLUG_PREFIX}free-post-post`;
@@ -28,6 +32,8 @@ const text = (label: string) => `E2E-reply ${label} ${RUN}`;
 
 let postId = 0;
 let authorId = 0;
+/** The author's handle as the thread names them — `Reply to <handle>`, `Replying to <handle>`. */
+let authorLabel = "";
 
 async function sweep() {
 	const stale = await db
@@ -65,11 +71,13 @@ test.beforeAll(async () => {
 	const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, POST_SLUG));
 	expect(post, `the gauntlet post ${POST_SLUG} is missing`).toBeTruthy();
 	postId = post.id;
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
 	const [author] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.username, GAUNTLET_CREATOR_USERNAME));
+		.where(eq(users.atprotoHandle, handle));
 	authorId = author.id;
+	authorLabel = handle;
 });
 
 test.afterAll(async () => {
@@ -98,7 +106,7 @@ test("⭐ a reply written in the browser lands under the comment it answers, ind
 		.filter({ hasText: text("question") })
 		.last();
 	await row.getByRole("button", { name: /^Reply to/ }).click();
-	const field = page.getByRole("textbox", { name: `Reply to ${GAUNTLET_CREATOR_USERNAME}` });
+	const field = page.getByRole("textbox", { name: `Reply to ${authorLabel}` });
 	await field.fill(text("answer"));
 	const posted = page.waitForResponse(
 		(r) => r.request().method() === "POST" && r.url().endsWith(`/posts/${POST_SLUG}/comments`),
@@ -155,7 +163,8 @@ test("🚨 past the last indent, a reply lines up with the one it answers and na
 		.last();
 	await expect(fourth).not.toContainText(text("three"));
 	await expect(
-		fourth.getByText(`Replying to ${GAUNTLET_CREATOR_USERNAME}`, { exact: true }),
+		// The label names the parent's author by their handle now — the username is gone.
+		fourth.getByText(`Replying to ${authorLabel}`, { exact: true }),
 	).toBeVisible();
 });
 

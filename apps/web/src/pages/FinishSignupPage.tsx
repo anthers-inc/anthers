@@ -167,9 +167,13 @@ export default function FinishSignupPage() {
 
 		// 🚨 Somebody already signed in has nothing to finish here — a reload after
 		// verifying looks like this — so they go on to the first-run state instead of being
-		// shown a code box for an address they have already proved.
+		// shown a code box for an address they have already proved. The test for "still owes
+		// the first run" is the terms, not the handle: the handle now arrives with the
+		// identity, so `user.handle` is always set and cannot tell onboarding from done.
+		// (It also fires the moment the verify's Set-Cookie updates the auth context, ahead
+		// of `commit`'s own navigation, so getting it wrong loses the race to `/`.)
 		if (user) {
-			navigate(user.handle ? "/" : "/welcome", { replace: true });
+			navigate(user.termsAcceptedAt ? "/" : "/welcome", { replace: true });
 			return;
 		}
 

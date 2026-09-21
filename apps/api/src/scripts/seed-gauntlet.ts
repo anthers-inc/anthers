@@ -117,6 +117,9 @@ async function ensureViewer(): Promise<void> {
 			displayName: "Gauntlet Viewer",
 			bio: "The harness's viewer for automated User Gauntlet walks.",
 			isCreator: false,
+			// Terms accepted: the walk drives the app itself, whose guarded routes a
+			// terms-owing account never reaches; onboarding has its own suites.
+			termsAcceptedAt: new Date(),
 		},
 	});
 	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
@@ -139,6 +142,8 @@ async function ensureCreator(): Promise<number> {
 			displayName: "Gauntlet Creator",
 			bio: "A fixture creator for the User Gauntlet. Every post below sits on a known rung of the ladder.",
 			isCreator: true,
+			// Terms accepted, as with the viewer — the fixture drives the app, not onboarding.
+			termsAcceptedAt: new Date(),
 		},
 	});
 	console.log(`${TAG} created creator "${GAUNTLET_CREATOR_USERNAME}" (id ${created.id})`);

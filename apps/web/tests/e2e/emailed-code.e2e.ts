@@ -9,6 +9,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { profileUrl } from "@anthers/web-shared/profile";
 import type { Page } from "@playwright/test";
 import { API_URL, emailedCode, expect, test } from "./fixtures";
 
@@ -44,25 +45,39 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 		.click();
 	await typeCode(page, await emailedCode(address));
 
-	// A new account owes a username, so the ceremony's last page is next.
+	// A new account owes the terms (the onboarding claim step is gone — the handle arrives
+	// with the identity), so the ceremony's last page is next, wearing its terms checkbox.
 	await expect(page).toHaveURL(/\/welcome/, { timeout: 15_000 });
 
 	// And the ceremony is all that is on it. Every sidebar destination is behind
-	// ProtectedRoute, which sends a handle-less account straight back here — so on this
+	// ProtectedRoute, which sends an unfinished account straight back here — so on this
 	// page the nav is a list of dead ends, and LoggedInLayout leaves it out until there
 	// is an account to navigate with. (Pinned here because this is the one existing walk
-	// that lands on /welcome as a nameless account; the toggle lives in the header.)
+	// that lands on /welcome with terms still owed; the toggle lives in the header.)
 	//
-	// 🚨 The nav's existence is asserted by an element that only renders with it — not by
-	// the links, which sit inside a `w-0` collapsed aside and so are in the DOM either
-	// way. The hamburger button that opens the drawer goes away with its chrome.
-	await expect(page.getByRole("button", { name: /toggle sidebar/i })).toHaveCount(0);
+	// Asserted by the aria-hidden state rather than an absence, and through a locator
+	// rather than getByRole (which hides aria-hidden elements from the query entirely).
+	// LoggedInLayout keeps the toggle MOUNTED through the auth load
+	// (`sidebar-phone.authed.e2e.ts` is why), so the button is always in the DOM, and
+	// aria-hidden is the state that separates the onboarding render from the ordinary one.
+	await expect(page.locator('button[aria-label="Toggle sidebar"]')).toHaveAttribute(
+		"aria-hidden",
+		"true",
+	);
 
 	const me = (await (await page.request.get(`${API_URL}/api/auth/me`)).json()) as {
-		user: { email: string; atprotoHandle: string; atprotoDid: string } | null;
+		user: {
+			email: string;
+			handle: string;
+			atprotoDid: string;
+			termsAcceptedAt: string | null;
+		} | null;
 	};
 	expect(me.user?.email).toBe(address);
-	expect(me.user?.atprotoHandle).toMatch(new RegExp(`^${name}\\.`));
+	expect(me.user?.handle).toMatch(new RegExp(`^${name}\\.`));
+	expect(me.user?.termsAcceptedAt, "the account exists but still owes the terms").toBeNull();
+	// The profile address is the handle, in the one way one is built.
+	expect(profileUrl(me.user?.handle ?? "")).toBe(`/@${me.user?.handle}`);
 
 	// And the identity is real: the session's server holds a repository under that DID and handle.
 	const server = process.env.HOSTED_PDS_URL;
@@ -71,16 +86,21 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 		`${server}/xrpc/com.atproto.repo.describeRepo?repo=${me.user?.atprotoDid}`,
 	);
 	expect(repo.status).toBe(200);
-	expect(((await repo.json()) as { handle: string }).handle).toBe(me.user?.atprotoHandle);
+	expect(((await repo.json()) as { handle: string }).handle).toBe(me.user?.handle);
 });
 
 test("an emailed code signs an existing account in from /login", async ({ page }) => {
-	const username = `e2e_login_${stamp()}`;
-	const address = `${username}@example.com`;
-	execFileSync("bun", ["run", "db:local-account", "--username", username, "--email", address], {
-		cwd: REPO_ROOT,
-		encoding: "utf8",
-	});
+	const name = `e2e-login-${stamp()}`.slice(0, 18);
+	const address = `${name}@example.com`;
+	const made = JSON.parse(
+		execFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+		})
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { handle: string };
 
 	await page.goto("/login");
 	await page.locator('input[autocomplete="email"]').fill(address);
@@ -90,9 +110,9 @@ test("an emailed code signs an existing account in from /login", async ({ page }
 	await expect
 		.poll(async () => {
 			const me = (await (await page.request.get(`${API_URL}/api/auth/me`)).json()) as {
-				user: { username: string } | null;
+				user: { handle: string } | null;
 			};
-			return me.user?.username ?? null;
+			return me.user?.handle ?? null;
 		})
-		.toBe(username);
+		.toBe(made.handle);
 });

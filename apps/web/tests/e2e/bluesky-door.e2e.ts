@@ -60,8 +60,10 @@ test("a Bluesky identity signs up through its own server's consent, and the acco
 
 	await expect(page).toHaveURL(/\/welcome/, { timeout: 15_000 });
 	const me = (await (await page.request.get(`${API}/api/auth/me`)).json()) as {
-		user: { atprotoDid: string; atprotoHandle: string } | null;
+		user: { atprotoDid: string; handle: string } | null;
 	};
 	expect(me.user?.atprotoDid).toBe(did);
-	expect(me.user?.atprotoHandle).toBe(handle);
+	// The brought handle IS the account's address — there is nothing left to claim, and
+	// `/welcome`'s remaining job is the terms.
+	expect(me.user?.handle).toBe(handle);
 });

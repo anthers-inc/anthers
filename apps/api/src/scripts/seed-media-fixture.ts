@@ -212,6 +212,9 @@ async function ensureCreator(): Promise<number> {
 			displayName: MEDIA_FIXTURE_DISPLAY_NAME,
 			bio: "A fixture creator whose Works carry real, playable media.",
 			isCreator: true,
+			// Terms accepted: the authed suites signed in as this fixture drive the app
+			// itself, not onboarding, and a terms-owing account is rerouted to /welcome.
+			termsAcceptedAt: new Date(),
 		},
 	});
 	console.log(`${TAG} created creator "${MEDIA_FIXTURE_USERNAME}" (id ${created.id})`);

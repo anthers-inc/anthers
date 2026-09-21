@@ -77,6 +77,16 @@ function LoggedInLayoutInner() {
 	const mode = useAppMode(isCreator);
 	const studio = mode === "studio";
 
+	// An account that has not finished onboarding owns nothing the sidebar points at:
+	// Feed, Library and Discover are all behind ProtectedRoute, which bounces a
+	// terms-owing account straight back to /welcome — so every link it offers is a dead
+	// end wearing a nav item. The sidebar stays out of the way until the account has
+	// finished, and the toggle button is part of its chrome and goes with it. (This
+	// keyed on the username until the handle retired the column; the terms are what
+	// onboarding still owes.)
+	const onboarding = user ? user.termsAcceptedAt === null : false;
+	const chromeHidden = !user || onboarding;
+
 	const handleLogout = async () => {
 		await signOut();
 		navigate("/");
@@ -99,11 +109,11 @@ function LoggedInLayoutInner() {
 					    closed sidebar on a desktop that should have started open. */}
 					<button
 						type="button"
-						className={`btn btn-ghost btn-sm btn-square ${!user ? "invisible pointer-events-none" : ""}`}
+						className={`btn btn-ghost btn-sm btn-square ${chromeHidden ? "invisible pointer-events-none" : ""}`}
 						onClick={toggleSidebar}
 						aria-label="Toggle sidebar"
-						aria-hidden={!user || undefined}
-						tabIndex={!user ? -1 : undefined}
+						aria-hidden={chromeHidden || undefined}
+						tabIndex={chromeHidden ? -1 : undefined}
 					>
 						<Bars3Icon className="w-5 h-5" />
 					</button>
@@ -205,7 +215,7 @@ function LoggedInLayoutInner() {
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
 				    is also what decides that a phone starts with it closed. */}
 				<aside
-					className={`${user && sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
+					className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-100`}
 				>
 					<div className="w-64 h-full flex flex-col overflow-y-auto">
 						{isCreator && (
