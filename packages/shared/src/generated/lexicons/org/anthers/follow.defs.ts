@@ -14,7 +14,7 @@ export { $nsid };
 type Main = { $type: "org.anthers.follow";
 
   /**
-   * The identifier of the account being followed. A bare identifier rather than the object the other records use for their subjects, because this one names a PERSON rather than a record: an identifier is already precise and permanently resolvable, and there is nothing to carry beside it the way a record address could carry a version.
+   * The identifier of the account being followed. A bare identifier rather than the object the other records use for their subjects, because this one names a PERSON rather than a record — and the future that object shape reserves cannot apply here. An object's field set can grow after publishing while a field's type never can, and the other records keep their subject an object against the day it carries a second datum beside the address: a content identifier pinning the subject to one version. A DID has no version to pin, and anything else said about a follow — its granularity, its source — belongs at the top level of the record, where it can still be added, rather than nested inside the subject. So the bare identifier closes no door that a person could ever walk through, and it matches the primitive `app.bsky.graph.follow` uses for the same reference.
    */
   "subject":l.DidString };
 

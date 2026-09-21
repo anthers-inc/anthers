@@ -36,6 +36,7 @@ import { hostedAccounts } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type { RecordRef, RepoWriter } from "./atproto-repo.js";
 import { hostedPdsUrl, nodeCall } from "./hosted-accounts.js";
+import { clearHostedSession, sessionForHostedAccount } from "./hosted-session-store.js";
 import { open } from "./secret-box.js";
 
 /** Why no writer could be made. Every one of these is ordinary rather than an error. */
@@ -89,16 +90,20 @@ export async function hostedWriterFor(
 		return { writer: null, reason: "credential_unopenable" };
 	}
 
-	const session = await nodeCall(
-		"/xrpc/com.atproto.server.createSession",
-		{ method: "POST", body: JSON.stringify({ identifier: row.did, password }) },
-		doFetch,
-	);
-	if (!session.ok) return { writer: null, reason: "node_unreachable" };
-	const token = session.body.accessJwt as string | undefined;
-	if (!token) return { writer: null, reason: "node_unreachable" };
+	// ⭐ **One login per account, not one per write.** The store reuses the session already on
+	// file and renews it with `refreshSession`; `createSession` — the call the node limits —
+	// happens only when there is no session or the node refused the refresh.
+	const session = await sessionForHostedAccount(row.did, password, { fetchImpl: doFetch });
+	if (!session.token) return { writer: null, reason: "node_unreachable" };
 
-	return { writer: writerOver(row.did, token, doFetch) };
+	return {
+		writer: writerOver(row.did, session.token, doFetch, {
+			// A write the node answered 401 means the token just died out from under us. Drop the
+			// stored session so the NEXT open logs in fresh once, then still throw — the caller's
+			// retry machinery is what should drive the recovery, not a silent in-writer retry.
+			onAuthFailure: () => clearHostedSession(row.did),
+		}),
+	};
 }
 
 /**
@@ -110,14 +115,36 @@ export async function hostedWriterFor(
  * returned a quiet failure would let a sync report success and store a URI for a record that
  * does not exist. The caller's job wrapper is what turns a throw back into a retry.
  */
-function writerOver(did: string, token: string, doFetch: typeof fetch): RepoWriter {
+/**
+ * The node's codes for "this token is dead". `AuthenticationRequired` and `InvalidToken` are
+ * the 401 answers; `ExpiredToken` is the reference PDS's considered refusal of an expired
+ * access token. Branching on the CODE rather than the prose for the same reason
+ * `hosted-accounts.ts` does: the prose is upstream's wording and moves between versions.
+ */
+const AUTH_FAILURE_CODES = new Set(["AuthenticationRequired", "InvalidToken", "ExpiredToken"]);
+
+function writerOver(
+	did: string,
+	token: string,
+	doFetch: typeof fetch,
+	opts: { onAuthFailure?: () => void | Promise<void> } = {},
+): RepoWriter {
 	const call = async (path: string, body: object): Promise<Record<string, unknown>> => {
 		const res = await nodeCall(
 			path,
 			{ method: "POST", token, body: JSON.stringify(body) },
 			doFetch,
 		);
-		if (!res.ok) throw new Error(`${path}: ${res.error}${res.message ? ` — ${res.message}` : ""}`);
+		if (!res.ok) {
+			// A non-retryable Authentication failure is the node saying this token is dead. The
+			// stored session goes so the next open logs in once; the THROW is unchanged, because
+			// callers rely on throw-to-retry and a write retried silently here would be a second
+			// attempt nobody asked for.
+			if (!res.retryable && AUTH_FAILURE_CODES.has(res.error) && opts.onAuthFailure) {
+				await opts.onAuthFailure();
+			}
+			throw new Error(`${path}: ${res.error}${res.message ? ` — ${res.message}` : ""}`);
+		}
 		return res.body;
 	};
 

@@ -157,22 +157,29 @@ describe("with every schema published", () => {
 	});
 });
 
-describe("with the real set of published schemas", () => {
-	// ⚠️ The case that is true in production today for every reader record: a comment that would
-	// otherwise be written, under a schema that is still a draft. It costs no session.
-	it("opens no writer while a comment's schema is unpublished", async () => {
-		const h = harness();
-		const result = await syncOwnedRecord({
-			ownerId: 7,
-			kind: COMMENT_KIND,
-			input: visible,
-			existingUri: null,
-			...h,
-		});
-		expect(result).toMatchObject({
-			status: "synced",
-			plan: { action: "none", reason: "lexicon_unpublished" },
-		});
-		expect(h.opened).toEqual([]);
+describe("a record whose schema is unpublished", () => {
+	// ⚠️ **The draft has to be constructed now** — every reader schema is published for real, so
+	// no kind is unpublished under the real set. What is still worth pinning is the ORDER: a row
+	// that would otherwise be written, under a schema treated as a draft, must cost no session.
+	// `comment` is made a draft by hand for the duration of this test.
+	it("opens no writer while its schema is unpublished", async () => {
+		setPublishedLexiconsForTesting(["org.anthers.review", "org.anthers.vote"]);
+		try {
+			const h = harness();
+			const result = await syncOwnedRecord({
+				ownerId: 7,
+				kind: COMMENT_KIND,
+				input: visible,
+				existingUri: null,
+				...h,
+			});
+			expect(result).toMatchObject({
+				status: "synced",
+				plan: { action: "none", reason: "lexicon_unpublished" },
+			});
+			expect(h.opened).toEqual([]);
+		} finally {
+			setPublishedLexiconsForTesting(undefined);
+		}
 	});
 });

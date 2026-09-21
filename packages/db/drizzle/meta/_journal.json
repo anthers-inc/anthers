@@ -666,6 +666,13 @@
       "when": 1789938515959,
       "tag": "0094_wealthy_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1790020938183,
+      "tag": "0095_glossy_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

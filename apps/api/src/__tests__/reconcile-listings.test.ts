@@ -242,10 +242,16 @@ describe("with every schema published", () => {
 	});
 });
 
-describe("with the real set of published schemas", () => {
+describe("a record whose schema is unpublished", () => {
 	let asked: Set<string>;
 	beforeAll(async () => {
-		setPublishedLexiconsForTesting(undefined);
+		// ⚠️ **The draft is constructed now.** Every reader schema is genuinely published, so the
+		// reconciler DOES pick these interactions up under the real set. What is still worth
+		// pinning is that a schema treated as a draft is never enqueued — asking is pure cost when
+		// the planner can only answer `lexicon_unpublished`. The four reader collections are made
+		// drafts by hand here; the creator collections and `work` stay published so the
+		// removal-finding half and the waiting-subject setup below still mean what they did.
+		setPublishedLexiconsForTesting(["org.anthers.work", "org.anthers.post", "org.anthers.project"]);
 		asked = await sweep();
 	});
 

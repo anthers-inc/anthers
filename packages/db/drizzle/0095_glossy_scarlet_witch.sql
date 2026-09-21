@@ -1,0 +1,1 @@
+ALTER TABLE "hosted_accounts" ADD COLUMN "sealed_session" text;
