@@ -80,7 +80,7 @@ let commentId = 0;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${hostName + "@example.com"}`, sql`${abeName + "@example.com"}`, sql`${beeName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${hostName}@example.com`}`, sql`${`${abeName}@example.com`}`, sql`${`${beeName}@example.com`}`], sql`, `)})`,
 	);
 	host = await signUp(hostName);
 	abe = await signUp(abeName);

@@ -82,7 +82,7 @@ let workId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerAName + "@example.com"}`, sql`${viewerBName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -201,7 +201,7 @@ describe("Editing a review", () => {
 					eq(reviews.workId, workId),
 					eq(
 						reviews.userId,
-						sql`(SELECT id FROM users WHERE email = ${viewerAName + "@example.com"})`,
+						sql`(SELECT id FROM users WHERE email = ${`${viewerAName}@example.com`})`,
 					),
 				),
 			)
@@ -230,7 +230,7 @@ describe("Reviews written before text was required", () => {
 	it("still render and still count, with an empty body", async () => {
 		// Insert the legacy shape directly — the API can no longer produce it.
 		const [viewer] = (await db.execute(
-			sql`SELECT id FROM users WHERE email = ${viewerBName + "@example.com"}`,
+			sql`SELECT id FROM users WHERE email = ${`${viewerBName}@example.com`}`,
 		)) as unknown as { id: number }[];
 		await db.insert(reviews).values({ userId: viewer.id, workId, verdict: "recommended" });
 

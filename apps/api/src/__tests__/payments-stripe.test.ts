@@ -277,7 +277,7 @@ const ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`, sql`${subscriberName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${subscriberName}@example.com`}`], sql`, `)})`,
 	);
 
 	realClient = getStripe();
@@ -323,7 +323,7 @@ afterAll(async () => {
 	if (previousWebhookSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
 	else process.env.STRIPE_WEBHOOK_SECRET = previousWebhookSecret;
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`, sql`${subscriberName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${subscriberName}@example.com`}`], sql`, `)})`,
 	);
 });
 

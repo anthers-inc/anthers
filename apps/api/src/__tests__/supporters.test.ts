@@ -13,7 +13,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, users } from "@anthers/db/schema";
+import { accountCycles, accounts } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -32,7 +32,7 @@ async function signUp(name: string) {
 	return createAccount(name);
 }
 
-async function idOf(userId: number): Promise<number> {
+async function _idOf(userId: number): Promise<number> {
 	// Kept as a function so the call site reads the same as it did under usernames.
 	return userId;
 }

@@ -100,7 +100,7 @@ const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorHandle}
 describe("a reader's filter by kind of content", () => {
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${readerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)})`,
 		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
 		({ cookie: readerCookie, id: readerId } = await signUp(readerName));

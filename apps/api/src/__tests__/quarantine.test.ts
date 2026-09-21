@@ -145,7 +145,7 @@ function download(workId: number, assetId: number, cookie: string) {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
 	creatorCookie = await signUp(creatorName);
 	buyerCookie = await signUp(buyerName);
@@ -725,6 +725,6 @@ afterAll(async () => {
 	// stale hold suspends real sweeps in later runs.
 	await db.execute(sql`DELETE FROM legal_holds WHERE reason LIKE 'Quarantine of Work %'`);
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
 });

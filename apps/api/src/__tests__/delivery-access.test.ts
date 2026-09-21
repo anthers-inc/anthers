@@ -72,7 +72,7 @@ describe("Delivery-layer access", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
@@ -160,11 +160,11 @@ describe("Delivery-layer access", () => {
 	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
 	// outlives its creator's account), so deleting the users alone orphans them instead.
 	afterAll(async () => {
-		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`;
+		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`;
 		await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
 		await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
 		);
 	});
 

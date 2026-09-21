@@ -79,7 +79,7 @@ describe("Consuming a Work requires an account", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
 		viewerCookie = await signUp(viewerName);
@@ -158,7 +158,7 @@ describe("Consuming a Work requires an account", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
 		);
 	});
 

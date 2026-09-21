@@ -72,7 +72,7 @@ describe("publishing requires a fully set-up creator", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${noneName + "@example.com"}`, sql`${heldName + "@example.com"}`, sql`${readyName + "@example.com"}`, sql`${payerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${noneName}@example.com`}`, sql`${`${heldName}@example.com`}`, sql`${`${readyName}@example.com`}`, sql`${`${payerName}@example.com`}`], sql`, `)})`,
 		);
 		none = await signUp(noneName);
 		held = await signUp(heldName);

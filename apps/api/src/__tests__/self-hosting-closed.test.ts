@@ -44,7 +44,7 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	await db.execute(sql`DELETE FROM users WHERE email = ${name + "@example.com"}`);
+	await db.execute(sql`DELETE FROM users WHERE email = ${`${name}@example.com`}`);
 });
 
 describe("the self-hosting flag cannot be set by request", () => {
@@ -90,7 +90,7 @@ describe("the self-hosting flag cannot be set by request", () => {
 		});
 		const rows = await db.execute(
 			sql`SELECT a.is_self_hosting FROM accounts a
-			    JOIN users u ON u.id = a.user_id WHERE u.email = ${name + "@example.com"}`,
+			    JOIN users u ON u.id = a.user_id WHERE u.email = ${`${name}@example.com`}`,
 		);
 		// Either no account row was created, or it exists and the flag is still false.
 		for (const row of rows) expect(row.is_self_hosting).toBeFalsy();

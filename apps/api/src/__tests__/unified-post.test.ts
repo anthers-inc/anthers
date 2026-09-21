@@ -56,7 +56,7 @@ describe("Catalog vertical slice", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 		);
 	}, DB_SETUP_TIMEOUT);
 
@@ -75,7 +75,7 @@ describe("Catalog vertical slice", () => {
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
 			await db.execute(
-				sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + "@example.com"}`,
+				sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
 			);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();

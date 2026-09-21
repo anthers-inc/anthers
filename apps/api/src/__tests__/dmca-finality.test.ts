@@ -265,7 +265,7 @@ const createdWorks: number[] = [];
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
 	realClient = getStripe();
 	fake = fakeStripe();
@@ -291,7 +291,7 @@ afterAll(async () => {
 		await db.delete(works).where(eq(works.id, id));
 	}
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
 });
 

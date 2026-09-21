@@ -57,7 +57,7 @@ describe("Catalog CRUD and post links", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${ownerName + "@example.com"}`, sql`${strangerName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
 		);
 	}, DB_SETUP_TIMEOUT);
 
@@ -71,7 +71,7 @@ describe("Catalog CRUD and post links", () => {
 			strangerCookie = await signUp(strangerName);
 			await enablePayouts(strangerName);
 			await db.execute(
-				sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${ownerName + "@example.com"}`, sql`${strangerName + "@example.com"}`], sql`, `)})`,
+				sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
 			);
 			expect(ownerCookie).toBeTruthy();
 			expect(strangerCookie).toBeTruthy();

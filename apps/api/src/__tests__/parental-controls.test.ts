@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, attentionEvents, users } from "@anthers/db/schema";
+import { accounts, attentionEvents } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -67,7 +67,7 @@ describe("Parental controls", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${childName + "@example.com"}`, sql`${creatorName + "@example.com"}`, sql`${otherCreatorName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${childName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
 		);
 		child = await signUp(childName);
 		creatorCookie = await signUp(creatorName);
@@ -112,7 +112,7 @@ describe("Parental controls", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${childName + "@example.com"}`, sql`${creatorName + "@example.com"}`, sql`${otherCreatorName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${childName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
 		);
 	});
 

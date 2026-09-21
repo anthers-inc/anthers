@@ -75,14 +75,14 @@ async function rawExport(cookie: string): Promise<{ res: Response; text: string 
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${subjectName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${subjectName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 	);
 	subject = await signUp(subjectName);
 	await enablePayouts(subjectName);
 	other = await signUp(otherName);
 	await enablePayouts(otherName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${subjectName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${`${subjectName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 	);
 
 	const idOf = async (u: string) => {

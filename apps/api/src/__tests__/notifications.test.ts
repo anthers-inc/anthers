@@ -66,7 +66,7 @@ async function idOf(u: string): Promise<number | null> {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${recipientName + "@example.com"}`, sql`${creatorName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${recipientName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
 	recipient = await signUp(recipientName);
 	await signUp(creatorName);

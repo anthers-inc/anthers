@@ -81,7 +81,7 @@ describe("nobody gets an account without accepting the terms", () => {
 describe("data-rights requests", () => {
 	it("stamps a 30-day deadline at creation and acknowledges it", async () => {
 		const name = `rt_req_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE email = ${name + "@example.com"}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${`${name}@example.com`}`);
 		const { cookie } = await createAccount(name);
 
 		const before = Date.now();
@@ -115,7 +115,7 @@ describe("data-rights requests", () => {
 
 	it("rejects an unknown kind rather than storing it", async () => {
 		const name = `rt_bad_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE email = ${name + "@example.com"}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${`${name}@example.com`}`);
 		const { cookie } = await createAccount(name);
 
 		const res = await req("/api/accounts/me/rights-requests", {

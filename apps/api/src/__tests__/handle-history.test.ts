@@ -13,13 +13,12 @@
  * moving dates around — the window's length is a decision, but the lapse is a mechanism.
  */
 
-import { beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { handleHistory, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
-import { findUserByAtprotoDid } from "../services/atproto.js";
-import { HANDLE_HOLD_DAYS } from "../services/atproto.js";
+import { findUserByAtprotoDid, HANDLE_HOLD_DAYS } from "../services/atproto.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 

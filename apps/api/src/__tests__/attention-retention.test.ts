@@ -119,13 +119,13 @@ async function seedEvent(
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerAName + "@example.com"}`, sql`${viewerBName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await signUp(viewerAName);
 	await signUp(viewerBName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + "@example.com"}`,
+		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
 
 	creatorId = await idOf(creatorName);

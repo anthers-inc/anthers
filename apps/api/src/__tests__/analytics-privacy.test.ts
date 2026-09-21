@@ -101,7 +101,7 @@ function allKeys(value: unknown, out: string[] = []): string[] {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${creatorName + "@example.com"}`, sql`${viewerAName + "@example.com"}`, sql`${viewerBName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
@@ -110,7 +110,7 @@ beforeAll(async () => {
 	const viewerB = await signUp(viewerBName);
 	await enablePayouts(viewerBName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email = ${creatorName + "@example.com"}`,
+		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
 
 	const idOf = async (username: string) => {
@@ -239,11 +239,11 @@ describe("creator analytics never expose per-viewer identity", () => {
 		// The other half of the same promise. Analytics filter on `creatorId`, so a
 		// creator with no attention of their own must see zero rather than the platform's.
 		const otherName = `apriv_other_${id}`;
-		await db.execute(sql`DELETE FROM users WHERE email = ${otherName + "@example.com"}`);
+		await db.execute(sql`DELETE FROM users WHERE email = ${`${otherName}@example.com`}`);
 		const other = await signUp(otherName);
 		await enablePayouts(otherName);
 		await db.execute(
-			sql`UPDATE users SET is_creator = true WHERE email = ${otherName + "@example.com"}`,
+			sql`UPDATE users SET is_creator = true WHERE email = ${`${otherName}@example.com`}`,
 		);
 
 		const overview = await (await req(ANALYTICS_ROUTES[0], { headers: { Cookie: other } })).json();

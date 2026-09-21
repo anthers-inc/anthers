@@ -96,7 +96,7 @@ describe("Share links", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${sharerName + "@example.com"}`, sql`${creatorName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${sharerName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 		);
 		sharerCookie = await signUp(sharerName);
 		creatorCookie = await signUp(creatorName);
@@ -105,7 +105,7 @@ describe("Share links", () => {
 			.select({ id: users.id, email: users.email })
 			.from(users)
 			.where(
-				sql`email IN (${sql.join([sql`${sharerName + "@example.com"}`, sql`${creatorName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+				sql`email IN (${sql.join([sql`${`${sharerName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 			);
 		sharerId = rows.find((r) => r.email === `${sharerName}@example.com`)!.id;
 		creatorId = rows.find((r) => r.email === `${creatorName}@example.com`)!.id;
@@ -163,7 +163,7 @@ describe("Share links", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${sharerName + "@example.com"}`, sql`${creatorName + "@example.com"}`, sql`${otherName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${sharerName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherName}@example.com`}`], sql`, `)})`,
 		);
 	});
 

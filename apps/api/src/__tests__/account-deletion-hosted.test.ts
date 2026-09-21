@@ -67,7 +67,7 @@ let strandDid: string;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${unreachableName + "@example.com"}`, sql`${strandedName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${unreachableName}@example.com`}`, sql`${`${strandedName}@example.com`}`], sql`, `)})`,
 	);
 	// Real identities on the session's server, sealed under the key this file set — so the one
 	// that is meant to be openable is.

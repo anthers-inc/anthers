@@ -98,7 +98,7 @@ let purchaseId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${leaverName + "@example.com"}`, sql`${stayerName + "@example.com"}`, sql`${buyerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${leaverName}@example.com`}`, sql`${`${stayerName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
 	leaver = await signUp(leaverName);
 	stayer = await signUp(stayerName);

@@ -13,7 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, posts, users, votes } from "@anthers/db/schema";
+import { comments, posts, votes } from "@anthers/db/schema";
 import { COLLAPSE_NET_THRESHOLD } from "@anthers/shared/votes";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -73,7 +73,7 @@ describe("votes", () => {
 	beforeAll(async () => {
 		await db.execute(
 			sql`DELETE FROM users WHERE email IN (${sql.join(
-				[creatorName, ...voterNames].map((n) => sql`${n + "@example.com"}`),
+				[creatorName, ...voterNames].map((n) => sql`${`${n}@example.com`}`),
 				sql`, `,
 			)})`,
 		);

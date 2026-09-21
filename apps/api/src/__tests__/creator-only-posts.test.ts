@@ -82,7 +82,7 @@ let reader: { cookie: string; id: number };
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${makerName + "@example.com"}`, sql`${leaverName + "@example.com"}`, sql`${readerName + "@example.com"}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${leaverName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)})`,
 	);
 	maker = await signUp(makerName);
 	leaver = await signUp(leaverName);
@@ -102,7 +102,7 @@ afterAll(async () => {
 	// A departing account's posts are kept as tombstones for the threads under them, so the
 	// account purge would leave these behind.
 	await db.execute(
-		sql`DELETE FROM posts WHERE creator_id IN (SELECT id FROM users WHERE email IN (${sql.join([sql`${makerName + "@example.com"}`, sql`${leaverName + "@example.com"}`, sql`${readerName + "@example.com"}`], sql`, `)}))`,
+		sql`DELETE FROM posts WHERE creator_id IN (SELECT id FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${leaverName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)}))`,
 	);
 });
 

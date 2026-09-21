@@ -105,7 +105,7 @@ describe("the legal hold console", () => {
 	afterAll(async () => {
 		await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${plainName + "@example.com"}`, sql`${subjectName + "@example.com"}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${plainName}@example.com`}`, sql`${`${subjectName}@example.com`}`], sql`, `)})`,
 		);
 	});
 
