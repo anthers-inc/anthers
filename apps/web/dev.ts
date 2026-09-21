@@ -13,8 +13,10 @@
  */
 import { serve } from "bun";
 import index from "./index.html";
+import { assertPortFree } from "./src/lib/dev-port.js";
 
 const port = Number(process.env.PORT ?? 3000);
+assertPortFree(port);
 
 /** Serve a file out of `public/`, 404ing rather than falling through to the SPA. */
 const publicFile = async (req: Request) => {

@@ -7,8 +7,10 @@
  */
 import { serve } from "bun";
 import index from "./index.html";
+import { assertPortFree } from "./src/lib/dev-port.js";
 
 const port = Number(process.env.PORT ?? 3001);
+assertPortFree(port);
 
 const server = serve({
 	port,

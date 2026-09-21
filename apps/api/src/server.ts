@@ -34,12 +34,15 @@
 
 import app from "./index.js";
 import { ensureQueueReady } from "./jobs/queue.js";
+import { assertPortFree } from "./lib/dev-port.js";
 
 // Start the job queue. This used to be guarded by `import.meta.main` in index.ts so that
 // importing the app from a test never started a queue; now that index.ts is only ever
 // imported and this file is only ever an entry point, the guard is unnecessary — being
 // here IS the condition it was testing for.
 ensureQueueReady().catch((err) => console.error("Job queue failed to start:", err));
+
+assertPortFree(Number(process.env.PORT ?? 8000));
 
 export default {
 	port: Number(process.env.PORT ?? 8000),
