@@ -63,7 +63,7 @@ export async function recordPaidInvoice(invoice: Stripe.Invoice): Promise<number
 	 * and the months that ran under suspension are legible — which a deleted record would
 	 * erase. `resumePausedRenewals` re-keys the paused rows at reinstatement against the
 	 * month it lands in, which is where their credits actually run. "Not deleting, not
-	 * cancelling" is the design: this row is what it looks like written down.
+	 * canceling" is the design: this row is what it looks like written down.
 	 *
 	 * Only `subscription_cycle` invoices are paused. A mid-month start charged today was
 	 * paid for days the account was in good standing, and that money is already owed to

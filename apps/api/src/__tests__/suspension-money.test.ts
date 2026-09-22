@@ -4,7 +4,7 @@
  *
  * Two settled behaviors, one file:
  *
- * 1. **A suspended supporter's renewal is paused, never cancelled and never settled.**
+ * 1. **A suspended supporter's renewal is paused, never canceled and never settled.**
  *    `recordPaidInvoice` books a `subscription_cycle` charge against the books with
  *    status `paused`, settlement never reads it, and reinstatement re-keys it against
  *    the month the suspension lifts so the withheld months credit from there.

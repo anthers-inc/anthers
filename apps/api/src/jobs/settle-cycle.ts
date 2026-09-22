@@ -278,7 +278,7 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 	// them. The *distribution* rows below stay on the record (they are the supporter's
 	// own history and the per-month view), so the withheld half is *the credits*: a month
 	// that runs with no credits for a suspended creator leaves the owed half of its
-	// arithmetic unsettled rather than cancelled, and the next run after reinstatement
+	// arithmetic unsettled rather than canceled, and the next run after reinstatement
 	// credits it against the month it was earned in — which is exactly how a suspension
 	// that lifts mid-review pays out.
 	const earnable = new Map<number, boolean>();
