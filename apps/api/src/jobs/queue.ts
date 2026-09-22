@@ -214,6 +214,17 @@ export const QUEUES = {
 	RESCAN_OWED: "rescan-owed",
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
+	// Lift suspensions whose `suspended_until` has passed. Each lift is its own
+	// transaction and its own `moderation_actions` row with both actor columns null,
+	// so the log records "the clock lifted this" exactly as it records an operator's lift.
+	// The same run also tells each supporter of a suspended creator that their renewal
+	// is paused — a billing notice whose dedupe makes the re-run harmless.
+	LIFT_SUSPENSIONS: "lift-suspensions",
+	// Release suspension payout holds whose review window lapsed with no finding
+	// recorded. The window is `PAYOUT_REVIEW_WINDOW_DAYS` from the suspension, and
+	// "absence of a finding by the deadline" IS the default outcome — so this sweep
+	// is the release mechanism rather than a reminder for one.
+	RELEASE_PAYOUT_HOLDS: "release-payout-holds",
 	// Delete expired sessions and verification tokens. Privacy Policy promises "Sessions: deleted
 	// when they expire"; until 2026-08-12 `deleteExpiredSessions()` and
 	// `deleteExpiredTokens()` were exported and called from NOWHERE, so every session row
@@ -408,7 +419,15 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// is a week — a few hours' latency on the far end of it is not something a user can
 	// perceive, and a wipe that runs once a day is a wipe you can reason about.
 	[QUEUES.RUN_DELETIONS, "0 4 * * *"],
-	// 5 AM daily. The counter-notice window is 10 business days, so a daily sweep
+	// Hourly at :37, off the shared marks. A temporary suspension's end is a promise
+	// made to its holder, so an hour's latency on it is acceptable where a day's
+	// would not be — and unlike a deletion, a late lift harms nothing irreversible.
+	[QUEUES.LIFT_SUSPENSIONS, "37 * * * *"],
+	// Hourly beside the lift sweep rather than daily: the window's end is when withheld
+	// money becomes the creator's again on the DEFAULT outcome, and a day's latency on
+	// being paid money you are owed is the kind of thing that reads as the forfeiture the
+	// hold exists to disprove, without saving anyone a review.
+	[QUEUES.RELEASE_PAYOUT_HOLDS, "52 * * * *"], // 5 AM daily. The counter-notice window is 10 business days, so a daily sweep
 	// is well within the statutory tolerance — and the sweep errs toward "late"
 	// per the brief's guidance: it restores no earlier than `restoreNoEarlierThan`,
 	// never before.

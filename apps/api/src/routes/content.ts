@@ -93,6 +93,7 @@ import {
 	desc,
 	eq,
 	inArray,
+	isNotNull,
 	isNull,
 	like,
 	ne,
@@ -116,6 +117,7 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
@@ -447,13 +449,36 @@ async function listComments(
 		blockedUserIds(viewerId),
 	]);
 
+	// A suspended author's comments go dark with the rest of their account. They render
+	// through the same gap the moderation-removed path already draws, so the thread
+	// around them still reads and nothing states the suspension — a tombstoned (null)
+	// author stays readable, since that gap belongs to a deleted account's promise.
+	// One grouped lookup rather than a predicate per row, matching how `blocked` loads.
+	const authorIds = [...new Set(rows.map((r) => r.comment.userId).filter((id) => id != null))];
+	const suspendedAuthors = new Set<number>(
+		authorIds.length === 0
+			? []
+			: (
+					await db
+						.select({ id: users.id })
+						.from(users)
+						.where(and(inArray(users.id, authorIds), isNotNull(users.suspendedAt)))
+				).map((r) => r.id),
+	);
+
 	const visibleIds = rows
-		.filter((r) => r.comment.moderationStatus === "visible")
+		.filter(
+			(r) =>
+				r.comment.moderationStatus === "visible" &&
+				(r.comment.userId == null || !suspendedAuthors.has(r.comment.userId)),
+		)
 		.map((r) => r.comment.id);
 	const { tallies, mine } = await voteTallies("comment", visibleIds, viewerId);
 
 	const nodes = rows.map((r) => {
-		const visible = r.comment.moderationStatus === "visible";
+		const visible =
+			r.comment.moderationStatus === "visible" &&
+			(r.comment.userId == null || !suspendedAuthors.has(r.comment.userId));
 		return {
 			row: r,
 			id: r.comment.id,
@@ -2205,6 +2230,12 @@ const contentRoutes = new Hono()
 			conditions.push(or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)) as SQL);
 		}
 
+		// A suspended account goes dark: its posts drop out of the public feed before any
+		// LIMIT, beside the block and maturity filters rather than after the page is cut.
+		if (mine !== "true") {
+			conditions.push(notSuspendedAccount(posts.creatorId) as SQL);
+		}
+
 		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
 		// for drafts (the creator's own view), so fall back to createdAt to keep them ordered.
 		const feedOrder = sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`;
@@ -2393,6 +2424,17 @@ const contentRoutes = new Hono()
 		// the permalink 404s for everyone else, matching how drafts are hidden from feeds.
 		const viewerId = await getOptionalUserId(c);
 		if (!post.isPublished && viewerId !== post.creatorId) {
+			return c.json({ error: "Post not found" }, 404);
+		}
+
+		// A suspended author's permalink reads as absent for the same reason a hidden
+		// entity's does: the account's presence stops being served, and the ordinary
+		// 404 is the least informative answer the reader already renders.
+		if (
+			post.creatorId != null &&
+			viewerId !== post.creatorId &&
+			(await isSuspendedAccount(post.creatorId))
+		) {
 			return c.json({ error: "Post not found" }, 404);
 		}
 
@@ -2623,6 +2665,10 @@ const contentRoutes = new Hono()
 	.get("/posts/:slug/comments", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
+		// The thread of a suspended author's post is as absent as the post itself.
+		if (post.creatorId != null && (await isSuspendedAccount(post.creatorId))) {
+			return c.json({ error: "Post not found" }, 404);
+		}
 		return c.json({ comments: await listComments("post", post.id, await getOptionalUserId(c)) });
 	})
 
@@ -2806,6 +2852,12 @@ const contentRoutes = new Hono()
 			const work = await findWorkRow(c.req.param("id"));
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
+			// A suspended creator's Work has no public review surface — the same 404 the
+			// Work page itself returns, since this list is a section of that page.
+			if (work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
+				return c.json({ error: "Work not found" }, 404);
+			}
+
 			const currentUserId = await getOptionalUserId(c);
 			const window = c.req.valid("query").window ?? "month";
 
@@ -2840,7 +2892,12 @@ const contentRoutes = new Hono()
 						),
 				})
 				.from(reviews)
-				.where(and(eq(reviews.workId, work.id), visibleReview));
+				// Suspension joins `visibleReview` here because it is viewer-independent —
+				// exactly the property the aggregate's no-block carve-out rests on, so the
+				// two rules never ask the same number to disagree with itself.
+				.where(
+					and(eq(reviews.workId, work.id), visibleReview, notSuspendedAccount(reviews.userId)),
+				);
 
 			// The written reviews themselves. Hidden ones are withheld here for the same
 			// reason they're excluded from the aggregate — this is a public read. Blocked
@@ -2863,6 +2920,10 @@ const contentRoutes = new Hono()
 						eq(reviews.workId, work.id),
 						visibleReview,
 						notBlockedBy(currentUserId, reviews.userId),
+						// A suspended reviewer's words go with the rest of their account;
+						// listed beside the block filter because both answer "who may meet
+						// the reader here".
+						notSuspendedAccount(reviews.userId),
 					),
 				);
 
@@ -3566,6 +3627,30 @@ const contentRoutes = new Hono()
 			if (!access.canReach) return c.json({ error: "Work not found" }, 404);
 		}
 
+		// A suspended creator's Work reads as absent — the same 404 a private Work gets,
+		// never a differently-worded one, because naming the state would leak it. Placed
+		// after the withdrawn-purchaser branch deliberately: a suspension removes the
+		// creator from circulation; it does not confiscate what a buyer already owns.
+		if (!isOwner && work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
+			const stillOwned =
+				work.visibility === "withdrawn" ||
+				(viewerId != null &&
+					(
+						await db
+							.select({ id: purchases.id })
+							.from(purchases)
+							.where(
+								and(
+									eq(purchases.workId, work.id),
+									eq(purchases.buyerId, viewerId),
+									eq(purchases.status, "completed"),
+								),
+							)
+							.limit(1)
+					).length > 0);
+			if (!stillOwned) return c.json({ error: "Work not found" }, 404);
+		}
+
 		const [workAssets, jobRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, work.id)),
 			db
@@ -3748,6 +3833,7 @@ const contentRoutes = new Hono()
 				seedAccess: works.seedAccess,
 				takedownStatus: works.takedownStatus,
 				quarantineStatus: works.quarantineStatus,
+				creatorId: works.creatorId,
 				sharerName: users.displayName,
 				sharerHandle: users.atprotoHandle,
 			})
@@ -3761,6 +3847,13 @@ const contentRoutes = new Hono()
 		// the existence the rung withholds. Withdrawn, gated or taken-down Works fail the same
 		// check, and a link to one of those has nothing left to open either.
 		if (!row || !isShareable(row)) {
+			return c.json({ error: "This link is no longer available" }, 404);
+		}
+
+		// A suspended creator's Work is no longer openable, so a link to one has nothing
+		// left to point at — the same "no longer available" a revoked link gets, rather
+		// than a response that would state the suspension.
+		if (row.creatorId != null && (await isSuspendedAccount(row.creatorId))) {
 			return c.json({ error: "This link is no longer available" }, 404);
 		}
 
@@ -3811,6 +3904,9 @@ const contentRoutes = new Hono()
 					eq(works.streamEnabled, true),
 					openToEveryone(works.seedAccess),
 					notBlockedBy(viewerId, works.creatorId),
+					// Suspended accounts are out of the commons entirely, beside the block
+					// filter a reader already sees here.
+					notSuspendedAccount(works.creatorId),
 					// 🚨 **Load-bearing here, not belt-and-braces.** Adult work MAY be Public
 					// Access since 2026-08-28, so this listing genuinely holds rows that must
 					// not reach a reader who has not opted in and verified. It was the
@@ -3862,13 +3958,19 @@ const contentRoutes = new Hono()
 				? await accountByHandle(resolution.redirectToHandle)
 				: undefined);
 		if (!account) return c.json({ error: "Creator not found" }, 404);
+		const viewerId = await getOptionalUserId(c);
+		// A suspended creator's Catalog is gone with the rest of their presence — the
+		// same 404 an unknown handle returns, from the route that already treats hidden
+		// as absent.
+		if (viewerId !== account.id && (await isSuspendedAccount(account.id))) {
+			return c.json({ error: "Creator not found" }, 404);
+		}
 		const creator = {
 			id: account.id,
 			handle: account.atprotoHandle,
 			displayName: account.displayName,
 		};
 
-		const viewerId = await getOptionalUserId(c);
 		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
 		// A creator browsing their own Catalog sees drafts too; nobody else does.
 		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
@@ -4504,6 +4606,9 @@ const contentRoutes = new Hono()
 			conditions.push(eq(projects.creatorId, userId));
 		} else {
 			conditions.push(eq(projects.isPublished, true));
+			// A suspended account's Projects go dark with everything else it made, before
+			// any LIMIT, the same way the feed drops its posts.
+			conditions.push(notSuspendedAccount(projects.creatorId) as SQL);
 		}
 
 		// 🚨 **A project whose released Works are all ones the viewer may not see is absent too.**
@@ -4757,7 +4862,16 @@ const contentRoutes = new Hono()
 			})
 			.from(projects)
 			.innerJoin(users, eq(projects.creatorId, users.id))
-			.where(eq(projects.slug, slug))
+			.where(
+				and(
+					eq(projects.slug, slug),
+					// A suspended creator's Project page reads as not found — the listing's
+					// filter is the route's WHERE so the answer never depends on which
+					// surface was asked. Viewer-independent, so the owner's own row drops
+					// too; a suspended account cannot sign in to reach it anyway.
+					notSuspendedAccount(projects.creatorId),
+				),
+			)
 			.limit(1);
 
 		if (result.length === 0) return c.json({ error: "Project not found" }, 404);

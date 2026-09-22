@@ -1,6 +1,6 @@
 {
-  "id": "38d15a8c-74b3-4853-b390-46684d11c6fb",
-  "prevId": "57a1b042-efe4-493a-a3b2-a4e717136065",
+  "id": "56b85756-f3e0-4169-9911-35406a5d73f9",
+  "prevId": "38d15a8c-74b3-4853-b390-46684d11c6fb",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3624,6 +3624,12 @@
         },
         "suspended_until": {
           "name": "suspended_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_review_resolved_at": {
+          "name": "payout_review_resolved_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

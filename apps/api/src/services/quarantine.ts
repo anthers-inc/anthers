@@ -31,11 +31,12 @@
  * storage layer refuses the key, which catches a route that never resolved a Work. Either
  * alone would be enough on a good day. This is not a good-day feature.
  *
- * **What this deliberately does not decide: whether the uploader's account is suspended.**
- * The wiki's *Moderation & Reporting* refuses a `user` subject with `400 not_moderatable` because suspension has
- * unanswered consequences for Works, purchases, support in flight and payouts, and
- * Child Safety Incident Runbook's Step 6 tells an operator not to invent one during an incident. Denying delivery
- * is this module; suspending a person is a decision that has not been taken.
+ * **What this deliberately does not touch: the uploader's account.** Quarantine denies
+ * delivery of the material and nothing more. Suspending the person is a separate act on
+ * the account row — `services/moderation.ts`'s `suspendAccount` — which an operator takes
+ * on its own grounds, not as a side effect of a finding here. The Child Safety Incident
+ * Runbook's Step 6 says the same thing from the other side: do not invent a person-level
+ * action during an incident.
  */
 
 import { db } from "@anthers/db/client";
@@ -539,8 +540,9 @@ export interface QuarantineObjectResult {
  * such history, and the only durable subject left is the uploader. Writing `user` there
  * would be worse than writing nothing: `loadModerationQueue` attaches the latest action to
  * a queue item by `(subject_type, subject_id)`, so a reported *person* would render as
- * hidden with reason `quarantine` when nothing whatever happened to their account — and
- * suspending a person is precisely the decision the wiki's *Moderation & Reporting* records as not taken. The
+ * hidden with reason `quarantine` when nothing whatever happened to their account — a
+ * *person* is suspended or not by `suspendAccount` on its own grounds, never as a side
+ * effect of quarantining what they uploaded. The
  * `media_quarantine` row is the record, and `GET /api/admin/quarantine` is where it surfaces.
  *
  * **Idempotent on the key**, on the same reasoning `quarantineWork` states: the realistic

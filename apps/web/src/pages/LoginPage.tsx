@@ -94,6 +94,15 @@ export default function LoginPage() {
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(false);
 
+	/**
+	 * The suspension interstitial, set when the code verifies but the account is
+	 * suspended. The holder has just proved the mailbox — the strongest telling
+	 * available — so the card itself becomes the notice rather than a generic failure.
+	 * State rather than a route: a suspended account is never signed in, so nothing
+	 * protects a `/suspended` page, and the thing being told is bound to this attempt.
+	 */
+	const [suspended, setSuspended] = useState<{ until: string | null } | null>(null);
+
 	/** Ask for a code. Answers the same whatever it found, so there is nothing to branch on. */
 	const sendCode = useCallback(async (address: string) => {
 		const res = await client.api.auth.signin.start.$post({ json: { email: address } });
@@ -149,7 +158,18 @@ export default function LoginPage() {
 				json: { email: codeEmail ?? "", code },
 			});
 			if (!res.ok) {
-				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				const body = (await res.json().catch(() => ({}))) as {
+					error?: string;
+					reason?: string;
+					suspendedUntil?: string | null;
+				};
+				// The code proved the mailbox and the account is suspended: the answer is
+				// the truth, told here, rather than a failure thrown back into the code field.
+				if (body.reason === "account_suspended") {
+					setCodeEmail(null);
+					setSuspended({ until: body.suspendedUntil ?? null });
+					return;
+				}
 				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
 			}
 			const body = (await res.json()) as { resume: boolean; needsOnboarding?: boolean };
@@ -225,8 +245,36 @@ export default function LoginPage() {
 					className="card relative z-10 min-h-[38rem] w-full bg-base-200 shadow-lg"
 				>
 					<div className="card-body justify-center">
-						<h1 className="card-title justify-center text-2xl">Log In</h1>
-						{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain div, not
+						{suspended ? (
+							/* The suspension interstitial. The code just proved the mailbox, so this
+							   is the strongest telling there is — the card becomes the notice.
+							   What it deliberately does not do is word a suspension as anything
+							   the account did itself (the 51.02 wording rule), and it names the
+							   appeal the moderation email already pointed at. */
+							<>
+								<h1 className="card-title justify-center text-2xl">Account Suspended</h1>
+								<div className="text-center text-sm text-base-content/80 space-y-3">
+									<p>
+										Anthers has suspended this account
+										{suspended.until
+											? ` until ${new Date(suspended.until).toLocaleDateString(undefined, { dateStyle: "long" })}`
+											: ""}
+										. While suspended you can't sign in, and your presence and works aren't shown
+										publicly.
+									</p>
+									<p>
+										We emailed the reason to you. If you believe this is a mistake, reply to that
+										email to appeal.
+									</p>
+								</div>
+								<Link to="/" className="btn btn-primary w-full mt-4">
+									Back to Anthers
+								</Link>
+							</>
+						) : (
+							<>
+								<h1 className="card-title justify-center text-2xl">Log In</h1>
+								{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain div, not
 						    <p>, so DaisyUI's card-body `p { flex-grow: 1 }` doesn't balloon it and
 						    shove the form down. It is a LINK now rather than a mode toggle — the
 						    card it used to flip to no longer exists.
@@ -236,62 +284,64 @@ export default function LoginPage() {
 						    came to log in and cannot — so it is the second-best place after the
 						    navbar to say that joining costs nothing. The destination page states the
 						    monthly Public Access limit in the same breath, per the wiki's *How Anthers Talks About Itself*. */}
-						<div className="text-center text-sm text-base-content/70">
-							New to Anthers?{" "}
-							<Link to="/subscribe" className="link link-primary">
-								Sign up free
-							</Link>
-						</div>
-						{errors.general && (
-							<div className="alert alert-error text-sm mt-2">
-								<span>{errors.general}</span>
-							</div>
-						)}
-						<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
-							<FormField
-								label="Email"
-								hint="We'll email you a six-character sign-in code — that's how signing in works."
-							>
-								{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
+								<div className="text-center text-sm text-base-content/70">
+									New to Anthers?{" "}
+									<Link to="/subscribe" className="link link-primary">
+										Sign up free
+									</Link>
+								</div>
+								{errors.general && (
+									<div className="alert alert-error text-sm mt-2">
+										<span>{errors.general}</span>
+									</div>
+								)}
+								<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
+									<FormField
+										label="Email"
+										hint="We'll email you a six-character sign-in code — that's how signing in works."
+									>
+										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
 								    "please include an '@' in the email address", which is a message about
 								    syntax on a page whose real answer is about what signing in *is*. The
 								    loose shape check above is the one whose sentence shows. */}
-								<input
-									type="text"
-									inputMode="email"
-									className="input input-bordered w-full"
-									autoComplete="email"
-									value={email}
-									onChange={(e) => setEmail(e.target.value)}
-									required
-								/>
-							</FormField>
-							<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
-								{loading ? (
-									<span className="loading loading-spinner loading-sm" />
-								) : (
-									"Email me a sign-in code"
-								)}
-							</button>
-						</form>
+										<input
+											type="text"
+											inputMode="email"
+											className="input input-bordered w-full"
+											autoComplete="email"
+											value={email}
+											onChange={(e) => setEmail(e.target.value)}
+											required
+										/>
+									</FormField>
+									<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
+										{loading ? (
+											<span className="loading loading-spinner loading-sm" />
+										) : (
+											"Email me a sign-in code"
+										)}
+									</button>
+								</form>
 
-						{/* ── Bluesky ────────────────────────────────────────────────────
+								{/* ── Bluesky ────────────────────────────────────────────────────
 						    Below the divider rather than beside the form, because it only
 						    works for an account that has already linked an identity — a
 						    prominent button that refuses most of the people who press it is
 						    worse than a quiet one. The divider says "or", not "or sign up
 						    with", deliberately. The handle itself is asked for in a modal;
 						    see `BlueskyHandleModal` for why it cannot be inline. */}
-						<div className="divider my-1 text-xs text-base-content/50">or</div>
-						<button
-							type="button"
-							className="btn btn-outline w-full"
-							onClick={() => setBlueskyOpen(true)}
-						>
-							<BlueskyMark className="h-4 w-4" />
-							Log in with Bluesky
-						</button>
+								<div className="divider my-1 text-xs text-base-content/50">or</div>
+								<button
+									type="button"
+									className="btn btn-outline w-full"
+									onClick={() => setBlueskyOpen(true)}
+								>
+									<BlueskyMark className="h-4 w-4" />
+									Log in with Bluesky
+								</button>
+							</>
+						)}
 					</div>
 				</div>
 			</div>
