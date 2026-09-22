@@ -76,6 +76,7 @@ function commit(files: Record<string, string | null>): string {
 function push(
 	stdin: string,
 	makeExit = 0,
+	extraEnv: Record<string, string> = {},
 ): { exitCode: number; target: string | null; stdout: string } {
 	writeFileSync(makeLog, "");
 	writeFileSync(cwdLog, "");
@@ -89,6 +90,7 @@ function push(
 			...SANDBOX_ENV,
 			PATH: `${stubBin}:${process.env.PATH}`,
 			STUB_MAKE_EXIT: String(makeExit),
+			...extraEnv,
 		},
 	});
 	const logged = readFileSync(makeLog, "utf8").trim();
@@ -335,6 +337,51 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 describe("an empty ref list", () => {
 	it("refuses rather than testing the current checkout instead of the push", () => {
 		expect(push("").exitCode).toBe(1);
+	});
+});
+
+describe("GIT_DIR inheritance from the pusher", () => {
+	// A push from a linked worktree hands its hook GIT_DIR=<root>/.git/worktrees/<name> — an
+	// absolute path into ANOTHER checkout's index. The verify worktree must still be created
+	// relative to THIS repository's root and must not inherit the pusher's dirty state, or one
+	// session's half-finished work can fail a different branch's push (2026-09-22). The hook
+	// unsets GIT_DIR itself before doing anything, so the tests that survive here are the ones
+	// the scrub leaves behind.
+	it("verifies in the right root, and with only the pushed tree, when GIT_DIR points at a linked worktree", () => {
+		// Stand up a linked worktree carrying a dirty tree, then push its committed head
+		// with GIT_DIR set the way git sets it for a hook spawned by a push from there.
+		const wtPath = join(dir, "linked-wt");
+		git("worktree", "add", "-b", "wt-dirty", wtPath);
+		writeFileSync(join(wtPath, "wt-dirty.txt"), "uncommitted\n");
+		const tip = git("-C", wtPath, "rev-parse", "HEAD"); // same content as base, plus the branch
+		// This is the honest GIT_DIR for that worktree — git rev-parse --absolute-git-dir
+		// answers the per-worktree dir, not the main .git.
+		const wtGitDir = git("-C", wtPath, "rev-parse", "--absolute-git-dir");
+		expect(wtGitDir).toContain(join(".git", "worktrees"));
+		const res = push(line(tip, base), 0, { GIT_DIR: wtGitDir });
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBe("verify");
+		expect(makeCwd().startsWith(join(repo, ".worktrees", "pre-push-verify-"))).toBe(true);
+		expect(capturedFiles()).not.toContain("./wt-dirty.txt");
+		git("worktree", "remove", "--force", wtPath);
+		git("branch", "-D", "wt-dirty");
+	});
+
+	it("does not let a foreign GIT_DIR pick the tree the verify worktree checks out", () => {
+		// The same shape with a plain absolute GIT_DIR pointing at another repository — the
+		// hook must still verify against the root it was launched from.
+		const foreign = mkdtempSync(join(tmpdir(), "pre-push-foreign-"));
+		Bun.spawnSync(["git", "init", "-q", "-b", "main", foreign], { env: SANDBOX_ENV });
+		git("checkout", "-q", "-b", "foreign-gitdir", base);
+		commit({ "foreign-code.ts": "export const own = 1;\n" });
+		const res = push(line(git("rev-parse", "HEAD"), base), 0, {
+			GIT_DIR: join(foreign, ".git"),
+		});
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBe("verify");
+		expect(makeCwd().startsWith(join(repo, ".worktrees", "pre-push-verify-"))).toBe(true);
+		expect(capturedFiles()).toContain("./foreign-code.ts");
+		rmSync(foreign, { recursive: true, force: true });
 	});
 });
 
