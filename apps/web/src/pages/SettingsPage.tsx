@@ -1667,8 +1667,8 @@ export default function SettingsPage() {
 										<span className="label-text font-medium">Enable creator mode</span>
 										<p className="text-xs text-base-content/50 mt-0.5">
 											Allows you to publish projects and posts — releasing anything also requires a
-											completed Stripe payout setup, which at launch reaches only the countries Stripe
-											supports for a platform like ours
+											completed Stripe payout setup, which at launch reaches only the countries
+											Stripe supports for a platform like ours
 										</p>
 									</div>
 								</label>
