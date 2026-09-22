@@ -19,6 +19,7 @@
  */
 
 import type { works } from "@anthers/db/schema";
+import type { QuarantineObjectKind } from "../services/quarantine.js";
 import {
 	beginScans,
 	type ScannableKind,
@@ -53,6 +54,10 @@ export interface ScanMediaData {
 	storageKey: string;
 	/** The Work it belongs to, when it belongs to one. Null for profile images. */
 	workId?: number | null;
+	/** Who uploaded it, for an object that belongs to no Work — read back off its scan row. */
+	uploaderId?: number | null;
+	/** Which kind of Work-less object it is, in the upload route's own vocabulary. */
+	objectKind?: QuarantineObjectKind | null;
 	/**
 	 * How the object must be read. Defaults to `image`, which is what every job enqueued
 	 * before video coverage existed carries — a payload with no `kind` is an image job from
@@ -63,7 +68,11 @@ export interface ScanMediaData {
 
 export async function scanMedia(data: ScanMediaData): Promise<void> {
 	const scan = data.kind === "video" ? scanStoredVideo : scanStoredImage;
-	const outcome = await scan(data.storageKey, { workId: data.workId ?? null });
+	const outcome = await scan(data.storageKey, {
+		workId: data.workId ?? null,
+		uploaderId: data.uploaderId ?? null,
+		objectKind: data.objectKind ?? null,
+	});
 
 	// Logged only when it is not the ordinary answer. A line per clean scan would bury the
 	// worker log, and this is a log somebody has to be able to read — the same reasoning

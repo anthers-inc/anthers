@@ -673,6 +673,13 @@
       "when": 1790020938183,
       "tag": "0095_glossy_scarlet_witch",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1790036658284,
+      "tag": "0096_eminent_talos",
+      "breakpoints": true
     }
   ]
 }
