@@ -52,6 +52,7 @@ import {
 import { and, count, desc, eq, exists, inArray, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
+import { resumePausedRenewals } from "./invoices.js";
 import { notify } from "./notifications.js";
 import { queueRecordSync } from "./record-sync.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
@@ -667,6 +668,15 @@ export async function unsuspendAccount(input: {
 			note,
 		});
 	});
+
+	// Renewal pause is a state rather than a canceled subscription, so this is the moment
+	// the months that ran under suspension rejoin the books — their paid invoices come off
+	// `paused` and land against the reinstatement month, where settlement credits what the
+	// suspension withheld. Deliberately NOT in the transaction above: a Stripe id was
+	// already its own record, and a re-key whose insert had to roll back the whole lift
+	// would hold a suspension open on a bookkeeping failure.
+	const resumed = await resumePausedRenewals(input.userId, new Date());
+	if (resumed > 0) console.log(`moderation: resumed ${resumed} paused renewal(s) on reinstatement`);
 
 	return { status: "visible" };
 }

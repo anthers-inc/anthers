@@ -44,6 +44,7 @@ import {
 	invoices,
 	monthSettlements,
 	poolDistributions,
+	users,
 } from "@anthers/db/schema";
 import {
 	currentCycleKey,
@@ -271,6 +272,31 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 		}
 	}
 
+	// **Accrual stops at suspension** (Parker, 2026-09-22): a month that ran while the
+	// creator was suspended credits them nothing — entitlement is read, which is correct,
+	// because suspended creators earn nothing from the pool or from support directed at
+	// them. The *distribution* rows below stay on the record (they are the supporter's
+	// own history and the per-month view), so the withheld half is *the credits*: a month
+	// that runs with no credits for a suspended creator leaves the owed half of its
+	// arithmetic unsettled rather than cancelled, and the next run after reinstatement
+	// credits it against the month it was earned in — which is exactly how a suspension
+	// that lifts mid-review pays out.
+	const earnable = new Map<number, boolean>();
+	for (const key of entitled.keys()) {
+		const creatorId = Number(key.split(":")[0]);
+		if (!earnable.has(creatorId)) {
+			const [row] = await db
+				.select({ suspendedAt: users.suspendedAt })
+				.from(users)
+				.where(eq(users.id, creatorId))
+				.limit(1);
+			earnable.set(creatorId, row?.suspendedAt == null);
+		}
+	}
+	for (const key of [...entitled.keys()]) {
+		if (!earnable.get(Number(key.split(":")[0]))) entitled.delete(key);
+	}
+
 	return db.transaction(async (tx) => {
 		// 2. The difference between what the month now entitles and what was already credited.
 		const already = await tx
@@ -292,6 +318,12 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 		const keys = new Set([...entitled.keys(), ...credited.keys()]);
 		const deltas: (typeof creatorCredits.$inferInsert)[] = [];
 		for (const key of keys) {
+			// A suspended creator earns nothing from this month — including a negative
+			// correction against money an earlier run credited them before the suspension.
+			// Reversing that here would be a clawback dressed as a settlement, and the
+			// balance the review may find tainted is exactly what such a reversal would
+			// erase.
+			if (!earnable.get(Number(key.split(":")[0]))) continue;
 			const owed = entitled.get(key)?.amount ?? new Decimal(0);
 			const delta = CENTS(owed.minus(credited.get(key) ?? new Decimal(0)));
 			if (delta.isZero()) continue;

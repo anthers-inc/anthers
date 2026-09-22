@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "payout_review_resolved_at" timestamp with time zone;

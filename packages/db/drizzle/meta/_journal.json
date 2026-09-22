@@ -701,6 +701,13 @@
       "when": 1790108133588,
       "tag": "0099_known_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1790108694993,
+      "tag": "0100_last_sasquatch",
+      "breakpoints": true
     }
   ]
 }

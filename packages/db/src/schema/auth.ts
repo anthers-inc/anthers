@@ -113,6 +113,24 @@ export const users = pgTable("users", {
 	 */
 	suspendedAt: timestamp("suspended_at", { withTimezone: true }),
 	suspendedUntil: timestamp("suspended_until", { withTimezone: true }),
+	// ── The payout review that accompanies a suspension ─────────────────────
+	// The three columns below are the *review over the suspension's payout
+	// hold*, not part of the suspension state itself. `services/payouts.ts`
+	// owns them and reads the pair above to open the hold.
+	/**
+	 * When the suspension's payout hold released, or null while the review
+	 * stands open. Meaningful only while `suspendedAt` is set: the hold exists
+	 * for the one question — was any of the suspended balance earned BY the
+	 * terms violation — and its default answer is no, money pays out, reached
+	 * by `releaseStalePayoutHolds` rather than by an operator at the window's
+	 * end. Stamped by `releasePayoutHold` however the review concluded — an
+	 * operator's finding, an operator's clear, or the lapsed window — because
+	 * "absence by the deadline means release" makes the deadline's pass a
+	 * conclusion of its own.
+	 */
+	payoutReviewResolvedAt: timestamp("payout_review_resolved_at", {
+		withTimezone: true,
+	}),
 	/**
 	 * When the account holder accepted the Terms of Service, including the 13+ assertion.
 	 * **Null until onboarding completes** — the account exists the moment the emailed

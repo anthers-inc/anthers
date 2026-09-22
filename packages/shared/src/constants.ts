@@ -714,6 +714,21 @@ export const RECORD_REDACTION_YEARS = 3;
  */
 export const PAYOUT_THRESHOLD = 20;
 
+/**
+ * How long a suspension's payout hold stands open for review, in days, counted from
+ * the suspension. A lapsed window with no finding recorded releases the hold
+ * automatically — `services/payouts.ts`'s `releaseStalePayoutHolds` runs the pass and
+ * stamps `users.payout_review_resolved_at` on its own authority, so the DEFAULT at
+ * the window's end is payout rather than forfeiture and no person needs to act for
+ * the money to reach its creator.
+ *
+ * 🚨 **A policy value, not a tunable.** The moderation runbook states this number to
+ * the operator at suspension time and it is repeated there, not the reverse — change
+ * it here and the runbook is stale, change it in the runbook and it does not move.
+ * Thirty days is the launch figure: long enough for a review to actually happen,
+ * short enough that a suspended creator is not financing their own review.
+ */
+
 // ── Delivery assumption (AV1 1080p60) ────────────────────────────────────────
 /**
  * Delivered GiB per stream-hour — a *size* assumption, used to describe how much
