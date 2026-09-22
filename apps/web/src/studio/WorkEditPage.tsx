@@ -49,6 +49,7 @@
 import {
 	isEmptyWriting,
 	isOwnThumbnail,
+	isPaged,
 	needsChosenThumbnail,
 	THUMBNAIL_RULE,
 } from "@anthers/shared/content";
@@ -122,6 +123,7 @@ import {
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
 import { frameOf } from "../lib/video-frame";
+import PanelEditor from "./PanelEditor";
 import RatingMatrix from "./RatingMatrix";
 import { unsavedKey } from "./work-edit";
 
@@ -772,9 +774,16 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					(fileReady ? (
 						<>
 							<WorkDeliverable work={asRead} lyrics={lyricsEditor} videoRef={videoEl} />
+							{/* Comics get a panel-correction surface once the pages are rendered. */}
+							{isPaged(type) && fileReady && (
+								<section className="rounded-box border border-base-300 bg-base-200/40 p-5">
+									<PanelEditor workId={current.id} pageCount={current.pageCount ?? 0} />
+								</section>
+							)}
+
 							{/* An image is replaced in place, as it could be before it had an upload
-							    step. Other kinds are not offered this: a new video re-encodes, and a
-							    released one would be unplayable while it did. */}
+				    step. Other kinds are not offered this: a new video re-encodes, and a
+				    released one would be unplayable while it did. */}
 							{type === "image" && (
 								<div className="max-w-xs">
 									<FileUpload
