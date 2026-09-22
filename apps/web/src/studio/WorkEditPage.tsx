@@ -1198,7 +1198,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 								<strong>Set up payouts before releasing.</strong> It is how you get paid, and it is
 								also what lets us say every creator here is an adult — Stripe checks identity so
 								Anthers never has to ask you for an ID. Anthers takes no cut, so all of it comes to
-								you.{" "}
+								you. One honest limit: Stripe's setup reaches only the countries Stripe supports for
+								a platform like ours, so if yours is not among them it cannot be completed yet.{" "}
 								<Link to={studioUrl("/settings")} className="link">
 									Set it up in Studio settings
 								</Link>

@@ -255,14 +255,27 @@ export const FAQ_ITEMS = {
 	// ⚠️ **Payout setup gates RELEASE, and this answer is the one that says so plainly.**
 	// The Creator Terms always claimed it; the code only started enforcing it on
 	// 2026-08-28, and `/parents` had a paragraph describing the gap. All three agree now.
-	// The country limit is stated rather than softened because a creator in one of the
-	// other ~160 countries finds out at the moment they try to release, and reading it here
-	// first is strictly better than discovering it then.
+	// The country limit is stated rather than softened because a creator in a country
+	// onboarding does not offer finds out at the moment they try to release, and reading it
+	// here first is strictly better than discovering it then. ⚠️ **No country count
+	// appears anywhere in this copy, deliberately**: the countries hosted onboarding
+	// offers are a per-platform Dashboard setting over a list Stripe moves (~46 countries
+	// for a platform like ours as of 2026-09, and not the "about 34" this answer claimed
+	// until the boundary was re-derived), so a typed number would be stale the moment
+	// either moves. The mechanism — you must be able to complete Stripe's setup — is what
+	// stays true, and the Creator Terms' named-regions sentence is the one remaining place
+	// that names them.
 	"creator-getting-started": {
 		category: "Creators",
 		question: "What do I need before I can publish?",
 		answer:
-			"A verified email address, and a completed payout setup with Stripe — the second one before you release anything, free work included. It exists for two reasons beyond paying you: it means no work here is stranded without a way to earn from the Time Pool, and because Stripe verifies identity and will not verify a minor, it is what lets us say every creator on Anthers is an adult without ever asking anyone for an ID. We never see those documents; we read back a yes or a no. The honest cost is that Stripe Connect reaches about 34 countries, so at launch you need to be in one of them — a limit we inherited rather than chose, and one we intend to get out of.",
+			"A verified email address, and a completed payout setup with Stripe — the second one before you release anything, free work included. It exists for two reasons beyond paying you: it means no work here is stranded without a way to earn from the Time Pool, and because Stripe verifies identity and will not verify a minor, it is what lets us say every creator on Anthers is an adult without ever asking anyone for an ID. We never see those documents; we read back a yes or a no. The honest cost is that Stripe's setup only reaches the countries Stripe supports for a platform like ours, so at launch you need to be in one of them to publish — a limit we inherited rather than chose, and one we intend to get out of.",
+	},
+	"creator-countries": {
+		category: "Creators",
+		question: "Can I publish if Stripe does not support my country?",
+		answer:
+			"Not yet, and we would rather you know that here than after you have uploaded something. Releasing anything on Anthers — free work included — requires completing Stripe's payout setup, because that is how we pay creators and how we know every creator here is an adult, and Stripe only offers it in the countries it supports for a platform like ours. If yours is not one of them, you cannot publish on Anthers today, though you can read, follow, and buy. We intend to publish from everywhere eventually, and knowing how many creators this excludes, and from where, is part of what will decide when.",
 	},
 	"creator-payouts": {
 		category: "Creators",
@@ -402,7 +415,9 @@ export const PAGE_FAQS: Record<FAQSurface, FAQId[]> = {
 	],
 	// /subscribe. Every question here is one somebody asks with their hand on the button,
 	// so the sequence is the order the doubts arrive: what will this cost me, what do I
-	// get, can I get out, and what happens to my data.
+	// get, can I get out, and what happens to my data. `creator-countries` closes it
+	// because "I was thinking of publishing" is itself a hand-on-the-button doubt, and it
+	// is the one doubt this page would otherwise answer at a `payouts_required` refusal.
 	signup: [
 		"card-required",
 		"whats-free",
@@ -410,6 +425,7 @@ export const PAGE_FAQS: Record<FAQSurface, FAQId[]> = {
 		"cancel-or-stop",
 		"bluesky",
 		"data-and-ads",
+		"creator-countries",
 	],
 };
 

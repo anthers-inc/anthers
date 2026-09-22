@@ -31,11 +31,13 @@
  *      paid accrues a debt to somebody we cannot pay. There is no such thing here as work
  *      that only costs money.
  *
- * ⚠️ **The cost of this is real and was the reason it was not done sooner:** Stripe Connect
- * reaches roughly 34 countries, so requiring it to publish shuts out creators in most of
- * the world, not merely creators who do not want money. That trade is now made
- * deliberately rather than by omission, and it is written down in both places a reader
- * meets it — the Creator Terms and `/parents`.
+ * ⚠️ **The cost of this is real and was the reason it was not done sooner:** hosted Connect
+ * onboarding only offers the countries Stripe supports for a platform like ours (~46 as of
+ * 2026-09, a Dashboard-configured list rather than a constant — and not the "roughly 34" this
+ * comment used to claim), so requiring it to publish shuts out creators in most of the world,
+ * not merely creators who do not want money. That trade is now made deliberately rather than
+ * by omission, and it is written down where a reader meets it — the Creator Terms, `/parents`,
+ * the FAQ, and the release refusal below.
  */
 
 import { db } from "@anthers/db/client";
@@ -113,6 +115,6 @@ export function payoutRefusalMessage(
 	return standing.connected
 		? `Your payout setup isn't finished — Stripe still needs something from you. Open Payouts under Studio settings to see what, and you'll be able to ${act} once it clears.`
 		: act === "release"
-			? "Set up payouts before releasing your first Work. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you."
-			: "Set up payouts before publishing. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you.";
+			? "Set up payouts before releasing your first Work. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you. One limit worth knowing: Stripe's setup reaches only the countries Stripe supports for a platform like ours, so if yours is not among them it can't be completed yet."
+			: "Set up payouts before publishing. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you. One limit worth knowing: Stripe's setup reaches only the countries Stripe supports for a platform like ours, so if yours is not among them it can't be completed yet.";
 }
