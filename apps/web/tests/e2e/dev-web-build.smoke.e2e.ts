@@ -26,7 +26,7 @@ test.describe("dev web-build harness", () => {
 		// The harness must be up: if the route isn't registered (a non-checkout, or the API not
 		// running yet) there is no directory to write to, and that is the failure to surface.
 		const res = await fetch(`${API}/api/dev/build`).catch(() => null);
-		if (!res || !res.ok) {
+		if (!res?.ok) {
 			throw new Error(
 				`the dev build harness answered ${res?.status ?? "unreachable"} at ${API}/api/dev/build ` +
 					"— it exists only when the API runs from a checkout, which the browser session arranges",
