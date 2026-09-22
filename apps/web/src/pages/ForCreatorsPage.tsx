@@ -822,6 +822,16 @@ export default function ForCreatorsPage() {
 							Anthers is free to use. No platform profit, no hidden fees. Just publish your work and
 							keep what you earn.
 						</p>
+						{/* The one limit the page does not argue, because it cannot be argued away:
+						    publishing requires Stripe's payout setup, which reaches only the countries
+						    Stripe supports for a platform like ours. Said once, above the button rather
+						    than in the FAQ alone, so a creator it excludes does not discover it at a
+						    release refusal. No country count — the list moves with Stripe. */}
+						<p className="mx-auto mt-4 max-w-4xl text-sm leading-relaxed text-base-content/50">
+							Publishing also asks for a completed Stripe payout setup, which at launch reaches only
+							the countries Stripe supports for a platform like ours — where you are decides whether
+							you can publish yet, though not whether you can read, follow, and buy.
+						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to={startHref} className="btn btn-primary rounded-full px-7">
 								Create Your Account
