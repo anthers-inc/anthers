@@ -1389,7 +1389,24 @@ function viewerTranscoding(
 		if (!job) return null;
 		if (!canAccess)
 			return { ...job, hlsManifestUrl: null, audioManifestUrl: null, outputFileUrl: null };
-		if (!delivery || job.status !== "completed") return job;
+		if (!delivery || job.status !== "completed") {
+			// No delivery context means local storage, where every object is served
+			// unsigned — the row's URLs are already the playable ones. The audio
+			// rendition still has to be reported, or the Podcast-This row never renders
+			// in a dev browser at all; its URL is the manifest's sibling, same shape as
+			// the raw storage URL the row already carries.
+			if (job.mediaType === "video" && job.hlsManifestUrl && job.status === "completed") {
+				const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+				const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
+				if (hasAudioRendition) {
+					return {
+						...job,
+						audioManifestUrl: job.hlsManifestUrl.replace(/[^/]+$/, "audio.m3u8"),
+					};
+				}
+			}
+			return job;
+		}
 
 		if (job.mediaType === "video" && job.hlsManifestUrl) {
 			// The audio-only rendition rides the same access-checked route. Its URL is

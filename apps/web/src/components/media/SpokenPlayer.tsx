@@ -16,7 +16,7 @@ import {
 	PauseIcon,
 	PlayIcon,
 } from "@heroicons/react/24/solid";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import {
 	LISTEN_RESUME_FLOOR_SECONDS,
@@ -215,15 +215,27 @@ export default function SpokenPlayer({
 		}
 	};
 
-	const seekTo = (seconds: number) => {
+	const seekTo = useCallback((seconds: number) => {
 		const audio = audioRef.current;
-		if (audio && duration > 0) {
-			audio.currentTime = Math.min(Math.max(0, seconds), duration);
-			setProgress(audio.currentTime);
-		}
-	};
+		if (!audio) return;
+		/*
+		 * Read the element's own duration, not the `duration` state — the state trails the
+		 * element by a `durationchange` event, and a render that remounted the element has
+		 * the real value while the state is still catching up. A zero-duration element (no
+		 * metadata yet) cannot seek, and clamping against Infinity keeps the tap harmless
+		 * rather than refused.
+		 */
+		const max = Number.isFinite(audio.duration) ? audio.duration : seconds;
+		audio.currentTime = Math.min(Math.max(0, seconds), max);
+		setProgress(audio.currentTime);
+	}, []);
 
-	const skipBy = (seconds: number) => seekTo(progress + seconds);
+	const skipBy = useCallback(
+		(seconds: number) => {
+			seekTo((audioRef.current?.currentTime ?? 0) + seconds);
+		},
+		[seekTo],
+	);
 	const stepRate = (direction: 1 | -1) => setRate(stepSpokenRate(rate, direction));
 
 	// The shortcut keymap, scoped to this container. No arrow-key ±5s nudge: spoken uses
