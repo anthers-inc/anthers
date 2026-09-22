@@ -56,6 +56,13 @@ export function allowedOrigins(): string[] {
 			"http://localhost:4173",
 			// The admin app's preview, beside the site's in a browser run without a session.
 			"http://localhost:4174",
+			// 🚨 The portless path: when the dev proxy serves web/admin from a named host,
+			// api.<name>.localhost is the API's own origin, so the page's credentialed call
+			// back to it passes CORS. Without these, the new dev URLs return the request as
+			// cross-origin and fail preflight.
+			"https://anthers.localhost",
+			"https://api.anthers.localhost",
+			"https://admin.anthers.localhost",
 			// The API itself serves spike test pages that make credentialed requests back
 			// to the API. Dev-only — no production page is served from the API origin.
 			"http://localhost:8000",

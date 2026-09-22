@@ -133,7 +133,7 @@ make install
 make dev
 ```
 
-`make dev` starts a fresh session — its own Postgres and a private AT Protocol network — applies migrations, seeds a dev account and a small catalog, and starts the API, the worker, the web dev server and the admin app. The API listens on `:8000`, the site on `:3000` and the admin app on `:3001`. Setting `DEV_ACCOUNT_ADMIN=true` gives your dev address an admin account, whose sign-in code arrives in the session's mail catcher. **Nothing persists between sessions**: stopping `make dev` removes the database, the network and anything uploaded, and the next one starts clean.
+`make dev` starts a fresh session — its own Postgres and a private AT Protocol network — applies migrations, seeds a dev account and a small catalog, and starts the API, the worker, the web dev server and the admin app. The apps run behind **portless**, so the site answers at `https://anthers.localhost`, the admin app at `https://admin.anthers.localhost`, and the API at `https://api.anthers.localhost` — no fixed ports to collide with another project's. Setting `DEV_ACCOUNT_ADMIN=true` gives your dev address an admin account, whose sign-in code arrives in the session's mail catcher. **Nothing persists between sessions**: stopping `make dev` removes the database, the network and anything uploaded, and the next one starts clean. One-time machine setup for the named URLs (`portless trust` — one sudo prompt — plus `portless service install`) is in [PhD-Wiki `16.09 Dev Servers by Name, Not Port`](obsidian://open?vault=PhD-Wiki&file=16%20Web%20%26%20App%20Engineering%2F16.09%20Dev%20Servers%20by%20Name%2C%20Not%20Port); without it, `PORTLESS=0 bun run dev` serves the same apps on `:3000`/`:3001`/`:8000` as before.
 
 | Command | What it does |
 |---|---|

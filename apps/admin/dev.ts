@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The admin app's dev server, on :3001 beside the site on :3000 and the API on :8000.
+ * The admin app's dev server, `admin.anthers` beside `anthers` (the site) and
+ * `api.anthers` under portless, or on :3001 when run without it.
  *
- * Use `127.0.0.1` rather than `localhost`, as for the site: the admin session cookie is set by the
- * API on `127.0.0.1:8000`, and a browser treats the two names as different hosts.
+ * As with the site, the URL under portless is `https://admin.anthers.localhost`; under the
+ * direct fallback it is `http://127.0.0.1:3001` — the `127.0.0.1` spelling matters because
+ * the session cookie the API sets is host-scoped, and `localhost` is a different host.
  */
 import { serve } from "bun";
 import index from "./index.html";
@@ -18,4 +20,4 @@ const server = serve({
 	routes: { "/*": index },
 });
 
-console.log(`Admin dev server on http://127.0.0.1:${server.port}`);
+console.log(`Admin dev server on ${process.env.PORTLESS_URL ?? `http://127.0.0.1:${server.port}`}`);

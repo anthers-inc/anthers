@@ -112,43 +112,36 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # including after a crash, which the next session cleans up. Every email the servers send lands in
 # the session's mail catcher at http://localhost:8025 rather than in a real inbox. Anything set up by hand during a session is gone when it ends; a file-change restart
 # under `bun --watch` is not an end.
-# 🚨 Refuse a second dev session BEFORE touching anything. Two parallel sessions landed this:
-# `dev-local` used to kill whatever held ports 8000/3000/3001 and only *then* run `session.ts
-# dev`, which refuses a second dev — so a second `make dev` took the first's servers down and
-# started nothing, the worst of both outcomes. The pid-file probe below runs first, so a live dev
-# session makes the command fail loudly and harm nothing. The kill loop stays, but only for ports
-# orphaned by an interrupted run — where no live pid file exists to refuse on.
+# 🚨 **A dev server owns a name, not a port.** The three apps bind ephemeral ports allocated
+# by the portless proxy (`portless.json`), and the world reaches them as
+# `https://anthers.localhost` / `admin.anthers.localhost` / `api.anthers.localhost`. Nothing
+# here ever claims :3000/:3001/:8000, so two projects' dev sessions cannot collide — the
+# failure this file's kill-loops used to manage is inexpressible in this shape. The escape
+# hatch is `PORTLESS=0 bun run dev`, which serves on this machine's conventional ports for
+# contributors who have not installed the proxy.
+#
+# A second `make dev` is still refused, by pid file rather than port: the session's database
+# and network are per-run, and sharing them across two sessions is the failure the refusal
+# guards against. `make down` stops the session's process group.
+#
+# The setup that makes this work is one command per machine — see
+# `packages/web-shared/src/lib/rpc.ts` beside the `portless.json` at the root for what
+# lands where.
 dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@for PIDFILE in .dev.pid .dev-api.pid; do \
 		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
 		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
 			echo "  -> A dev session is already running (pid $$DEV_PID, $$PIDFILE)."; \
-			echo "     Refusing to start a second and take its ports. 'make down' stops it first."; \
+			echo "     Refusing to start a second; 'make down' stops it first."; \
 			exit 1; \
 		fi; \
 	done
-	@KILLED=0; \
-	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
-		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
-		if [ -n "$$EXISTING_PID" ]; then \
-			echo "  -> WARNING: Port $$PORT in use (pid $$EXISTING_PID) — killing to free port"; \
-			kill $$EXISTING_PID 2>/dev/null || true; \
-			KILLED=1; \
-		fi; \
-	done; \
-	[ "$$KILLED" = "1" ] && sleep 1 || true
 	@bun run scripts/session.ts dev --pid-file .dev.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev'
 
 # The API alone still needs a database, so it starts the dev session itself — which means it cannot
 # run beside `make dev`, and the session refuses rather than letting the two share one.
 dev-api: ## Start API dev server only, in its own dev session
-	@EXISTING_PID=$$(lsof -ti :$(API_PORT) 2>/dev/null); \
-	if [ -n "$$EXISTING_PID" ]; then \
-		echo "  -> WARNING: Port $(API_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
-		kill $$EXISTING_PID 2>/dev/null || true; \
-		sleep 1; \
-	fi
 	@bun run scripts/session.ts dev --pid-file .dev-api.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev:api'
 
@@ -158,12 +151,6 @@ dev-worker: ## Start background job worker only, inside the running dev session
 	@bun run scripts/session.ts attach dev -- bun run dev:worker
 
 dev-web: ## Start web dev server only
-	@EXISTING_PID=$$(lsof -ti :$(WEB_PORT) 2>/dev/null); \
-	if [ -n "$$EXISTING_PID" ]; then \
-		echo "  -> WARNING: Port $(WEB_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
-		kill $$EXISTING_PID 2>/dev/null || true; \
-		sleep 1; \
-	fi
 	@setsid bun run dev:web & DEV_PID=$$!; \
 	echo $$DEV_PID > .dev-web.pid; \
 	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-web.pid" EXIT; \
@@ -183,18 +170,13 @@ down: ## Stop everything
 		fi; \
 	done; \
 	if [ "$$FOUND" = "0" ]; then \
-		echo "  -> No pid files found, checking ports..."; \
-		for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
-			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
-			if [ -n "$$PORT_PID" ]; then \
-				kill $$PORT_PID 2>/dev/null || true; \
-				echo "  -> Killed process on port $$PORT (pid $$PORT_PID)"; \
-				FOUND=1; \
-			fi; \
-		done; \
+		echo "  -> No pid files found."; \
+		if command -v portless >/dev/null 2>&1; then \
+			portless prune >/dev/null 2>&1 && echo "  -> Pruned stale portless routes (leftover processes from an interrupted dev)" || true; \
+		fi; \
 	fi; \
 	if [ "$$FOUND" = "0" ]; then \
-		echo "  -> No dev servers running"; \
+		echo "  -> Nothing else to do — dev apps run behind the portless proxy, so a dead make is a dead make."; \
 	fi
 
 # ─── Worktrees: one checkout per task (scripts/worktree.ts) ───────────────────

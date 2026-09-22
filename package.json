@@ -1,5 +1,6 @@
 {
 	"name": "anthers",
+	"portless": "anthers",
 	"private": true,
 	"version": "0.1.0",
 	"packageManager": "bun@1.3.9",
@@ -10,7 +11,7 @@
 		"scripts"
 	],
 	"scripts": {
-		"dev": "bun run --filter '*' dev",
+		"dev": "portless",
 		"dev:api": "bun run --filter api dev:api",
 		"dev:worker": "bun run --filter api dev:worker",
 		"dev:web": "bun run --filter web dev",

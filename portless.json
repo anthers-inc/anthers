@@ -1,0 +1,8 @@
+{
+	"$schema": "https://raw.githubusercontent.com/vercel-labs/portless/main/packages/portless/portless.schema.json",
+	"apps": {
+		"apps/web": { "name": "anthers" },
+		"apps/admin": { "name": "admin.anthers" },
+		"apps/api": { "name": "api.anthers" }
+	}
+}
