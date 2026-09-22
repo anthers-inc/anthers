@@ -100,11 +100,11 @@ export default function ParentsPage() {
 				</p>
 				<p>
 					⚠️ <strong>This costs something real, and we would rather you knew what.</strong> Stripe's
-					identity checks reach about 34 countries, so requiring them to publish shuts out creators
-					in much of the world — not only creators who wanted to be paid. We held the gap open for a
-					while for exactly that reason, and closed it because a platform teenagers use should be
-					able to say plainly who is publishing on it. Finding a check that does both is work we
-					still owe.
+					identity checks reach only the countries Stripe supports for a platform like ours, so
+					requiring them to publish shuts out creators in much of the world — not only creators who
+					wanted to be paid. We held the gap open for a while for exactly that reason, and closed it
+					because a platform teenagers use should be able to say plainly who is publishing on it.
+					Finding a check that does both is work we still owe.
 				</p>
 			</Section>
 
