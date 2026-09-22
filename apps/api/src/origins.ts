@@ -63,12 +63,31 @@ export function allowedOrigins(): string[] {
 			"https://anthers.localhost",
 			"https://api.anthers.localhost",
 			"https://admin.anthers.localhost",
+			// The per-worktree forms the proxy allocates under portless, derived from this API's
+			// own PORTLESS_URL: a worktree's web app answers at `<worktree>.anthers.localhost`
+			// while this API answers at `<worktree>.api.anthers.localhost`, and the page's
+			// credentialed call to the API carries the web origin. Dev-only by the guard above —
+			// PORTLESS_URL is unset outside the proxy and these only ever name `.localhost`.
+			...portlessWorktreeOrigins(),
 			// The API itself serves spike test pages that make credentialed requests back
 			// to the API. Dev-only — no production page is served from the API origin.
 			"http://localhost:8000",
 			...sessionPreviewOrigins(),
 		]),
 	];
+}
+
+/**
+ * The named dev origins a worktree serves under portless, derived from this process's own
+ * `PORTLESS_URL` — which names the API (`https://<worktree>.api.anthers.localhost`), so the
+ * sibling web and admin origins follow from it. Empty outside the proxy.
+ */
+function portlessWorktreeOrigins(): string[] {
+	const url = process.env.PORTLESS_URL ?? "";
+	const m = /^https:\/\/(.+)\.api\.anthers\.localhost$/.exec(url);
+	if (!m) return [];
+	const worktree = m[1];
+	return [`https://${worktree}.anthers.localhost`, `https://${worktree}.admin.anthers.localhost`];
 }
 
 /**
