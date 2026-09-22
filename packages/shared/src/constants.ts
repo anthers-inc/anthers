@@ -728,6 +728,7 @@ export const PAYOUT_THRESHOLD = 20;
  * Thirty days is the launch figure: long enough for a review to actually happen,
  * short enough that a suspended creator is not financing their own review.
  */
+export const PAYOUT_REVIEW_WINDOW_DAYS = 30;
 
 // ── Delivery assumption (AV1 1080p60) ────────────────────────────────────────
 /**

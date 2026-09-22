@@ -55,7 +55,7 @@ import {
 import { supportAmount } from "@anthers/shared/constants";
 import { cardFee, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { and, eq, inArray, isNotNull, isNull, like, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { computeMonth, type MonthCharge } from "./distribute-pool.js";
 
 export interface SettleCycleData {
@@ -297,6 +297,15 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 		if (!earnable.get(Number(key.split(":")[0]))) entitled.delete(key);
 	}
 
+	// Every creator this month named, including a suspended one, so the distribution rows
+	// below know who still stands on the estimate — but only an earnable creator's month
+	// is ever STAMPED. Writing the zeroed final row for a suspended creator would record
+	// "the month closed with them owed nothing", which nothing is in a position to decide;
+	// leaving the estimate un-stamped is what lets the next run after reinstatement credit
+	// the withheld month normally, the way a late invoice's money is.
+	const distributedCreatorIds = new Set(month$.distributions.keys());
+	const suspendedIds = [...distributedCreatorIds].filter((id) => earnable.get(id) === false);
+
 	return db.transaction(async (tx) => {
 		// 2. The difference between what the month now entitles and what was already credited.
 		const already = await tx
@@ -367,8 +376,10 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 			});
 		}
 
-		// 4. The month's rows, made final. A creator the estimate named and the paid month does not
-		// is written to zero rather than left standing as an estimate nobody will settle.
+		// 4. The month's rows, made final — for the creators who earn. A creator the estimate
+		// named and the paid month does not is written to zero rather than left standing as an
+		// estimate nobody will settle; a suspended one is left untouched, because the withheld
+		// month is still owed and the reset would say otherwise.
 		await tx
 			.update(poolDistributions)
 			.set({
@@ -379,9 +390,18 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 				updatedAt: now,
 			})
 			.where(
-				and(eq(poolDistributions.subscriberId, userId), eq(poolDistributions.billingCycle, month)),
+				and(
+					eq(poolDistributions.subscriberId, userId),
+					eq(poolDistributions.billingCycle, month),
+					// A suspended creator's estimate is left standing; everyone else's settles.
+					suspendedIds.length > 0
+						? or(isNull(poolDistributions.creatorId), notInArray(poolDistributions.creatorId, suspendedIds))
+						: undefined,
+				),
 			);
 		for (const [creatorId, d] of month$.distributions) {
+			// A suspended creator's rows stay on the estimate — see the note at the reset.
+			if (!earnable.get(creatorId)) continue;
 			// Seconds that earned nothing — gated time, a pool that reached zero — make no row, as
 			// in the estimate; the reset above already zeroed any row the estimate had made.
 			if (d.poolAmount.isZero() && d.seedAmount.isZero() && d.stickerAmount.isZero()) continue;
@@ -424,7 +444,12 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 				set: { ...snapshot, updatedAt: now },
 			});
 
-		if (paid) {
+		// 🚨 Not while a suspended creator's money was withheld from it. Stamping the
+		// invoice would close the supporter's month with part of what it owed recorded
+		// nowhere, and a scoped re-run after reinstatement — the pause's whole resume
+		// mechanism — would find the invoice settled and credit nothing. The stamp lands
+		// on that later run instead, when the withheld share is credited with the rest.
+		if (paid && suspendedIds.length === 0) {
 			await tx
 				.update(invoices)
 				.set({ settledAt: now, updatedAt: now })
