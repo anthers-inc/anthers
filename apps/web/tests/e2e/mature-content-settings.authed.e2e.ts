@@ -23,7 +23,8 @@
 import { expect, test } from "@playwright/test";
 
 test("the two rungs have separate controls, and Mature blurs by default", async ({ page }) => {
-	await page.goto("/settings");
+	// The Content & Safety tab, where both rungs' controls live.
+	await page.goto("/settings?tab=content");
 
 	const section = page.locator(".card").filter({ hasText: "What you meet before you choose" });
 	await expect(section, "no mature-content controls on the settings page").toBeVisible();
@@ -50,7 +51,7 @@ test("the two rungs have separate controls, and Mature blurs by default", async 
 });
 
 test("the page says what the age check actually reads, and what it excludes", async ({ page }) => {
-	await page.goto("/settings");
+	await page.goto("/settings?tab=content");
 	const section = page.locator(".card").filter({ hasText: "What you meet before you choose" });
 
 	// 🚨 Paying is not the check, and saying so is not optional. Debit and prepaid cards
