@@ -130,8 +130,38 @@ else
 fi
 
 # A git hook inherits the pusher's GIT_DIR, which points at the repository that pushed rather
+# than this checkout — any git command run under it would act there instead. Unset it before
+# anything runs: the worktree path below is relative, so it must resolve against this checkout,
+# not against whoever happened to push.
+#
+# 🚨 This scrub is not optional ceremony, and the hook's relative paths are the reason. A hook
+# launched by a push from a LINKED WORKTREE receives GIT_DIR=<main>/.git/worktrees/<name> —
+# an absolute path into ANOTHER checkout's index. Left set, two things break that look fine
+# from the pushing terminal: the worktree add below resolves `.worktrees/…` against the
+# pusher's tree (so a push from `.worktrees/push-guard` creates
+# `.worktrees/push-guard/.worktrees/pre-push-verify-<pid>` and the suite verifies a nested
+# leftover), and any bare `git` outside `git_clean` reports the pusher's state — including its
+# uncommitted files — as this repository's. On 2026-09-22 that second failure let one
+# session's half-finished account-suspension work fail the lint of a completely different
+# branch's push. The hook itself never runs `git` before its first `git_clean` call, so GIT_DIR
+# carries nothing it needs.
+unset GIT_DIR
+
+# GIT_DIR gone, resolve the checkout root and make relative paths honest. The worktree dir,
+# the stub `make`'s `$PWD` and every `git worktree` command below all hang off the root, so
+# they must not be at the mercy of a hook launched from a subdirectory or a sibling worktree.
+repo_root=$(git rev-parse --show-toplevel) || {
+	printf '\n\033[31m✗ pre-push: could not resolve the repository root to verify from\033[0m\n'
+	exit 1
+}
+cd "$repo_root" || exit 1
+
+# A git hook inherits the pusher's GIT_DIR, which points at the repository that pushed rather
 # than this checkout — any git worktree command run under it would act there instead. Scrub
-# it. The same failure made the test suite rewrite the real repository.
+# the whole family; the same failure made the test suite rewrite the real repository.
+# GIT_QUARANTINE_PATH goes with them: the worktree add below updates HEAD, which quarantine
+# forbids, and nothing the hook does needs the push's not-yet-accepted objects anyway —
+# origin/main is fetched fresh rather than read from the quarantine.
 git_clean() {
 	env -i PATH="$PATH" HOME="$HOME" git "$@"
 }
