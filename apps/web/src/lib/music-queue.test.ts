@@ -36,6 +36,7 @@ import {
 function track(n: number, locked = false): QueueTrack {
 	return {
 		workId: n,
+		kind: "music",
 		slug: `track-${n}`,
 		publicId: 1000 + n,
 		title: `Track ${n}`,
@@ -180,6 +181,15 @@ describe("a queue holding tracks the listener cannot play", () => {
 });
 
 describe("what the queue panel shows", () => {
+	test("a spoken-word track round-trips through the queue with its kind intact", () => {
+		// `kind` pins which player surface the bar renders for the track; nothing about
+		// queue mechanics branches on it, so this test only says it survives the trip.
+		const spoken = { ...track(1), kind: "audio" as const };
+		const s = startQueue(EMPTY_QUEUE, [spoken]);
+		expect(nowPlaying(s)?.kind).toBe("audio");
+		expect(nextPosition(s, false)).toBeNull();
+	});
+
 	test("up next is everything after the current position, in play order", () => {
 		const s = startQueue(EMPTY_QUEUE, ALBUM, 1);
 		expect(upcoming(s).map((e) => e.track.title)).toEqual(["Track 3", "Track 4"]);
