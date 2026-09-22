@@ -23,8 +23,10 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, workPages, works } from "@anthers/db/schema";
+import { transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import sharp from "sharp";
+import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
 
 export interface RasterizeEbookData {
@@ -155,7 +157,44 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			// 🚨 PRIVATE, like every other derived object. The whole reason for this job is
 			// that pages can be checked one at a time; a public page defeats it entirely.
 			await storage.upload(key, bytes, "image/jpeg", "private");
-			await db.insert(workPages).values({ workId: work.id, pageNumber: i + 1, file: key });
+
+			const metadata = await sharp(bytes).metadata();
+			const width = metadata.width ?? 0;
+			const height = metadata.height ?? 0;
+
+			const [page] = await db
+				.insert(workPages)
+				.values({ workId: work.id, pageNumber: i + 1, file: key, width, height })
+				.returning({ id: workPages.id });
+
+			// Panel detection runs on every page. Comics need regions; prose books gracefully
+			// degrade to one whole-page panel. The detector is fast enough on 150 DPI pages that
+			// doing it inline adds no separate job.
+			try {
+				const inkColor = await sampleInkColor(bytes);
+				const panels = await detectPanels(bytes, { inkColor });
+				if (panels.length > 0 && page) {
+					await db.insert(workPanels).values(
+						panels.map((p, panelNumber) => ({
+							pageId: page.id,
+							panelNumber: panelNumber + 1,
+							x: p.x,
+							y: p.y,
+							width: p.width,
+							height: p.height,
+							auto: true,
+						})),
+					);
+				}
+			} catch (detectionError) {
+				const message =
+					detectionError instanceof Error ? detectionError.message : String(detectionError);
+				console.warn(
+					`[rasterize-ebook] panel detection failed for work ${work.id} page ${i + 1}: ${message}`,
+				);
+				// A detection failure leaves the page without panels, which the reader treats as
+				// whole-page fallback. The job continues.
+			}
 
 			// 40 → 95 across the upload, which is where the wall-clock actually goes.
 			if (i % 5 === 0 || i === files.length - 1) {
