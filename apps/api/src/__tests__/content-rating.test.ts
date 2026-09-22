@@ -40,6 +40,7 @@ import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./clean
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { CREATED_CREDIT } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -123,6 +124,9 @@ describe("content ratings", () => {
 				type: "text",
 				title: `Rating fixture ${id}`,
 				bodyHtml: "<p>A rating fixture.</p>",
+				// With a credit naming a human, because release refuses a Work whose credits name
+				// none (`credits_creator_required`) for a reason that is not this suite's subject.
+				credits: CREATED_CREDIT,
 				...body,
 			}),
 		});

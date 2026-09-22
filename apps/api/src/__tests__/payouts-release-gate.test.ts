@@ -38,6 +38,7 @@ import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { CREATED_CREDIT } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -119,6 +120,7 @@ describe("publishing requires a fully set-up creator", () => {
 				body: "A short thing.",
 				bodyHtml: "<p>A short thing.</p>",
 				maturityRows: rowsRatedAs("general"),
+				credits: CREATED_CREDIT,
 			}),
 		});
 		expect(res.status).toBe(201);

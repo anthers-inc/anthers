@@ -70,6 +70,21 @@ export interface AccessRow {
 
 export type SeedAccessRow = AccessRow;
 
+/** What a credit asserts about its role: a human made it, a source licensed it, or a machine did. */
+export type WorkCreditType = "created" | "licensed" | "ai";
+
+/**
+ * One row of a Work's credits — the creator saying who or what made which part. Public
+ * liner notes: ungated on every Work serialization. A `created` credit always names its
+ * contributor; a pure `licensed`/`ai` row may not. Mirrors `WorkCredit` in
+ * `packages/db/src/schema/content.ts` — the two are one shape and change together.
+ */
+export interface WorkCredit {
+	role: string;
+	contributor: string;
+	types: WorkCreditType[];
+}
+
 /**
  * One way a denied viewer could open a post. `moreNeeded` is the marginal ask — what
  * they still have to add — and it is computed server-side on purpose: the UI naming its
@@ -177,9 +192,6 @@ export type ContentType = WorkType;
  */
 export type UploadableWorkType = Exclude<ContentType, "text">;
 
-/** How precise a creator's asserted Created date is — rendered exactly as claimed. */
-export type AuthoredPrecision = "year" | "month" | "day";
-
 /**
  * Where a Work sits relative to the public Catalog.
  *
@@ -238,7 +250,8 @@ export interface Work {
 	metadata: Record<string, unknown> | null;
 
 	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;
-	// the public sees `authoredAt` (when the work was MADE) and `releasedAt`.
+	// the public sees `originallyReleased` (when the work first came out, anywhere) and
+	// `releasedAt` (when it came out here).
 	visibility?: WorkVisibility;
 	/** When a private Work is due to be released, if its creator scheduled one. Owner-facing. */
 	scheduledReleaseAt?: string | null;
@@ -266,8 +279,13 @@ export interface Work {
 	 * self-declared one. What it tells the creator is that lowering it takes an appeal.
 	 */
 	maturityLocked?: boolean;
-	authoredAt?: string | null;
-	authoredPrecision?: AuthoredPrecision | null;
+	/** When the work first came out ANYWHERE, creator-asserted; null means "here first". */
+	originallyReleased?: string | null;
+	/**
+	 * The credits — who or what made which part of it, as public liner notes. Ungated for
+	 * every viewer; null/absent means none were asserted, which renders as nothing.
+	 */
+	credits?: WorkCredit[] | null;
 
 	// Delivery & access (creator-facing tables; viewers get the resolved `access`).
 	streamEnabled?: boolean;
@@ -342,8 +360,9 @@ export interface WorkInput {
 	 * with `rate_through_matrix`, so neither is on this type.
 	 */
 	maturityRows?: MaturityRows;
-	authoredAt?: string | null;
-	authoredPrecision?: AuthoredPrecision | null;
+	originallyReleased?: string | null;
+	/** The credits table; a full replace on save, like the access table beside it. */
+	credits?: WorkCredit[];
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
 	seedAccess?: SeedAccessRow[];

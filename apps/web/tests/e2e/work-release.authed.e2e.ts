@@ -41,8 +41,7 @@ const TITLE_PREFIX = "Release walk ";
 interface PublicWork {
 	title: string;
 	publicAccess?: boolean;
-	authoredAt?: string | null;
-	authoredPrecision?: string | null;
+	originallyReleased?: string | null;
 }
 
 /** The fields of a Work as the creator's own listing returns it (used for the sweep). */
@@ -250,15 +249,13 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	const published = await catalogWork();
 
 	/**
-	 * The Created date survived the form.
+	 * The original release date survived the form.
 	 *
-	 * ⚠️ Added after a sabotage run: stubbing `authoredAt` to `null` in the editor left this
+	 * ⚠️ Added after a sabotage run: stubbing the date to `null` in the editor left this
 	 * spec green, because filling a field in is not the same as asserting it was sent. The
-	 * unit tests cover the UTC conversion; nothing covered the wiring, which is the half
-	 * that actually breaks when someone reshuffles the request body.
+	 * wiring is the half that actually breaks when someone reshuffles the request body.
 	 */
-	expect(published?.authoredAt).toBe("2015-01-01T00:00:00.000Z");
-	expect(published?.authoredPrecision).toBe("year");
+	expect(published?.originallyReleased).toBe("2015-01-01T00:00:00.000Z");
 
 	// ── The locked state ────────────────────────────────────────────────────
 	await cardFor(page).getByRole("link", { name: "Edit" }).click();

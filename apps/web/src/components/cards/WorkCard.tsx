@@ -31,37 +31,27 @@ type WorkCardItem = Work & {
 };
 
 /**
- * Renders the creator-asserted **Created** date at exactly the precision they claimed.
+ * Renders the date the work first came out anywhere — the creator's asserted original
+ * release date, or their release-here date when the work debuted on Anthers.
  *
- * A Work back-dated to "2015" must render "2015", not "1 January 2015" — inventing a day
- * the creator never asserted is the kind of false precision the whole `authoredPrecision`
- * column exists to prevent. Falls back to the release date when nothing was asserted.
+ * We only ever claim a date the creator gave us, formatted as a date: a creator who knows
+ * only the year picks one, and the card renders exactly that.
  */
-function madeLabel(work: WorkCardItem): string {
-	const iso = work.authoredAt ?? work.releasedAt ?? work.createdAt;
+function dateLabel(work: WorkCardItem): string {
+	const iso = work.originallyReleased ?? work.releasedAt ?? work.createdAt;
 	if (!iso) return "";
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return "";
-	if (!work.authoredAt) {
-		return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-	}
-	switch (work.authoredPrecision) {
-		case "year":
-			return String(d.getUTCFullYear());
-		case "month":
-			return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-		default:
-			return d.toLocaleDateString("en-US", {
-				month: "short",
-				day: "numeric",
-				year: "numeric",
-				timeZone: "UTC",
-			});
-	}
+	return d.toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+		timeZone: "UTC",
+	});
 }
 
 export default function WorkCard({ work: post }: { work: WorkCardItem }) {
-	const date = madeLabel(post);
+	const date = dateLabel(post);
 
 	// Locked to the viewer → the card is a gated preview (blurred cover, visible title).
 	// Clicking still navigates into the post, where the unlock options live.

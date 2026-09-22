@@ -73,7 +73,6 @@ import {
 	useWorkDetails,
 	WorkFileSection,
 } from "@anthers/web-shared/content/work-media";
-import { authoredToIso, isoToAuthoredValue } from "@anthers/web-shared/content/work-state";
 import { isBuildType, typeLabel } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
@@ -94,10 +93,11 @@ import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import type {
-	AuthoredPrecision,
 	CreatorGate,
 	UploadableWorkType,
 	Work,
+	WorkCredit,
+	WorkCreditType,
 	WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
@@ -247,15 +247,12 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	const details = useWorkDetails(type, editing);
 
-	// Created date — the creator's claim about when the work was MADE, distinct from the
-	// upload date (`createdAt`, creator-facing only) and the release date (ours).
-	const [authoredPrecision, setAuthoredPrecision] = useState<AuthoredPrecision | null>(
-		editing.authoredAt ? (editing.authoredPrecision ?? "day") : null,
-	);
-	const [authoredValue, setAuthoredValue] = useState(() =>
-		editing.authoredAt
-			? isoToAuthoredValue(editing.authoredAt, editing.authoredPrecision ?? "day")
-			: "",
+	// Original release date — the creator's claim about when the work FIRST came out,
+	// anywhere, distinct from the upload date (`createdAt`, creator-facing bookkeeping)
+	// and the release date (`releasedAt`, when it went public here). Empty means "came
+	// out here first".
+	const [originalDate, setOriginalDate] = useState(() =>
+		editing.originallyReleased ? editing.originallyReleased.slice(0, 10) : "",
 	);
 
 	// Delivery. A Work must keep at least one of them on, which the server enforces against the
@@ -298,6 +295,13 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// exist, so the rows are the only state worth holding.
 	const [seedRows, setSeedRows] = useState<SeedRowDraft[]>(() =>
 		buildSeedRows([], editing.seedAccess),
+	);
+
+	// The credits — the Work's liner notes, who or what made which part. Rows are drafts of the
+	// stored table; the same validation the server enforces (a Created credit names its
+	// contributor) is enforced here so the creator meets it in the editor, not on the save.
+	const [creditRows, setCreditRows] = useState<WorkCredit[]>(() =>
+		(editing.credits ?? []).map((r) => ({ ...r, types: [...r.types] })),
 	);
 
 	const [saving, setSaving] = useState(false);
@@ -470,15 +474,23 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			streamEnabled,
 			downloadEnabled,
 			seedAccess: serializeSeedRows(seedRows),
-			// Sent unconditionally, including as `null` — clearing a Created date is a real
-			// edit, and an omitted field cannot express it. The server clears the precision
-			// alongside it, since a precision without a date claims accuracy about nothing.
-			authoredAt: authoredToIso(authoredPrecision, authoredValue),
+			// Sent unconditionally as the whole table: editing a credit list is editing a list,
+			// and an omitted field cannot express "removed them all".
+			credits: creditRows
+				.map((r) => ({
+					role: r.role.trim(),
+					contributor: r.types.includes("created") ? r.contributor.trim() : "",
+					types: r.types,
+				}))
+				// A credit asserts SOMETHING — an untyped row is not a credit and cannot save.
+				.filter((r) => r.types.length > 0),
+			// Sent unconditionally, including as `null` — clearing the date is a real
+			// edit, and an omitted field cannot express it. YYYY-MM-DD becomes midnight UTC.
+			originallyReleased: originalDate ? `${originalDate}T00:00:00.000Z` : null,
 			...details.fields(),
 			...(writing ? { bodyHtml, body: bodyText } : {}),
 		};
 		if (rowsChanged) json.maturityRows = normalizeMaturityRows(rows, grid);
-		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
 		return json;
 	};
 
@@ -509,6 +521,12 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	}, [dirty]);
 
 	const handleSave = async () => {
+		// The editor's half of the credit rule the server enforces: a created credit names its
+		// contributor. Checked here so the refusal reads as this page's own, not the server's.
+		if (creditRows.some((r) => r.types.includes("created") && r.contributor.trim() === "")) {
+			setError("Every Created credit names its contributor before this can save.");
+			return;
+		}
 		setSaving(true);
 		setError(null);
 		try {
@@ -602,6 +620,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// And a video with no thumbnail its creator chose (`thumbnail_missing`), judged against the
 	// thumbnail this page would save, which is also the creator's to fix.
 	const thumbnailMissing = needsChosenThumbnail(type) && !thumbnailUrl;
+	// And a Work whose credits name no human (`credits_creator_required`), judged against the
+	// rows as they stand on the page — including the unticked empty table, since an untyped
+	// row asserts nothing. Also the creator's to fix: save locks nothing, but release does.
+	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
 	/**
 	 * Whether the Work itself can be shown as a reader sees it: its file is here, and whatever
 	 * processing it needs has finished. Until then the file section stands in for it, with the
@@ -736,19 +758,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					/>
 				}
 				dates={
-					<CreatedDate
-						precision={authoredPrecision}
-						value={authoredValue}
-						released={released}
-						onPrecision={(next) => {
-							// Re-cut the value to the new precision rather than dropping it, so
-							// narrowing "2015-06" to a year keeps 2015 instead of blanking.
-							const iso = authoredToIso(authoredPrecision, authoredValue);
-							setAuthoredPrecision(next);
-							setAuthoredValue(next ? isoToAuthoredValue(iso, next) : "");
-						}}
-						onValue={setAuthoredValue}
-					/>
+					<OriginalReleaseDate value={originalDate} released={released} onValue={setOriginalDate} />
 				}
 				rating={<RatingLine maturity={maturity} notes={contentNotes} />}
 			/>
@@ -1043,6 +1053,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					)}
 				</div>
 
+				<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
+					<h2 className="font-semibold text-sm">Credits</h2>
+					<CreditsSection rows={creditRows} onChange={setCreditRows} />
+				</div>
+
 				<div className="border-t border-base-300 pt-4 flex flex-col gap-2">
 					<h2 className="font-semibold text-sm">Release</h2>
 					<label className="label cursor-pointer justify-start gap-2">
@@ -1053,8 +1068,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							// The server refuses a release with an unanswered row with
 							// `maturity_undeclared`, one with no payout setup with `payouts_required`,
 							// one Anthers has no permission to list with
-							// `publishing_permission_required`, and one whose file has not arrived with
-							// `media_missing`. Don't offer the click that fails — the same reasoning as
+							// `publishing_permission_required`, one whose file has not arrived with
+							// `media_missing`, and one whose credits name nobody with
+							// `credits_creator_required`. Don't offer the click that fails — the same reasoning as
 							// the delivery switches above. `=== false` and `=== true` rather than
 							// truthiness, so an unanswered status request leaves the control alone
 							// instead of locking it for a reason nobody stated. The rating, file and
@@ -1066,6 +1082,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 									fileMissing ||
 									writingEmpty ||
 									thumbnailMissing ||
+									creditsMissing ||
 									permissionMissing === true) &&
 									visibility !== "released")
 							}
@@ -1114,6 +1131,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 										!fromRows ||
 										writingEmpty ||
 										thumbnailMissing ||
+										creditsMissing ||
 										payoutsReady === false ||
 										permissionMissing === true
 									}
@@ -1154,6 +1172,12 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						<p className="text-xs text-warning">
 							Answer every row of the Rating above first. Nothing goes into your public Catalog
 							until every row has an answer.
+						</p>
+					)}
+					{creditsMissing && visibility !== "released" && (
+						<p className="text-xs text-warning">
+							Credit who made this above first. A Work isn't released until at least one credit has
+							its Created box ticked, naming the person who made it.
 						</p>
 					)}
 					{serverDown && visibility !== "released" && (
@@ -1260,72 +1284,36 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 }
 
 /**
- * The Created date, where a reader sees "Made 2015": the creator's claim about when the work was
- * made, at the precision they pick, beside the release date Anthers records.
+ * The Original Release Date, where a reader sees "First released": the creator's claim about
+ * when the work first came out anywhere, beside the date Anthers records it releasing here.
  */
-function CreatedDate({
-	precision,
+function OriginalReleaseDate({
 	value,
 	released,
-	onPrecision,
 	onValue,
 }: {
-	precision: AuthoredPrecision | null;
 	value: string;
 	released: string | null;
-	onPrecision: (next: AuthoredPrecision | null) => void;
 	onValue: (next: string) => void;
 }) {
 	return (
 		<div className="flex flex-col gap-1">
 			<div className="flex flex-wrap items-center gap-2 text-sm text-base-content/60">
 				<CalendarIcon className="w-4 h-4" />
-				<span>Made</span>
-				<select
-					aria-label="Created date"
-					className="select select-bordered select-xs w-auto"
-					value={precision ?? ""}
-					onChange={(e) => onPrecision((e.target.value || null) as AuthoredPrecision | null)}
-				>
-					<option value="">Not stated</option>
-					<option value="year">Year</option>
-					<option value="month">Month</option>
-					<option value="day">Exact date</option>
-				</select>
-				{precision === "year" && (
-					<input
-						type="number"
-						aria-label="Year made"
-						className="input input-bordered input-xs w-24"
-						value={value}
-						min="1900"
-						max="2200"
-						placeholder="2015"
-						onChange={(e) => onValue(e.target.value)}
-					/>
-				)}
-				{precision === "month" && (
-					<input
-						type="month"
-						aria-label="Month made"
-						className="input input-bordered input-xs"
-						value={value}
-						onChange={(e) => onValue(e.target.value)}
-					/>
-				)}
-				{precision === "day" && (
-					<input
-						type="date"
-						aria-label="Date made"
-						className="input input-bordered input-xs"
-						value={value}
-						onChange={(e) => onValue(e.target.value)}
-					/>
-				)}
+				<label htmlFor="work-original-release">Original Release Date</label>
+				<input
+					id="work-original-release"
+					type="date"
+					aria-label="Original release date"
+					className="input input-bordered input-xs"
+					value={value}
+					onChange={(e) => onValue(e.target.value)}
+				/>
 				{released && <span>Released {released}</span>}
 			</div>
 			<p className="text-xs text-base-content/40">
-				When this was made, not when you uploaded it, to whatever precision you know it.
+				When this first came out anywhere, if it was somewhere else first. Leave it empty if this is
+				its first release. If you only know the year, pick a date in it.
 			</p>
 		</div>
 	);
@@ -1495,6 +1483,124 @@ function SaveBar({
 						</button>
 					</div>
 				)}
+			</div>
+		</div>
+	);
+}
+
+/** What a credit type is called in the editor, in the order the checkboxes appear. */
+const CREDIT_TYPES: { value: WorkCreditType; label: string }[] = [
+	{ value: "created", label: "Created" },
+	{ value: "licensed", label: "Licensed" },
+	{ value: "ai", label: "AI" },
+];
+
+/**
+ * The Work's credits table — its liner notes, edited one row at a time.
+ *
+ * The one rule enforced here as well as on the server: a **Created** credit names its
+ * contributor. Pure Licensed/AI rows may stay anonymous, and the Contributor box is
+ * disabled and cleared unless Created is among the ticked types — an AI credit never names
+ * a model as its contributor, because a model owns nothing and is granted nothing.
+ */
+function CreditsSection({
+	rows,
+	onChange,
+}: {
+	rows: WorkCredit[];
+	onChange: (next: WorkCredit[]) => void;
+}) {
+	const setRow = (index: number, next: WorkCredit) => {
+		onChange(rows.map((r, i) => (i === index ? next : r)));
+	};
+	const toggleType = (index: number, type: WorkCreditType, checked: boolean) => {
+		const row = rows[index];
+		const types = checked ? [...row.types, type] : row.types.filter((t) => t !== type);
+		// Contributor is created-only: unticking the last Created clears it rather than
+		// leaving a name attached to a credit that no longer asserts one.
+		setRow(index, { ...row, types, contributor: types.includes("created") ? row.contributor : "" });
+	};
+	const missingContributor = (row: WorkCredit) =>
+		row.types.includes("created") && row.contributor.trim() === "";
+
+	return (
+		<div className="flex flex-col gap-3">
+			<p className="text-xs text-base-content/50">
+				Who and what made this — readers see these as liner notes on the Work. A Created credit
+				names who; Licensed and AI credits may stay anonymous. An AI credit never names the model —
+				a tool owns nothing. A Work needs at least one credit naming a human creator before it can
+				be released.
+			</p>
+			{rows.length === 0 && (
+				<p className="text-xs text-warning">
+					No credits yet — add one with its Created box ticked before this can be released.
+				</p>
+			)}
+			{rows.map((row, i) => (
+				<div
+					// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id of its own; the inputs are controlled by position and rows are replaced wholesale on save.
+					key={i}
+					className="flex flex-wrap items-center gap-3 rounded-lg border border-base-300 p-3"
+				>
+					<input
+						type="text"
+						aria-label={`Credit ${i + 1} role`}
+						className="input input-bordered input-sm w-44"
+						placeholder="Written by, Cut by…"
+						value={row.role}
+						onChange={(e) => setRow(i, { ...row, role: e.target.value })}
+					/>
+					<div className="flex items-center gap-3">
+						{CREDIT_TYPES.map((t) => (
+							<label key={t.value} className="label cursor-pointer gap-1.5 py-0">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm checkbox-primary"
+									aria-label={`Credit ${i + 1} ${t.label}`}
+									checked={row.types.includes(t.value)}
+									onChange={(e) => toggleType(i, t.value, e.target.checked)}
+								/>
+								<span className="label-text text-sm">{t.label}</span>
+							</label>
+						))}
+					</div>
+					<input
+						type="text"
+						aria-label={`Credit ${i + 1} contributor`}
+						className="input input-bordered input-sm flex-1 min-w-40"
+						placeholder={row.types.includes("created") ? "Who made this part" : "Optional"}
+						value={row.contributor}
+						disabled={!row.types.includes("created")}
+						onChange={(e) => setRow(i, { ...row, contributor: e.target.value })}
+					/>
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs"
+						aria-label={`Remove credit ${i + 1}`}
+						onClick={() => onChange(rows.filter((_, j) => j !== i))}
+					>
+						Remove
+					</button>
+					{missingContributor(row) && (
+						<p className="w-full text-xs text-error">
+							A Created credit names its contributor — say who made this part.
+						</p>
+					)}
+				</div>
+			))}
+			{rows.some(missingContributor) && (
+				<div className="alert alert-error text-sm">
+					<span>Every Created credit names its contributor before this can save.</span>
+				</div>
+			)}
+			<div>
+				<button
+					type="button"
+					className="btn btn-outline btn-sm"
+					onClick={() => onChange([...rows, { role: "", contributor: "", types: [] }])}
+				>
+					Add a credit
+				</button>
 			</div>
 		</div>
 	);
