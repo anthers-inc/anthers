@@ -110,7 +110,13 @@ fi
 # hook's PID, so two pushes from two sessions verify side by side rather than colliding on
 # one shared worktree — a fixed path reads as stale leftover from outside, and removing the
 # "leftover" of a live push is then both possible and invisible from the tree itself.
-printf '\033[36m→ pre-push: running `make verify` before pushing to %s (in a detached worktree at the push'\''s head)\033[0m\n' "$remote"
+#
+# Every step announces itself. The suite takes minutes of silence otherwise, and an agent
+# driving the push from a non-interactive shell reads a silent 120 s as a hang and retries
+# the push — which races the first one through the same gate. Saying "worktree / install /
+# suite" as each starts tells the watcher the push is alive and which phase it is in.
+printf '\033[36m→ pre-push: %s — running `make %s` before pushing\033[0m\n' "$(date +%H:%M:%S)" "$target"
+printf '\033[36m→ pre-push: this is the whole suite (typecheck, lint, migrate, unit, full Playwright) — minutes, not seconds\033[0m\n'
 
 worktree_dir=".worktrees/pre-push-verify-$$"
 push_head_rev="HEAD"
@@ -164,18 +170,21 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
-if ! git_clean worktree add --detach "$worktree_dir" "$push_head_rev" >/dev/null; then
+printf '\033[36m→ pre-push: %s — checking out the push'"'"'s head into %s\033[0m\n' "$(date +%H:%M:%S)" "$worktree_dir"
+if ! git_clean worktree add --detach "$worktree_dir" "$push_head_rev"; then
 	printf '\n\033[31m✗ pre-push: could not check out %s in %s\033[0m\n' "$push_head_rev" "$worktree_dir"
 	exit 1
 fi
 
 # Install into the worktree; the shared Bun cache hardlinks the packages, so it is seconds
 # rather than minutes (PR #287 measured ~0.14s).
-if ! (cd "$worktree_dir" && bun install) >/dev/null 2>&1; then
+printf '\033[36m→ pre-push: %s — installing dependencies (shared cache, fast)\033[0m\n' "$(date +%H:%M:%S)"
+if ! (cd "$worktree_dir" && bun install >/dev/null); then
 	printf '\n\033[31m✗ pre-push: bun install failed in %s\033[0m\n' "$worktree_dir"
 	exit 1
 fi
 
+printf '\033[36m→ pre-push: %s — running the suite; streaming output below\033[0m\n\n' "$(date +%H:%M:%S)"
 if (cd "$worktree_dir" && make "$target"); then
 	printf '\033[32m✓ pre-push: %s passed\033[0m\n' "$target"
 	exit 0
