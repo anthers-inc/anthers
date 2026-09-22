@@ -24,7 +24,11 @@ import {
 	restoreWork,
 	retryUnsentCounterNotices,
 } from "../services/dmca.js";
-import { liftExpiredSuspensions, notifySupportersOfSuspensions, runEscalationSweep } from "../services/moderation.js";
+import {
+	liftExpiredSuspensions,
+	notifySupportersOfSuspensions,
+	runEscalationSweep,
+} from "../services/moderation.js";
 import { releaseStalePayoutHolds } from "../services/payouts.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";

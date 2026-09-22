@@ -169,9 +169,7 @@ describe("liftExpiredSuspensions", () => {
 describe("isAccountSuspended", () => {
 	it("reads the pair: null is standing, an end in the past is over only until the lift clears both", () => {
 		expect(isAccountSuspended({ suspendedAt: null, suspendedUntil: null })).toBe(false);
-		expect(
-			isAccountSuspended({ suspendedAt: new Date(), suspendedUntil: null }),
-		).toBe(true);
+		expect(isAccountSuspended({ suspendedAt: new Date(), suspendedUntil: null })).toBe(true);
 		expect(
 			isAccountSuspended({
 				suspendedAt: new Date(),

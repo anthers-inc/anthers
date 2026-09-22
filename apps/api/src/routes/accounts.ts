@@ -592,7 +592,13 @@ const accountRoutes = new Hono()
 			// Discover's people half. A blocked creator is absent from the listing entirely,
 			// in both directions — this is the surface where two users are most likely to
 			// run into each other without going looking.
-			.where(and(eq(users.isCreator, true), notBlockedBy(currentUserId, users.id), notSuspendedAccount(users.id)));
+			.where(
+				and(
+					eq(users.isCreator, true),
+					notBlockedBy(currentUserId, users.id),
+					notSuspendedAccount(users.id),
+				),
+			);
 
 		return c.json({
 			creators: creatorList.map((row) =>

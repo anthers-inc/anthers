@@ -395,7 +395,10 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 					eq(poolDistributions.billingCycle, month),
 					// A suspended creator's estimate is left standing; everyone else's settles.
 					suspendedIds.length > 0
-						? or(isNull(poolDistributions.creatorId), notInArray(poolDistributions.creatorId, suspendedIds))
+						? or(
+								isNull(poolDistributions.creatorId),
+								notInArray(poolDistributions.creatorId, suspendedIds),
+							)
 						: undefined,
 				),
 			);

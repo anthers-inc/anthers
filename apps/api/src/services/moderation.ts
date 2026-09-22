@@ -52,7 +52,20 @@ import {
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
 import { alias } from "drizzle-orm/pg-core";
-import { and, count, desc, eq, exists, inArray, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
+import {
+	and,
+	count,
+	desc,
+	eq,
+	exists,
+	inArray,
+	isNotNull,
+	isNull,
+	lte,
+	max,
+	or,
+	sql,
+} from "drizzle-orm";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { resumePausedRenewals } from "./invoices.js";
@@ -622,7 +635,7 @@ export async function suspendAccount(input: {
 					eq(moderationReports.subjectType, "user"),
 					eq(moderationReports.subjectId, input.userId),
 					eq(moderationReports.status, "open"),
-		),
+				),
 			);
 	});
 
@@ -731,11 +744,20 @@ export async function liftExpiredSuspensions(now: Date = new Date()): Promise<nu
 	const due = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(and(isNotNull(users.suspendedAt), isNotNull(users.suspendedUntil), lte(users.suspendedUntil, now)));
+		.where(
+			and(
+				isNotNull(users.suspendedAt),
+				isNotNull(users.suspendedUntil),
+				lte(users.suspendedUntil, now),
+			),
+		);
 
 	let lifted = 0;
 	for (const account of due) {
-		const result = await unsuspendAccount({ userId: account.id, note: "Suspension reached its scheduled end." });
+		const result = await unsuspendAccount({
+			userId: account.id,
+			note: "Suspension reached its scheduled end.",
+		});
 		if (result) lifted += 1;
 	}
 	if (lifted > 0) console.log(`moderation: lifted ${lifted} expired suspension(s)`);
@@ -773,7 +795,13 @@ export async function notifySupportersOfSuspensions(): Promise<number> {
 		.from(invoiceLines)
 		.innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
 		.innerJoin(creator, eq(invoiceLines.creatorId, creator.id))
-		.where(and(isNotNull(invoiceLines.creatorId), isNotNull(creator.suspendedAt), isNotNull(invoices.userId)));
+		.where(
+			and(
+				isNotNull(invoiceLines.creatorId),
+				isNotNull(creator.suspendedAt),
+				isNotNull(invoices.userId),
+			),
+		);
 
 	let sent = 0;
 	for (const row of rows) {

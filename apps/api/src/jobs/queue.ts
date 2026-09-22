@@ -427,7 +427,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// money becomes the creator's again on the DEFAULT outcome, and a day's latency on
 	// being paid money you are owed is the kind of thing that reads as the forfeiture the
 	// hold exists to disprove, without saving anyone a review.
-	[QUEUES.RELEASE_PAYOUT_HOLDS, "52 * * * *"],	// 5 AM daily. The counter-notice window is 10 business days, so a daily sweep
+	[QUEUES.RELEASE_PAYOUT_HOLDS, "52 * * * *"], // 5 AM daily. The counter-notice window is 10 business days, so a daily sweep
 	// is well within the statutory tolerance — and the sweep errs toward "late"
 	// per the brief's guidance: it restores no earlier than `restoreNoEarlierThan`,
 	// never before.

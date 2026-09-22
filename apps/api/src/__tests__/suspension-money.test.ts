@@ -86,7 +86,10 @@ async function unsuspend(userId: number, at: Date) {
 	// The service's own write — clearing the state — is done by hand here so the test
 	// isolates the follow-up: re-keying the paused renewals is `resumePausedRenewals`'s
 	// job, called from `unsuspendAccount`.
-	await db.update(users).set({ suspendedAt: null, suspendedUntil: null }).where(eq(users.id, userId));
+	await db
+		.update(users)
+		.set({ suspendedAt: null, suspendedUntil: null })
+		.where(eq(users.id, userId));
 	return resumePausedRenewals(userId, at);
 }
 
@@ -169,10 +172,7 @@ describe("a suspended supporter's renewal", () => {
 			.select()
 			.from(creatorCredits)
 			.where(
-				and(
-					eq(creatorCredits.subscriberId, supporterId),
-					eq(creatorCredits.billingCycle, MONTH),
-				),
+				and(eq(creatorCredits.subscriberId, supporterId), eq(creatorCredits.billingCycle, MONTH)),
 			);
 		expect(credits).toHaveLength(0);
 

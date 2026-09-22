@@ -2190,15 +2190,15 @@ const contentRoutes = new Hono()
 
 		if (tag) conditions.push(sql`${posts.tags} @> ${JSON.stringify([tag])}::jsonb`);
 
-	if (search) {
-		conditions.push(or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)) as SQL);
-	}
+		if (search) {
+			conditions.push(or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)) as SQL);
+		}
 
-	// A suspended account goes dark: its posts drop out of the public feed before any
-	// LIMIT, beside the block and maturity filters rather than after the page is cut.
-	if (mine !== "true") {
-		conditions.push(notSuspendedAccount(posts.creatorId) as SQL);
-	}
+		// A suspended account goes dark: its posts drop out of the public feed before any
+		// LIMIT, beside the block and maturity filters rather than after the page is cut.
+		if (mine !== "true") {
+			conditions.push(notSuspendedAccount(posts.creatorId) as SQL);
+		}
 
 		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
 		// for drafts (the creator's own view), so fall back to createdAt to keep them ordered.
@@ -2394,7 +2394,11 @@ const contentRoutes = new Hono()
 		// A suspended author's permalink reads as absent for the same reason a hidden
 		// entity's does: the account's presence stops being served, and the ordinary
 		// 404 is the least informative answer the reader already renders.
-		if (post.creatorId != null && viewerId !== post.creatorId && (await isSuspendedAccount(post.creatorId))) {
+		if (
+			post.creatorId != null &&
+			viewerId !== post.creatorId &&
+			(await isSuspendedAccount(post.creatorId))
+		) {
 			return c.json({ error: "Post not found" }, 404);
 		}
 
@@ -2855,7 +2859,9 @@ const contentRoutes = new Hono()
 				// Suspension joins `visibleReview` here because it is viewer-independent —
 				// exactly the property the aggregate's no-block carve-out rests on, so the
 				// two rules never ask the same number to disagree with itself.
-				.where(and(eq(reviews.workId, work.id), visibleReview, notSuspendedAccount(reviews.userId)));
+				.where(
+					and(eq(reviews.workId, work.id), visibleReview, notSuspendedAccount(reviews.userId)),
+				);
 
 			// The written reviews themselves. Hidden ones are withheld here for the same
 			// reason they're excluded from the aggregate — this is a public read. Blocked
@@ -3634,21 +3640,21 @@ const contentRoutes = new Hono()
 		const link = await resolveShareToken(c.req.param("token"));
 		if (!link) return c.json({ error: "This link is no longer available" }, 404);
 
-			const [row] = await db
-				.select({
-					slug: works.slug,
-					publicId: works.publicId,
-					title: works.title,
-					visibility: works.visibility,
-					maturity: works.maturity,
-					streamEnabled: works.streamEnabled,
-					seedAccess: works.seedAccess,
-					takedownStatus: works.takedownStatus,
-					quarantineStatus: works.quarantineStatus,
-					creatorId: works.creatorId,
-					sharerName: users.displayName,
-					sharerHandle: users.atprotoHandle,
-				})
+		const [row] = await db
+			.select({
+				slug: works.slug,
+				publicId: works.publicId,
+				title: works.title,
+				visibility: works.visibility,
+				maturity: works.maturity,
+				streamEnabled: works.streamEnabled,
+				seedAccess: works.seedAccess,
+				takedownStatus: works.takedownStatus,
+				quarantineStatus: works.quarantineStatus,
+				creatorId: works.creatorId,
+				sharerName: users.displayName,
+				sharerHandle: users.atprotoHandle,
+			})
 			.from(works)
 			.innerJoin(users, eq(users.id, link.sharerId))
 			.where(eq(works.id, link.workId))
@@ -3714,11 +3720,11 @@ const contentRoutes = new Hono()
 				and(
 					eq(works.visibility, "released"),
 					eq(works.streamEnabled, true),
-				openToEveryone(works.seedAccess),
-				notBlockedBy(viewerId, works.creatorId),
-				// Suspended accounts are out of the commons entirely, beside the block
-				// filter a reader already sees here.
-				notSuspendedAccount(works.creatorId),
+					openToEveryone(works.seedAccess),
+					notBlockedBy(viewerId, works.creatorId),
+					// Suspended accounts are out of the commons entirely, beside the block
+					// filter a reader already sees here.
+					notSuspendedAccount(works.creatorId),
 					// 🚨 **Load-bearing here, not belt-and-braces.** Adult work MAY be Public
 					// Access since 2026-08-28, so this listing genuinely holds rows that must
 					// not reach a reader who has not opted in and verified. It was the
