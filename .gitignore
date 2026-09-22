@@ -53,6 +53,11 @@ coverage/
 # ─── Local content storage (dev) ───
 /content/
 
+# ─── Dropped web builds (dev) ───
+# The dev-only build harness serves from here (apps/web/serve.ts → /dev/web-build). A build
+# a developer drops in to test is theirs, not the repo's.
+/builds/
+
 # ─── Playwright / browser testing ───
 .screenshots/
 test-results/
