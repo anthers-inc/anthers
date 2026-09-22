@@ -172,11 +172,14 @@ down: ## Stop everything
 	if [ "$$FOUND" = "0" ]; then \
 		echo "  -> No pid files found."; \
 		if command -v portless >/dev/null 2>&1; then \
-			portless prune >/dev/null 2>&1 && echo "  -> Pruned stale portless routes (leftover processes from an interrupted dev)" || true; \
+			for PID in $$(bun run scripts/portless-down.ts 2>/dev/null || true); do \
+				kill $$PID 2>/dev/null && echo "  -> Killed portless process (pid $$PID)" && FOUND=1 || true; \
+			done; \
+			portless prune >/dev/null 2>&1 || true; \
 		fi; \
 	fi; \
 	if [ "$$FOUND" = "0" ]; then \
-		echo "  -> Nothing else to do — dev apps run behind the portless proxy, so a dead make is a dead make."; \
+		echo "  -> Nothing to do — no live dev servers and no stale portless routes."; \
 	fi
 
 # ─── Worktrees: one checkout per task (scripts/worktree.ts) ───────────────────
