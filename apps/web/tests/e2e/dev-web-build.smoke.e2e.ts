@@ -4,43 +4,51 @@
  * Verifies the page lists a dropped build, plays it in the iframe, and that the iframe's
  * subresources resolve against the delivery route — the property the real route keeps.
  * Dev-only by construction: `/api/dev/build` is never registered outside a checkout and the
- * page exists nowhere but serve.ts's in-memory handler.
+ * page exists nowhere but the dev servers.
  *
- * The `demo` build is `builds/web-test/demo/`, a stub committed so this spec has something
- * to play — not a real web build, which the harness is *for* dropping in.
+ * The fixture build is written to the directory the API itself reports it serves — asked of
+ * `GET /api/dev/build` rather than computed here — so the spec and the API agree on the path
+ * on any machine and in the bundled CI runner, where walking up from a module's location can
+ * disagree with the API's own resolution. (CI's first run failed exactly there: the spec's
+ * `devCheckoutRoot()` received an undefined path under the bundled Playwright process.)
  */
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { devCheckoutRoot } from "@anthers/db/dev-only";
 import { expect, test } from "@playwright/test";
 import { WEB_ORIGIN } from "./fixtures";
 
 const API = `http://localhost:${process.env.API_PORT ?? 8000}`;
 
-/**
- * The harness serves whatever a developer dropped into `builds/<id>/`. For the spec to run
- * on any checkout (CI included) it writes its own throwaway build rather than expecting one —
- * the same files the harness would otherwise find, written from here and removed after.
- */
-const BUILD_ROOT = join(devCheckoutRoot() ?? "", "builds", "web-test", "demo");
-
 test.describe("dev web-build harness", () => {
+	let buildRoot = "";
+
 	test.beforeAll(async () => {
-		await mkdir(BUILD_ROOT, { recursive: true });
+		// The harness must be up: if the route isn't registered (a non-checkout, or the API not
+		// running yet) there is no directory to write to, and that is the failure to surface.
+		const res = await fetch(`${API}/api/dev/build`).catch(() => null);
+		if (!res || !res.ok) {
+			throw new Error(
+				`the dev build harness answered ${res?.status ?? "unreachable"} at ${API}/api/dev/build ` +
+					"— it exists only when the API runs from a checkout, which the browser session arranges",
+			);
+		}
+		const { root } = (await res.json()) as { root: string };
+		buildRoot = join(root, "demo");
+		await mkdir(buildRoot, { recursive: true });
 		await writeFile(
-			join(BUILD_ROOT, "index.html"),
+			join(buildRoot, "index.html"),
 			'<!doctype html><html><head><meta charset="utf-8"><title>demo</title></head>' +
 				'<body><p id="msg">loading…</p><script src="game.js"></script></body></html>',
 		);
 		await writeFile(
-			join(BUILD_ROOT, "game.js"),
+			join(buildRoot, "game.js"),
 			'document.getElementById("msg").textContent = "loader ran";',
 		);
-		await writeFile(join(BUILD_ROOT, "game.pck"), "PACK");
+		await writeFile(join(buildRoot, "game.pck"), "PACK");
 	});
 
 	test.afterAll(async () => {
-		await rm(join(BUILD_ROOT), { recursive: true, force: true });
+		await rm(buildRoot, { recursive: true, force: true });
 	});
 
 	test("lists a dropped build and plays it through the delivery route", async ({ page }) => {
