@@ -31,7 +31,7 @@ import {
 } from "@anthers/db/schema";
 import { PAYOUT_REVIEW_WINDOW_DAYS, timePoolFor } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import type Stripe from "stripe";
 import { settleCycle } from "../jobs/settle-cycle";
 import { setStripeClient } from "../lib/stripe";

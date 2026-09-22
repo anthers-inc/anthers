@@ -43,19 +43,10 @@ function req(path: string, options?: RequestInit) {
 	return app.fetch(new Request(`http://localhost${path}`, options));
 }
 
-async function idOf(name: string): Promise<number> {
-	const [row] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.email, `${name}@example.com`));
-	return row!.id;
-}
-
 let creatorId = 0;
 let otherId = 0;
 let adminId = 0;
 let buyerCookie = "";
-let workId = 0;
 let workSlug = "";
 
 /** Suspended the fixture creator, whatever state an earlier failed run left them in. */
@@ -96,7 +87,6 @@ describe("Suspension visibility — a suspended account goes dark", () => {
 		// the fixture buyer — written directly, because this suite is about reads and
 		// driving Stripe would test checkout instead.
 		const work = await insertWork({ creatorId, type: "game", title: "Suspended fixture" });
-		workId = work.id;
 		workSlug = work.slug;
 
 		const buyerId = buyer.user.id;

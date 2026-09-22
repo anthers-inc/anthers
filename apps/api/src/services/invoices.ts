@@ -17,7 +17,7 @@ import { db } from "@anthers/db/client";
 import { accounts, invoiceLines, invoices, users } from "@anthers/db/schema";
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 import { itemsFromSub } from "./billing.js";

@@ -65,8 +65,8 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
-import { interactionPermissionRefusal } from "../services/atproto.js";
 import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
+import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";

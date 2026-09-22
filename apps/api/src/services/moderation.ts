@@ -51,7 +51,6 @@ import {
 	moderationReasonLabel,
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
-import { alias } from "drizzle-orm/pg-core";
 import {
 	and,
 	count,
@@ -66,6 +65,7 @@ import {
 	or,
 	sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { resumePausedRenewals } from "./invoices.js";

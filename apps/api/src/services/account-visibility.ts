@@ -22,7 +22,7 @@
 
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
-import { eq, sql, type SQL } from "drizzle-orm";
+import { eq, type SQL, sql } from "drizzle-orm";
 
 /**
  * A SQL predicate excluding rows whose `userColumn` names a suspended account.

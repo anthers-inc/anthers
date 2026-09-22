@@ -115,6 +115,7 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
@@ -123,7 +124,6 @@ import {
 } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { recordUrlFor } from "../services/atproto-repo.js";
-import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
 import { blockedUserIds, isBlocked, notBlockedBy } from "../services/blocks.js";
 import {
 	commentAncestry,
