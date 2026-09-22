@@ -130,6 +130,34 @@ git_clean() {
 	env -i PATH="$PATH" HOME="$HOME" git "$@"
 }
 
+# 🚨 A branch carrying a migration must still descend from origin/main. Two worktrees can each
+# author the next migration number against the same parent; both verifies pass; the second push
+# to land turns main's journal into a fork that drizzle-snapshots and the journal-order test
+# only catch AFTER the merge — too late, because it now sits on main. The merge is not the
+# moment to find out: production's migrator reads `when` from the journal and silently skips
+# anything older than its newest applied entry, so a renumbered migration never lands. The
+# right repair is to delete the migration files and regenerate against the merged schema
+# (`bun run db:generate`), never to renumber. Check before the worktree is made, so a stale
+# migration push fails fast and names the fix.
+if [ -n "$push_head" ]; then
+	# Cheap and idempotent; a failure to fetch must not block the push (offline dev, remote
+	# down) — the suite that follows still catches an unmergeable journal, just later.
+	git_clean fetch origin main >/dev/null 2>&1 || true
+	if ! git_clean merge-base --is-ancestor origin/main "$push_head" 2>/dev/null; then
+		# `--diff-filter=A` selects files the branch *added* under origin/main's view; an
+		# amended file (same path, different content) is not a new migration slot, but a
+		# branch that *deletes and regenerates* one is — both paths appear, so compare the
+		# file itself rather than the file list.
+		journal_change=$(git_clean diff --diff-filter=A --name-only origin/main "$push_head" -- packages/db/drizzle/ 2>/dev/null || true)
+		if [ -n "$journal_change" ]; then
+			printf '\n\033[31m✗ pre-push: another migration landed on origin/main since you forked — a journal push from here would fork main.\033[0m\n'
+			printf '  Delete your migration files and bun run db:generate again against the merged schema.\n'
+			printf '  Never renumber: production reads the journal%s `when` and silently skips anything older than its newest applied entry.\n' "'s"
+			exit 1
+		fi
+	fi
+fi
+
 cleanup_worktree() {
 	git_clean worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
 	git_clean worktree prune >/dev/null 2>&1 || true

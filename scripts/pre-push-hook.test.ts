@@ -18,9 +18,9 @@
  * the full suite would have refused.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const REPO_ROOT = join(import.meta.dir, "..");
 const HOOK = join(REPO_ROOT, ".githooks", "pre-push");
@@ -29,6 +29,7 @@ const ZERO = "0".repeat(40);
 let dir: string;
 let repo: string;
 let stubBin: string;
+let originDir: string;
 let makeLog: string;
 
 /**
@@ -61,7 +62,9 @@ function commit(files: Record<string, string | null>): string {
 	for (const [path, content] of Object.entries(files)) {
 		if (content === null) git("rm", "-q", path);
 		else {
-			writeFileSync(join(repo, path), content);
+			const abs = join(repo, path);
+			mkdirSync(dirname(abs), { recursive: true });
+			writeFileSync(abs, content);
 			git("add", path);
 		}
 	}
@@ -70,7 +73,10 @@ function commit(files: Record<string, string | null>): string {
 }
 
 /** Run the hook with these ref lines on stdin; report which `make` target it ran, if any. */
-function push(stdin: string, makeExit = 0): { exitCode: number; target: string | null } {
+function push(
+	stdin: string,
+	makeExit = 0,
+): { exitCode: number; target: string | null; stdout: string } {
 	writeFileSync(makeLog, "");
 	writeFileSync(cwdLog, "");
 	writeFileSync(treeLog, "");
@@ -86,7 +92,11 @@ function push(stdin: string, makeExit = 0): { exitCode: number; target: string |
 		},
 	});
 	const logged = readFileSync(makeLog, "utf8").trim();
-	return { exitCode: res.exitCode, target: logged === "" ? null : logged };
+	return {
+		exitCode: res.exitCode,
+		target: logged === "" ? null : logged,
+		stdout: res.stdout.toString(),
+	};
 }
 
 let cwdLog: string;
@@ -163,29 +173,43 @@ exit "$STUB_MAKE_EXIT"
 	git("config", "user.name", "Hook Test");
 	base = commit({ "code.ts": "export const a = 1;\n", "README.md": "# Repo\n" });
 	git("update-ref", "refs/remotes/origin/main", base);
+
+	// The migration-gate half of the hook runs `git fetch origin main`. A real fetch needs a
+	// real remote, so the suite keeps a bare origin beside the fixture and points it at the
+	// same commit — a fetch that fails is a fetch the hook treats as offline, which the gate
+	// must not block on.
+	originDir = join(dir, "origin.git");
+	mkdirSync(originDir);
+	Bun.spawnSync(["git", "-c", "commit.gpgsign=false", "init", "--bare", originDir], {
+		cwd: dir,
+		env: SANDBOX_ENV,
+	});
+	git("remote", "add", "origin", originDir);
+	git("push", "-q", "-u", "origin", "main");
 });
 
 afterAll(() => {
 	rmSync(dir, { recursive: true, force: true });
+	// Nothing to reset — the fixture dies with the suite.
 });
 
 describe("the markdown-only fast path", () => {
 	it("runs verify-docs for a new branch that changes only markdown", () => {
 		git("checkout", "-q", "-b", "docs-new", base);
 		const tip = commit({ "README.md": "# Repo\n\nMore.\n", "GUIDE.md": "Hello.\n" });
-		expect(push(line(tip, ZERO))).toEqual({ exitCode: 0, target: "verify-docs" });
+		expect(push(line(tip, ZERO))).toMatchObject({ exitCode: 0, target: "verify-docs" });
 	});
 
 	it("runs verify-docs for markdown pushed onto a tip the remote already has", () => {
 		git("checkout", "-q", "-b", "docs-existing", base);
 		const tip = commit({ "README.md": "# Repo\n\nAgain.\n" });
-		expect(push(line(tip, base))).toEqual({ exitCode: 0, target: "verify-docs" });
+		expect(push(line(tip, base))).toMatchObject({ exitCode: 0, target: "verify-docs" });
 	});
 
 	it("fails the push when verify-docs fails", () => {
 		git("checkout", "-q", "-b", "docs-red", base);
 		const tip = commit({ "README.md": "# Repo\n\nRed.\n" });
-		expect(push(line(tip, base), 2)).toEqual({ exitCode: 1, target: "verify-docs" });
+		expect(push(line(tip, base), 2)).toMatchObject({ exitCode: 1, target: "verify-docs" });
 	});
 });
 
@@ -241,7 +265,7 @@ describe("everything else runs the whole suite", () => {
 	});
 
 	it("still skips a push of nothing but deletions", () => {
-		expect(push(line(ZERO, base))).toEqual({ exitCode: 0, target: null });
+		expect(push(line(ZERO, base))).toMatchObject({ exitCode: 0, target: null });
 	});
 });
 
@@ -311,6 +335,65 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 describe("an empty ref list", () => {
 	it("refuses rather than testing the current checkout instead of the push", () => {
 		expect(push("").exitCode).toBe(1);
+	});
+});
+
+describe("the migration fork gate", () => {
+	// Three cases. The gate exists because a branch that has authored a migration whose parent
+	// is no longer the head of origin/main will fork main's journal when it lands, and the
+	// existing after-the-fact checks (journal-order) only catch this too late. Each case
+	// corresponds to one of the states a branch can be in, and the two that the gate must pass
+	// are the ones that would regress without it.
+	it("passes a branch whose migration sits on the current origin/main", () => {
+		git("checkout", "-q", "-b", "mig-current", base);
+		const branchTip = commit({
+			"packages/db/drizzle/0096_foo.sql": "CREATE TABLE foo();\n",
+			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":96,"version":"7","when":1234567890,"tag":"0096_foo","breakpoints":true}]}\n`,
+		});
+		const res = push(line(branchTip, base));
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBe("verify");
+	});
+
+	it("refuses a branch whose migration sits behind origin/main, and names the repair", () => {
+		git("checkout", "-q", "-b", "mig-stale", base);
+		// The branch authors its migration against base.
+		const staleTip = commit({
+			"packages/db/drizzle/0096_foo.sql": "CREATE TABLE foo();\n",
+			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":96,"version":"7","when":1234567890,"tag":"0096_foo","breakpoints":true}]}\n`,
+		});
+		// Another agent lands a migration while we were working.
+		git("checkout", "-q", "main");
+		const mainTip = commit({
+			"packages/db/drizzle/0096_other.sql": "CREATE TABLE other();\n",
+			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":96,"version":"7","when":1234567891,"tag":"0096_other","breakpoints":true}]}\n`,
+		});
+		git("push", "-q", "origin", `+${mainTip}:refs/heads/main`);
+		// git fetch must run inside the hook for the check to read the moved origin; nothing
+		// locally updates refs/remotes on its own.
+		const res = push(line(staleTip, mainTip));
+		expect(res.exitCode).toBe(1);
+		expect(res.target).toBeNull();
+		// The message names the repair, not only the fault, because the wrong repair
+		// (renumbering) is what production's journal reader turns into a silent skip.
+		expect(res.stdout).toContain("another migration landed on origin/main since you forked");
+		expect(res.stdout).toContain("bun run db:generate");
+		expect(res.stdout).toContain("Never renumber");
+		expect(res.stdout).toContain("journal's `when`");
+	});
+
+	it("passes a branch that is behind origin/main but carries no new migration", () => {
+		git("checkout", "-q", "-b", "plain-stale", base);
+		const staleTip = commit({ "code.ts": "export const a = 2;\n" });
+		git("checkout", "-q", "main");
+		const mainTip = commit({
+			"packages/db/drizzle/0097_other.sql": "CREATE TABLE other();\n",
+			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":97,"version":"7","when":1234567891,"tag":"0097_other","breakpoints":true}]}\n`,
+		});
+		git("push", "-q", "origin", `+${mainTip}:refs/heads/main`);
+		const res = push(line(staleTip, mainTip));
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBe("verify");
 	});
 });
 
