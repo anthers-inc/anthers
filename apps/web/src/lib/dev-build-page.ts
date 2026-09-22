@@ -31,18 +31,23 @@ const PAGE_TITLE = "Web Build Test Harness";
 
 /** The API origin the harness page calls, from the request it was served for. */
 export function devBuildApiOrigin(req: Request, announcePort?: string): string {
-	const url = new URL(req.url);
-	const h = url.hostname;
+	// Bun's router may hand the handler the listen origin in req.url rather than the proxied
+	// host, so the proxy's hostname is read from the Host header first — that is the one the
+	// browser asked for, the one the API call has to share a parent with for cookies to follow.
+	const hostHeader = req.headers.get("host") ?? "";
+	const host = hostHeader !== "" ? hostHeader : new URL(req.url).host;
+	const h = host.split(":")[0];
+	const protocol =
+		req.headers.get("x-forwarded-proto") ?? new URL(req.url).protocol.replace(":", "");
 	if (h === "localhost" || h === "127.0.0.1") {
 		const port = /^\d{2,5}$/.test(announcePort ?? "") ? announcePort : "8000";
 		return `http://${h}:${port}`;
 	}
 	// Portless: <worktree>.anthers.localhost → <worktree>.api.anthers.localhost; the apex dev
 	// site anthers.localhost → api.anthers.localhost.
-	if (h === "anthers.localhost") return `${url.protocol}//api.anthers.localhost`;
+	if (h === "anthers.localhost") return `${protocol}://api.anthers.localhost`;
 	if (h.endsWith(".anthers.localhost")) {
-		const { protocol } = url;
-		return `${protocol}//${h.replace(/\.anthers\.localhost$/, ".api.anthers.localhost")}`;
+		return `${protocol}://${h.replace(/\.anthers\.localhost$/, ".api.anthers.localhost")}`;
 	}
 	return "";
 }
