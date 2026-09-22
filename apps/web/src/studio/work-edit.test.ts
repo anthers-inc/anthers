@@ -14,7 +14,7 @@ const base: WorkInput = {
 	streamEnabled: true,
 	downloadEnabled: false,
 	seedAccess: [{ threshold: 0, allow: true, price: "0.00" }],
-	authoredAt: null,
+	originallyReleased: null,
 };
 
 describe("unsavedKey", () => {
@@ -54,5 +54,20 @@ describe("unsavedKey", () => {
 	it("changes with any other field", () => {
 		expect(unsavedKey({ ...base, title: "Another song" })).not.toBe(unsavedKey(base));
 		expect(unsavedKey({ ...base, visibility: "released" })).not.toBe(unsavedKey(base));
+	});
+
+	it("changes when a credit is added, edited, or removed", () => {
+		const credited: WorkInput = {
+			...base,
+			credits: [{ role: "Written by", contributor: "A. Creator", types: ["created"] }],
+		};
+		expect(unsavedKey(credited)).not.toBe(unsavedKey(base));
+		const edited: WorkInput = {
+			...base,
+			credits: [{ role: "Written by", contributor: "A. Creator", types: ["created", "ai"] }],
+		};
+		expect(unsavedKey(edited)).not.toBe(unsavedKey(credited));
+		// Removing them all is an edit back to the empty table the save sends, not to omission.
+		expect(unsavedKey({ ...base, credits: [] })).not.toBe(unsavedKey(credited));
 	});
 });

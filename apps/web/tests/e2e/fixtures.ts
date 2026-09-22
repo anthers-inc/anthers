@@ -28,6 +28,16 @@ export const AUTH_STATE_PATH = fileURLToPath(
 	new URL("./.auth/gauntlet-viewer.json", import.meta.url),
 );
 
+/**
+ * One `created` credit for a Work the spec is going to release. Release refuses a Work whose
+ * credits name no human (`credits_creator_required`), so a spec that releases without one is
+ * testing the gate rather than its own subject. Include this in the create POST body of any
+ * Work the walk will release or schedule; leave it out only when the gate itself is on test.
+ */
+export const CREATED_CREDIT = [
+	{ role: "Everything", contributor: "The Creator", types: ["created"] },
+];
+
 // The whole app is wrapped in SiteGate (the pre-launch "Team access" wall),
 // which is authorized purely by the `anthers_site_access` localStorage flag.
 // Seed it before any app script runs so every test lands on the real app

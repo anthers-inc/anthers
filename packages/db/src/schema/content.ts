@@ -61,8 +61,27 @@ export interface AccessRow {
 /** A row in a Work's access table — `threshold` is monthly dollars given to the creator. */
 export type SeedAccessRow = AccessRow;
 
-/** How precise a Work's creator-asserted Created date is. */
-export type AuthoredPrecision = "year" | "month" | "day";
+/** What a credit asserts about its role: a human made it, a source licensed it, or a machine did. */
+export type WorkCreditType = "created" | "licensed" | "ai";
+
+/**
+ * One row of a Work's credits — creator-asserted provenance, shown as public liner notes.
+ * `packages/web-shared/src/lib/types.ts` carries the same interface for the frontend
+ * (Work shapes are declared there without importing this package, mirroring `AccessRow`);
+ * the two are one shape and change together.
+ *
+ * Contributor-asserted facts: `role` is the freeform contribution ("Written by");
+ * `types` is any non-empty combination asserting what made it. `"created"` forces a
+ * `contributor` — a human-made part names its human — while a pure `licensed` or `ai`
+ * row may stay anonymous (a machine owns nothing, so an `ai` credit never names a model). A
+ * Work is released only when some credit carries `created` — a released Work earns, and one
+ * with no credited human has nobody the earnings belong to (`work-release.ts`).
+ */
+export interface WorkCredit {
+	role: string;
+	contributor: string;
+	types: WorkCreditType[];
+}
 
 /**
  * Works — the creator's **Catalog**, and the unit of published creative work.
@@ -176,14 +195,14 @@ export const works = pgTable(
 		withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 
 		// ── Dates ──
-		// Three dates exist for a Work and the platform may only assert two of them.
-		// `createdAt` is the UPLOAD date (ours, creator-visible only); `releasedAt` is when
-		// it went public (ours); `authoredAt` is when the work was MADE — off-platform,
-		// asserted by the creator, freely editable, and often long before Anthers existed.
-		authoredAt: timestamp("authored_at", { withTimezone: true }),
-		// Stored precision, so back-filling a 2015 project renders "2015" rather than an
-		// invented 1 January. Null alongside a null authoredAt.
-		authoredPrecision: text("authored_precision").$type<AuthoredPrecision>(),
+		// Three dates exist for a Work. `createdAt` is the UPLOAD date (ours,
+		// creator-facing bookkeeping); `releasedAt` is when it went public HERE (ours);
+		// `originallyReleased` is when the work FIRST came out anywhere — asserted by
+		// the creator, often years before Anthers (a 2015 song first released on
+		// YouTube). A creator who means "it first came out here" leaves it null and
+		// `releasedAt` says it, and a creator who knows only the year picks a date —
+		// the system never claims to know more than it was told.
+		originallyReleased: timestamp("originally_released", { withTimezone: true }),
 
 		// ── Delivery (orthogonal; ≥1 enforced at the app layer) ──
 		streamEnabled: boolean("stream_enabled").notNull().default(true),
@@ -194,6 +213,9 @@ export const works = pgTable(
 		// The `anthers_access` column that sat beside this was folded in and dropped by
 		// migration 0029 — see the AccessRow doc comment.
 		seedAccess: jsonb("seed_access").$type<SeedAccessRow[]>().default([]),
+
+		// ── Credits (public liner notes; see WorkCredit above) ──
+		credits: jsonb("credits").$type<WorkCredit[]>().default([]),
 
 		// ── Presentation & metadata ──
 		isPinned: boolean("is_pinned").notNull().default(false),
@@ -300,8 +322,8 @@ export const works = pgTable(
 	(table) => [
 		index("idx_works_creator").on(table.creatorId),
 		index("idx_works_type").on(table.type),
-		// The Catalog timeline: a creator's released Works in Created-date order.
-		index("idx_works_catalog").on(table.creatorId, table.visibility, table.authoredAt),
+		// The Catalog timeline: a creator's released Works in original-release order.
+		index("idx_works_catalog").on(table.creatorId, table.visibility, table.originallyReleased),
 		index("idx_works_released").on(table.visibility, table.releasedAt),
 		uniqueIndex("uq_works_public_id").on(table.publicId),
 	],

@@ -626,9 +626,9 @@ export default function CreatorProfilePage() {
 	const audioWorks = works.filter((w) => isListened(w.type));
 	const textWorks = works.filter((w) => w.type === "text");
 
-	// The "All" tab is the Catalog timeline: everything this creator has made, in the order
-	// they made it. The API already sorts by the creator-asserted Created date; projects
-	// interleave on their own dates.
+	// The "All" tab is the Catalog timeline: everything this creator has put out, in the
+	// order it first came out. The API already sorts by the creator-asserted original
+	// release date; projects interleave on their own dates.
 	const allItems: { type: "project" | "work"; item: Project | CatalogWork; date: string }[] = [];
 	projects.forEach((p) => {
 		allItems.push({ type: "project", item: p, date: p.createdAt });
@@ -637,7 +637,7 @@ export default function CreatorProfilePage() {
 		allItems.push({
 			type: "work",
 			item: w,
-			date: w.authoredAt ?? w.releasedAt ?? w.createdAt ?? "",
+			date: w.originallyReleased ?? w.releasedAt ?? w.createdAt ?? "",
 		});
 	});
 	allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

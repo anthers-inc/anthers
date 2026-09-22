@@ -22,6 +22,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { CREATED_CREDIT } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -83,7 +84,7 @@ describe("Catalog vertical slice", () => {
 		DB_SETUP_TIMEOUT,
 	);
 
-	it("uploads a game to the Catalog, back-dated to the year it was actually made", async () => {
+	it("uploads a game to the Catalog, dated to when it first came out", async () => {
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
@@ -91,18 +92,18 @@ describe("Catalog vertical slice", () => {
 				type: "game",
 				title: `Old Game ${id}`,
 				maturityRows: rowsRatedAs("general"),
-				description: "Made years before Anthers existed",
+				description: "First released years before Anthers existed",
 				streamEnabled: false,
 				downloadEnabled: true,
-				authoredAt: "2015-01-01T00:00:00.000Z",
-				authoredPrecision: "year",
+				originallyReleased: "2015-01-01T00:00:00.000Z",
+				credits: CREATED_CREDIT,
 			}),
 		});
 		expect(res.status).toBe(201);
 		const { work } = await res.json();
 		oldGameId = work.id;
 		expect(work.visibility).toBe("private");
-		expect(work.authoredPrecision).toBe("year");
+		expect(work.originallyReleased).toBe("2015-01-01T00:00:00.000Z");
 	});
 
 	it("attaches a downloadable build to it", async () => {
@@ -151,7 +152,7 @@ describe("Catalog vertical slice", () => {
 		expect(work.releasedAt).toBeTruthy();
 	});
 
-	it("publishes a free essay too, dated this year", async () => {
+	it("publishes a free essay too", async () => {
 		const create = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
@@ -160,8 +161,8 @@ describe("Catalog vertical slice", () => {
 				title: `Recent Essay ${id}`,
 				maturityRows: rowsRatedAs("general"),
 				bodyHtml: "<p>a thing I wrote lately</p>",
-				authoredAt: new Date().toISOString(),
-				authoredPrecision: "day",
+				originallyReleased: new Date().toISOString(),
+				credits: CREATED_CREDIT,
 			}),
 		});
 		expect(create.status).toBe(201);

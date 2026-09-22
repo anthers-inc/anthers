@@ -142,6 +142,49 @@ describe("scheduling a release", () => {
 		expect((await res.json()).code).toBe("payouts_required");
 	});
 
+	it("refuses a Work whose credits name no human, and takes the credit in the same request", async () => {
+		// Both doors behave identically — the route refuses now and the sweep below would clear
+		// the schedule later — because a Work with no credited human is not releasable at all.
+		const workId = await stage(creator.id, { credits: [] });
+		const refused = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			scheduledReleaseAt: inAnHour(),
+		});
+		expect(refused.status).toBe(409);
+		expect((await refused.json()).code).toBe("credits_creator_required");
+		expect((await row(workId)).scheduledReleaseAt).toBeNull();
+
+		const accepted = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			credits: [{ role: "Made by", contributor: "The Creator", types: ["created"] }],
+			scheduledReleaseAt: inAnHour(),
+		});
+		expect(accepted.status).toBe(200);
+		expect((await row(workId)).scheduledReleaseAt).not.toBeNull();
+	});
+
+	it("refuses a time for a Work whose only credits are AI or licensed sources", async () => {
+		const workId = await stage(creator.id, {
+			credits: [
+				{ role: "Voiceover", contributor: "", types: ["ai"] },
+				{ role: "Sample pack", contributor: "", types: ["licensed"] },
+			],
+		});
+		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			scheduledReleaseAt: inAnHour(),
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("credits_creator_required");
+	});
+
+	it("accepts a blended created+ai credit — one human-made part is enough", async () => {
+		const workId = await stage(creator.id, {
+			credits: [{ role: "Cut by", contributor: "The Editor", types: ["created", "ai"] }],
+		});
+		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			scheduledReleaseAt: inAnHour(),
+		});
+		expect(res.status).toBe(200);
+	});
+
 	it("accepts a Work whose media is still processing, which is what a schedule waits for", async () => {
 		const workId = await stage(creator.id, {
 			type: "video",
@@ -249,6 +292,30 @@ describe("the release-scheduled sweep", () => {
 		await releaseScheduled();
 		stored = await row(workId);
 		expect(stored.visibility).toBe("released");
+	});
+
+	it("gives up the schedule on a Work nobody is credited for, which is the creator's to fix", async () => {
+		// `credits_creator_required` resolves as `creator`: the sweep does not wait on it the way
+		// it waits on processing, because no amount of waiting puts a human in the credits.
+		const workId = await stage(creator.id, { credits: [] });
+		const at = await makeDue(workId);
+		await releaseScheduled();
+
+		const stored = await row(workId);
+		expect(stored.visibility).toBe("private");
+		expect(stored.scheduledReleaseAt).toBeNull();
+
+		const notices = await db
+			.select()
+			.from(notifications)
+			.where(
+				and(
+					eq(notifications.userId, creator.id),
+					eq(notifications.dedupeKey, `scheduled-release-refused:${workId}:${at.toISOString()}`),
+				),
+			);
+		expect(notices).toHaveLength(1);
+		expect(notices[0].kind).toBe("scheduled_release_refused");
 	});
 
 	it("gives up the schedule and tells the creator when their payouts have lapsed", async () => {

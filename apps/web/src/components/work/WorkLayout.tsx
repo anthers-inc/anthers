@@ -99,31 +99,21 @@ export const WORK_LYRICS_HEADING_CLASS =
 	"mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50";
 
 /**
- * The creator-asserted Created date, at the precision they actually claimed.
+ * The creator-asserted original release date, formatted as a plain date.
  *
- * Inventing a day the creator never asserted is exactly the false precision the
- * `authoredPrecision` column exists to prevent, so this never widens what was said.
+ * We only ever claim a date the creator gave us — a creator who knows only the year
+ * picks a date, and that date is what renders.
  */
-export function formatAuthored(
-	iso: string | null | undefined,
-	precision: string | null | undefined,
-): string | null {
+export function formatOriginallyReleased(iso: string | null | undefined): string | null {
 	if (!iso) return null;
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return null;
-	switch (precision) {
-		case "year":
-			return String(d.getUTCFullYear());
-		case "month":
-			return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-		default:
-			return d.toLocaleDateString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-				timeZone: "UTC",
-			});
-	}
+	return d.toLocaleDateString("en-US", {
+		month: "long",
+		day: "numeric",
+		year: "numeric",
+		timeZone: "UTC",
+	});
 }
 
 /**
@@ -212,9 +202,9 @@ export function WorkHeader({ work, title, titleAside, dates, rating }: WorkHeade
 	);
 }
 
-/** Made, then released — never the upload date, which is bookkeeping. */
+/** First released anywhere, then released here — never the upload date, which is bookkeeping. */
 export function WorkDates({ work }: { work: WorkDetail }) {
-	const made = formatAuthored(work.authoredAt, work.authoredPrecision);
+	const originally = formatOriginallyReleased(work.originallyReleased);
 	const released = work.releasedAt
 		? new Date(work.releasedAt).toLocaleDateString("en-US", {
 				month: "long",
@@ -224,10 +214,10 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 		: null;
 	return (
 		<div className="flex flex-wrap items-center gap-4 text-sm text-base-content/60">
-			{made && (
+			{originally && (
 				<span className="flex items-center gap-1">
 					<CalendarIcon className="w-4 h-4" />
-					Made {made}
+					First released {originally}
 				</span>
 			)}
 			{released && <span>Released {released}</span>}
@@ -406,5 +396,58 @@ export function WorkArticle({ html }: { html: string }) {
 		<article className={WRITING_ARTICLE_CLASS} style={WRITING_BODY_STYLE}>
 			<SanitizedHtml html={html} />
 		</article>
+	);
+}
+
+/**
+ * How a single credit's AI involvement is labeled. A bare AI row is simply **AI**, with no
+ * contributor — an AI credit never names the model, because a tool owns nothing and is
+ * granted nothing; the type records that the role was machine-made and no more. A
+ * created+ai blend is labeled **AI blended**, because the human it names is real and the
+ * machine's part is part of the same credit. A pure licensed row is **Licensed** and may
+ * carry its source as the contributor.
+ */
+function creditBadges(types: string[]): { ai: boolean; blended: boolean; licensed: boolean } {
+	const ai = types.includes("ai");
+	const created = types.includes("created");
+	return { ai, blended: ai && created, licensed: types.includes("licensed") && !ai && !created };
+}
+
+/**
+ * The Work's credits, rendered as liner notes — one line per credit, with AI involvement
+ * badged rather than buried. Public: any viewer of a released Work sees these, gated or
+ * not, as they see the description. A Work with no credits renders nothing.
+ */
+export function WorkCredits({ work }: { work: WorkDetail }) {
+	const credits = work.credits ?? [];
+	if (credits.length === 0) return null;
+	return (
+		<section className="flex flex-col gap-2">
+			<h2 className="text-sm font-semibold">Credits</h2>
+			<ul className="flex flex-col gap-1.5 text-sm">
+				{credits.map((credit, i) => {
+					const badges = creditBadges(credit.types);
+					return (
+						// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id — the row is pure data rendered in table order.
+						<li key={i} className="flex flex-wrap items-baseline gap-x-2">
+							<span>
+								{credit.role}
+								{credit.contributor && (
+									<>
+										{" "}
+										<span className="text-base-content/70">{credit.contributor}</span>
+									</>
+								)}
+							</span>
+							{badges.blended && <span className="badge badge-xs badge-outline">Human + AI</span>}
+							{badges.ai && !badges.blended && (
+								<span className="badge badge-xs badge-outline">AI</span>
+							)}
+							{badges.licensed && <span className="badge badge-xs badge-ghost">Licensed</span>}
+						</li>
+					);
+				})}
+			</ul>
+		</section>
 	);
 }

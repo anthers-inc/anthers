@@ -23,7 +23,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { giveWorkAFile } from "./work-fixtures.js";
+import { CREATED_CREDIT, giveWorkAFile } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -47,7 +47,12 @@ async function makeItem(cookie: string, title: string, type = "game"): Promise<n
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 		// Rated on create so the release below is not refused for a reason
 		// this suite is not about — release is gated on every row of the rating being answered.
-		body: JSON.stringify({ type, title, maturityRows: rowsRatedAs("general") }),
+		body: JSON.stringify({
+			type,
+			title,
+			maturityRows: rowsRatedAs("general"),
+			credits: CREATED_CREDIT,
+		}),
 	});
 	expect(res.status).toBe(201);
 	return (await res.json()).work.id;

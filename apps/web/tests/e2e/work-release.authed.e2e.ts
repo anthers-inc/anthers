@@ -41,8 +41,7 @@ const TITLE_PREFIX = "Release walk ";
 interface PublicWork {
 	title: string;
 	publicAccess?: boolean;
-	authoredAt?: string | null;
-	authoredPrecision?: string | null;
+	originallyReleased?: string | null;
 }
 
 /** The fields of a Work as the creator's own listing returns it (used for the sweep). */
@@ -202,10 +201,18 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// Rated through the matrix: every row answered Not in It is a General Work.
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
 
-	// The Created date, at year precision, on the same save. Its whole reason for existing is
+	// The credits, on the same save. Release refuses a Work whose credits name no human
+	// (`credits_creator_required`), and the walk is through the UI rather than around it:
+	// add a credit, tick its Created box, and name the person — the shape every creator
+	// now meets before release.
+	await page.getByRole("button", { name: "Add a credit" }).click();
+	await page.getByRole("textbox", { name: "Credit 1 role" }).fill("Made by");
+	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
+	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill(CREATOR);
+
+	// The original release date, on the same save. Its whole reason for existing is
 	// back-dating a catalog, which is what a creator arriving with years of work actually does.
-	await page.getByRole("combobox", { name: "Created date" }).selectOption("year");
-	await page.locator('input[type="number"][min="1900"]').fill("2015");
+	await page.getByLabel("Original release date").fill("2015-01-15");
 
 	await page.getByRole("button", { name: /save work/i }).click();
 	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
@@ -250,15 +257,13 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	const published = await catalogWork();
 
 	/**
-	 * The Created date survived the form.
+	 * The original release date survived the form.
 	 *
-	 * ⚠️ Added after a sabotage run: stubbing `authoredAt` to `null` in the editor left this
+	 * ⚠️ Added after a sabotage run: stubbing the date to `null` in the editor left this
 	 * spec green, because filling a field in is not the same as asserting it was sent. The
-	 * unit tests cover the UTC conversion; nothing covered the wiring, which is the half
-	 * that actually breaks when someone reshuffles the request body.
+	 * wiring is the half that actually breaks when someone reshuffles the request body.
 	 */
-	expect(published?.authoredAt).toBe("2015-01-01T00:00:00.000Z");
-	expect(published?.authoredPrecision).toBe("year");
+	expect(published?.originallyReleased).toBe("2015-01-15T00:00:00.000Z");
 
 	// ── The locked state ────────────────────────────────────────────────────
 	await cardFor(page).getByRole("link", { name: "Edit" }).click();

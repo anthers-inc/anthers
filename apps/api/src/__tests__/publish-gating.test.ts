@@ -27,6 +27,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { CREATED_CREDIT } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -88,6 +89,7 @@ describe("Catalog CRUD and post links", () => {
 				title: "Library Build",
 				description: "A build",
 				maturityRows: rowsRatedAs("general"),
+				credits: CREATED_CREDIT,
 			}),
 		});
 		expect(create.status).toBe(201);
@@ -121,36 +123,20 @@ describe("Catalog CRUD and post links", () => {
 		expect((await res.json()).code).toBe("release_on_create");
 	});
 
-	it("patches the Work (owner-only) and records a Created date with its precision", async () => {
+	it("patches the Work (owner-only) and records an original release date", async () => {
 		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
 			body: JSON.stringify({
 				title: "Renamed Build",
-				authoredAt: "2015-06-01T00:00:00.000Z",
-				authoredPrecision: "year",
+				originallyReleased: "2015-06-01T00:00:00.000Z",
 			}),
 		});
 		expect(res.status).toBe(200);
 		const { work } = await res.json();
 		expect(work.title).toBe("Renamed Build");
-		// The migration case: made long before it was uploaded, and we store how precisely
-		// the creator actually knows that, rather than inventing a day.
-		expect(work.authoredPrecision).toBe("year");
-		expect(new Date(work.authoredAt).getUTCFullYear()).toBe(2015);
-	});
-
-	it("rejects a Created date with no precision", async () => {
-		const res = await req("/api/content/works", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
-			body: JSON.stringify({
-				type: "game",
-				title: "Undated",
-				authoredAt: "2015-06-01T00:00:00.000Z",
-			}),
-		});
-		expect(res.status).toBe(400);
+		// The migration case: it came out somewhere else years before it was uploaded.
+		expect(work.originallyReleased).toBe("2015-06-01T00:00:00.000Z");
 	});
 
 	it("releases the Work, and only then does it become publicly visible", async () => {

@@ -41,6 +41,7 @@ import {
 	isWriting,
 	pageHoldsTheMeter,
 	WorkColumn,
+	WorkCredits,
 	WorkDeliverable,
 	WorkDescription,
 	type WorkDetail,
@@ -326,6 +327,9 @@ export default function WorkPage() {
 			{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
 			{!isWriting(work.type) && <WorkDescription work={work} />}
+
+			{/* The liner notes — who and what made it, public whether or not it is gated. */}
+			<WorkCredits work={work} />
 
 			{work.assets.length > 0 && (
 				<ProjectDownloads

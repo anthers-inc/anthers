@@ -197,18 +197,18 @@ describe("what the record must never carry", () => {
 	});
 
 	it("carries no field that assumes what kind of thing a Work is", () => {
-		// ⭐ The principle that removed `durationSeconds` and `authoredAt`: a listing must
-		// not encode assumptions about a Work's shape. Duration assumed time-based media;
-		// an authored date assumed a finished artifact, which excludes actively developed
-		// software, patched games and serial comics. Both are mediums Anthers welcomes.
+		// ⭐ The principle that keeps `durationSeconds` off the record: a listing must not
+		// encode assumptions about a Work's shape. Duration assumed time-based media, which
+		// excludes actively developed software, patched games and serial comics — mediums
+		// Anthers welcomes. An original-release date is being validated on our own
+		// back-catalog use before any decision to publish it; it belongs nowhere until then.
 		const props = Object.keys(
 			(workRecord.schema as { shape?: Record<string, unknown> }).shape ?? {},
 		);
 		expect(props.length).toBeGreaterThan(3);
 		for (const shaped of [
 			"durationSeconds",
-			"authoredAt",
-			"authoredPrecision",
+			"originallyReleased",
 			"readMinutes",
 			"pageCount",
 			"extent",

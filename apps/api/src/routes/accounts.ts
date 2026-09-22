@@ -529,8 +529,7 @@ const accountRoutes = new Hono()
 					maturityNotes: w.maturityNotes ?? [],
 					maturityRows: w.maturityRows ?? {},
 					description: w.description,
-					authoredAt: w.authoredAt,
-					authoredPrecision: w.authoredPrecision,
+					originallyReleased: w.originallyReleased,
 					releasedAt: w.releasedAt,
 					createdAt: w.createdAt,
 					creator: embedCreator({

@@ -37,7 +37,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { giveWorkAFile } from "./work-fixtures.js";
+import { CREATED_CREDIT, giveWorkAFile } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -142,6 +142,7 @@ beforeAll(async () => {
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
 		body: JSON.stringify({
 			visibility: "released",
+			credits: CREATED_CREDIT,
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		}),
 	});
