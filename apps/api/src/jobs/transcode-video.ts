@@ -146,11 +146,66 @@ async function ffmpegHls(
 	return playlist;
 }
 
-/** Generate an HLS master playlist */
-async function generateMasterPlaylist(outputDir: string, variants: Variant[]) {
+/** The filename of a Work's audio-only rendition, within the same HLS directory. */
+export const AUDIO_RENDITION_PLAYLIST = "audio.m3u8";
+
+/** Transcode an audio-only HLS rendition — the same audio the variants carry, demuxed
+ *  into its own playlist. One variant, at the bitrate the muxed ones carry, so a Work
+ *  can be listened to as a podcast without paying for video bandwidth it cannot see. */
+async function ffmpegAudioHls(inputPath: string, outputDir: string) {
+	const playlist = join(outputDir, AUDIO_RENDITION_PLAYLIST);
+	const segmentPattern = join(outputDir, "audio-%03d.ts");
+	const proc = Bun.spawn(
+		ffmpegCommand(inputPath, [
+			"-vn",
+			"-c:a",
+			"aac",
+			"-b:a",
+			"128k",
+			"-hls_time",
+			"6",
+			"-hls_playlist_type",
+			"vod",
+			"-hls_segment_filename",
+			segmentPattern,
+			"-f",
+			"hls",
+			playlist,
+			"-y",
+		]),
+		{ stdout: "ignore", stderr: "pipe" },
+	);
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(`ffmpeg audio-only HLS failed: ${stderr.slice(0, 500)}`);
+	}
+	return playlist;
+}
+
+/**
+ * Generate an HLS master playlist.
+ *
+ * Tags every variant with the `AUDIO` group the rendition below provides. Per RFC 8216
+ * a stream-inf naming an audio group plays ITS audio from the named rendition rather
+ * than its own muxed stream when a player honors it (every one hls.js drives does),
+ * which is what makes the rendition one copy of the audio rather than a second encode.
+ */
+async function generateMasterPlaylist(outputDir: string, variants: Variant[], hasAudio: boolean) {
 	const lines = ["#EXTM3U"];
+	// Only when a rendition actually ships: a source with no audio track is a video
+	// nobody can listen to, and an unresolvable media group is a dangling reference.
+	if (hasAudio) {
+		lines.push(
+			'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Spoken",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"',
+		);
+	}
 	for (const v of variants) {
-		lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}`);
+		lines.push(
+			`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}${
+				hasAudio ? ',AUDIO="aud"' : ""
+			}`,
+		);
 		lines.push(`${v.name}.m3u8`);
 	}
 	await Bun.write(join(outputDir, "master.m3u8"), `${lines.join("\n")}\n`);
@@ -292,8 +347,15 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
 		}
 
+		// 3b. The audio-only rendition, beside the variants — one more pass over the same
+		// source, so a video can be listened to as a podcast without its picture. Its
+		// presence is what `viewerTranscoding` serializes as `audioManifestUrl`. A silent
+		// source has nothing to demux, so it ships no rendition and the master says so.
+		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
+		if (hasAudio) await ffmpegAudioHls(localPath, outputDir);
+
 		// 4. Generate master playlist
-		await generateMasterPlaylist(outputDir, variants);
+		await generateMasterPlaylist(outputDir, variants, !!hasAudio);
 		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
 		// segments takes a time nothing measures, and the last estimate the
 		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
