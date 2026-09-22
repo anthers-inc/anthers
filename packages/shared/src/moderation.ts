@@ -56,11 +56,13 @@ export function isModerationSubjectType(value: string): value is ModerationSubje
 
 /**
  * Subject types that carry a `moderation_status` and can therefore be hidden and
- * restored. **A `user` cannot**, and the omission is deliberate rather than pending:
- * hiding a person is account suspension, which has to answer what becomes of their
+ * restored. **A `user` cannot.** The omission is a shape distinction rather than a
+ * gap: hiding a person is account suspension, and an account's state is the
+ * `suspended_at`/`suspended_until` pair on its own row — written by
+ * `services/moderation.ts`'s `suspendAccount`/`unsuspendAccount` rather than the
+ * hide/restore path — because suspension has to answer what becomes of the person's
  * Works, their buyers' purchases, the support pointed at them and any payout in
- * flight. None of that is decided, so a person report routes to a human who acts out
- * of band, and the only in-app outcome is `dismiss`.
+ * flight, none of which a comment-shaped hide can express.
  *
  * Stating it as a predicate rather than leaving `hideSubject` to fail on a missing
  * column is what keeps the refusal legible — a 400 that says why, instead of a 500.
