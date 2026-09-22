@@ -12,7 +12,14 @@
  * creator who could not release. Nothing is saved, so the Work is never actually released.
  */
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	CREATED_CREDIT,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Rated PA walk ";
 const TITLE = `${TITLE_PREFIX}${Date.now()}`;
@@ -57,6 +64,8 @@ test("a creator releasing rated work into Public Access is told who will see it"
 			maturityRows: rowsRatedAs("mature"),
 			streamEnabled: true,
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			// The Edit page release below needs a human in the credits (`credits_creator_required`).
+			credits: CREATED_CREDIT,
 		}),
 	});
 	const { work } = (await created.json()) as { work: { publicId: number } };

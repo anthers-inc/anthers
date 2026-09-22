@@ -166,6 +166,14 @@ test("a piece of writing is written on its page and reads as an article", async 
 	const released = page.getByRole("checkbox", { name: /released to my public catalog/i });
 	await expect(released).toBeDisabled();
 
+	// And not releasable until a human is credited either (`credits_creator_required`):
+	// one credit row with its Created box ticked, naming the writer.
+	await page.getByRole("button", { name: "Add a credit" }).click();
+	await page.getByRole("textbox", { name: "Credit 1 role" }).fill("Written by");
+	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
+	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill("The Walker");
+	await expect(released).toBeDisabled();
+
 	await page.getByRole("textbox", { name: "Description" }).fill("A standfirst for the walk.");
 	await page.locator(".tiptap").click();
 	await page.keyboard.type("The first hard frost came early this year.");

@@ -188,6 +188,24 @@ export async function releaseRefusal(
 		};
 	}
 
+	// A released Work credits at least one human. It follows from the same premise as the
+	// payout gate above rather than overriding it: every released Work earns, and a Work with
+	// no credited human has nobody the earnings belong to — so there is no "released with no
+	// human credited" state, and no resolver-side free-only exception is needed. Zero credits
+	// and only-AI/licensed credits both refuse, because neither names a human; any blend
+	// carrying `created` passes, since the API requires that row to name its contributor.
+	if (!(work.credits ?? []).some((credit) => credit.types.includes("created"))) {
+		return {
+			status: 409,
+			body: {
+				error:
+					"Credit who made this before releasing it — at least one credit needs its Created box ticked, naming the person.",
+				code: "credits_creator_required",
+			},
+			resolves: "creator",
+		};
+	}
+
 	// A video goes out with a thumbnail its creator chose, because nothing takes one on their
 	// behalf: a still picked by the platform could be any moment of a Mature or Adult video, and
 	// the thumbnail is what feeds show to everybody (Parker, 2026-09-18).

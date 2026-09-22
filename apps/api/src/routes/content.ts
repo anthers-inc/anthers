@@ -724,6 +724,37 @@ const accessRowSchema = z.object({
 const seedAccessRowSchema = accessRowSchema;
 
 /**
+ * One credit row — creator-asserted provenance (`WorkCredit` in the schema).
+ *
+ * Two rules are enforced rather than trusted. A credit must assert SOMETHING — an empty
+ * `types` is not a credit — and a `created` assertion must name its human: anything a
+ * person made, alone or blended with AI or a license, says who made it. A pure `licensed`
+ * or `ai` row may stay anonymous; an AI credit never names a model, because a model owns
+ * nothing and is granted nothing.
+ */
+const workCreditRowSchema = z.object({
+	role: z.string().max(255),
+	contributor: z.string().max(255).default(""),
+	types: z.array(z.enum(["created", "licensed", "ai"])).min(1),
+});
+
+/** Every credit asserting `created` names its contributor. */
+const workCreditsSchema = z
+	.array(workCreditRowSchema)
+	.superRefine((rows, ctx) => {
+		rows.forEach((row, i) => {
+			if (row.types.includes("created") && row.contributor.trim() === "") {
+				ctx.addIssue({
+					code: "custom",
+					path: [i, "contributor"],
+					message: "A created credit names its contributor.",
+				});
+			}
+		});
+	})
+	.optional();
+
+/**
  * The Works a post points at. A bare id list — there is nothing to configure, because
  * the reference carries no access, no caption-as-content and no ordering semantics beyond
  * display order. Anything richer would be the post owning the Work again.
@@ -732,10 +763,9 @@ const postWorkRefsSchema = z.array(z.number().int()).max(50);
 
 // ── Works (the Catalog) ──
 
-/** A creator-asserted Created date: when the work was MADE, with the precision they claim. */
-const authoredSchema = z.object({
-	authoredAt: z.string().datetime().nullable().optional(),
-	authoredPrecision: z.enum(["year", "month", "day"]).nullable().optional(),
+/** When the work first came out ANYWHERE, creator-asserted, optional. */
+const originallyReleasedSchema = z.object({
+	originallyReleased: z.string().datetime().nullable().optional(),
 });
 
 const workBaseSchema = z
@@ -793,13 +823,16 @@ const workBaseSchema = z
 		// Access table (default "free but fully locked" applied server-side when omitted)
 		seedAccess: z.array(seedAccessRowSchema).optional(),
 
+		// Credits — the work's liner notes (see workCreditsSchema for the rules).
+		credits: workCreditsSchema,
+
 		// Presentation & metadata
 		isPinned: z.boolean().optional(),
 		tags: z.array(z.string()).optional(),
 		websiteUrl: z.string().max(500).optional(),
 		sourceUrl: z.string().max(500).optional(),
 	})
-	.merge(authoredSchema);
+	.merge(originallyReleasedSchema);
 
 /**
  * A creator's appeal against an operator's rating correction.
@@ -813,12 +846,7 @@ const ratingAppealSchema = z.object({
 	statement: z.string().trim().min(10).max(RATING_APPEAL_STATEMENT_MAX),
 });
 
-const createWorkSchema = workBaseSchema
-	.extend({ type: z.enum(WORK_TYPES) })
-	.refine((d) => d.authoredAt == null || d.authoredPrecision != null, {
-		message: "A Created date needs its precision (year, month or day)",
-		path: ["authoredPrecision"],
-	});
+const createWorkSchema = workBaseSchema.extend({ type: z.enum(WORK_TYPES) });
 
 const updateWorkSchema = workBaseSchema.partial();
 
@@ -1075,18 +1103,18 @@ function serializeWork(
 		maturityRows: item.maturityRows ?? {},
 		/** Whether an operator set the rating — what tells the creator an appeal is the route. */
 		maturityLocked: item.maturitySource === "operator",
-		authoredAt: item.authoredAt,
-		authoredPrecision: item.authoredPrecision,
+		originallyReleased: item.originallyReleased,
 		streamEnabled: item.streamEnabled,
 		downloadEnabled: item.downloadEnabled,
 		seedAccess: item.seedAccess,
+		credits: item.credits,
 		isPinned: item.isPinned,
 		tags: item.tags,
 		websiteUrl: item.websiteUrl,
 		sourceUrl: item.sourceUrl,
 		viewCount: item.viewCount,
 		downloadCount: item.downloadCount,
-		/** The UPLOAD date. Creator-facing only — the public sees authoredAt and releasedAt. */
+		/** The UPLOAD date. Creator-facing only — the public sees originallyReleased and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
 		assets: workAssets,
@@ -1769,8 +1797,9 @@ function serializeWorkForViewer(
 		// restates the notes plus which rows are Not in It, so it tells a reader nothing the notes
 		// do not, except that a creator said something is absent.
 		maturityRows: work.maturityRows ?? {},
-		authoredAt: work.authoredAt,
-		authoredPrecision: work.authoredPrecision,
+		originallyReleased: work.originallyReleased,
+		// The creator's provenance table — public liner notes, ungated like the description.
+		credits: work.credits,
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 		isPinned: work.isPinned,
@@ -3238,11 +3267,11 @@ const contentRoutes = new Hono()
 				maturityRows: normalizeMaturityRows(data.maturityRows, gridFor(data.type)),
 				maturitySource: declaredOnCreate.maturity ? "creator" : null,
 				maturitySetAt: declaredOnCreate.maturity ? new Date() : null,
-				authoredAt: data.authoredAt ? new Date(data.authoredAt) : null,
-				authoredPrecision: data.authoredPrecision ?? null,
+				originallyReleased: data.originallyReleased ? new Date(data.originallyReleased) : null,
 				streamEnabled: data.streamEnabled ?? true,
 				downloadEnabled: data.downloadEnabled ?? false,
 				seedAccess: data.seedAccess ?? defaultSeedAccess(),
+				credits: data.credits ?? [],
 				isPinned: data.isPinned ?? false,
 				tags: data.tags ?? [],
 				websiteUrl: data.websiteUrl ?? "",
@@ -3632,16 +3661,16 @@ const contentRoutes = new Hono()
 	})
 
 	/**
-	 * A creator's public Catalog — their released Works, newest-made first.
+	 * A creator's public Catalog — their released Works, newest-first-released first.
 	 *
-	 * Sorted by the creator-asserted **Created** date by default, so it reads as a body of
-	 * work in the order it was made rather than the order it happened to be uploaded.
-	 * `sort=released` gives "what's new here" instead. Works with no Created date fall back
-	 * to their release date so they can't vanish to the bottom.
+	 * Sorted by the creator-asserted original release date by default, so it reads as a
+	 * body of work in the order it first came out, which may be years before Anthers.
+	 * `sort=released` gives "what's new here" instead. Works with no original release
+	 * date fall back to their release date so they can't vanish to the bottom.
 	 */
 	.get("/catalog/:handle", zValidator("query", catalogQuerySchema), async (c) => {
 		const handle = c.req.param("handle");
-		const sort = c.req.query("sort") ?? "authored";
+		const sort = c.req.query("sort") ?? "original";
 		const type = c.req.query("type");
 
 		const resolution = await resolveHandle(handle);
@@ -3678,7 +3707,7 @@ const contentRoutes = new Hono()
 		const order =
 			sort === "released"
 				? sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`
-				: sql`COALESCE(${works.authoredAt}, ${works.releasedAt}, ${works.createdAt}) DESC`;
+				: sql`COALESCE(${works.originallyReleased}, ${works.releasedAt}, ${works.createdAt}) DESC`;
 
 		const rows = await db
 			.select()
@@ -3853,12 +3882,15 @@ const contentRoutes = new Hono()
 		// loaded.** A piece of writing is its body, and the Edit page sends the body and the release
 		// in one save, so asking about the stored body would refuse a piece for being empty in the
 		// very request that fills it — the same trap the rating fell into before it was written
-		// ahead of these gates. Only the body is overlaid, because it is the only field a condition
-		// reads that this request can also be the one to supply.
-		const asLeft: typeof work =
-			work.type === "text" && data.bodyHtml !== undefined
+		// ahead of these gates. The credits are overlaid for the same reason: a save can tick a
+		// Created box and release in one request, and refusing it for the credits it just replaced
+		// would be `credits_creator_required` answering a request that satisfied it.
+		const asLeft: typeof work = {
+			...(work.type === "text" && data.bodyHtml !== undefined
 				? { ...work, bodyHtml: sanitizePostHtml(data.bodyHtml) }
-				: work;
+				: work),
+			...(data.credits !== undefined ? { credits: data.credits } : {}),
+		};
 
 		// 🚨 **Scheduling a release asks the conditions only the creator can fix, and asks them
 		// now.** The sweep that releases a scheduled Work runs with nobody at the screen, so a
@@ -3912,6 +3944,7 @@ const contentRoutes = new Hono()
 		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
 		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
+		if (data.credits !== undefined) updates.credits = data.credits;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
@@ -3927,14 +3960,11 @@ const contentRoutes = new Hono()
 			updates.estimatedReadMinutes = estimateReadMinutes(updates.bodyHtml as string);
 		}
 
-		// The creator-asserted Created date. Clearing it clears its precision with it —
-		// a precision without a date would claim accuracy about nothing.
-		if (data.authoredAt !== undefined) {
-			updates.authoredAt = data.authoredAt ? new Date(data.authoredAt) : null;
-			if (!data.authoredAt) updates.authoredPrecision = null;
-		}
-		if (data.authoredPrecision !== undefined && data.authoredPrecision !== null) {
-			updates.authoredPrecision = data.authoredPrecision;
+		// The creator-asserted original release date.
+		if (data.originallyReleased !== undefined) {
+			updates.originallyReleased = data.originallyReleased
+				? new Date(data.originallyReleased)
+				: null;
 		}
 
 		if (scheduleSent !== undefined) {

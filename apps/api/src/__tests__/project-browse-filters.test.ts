@@ -22,7 +22,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { giveWorkAFile } from "./work-fixtures.js";
+import { CREATED_CREDIT, giveWorkAFile } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -91,6 +91,7 @@ describe("project browse filters", () => {
 					// Rated on create so the release below is not refused for a reason this
 					// suite is not about, and a piece of writing given its body for the same reason.
 					maturityRows: rowsRatedAs("general"),
+					credits: CREATED_CREDIT,
 					...(c.type === "text" ? { bodyHtml: "<p>An essay.</p>" } : {}),
 				}),
 			});

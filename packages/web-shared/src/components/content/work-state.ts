@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The pure half of the Catalog's authoring surface: what a Work's access table means from
- * its creator's side of the glass, and how a creator-asserted Created date converts to and
- * from the instant the API stores.
+ * its creator's side of the glass.
  *
- * Kept out of the `.tsx` files that render it so both are testable without a DOM — the
+ * Kept out of the `.tsx` files that render it so it is testable without a DOM — the
  * same reasoning that puts `attention.ts`, `public-access.ts` and `resolveAccessSync`
- * behind pure modules. Neither of these can be checked by looking at the screen: a
- * timezone slip renders a perfectly plausible date one day early, and a drifted access
- * rule renders a perfectly plausible badge.
+ * behind pure modules. A drifted access rule renders a perfectly plausible badge, which
+ * is the kind of defect that cannot be caught by looking at the screen.
  */
 import type { SeedAccessRow, Work } from "../../lib/types";
 
@@ -55,51 +53,4 @@ export function accessState(item: AccessShape): AccessState {
 		return item.streamEnabled ? "public-access" : "free";
 	}
 	return "gated";
-}
-
-// ─── The creator-asserted Created date ──────────────────────────────────────
-
-export type AuthoredPrecisionValue = "year" | "month" | "day";
-
-/**
- * The Created date is stored as a full instant plus the precision the creator actually
- * claimed, so a back-dated 2015 game renders "2015" and never an invented 1 January.
- *
- * Everything here works in **UTC** because the read side does — `WorkCard.madeLabel` uses
- * `getUTCFullYear()` and `timeZone: "UTC"`. A local-midnight instant would render as the
- * previous day for every reader west of Greenwich, which is the kind of defect that looks
- * like a plausible date rather than an error.
- *
- * The API takes `z.string().datetime()`, i.e. RFC 3339 with the `Z`, so a bare
- * `"2015-01-01"` is rejected outright. Each precision widens to the first instant of its
- * period.
- */
-export function authoredToIso(
-	precision: AuthoredPrecisionValue | null,
-	value: string,
-): string | null {
-	if (!precision || !value) return null;
-	const full =
-		precision === "year" ? `${value}-01-01` : precision === "month" ? `${value}-01` : value;
-	const d = new Date(`${full}T00:00:00.000Z`);
-	return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-/** The stored instant → the value its precision's input expects. Inverse of the above. */
-export function isoToAuthoredValue(
-	iso: string | null | undefined,
-	precision: AuthoredPrecisionValue,
-): string {
-	if (!iso) return "";
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return "";
-	const day = d.toISOString().slice(0, 10); // YYYY-MM-DD, already UTC
-	switch (precision) {
-		case "year":
-			return day.slice(0, 4);
-		case "month":
-			return day.slice(0, 7);
-		default:
-			return day;
-	}
 }

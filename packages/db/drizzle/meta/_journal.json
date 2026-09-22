@@ -680,6 +680,20 @@
       "when": 1790036658284,
       "tag": "0096_eminent_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1790100179991,
+      "tag": "0097_smiling_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1790101055501,
+      "tag": "0098_add_work_credits",
+      "breakpoints": true
     }
   ]
 }

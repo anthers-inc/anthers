@@ -12,7 +12,14 @@
  * title prefix.
  */
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	CREATED_CREDIT,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Schedule walk ";
 const TITLE = `${TITLE_PREFIX}${Date.now()}`;
@@ -63,7 +70,14 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 			Cookie: `session=${session}`,
 			Origin: WEB_ORIGIN,
 		},
-		body: JSON.stringify({ type: "service", title: TITLE, maturityRows: rowsRatedAs("general") }),
+		body: JSON.stringify({
+			type: "service",
+			title: TITLE,
+			maturityRows: rowsRatedAs("general"),
+			// Scheduling and the final release both ask for a human in the credits
+			// (`credits_creator_required`); the schedule below would be refused without it.
+			credits: CREATED_CREDIT,
+		}),
 	});
 	const { work } = (await created.json()) as { work: OwnedWork };
 

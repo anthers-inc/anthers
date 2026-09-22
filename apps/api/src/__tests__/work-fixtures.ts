@@ -16,7 +16,7 @@
 
 import { afterAll } from "bun:test";
 import { db } from "@anthers/db/client";
-import type { SeedAccessRow } from "@anthers/db/schema";
+import type { SeedAccessRow, WorkCredit } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
 import { needsChosenThumbnail } from "@anthers/shared/content";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
@@ -61,6 +61,15 @@ afterAll(async () => {
  */
 const BASE = Math.floor(Math.random() * 800_000_000);
 let seq = 0;
+
+/**
+ * One `created` credit naming nobody in particular, for suites whose subject is not the
+ * credits gate: release refuses a Work whose credits name no human (`credits_creator_required`),
+ * so a release staged over the routes carries this unless the gate itself is under test.
+ */
+export const CREATED_CREDIT: WorkCredit[] = [
+	{ role: "Made by", contributor: "Fixture Creator", types: ["created"] },
+];
 
 /** A unique 9-digit public id, in the same range the routes mint. */
 export function testPublicId(): number {
@@ -107,8 +116,15 @@ export interface WorkFixture {
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
 	seedAccess?: SeedAccessRow[];
-	authoredAt?: Date | null;
-	authoredPrecision?: "year" | "month" | "day" | null;
+	/**
+	 * The credits table. Defaults to one `created` row naming the fixture, because a fixture
+	 * Work stands for one that can be released and release is refused while no credit names a
+	 * human (`credits_creator_required`) — credits are asserted, and a fixture asserting none
+	 * would be an unreleaseable state staged silently. Pass `[]` explicitly, or only `ai` /
+	 * `licensed` rows, when the credits gate is what is being tested.
+	 */
+	credits?: WorkCredit[];
+	originallyReleased?: Date | null;
 	metadata?: Record<string, unknown>;
 }
 
@@ -152,8 +168,8 @@ export async function insertWork(fixture: WorkFixture) {
 			streamEnabled: fixture.streamEnabled ?? true,
 			downloadEnabled: fixture.downloadEnabled ?? false,
 			seedAccess: fixture.seedAccess ?? [],
-			authoredAt: fixture.authoredAt ?? null,
-			authoredPrecision: fixture.authoredPrecision ?? null,
+			credits: fixture.credits ?? CREATED_CREDIT,
+			originallyReleased: fixture.originallyReleased ?? null,
 			metadata: fixture.metadata ?? {},
 		})
 		.returning();

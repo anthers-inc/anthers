@@ -24,6 +24,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { CREATED_CREDIT } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -65,6 +66,8 @@ function release(workId: number) {
 	return call("PATCH", `/api/content/works/${workId}`, {
 		visibility: "released",
 		maturityRows: rowsRatedAs("general"),
+		// A human in the credits, so `credits_creator_required` is not the refusal under test.
+		credits: CREATED_CREDIT,
 	});
 }
 
@@ -261,6 +264,7 @@ describe("a piece of writing, which is its body the way a video is its file", ()
 			body: "The first hard frost came early this year.",
 			visibility: "released",
 			maturityRows: rowsRatedAs("general"),
+			credits: CREATED_CREDIT,
 		});
 		expect(res.status).toBe(200);
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
