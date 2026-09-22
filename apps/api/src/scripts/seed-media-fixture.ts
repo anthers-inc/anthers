@@ -53,6 +53,7 @@ import { transcodeVideo } from "../jobs/transcode-video.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { storage } from "../services/storage/index.js";
+import { urlToKey } from "../services/storage/keys.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
@@ -324,11 +325,23 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 /** Whether this Work already has media we can trust, so the encode can be skipped. */
 async function alreadyPlayable(workId: number): Promise<boolean> {
 	const [job] = await db
-		.select({ status: transcodingJobs.status })
+		.select({
+			status: transcodingJobs.status,
+			mediaType: transcodingJobs.mediaType,
+			hlsManifestUrl: transcodingJobs.hlsManifestUrl,
+		})
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.workId, workId))
 		.limit(1);
-	return job?.status === "completed";
+	if (job?.status !== "completed") return false;
+	// A completed-from-before-the-rendition video is not playable in the sense the browser
+	// suite needs — the Podcast-This row is gated on `audio.m3u8` existing in storage,
+	// and a fixture seeded on an older branch has no such object. Re-encode it.
+	if (job.mediaType === "video" && job.hlsManifestUrl) {
+		const prefix = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+		return await storage.exists(`${prefix}/audio.m3u8`);
+	}
+	return true;
 }
 
 async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<void> {

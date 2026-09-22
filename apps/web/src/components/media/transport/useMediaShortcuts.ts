@@ -11,14 +11,22 @@
  *
  * The bindings follow the conventions people already have from YouTube and VLC rather
  * than inventing any: space/k play, j/l jump ten, arrows nudge five, f fullscreen,
- * m mute, digits seek by tenths, `,`/`.` step a frame while paused.
+ * m mute, digits seek by tenths, `,`/`.` step a frame while paused. j/l move by ten
+ * *seconds on video*; a spoken player overrides the step via `jump`, which is what a
+ * podcast pair (−15, +30) binds to instead.
  */
 import type { KeyboardEvent } from "react";
 
 export interface MediaShortcutHandlers {
 	togglePlay?: () => void;
-	/** Seconds — negative seeks back. */
+	/** Seconds — negative seeks back. Bound to the arrow keys. */
 	nudge?: (seconds: number) => void;
+	/**
+	 * j/l, by direction rather than by seconds. Absent, they move ±10 seconds through
+	 * `nudge`; the spoken player's pair (−15, +30) is the reason this exists as its own
+	 * handler.
+	 */
+	jump?: (direction: 1 | -1) => void;
 	/** Fraction 0–1 of the whole duration. */
 	seekFraction?: (fraction: number) => void;
 	adjustVolume?: (delta: number) => void;
@@ -67,10 +75,10 @@ export function useMediaShortcuts(handlers: MediaShortcutHandlers) {
 				return run(h.nudge && (() => h.nudge?.(5)));
 			case "j":
 			case "J":
-				return run(h.nudge && (() => h.nudge?.(-10)));
+				return run((h.jump && (() => h.jump?.(-1))) ?? (h.nudge && (() => h.nudge?.(-10))));
 			case "l":
 			case "L":
-				return run(h.nudge && (() => h.nudge?.(10)));
+				return run((h.jump && (() => h.jump?.(1))) ?? (h.nudge && (() => h.nudge?.(10))));
 			case "ArrowUp":
 				return run(h.adjustVolume && (() => h.adjustVolume?.(0.05)));
 			case "ArrowDown":

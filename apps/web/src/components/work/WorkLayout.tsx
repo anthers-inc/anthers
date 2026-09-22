@@ -27,6 +27,7 @@ import { trackFromWork } from "../../lib/tracks";
 import AudioPlayer from "../media/AudioPlayer";
 import ComicReader from "../media/ComicReader";
 import { PublicAccessFooter } from "../media/PublicAccessNotice";
+import SpokenPlayer from "../media/SpokenPlayer";
 import VideoPlayer from "../media/VideoPlayer";
 import ProjectEmbed from "../project/ProjectEmbed";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
@@ -280,9 +281,19 @@ export function WorkDeliverable({
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
+					// The Podcast-This row: only a video whose audio rendition really shipped
+					// gets one — serialization nulls the URL when `audio.m3u8` is absent.
+					podcast={
+						work.transcoding.audioManifestUrl
+							? {
+									audioManifestUrl: work.transcoding.audioManifestUrl,
+									track: trackFromWork(work),
+								}
+							: undefined
+					}
 				/>
 			)}
-			{isListened(work.type) && work.transcoding?.outputFileUrl && (
+			{work.type === "music" && work.transcoding?.outputFileUrl && (
 				<>
 					<AudioPlayer
 						src={work.transcoding.outputFileUrl}
@@ -296,17 +307,28 @@ export function WorkDeliverable({
 					{/* A song's words, under the player. Gated with the audio: the API blanks
 					    them for a viewer without access, so reaching this branch at all
 					    means the viewer may read them. */}
-					{work.type === "music" &&
-						(lyrics ??
-							(work.lyrics?.trim() && (
-								<section className={WORK_LYRICS_CLASS}>
-									<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
-									<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
-										{work.lyrics}
-									</p>
-								</section>
-							)))}
+					{lyrics ??
+						(work.lyrics?.trim() && (
+							<section className={WORK_LYRICS_CLASS}>
+								<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
+								<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
+									{work.lyrics}
+								</p>
+							</section>
+						))}
 				</>
+			)}
+			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
+			    a rate control and a remembered position, none of which a song does. */}
+			{work.type === "audio" && work.transcoding?.outputFileUrl && (
+				<SpokenPlayer
+					src={work.transcoding.outputFileUrl}
+					workId={work.id}
+					waveform={work.transcoding.waveformData ?? undefined}
+					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+					publicAccess={work.publicAccess ?? false}
+					onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
+				/>
 			)}
 			{isPaged(work.type) && (
 				<ComicReader

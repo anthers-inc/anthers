@@ -31,6 +31,12 @@
 /** One entry in the queue. Everything the bar needs to render, decide and claim. */
 export interface QueueTrack {
 	workId: number;
+	/**
+	 * `"music"` or `"audio"` — which player surface this track is for. Drives the
+	 * spoken styling in the bar and the resume-from-position behavior, and nothing
+	 * else: a mixed queue is valid and everything about advancing is agnostic to it.
+	 */
+	kind: "music" | "audio";
 	/** Canonical URL parts, for linking back to the Work page. */
 	slug: string;
 	publicId: number;

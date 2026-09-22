@@ -1411,18 +1411,51 @@ function viewerTranscoding(
 	job: TranscodingJobRow | null,
 	canAccess: boolean,
 	delivery: DeliveryCtx | null,
-): TranscodingJobRow | null {
-	if (!job) return null;
-	if (!canAccess) return { ...job, hlsManifestUrl: null, outputFileUrl: null };
-	if (!delivery || job.status !== "completed") return job;
+): Promise<TranscodingJobRow | null> {
+	// See the async boundary below: the rendition check is the only lookup in here.
+	return (async () => {
+		if (!job) return null;
+		if (!canAccess)
+			return { ...job, hlsManifestUrl: null, audioManifestUrl: null, outputFileUrl: null };
+		if (!delivery || job.status !== "completed") {
+			// No delivery context means local storage, where every object is served
+			// unsigned — the row's URLs are already the playable ones. The audio
+			// rendition still has to be reported, or the Podcast-This row never renders
+			// in a dev browser at all; its URL is the manifest's sibling, same shape as
+			// the raw storage URL the row already carries.
+			if (job.mediaType === "video" && job.hlsManifestUrl && job.status === "completed") {
+				const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+				const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
+				if (hasAudioRendition) {
+					return {
+						...job,
+						audioManifestUrl: job.hlsManifestUrl.replace(/[^/]+$/, "audio.m3u8"),
+					};
+				}
+			}
+			return job;
+		}
 
-	if (job.mediaType === "video" && job.hlsManifestUrl) {
-		return { ...job, hlsManifestUrl: buildHlsManifestUrl(delivery, job.workId) };
-	}
-	if (job.mediaType === "audio" && job.outputFileUrl) {
-		return { ...job, outputFileUrl: buildAudioUrl(delivery, job.workId) };
-	}
-	return job;
+		if (job.mediaType === "video" && job.hlsManifestUrl) {
+			// The audio-only rendition rides the same access-checked route. Its URL is
+			// serialized only when the rendition genuinely exists — a video transcoded
+			// before the job produced one has an `audio.m3u8` that 404s, and reporting it
+			// anyway would draw a Podcast-This affordance that plays nothing.
+			const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+			const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
+			return {
+				...job,
+				hlsManifestUrl: buildHlsManifestUrl(delivery, job.workId),
+				audioManifestUrl: hasAudioRendition
+					? buildHlsManifestUrl(delivery, job.workId, "audio.m3u8")
+					: null,
+			};
+		}
+		if (job.mediaType === "audio" && job.outputFileUrl) {
+			return { ...job, outputFileUrl: buildAudioUrl(delivery, job.workId) };
+		}
+		return job;
+	})();
 }
 
 /** Parse an `:id` path param, rejecting anything that isn't a positive integer. */
@@ -1704,7 +1737,7 @@ async function parentalTimeGate(
  * only on access. A denied viewer gets no pointer at the payload at all: not a signed
  * one, not an expired one, none.
  */
-function serializeWorkForViewer(
+async function serializeWorkForViewer(
 	work: WorkRow,
 	workAssets: AssetRow[],
 	job: TranscodingJobRow | null,
@@ -1844,7 +1877,7 @@ function serializeWorkForViewer(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
-		transcoding: viewerTranscoding(job, canAccess, delivery),
+		transcoding: await viewerTranscoding(job, canAccess, delivery),
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -1971,8 +2004,8 @@ async function loadPostWorks(
 		allowanceSpent(viewerId),
 	]);
 
-	return refs
-		.map((ref) => {
+	const serialized = await Promise.all(
+		refs.map(async (ref) => {
 			const work = worksById.get(ref.workId);
 			if (!work) return null;
 			// 🚨 A post announcing an Adult Work does not announce it to somebody who has
@@ -1990,7 +2023,7 @@ async function loadPostWorks(
 			}
 			return {
 				position: ref.position,
-				work: serializeWorkForViewer(
+				work: await serializeWorkForViewer(
 					work,
 					assetsByWork.get(work.id) ?? [],
 					jobByWork.get(work.id) ?? null,
@@ -2000,8 +2033,9 @@ async function loadPostWorks(
 					pagesByWork.get(work.id) ?? 0,
 				),
 			};
-		})
-		.filter((r): r is NonNullable<typeof r> => r !== null);
+		}),
+	);
+	return serialized.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /**
@@ -3023,7 +3057,9 @@ const contentRoutes = new Hono()
 		// around it. Status still flows to a denied viewer; only the payload URLs don't.
 		const access = await workAccessFor(c, work);
 		return c.json({
-			jobs: jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+			jobs: await Promise.all(
+				jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+			),
 		});
 	})
 
@@ -3458,7 +3494,7 @@ const contentRoutes = new Hono()
 
 		return c.json({
 			work: {
-				...serializeWorkForViewer(
+				...(await serializeWorkForViewer(
 					work,
 					workAssets,
 					jobRows[0] ?? null,
@@ -3473,7 +3509,7 @@ const contentRoutes = new Hono()
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
 					(await parentalTimeGate(viewerId, work)) !== null,
-				),
+				)),
 				creator,
 				creatorHasStripe,
 				// Who sent them, when they arrived by a share link — a display name and nothing
@@ -3727,15 +3763,17 @@ const contentRoutes = new Hono()
 
 		return c.json({
 			creator,
-			works: rows.map((w) =>
-				serializeWorkForViewer(
-					w,
-					assetsByWork.get(w.id) ?? [],
-					jobByWork.get(w.id) ?? null,
-					resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
-					deliveryCtx(),
-					catalogSpent,
-					pagesByWork.get(w.id) ?? 0,
+			works: await Promise.all(
+				rows.map((w) =>
+					serializeWorkForViewer(
+						w,
+						assetsByWork.get(w.id) ?? [],
+						jobByWork.get(w.id) ?? null,
+						resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
+						deliveryCtx(),
+						catalogSpent,
+						pagesByWork.get(w.id) ?? 0,
+					),
 				),
 			),
 		});
@@ -4640,21 +4678,23 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				}),
-				works: itemRows.map((m) => ({
-					sortOrder: m.sortOrder,
-					...serializeWorkForViewer(
-						m.work,
-						assetsByWork.get(m.work.id) ?? [],
-						jobByWork.get(m.work.id) ?? null,
-						resolveAccessSync(
-							m.work as AccessibleWork,
-							contextFor(m.work, viewerId, workCtx, previewRequest(c)),
-						),
-						deliveryCtx(),
-						projectSpent,
-						pagesByWork.get(m.work.id) ?? 0,
-					),
-				})),
+				works: await Promise.all(
+					itemRows.map(async (m) => ({
+						sortOrder: m.sortOrder,
+						...(await serializeWorkForViewer(
+							m.work,
+							assetsByWork.get(m.work.id) ?? [],
+							jobByWork.get(m.work.id) ?? null,
+							resolveAccessSync(
+								m.work as AccessibleWork,
+								contextFor(m.work, viewerId, workCtx, previewRequest(c)),
+							),
+							deliveryCtx(),
+							projectSpent,
+							pagesByWork.get(m.work.id) ?? 0,
+						)),
+					})),
+				),
 				// No per-post access verdict: a post has no gates. The Works a member post
 				// links resolve on their own gates, at the post's own endpoint.
 				posts: memberRows.map((m) => ({
@@ -5401,53 +5441,55 @@ const contentRoutes = new Hono()
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 
 		return c.json({
-			items: rows
-				.map((row) => {
-					const base = {
-						id: row.id,
-						hidden: row.hidden,
-						sortOrder: row.sortOrder,
-						savedAt: row.savedAt,
-					};
-					if (row.workId != null) {
-						const w = workById.get(row.workId);
-						if (!w) return null;
+			items: (
+				await Promise.all(
+					rows.map(async (row) => {
+						const base = {
+							id: row.id,
+							hidden: row.hidden,
+							sortOrder: row.sortOrder,
+							savedAt: row.savedAt,
+						};
+						if (row.workId != null) {
+							const w = workById.get(row.workId);
+							if (!w) return null;
+							return {
+								...base,
+								kind: "work" as const,
+								// Derived from `purchases` on every read, never stamped on the row —
+								// so a refund releases the entry with nothing to keep in step.
+								purchased: permanent.has(w.id),
+								work: await serializeWorkForViewer(
+									w,
+									assetsByWork.get(w.id) ?? [],
+									jobByWork.get(w.id) ?? null,
+									resolveAccessSync(w as AccessibleWork, ctx),
+									deliveryCtx(),
+									spent,
+									pagesByWork.get(w.id) ?? 0,
+								),
+							};
+						}
+						const p = row.projectId != null ? projectById.get(row.projectId) : null;
+						if (!p) return null;
+						// A Project is a shelf, not a payload: it has no gates of its own and
+						// nothing to withhold. Its members resolve their own access when opened.
+						const counts = countsByProject.get(p.id);
 						return {
 							...base,
-							kind: "work" as const,
-							// Derived from `purchases` on every read, never stamped on the row —
-							// so a refund releases the entry with nothing to keep in step.
-							purchased: permanent.has(w.id),
-							work: serializeWorkForViewer(
-								w,
-								assetsByWork.get(w.id) ?? [],
-								jobByWork.get(w.id) ?? null,
-								resolveAccessSync(w as AccessibleWork, ctx),
-								deliveryCtx(),
-								spent,
-								pagesByWork.get(w.id) ?? 0,
-							),
+							kind: "project" as const,
+							purchased: false,
+							project: {
+								...p,
+								trackCount: counts?.workCount ?? 0,
+								// Every released member is music — i.e. this is a record, not a
+								// folder that happens to contain some music.
+								isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.musicCount,
+							},
 						};
-					}
-					const p = row.projectId != null ? projectById.get(row.projectId) : null;
-					if (!p) return null;
-					// A Project is a shelf, not a payload: it has no gates of its own and
-					// nothing to withhold. Its members resolve their own access when opened.
-					const counts = countsByProject.get(p.id);
-					return {
-						...base,
-						kind: "project" as const,
-						purchased: false,
-						project: {
-							...p,
-							trackCount: counts?.workCount ?? 0,
-							// Every released member is music — i.e. this is a record, not a
-							// folder that happens to contain some music.
-							isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.musicCount,
-						},
-					};
-				})
-				.filter((x) => x != null),
+					}),
+				)
+			).filter((x) => x != null),
 			truncated,
 			limit: SHELF_LIMIT,
 		});

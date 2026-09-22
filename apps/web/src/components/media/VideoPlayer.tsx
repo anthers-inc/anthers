@@ -22,6 +22,8 @@ import { PlayIcon } from "@heroicons/react/24/solid";
 import type HlsInstance from "hls.js";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
+import { useMediaPlayer } from "../../lib/media-player";
+import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { useMediaShortcuts } from "./transport/useMediaShortcuts";
@@ -54,6 +56,15 @@ interface VideoPlayerProps {
 	 * Studio's *Use This Frame*, which draws the paused frame into a thumbnail.
 	 */
 	elementRef?: MutableRefObject<HTMLVideoElement | null>;
+	/**
+	 * The Podcast-This hand-off: everything needed to put this video's audio rendition
+	 * into the listening queue as spoken word. Absent when the Work carries no audio
+	 * rendition — the settings panel then renders no such row.
+	 */
+	podcast?: {
+		audioManifestUrl: string;
+		track: Omit<QueueTrack, "src" | "kind">;
+	};
 }
 
 export default function VideoPlayer({
@@ -63,6 +74,7 @@ export default function VideoPlayer({
 	attention,
 	publicAccess = false,
 	elementRef,
+	podcast,
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -90,6 +102,26 @@ export default function VideoPlayer({
 	 */
 	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
+	const { playTracks } = useMediaPlayer();
+
+	/**
+	 * Hand this video's audio rendition to the persistent bar, as spoken word.
+	 *
+	 * The video is fully unloaded — its hls instance destroyed and its src released — so
+	 * a silent picture stops drawing bandwidth while the episode plays underneath it; two
+	 * elements on the same Work are also two attention claims on one listener, and the
+	 * hand-off is a switch, not a doubling.
+	 */
+	const podcastThis = useCallback(() => {
+		if (!podcast) return;
+		const video = videoRef.current;
+		video?.pause();
+		hlsRef.current?.destroy();
+		hlsRef.current = null;
+		video?.removeAttribute("src");
+		video?.load();
+		playTracks([{ ...podcast.track, src: podcast.audioManifestUrl, kind: "audio" }]);
+	}, [podcast, playTracks]);
 	const { volume, effective: effectiveVolume, setLevel: setVolumeLevel, toggleMuted } = useVolume();
 
 	/*
@@ -449,6 +481,7 @@ export default function VideoPlayer({
 					onRate={applyRate}
 					onLevel={applyLevel}
 					onToggleFullscreen={toggleFullscreen}
+					onPodcastThis={podcast ? podcastThis : undefined}
 				/>
 			</section>
 			{publicAccess && <PublicAccessFooter />}
