@@ -38,7 +38,7 @@ export interface MediaFixtureWork {
 	publicId: number;
 	title: string;
 	/** The Work's type. */
-	media: "video" | "music" | "comic";
+	media: "video" | "music" | "comic" | "audio";
 	/** Position within the fixture's Project — the album's track order. */
 	trackNumber: number;
 	/**
@@ -119,6 +119,16 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		title: "Track 4",
 		media: "music",
 		trackNumber: 4,
+	},
+	// A spoken Work, off the album — the episode the spoken player and its resume are
+	// for. It joins no Project: a queue of one is the shape it exists to exercise.
+	{
+		key: "episode",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}episode`,
+		publicId: PUBLIC_ID_BASE + 21,
+		title: "An episode worth talking about",
+		media: "audio",
+		trackNumber: 0,
 	},
 ];
 

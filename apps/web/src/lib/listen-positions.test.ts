@@ -48,11 +48,15 @@ const realStorage = globalThis.localStorage;
 
 beforeEach(() => {
 	store = new MemoryStorage();
-	Object.defineProperty(globalThis, "localStorage", { value: store, configurable: true });
+	// 🚨 Assigned rather than defineProperty'd. `volume.test.ts` assigns the global the
+	// plain way in the same process, and a defineProperty here would turn its writes into
+	// "readonly property" TypeErrors — file-local stubbing is the shared convention, and
+	// the weaker write must not be able to break the stronger one's readers.
+	Object.assign(globalThis, { localStorage: store });
 });
 
 afterEach(() => {
-	Object.defineProperty(globalThis, "localStorage", { value: realStorage, configurable: true });
+	Object.assign(globalThis, { localStorage: realStorage });
 });
 
 const NOW = 1_800_000_000_000;
@@ -83,14 +87,13 @@ describe("readPosition", () => {
 	});
 
 	test("a store that throws on read is absent", () => {
-		Object.defineProperty(globalThis, "localStorage", {
-			value: {
+		Object.assign(globalThis, {
+			localStorage: {
 				getItem: () => {
 					throw new Error("denied");
 				},
 				setItem: () => {},
 			},
-			configurable: true,
 		});
 		expect(readPosition(1, NOW)).toBeNull();
 	});
