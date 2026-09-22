@@ -30,7 +30,6 @@ let dir: string;
 let repo: string;
 let stubBin: string;
 let makeLog: string;
-let worktreeDir: string;
 
 /**
  * The environment every git command and hook run in this file gets: this process's, minus git's own
@@ -94,11 +93,16 @@ let cwdLog: string;
 
 /**
  * Where the stubbed `make` was reached — the repo root for the docs-only fast path, the
- * ephemeral worktree for the full suite. The verify side keeps the working copy free, so
- * these must never agree when the full suite runs.
+ * ephemeral worktree for the full suite. The worktree's path is unique to its push, so the
+ * assertion is the prefix rather than the directory, and the push's own pid lands in it.
  */
 function makeCwd(): string {
 	return readFileSync(cwdLog, "utf8").trim();
+}
+
+/** Where the full suite ran, on the prefix every per-push worktree shares. */
+function verifyWorktree(): string {
+	return join(repo, ".worktrees", "pre-push-verify-");
 }
 
 /** The files the suite saw at its execution point — one per line, relative to its root. */
@@ -120,8 +124,7 @@ beforeAll(() => {
 	stubBin = join(dir, "bin");
 	makeLog = join(dir, "make.log");
 	cwdLog = join(dir, "cwd.log");
-	treeLog = join(dir, "tree.json");
-	worktreeDir = join(repo, ".worktrees", "pre-push-verify");
+	treeLog = join(dir, "tree.txt");
 	Bun.spawnSync(["mkdir", "-p", repo, stubBin]);
 	writeFileSync(
 		join(stubBin, "make"),
@@ -248,8 +251,21 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 		commit({ "code.ts": "export const inWorktree = true;\n", "in-worktree.txt": "here\n" });
 		const res = push(line(git("rev-parse", "HEAD"), base));
 		expect(res.target).toBe("verify");
-		expect(makeCwd()).toBe(worktreeDir);
+		expect(makeCwd().startsWith(verifyWorktree())).toBe(true);
 		expect(capturedFiles()).toContain("./in-worktree.txt");
+	});
+
+	it("gives each push its own worktree path, so two pushes never share one", () => {
+		git("checkout", "-q", "-b", "unique-path", base);
+		commit({ "code.ts": "export const unique = 1;\n" });
+		push(line(git("rev-parse", "HEAD"), base));
+		const first = makeCwd();
+		expect(first.startsWith(verifyWorktree())).toBe(true);
+		expect(first).not.toBe(verifyWorktree().slice(0, -1));
+		push(line(git("rev-parse", "HEAD"), base));
+		const second = makeCwd();
+		expect(second.startsWith(verifyWorktree())).toBe(true);
+		expect(second).not.toBe(first);
 	});
 
 	it("keeps the working copy free — the suite never runs in it", () => {
@@ -273,7 +289,13 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 		git("checkout", "-q", "-b", "cleanup", base);
 		commit({ "code.ts": "export const gone = 1;\n" });
 		push(line(git("rev-parse", "HEAD"), base));
-		expect(Bun.spawnSync(["test", "-e", worktreeDir]).exitCode).toBe(1);
+		const left = Bun.spawnSync(["find", ".worktrees", "-mindepth", "1", "-maxdepth", "1"], {
+			cwd: repo,
+			env: SANDBOX_ENV,
+		})
+			.stdout.toString()
+			.trim();
+		expect(left).toBe("");
 	});
 
 	it("verifies the pushed commit, not the branch the working copy happens to be on", () => {

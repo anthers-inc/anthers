@@ -22,7 +22,9 @@
 # which frees the working copy during the hold and verifies the tree being pushed rather than
 # whichever checkout the push was launched from — two backgrounded pushes collided with a
 # `git checkout` mid-verify on 2026-09-19, and a hold that long is easily misread as a broken
-# push. The worktree is built on demand and removed when the suite finishes; a warm second
+# push. Each push's worktree lives at its own path (`.worktrees/pre-push-verify-<pid>`), so
+# one push's verify can never be mistaken for another's leftover and two pushes run side by
+# side without coordinating. The worktree is removed when the suite finishes; a warm second
 # checkout would drift, and drift in the thing doing the verifying is its own class of bug.
 # The docs-only fast path stays here — it is cheap and reads only markdown.
 #
@@ -104,10 +106,13 @@ if [ "$target" = "verify-docs" ]; then
 fi
 
 # `make verify` runs in a detached worktree at the push's head — see the header. Built on
-# demand and removed when the suite finishes.
+# demand and removed when the suite finishes. Each push gets its own path keyed on this
+# hook's PID, so two pushes from two sessions verify side by side rather than colliding on
+# one shared worktree — a fixed path reads as stale leftover from outside, and removing the
+# "leftover" of a live push is then both possible and invisible from the tree itself.
 printf '\033[36m→ pre-push: running `make verify` before pushing to %s (in a detached worktree at the push'\''s head)\033[0m\n' "$remote"
 
-worktree_dir=".worktrees/pre-push-verify"
+worktree_dir=".worktrees/pre-push-verify-$$"
 push_head_rev="HEAD"
 if [ -n "$push_head" ]; then
 	push_head_rev="$push_head"
@@ -131,17 +136,6 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
-# A stale entry means a previous push died holding this worktree; refuse to remove it out
-# from under a running suite and prune any bookkeeping entry instead.
-if git_clean worktree list --porcelain | grep -q "^worktree .*${worktree_dir}$"; then
-	git_clean worktree prune >/dev/null 2>&1 || true
-	if git_clean worktree list --porcelain | grep -q "^worktree .*${worktree_dir}$"; then
-		printf '\n\033[31m✗ pre-push: %s is already checked out — another verify may still be running\033[0m\n' "$worktree_dir"
-		exit 1
-	fi
-fi
-
-git_clean worktree prune >/dev/null 2>&1 || true
 if ! git_clean worktree add --detach "$worktree_dir" "$push_head_rev" >/dev/null; then
 	printf '\n\033[31m✗ pre-push: could not check out %s in %s\033[0m\n' "$push_head_rev" "$worktree_dir"
 	exit 1
