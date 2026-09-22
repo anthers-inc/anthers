@@ -27,6 +27,7 @@
  *    single-track hook was never built to avoid.
  */
 
+import type HlsInstance from "hls.js";
 import {
 	createContext,
 	type ReactNode,
@@ -234,6 +235,59 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 			audio.load();
 			return;
 		}
+
+		/*
+		 * An HLS source — today, a video listened to as a podcast — needs hls.js where a
+		 * plain endpoint does not. Lazy-imported so the bar's base bundle stays unchanged
+		 * for music, which only ever carries the progressive URL. The instance's lifecycle
+		 * is this effect's: created on a manifest src, destroyed on a change away or on
+		 * unmount below. Mirrors the pattern in VideoPlayer.tsx, including the 402
+		 * backstop — the element itself cannot report the status that emptied allowance.
+		 */
+		if (src.endsWith(".m3u8")) {
+			let hls: HlsInstance | null = null;
+			let canceled = false;
+			void import("hls.js").then(({ default: Hls }) => {
+				if (canceled || !Hls.isSupported()) return;
+				hls = new Hls({
+					// Same cookie rule as the video player: our manifest endpoint is
+					// access-checked and same-origin; signed CDN segments must not carry
+					// credentials.
+					xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+						if (/\/api\/content\/works\/[^/]+\/hls\//.test(url)) {
+							xhr.withCredentials = true;
+						}
+					},
+				});
+				hls.on(Hls.Events.ERROR, (_evt, data) => {
+					if (data?.response?.code === 402) {
+						setRefused(true);
+						refreshBudget();
+						audio.pause();
+					}
+				});
+				hls.loadSource(src);
+				hls.attachMedia(audio);
+				if (current?.kind === "audio") {
+					// Resume once the manifest has given the element a duration to seek into.
+					const stored = readPosition(current.workId);
+					if (stored != null) {
+						hls.on(Hls.Events.MANIFEST_PARSED, () => {
+							audio.currentTime = stored;
+						});
+					}
+				}
+				audio.addEventListener("canplay", () => void audio.play().catch(() => {}), { once: true });
+			});
+			return () => {
+				canceled = true;
+				hls?.destroy();
+				audio.pause();
+				audio.removeAttribute("src");
+				audio.load();
+			};
+		}
+
 		audio.src = src;
 		// A spoken track resumes where the listener left it; a song never does — an album
 		// track does not restart mid-song across sessions. The floor and the finish rules
