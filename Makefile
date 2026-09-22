@@ -117,7 +117,14 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # dev`, which refuses a second dev — so a second `make dev` took the first's servers down and
 # started nothing, the worst of both outcomes. The pid-file probe below runs first, so a live dev
 # session makes the command fail loudly and harm nothing. The kill loop stays, but only for ports
-# orphaned by an interrupted run — where no live pid file exists to refuse on.
+# orphaned by an interrupted run.
+# 🚨 "Orphaned" is decided by WHO listens on the port, not by the pid file's absence — another
+# project's dev server (Polysemy's studio-web, live in its Tauri window on 2026-09-21) has no
+# Anthers pid file by definition, and the bare `lsof -ti :$PORT` loop killed it as one. That
+# bare form also matches a *client's* outbound socket to the port, so a webview browsing a live
+# dev server read as holding it. Freeing a port therefore goes through `scripts/port-guard.ts`,
+# which kills only a listener whose cwd is inside this repository and refuses — naming the
+# process and its cwd — otherwise.
 dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@for PIDFILE in .dev.pid .dev-api.pid; do \
 		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
@@ -127,28 +134,16 @@ dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 			exit 1; \
 		fi; \
 	done
-	@KILLED=0; \
-	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
-		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
-		if [ -n "$$EXISTING_PID" ]; then \
-			echo "  -> WARNING: Port $$PORT in use (pid $$EXISTING_PID) — killing to free port"; \
-			kill $$EXISTING_PID 2>/dev/null || true; \
-			KILLED=1; \
-		fi; \
-	done; \
-	[ "$$KILLED" = "1" ] && sleep 1 || true
+	@for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
+		bun run scripts/port-guard.ts kill $$PORT || exit $$?; \
+	done
 	@bun run scripts/session.ts dev --pid-file .dev.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev'
 
 # The API alone still needs a database, so it starts the dev session itself — which means it cannot
 # run beside `make dev`, and the session refuses rather than letting the two share one.
 dev-api: ## Start API dev server only, in its own dev session
-	@EXISTING_PID=$$(lsof -ti :$(API_PORT) 2>/dev/null); \
-	if [ -n "$$EXISTING_PID" ]; then \
-		echo "  -> WARNING: Port $(API_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
-		kill $$EXISTING_PID 2>/dev/null || true; \
-		sleep 1; \
-	fi
+	@bun run scripts/port-guard.ts kill $(API_PORT)
 	@bun run scripts/session.ts dev --pid-file .dev-api.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev:api'
 
@@ -158,12 +153,7 @@ dev-worker: ## Start background job worker only, inside the running dev session
 	@bun run scripts/session.ts attach dev -- bun run dev:worker
 
 dev-web: ## Start web dev server only
-	@EXISTING_PID=$$(lsof -ti :$(WEB_PORT) 2>/dev/null); \
-	if [ -n "$$EXISTING_PID" ]; then \
-		echo "  -> WARNING: Port $(WEB_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
-		kill $$EXISTING_PID 2>/dev/null || true; \
-		sleep 1; \
-	fi
+	@bun run scripts/port-guard.ts kill $(WEB_PORT)
 	@setsid bun run dev:web & DEV_PID=$$!; \
 	echo $$DEV_PID > .dev-web.pid; \
 	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-web.pid" EXIT; \
@@ -185,10 +175,10 @@ down: ## Stop everything
 	if [ "$$FOUND" = "0" ]; then \
 		echo "  -> No pid files found, checking ports..."; \
 		for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
-			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
-			if [ -n "$$PORT_PID" ]; then \
-				kill $$PORT_PID 2>/dev/null || true; \
-				echo "  -> Killed process on port $$PORT (pid $$PORT_PID)"; \
+			bun run scripts/port-guard.ts check $$PORT; \
+			STATUS=$$?; \
+			if [ "$$STATUS" = "1" ]; then \
+				bun run scripts/port-guard.ts kill $$PORT; \
 				FOUND=1; \
 			fi; \
 		done; \
