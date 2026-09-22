@@ -24,7 +24,8 @@
 import { expect, test } from "@playwright/test";
 
 test("a person can download their data from settings", async ({ page }) => {
-	await page.goto("/settings");
+	// The Activity & Data tab carries both controls.
+	await page.goto("/settings?tab=activity");
 
 	const button = page.getByRole("button", { name: /download my data/i });
 	await expect(button, "no export control on the settings page").toBeVisible();
@@ -37,7 +38,7 @@ test("a person can download their data from settings", async ({ page }) => {
 });
 
 test("deletion states what it will do, in real counts, before it does it", async ({ page }) => {
-	await page.goto("/settings");
+	await page.goto("/settings?tab=activity");
 
 	await page.getByRole("button", { name: /^delete my account$/i }).click();
 

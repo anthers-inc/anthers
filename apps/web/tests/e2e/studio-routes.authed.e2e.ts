@@ -57,20 +57,20 @@ test("/studio resolves to the Studio and its creator gate", async ({ page }) => 
 
 	// Signed in but not a creator → the gate sends us to account settings, in-app.
 	//
-	// ⭐ The `?creator=1` is a stronger assertion than the bare path, not noise: only the
-	// Studio's gate adds it, so it distinguishes "the Studio route matched and bounced us"
-	// from "something else happened to land on /settings". It is also what tells the person
-	// why they were moved — the redirect was silent until 2026-09-11.
-	await expect(page).toHaveURL(/\/settings\?creator=1$/);
+	// ⭐ What arrives is `?tab=account`: the gate adds `?creator=1` to tell the page why
+	// the person was moved, and the page immediately swaps it for the tab the toggle
+	// lives on (settings are tabbed since 2026-09-22). Asserting the tab still proves
+	// both hops ran — a dead-end would have stayed put — via the URL the person
+	// actually sees rather than the one they were sent.
+	await expect(page).toHaveURL(/\/settings\?tab=account$/);
 	expect(errors).toEqual([]);
 });
 
 test("legacy /dashboard paths redirect into /studio", async ({ page }) => {
 	await page.goto("/dashboard/analytics");
-	// StudioRedirect strips /dashboard → /studio/analytics, then the creator gate applies.
-	// Landing on the gate's own destination proves both hops ran; a dead-end would have
-	// stayed put.
-	await expect(page).toHaveURL(/\/settings\?creator=1$/);
+	// StudioRedirect strips /dashboard → /studio/analytics, then the creator gate applies,
+	// and the page's own `?creator=1` → `tab=account` swap runs after that.
+	await expect(page).toHaveURL(/\/settings\?tab=account$/);
 });
 
 test("a creator reaches the Studio itself", async ({ page, context }) => {

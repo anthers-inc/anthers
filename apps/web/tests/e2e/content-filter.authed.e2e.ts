@@ -105,7 +105,8 @@ test("a reader who blurs or hides violence meets it covered, then not at all", a
 	await release(GENTLE, rowsRatedAs("general"));
 
 	const violence = async (choice: "Hide" | "Blur" | "Show") => {
-		await page.goto("/settings");
+		// The violence control is on the Content & Safety tab.
+		await page.goto("/settings?tab=content");
 		const control = page.getByRole("group", { name: "Violence", exact: true });
 		await control.getByRole("button", { name: choice, exact: true }).click();
 		await expect(control.getByRole("button", { name: choice, exact: true })).toHaveAttribute(
