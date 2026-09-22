@@ -1,0 +1,19 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.creditConfirmation",
+	"defs": {
+		"main": {
+			"type": "permission-set",
+			"title": "Confirm a Credit That Names You",
+			"detail": "Record, in your own repository, that you accept a credit naming you on somebody's work. This is the only thing it permits — it is not permission over your posts, projects or works, and a person who is credited but creates nothing on Anthers needs no other set.",
+			"permissions": [
+				{
+					"type": "permission",
+					"resource": "repo",
+					"collection": ["org.anthers.creditAcceptance"],
+					"action": ["create", "delete"]
+				}
+			]
+		}
+	}
+}

@@ -36,12 +36,17 @@ type Main = { $type: "org.anthers.work";
   /**
    * The creator's own summary of the work. Plain text, so that every consumer can render it safely without a sanitizer.
    */
-  "description"?:string;"access"?:Access };
+  "description"?:string;"access"?:Access;
+
+  /**
+   * Who made this work and what of it they made — the creator's own liner notes. Optional and additive: a work with no credits simply lists none, which says nothing against it (credits are asserted, never assumed). Each credit names a contribution and, where that contribution was made by a person, who; an `ai`-only or `licensed`-only credit may name nobody. The type flags are published exactly as the creator entered them — including `ai` — so a stranger can build a real filter on machine-made work, which is the transparency Anthers is committed to. A credit naming an on-network identity is withheld from this record until that identity accepts it; see `org.anthers.creditConfirmation`. The work the credit is about is always THIS record's work, so the credit carries no subject.
+   */
+  "credits"?:(Credit)[] };
 
 export type { Main };
 
 /** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any))}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any)),"credits":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.ref<Credit>((() => credit) as any), ))}));
 
 export { main };
 
@@ -77,3 +82,53 @@ export type { Access };
 const access = /*#__PURE__*/ l.typedObject<Access>($nsid, "access", /*#__PURE__*/ l.object({"state":/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32})}));
 
 export { access };
+
+/** One credit on the work: a contribution, its kind, and where a person made it, who. The three parts answer different questions and are kept apart so each can be absent on its own terms. */
+type Credit = { $type?: "org.anthers.work#credit";
+
+  /**
+   * The contribution this credit names, as a freeform title in the industry's own words — 'Written by', 'Cut by', 'Sound recording'. Freeform rather than a fixed list, because the useful roles differ by medium and a closed set would force every work into categories that fit none of them. Optional: a credit that is only a type assertion (a bare `ai` row, or an anonymous license) may leave the role unnamed.
+   */
+  "role"?:string;
+
+  /**
+   * Who the contributor was — an on-network identity, or an off-platform person or source by name. Optional: a credit with no `created` among its types may name nobody (a license or a machine makes nothing a person owns). REQUIRED whenever `created` is among the types, alone or in a blend — anything a human made must name who.
+   */
+  "contributor"?:Contributor;
+
+  /**
+   * The kind(s) of contribution, published as entered. `created` — a person made this part. `licensed` — this part is pre-existing material used under a right (the source may be named or not, at the creator's choice; many licenses do not require attribution). `ai` — this part was machine-made: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. An open set on purpose: a `created+ai` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as AI' reading of a blend — whether one clears a filter is the reader's own call, and two filters reading a blend opposite ways is a feature, not a defect. `minLength: 1` because a credit must assert something.
+   */
+  "types":("created" | "licensed" | "ai" | l.UnknownString)[] };
+
+export type { Credit };
+
+/** One credit on the work: a contribution, its kind, and where a person made it, who. The three parts answer different questions and are kept apart so each can be absent on its own terms. */
+const credit = /*#__PURE__*/ l.typedObject<Credit>($nsid, "credit", /*#__PURE__*/ l.object({"role":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":120,"maxLength":1200})),"contributor":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Contributor>((() => contributor) as any)),"types":/*#__PURE__*/ l.array(/*#__PURE__*/ l.string<{"knownValues":["created","licensed","ai"],"maxLength":16}>({"maxLength":16}), {"minLength":1})}));
+
+export { credit };
+
+/** Who made a credited contribution. An OBJECT rather than a bare string, deliberately: a published field's type can never change, and a bare name would close the door on carrying an on-network identity beside it — the two shapes that follow. Exactly one of `did` or `name` should be present. */
+type Contributor = { $type?: "org.anthers.work#contributor";
+
+  /**
+   * An on-network identity — the credited person's own DID. A credit naming a `did` is a public claim about a third party, so it is withheld from the work record until that identity accepts it (see `org.anthers.creditConfirmation`): an unconfirmed claim rendered as fact would travel somewhere a later correction cannot follow. Present instead of `name`.
+   */
+  "did"?:l.DidString;
+
+  /**
+   * An off-platform person or source, by name — a collaborator with no network identity, or the title of licensed material. Optionally with `url`. Stays unconfirmed by construction: there is no actor who can accept. Present instead of `did`.
+   */
+  "name"?:string;
+
+  /**
+   * A link giving context for a `name` contributor — a portfolio, a source page. Never meaningfully present alongside `did` (the identity is its own reference).
+   */
+  "url"?:l.UriString };
+
+export type { Contributor };
+
+/** Who made a credited contribution. An OBJECT rather than a bare string, deliberately: a published field's type can never change, and a bare name would close the door on carrying an on-network identity beside it — the two shapes that follow. Exactly one of `did` or `name` should be present. */
+const contributor = /*#__PURE__*/ l.typedObject<Contributor>($nsid, "contributor", /*#__PURE__*/ l.object({"did":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"did"})),"name":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000})),"url":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"uri","maxLength":2048}))}));
+
+export { contributor };
