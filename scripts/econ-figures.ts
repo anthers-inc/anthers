@@ -1044,8 +1044,7 @@ interface Block {
 	allowRetired?: string;
 }
 
-const LADDER =
-	"60-69 Governance & Strategy/61 Roadmap & Growth/61.01 Growth Phases and Join Quotas.md";
+const LADDER = "20-29 Strategy & Design/24 - Growth Phases and Join Quotas.md";
 
 /**
  * Generated regions in markdown that lives in **this repository**.
@@ -1148,11 +1147,13 @@ const BLOCKS: Block[] = [
 	// past tense.** With no internal blocks left it is unused, and it should stay that way:
 	// a public block needing it is publishing edit history, and the fix there is a public
 	// renderer rather than an exemption.
-	// `11.02 Free Access and Charitable Programs` was folded into `Charity References` and
-	// deleted. The block moved with the prose; this entry did not, so `--check --wiki` had
-	// been failing on "no such file" — which is the absent-vs-broken rule doing its job.
+	// `11.02 Free Access and Charitable Programs` was folded into `Charity References`,
+	// which moved into `Internal Wiki/` at the 2026-09-03 flatten. `BLOCKS` resolves against
+	// the private-vault root, so this path is relative to `Internal Wiki/` — the "no such
+	// file" failure is the absent-vs-broken rule doing its job, and it stays failing until
+	// this path matches the live location.
 	{
-		file: "KEEP PRIVATE/Charity References.md",
+		file: "20-29 Strategy & Design/27 - Charity References.md",
 		key: "self-sufficiency",
 		render: renderSelfSufficiencyMarkdown,
 	},
