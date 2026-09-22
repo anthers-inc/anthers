@@ -694,6 +694,13 @@
       "when": 1790101055501,
       "tag": "0098_add_work_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1790114353848,
+      "tag": "0099_work_panels",
+      "breakpoints": true
     }
   ]
 }

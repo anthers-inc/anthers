@@ -15,6 +15,7 @@ import {
 	integer,
 	jsonb,
 	pgTable,
+	real,
 	serial,
 	text,
 	timestamp,
@@ -601,6 +602,50 @@ export const workPages = pgTable(
 	(table) => [
 		uniqueIndex("uq_work_pages").on(table.workId, table.pageNumber),
 		index("idx_work_pages_work").on(table.workId, table.pageNumber),
+	],
+);
+
+/**
+ * The panels of a comic page — the reading order a reader moves through, panel by panel.
+ *
+ * Detection is hybrid: the rasterizer proposes, the Studio corrects. A row detected
+ * automatically carries `auto: true` until a creator touch clears it, so the reader can
+ * mark a guessed panel boundary rather than silently trust it. Coordinates are normalized
+ * 0..1 fractions of the page width/height so a re-rasterize at a different DPI does not
+ * silently move every region. Reading direction is LTR; no Work field for reading direction
+ * exists today, and adding one is a future task's job rather than something this table
+ * pretends to handle.
+ */
+// node — a comic page's panels. Node media, cascades with the page and its Work.
+export const workPanels = pgTable(
+	"work_panels",
+	{
+		id: serial("id").primaryKey(),
+		pageId: integer("page_id")
+			.notNull()
+			.references(() => workPages.id, { onDelete: "cascade" }),
+		/** 1-based within the page, top-left-first after sorting; the reader walks this. */
+		panelNumber: integer("panel_number").notNull(),
+		/**
+		 * Normalized 0..1 page coordinates — fractions of width/height, not pixels, so
+		 * a re-rasterize at a different DPI does not silently move every region.
+		 */
+		x: real("x").notNull(),
+		y: real("y").notNull(),
+		width: real("width").notNull(),
+		height: real("height").notNull(),
+		/**
+		 * True until a creator touch clears it. The reader visually distinguishes a
+		 * guessed panel from a confirmed one; the Studio uses it to badge pages that
+		 * still need a creator pass.
+		 */
+		auto: boolean("auto").notNull().default(true),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_panels").on(table.pageId, table.panelNumber),
+		index("idx_work_panels_page").on(table.pageId, table.panelNumber),
 	],
 );
 
