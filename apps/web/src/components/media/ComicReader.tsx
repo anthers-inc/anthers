@@ -129,7 +129,7 @@ export default function ComicReader({
 	useEffect(() => {
 		if (mode !== "panel" || panelPages != null || error) return;
 		let live = true;
-		fetch(panelsUrl())
+		fetch(panelsUrl(), { credentials: "include" })
 			.then(async (res) => {
 				if (!res.ok) {
 					throw new Error(`Panels failed: ${res.status}`);
@@ -176,7 +176,7 @@ export default function ComicReader({
 		return () => document.removeEventListener("fullscreenchange", onChange);
 	}, []);
 
-	const initialPanel = readPanelProgress(workId);
+	const [initialPanel] = useState(() => readPanelProgress(workId));
 	const panelNav = usePanelNavigation(
 		panelPages ?? [],
 		useCallback(
@@ -189,12 +189,19 @@ export default function ComicReader({
 		{ pageNumber: initialPanel.page, panelNumber: initialPanel.panel },
 	);
 
-	// Once panel geometry arrives, restore the saved panel position.
+	// Restore the saved panel position when panel geometry first arrives — once, not on
+	// every render. The initial values come from the `useState` initializer above, so they
+	// are the mount-time snapshot; an effect that re-ran on later renders would re-restore
+	// after every navigation, fighting the click the reader just took.
+	const didRestorePanels = useRef(false);
+	const restorePage = initialPanel.page;
+	const restorePanel = initialPanel.panel;
 	useEffect(() => {
-		if (panelPages && panelPages.length > 0) {
-			panelNav.goTo({ pageNumber: initialPanel.page, panelNumber: initialPanel.panel });
-		}
-	}, [panelPages, initialPanel, panelNav]);
+		if (didRestorePanels.current) return;
+		if (!panelPages || panelPages.length === 0) return;
+		didRestorePanels.current = true;
+		panelNav.goTo({ pageNumber: restorePage, panelNumber: restorePanel });
+	}, [panelPages, panelNav.goTo, restorePage, restorePanel]);
 
 	const panelNext = useCallback(() => {
 		panelNav.next();
