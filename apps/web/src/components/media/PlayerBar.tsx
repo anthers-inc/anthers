@@ -35,10 +35,12 @@ import {
 } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
+import { useSpokenRate } from "../../lib/spoken-rate";
 import LyricsPanel from "./LyricsPanel";
 import QueuePanel from "./QueuePanel";
 import { formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
+import SpeedMenu from "./transport/SpeedMenu";
 import TransportButton from "./transport/TransportButton";
 import VolumeControl from "./transport/VolumeControl";
 import WaveformDisplay from "./WaveformDisplay";
@@ -49,6 +51,7 @@ type Panel = "none" | "queue" | "lyrics";
 export default function PlayerBar() {
 	const player = useMediaPlayer();
 	const [panel, setPanel] = useState<Panel>("none");
+	const [spokenRate, setSpokenRate] = useSpokenRate();
 
 	const track = player.currentTrack;
 	if (!track) return null;
@@ -56,6 +59,11 @@ export default function PlayerBar() {
 	const toggle = (which: Exclude<Panel, "none">) => setPanel((p) => (p === which ? "none" : which));
 
 	const hasLyrics = !!track.lyrics?.trim();
+
+	// Listening to talk is a different posture from listening to music: one episode has
+	// nothing to shuffle, "repeat one" on a queue of one is indistinguishable from off,
+	// and the speed a listener set on the Work page is the thing the bar has to honor.
+	const spoken = track.kind === "audio";
 
 	return (
 		<div
@@ -104,14 +112,16 @@ export default function PlayerBar() {
 
 				{/* ── Transport ── */}
 				<div className="flex shrink-0 items-center gap-0.5">
-					<TransportButton
-						label={player.shuffle ? "Shuffle: on" : "Shuffle: off"}
-						icon={ArrowsRightLeftIcon}
-						onClick={player.toggleShuffle}
-						active={player.shuffle}
-						size="xs"
-						className="hidden sm:inline-flex"
-					/>
+					{!spoken && (
+						<TransportButton
+							label={player.shuffle ? "Shuffle: on" : "Shuffle: off"}
+							icon={ArrowsRightLeftIcon}
+							onClick={player.toggleShuffle}
+							active={player.shuffle}
+							size="xs"
+							className="hidden sm:inline-flex"
+						/>
+					)}
 					<TransportButton
 						label="Previous"
 						icon={BackwardIcon}
@@ -131,21 +141,23 @@ export default function PlayerBar() {
 						onClick={player.next}
 						disabled={!player.hasNext}
 					/>
-					<TransportButton
-						label={`Repeat: ${player.repeat}`}
-						icon={ArrowPathIcon}
-						onClick={player.cycleRepeat}
-						active={player.repeat !== "off"}
-						size="xs"
-						className="hidden sm:inline-flex"
-						badge={
-							player.repeat === "one" ? (
-								<span className="absolute right-1 top-0.5 text-[8px] font-bold leading-none">
-									1
-								</span>
-							) : undefined
-						}
-					/>
+					{!spoken && (
+						<TransportButton
+							label={`Repeat: ${player.repeat}`}
+							icon={ArrowPathIcon}
+							onClick={player.cycleRepeat}
+							active={player.repeat !== "off"}
+							size="xs"
+							className="hidden sm:inline-flex"
+							badge={
+								player.repeat === "one" ? (
+									<span className="absolute right-1 top-0.5 text-[8px] font-bold leading-none">
+										1
+									</span>
+								) : undefined
+							}
+						/>
+					)}
 				</div>
 
 				{/* ── The middle: a scrubber, or the reason there isn't one ── */}
@@ -191,6 +203,9 @@ export default function PlayerBar() {
 						<span className="w-9 shrink-0 text-[11px] tabular-nums text-base-content/50">
 							{formatTime(player.duration)}
 						</span>
+						{/* The same menu the Work page's spoken player opens, so the rate
+							    reads identically in both places — see transport/SpeedMenu.tsx. */}
+						{spoken && <SpeedMenu rate={spokenRate} onRate={setSpokenRate} size="xs" />}
 					</div>
 				)}
 

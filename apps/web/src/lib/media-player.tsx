@@ -58,7 +58,7 @@ import {
 	upcoming as upcomingIn,
 } from "./music-queue";
 import { refreshBudget, useMeteredBudget } from "./public-access";
-import { readSpokenRate } from "./spoken-rate";
+import { readSpokenRate, SPOKEN_RATE_EVENT } from "./spoken-rate";
 
 export type { QueueTrack, RepeatMode };
 
@@ -271,7 +271,13 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	// plays at its recorded tempo — no rate control exists for it there.
 	useEffect(() => {
 		const audio = audioRef.current;
-		if (audio) audio.playbackRate = current?.kind === "audio" ? readSpokenRate() : 1;
+		if (!audio) return;
+		const apply = () => {
+			audio.playbackRate = current?.kind === "audio" ? readSpokenRate() : 1;
+		};
+		apply();
+		window.addEventListener(SPOKEN_RATE_EVENT, apply);
+		return () => window.removeEventListener(SPOKEN_RATE_EVENT, apply);
 	}, [current?.kind]);
 
 	// Stop the buffered tail the moment the allowance goes. Without this, playback runs on

@@ -31,7 +31,17 @@ export function writeSpokenRate(rate: number): void {
 		// A store that refuses the write simply forgets the preference, which is the
 		// correct failure mode for a convenience.
 	}
+	// A `storage` event never fires in the tab that wrote, so the playing element learns
+	// of the change through this — set from the bar mid-episode and the bar hears it now.
+	// Guarded for the test runner, which has no window: a rate nobody can hear needs no
+	// announcement.
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(new CustomEvent(SPOKEN_RATE_EVENT, { detail: rate }));
+	}
 }
+
+/** Dispatched on `window` when the remembered rate changes in this tab. */
+export const SPOKEN_RATE_EVENT = "anthers:spoken-rate";
 
 /** The current spoken rate with its setter — see the file comment for why it persists. */
 export function useSpokenRate(): [number, (rate: number) => void] {

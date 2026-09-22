@@ -24,7 +24,7 @@ import {
 	writePosition,
 } from "../../lib/listen-positions";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
-import { stepSpokenRate, useSpokenRate } from "../../lib/spoken-rate";
+import { SPOKEN_RATE_EVENT, stepSpokenRate, useSpokenRate } from "../../lib/spoken-rate";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
@@ -181,11 +181,21 @@ export default function SpokenPlayer({
 		audio.muted = volume.muted;
 	}, [effectiveVolume, volume.muted]);
 
-	// The shared spoken preference — see `lib/spoken-rate.ts` for why it persists.
+	// The shared spoken preference — see `lib/spoken-rate.ts` for why it persists — and a
+	// rate changed in the persistent bar lands here too, so both surfaces stay in step.
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (audio) audio.playbackRate = rate;
 	}, [rate]);
+	useEffect(() => {
+		const audio = audioRef.current;
+		if (!audio) return;
+		const apply = (e: Event) => {
+			audio.playbackRate = (e as CustomEvent<number>).detail;
+		};
+		window.addEventListener(SPOKEN_RATE_EVENT, apply);
+		return () => window.removeEventListener(SPOKEN_RATE_EVENT, apply);
+	}, []);
 
 	// Stop the buffered tail rather than letting it run on under the wall — otherwise the
 	// limit visibly does not apply, and attention keeps being credited past it.
