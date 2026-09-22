@@ -18,10 +18,13 @@ async function indexHtml(): Promise<Response> {
 	return new Response(html, { headers: { "Content-Type": "text/html;charset=utf-8" } });
 }
 
+import { devBuildApiOrigin, devBuildPage } from "./src/lib/dev-build-page.js";
+
 Bun.serve({
 	port: PORT,
 	async fetch(req) {
 		const url = new URL(req.url);
+		if (url.pathname === "/dev/web-build") return devBuildPage(devBuildApiOrigin(req, API_PORT));
 		if (url.pathname === "/index.html") return indexHtml();
 		// Try serving static file from dist/
 		const file = Bun.file(`./dist${url.pathname}`);

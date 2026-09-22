@@ -3,6 +3,7 @@
 // committed .do/app.yaml before any route module reads process.env. No-ops in
 // production, where that file is not in the image. See dev-spec-env.ts.
 import "./dev-spec-env.js";
+import { isDevCheckout } from "@anthers/db/dev-only";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
@@ -15,6 +16,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { atprotoRoutes } from "./routes/atproto.js";
 import { authRoutes } from "./routes/auth.js";
 import { contentRoutes } from "./routes/content.js";
+import { createDevBuildRoutes } from "./routes/dev-build.js";
 import { dmcaRoutes } from "./routes/dmca.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
@@ -28,6 +30,17 @@ import { matchesInviteKey, matchesSitePassword } from "./site-gate.js";
 
 const app = new Hono()
 	.use(logger())
+	// The dev build-delivery harness frames its build from the preview page, which is a
+	// different origin (port) than this API, and `secureHeaders` below stamps
+	// `X-Frame-Options: SAMEORIGIN` on every response — which blocks exactly that frame.
+	// A build can never be same-origin with the thing embedding it (that's the whole point of
+	// anthers.run), so for these routes and only these routes the header comes off. This is
+	// registered BEFORE `secureHeaders` so its post-`next()` segment runs after and wins.
+	// Dev-only, refuse-closed: the registration of the routes is gated on `isDevCheckout()`.
+	.use("/api/dev/build/*", async (c, next) => {
+		await next();
+		c.res.headers.delete("X-Frame-Options");
+	})
 	.use(secureHeaders({ crossOriginResourcePolicy: "cross-origin" }))
 	.use(
 		cors({
@@ -79,6 +92,14 @@ const app = new Hono()
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 
+/**
+ * The dev-only build-delivery harness, registered only from a checkout. Keeping the mount
+ * here — rather than inside `createDevBuildRoutes` — is the first of the three refuse-closed
+ * layers: the production image carries no `.do/app.yaml` and no `Makefile`, so the route is
+ * never attached there and `/api/dev/build/*` 404s. The module enforces the other two.
+ */
+const devApp = isDevCheckout() ? app.route("/api/dev", createDevBuildRoutes()) : app;
+
 // This module is the Hono app and nothing else. It is never a process entry point —
 // `server.ts` is, and it owns the Bun.serve object (port, fetch, websocket).
 //
@@ -93,6 +114,6 @@ const app = new Hono()
 // So a WebSocket handler, an upgrade intercept, or anything else wanting the Bun server
 // object goes in `server.ts`. Adding it here breaks the tests, at a distance, in a way
 // that reads as their fault.
-export default app;
+export default devApp;
 
-export type AppType = typeof app;
+export type AppType = typeof devApp;
