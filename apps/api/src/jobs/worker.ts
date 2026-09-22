@@ -24,7 +24,12 @@ import {
 	restoreWork,
 	retryUnsentCounterNotices,
 } from "../services/dmca.js";
-import { runEscalationSweep } from "../services/moderation.js";
+import {
+	liftExpiredSuspensions,
+	notifySupportersOfSuspensions,
+	runEscalationSweep,
+} from "../services/moderation.js";
+import { releaseStalePayoutHolds } from "../services/payouts.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
@@ -159,6 +164,22 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[run-deletions] Processing job ${job.id}`);
 			await runDueDeletions();
+		}
+	});
+
+	await queue.work(QUEUES.LIFT_SUSPENSIONS, async (jobs) => {
+		for (const job of jobs) {
+			const lifted = await liftExpiredSuspensions();
+			const told = await notifySupportersOfSuspensions();
+			if (lifted > 0 || told > 0)
+				console.log(`[lift-suspensions] job ${job.id}: lifted ${lifted}, supporters told ${told}`);
+		}
+	});
+
+	await queue.work(QUEUES.RELEASE_PAYOUT_HOLDS, async (jobs) => {
+		for (const job of jobs) {
+			const released = await releaseStalePayoutHolds();
+			if (released > 0) console.log(`[release-payout-holds] job ${job.id}: released ${released}`);
 		}
 	});
 

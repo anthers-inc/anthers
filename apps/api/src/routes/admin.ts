@@ -62,6 +62,8 @@ import {
 	type QueueFilter,
 	restoreSubject,
 	routeToCopyright,
+	suspendAccount,
+	unsuspendAccount,
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
 import {
@@ -115,6 +117,19 @@ const subjectSchema = z.object({
 
 const hideSchema = subjectSchema.extend({
 	reason: z.string().refine(isModerationReason, "Unknown reason"),
+});
+
+const suspendSchema = z.object({
+	userId: z.number().int().positive(),
+	reason: z.string().refine(isModerationReason, "Unknown reason"),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+	/** ISO timestamp the suspension lifts itself at. Omit for an indefinite suspension. */
+	until: z.string().datetime({ offset: true }).optional(),
+});
+
+const unsuspendSchema = z.object({
+	userId: z.number().int().positive(),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
 });
 
 /**
@@ -471,9 +486,9 @@ const adminRoutes = new Hono<AdminEnv>()
 	})
 
 	// `not_moderatable` is what a person report gets, and it is a 400 rather than a 501
-	// because the request is well-formed and simply asks for something that does not
-	// exist as an action: hiding an account is suspension, which is not built. The
-	// console reads `moderatable` off the queue item and doesn't offer the button —
+	// because the request is well-formed and simply asks for the wrong action: hiding an
+	// account is suspension, which is `/moderation/suspend` below rather than this route.
+	// The console reads `moderatable` off the queue item and doesn't offer the button —
 	// this is the backstop for a client that does anyway.
 	.post("/moderation/hide", zValidator("json", hideSchema, invalidBody), async (c) => {
 		const admin = c.get("admin");
@@ -487,7 +502,10 @@ const adminRoutes = new Hono<AdminEnv>()
 		});
 		if (result === "not_moderatable") {
 			return c.json(
-				{ error: "An account can't be hidden — suspension isn't built.", code: "not_moderatable" },
+				{
+					error: "An account isn't hidden — suspend it instead.",
+					code: "not_moderatable",
+				},
 				400,
 			);
 		}
@@ -506,6 +524,34 @@ const adminRoutes = new Hono<AdminEnv>()
 			);
 		}
 		if (!result) return c.json({ error: "Subject not found" }, 404);
+		return c.json(result);
+	})
+
+	// An account is suspended rather than hidden: the state lives on the `users` row
+	// (`suspended_at`/`suspended_until`), and the reasoning is appended to
+	// `moderation_actions` beside every other decision. `until` omitted is an
+	// indefinite suspension — it stands until lifted, it is not a different kind. See
+	// `suspendAccount` for what this reaches (everything public-facing) and what it
+	// deliberately does not (the repository, the purchases, the money services).
+	.post("/moderation/suspend", zValidator("json", suspendSchema, invalidBody), async (c) => {
+		const admin = c.get("admin");
+		const { userId, reason, note, until } = c.req.valid("json");
+		const result = await suspendAccount({
+			userId,
+			adminId: admin.id,
+			reason,
+			note,
+			until: until ? new Date(until) : null,
+		});
+		if (!result) return c.json({ error: "Account not found" }, 404);
+		return c.json(result);
+	})
+
+	.post("/moderation/unsuspend", zValidator("json", unsuspendSchema, invalidBody), async (c) => {
+		const admin = c.get("admin");
+		const { userId, note } = c.req.valid("json");
+		const result = await unsuspendAccount({ userId, adminId: admin.id, note });
+		if (!result) return c.json({ error: "Account not found" }, 404);
 		return c.json(result);
 	})
 

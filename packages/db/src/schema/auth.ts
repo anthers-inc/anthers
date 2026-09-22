@@ -95,6 +95,43 @@ export const users = pgTable("users", {
 	 */
 	deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
 	/**
+	 * When moderation suspended the account, and when the suspension ends. Both null
+	 * means the account is in good standing; `suspendedAt` without `suspendedUntil`
+	 * is an indefinite suspension — it stands until an operator lifts it, not a
+	 * different kind of suspension.
+	 *
+	 * Suspension is a **state, never a delete**, on the same rule as every other
+	 * removal (the wiki's *How Removal Works*): the row, the identity and the
+	 * repository stay whole, the decision and its reversal are appended to
+	 * `moderation_actions`, and an appeal years later has something to read. A
+	 * suspended account cannot be signed into — sign-in and session validation
+	 * refuse it the way they refuse one with `deletionRequestedAt` set — and its
+	 * profile, its content and its Works stop being served publicly, while a
+	 * buyer's existing purchases keep working. The *reasoning* (who suspended, why,
+	 * with what note) never lives here: it is appended to `moderation_actions`, so
+	 * this pair answers only "is this account suspended right now".
+	 */
+	suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+	suspendedUntil: timestamp("suspended_until", { withTimezone: true }),
+	// ── The payout review that accompanies a suspension ─────────────────────
+	// The three columns below are the *review over the suspension's payout
+	// hold*, not part of the suspension state itself. `services/payouts.ts`
+	// owns them and reads the pair above to open the hold.
+	/**
+	 * When the suspension's payout hold released, or null while the review
+	 * stands open. Meaningful only while `suspendedAt` is set: the hold exists
+	 * for the one question — was any of the suspended balance earned BY the
+	 * terms violation — and its default answer is no, money pays out, reached
+	 * by `releaseStalePayoutHolds` rather than by an operator at the window's
+	 * end. Stamped by `releasePayoutHold` however the review concluded — an
+	 * operator's finding, an operator's clear, or the lapsed window — because
+	 * "absence by the deadline means release" makes the deadline's pass a
+	 * conclusion of its own.
+	 */
+	payoutReviewResolvedAt: timestamp("payout_review_resolved_at", {
+		withTimezone: true,
+	}),
+	/**
 	 * When the account holder accepted the Terms of Service, including the 13+ assertion.
 	 * **Null until onboarding completes** — the account exists the moment the emailed
 	 * code checks out (so payment is an ordinary authenticated call), and the terms are

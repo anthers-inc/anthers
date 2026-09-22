@@ -56,11 +56,13 @@ export function isModerationSubjectType(value: string): value is ModerationSubje
 
 /**
  * Subject types that carry a `moderation_status` and can therefore be hidden and
- * restored. **A `user` cannot**, and the omission is deliberate rather than pending:
- * hiding a person is account suspension, which has to answer what becomes of their
+ * restored. **A `user` cannot.** The omission is a shape distinction rather than a
+ * gap: hiding a person is account suspension, and an account's state is the
+ * `suspended_at`/`suspended_until` pair on its own row — written by
+ * `services/moderation.ts`'s `suspendAccount`/`unsuspendAccount` rather than the
+ * hide/restore path — because suspension has to answer what becomes of the person's
  * Works, their buyers' purchases, the support pointed at them and any payout in
- * flight. None of that is decided, so a person report routes to a human who acts out
- * of band, and the only in-app outcome is `dismiss`.
+ * flight, none of which a comment-shaped hide can express.
  *
  * Stating it as a predicate rather than leaving `hideSubject` to fail on a missing
  * column is what keeps the refusal legible — a 400 that says why, instead of a 500.
@@ -333,8 +335,14 @@ export function isLegalReason(value: string): boolean {
  * than a reuse of the first two because it is neither a hide nor a restore: nothing becomes
  * more or less reachable, and recording it as either would make the log lie about what
  * happened. `services/content-rating.ts` is the only thing that writes one.
+ *
+ * `suspend` and `unsuspend` act on a `user` subject and record the account action beside
+ * the content ones, so an appeal reads one sequence — report, hide, suspend, unsuspend —
+ * rather than reassembling history across tables. A suspension lifted by the expiry sweep
+ * is an `unsuspend` row with both actor columns null, identical in shape to the lift an
+ * operator performs by hand.
  */
-export type ModerationActionType = "hide" | "restore" | "reclassify";
+export type ModerationActionType = "hide" | "restore" | "reclassify" | "suspend" | "unsuspend";
 
 /**
  * Who decided. v1 has exactly one operator, but the column exists from day one

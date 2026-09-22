@@ -21,7 +21,7 @@
  * spend it, which is `support_reductions`.
  */
 import { db } from "@anthers/db/client";
-import { accounts, supportReductions } from "@anthers/db/schema";
+import { accounts, supportReductions, users } from "@anthers/db/schema";
 import { cycleKeyFor, nextCycleKey, reductionFor } from "@anthers/shared/billing-cycle";
 import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
@@ -119,6 +119,35 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 		.where(eq(accounts.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return 0;
+
+	/**
+	 * A suspended supporter's renewal credits nobody — `recordPaidInvoice` drops it on
+	 * the way in — so a reduction spent on one is a coupon minted against a charge that
+	 * exists only to be discarded. Settle the rows as applied and name them against the
+	 * invoice they reached; the money they recorded was owed against days the account was
+	 * NOT suspended, which is preserved in `recordReductions`'s rows rather than spent
+	 * here.
+	 */
+	const [holder] = await db
+		.select({ suspendedAt: users.suspendedAt })
+		.from(users)
+		.where(eq(users.id, acct.userId))
+		.limit(1);
+	if (holder?.suspendedAt != null) {
+		const now = new Date();
+		const cycle = cycleInvoicePaysFor(invoice);
+		await db
+			.update(supportReductions)
+			.set({ appliedAt: now, appliedInvoiceId: invoice.id, updatedAt: now })
+			.where(
+				and(
+					eq(supportReductions.userId, acct.userId),
+					eq(supportReductions.billingCycle, cycle),
+					isNull(supportReductions.appliedAt),
+				),
+			);
+		return 0;
+	}
 
 	// The cycle this invoice PAYS FOR, read from its lines rather than from today's date or from
 	// `invoice.period_start` — see `cycleInvoicePaysFor` for why the invoice-level field names

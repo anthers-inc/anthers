@@ -14,7 +14,8 @@
  * that exist.
  */
 import { db } from "@anthers/db/client";
-import { accounts, invoiceLines, invoices } from "@anthers/db/schema";
+import { accounts, invoiceLines, invoices, users } from "@anthers/db/schema";
+import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -46,6 +47,39 @@ export async function recordPaidInvoice(invoice: Stripe.Invoice): Promise<number
 		.limit(1);
 	if (!acct) return null;
 
+	/**
+	 * 🚨 **A RENEWAL whose supporter is suspended is not recorded, and not charged for.**
+	 * The account keeps its Stripe subscription for the whole suspension — nothing is
+	 * `cancel_at_period_end`'d away, and the renewal fires and is paid on the card on
+	 * file — but it credits nobody: suspension stops the support's earnings from accruing,
+	 * and a renewal recorded here and settled would credit them anyway. So it is dropped
+	 * on the way in and the money is simply unbooked — which is why a suspended
+	 * subscriber's renewal is NOT refunded by this (they already have it, and refunds are
+	 * initiated by the person or a refund path, not by moderation).
+	 *
+	 * The pause is read off the ACCOUNT ROW rather than computed per charge, and the
+	 * resume is its mirror: the row is written HERE with status `paused` rather than
+	 * refused, so the Stripe id, the amount and the month it paid for are on the books
+	 * and the months that ran under suspension are legible — which a deleted record would
+	 * erase. `resumePausedRenewals` re-keys the paused rows at reinstatement against the
+	 * month it lands in, which is where their credits actually run. "Not deleting, not
+	 * canceling" is the design: this row is what it looks like written down.
+	 *
+	 * Only `subscription_cycle` invoices are paused. A mid-month start charged today was
+	 * paid for days the account was in good standing, and that money is already owed to
+	 * the destinations it names — withholding it would be a forfeiture path dressed as a
+	 * moderation one.
+	 */
+	let paused = false;
+	if (invoice.billing_reason === "subscription_cycle") {
+		const [holder] = await db
+			.select({ suspendedAt: users.suspendedAt })
+			.from(users)
+			.where(eq(users.id, acct.userId))
+			.limit(1);
+		paused = holder?.suspendedAt != null;
+	}
+
 	// 🚨 The month this invoice PAYS FOR, read from its lines. A mid-month start is charged in
 	// full for the month it joins and its reduced renewal pays for the next one, so keying this
 	// by payment date — or by `invoice.period_start`, which on a renewal is the month before —
@@ -70,7 +104,9 @@ export async function recordPaidInvoice(invoice: Stripe.Invoice): Promise<number
 			stripeInvoiceId: invoice.id,
 			stripePaymentIntentId: payment.paymentIntentId,
 			billingCycle,
-			status: "paid",
+			// A paused renewal is on the books but settles nowhere — `settle-cycle` reads
+			// `paid` only, and reinstatement re-keys it rather than re-recording it.
+			status: paused ? "paused" : "paid",
 			subtotal: subtotal.toFixed(2),
 			discount: discount.toFixed(2),
 			tax: tax.toFixed(2),
@@ -242,6 +278,33 @@ export async function markInvoiceMoneyReturned(
 		.where(and(eq(invoices.stripePaymentIntentId, paymentIntentId), eq(invoices.status, "paid")))
 		.returning({ id: invoices.id });
 	return rows.length;
+}
+
+/**
+ * Re-key a suspended account's paid renewals against the month reinstatement lands
+ * in, so settlement credits them from the month that is settling rather than the
+ * months the suspension ran over. Called from `unsuspendAccount`; returns how many
+ * renewals were resumed.
+ *
+ * 🚨 **Re-keyed rather than re-recorded.** The renewal was paid on the card on file
+ * and dropped by `recordPaidInvoice` while it was owed to nobody — its Stripe invoice
+ * id and amount are the record, so re-deriving either from a lookup would be a second
+ * truth beside the one Stripe holds. The rows here are ones the pause wrote as
+ * `paused`: present in the subledger, credited nowhere, and findable by that status
+ * alone rather than by any arithmetic on dates. A renewal resumed twice is a no-op
+ * because reinstatement has already moved its status off `paused`.
+ *
+ * Only renewal invoices are ever candidates: a mid-month start was recorded through
+ * the pause (see `recordPaidInvoice`) and already sits against the month it joined.
+ */
+export async function resumePausedRenewals(userId: number, at: Date): Promise<number> {
+	const cycle = cycleKeyFor(at);
+	const resumed = await db
+		.update(invoices)
+		.set({ billingCycle: cycle, status: "paid", updatedAt: new Date() })
+		.where(and(eq(invoices.userId, userId), eq(invoices.status, "paused")))
+		.returning({ id: invoices.id });
+	return resumed.length;
 }
 
 /**
