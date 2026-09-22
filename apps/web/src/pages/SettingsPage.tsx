@@ -1453,9 +1453,51 @@ function DataSection() {
 	);
 }
 
+/**
+ * The account settings are grouped into four tabs by subject, replacing a single
+ * scroll of eleven sections. The tab is carried in the URL as `?tab=` so a link can
+ * point somebody at the right one.
+ */
+type SettingsTab = "account" | "identity" | "content" | "activity";
+
+const TAB_LABELS: { id: SettingsTab; label: string }[] = [
+	{ id: "account", label: "Account" },
+	{ id: "identity", label: "Identity & Devices" },
+	{ id: "content", label: "Content & Safety" },
+	{ id: "activity", label: "Activity & Data" },
+];
+
+function isSettingsTab(value: string | null): value is SettingsTab {
+	return TAB_LABELS.some((t) => t.id === value);
+}
+
 export default function SettingsPage() {
 	const { user, refreshUser, grantPublishing } = useAuth();
-	const [settingsParams] = useSearchParams();
+	const [settingsParams, setSettingsParams] = useSearchParams();
+
+	/**
+	 * The active tab. Defaults to Account.
+	 *
+	 * ⚠️ **`?creator=1` is an inbound redirect from `StudioAuthGate`, not a tab.** It
+	 * asks for the toggle it names, which now lives on the Account tab, so the param
+	 * swaps itself for `tab=account` on arrival rather than fighting the tab bar.
+	 */
+	const tabParam = settingsParams.get("tab");
+	const activeTab: SettingsTab = isSettingsTab(tabParam) ? tabParam : "account";
+
+	useEffect(() => {
+		if (settingsParams.get("creator") !== "1") return;
+		if (tabParam === "account") return;
+		setSettingsParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				next.set("tab", "account");
+				next.delete("creator");
+				return next;
+			},
+			{ replace: true },
+		);
+	}, [settingsParams, tabParam, setSettingsParams]);
 
 	/**
 	 * Somebody the Studio's gate sent here, rather than somebody who came to change a setting.
@@ -1464,8 +1506,14 @@ export default function SettingsPage() {
 	 * non-creator to this page because creator mode is enabled here — but arriving with no
 	 * explanation reads as a dead end, and this page has a dozen switches, only one of which
 	 * is the one they wanted. Gone as soon as they turn it on, so it never becomes furniture.
+	 *
+	 * Captured once from the arrival URL: `?creator=1` swaps itself for `tab=account`
+	 * immediately (the effect below), so a live re-read of the param would un-explain the
+	 * visit the moment the effect ran.
 	 */
-	const sentFromStudio = settingsParams.get("creator") === "1" && !user?.isCreator;
+	const [sentFromStudio] = useState(
+		() => settingsParams.get("creator") === "1" && !user?.isCreator,
+	);
 
 	const [isCreator, setIsCreator] = useState(user?.isCreator || false);
 	const [saving, setSaving] = useState(false);
@@ -1574,83 +1622,124 @@ export default function SettingsPage() {
 				</div>
 			)}
 
-			{/* Creator mode toggle */}
-			<div
-				className={`card mb-6 ${sentFromStudio ? "bg-base-200 ring-2 ring-info" : "bg-base-200"}`}
-			>
-				<div className="card-body">
-					<div className="form-control">
-						<label className="label cursor-pointer justify-start gap-3">
-							<input
-								type="checkbox"
-								className="toggle toggle-primary"
-								checked={isCreator}
-								onChange={(e) => handleCreatorToggle(e.target.checked)}
-								disabled={saving || !user?.emailVerified}
-							/>
-							<div>
-								<span className="label-text font-medium">Enable creator mode</span>
-								<p className="text-xs text-base-content/50 mt-0.5">
-									Allows you to publish projects and posts — releasing anything also requires a
-									completed Stripe payout setup, which at launch reaches only the countries Stripe
-									supports for a platform like ours
-								</p>
-							</div>
-						</label>
-						{!user?.emailVerified && (
-							<p className="text-xs text-warning mt-2">
-								<Link to="/verify-email" className="link">
-									Verify your email
-								</Link>{" "}
-								to enable creator mode.
-							</p>
-						)}
-					</div>
-				</div>
+			{/* `tabs-box`, not the retired v4 `tabs-boxed` — the same convention the
+			    Library page uses. */}
+			<div role="tablist" aria-label="Settings" className="tabs tabs-box mb-6 w-fit">
+				{TAB_LABELS.map((t) => (
+					<button
+						key={t.id}
+						type="button"
+						role="tab"
+						className={`tab ${activeTab === t.id ? "tab-active" : ""}`}
+						onClick={() =>
+							setSettingsParams(
+								(prev) => {
+									const next = new URLSearchParams(prev);
+									next.set("tab", t.id);
+									return next;
+								},
+								{ replace: true },
+							)
+						}
+					>
+						{t.label}
+					</button>
+				))}
 			</div>
 
-			{/* The one setting that decides whether a person's name appears in public. */}
-			<SupporterListingSection />
-
-			{/* The account's identity on the network — issued here, or brought from elsewhere. */}
-			<IdentitySection />
-
-			{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
-			<DesktopHomeSection />
-
-			<DevicesSection />
-
-			{/* What the reader meets at each rung, and the door to the Adult rung. */}
-			<MatureContentSection />
-
-			{/* Directly under it, because the first thing the pin protects is the section
-			    above — and a guardian who has just set those switches is exactly who wants
-			    to lock them. */}
-			<ParentalControlsSection />
-
-			{/* Blocked accounts — the only place a block can be lifted, since a blocked
-			    profile no longer resolves. */}
-			<BlockedSection />
-
-			{/* The person's own attention record — what the Privacy Policy says they can read. */}
-			<ActivityHistorySection />
-
-			{/* Export and deletion — the controls Privacy Policy and /parents describe. */}
-			<DataSection />
-
-			{/* Creator tools live in the Studio (payouts, connections, Badges). */}
-			{isCreator && (
-				<div className="card bg-base-200 mt-6">
-					<div className="card-body">
-						<h3 className="card-title text-lg">Creator tools</h3>
-						<p className="text-sm text-base-content/60">
-							Manage payouts, platform connections, and your Badges in your Studio.
-						</p>
-						<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
-							Open Studio settings
-						</a>
+			{activeTab === "account" && (
+				<>
+					{/* Creator mode toggle */}
+					<div
+						className={`card mb-6 ${sentFromStudio ? "bg-base-200 ring-2 ring-info" : "bg-base-200"}`}
+					>
+						<div className="card-body">
+							<div className="form-control">
+								<label className="label cursor-pointer justify-start gap-3">
+									<input
+										type="checkbox"
+										className="toggle toggle-primary"
+										checked={isCreator}
+										onChange={(e) => handleCreatorToggle(e.target.checked)}
+										disabled={saving || !user?.emailVerified}
+									/>
+									<div>
+										<span className="label-text font-medium">Enable creator mode</span>
+										<p className="text-xs text-base-content/50 mt-0.5">
+											Allows you to publish projects and posts — releasing anything also requires a
+											completed Stripe payout setup, which at launch reaches only the countries
+											Stripe supports for a platform like ours
+										</p>
+									</div>
+								</label>
+								{!user?.emailVerified && (
+									<p className="text-xs text-warning mt-2">
+										<Link to="/verify-email" className="link">
+											Verify your email
+										</Link>{" "}
+										to enable creator mode.
+									</p>
+								)}
+							</div>
+						</div>
 					</div>
-				</div>
+
+					{/* The one setting that decides whether a person's name appears in public. */}
+					<SupporterListingSection />
+
+					{/* Creator tools live in the Studio (payouts, connections, Badges). */}
+					{isCreator && (
+						<div className="card bg-base-200 mt-6">
+							<div className="card-body">
+								<h3 className="card-title text-lg">Creator tools</h3>
+								<p className="text-sm text-base-content/60">
+									Manage payouts, platform connections, and your Badges in your Studio.
+								</p>
+								<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
+									Open Studio settings
+								</a>
+							</div>
+						</div>
+					)}
+				</>
+			)}
+
+			{activeTab === "identity" && (
+				<>
+					{/* The account's identity on the network — issued here, or brought from elsewhere. */}
+					<IdentitySection />
+
+					{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
+					<DesktopHomeSection />
+
+					<DevicesSection />
+				</>
+			)}
+
+			{activeTab === "content" && (
+				<>
+					{/* What the reader meets at each rung, and the door to the Adult rung. */}
+					<MatureContentSection />
+
+					{/* Directly under it, because the first thing the pin protects is the section
+					    above — and a guardian who has just set those switches is exactly who wants
+					    to lock them. */}
+					<ParentalControlsSection />
+
+					{/* Blocked accounts — the only place a block can be lifted, since a blocked
+					    profile no longer resolves. */}
+					<BlockedSection />
+				</>
+			)}
+
+			{activeTab === "activity" && (
+				<>
+					{/* The person's own attention record — what the Privacy Policy says they can read. */}
+					<ActivityHistorySection />
+
+					{/* Export and deletion — the controls Privacy Policy and /parents describe. */}
+					<DataSection />
+				</>
 			)}
 		</div>
 	);

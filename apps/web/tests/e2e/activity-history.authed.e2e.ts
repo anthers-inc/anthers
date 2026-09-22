@@ -16,7 +16,8 @@
 import { expect, test } from "@playwright/test";
 
 test("a person can read their own activity record in settings", async ({ page }) => {
-	await page.goto("/settings");
+	// The Activity & Data tab, where the record lives.
+	await page.goto("/settings?tab=activity");
 
 	await expect(
 		page.getByRole("heading", { name: /your activity history/i }),
