@@ -148,7 +148,8 @@ export default function SafetyPage() {
 				</p>
 				<p>
 					<strong>
-						Uploaded images are checked against databases of known child sexual abuse material.
+						Uploaded images and video are checked against databases of known child sexual abuse
+						material.
 					</strong>{" "}
 					We are still extending that to other kinds of media, and alongside it we act on what
 					people report to us and what we find ourselves.
