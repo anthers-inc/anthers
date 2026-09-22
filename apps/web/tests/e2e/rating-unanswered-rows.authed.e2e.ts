@@ -16,7 +16,14 @@
 import { db } from "@anthers/db/client";
 import { works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	CREATED_CREDIT,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Unanswered rows walk ";
 const TITLE = `${TITLE_PREFIX}${Date.now()}`;
@@ -59,6 +66,8 @@ test("a Work rated before the matrix is released only once every row is answered
 			bodyHtml: "<p>Rated before there was a matrix to rate it with.</p>",
 			streamEnabled: true,
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			// The gate under test is the rating's, not the credits one — stage the human credit.
+			credits: CREATED_CREDIT,
 		}),
 	});
 	expect(created.status).toBe(201);

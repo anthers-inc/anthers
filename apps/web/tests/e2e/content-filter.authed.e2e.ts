@@ -21,6 +21,7 @@ import type { BrowserContext } from "@playwright/test";
 import {
 	API_URL,
 	AUTH_STATE_PATH,
+	CREATED_CREDIT,
 	expect,
 	signInAsMediaFixture,
 	test,
@@ -68,6 +69,8 @@ async function release(title: string, rows: Record<string, string>): Promise<voi
 			maturityRows: rows,
 			streamEnabled: true,
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			// Release refuses a Work whose credits name no human (`credits_creator_required`).
+			credits: CREATED_CREDIT,
 		}),
 	});
 	expect(created.status).toBe(201);
