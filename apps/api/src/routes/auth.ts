@@ -671,6 +671,22 @@ const authRoutes = new Hono()
 		}
 
 		const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
+		if (user?.suspendedAt) {
+			// The holder proved the mailbox and is told the truth rather than a generic
+			// failure: the account is suspended, with whatever end the suspension carries.
+			// The full reason and the appeal path live on the interstitial the client sends
+			// them to; creating no session is the whole of the refusal.
+			return c.json(
+				{
+					error: "This account is suspended.",
+					reason: "account_suspended",
+					suspendedUntil: user.suspendedUntil?.toISOString() ?? null,
+					user: null,
+					resume: false,
+				},
+				403,
+			);
+		}
 		if (!user) {
 			// 🚨 **An unfinished signup resumes here, and this route still creates nothing.**
 			// Somebody who pressed *Create My Account* in another browser has a pending signup

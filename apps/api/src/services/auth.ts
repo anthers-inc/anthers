@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
 import { desktopAuthRequests, sessions, users, verificationTokens } from "@anthers/db/schema";
-import { and, desc, eq, gt, lt, notInArray } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, notInArray } from "drizzle-orm";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -72,7 +72,20 @@ export async function validateSession(token: string) {
 		})
 		.from(sessions)
 		.innerJoin(users, eq(sessions.userId, users.id))
-		.where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
+		.where(
+			and(
+				eq(sessions.token, token),
+				gt(sessions.expiresAt, new Date()),
+				// A suspended account is gone as far as its holder is concerned: no session
+				// of it may authenticate, however fresh. `suspendAccount` deletes the rows
+				// outright, so this predicate is the backstop rather than the mechanism —
+				// the one fact every reader of a session agrees on, in case a token
+				// outlives the action that should have destroyed it. Session deletion is
+				// not content deletion: a session is a credential, and `deleteExpiredSessions`
+				// destroys them as routine hygiene.
+				isNull(users.suspendedAt),
+			),
+		)
 		.limit(1);
 
 	if (result.length === 0) return null;

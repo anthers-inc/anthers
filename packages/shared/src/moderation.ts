@@ -333,8 +333,14 @@ export function isLegalReason(value: string): boolean {
  * than a reuse of the first two because it is neither a hide nor a restore: nothing becomes
  * more or less reachable, and recording it as either would make the log lie about what
  * happened. `services/content-rating.ts` is the only thing that writes one.
+ *
+ * `suspend` and `unsuspend` act on a `user` subject and record the account action beside
+ * the content ones, so an appeal reads one sequence — report, hide, suspend, unsuspend —
+ * rather than reassembling history across tables. A suspension lifted by the expiry sweep
+ * is an `unsuspend` row with both actor columns null, identical in shape to the lift an
+ * operator performs by hand.
  */
-export type ModerationActionType = "hide" | "restore" | "reclassify";
+export type ModerationActionType = "hide" | "restore" | "reclassify" | "suspend" | "unsuspend";
 
 /**
  * Who decided. v1 has exactly one operator, but the column exists from day one

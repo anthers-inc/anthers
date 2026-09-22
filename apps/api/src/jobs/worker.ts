@@ -24,7 +24,7 @@ import {
 	restoreWork,
 	retryUnsentCounterNotices,
 } from "../services/dmca.js";
-import { runEscalationSweep } from "../services/moderation.js";
+import { liftExpiredSuspensions, runEscalationSweep } from "../services/moderation.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
@@ -159,6 +159,13 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[run-deletions] Processing job ${job.id}`);
 			await runDueDeletions();
+		}
+	});
+
+	await queue.work(QUEUES.LIFT_SUSPENSIONS, async (jobs) => {
+		for (const job of jobs) {
+			const lifted = await liftExpiredSuspensions();
+			if (lifted > 0) console.log(`[lift-suspensions] job ${job.id}: lifted ${lifted}`);
 		}
 	});
 

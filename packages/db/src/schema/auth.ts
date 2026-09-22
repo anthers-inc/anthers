@@ -95,6 +95,25 @@ export const users = pgTable("users", {
 	 */
 	deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
 	/**
+	 * When moderation suspended the account, and when the suspension ends. Both null
+	 * means the account is in good standing; `suspendedAt` without `suspendedUntil`
+	 * is an indefinite suspension — it stands until an operator lifts it, not a
+	 * different kind of suspension.
+	 *
+	 * Suspension is a **state, never a delete**, on the same rule as every other
+	 * removal (the wiki's *How Removal Works*): the row, the identity and the
+	 * repository stay whole, the decision and its reversal are appended to
+	 * `moderation_actions`, and an appeal years later has something to read. A
+	 * suspended account cannot be signed into — sign-in and session validation
+	 * refuse it the way they refuse one with `deletionRequestedAt` set — and its
+	 * profile, its content and its Works stop being served publicly, while a
+	 * buyer's existing purchases keep working. The *reasoning* (who suspended, why,
+	 * with what note) never lives here: it is appended to `moderation_actions`, so
+	 * this pair answers only "is this account suspended right now".
+	 */
+	suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+	suspendedUntil: timestamp("suspended_until", { withTimezone: true }),
+	/**
 	 * When the account holder accepted the Terms of Service, including the 13+ assertion.
 	 * **Null until onboarding completes** — the account exists the moment the emailed
 	 * code checks out (so payment is an ordinary authenticated call), and the terms are
