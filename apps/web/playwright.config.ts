@@ -34,7 +34,16 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	workers: process.env.CI ? 1 : undefined,
+	// 🚨 **Local runs cap at a handful of workers, not half the machine.** Playwright's
+	// default is cores/2, which was written for one person on an idle box. This machine
+	// runs several agent sessions at once — each with its own browsers and, since the
+	// pre-push hook verifies every push, its own full-suite runs — and at cores/2 the
+	// suite's timeout-adjacent assertions flake in rotating sets under the contention.
+	// A busy box must degrade into a slower run, never a false-red gate: the gate's
+	// redness is the signal every push trusts, so it has to mean the code is red. CI
+	// stays at 1 worker; it pays for certainty in wall-clock on a quiet runner.
+	// E2E_WORKERS overrides when a deliberately quiet machine wants the speed back.
+	workers: process.env.CI ? 1 : Number(process.env.E2E_WORKERS ?? 4),
 	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
 	use: {
 		baseURL: `http://localhost:${PORT}`,
