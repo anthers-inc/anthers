@@ -17,14 +17,14 @@
  * failure may have happened in a worker process that no longer exists.
  */
 
-import { worksOwedScans } from "../services/safety-scan.js";
+import { objectsOwedScans, worksOwedScans } from "../services/safety-scan.js";
 import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 
-/** Re-queue every owed object. Returns how many jobs were sent. */
+/** Re-queue every owed object, in both senses. Returns how many jobs were sent. */
 export async function rescanOwed(): Promise<number> {
-	const owed = await worksOwedScans();
 	let sent = 0;
-	for (const work of owed) {
+
+	for (const work of await worksOwedScans()) {
 		for (const object of work.objects) {
 			// `kind` travels with the key rather than being re-derived here: a video source
 			// re-queued as an image would hash the container bytes, fail, and record the
@@ -37,6 +37,26 @@ export async function rescanOwed(): Promise<number> {
 			);
 			sent += 1;
 		}
+	}
+
+	// The Work-less arm: badge art, avatars and every other upload that has no Work. Its
+	// selection is the opposite of the one above — the row EXISTS here and is absent up
+	// there — so one query cannot serve both and neither may borrow the other's. The
+	// subject columns on the row are what lets a match on one of these quarantine rather
+	// than log: without them the scanner would know something matched and nothing about
+	// whose it was.
+	for (const object of await objectsOwedScans()) {
+		await queue.send(
+			QUEUES.SCAN_MEDIA,
+			{
+				storageKey: object.storageKey,
+				kind: object.kind,
+				uploaderId: object.subject.uploaderId ?? null,
+				objectKind: object.subject.objectKind ?? null,
+			},
+			JOB_OPTIONS[QUEUES.SCAN_MEDIA],
+		);
+		sent += 1;
 	}
 	return sent;
 }

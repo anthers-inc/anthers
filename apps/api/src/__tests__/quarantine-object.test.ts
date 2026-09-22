@@ -533,7 +533,7 @@ describe("A failed write carrying the vendor's answer", () => {
 			await failureOf(
 				recordScan(
 					`creators/${creatorId}/avatars/${RUN}-refused.png`,
-					2_000_000_000,
+					{ workId: 2_000_000_000 },
 					null,
 					outcome,
 				),
@@ -544,7 +544,7 @@ describe("A failed write carrying the vendor's answer", () => {
 				recordScans([
 					{
 						storageKey: `creators/${creatorId}/avatars/${RUN}-refused-frames.png`,
-						workId: 2_000_000_000,
+						subject: { workId: 2_000_000_000 },
 						pdq: null,
 						outcome,
 					},

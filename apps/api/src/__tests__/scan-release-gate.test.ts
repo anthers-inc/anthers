@@ -21,13 +21,19 @@
  * enqueues the scan and pg-boss is not running under the test runner. What is under test is
  * the gate, not the enqueue.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { mediaScans, works } from "@anthers/db/schema";
+import { mediaQuarantine, mediaScans, works } from "@anthers/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
+import { queue } from "../jobs/queue.js";
+import { rescanOwed } from "../jobs/rescan-owed.js";
+import type { ScanMediaData } from "../jobs/scan-media.js";
+import { MIN_PDQ_QUALITY } from "../lib/pdq.js";
 import {
 	beginScans,
+	objectsOwedScans,
+	RESCAN_OBJECT_AGE_MS,
 	SCAN_RELEASE_GRACE_MS,
 	scannableKeys,
 	scanReleaseGate,
@@ -308,6 +314,174 @@ describe("release waits for a safety scan, and gives way", () => {
 			const work = await stage({ type: "image", sourceKey: KEY("noclock-owed") });
 			const owed = await worksOwedScans();
 			expect(owed.find((o) => o.id === work.id)).toBeUndefined();
+		});
+	});
+
+	describe("objectsOwedScans — the Work-less arm of the same sweep", () => {
+		const OLD = new Date(Date.now() - 2 * RESCAN_OBJECT_AGE_MS);
+
+		async function record(row: {
+			key: string;
+			determination: string;
+			pdqHash?: string | null;
+			pdqQuality?: number | null;
+			uploaderId?: number | null;
+			objectKind?: string | null;
+			scannedAt?: Date;
+			workId?: number | null;
+		}) {
+			await db
+				.insert(mediaScans)
+				.values({
+					storageKey: row.key,
+					workId: row.workId ?? null,
+					uploaderId: row.uploaderId ?? null,
+					objectKind: row.objectKind ?? null,
+					determination: row.determination,
+					pdqHash: row.pdqHash ?? null,
+					pdqQuality: row.pdqQuality ?? null,
+					scannedAt: row.scannedAt ?? OLD,
+				})
+				.onConflictDoUpdate({
+					target: mediaScans.storageKey,
+					set: {
+						workId: row.workId ?? null,
+						uploaderId: row.uploaderId ?? null,
+						objectKind: row.objectKind ?? null,
+						determination: row.determination,
+						pdqHash: row.pdqHash ?? null,
+						pdqQuality: row.pdqQuality ?? null,
+						scannedAt: row.scannedAt ?? OLD,
+					},
+				});
+		}
+
+		it("finds an unanswered Work-less scan and reads its subject off the row", async () => {
+			await record({
+				key: KEY("arm-owed"),
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: MIN_PDQ_QUALITY + 10,
+				uploaderId: creator.userId,
+				objectKind: "badge",
+			});
+			const owed = await objectsOwedScans();
+			const found = owed.find((o) => o.storageKey === KEY("arm-owed"));
+			expect(found).toMatchObject({
+				kind: "image",
+				subject: { uploaderId: creator.userId, objectKind: "badge" },
+			});
+		});
+
+		it("rejects a row that could never have been asked, and one deliberately not asked", async () => {
+			// The fingerprint is the whole selection: without one there was nothing a vendor
+			// could have answered, and below the quality floor we declined to ask.
+			await record({ key: KEY("arm-nohash"), determination: "unscannable" });
+			await record({
+				key: KEY("arm-lowq"),
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: MIN_PDQ_QUALITY - 1,
+			});
+			const owed = await objectsOwedScans();
+			expect(owed.find((o) => o.storageKey === KEY("arm-nohash"))).toBeUndefined();
+			expect(owed.find((o) => o.storageKey === KEY("arm-lowq"))).toBeUndefined();
+		});
+
+		it("rejects a row with an answer, one behind a Work, and one the inline pass just wrote", async () => {
+			const work = await stage({ type: "text" });
+			await record({
+				key: KEY("arm-clean"),
+				determination: "clean",
+				pdqHash: "f".repeat(64),
+				pdqQuality: 100,
+			});
+			await record({
+				key: KEY("arm-work"),
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: 100,
+				workId: work.id,
+			});
+			await record({
+				key: KEY("arm-fresh"),
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: 100,
+				scannedAt: new Date(),
+			});
+			const owed = await objectsOwedScans();
+			expect(owed.find((o) => o.storageKey === KEY("arm-clean"))).toBeUndefined();
+			expect(owed.find((o) => o.storageKey === KEY("arm-work"))).toBeUndefined();
+			expect(owed.find((o) => o.storageKey === KEY("arm-fresh"))).toBeUndefined();
+		});
+
+		it("rejects an object already quarantined, and accepts one whose finding cleared", async () => {
+			await record({
+				key: KEY("arm-parked"),
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: 100,
+			});
+			await db.insert(mediaQuarantine).values({
+				workId: null,
+				uploaderId: creator.userId,
+				originalKey: KEY("arm-parked"),
+				quarantineKey: `quarantine/${KEY("arm-parked")}`,
+				objectKind: "badge",
+				source: "scan",
+				classification: "apparent-csam",
+			});
+			await record({
+				key: KEY("arm-cleared"),
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: 100,
+			});
+			await db.insert(mediaQuarantine).values({
+				workId: null,
+				uploaderId: creator.userId,
+				originalKey: KEY("arm-cleared"),
+				quarantineKey: `quarantine/${KEY("arm-cleared")}`,
+				objectKind: "badge",
+				source: "scan",
+				classification: "apparent-csam",
+				clearedAt: new Date(),
+			});
+			const owed = await objectsOwedScans();
+			expect(owed.find((o) => o.storageKey === KEY("arm-parked"))).toBeUndefined();
+			expect(owed.find((o) => o.storageKey === KEY("arm-cleared"))).toBeDefined();
+		});
+
+		it("re-queues a Work-less job with the subject it would have had inline", async () => {
+			const key = KEY("arm-rescan");
+			await record({
+				key,
+				determination: "unscannable",
+				pdqHash: "f".repeat(64),
+				pdqQuality: 100,
+				uploaderId: creator.userId,
+				objectKind: "avatar",
+			});
+			const sentJobs: ScanMediaData[] = [];
+			const sendSpy = spyOn(queue, "send").mockImplementation((async (
+				_name: string,
+				data: unknown,
+			) => {
+				sentJobs.push(data as ScanMediaData);
+				return "job";
+			}) as typeof queue.send);
+			try {
+				const sent = await rescanOwed();
+				expect(sent).toBeGreaterThan(0);
+			} finally {
+				sendSpy.mockRestore();
+			}
+			expect(sentJobs.find((j) => j.storageKey === key)).toMatchObject({
+				kind: "image",
+				uploaderId: creator.userId,
+				objectKind: "avatar",
+			});
 		});
 	});
 

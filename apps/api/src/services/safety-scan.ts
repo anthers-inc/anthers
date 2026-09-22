@@ -22,8 +22,8 @@
 import { rm } from "node:fs/promises";
 import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
-import { mediaScans, works } from "@anthers/db/schema";
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { mediaQuarantine, mediaScans, works } from "@anthers/db/schema";
+import { and, eq, inArray, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import {
 	type ShieldClassification,
 	type ShieldCredentials,
@@ -221,7 +221,18 @@ export async function scanStoredImage(
 		outcome = UNSCANNABLE;
 	}
 
-	await recordScan(storageKey, options.workId ?? null, pdq, outcome);
+	const subject = scanSubjectOf(options);
+	if (pdq && !outcome.quarantine && subject.workId == null && !subject.objectKind) {
+		// A Work-less scan with no recorded subject is the gap {@link objectsOwedScans}
+		// was built for: re-queued later, matched, and quarantined nowhere because nothing
+		// on the row says whose it was. The upload routes always pass one, so this line
+		// means a caller arrived without one — loud rather than silent for the same reason
+		// `quarantineMatch` logs its dead end.
+		console.warn(
+			`[safety-scan] ${storageKey}: unscannable Work-less scan recorded without a subject — re-ask would not quarantine a match`,
+		);
+	}
+	await recordScan(storageKey, subject, pdq, outcome);
 
 	if (outcome.quarantine) {
 		await quarantineMatch(storageKey, outcome, options, `safety scan: ${storageKey}`);
@@ -248,6 +259,43 @@ export interface ScanSubject {
 }
 
 /**
+ * The subject to write on a scan row, minus the Work.
+ *
+ * 🚨 **`uploaderId` and `objectKind` are deliberately dropped when a `workId` is present.**
+ * The row then names the Work's creator rather than whoever happened to attach the file, and
+ * a row that gains a Work later stops pointing at the uploader when the uploader and the
+ * creator part company. The reverse — dropping the Work when an uploader is present — would
+ * break `worksOwedScans`, which finds an owed object by the Work it belongs to.
+ */
+export function scanSubjectOf(subject: ScanSubject): ScanSubject {
+	if (subject.workId != null) return { workId: subject.workId };
+	return {
+		workId: null,
+		uploaderId: subject.uploaderId ?? null,
+		objectKind: subject.objectKind ?? null,
+	};
+}
+
+/**
+ * Read the subject off a scan row, for a re-ask that never met the upload.
+ *
+ * This is a read-back, not a rediscovery: the columns are what the uploader's request
+ * declared when the scan was first recorded, and re-deriving them from the key would
+ * parse a filename for facts that were already known once. A row whose key points at a
+ * deleted object, or which was written before the columns existed, may come back with
+ * neither field — an old row still scans, and a new one is the reason this exists.
+ */
+export function scanSubjectFromRow(row: {
+	uploaderId?: number | null;
+	objectKind?: string | null;
+}): Pick<ScanSubject, "uploaderId" | "objectKind"> {
+	return {
+		uploaderId: row.uploaderId ?? null,
+		objectKind: (row.objectKind ?? null) as QuarantineObjectKind | null,
+	};
+}
+
+/**
  * Scan an object an upload handler is holding open, and never fail the upload because a
  * detection vendor is having a bad day.
  *
@@ -270,10 +318,12 @@ export interface ScanSubject {
  * asked. {@link ScanUnansweredError} carries it out of the failure so the distinction
  * survives, and re-asking costs a vendor call rather than another read and another hash.
  *
- * ⚠️ **Nothing sweeps these afterwards yet.** `worksOwedScans` enumerates Works and finds
- * them by the absence of a row, so a Work-less object — which now has a row — is outside it
- * in both directions. Closing that is its own task; what this function guarantees is that
- * the sweep, when it exists, has something unambiguous to select on.
+ * ⭐ **The hourly `rescan-owed` sweep re-asks these once the row has aged out of the
+ * upload path.** `worksOwedScans` enumerates Works and finds them by the absence of a
+ * row, so a Work-less object — which now has a row — is outside it in both directions;
+ * {@link objectsOwedScans} is the arm that sees it, selecting on the usable fingerprint
+ * this row is carrying. Its subject comes back off the same row, which is what the
+ * `uploader_id` / `object_kind` pair above the release gate is for.
  *
  * 🚨 **A caller passing a `workId` here would take that object out of `worksOwedScans`**,
  * because writing any row is what removes a key from a sweep keyed on absence. No caller
@@ -288,7 +338,7 @@ export async function scanInlineUpload(
 		return await scanStoredImage(storageKey, subject);
 	} catch (err) {
 		const pdq = err instanceof ScanUnansweredError ? err.pdq : null;
-		await recordScan(storageKey, subject.workId ?? null, pdq, UNSCANNABLE);
+		await recordScan(storageKey, scanSubjectOf(subject), pdq, UNSCANNABLE);
 		return UNSCANNABLE;
 	}
 }
@@ -370,8 +420,6 @@ export async function scanStoredVideo(
 		now?: () => Date;
 	} = {},
 ): Promise<ScanOutcome> {
-	const workId = options.workId ?? null;
-
 	let frames: SampledFrame[] = [];
 	let localPath: string | null = null;
 	try {
@@ -394,7 +442,7 @@ export async function scanStoredVideo(
 	}
 
 	if (frames.length === 0) {
-		await recordScan(storageKey, workId, null, UNSCANNABLE);
+		await recordScan(storageKey, scanSubjectOf(options), null, UNSCANNABLE);
 		return UNSCANNABLE;
 	}
 
@@ -403,17 +451,19 @@ export async function scanStoredVideo(
 		options,
 	);
 
+	const subject = scanSubjectOf(options);
 	const rows = frames.map((frame) => ({
 		storageKey: `${storageKey}#t=${frame.atSeconds}`,
 		pdq: frame.hash,
 		outcome: outcomes.get(frame.hash.hash) ?? UNSCANNABLE,
+		subject,
 	}));
 
 	const worst = worstOutcome(rows.map((r) => r.outcome));
 	// Frames first, then the summary. A crash between the two leaves the video still owed,
 	// which the sweep re-asks — the other order would mark it answered with nothing behind it.
-	await recordScans(rows.map((r) => ({ ...r, workId })));
-	await recordScan(storageKey, workId, null, worst);
+	await recordScans(rows);
+	await recordScan(storageKey, subject, null, worst);
 
 	if (worst.quarantine) {
 		await quarantineMatch(storageKey, worst, options, `safety scan: ${storageKey} (video frame)`);
@@ -697,6 +747,77 @@ export async function worksOwedScans(
 	return owed;
 }
 
+/** How old an unanswered Work-less scan must be before the sweep re-asks it. One hour. */
+export const RESCAN_OBJECT_AGE_MS = 60 * 60 * 1000;
+
+/**
+ * Work-less objects whose scan went unanswered — an `unscannable` row carrying a usable
+ * fingerprint with no Work behind it and no open quarantine, old enough that the inline
+ * pass the upload just did is not the thing being retried.
+ *
+ * 🚨 **This is the second arm of the sweep, on the opposite condition.** `worksOwedScans`
+ * finds an object by the ABSENCE of a row; here the row exists, because `scanInlineUpload`
+ * writes one the moment the vendor lets it down — and what makes that row re-askable
+ * rather than permanently unaskable is the hash on it. A null hash means the question
+ * could never be asked, and a low-quality one means it was deliberately not asked. Only
+ * this arm knows the difference, which is why the two arms cannot share a query.
+ *
+ * ⚠️ **A Work-less key re-queued as `video` would decode nothing and come back
+ * `unscannable` with its fingerprint wiped**, which is how a sweep undoes the coverage it
+ * exists to restore — the row's `objectKind` is the upload vocabulary rather than the
+ * scanner's, so the only Work-less job with kind `video` is one nobody sends today. The
+ * check is cheap and the failure is silent, so the check is here.
+ *
+ * 🚨 **The row's own `uploaderId` and `objectKind` ride the re-ask rather than being
+ * recovered from the key**, because the key cannot produce them — one prefix serves
+ * several kinds and the kind decides which quarantine door a match takes, which is the
+ * whole reason the sweep exists. A row missing either goes out with what it has, and a
+ * match on it logs rather than landing in quarantine — which is the gap these columns
+ * close for every row written from now on.
+ */
+export async function objectsOwedScans(
+	limit = 200,
+	now: Date = new Date(),
+): Promise<Array<{ storageKey: string; kind: ScannableKind; subject: ScanSubject }>> {
+	const rows = await db
+		.select({
+			storageKey: mediaScans.storageKey,
+			objectKind: mediaScans.objectKind,
+			uploaderId: mediaScans.uploaderId,
+		})
+		.from(mediaScans)
+		.where(
+			and(
+				eq(mediaScans.determination, "unscannable"),
+				isNull(mediaScans.workId),
+				isNotNull(mediaScans.pdqHash),
+				sql`${mediaScans.pdqQuality} >= ${MIN_PDQ_QUALITY}`,
+				lt(mediaScans.scannedAt, new Date(now.getTime() - RESCAN_OBJECT_AGE_MS)),
+				// A quarantine already parked this object. Re-asking about material that is
+				// already out of reach asks a question whose answer cannot change anything,
+				// and the scan path would refuse the key on arrival anyway.
+				notExists(
+					db
+						.select({ one: sql`1` })
+						.from(mediaQuarantine)
+						.where(
+							and(
+								eq(mediaQuarantine.originalKey, mediaScans.storageKey),
+								isNull(mediaQuarantine.clearedAt),
+							),
+						),
+				),
+			),
+		)
+		.limit(limit);
+
+	return rows.map((row) => ({
+		storageKey: row.storageKey,
+		kind: row.objectKind === "video" ? "video" : "image",
+		subject: scanSubjectFromRow(row),
+	}));
+}
+
 /**
  * Record many scans at once — the video path, which writes a row per sampled frame.
  *
@@ -706,22 +827,27 @@ export async function worksOwedScans(
 export async function recordScans(
 	entries: Array<{
 		storageKey: string;
-		workId: number | null;
+		subject: ScanSubject;
 		pdq: PdqHash | null;
 		outcome: ScanOutcome;
 	}>,
 ): Promise<void> {
 	if (entries.length === 0) return;
 	const scannedAt = new Date();
-	const rows = entries.map((e) => ({
-		storageKey: e.storageKey,
-		workId: e.workId,
-		pdqHash: e.pdq?.hash ?? null,
-		pdqQuality: e.pdq?.quality ?? null,
-		determination: e.outcome.determination,
-		vendorMatch: e.outcome.vendorMatch,
-		scannedAt,
-	}));
+	const rows = entries.map((e) => {
+		const subject = scanSubjectOf(e.subject);
+		return {
+			storageKey: e.storageKey,
+			workId: subject.workId ?? null,
+			uploaderId: subject.uploaderId ?? null,
+			objectKind: subject.objectKind ?? null,
+			pdqHash: e.pdq?.hash ?? null,
+			pdqQuality: e.pdq?.quality ?? null,
+			determination: e.outcome.determination,
+			vendorMatch: e.outcome.vendorMatch,
+			scannedAt,
+		};
+	});
 	await writingMatchData(`${rows.length} scan records`, () =>
 		db
 			.insert(mediaScans)
@@ -730,6 +856,8 @@ export async function recordScans(
 				target: mediaScans.storageKey,
 				set: {
 					workId: sql`excluded.work_id`,
+					uploaderId: sql`excluded.uploader_id`,
+					objectKind: sql`excluded.object_kind`,
 					pdqHash: sql`excluded.pdq_hash`,
 					pdqQuality: sql`excluded.pdq_quality`,
 					determination: sql`excluded.determination`,
@@ -743,13 +871,16 @@ export async function recordScans(
 /** The only writer of `media_scans`. A re-scan replaces the row rather than stacking. */
 export async function recordScan(
 	storageKey: string,
-	workId: number | null,
+	subject: ScanSubject,
 	pdq: PdqHash | null,
 	outcome: ScanOutcome,
 ): Promise<void> {
+	const normalized = scanSubjectOf(subject);
 	const row = {
 		storageKey,
-		workId,
+		workId: normalized.workId ?? null,
+		uploaderId: normalized.uploaderId ?? null,
+		objectKind: normalized.objectKind ?? null,
 		pdqHash: pdq?.hash ?? null,
 		pdqQuality: pdq?.quality ?? null,
 		determination: outcome.determination,

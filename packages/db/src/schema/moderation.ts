@@ -450,8 +450,35 @@ export const mediaScans = pgTable(
 		/**
 		 * The Work it belongs to, when it belongs to one. **Nullable on purpose**: avatars,
 		 * covers and other profile images are scanned too and have no Work behind them.
+		 * The pair below is the other half of that — for a Work-less object they are the
+		 * subject it belongs to, and without them a re-asked match has nobody and nothing
+		 * to quarantine.
 		 */
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		/**
+		 * Who uploaded the object, when it belongs to no Work. Null either way around:
+		 * for a Work the uploader is the Work's creator, and for some older rows the
+		 * fact was simply never written down (see {@link scanSubjectForKey}). Set null
+		 * rather than cascade, on the same reasoning as `media_quarantine.uploader_id`:
+		 * the record of a scan has to outlive the account it names.
+		 */
+		uploaderId: integer("uploader_id").references(() => users.id, { onDelete: "set null" }),
+		/**
+		 * Which kind of object this is — the upload route's own `mediaType` vocabulary,
+		 * or a Work object kind when one applies. **What makes it worth storing rather
+		 * than deriving**: the same key prefix cannot tell `badge` from `thumbnail` from
+		 * `gallery`, because several kinds mint into one prefix; only the uploader's
+		 * declared media type knows. That type decides both the bucket and the scan kind,
+		 * so it rides the row beside the object it describes.
+		 *
+		 * ⚠️ **It may be widened past {@link QuarantineObjectKind}.** An existing row
+		 * describes an object the code minted under a vocabulary that is itself
+		 * versioned, and a future one may carry a kind a quarantine has not learned
+		 * yet. The scanner reads it back with `as QuarantineObjectKind`; a row carrying
+		 * a kind nobody recognizes lands as the door nobody wrote, loudly, rather than
+		 * on a fallback key parse.
+		 */
+		objectKind: text("object_kind"),
 		/**
 		 * The PDQ perceptual hash we computed, hex, in the reference byte order.
 		 *
