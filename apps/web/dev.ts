@@ -37,11 +37,10 @@ const server = serve({
 	},
 });
 
-// 🚨 **`127.0.0.1`, not `localhost`, and the two are not interchangeable here.** A browser
-// treats them as different hosts and scopes cookies accordingly, while the ATProto spec permits
-// only `127.0.0.1` / `[::1]` for a loopback client's redirect — so the dev OAuth callback always
-// lands on `127.0.0.1`. Browsing the site at `localhost` therefore splits the cookie jar in half
-// and the Bluesky signup loses the address the PDS just handed over. Print the one that works.
-console.log(`Web dev server on http://127.0.0.1:${server.port}`);
-console.log("  ⚠️  Use 127.0.0.1 rather than localhost — Bluesky's OAuth callback requires it,");
-console.log("      and the two are different cookie hosts.");
+// 🚨 **Under portless, dev answers at a named URL, not a port.** `portless.json` names this
+// app `anthers`; the proxy allocates the port it binds here, routes `https://anthers.localhost`
+// to it, and the URL is what to print. Direct fallback (PORTLESS=0, or no portless on the
+// machine) binds :3000 and the site is reached at `http://127.0.0.1:3000` — the `127.0.0.1`
+// matters, because the ATProto dev OAuth callback is restricted to that spelling and cookies
+// are host-scoped.
+console.log(`Web dev server on ${process.env.PORTLESS_URL ?? `http://127.0.0.1:${server.port}`}`);

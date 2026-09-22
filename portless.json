@@ -1,0 +1,7 @@
+{
+	"apps": {
+		"apps/web": { "name": "anthers" },
+		"apps/admin": { "name": "admin.anthers" },
+		"apps/api": { "name": "api.anthers" }
+	}
+}

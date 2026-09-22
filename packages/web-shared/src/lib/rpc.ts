@@ -61,7 +61,18 @@ export function apiSendsCookies(): boolean {
  *   - the desktop shell   → whatever origin it injected (host-sniffing can't work
  *     from `tauri://localhost`, which would otherwise resolve to the app itself)
  *   - localhost / 127.0.0.1 → the dev API, on :8000 or the port the page announces
+ *   - a named local URL   → `api.<host>` — portless serves web as `<project>.localhost`
+ *     and api as `api.<project>.localhost`, so the two share `.localhost` as a parent.
  *   - otherwise             → same-origin ("")
+ *
+ * 🚨 **Mirroring the page's own host, whatever it is, is what matters** because cookies are
+ * host-scoped and `127.0.0.1` is a different host from `localhost` *and* from
+ * `<name>.localhost`. Pinning to one cost the Bluesky signup entirely on 2026-09-04: the
+ * ATProto spec permits only `127.0.0.1` / `[::1]` for a loopback client's redirect, so the
+ * dev OAuth callback landed on `127.0.0.1:8000` while every other call went to
+ * `localhost:8000` — the pending-signup cookie was written on one host and read on the
+ * other, so the finishing page found an empty row. Under portless the two halves share
+ * `.<name>.localhost` as a parent and the split goes away.
  *
  * There was a `studio.<host>` branch until 2026-08-11 that stripped the label to reach
  * the apex API, because the Studio was a separate cross-origin subdomain. It merged into
@@ -81,6 +92,12 @@ export function apiBaseUrl(): string {
 	// address Bluesky had already given us. Serve dev from `http://127.0.0.1:3000` and the
 	// whole flow stays on one host.
 	if (h === "localhost" || h === "127.0.0.1") return `http://${h}:${devApiPort()}`;
+	if (h.endsWith(".localhost")) {
+		// A portless host carries the project in its name — the API lives on its own
+		// subdomain of that, so both sides share a parent and cookies scope correctly
+		// across the bounce.
+		return `https://api.${h}`;
+	}
 	return "";
 }
 

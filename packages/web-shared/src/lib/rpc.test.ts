@@ -25,7 +25,7 @@
 import { describe, expect, it } from "bun:test";
 import { join, relative, resolve } from "node:path";
 import { Glob } from "bun";
-import { devApiPort } from "./rpc.js";
+import { apiBaseUrl, devApiPort } from "./rpc.js";
 
 const REPO = resolve(import.meta.dir, "../../../..");
 
@@ -102,5 +102,29 @@ describe("the dev API port a localhost page reaches", () => {
 	it("ignores an announcement that is not a port, rather than building a URL out of it", () => {
 		expect(devApiPort(page("evil.example/"))).toBe("8000");
 		expect(devApiPort(page(""))).toBe("8000");
+	});
+});
+
+describe("the API origin under a named local URL (portless)", () => {
+	it("puts web and api on subdomains of one hostname, so cookies scope across both", () => {
+		// The shape that matters is that dev's two apps stop sharing a port and share a
+		// hostname's parent domain instead. `https://anthers.localhost` and
+		// `https://api.anthers.localhost` have the same site, and a Domain=.anthers.localhost
+		// cookie reaches both — which is what the pending-signup bounce needs.
+		const prev = globalThis.location;
+		Object.defineProperty(globalThis, "location", {
+			value: { hostname: "anthers.localhost" },
+			configurable: true,
+			writable: true,
+		});
+		try {
+			expect(apiBaseUrl()).toBe("https://api.anthers.localhost");
+		} finally {
+			Object.defineProperty(globalThis, "location", {
+				value: prev,
+				configurable: true,
+				writable: true,
+			});
+		}
 	});
 });
