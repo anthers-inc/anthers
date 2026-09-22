@@ -217,6 +217,8 @@ export const QUEUES = {
 	// Lift suspensions whose `suspended_until` has passed. Each lift is its own
 	// transaction and its own `moderation_actions` row with both actor columns null,
 	// so the log records "the clock lifted this" exactly as it records an operator's lift.
+	// The same run also tells each supporter of a suspended creator that their renewal
+	// is paused — a billing notice whose dedupe makes the re-run harmless.
 	LIFT_SUSPENSIONS: "lift-suspensions",
 	// Release suspension payout holds whose review window lapsed with no finding
 	// recorded. The window is `PAYOUT_REVIEW_WINDOW_DAYS` from the suspension, and

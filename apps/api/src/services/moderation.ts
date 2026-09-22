@@ -29,6 +29,8 @@ import { db } from "@anthers/db/client";
 import {
 	adminAccounts,
 	comments,
+	invoiceLines,
+	invoices,
 	moderationActions,
 	moderationReports,
 	posts,
@@ -49,6 +51,7 @@ import {
 	moderationReasonLabel,
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
+import { alias } from "drizzle-orm/pg-core";
 import { and, count, desc, eq, exists, inArray, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
@@ -619,9 +622,29 @@ export async function suspendAccount(input: {
 					eq(moderationReports.subjectType, "user"),
 					eq(moderationReports.subjectId, input.userId),
 					eq(moderationReports.status, "open"),
-				),
+		),
 			);
 	});
+
+	// The holder is told, by email, the moment the state lands. `essential` category:
+	// nobody may opt out of being told their account was acted on. The message names the
+	// reason category and any end, and points at the appeal path — a suspension somebody
+	// learns of from a generic sign-in failure is a support ticket, not a moderation record.
+	// The dedupe keys on THIS suspension (by its timestamp), so a re-suspension after a
+	// lift mails again while a retry of this same action does not.
+	void notify({
+		userId: input.userId,
+		category: "essential",
+		kind: "account_suspended",
+		title: "Your Anthers account has been suspended",
+		body:
+			`Anthers has suspended your account${input.until ? ` until ${input.until.toISOString()}` : ""}. ` +
+			`Reason: ${moderationReasonLabel(input.reason)}. ` +
+			`While suspended you cannot sign in, and your presence and your works are not shown publicly. ` +
+			`If you believe this is a mistake, reply to this email to appeal.`,
+		linkPath: "/suspended",
+		dedupeKey: `account-suspended:${input.userId}:${Date.now()}`,
+	}).catch(() => {});
 
 	return { status: "suspended" };
 }
@@ -678,6 +701,21 @@ export async function unsuspendAccount(input: {
 	const resumed = await resumePausedRenewals(input.userId, new Date());
 	if (resumed > 0) console.log(`moderation: resumed ${resumed} paused renewal(s) on reinstatement`);
 
+	// Told, whoever lifted it — an operator's reversal or the clock. The dedupe keys on
+	// the lift itself (`Date.now()`), symmetric with the suspension notice: a later
+	// re-suspension and lift is a fresh sequence and mails again.
+	void notify({
+		userId: input.userId,
+		category: "essential",
+		kind: "account_reinstated",
+		title: "Your Anthers account is reinstated",
+		body:
+			"Your account's suspension has ended and you can sign in again. " +
+			"Your presence and your works are shown publicly once more, and any support paused during the suspension resumes at its next renewal.",
+		linkPath: "/login",
+		dedupeKey: `account-reinstated:${input.userId}:${Date.now()}`,
+	}).catch(() => {});
+
 	return { status: "visible" };
 }
 
@@ -702,6 +740,61 @@ export async function liftExpiredSuspensions(now: Date = new Date()): Promise<nu
 	}
 	if (lifted > 0) console.log(`moderation: lifted ${lifted} expired suspension(s)`);
 	return lifted;
+}
+
+/**
+ * Tell each supporter of a suspended creator that their renewal is paused.
+ *
+ * Runs from a sweep rather than inline in `suspendAccount` for two reasons. First, the
+ * supporter set is derived from the invoice ledger — a supporter is whoever's invoice
+ * carried a line naming this creator — and that read wants no part of the suspension
+ * transaction. Second, each notice is idempotent by its dedupe key, so a sweep that
+ * re-runs after a partial failure tells nobody twice, and an hour's latency on a
+ * billing notice is invisible where a sign-in refusal's is not.
+ *
+ * One notice per (supporter, creator, suspension), keyed on the suspension's own
+ * `suspendedAt` so a re-suspension after a lift correctly tells supporters again. The
+ * message says what is true: renewal is paused (not canceled), it resumes if the
+ * suspension lifts, cancel any time. `essential`, because money is moving (or rather,
+ * deliberately not moving) and that is not a thing anyone gets to be un-told.
+ */
+export async function notifySupportersOfSuspensions(): Promise<number> {
+	// The line names the creator (`creatorId` non-null is a creator line; null is the
+	// Anthers line) and the invoice names the supporter. Two `users` joins: the line's
+	// creator for the suspension state, the invoice's supporter for who to tell.
+	const creator = alias(users, "creator");
+	const rows = await db
+		.selectDistinct({
+			supporterId: invoices.userId,
+			creatorId: invoiceLines.creatorId,
+			suspendedAt: creator.suspendedAt,
+			creatorHandle: creator.atprotoHandle,
+		})
+		.from(invoiceLines)
+		.innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
+		.innerJoin(creator, eq(invoiceLines.creatorId, creator.id))
+		.where(and(isNotNull(invoiceLines.creatorId), isNotNull(creator.suspendedAt), isNotNull(invoices.userId)));
+
+	let sent = 0;
+	for (const row of rows) {
+		if (row.supporterId == null || row.creatorId == null || row.suspendedAt == null) continue;
+		const { emailed } = await notify({
+			userId: row.supporterId,
+			category: "essential",
+			kind: "subscription_paused_suspension",
+			title: "Your support is paused while this creator is suspended",
+			body:
+				`The creator you support (@${row.creatorHandle ?? "unknown"}) has been suspended. ` +
+				`Your renewal did not charge and will not while the suspension stands — this is a pause, not a cancellation. ` +
+				`If the suspension lifts, your support resumes at its next renewal. You can cancel any time from your account settings.`,
+			linkPath: "/settings",
+			dedupeKey: `subscription-paused-suspension:${row.supporterId}:${row.creatorId}:${row.suspendedAt.getTime()}`,
+		});
+		if (emailed) sent += 1;
+	}
+	if (sent > 0)
+		console.log(`moderation: notified ${sent} supporter(s) of a suspension pausing their renewal`);
+	return sent;
 }
 
 // ── The operator queue ──────────────────────────────────────────────────────
