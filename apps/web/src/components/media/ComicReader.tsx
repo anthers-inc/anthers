@@ -1,30 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The comic reader — page turns over a comic or ebook Work, until comics get a reader of their own.
+ * The comic/ebook reader — page turns by default, with an opt-in panel mode for comics.
  *
- * Third of the three players, and built from the same `transport/` pieces as the other
- * two on purpose: same button shapes, same focus treatment, same keyboard philosophy, same
- * `SeekBar` for the page rail. Three players that feel like three different products is
- * the failure mode this whole area was doing at once to avoid.
+ * Panel mode fetches `/works/:id/panels` once, then crops each panel from the page image
+ * so the panel fills the viewport. A full-page zoom view is available with `z` without
+ * leaving panel mode. Touch swipes advance panels on mobile.
  *
- * **Page-flip only.** Panel-to-panel is deferred rather than dropped (Parker, 2026-08-13):
- * it needs either an authoring surface or a gutter-detection heuristic that fails in front
- * of a reader mid-scene, and the choice gets easier with real pages in hand. Nothing here
- * forecloses it — pages carry stable ids and numbers server-side, so panel regions can
- * hang off a page later.
- *
- * ## Two constraints inherited, not chosen
- *
- * 🚨 **Every page URL is minted per request** at `/works/:id/pages/:n`, which re-resolves
- * access and meters the commons. So the reader never caches a page URL and never fetches
- * ahead of the *endpoint* — prefetching the next page means asking that endpoint for it,
- * which is a real check every time. This is why an `<img src>` per page is the whole
- * implementation: the browser's own cache holds bytes it was allowed to have, and asking
- * again goes through the door again.
- *
- * **Attention is presence-mode** for a comic or an ebook — visible tab plus a sign of life within
- * 60s, which turning pages supplies naturally. The claim lives on the page that renders
- * this, keyed on the Work; see the wiki's *What the Time Pool Pays For*.
+ * Page URLs are still minted per request for page-flip mode, and panel mode uses the same
+ * page endpoint for the underlying image.
  */
 import {
 	ArrowsPointingInIcon,
@@ -33,16 +16,25 @@ import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
 	Squares2X2Icon,
+	ViewfinderCircleIcon,
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type PanelPage, type PanelPosition, usePanelNavigation } from "@/lib/panel-navigation";
 import SeekBar from "./transport/SeekBar";
 import TransportButton from "./transport/TransportButton";
 
 /** How the pages are laid out. Spread is two-up, the way a printed book opens. */
 type Layout = "single" | "spread";
+type ReaderMode = "page" | "panel";
 
 /** Where a reader got to, per Work, so reopening a chapter resumes rather than restarts. */
 const PROGRESS_KEY = "anthers_reading_progress";
+const PANEL_PROGRESS_KEY = "anthers_panel_progress";
+
+interface PanelProgress {
+	page: number;
+	panel: number;
+}
 
 function readProgress(workId: number): number {
 	try {
@@ -64,6 +56,28 @@ function writeProgress(workId: number, page: number) {
 		localStorage.setItem(PROGRESS_KEY, JSON.stringify(map));
 	} catch {
 		/* Storage disabled — the reader simply always opens at page one. */
+	}
+}
+
+function readPanelProgress(workId: number): PanelProgress {
+	try {
+		const raw = localStorage.getItem(PANEL_PROGRESS_KEY);
+		if (!raw) return { page: 1, panel: 1 };
+		const map = JSON.parse(raw) as Record<string, PanelProgress>;
+		const p = map[String(workId)];
+		if (p && Number.isInteger(p.page) && Number.isInteger(p.panel)) return p;
+	} catch {}
+	return { page: 1, panel: 1 };
+}
+
+function writePanelProgress(workId: number, position: PanelProgress) {
+	try {
+		const raw = localStorage.getItem(PANEL_PROGRESS_KEY);
+		const map = raw ? (JSON.parse(raw) as Record<string, PanelProgress>) : {};
+		map[String(workId)] = position;
+		localStorage.setItem(PANEL_PROGRESS_KEY, JSON.stringify(map));
+	} catch {
+		/* Storage disabled — panel progress does not persist. */
 	}
 }
 
@@ -93,6 +107,10 @@ export default function ComicReader({
 	const [page, setPage] = useState(() => Math.min(readProgress(workId), Math.max(pageCount, 1)));
 	const [layout, setLayout] = useState<Layout>("single");
 	const [fullscreen, setFullscreen] = useState(false);
+	const [mode, setMode] = useState<ReaderMode>("page");
+	const [panelPages, setPanelPages] = useState<PanelPage[] | null>(null);
+	const [panelZoom, setPanelZoom] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	const pageUrl = useCallback(
 		(n: number) => {
@@ -101,6 +119,31 @@ export default function ComicReader({
 		},
 		[apiBase, workId, shareToken],
 	);
+
+	const panelsUrl = useCallback(() => {
+		const url = `${apiBase}/api/content/works/${workId}/panels`;
+		return shareToken ? `${url}?share=${encodeURIComponent(shareToken)}` : url;
+	}, [apiBase, workId, shareToken]);
+
+	// Lazy-load panel geometry the first time panel mode is entered.
+	useEffect(() => {
+		if (mode !== "panel" || panelPages != null || error) return;
+		let live = true;
+		fetch(panelsUrl())
+			.then(async (res) => {
+				if (!res.ok) {
+					throw new Error(`Panels failed: ${res.status}`);
+				}
+				const data = (await res.json()) as { pages: PanelPage[] };
+				if (live) setPanelPages(data.pages);
+			})
+			.catch((e) => {
+				if (live) setError(e instanceof Error ? e.message : String(e));
+			});
+		return () => {
+			live = false;
+		};
+	}, [mode, panelPages, panelsUrl, error]);
 
 	// Two-up shows n and n+1, so the last spread of an even-length book is a single page.
 	const spread = layout === "spread";
@@ -133,29 +176,69 @@ export default function ComicReader({
 		return () => document.removeEventListener("fullscreenchange", onChange);
 	}, []);
 
-	/*
-	 * Prefetch the next page (or spread) — through the ENDPOINT, never around it.
-	 *
-	 * An `<img>` created off-screen makes an ordinary request that re-resolves access and
-	 * draws the meter exactly as the visible pages do. That is the whole point: reading
-	 * ahead is not a way to accumulate pages a reader is not entitled to, it just warms
-	 * the browser cache one page early so a turn feels instant.
-	 */
-	useEffect(() => {
-		if (pageCount === 0) return;
-		for (const n of spread ? [page + 2, page + 3] : [page + 1]) {
-			if (n > pageCount) continue;
-			const img = new Image();
-			img.src = pageUrl(n);
-		}
-	}, [page, pageCount, pageUrl, spread]);
+	const initialPanel = readPanelProgress(workId);
+	const panelNav = usePanelNavigation(
+		panelPages ?? [],
+		useCallback(
+			(pos: PanelPosition) => {
+				writePanelProgress(workId, { page: pos.pageNumber, panel: pos.panelNumber });
+				setPage(pos.pageNumber);
+			},
+			[workId],
+		),
+		{ pageNumber: initialPanel.page, panelNumber: initialPanel.panel },
+	);
 
-	// Keyboard, scoped to the reader the same way the video player scopes its keymap: a
-	// document listener would steal arrow keys from a page that is mostly reading.
+	// Once panel geometry arrives, restore the saved panel position.
+	useEffect(() => {
+		if (panelPages && panelPages.length > 0) {
+			panelNav.goTo({ pageNumber: initialPanel.page, panelNumber: initialPanel.panel });
+		}
+	}, [panelPages, initialPanel, panelNav]);
+
+	const panelNext = useCallback(() => {
+		panelNav.next();
+	}, [panelNav]);
+
+	const panelPrevious = useCallback(() => {
+		panelNav.previous();
+	}, [panelNav]);
+
+	// Keyboard handling: arrows and space advance panels in panel mode, pages otherwise.
 	const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		const target = e.target as HTMLElement;
-		if (target.tagName === "INPUT") return; // the page slider owns its own arrows
+		if (target.tagName === "INPUT") return;
+		if (mode === "panel") {
+			switch (e.key) {
+				case "ArrowRight":
+				case " ":
+				case "PageDown":
+					e.preventDefault();
+					return panelNext();
+				case "ArrowLeft":
+				case "PageUp":
+					e.preventDefault();
+					return panelPrevious();
+				case "z":
+				case "Z":
+					e.preventDefault();
+					return setPanelZoom((z) => !z);
+				case "Home":
+					e.preventDefault();
+					return panelNav.goTo({ pageNumber: 1, panelNumber: 1 });
+				case "End":
+					e.preventDefault();
+					return panelNav.goTo({ pageNumber: pageCount, panelNumber: 1 });
+				case "f":
+				case "F":
+					e.preventDefault();
+					return toggleFullscreen();
+				default:
+					break;
+			}
+			return;
+		}
 		switch (e.key) {
 			case "ArrowRight":
 			case " ":
@@ -181,6 +264,25 @@ export default function ComicReader({
 		}
 	};
 
+	// Touch swipe handling for panel mode.
+	const touchStart = useRef<{ x: number; y: number } | null>(null);
+	const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+		touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+	};
+	const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+		if (!touchStart.current) return;
+		const dx = e.changedTouches[0].clientX - touchStart.current.x;
+		const dy = e.changedTouches[0].clientY - touchStart.current.y;
+		touchStart.current = null;
+		if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+		if (dx < 0) panelNext();
+		else panelPrevious();
+	};
+
+	const togglePanelMode = useCallback(() => {
+		setMode((m) => (m === "panel" ? "page" : "panel"));
+	}, []);
+
 	if (pageCount === 0) {
 		return (
 			<div className="rounded-lg border border-base-300 bg-base-200 px-6 py-12 text-center">
@@ -189,6 +291,9 @@ export default function ComicReader({
 			</div>
 		);
 	}
+
+	const currentPanelPage = panelNav.page;
+	const currentPanel = panelNav.panel;
 
 	return (
 		<section
@@ -199,54 +304,108 @@ export default function ComicReader({
 			aria-label={`Reader: ${title}`}
 			className="overflow-hidden rounded-lg bg-neutral focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 		>
-			<div className="flex min-h-[60vh] items-center justify-center gap-1 bg-neutral p-2 sm:gap-2 sm:p-4">
-				{shown.map((n) => (
-					<img
-						key={n}
-						src={pageUrl(n)}
-						alt={`${title}, page ${n}`}
-						// `max-h-[80vh]` rather than a fixed height: a comic page is portrait and
-						// a spread is landscape, and both have to fit without cropping art.
-						className="max-h-[80vh] w-auto max-w-full rounded object-contain shadow-lg"
-						// The current page is the point of the screen; never lazy-load it.
-						loading="eager"
-					/>
-				))}
+			<div
+				className="relative flex min-h-[60vh] items-center justify-center gap-1 bg-neutral p-2 sm:gap-2 sm:p-4"
+				onTouchStart={onTouchStart}
+				onTouchEnd={onTouchEnd}
+			>
+				{mode === "page" ? (
+					shown.map((n) => (
+						<img
+							key={n}
+							src={pageUrl(n)}
+							alt={`${title}, page ${n}`}
+							className="max-h-[80vh] w-auto max-w-full rounded object-contain shadow-lg"
+							loading="eager"
+						/>
+					))
+				) : currentPanelPage && currentPanel ? (
+					<div className="relative flex h-[80vh] w-full items-center justify-center">
+						{/* Full page ghosted behind the panel so the reader keeps context. */}
+						<img
+							src={pageUrl(currentPanelPage.pageNumber)}
+							alt={`${title}, page ${currentPanelPage.pageNumber}`}
+							className="absolute inset-0 h-full w-full rounded object-contain opacity-20"
+							loading="eager"
+						/>
+						{panelZoom ? (
+							<img
+								src={pageUrl(currentPanelPage.pageNumber)}
+								alt={`${title}, page ${currentPanelPage.pageNumber}`}
+								className="relative z-10 max-h-[80vh] w-auto max-w-full rounded object-contain shadow-lg"
+								loading="eager"
+							/>
+						) : (
+							<PanelView
+								page={currentPanelPage}
+								panel={currentPanel}
+								src={pageUrl(currentPanelPage.pageNumber)}
+								title={title}
+							/>
+						)}
+					</div>
+				) : error ? (
+					<div className="text-center">
+						<p className="text-sm text-base-content/60">Could not load panel layout.</p>
+					</div>
+				) : (
+					<div className="text-center">
+						<p className="text-sm text-base-content/60">Loading panels…</p>
+					</div>
+				)}
 			</div>
 
 			<div className="flex items-center gap-2 border-t border-base-300 bg-base-200 px-2 py-2 sm:px-3">
 				<TransportButton
-					label="Previous page"
+					label={mode === "panel" ? "Previous panel" : "Previous page"}
 					icon={ChevronLeftIcon}
-					onClick={previous}
-					disabled={page <= 1}
+					onClick={mode === "panel" ? panelPrevious : previous}
+					disabled={mode === "panel" ? !panelNav.hasPrevious : page <= 1}
 				/>
 
 				<span className="shrink-0 text-xs tabular-nums text-base-content/60">
-					{shown.length > 1 ? `${shown[0]}–${shown[shown.length - 1]}` : page}
-					<span className="text-base-content/35"> / {pageCount}</span>
+					{mode === "panel" && currentPanel && currentPanelPage
+						? `Panel ${panelNav.panelIndex + 1} of ${currentPanelPage.panels.length} · Page ${currentPanelPage.pageNumber}`
+						: shown.length > 1
+							? `${shown[0]}–${shown[shown.length - 1]}`
+							: page}
+					<span className="text-base-content/35">
+						{" "}
+						/ {mode === "panel" ? panelNav.total : pageCount}
+					</span>
 				</span>
 
-				{/*
-				 * The page rail — the same `SeekBar` the video and music transports use, which
-				 * is what makes scrubbing through a book feel like the rest of the app rather
-				 * than like a different product. Its hover bubble reads in pages here because
-				 * the label is what a caller passes in.
-				 */}
-				<SeekBar
-					position={page}
-					duration={pageCount}
-					onSeek={(n) => goTo(Math.round(n))}
-					label="Page"
-					className="flex-1"
-				/>
+				{mode === "page" && (
+					<SeekBar
+						position={page}
+						duration={pageCount}
+						onSeek={(n) => goTo(Math.round(n))}
+						label="Page"
+						className="flex-1"
+					/>
+				)}
 
 				<TransportButton
-					label="Next page"
+					label={mode === "panel" ? "Next panel" : "Next page"}
 					icon={ChevronRightIcon}
-					onClick={next}
-					disabled={page + step > pageCount}
+					onClick={mode === "panel" ? panelNext : next}
+					disabled={mode === "panel" ? !panelNav.hasNext : page + step > pageCount}
 				/>
+				<TransportButton
+					label={mode === "panel" ? "Page mode" : "Panel mode"}
+					icon={ViewfinderCircleIcon}
+					onClick={togglePanelMode}
+					active={mode === "panel"}
+					className="hidden sm:inline-flex"
+				/>
+				{mode === "panel" && (
+					<TransportButton
+						label={panelZoom ? "Zoom out" : "Zoom to page"}
+						icon={panelZoom ? ArrowsPointingInIcon : ArrowsPointingOutIcon}
+						onClick={() => setPanelZoom((z) => !z)}
+						active={panelZoom}
+					/>
+				)}
 				<TransportButton
 					label={spread ? "Single page" : "Two-page spread"}
 					icon={spread ? BookOpenIcon : Squares2X2Icon}
@@ -261,5 +420,45 @@ export default function ComicReader({
 				/>
 			</div>
 		</section>
+	);
+}
+
+function PanelView({
+	page,
+	panel,
+	src,
+	title,
+}: {
+	page: PanelPage;
+	panel: { x: number; y: number; width: number; height: number; panelNumber: number };
+	src: string;
+	title: string;
+}) {
+	// The panel is rendered by cropping the full page image. The container is sized to the
+	// panel's aspect ratio, and the image is scaled so the panel region fills it.
+	const scale = Math.max(1 / (panel.width * page.width), 1 / (panel.height * page.height));
+
+	return (
+		<div
+			className="relative z-10 h-[80vh] overflow-hidden rounded shadow-lg"
+			style={{
+				aspectRatio: `${panel.width * page.width} / ${panel.height * page.height}`,
+			}}
+		>
+			<img
+				src={src}
+				alt={`${title}, panel ${panel.panelNumber}`}
+				className="absolute max-w-none"
+				loading="eager"
+				style={{
+					width: `${page.width * scale * (panel.width * page.width)}px`,
+					height: `${page.height * scale * (panel.height * page.height)}px`,
+					objectFit: "none",
+					objectPosition: `${panel.x * 100}% ${panel.y * 100}%`,
+					left: 0,
+					top: 0,
+				}}
+			/>
+		</div>
 	);
 }
