@@ -38,8 +38,8 @@ export interface WorkRecord {
 	description?: string;
 	access?: { state: "open" | "gated" };
 	credits?: Array<{
-		role: string;
-		contributor:
+		role?: string;
+		contributor?:
 			| { $type: "org.anthers.work#didContributor"; did: string }
 			| { $type: "org.anthers.work#namedContributor"; name: string; url?: string };
 		types: WorkCredit["types"];
@@ -63,32 +63,46 @@ export function creditContributorIsDid(contributor: string): boolean {
  *
  * - A DID contributor is emitted only when it appears in `confirmedCredits`.
  * - A named contributor is emitted exactly as entered.
+ * - An anonymous credit (blank contributor — legal on a non-`created` row) carries no
+ *   `contributor` field at all, and a blank role is omitted likewise: absence, not an empty
+ *   value, the same convention as `description`.
  * - `null` means this credit has no public representation right now.
  */
 function creditToRecord(
 	credit: WorkCredit,
 	confirmedCredits: Set<string>,
 ): {
-	role: string;
-	contributor:
+	role?: string;
+	contributor?:
 		| { $type: "org.anthers.work#didContributor"; did: string }
 		| { $type: "org.anthers.work#namedContributor"; name: string; url?: string };
 	types: WorkCredit["types"];
 } | null {
-	const role = credit.role;
 	const types = credit.types;
-	if (creditContributorIsDid(credit.contributor)) {
-		const key = `${credit.contributor}|${role}`;
+	const role = credit.role.trim() === "" ? undefined : credit.role;
+	const contributorStr = credit.contributor.trim();
+
+	// A DID contributor publishes only once confirmed — withheld otherwise.
+	if (creditContributorIsDid(contributorStr)) {
+		const key = `${contributorStr}|${credit.role}`;
 		if (!confirmedCredits.has(key)) return null;
 		return {
-			role,
-			contributor: { $type: "org.anthers.work#didContributor", did: credit.contributor },
+			...(role !== undefined ? { role } : {}),
+			contributor: { $type: "org.anthers.work#didContributor", did: contributorStr },
 			types,
 		};
 	}
+
+	// Blank contributor (an anonymous `licensed`/`ai` row): omit the field rather than emit an
+	// empty-named contributor — the API guarantees a `created` row names someone, so a blank
+	// contributor can only be a credit that is allowed to be anonymous.
+	if (contributorStr === "") {
+		return { ...(role !== undefined ? { role } : {}), types };
+	}
+
 	return {
-		role,
-		contributor: { $type: "org.anthers.work#namedContributor", name: credit.contributor },
+		...(role !== undefined ? { role } : {}),
+		contributor: { $type: "org.anthers.work#namedContributor", name: contributorStr },
 		types,
 	};
 }

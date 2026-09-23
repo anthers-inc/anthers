@@ -342,4 +342,30 @@ describe("credits on the public listing", () => {
 		]);
 		expect(workRecord.safeParse(record).success).toBe(true);
 	});
+
+	it("publishes an anonymous licensed credit with no contributor field", () => {
+		// A `licensed` row may name nobody (the settled rule), and an anonymous credit carries no
+		// contributor object at all rather than an empty name — absence, not an empty value.
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Cover art from", contributor: "", types: ["licensed"] }],
+			}),
+			{ baseUrl: BASE, confirmedCredits: new Set() },
+		);
+		expect(record?.credits).toEqual([{ role: "Cover art from", types: ["licensed"] }]);
+		expect(record?.credits?.[0]).not.toHaveProperty("contributor");
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("omits a blank role and keeps a bare ai assertion publishable", () => {
+		// A bare `ai` row carries only the type signal — no role, no contributor — and is valid.
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "   ", contributor: "", types: ["ai"] }],
+			}),
+			{ baseUrl: BASE, confirmedCredits: new Set() },
+		);
+		expect(record?.credits).toEqual([{ types: ["ai"] }]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
 });
