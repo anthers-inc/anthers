@@ -17,8 +17,9 @@
 					},
 					"role": {
 						"type": "string",
-						"description": "What the credited person agrees they did, as the creator asserted it.",
-						"maxLength": 255
+						"description": "What the credited person agrees they did, as the creator asserted it. Echoes the credit's own `role`, so its limits match (`role` on a credit is 120 graphemes) — a longer credit role could not be accepted at all if this were shorter.",
+						"maxGraphemes": 120,
+						"maxLength": 1200
 					},
 					"acceptedAt": {
 						"type": "string",

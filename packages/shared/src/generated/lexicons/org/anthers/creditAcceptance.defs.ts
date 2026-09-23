@@ -19,7 +19,7 @@ type Main = { $type: "org.anthers.creditAcceptance";
   "work":l.AtUriString;
 
   /**
-   * What the credited person agrees they did, as the creator asserted it.
+   * What the credited person agrees they did, as the creator asserted it. Echoes the credit's own `role`, so its limits match (`role` on a credit is 120 graphemes) — a longer credit role could not be accepted at all if this were shorter.
    */
   "role":string;
 
@@ -31,7 +31,7 @@ type Main = { $type: "org.anthers.creditAcceptance";
 export type { Main };
 
 /** A credited person's acceptance that they contributed to a work. It lives in the contributor's own repository, and is written only when the person Anthers names as a contributor agrees to be named there. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"work":/*#__PURE__*/ l.string({"format":"at-uri"}),"role":/*#__PURE__*/ l.string({"maxLength":255}),"acceptedAt":/*#__PURE__*/ l.string({"format":"datetime"})}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"work":/*#__PURE__*/ l.string({"format":"at-uri"}),"role":/*#__PURE__*/ l.string({"maxGraphemes":120,"maxLength":1200}),"acceptedAt":/*#__PURE__*/ l.string({"format":"datetime"})}));
 
 export { main };
 
