@@ -1,0 +1,19 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.creditConfirmation",
+	"defs": {
+		"main": {
+			"type": "permission-set",
+			"title": "Confirm Your Credits",
+			"detail": "Let Anthers write a public record in your own repository when you accept credit for a work you contributed to — and remove it again if you withdraw. Accepting or withdrawing is always your call; this writes nothing else.",
+			"permissions": [
+				{
+					"type": "permission",
+					"resource": "repo",
+					"collection": ["org.anthers.creditAcceptance"],
+					"action": ["create", "delete"]
+				}
+			]
+		}
+	}
+}

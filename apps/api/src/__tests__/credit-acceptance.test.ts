@@ -92,7 +92,7 @@ async function rejectViaRoute(workId: number, role: string, token: string): Prom
 }
 
 describe("acceptCredit", () => {
-	it("records an acceptance row with a null atprotoUri while the collection is unpublished", async () => {
+	it("records an acceptance row and writes the record, now that the collection is published", async () => {
 		const result = await acceptCredit({
 			callerUserId: contributor.userId,
 			callerDid: contributor.did,
@@ -102,8 +102,9 @@ describe("acceptCredit", () => {
 		});
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		// Unpublished collection: no record address yet.
-		expect(result.atprotoUri).toBeNull();
+		// The collection is published, so the acceptance record is written in the contributor's
+		// repository and its address is stored on the row.
+		expect(result.atprotoUri).toMatch(/^at:\/\//);
 
 		const [row] = await db
 			.select()
@@ -117,7 +118,7 @@ describe("acceptCredit", () => {
 			)
 			.limit(1);
 		expect(row).toBeDefined();
-		expect(row.atprotoUri).toBeNull();
+		expect(row.atprotoUri).toMatch(/^at:\/\//);
 	});
 
 	it("re-queues the work listing after acceptance", async () => {
@@ -265,7 +266,7 @@ describe("routes", () => {
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.accepted).toBe(true);
-		expect(body.atprotoUri).toBeNull();
+		expect(body.atprotoUri).toMatch(/^at:\/\//);
 	});
 
 	it("rejects credit via POST /api/content/works/:id/credits/reject", async () => {

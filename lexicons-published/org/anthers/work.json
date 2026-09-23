@@ -53,6 +53,15 @@
 					"access": {
 						"type": "ref",
 						"ref": "#access"
+					},
+					"credits": {
+						"type": "array",
+						"description": "Who made this work and what of it they made — the creator's own liner notes. Optional and additive: a work with no credits simply lists none, which says nothing against it (credits are asserted, never assumed). A credit naming an on-network identity by DID is withheld until that identity accepts it (see `org.anthers.creditAcceptance`), because a public claim about a third party should not be made in their name without their consent. The `types` flags are published exactly as the creator entered them — including `ai` — so a stranger can build a real filter on machine-made work.",
+						"items": {
+							"type": "ref",
+							"ref": "#credit"
+						},
+						"maxLength": 100
 					}
 				}
 			}
@@ -67,6 +76,65 @@
 					"description": "`open` — anyone may reach the work at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. Terms themselves are deliberately absent: a price shown apart from the total a person actually pays is misleading, and this record cannot control how a consumer renders it.",
 					"knownValues": ["open", "gated"],
 					"maxLength": 32
+				}
+			}
+		},
+		"didContributor": {
+			"type": "object",
+			"description": "A contributor identified by an on-network identity — their own DID. Naming one is a public claim about a third party, so it is withheld from the work record until that identity accepts it; an unconfirmed claim rendered as fact would travel somewhere a later correction cannot follow.",
+			"required": ["did"],
+			"properties": {
+				"did": {
+					"type": "string",
+					"format": "did",
+					"description": "The contributor's DID."
+				}
+			}
+		},
+		"namedContributor": {
+			"type": "object",
+			"description": "A contributor with no network identity, named by the creator — an off-platform collaborator, or a source by title. Stays unconfirmed by construction: there is no actor who can accept.",
+			"required": ["name"],
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The contributor or source, as the creator entered it.",
+					"maxGraphemes": 300,
+					"maxLength": 3000
+				},
+				"url": {
+					"type": "string",
+					"format": "uri",
+					"description": "A link giving context — a portfolio, a source page.",
+					"maxLength": 2048
+				}
+			}
+		},
+		"credit": {
+			"type": "object",
+			"description": "One credit on the work: a contribution, its kind, and where a person made it, who. The three parts answer different questions and are kept apart so each can be absent on its own terms. `types` is the only required one — a credit must assert something.",
+			"required": ["types"],
+			"properties": {
+				"role": {
+					"type": "string",
+					"description": "The contribution this credit names, as a freeform title in the industry's own words — 'Written by', 'Cut by', 'Sound recording'. Freeform rather than a fixed list, because the useful roles differ by medium and a closed set would force every work into categories that fit none of them. Optional: a credit that is only a type assertion (a bare `ai` row, or an anonymous license) may leave the role unnamed.",
+					"maxGraphemes": 120,
+					"maxLength": 1200
+				},
+				"contributor": {
+					"type": "union",
+					"refs": ["#didContributor", "#namedContributor"],
+					"description": "Who is credited. A DID names an on-network identity and is withheld until that identity accepts (see `org.anthers.creditAcceptance`); a name names an off-network contributor and is published as entered. A union rather than a bare string or a single object, so a third contributor kind can join later as a permitted addition. Optional: a credit with no `created` among its types may name nobody — a license or a machine makes nothing a person owns. Required whenever `created` is among the types, alone or in a blend — anything a human made must name who."
+				},
+				"types": {
+					"type": "array",
+					"description": "The kind(s) of contribution, published as entered. `created` — a person made this part. `licensed` — this part is pre-existing material used under a right (the source may be named or not, at the creator's choice; many licenses do not require attribution). `ai` — this part was machine-made: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. An open set on purpose: a `created+ai` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as AI' reading of a blend — whether one clears a filter is the reader's own call, and two filters reading a blend opposite ways is a feature, not a defect.",
+					"items": {
+						"type": "string",
+						"knownValues": ["created", "licensed", "ai"],
+						"maxLength": 16
+					},
+					"minLength": 1
 				}
 			}
 		}
