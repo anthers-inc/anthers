@@ -45,6 +45,7 @@ export const PUBLISHED_LEXICONS: ReadonlySet<string> = new Set([
 	"org.anthers.review",
 	"org.anthers.vote",
 	"org.anthers.follow",
+	"org.anthers.creditAcceptance",
 ]);
 
 let override: ReadonlySet<string> | undefined;

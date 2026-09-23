@@ -249,6 +249,7 @@ describe("a collection whose Lexicon is not published", () => {
 			expect([...PUBLISHED_LEXICONS].sort()).toEqual([
 				"org.anthers.comment",
 				"org.anthers.creatorPermissions",
+				"org.anthers.creditAcceptance",
 				"org.anthers.follow",
 				"org.anthers.post",
 				"org.anthers.project",
