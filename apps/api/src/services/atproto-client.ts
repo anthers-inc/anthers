@@ -264,6 +264,12 @@ export const USER_PERMISSION_SET = "org.anthers.userPermissions";
 export const CREATOR_PERMISSION_SET = "org.anthers.creatorPermissions";
 
 /**
+ * The permission set a contributor is asked for under when they accept credit for a work:
+ * Anthers writes an acceptance record in the contributor's own repository.
+ */
+export const CREDIT_CONFIRMATION_PERMISSION_SET = "org.anthers.creditConfirmation";
+
+/**
  * The collections each set names, which is what a granted scope is actually judged against.
  *
  * 🚨 **A granted scope comes back as its EXPANSION, never as the set's name**, so nothing may
@@ -276,7 +282,11 @@ export const USER_COLLECTIONS: readonly string[] = [
 	"org.anthers.review",
 	"org.anthers.vote",
 	"org.anthers.follow",
+	"org.anthers.creditAcceptance",
 ];
+
+/** The collections the credit-confirmation permission set names on its own. */
+export const CREDIT_CONFIRMATION_COLLECTIONS: readonly string[] = ["org.anthers.creditAcceptance"];
 export const CREATOR_COLLECTIONS: readonly string[] = [
 	"org.anthers.project",
 	WORK_COLLECTION,
@@ -297,7 +307,10 @@ export const CREATOR_COLLECTIONS: readonly string[] = [
  * the Atmosphere` — and a record in your repository is Anthers working, not an extra somebody
  * opts into.
  */
-export const USER_SCOPES: readonly string[] = [`include:${USER_PERMISSION_SET}`];
+export const USER_SCOPES: readonly string[] = [
+	`include:${USER_PERMISSION_SET}`,
+	`include:${CREDIT_CONFIRMATION_PERMISSION_SET}`,
+];
 
 /**
  * The records Anthers writes on behalf of somebody who publishes.

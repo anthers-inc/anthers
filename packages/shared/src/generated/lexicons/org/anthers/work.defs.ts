@@ -36,12 +36,17 @@ type Main = { $type: "org.anthers.work";
   /**
    * The creator's own summary of the work. Plain text, so that every consumer can render it safely without a sanitizer.
    */
-  "description"?:string;"access"?:Access };
+  "description"?:string;"access"?:Access;
+
+  /**
+   * Creator-asserted provenance for the work. A credit naming a person by DID is withheld from this listing until that person has accepted it, because a public claim about a third party should not be made in their name without their consent.
+   */
+  "credits"?:(Credit)[] };
 
 export type { Main };
 
 /** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any))}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any)),"credits":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.ref<Credit>((() => credit) as any), {"maxLength":100}))}));
 
 export { main };
 
@@ -77,3 +82,63 @@ export type { Access };
 const access = /*#__PURE__*/ l.typedObject<Access>($nsid, "access", /*#__PURE__*/ l.object({"state":/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32})}));
 
 export { access };
+
+/** A contributor identified by their decentralized identifier. */
+type DidContributor = { $type?: "org.anthers.work#didContributor";
+
+  /**
+   * The contributor's DID.
+   */
+  "did":l.DidString };
+
+export type { DidContributor };
+
+/** A contributor identified by their decentralized identifier. */
+const didContributor = /*#__PURE__*/ l.typedObject<DidContributor>($nsid, "didContributor", /*#__PURE__*/ l.object({"did":/*#__PURE__*/ l.string({"format":"did"})}));
+
+export { didContributor };
+
+/** A contributor identified by a free-text name and an optional link. */
+type NamedContributor = { $type?: "org.anthers.work#namedContributor";
+
+  /**
+   * The contributor's name as the creator entered it.
+   */
+  "name":string;
+
+  /**
+   * Where the contributor can be found, if the creator provided one.
+   */
+  "url"?:l.UriString };
+
+export type { NamedContributor };
+
+/** A contributor identified by a free-text name and an optional link. */
+const namedContributor = /*#__PURE__*/ l.typedObject<NamedContributor>($nsid, "namedContributor", /*#__PURE__*/ l.object({"name":/*#__PURE__*/ l.string({"maxLength":255}),"url":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"uri"}))}));
+
+export { namedContributor };
+
+/** One row of a work's public liner notes. */
+type Credit = { $type?: "org.anthers.work#credit";
+
+  /**
+   * What the contributor did, in the creator's own words.
+   */
+  "role":string;
+
+  /**
+   * Who is credited. A DID names an on-network identity and is withheld until that identity accepts; a name or URL names an off-network contributor and is published as entered.
+   */
+  "contributor":l.$Typed<DidContributor> | l.$Typed<NamedContributor> | l.Unknown$TypedObject;
+
+  /**
+   * What kind of contribution this was. At least one kind must be asserted.
+   */
+  "types":("created" | "licensed" | "ai" | l.UnknownString)[] };
+
+export type { Credit };
+
+/** One row of a work's public liner notes. */
+const credit = /*#__PURE__*/ l.typedObject<Credit>($nsid, "credit", /*#__PURE__*/ l.object({"role":/*#__PURE__*/ l.string({"maxLength":255}),"contributor":/*#__PURE__*/ l.typedUnion([/*#__PURE__*/ l.typedRef<DidContributor>((() => didContributor) as any),/*#__PURE__*/ l.typedRef<NamedContributor>((() => namedContributor) as any)], false),"types":/*#__PURE__*/ l.array(/*#__PURE__*/ l.string<{"knownValues":["created","licensed","ai"]}>(), {"minLength":1})}));
+
+export { credit };

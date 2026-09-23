@@ -27,6 +27,7 @@ import {
 	CREATOR_COLLECTIONS,
 	CREATOR_SCOPE_EXPANDED,
 	CREATOR_SCOPES,
+	CREDIT_CONFIRMATION_COLLECTIONS,
 	grantedScopeFor,
 	setAtprotoClient,
 	USER_COLLECTIONS,
@@ -175,7 +176,10 @@ describe("what the client is allowed to ask for", () => {
 		process.env.BASE_URL = "https://anthers.org";
 		try {
 			const scope = buildClientMetadata().scope ?? "";
-			expect(USER_SCOPES).toEqual(["include:org.anthers.userPermissions"]);
+			expect(USER_SCOPES).toEqual([
+				"include:org.anthers.userPermissions",
+				"include:org.anthers.creditConfirmation",
+			]);
 			expect(CREATOR_SCOPES).toEqual(["include:org.anthers.creatorPermissions"]);
 			for (const asked of [...USER_SCOPES, ...CREATOR_SCOPES]) expect(scope).toContain(asked);
 			// Retired, and so no longer declared: nothing may ask for it again.
@@ -198,10 +202,7 @@ describe("what the client is allowed to ask for", () => {
 	// name exactly the collections the code judges a grant against, or a grant would be read as
 	// covering records it does not.
 	it("asks for exactly the collections the code writes, and three actions, in each set", async () => {
-		for (const [name, collections] of [
-			["userPermissions", USER_COLLECTIONS],
-			["creatorPermissions", CREATOR_COLLECTIONS],
-		] as const) {
+		async function loadPermissionSet(name: string) {
 			const set = (await Bun.file(`lexicons/org/anthers/${name}.json`).json()) as {
 				id: string;
 				defs: {
@@ -213,22 +214,31 @@ describe("what the client is allowed to ask for", () => {
 					};
 				};
 			};
-
 			expect(set.id).toBe(`org.anthers.${name}`);
 			expect(set.defs.main.type).toBe("permission-set");
 			expect(set.defs.main.permissions).toHaveLength(1);
 
 			const [permission] = set.defs.main.permissions;
 			expect(permission.resource).toBe("repo");
-			expect([...permission.collection].sort()).toEqual([...collections].sort());
 			expect(permission.collection).not.toContain("*");
 			expect([...permission.action].sort()).toEqual(["create", "delete", "update"]);
-
-			// ⭐ The title and the detail are the sentence somebody reads deciding whether to trust
-			// us, so they are copy rather than configuration — and they must not go empty.
 			expect(set.defs.main.title.length).toBeGreaterThan(0);
 			expect(set.defs.main.detail.length).toBeGreaterThan(0);
+			return permission.collection;
 		}
+
+		const userCollections = await loadPermissionSet("userPermissions");
+		const creditCollections = await loadPermissionSet("creditConfirmation");
+		const creatorCollections = await loadPermissionSet("creatorPermissions");
+
+		// The reader tier is spread across two permission sets: the original reader records and the
+		// credit-confirmation set that lets Anthers publish an acceptance in the reader's repo.
+		expect([...new Set([...userCollections, ...creditCollections])].sort()).toEqual(
+			[...USER_COLLECTIONS].sort(),
+		);
+		expect([...creatorCollections].sort()).toEqual([...CREATOR_COLLECTIONS].sort());
+		// The credit-confirmation set names only the collection an acceptance record lives in.
+		expect([...creditCollections].sort()).toEqual([...CREDIT_CONFIRMATION_COLLECTIONS].sort());
 	});
 });
 

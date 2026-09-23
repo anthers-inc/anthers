@@ -258,3 +258,88 @@ describe("the canonical url", () => {
 		);
 	});
 });
+
+describe("credits on the public listing", () => {
+	it("omits a did credit that has not been accepted", () => {
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Written by", contributor: "did:plc:alice", types: ["created"] }],
+			}),
+			{ baseUrl: BASE },
+		);
+		expect(record).not.toHaveProperty("credits");
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("includes a did credit that has been accepted", () => {
+		const confirmed = new Set(["did:plc:alice|Written by"]);
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Written by", contributor: "did:plc:alice", types: ["created"] }],
+			}),
+			{ baseUrl: BASE, confirmedCredits: confirmed },
+		);
+		expect(record?.credits).toEqual([
+			{
+				role: "Written by",
+				contributor: { $type: "org.anthers.work#didContributor", did: "did:plc:alice" },
+				types: ["created"],
+			},
+		]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("always includes a name credit regardless of acceptance", () => {
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Art by", contributor: "Jordan Doe", types: ["created"] }],
+			}),
+			{ baseUrl: BASE },
+		);
+		expect(record?.credits).toEqual([
+			{
+				role: "Art by",
+				contributor: { $type: "org.anthers.work#namedContributor", name: "Jordan Doe" },
+				types: ["created"],
+			},
+		]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("omits the credits field entirely when no credit is publicly visible", () => {
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Written by", contributor: "did:plc:alice", types: ["created"] }],
+			}),
+			{ baseUrl: BASE },
+		);
+		expect(record).not.toHaveProperty("credits");
+	});
+
+	it("mixes accepted did credits and name credits", () => {
+		const confirmed = new Set(["did:plc:alice|Written by"]);
+		const record = workToRecord(
+			openWork({
+				credits: [
+					{ role: "Written by", contributor: "did:plc:alice", types: ["created"] },
+					{ role: "Art by", contributor: "Jordan Doe", types: ["created"] },
+					{ role: "Music by", contributor: "did:plc:bob", types: ["created"] },
+				],
+			}),
+			{ baseUrl: BASE, confirmedCredits: confirmed },
+		);
+		expect(record?.credits).toEqual([
+			{
+				role: "Written by",
+				contributor: { $type: "org.anthers.work#didContributor", did: "did:plc:alice" },
+				types: ["created"],
+			},
+			{
+				role: "Art by",
+				contributor: { $type: "org.anthers.work#namedContributor", name: "Jordan Doe" },
+				types: ["created"],
+			},
+		]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+});

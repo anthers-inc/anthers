@@ -1062,3 +1062,63 @@ export const votes = pgTable(
 		index("idx_votes_subject").on(table.subjectType, table.subjectId),
 	],
 );
+
+/**
+ * A contributor's acceptance of a credit on a work. The row is the local signal that a
+ * `did`-naming credit may be published, and the acceptance record lives in the contributor's
+ * own repository once the collection is published.
+ */
+// org — the contributor is acting on a claim a creator made about them, and the record is
+// written in the contributor's repository. The row is Anthers' index of that fact.
+export const creditAcceptances = pgTable(
+	"credit_acceptances",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		contributorDid: text("contributor_did").notNull(),
+		role: text("role").notNull(),
+		acceptedAt: timestamp("accepted_at", { withTimezone: true }).defaultNow().notNull(),
+		// The address of the acceptance record in the contributor's repository. Null while the
+		// collection is unpublished and no record has been written yet.
+		atprotoUri: text("atproto_uri").unique(),
+	},
+	(table) => [
+		// One acceptance per credit a work names.
+		uniqueIndex("uq_credit_acceptances_work_contributor_role").on(
+			table.workId,
+			table.contributorDid,
+			table.role,
+		),
+		index("idx_credit_acceptances_work").on(table.workId),
+	],
+);
+
+/**
+ * A contributor's rejection of a credit on a work. Rejection is private: no record is written,
+ * and the credit is removed from the work and blocked from being re-added.
+ */
+// org — the decision not to be credited is itself a fact Anthers keeps, so a creator cannot
+// re-publish the same claim by re-adding the credit.
+export const creditRejections = pgTable(
+	"credit_rejections",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		contributorDid: text("contributor_did").notNull(),
+		role: text("role").notNull(),
+		rejectedAt: timestamp("rejected_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One rejection per credit a work names.
+		uniqueIndex("uq_credit_rejections_work_contributor_role").on(
+			table.workId,
+			table.contributorDid,
+			table.role,
+		),
+		index("idx_credit_rejections_work").on(table.workId),
+	],
+);

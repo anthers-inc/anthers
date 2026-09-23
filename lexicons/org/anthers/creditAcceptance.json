@@ -1,0 +1,32 @@
+{
+	"lexicon": 1,
+	"id": "org.anthers.creditAcceptance",
+	"defs": {
+		"main": {
+			"type": "record",
+			"key": "tid",
+			"description": "A credited person's acceptance that they contributed to a work. It lives in the contributor's own repository, and is written only when the person Anthers names as a contributor agrees to be named there.",
+			"record": {
+				"type": "object",
+				"required": ["work", "role", "acceptedAt"],
+				"properties": {
+					"work": {
+						"type": "string",
+						"format": "at-uri",
+						"description": "The address of the work listing this person is accepting credit for."
+					},
+					"role": {
+						"type": "string",
+						"description": "What the credited person agrees they did, as the creator asserted it.",
+						"maxLength": 255
+					},
+					"acceptedAt": {
+						"type": "string",
+						"format": "datetime",
+						"description": "When the contributor accepted the credit."
+					}
+				}
+			}
+		}
+	}
+}

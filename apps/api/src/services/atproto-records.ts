@@ -12,6 +12,7 @@
  * `sourceKey`, no signed URLs. That is not a policy applied afterwards — it is why the
  * Lexicon has no field capable of carrying them.
  */
+import type { WorkCredit } from "@anthers/db/schema";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import { type AccessibleWork, buildPreviewContext, resolveAccessSync } from "./access.js";
 
@@ -24,6 +25,8 @@ export interface PublishableWork extends AccessibleWork {
 	publicId: number;
 	releasedAt: Date | null;
 	visibility: string;
+	/** Public credits; null/undefined treated as "no credits asserted". */
+	credits?: WorkCredit[] | null;
 }
 
 export interface WorkRecord {
@@ -34,6 +37,60 @@ export interface WorkRecord {
 	releasedAt: string;
 	description?: string;
 	access?: { state: "open" | "gated" };
+	credits?: Array<{
+		role: string;
+		contributor:
+			| { $type: "org.anthers.work#didContributor"; did: string }
+			| { $type: "org.anthers.work#namedContributor"; name: string; url?: string };
+		types: WorkCredit["types"];
+	}>;
+}
+
+/**
+ * Whether a credit's contributor string names an on-network identity.
+ *
+ * 🚨 This is the one place the "is it a DID?" parse lives. A Work's `credits` column stores
+ * the contributor as a plain string; the public record distinguishes a DID contributor from a
+ * named one. Keeping the parse here keeps the mapper pure and centralizes the rule about what
+ * counts as a DID.
+ */
+export function creditContributorIsDid(contributor: string): boolean {
+	return contributor.startsWith("did:");
+}
+
+/**
+ * Build the public credit row a Work listing may carry.
+ *
+ * - A DID contributor is emitted only when it appears in `confirmedCredits`.
+ * - A named contributor is emitted exactly as entered.
+ * - `null` means this credit has no public representation right now.
+ */
+function creditToRecord(
+	credit: WorkCredit,
+	confirmedCredits: Set<string>,
+): {
+	role: string;
+	contributor:
+		| { $type: "org.anthers.work#didContributor"; did: string }
+		| { $type: "org.anthers.work#namedContributor"; name: string; url?: string };
+	types: WorkCredit["types"];
+} | null {
+	const role = credit.role;
+	const types = credit.types;
+	if (creditContributorIsDid(credit.contributor)) {
+		const key = `${credit.contributor}|${role}`;
+		if (!confirmedCredits.has(key)) return null;
+		return {
+			role,
+			contributor: { $type: "org.anthers.work#didContributor", did: credit.contributor },
+			types,
+		};
+	}
+	return {
+		role,
+		contributor: { $type: "org.anthers.work#namedContributor", name: credit.contributor },
+		types,
+	};
 }
 
 /**
@@ -127,7 +184,10 @@ export function workUrl(work: PublishableWork, baseUrl: string): string {
 }
 
 /** Build the public record for a Work, or `null` when it must not have one. */
-export function workToRecord(work: PublishableWork, opts: { baseUrl: string }): WorkRecord | null {
+export function workToRecord(
+	work: PublishableWork,
+	opts: { baseUrl: string; confirmedCredits?: Set<string> },
+): WorkRecord | null {
 	if (unpublishableReason(work) !== null) return null;
 	// `unpublishableReason` has already established this. Re-checking rather than asserting
 	// because a non-null assertion here would be a lie waiting to become true if the two
@@ -146,6 +206,14 @@ export function workToRecord(work: PublishableWork, opts: { baseUrl: string }): 
 	// An empty string is not a value: writing `description: ""` into a public record says
 	// the creator wrote an empty description, where absence says they wrote none.
 	if (work.description) record.description = work.description;
+
+	const confirmed = opts.confirmedCredits ?? new Set<string>();
+	const visibleCredits = (work.credits ?? [])
+		.map((credit) => creditToRecord(credit, confirmed))
+		.filter((c): c is NonNullable<ReturnType<typeof creditToRecord>> => c !== null);
+	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+	// An empty `credits` array is not a value: absence says the Work has no public credits.
+	if (visibleCredits.length > 0) record.credits = visibleCredits;
 
 	return record;
 }

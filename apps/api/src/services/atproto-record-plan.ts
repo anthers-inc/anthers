@@ -30,6 +30,7 @@
  */
 import {
 	commentRecord,
+	creditAcceptanceRecord,
 	followRecord,
 	type LexiconValidator,
 	postRecord,
@@ -48,6 +49,14 @@ import {
 	unpublishablePostReason,
 	unpublishableProjectReason,
 } from "./atproto-creator-records.js";
+import {
+	CREDIT_ACCEPTANCE_COLLECTION,
+	type CreditAcceptanceRecord,
+	creditAcceptanceToRecord,
+	type PublishableCreditAcceptance,
+	type UnpublishableCreditAcceptanceReason,
+	unpublishableCreditAcceptanceReason,
+} from "./atproto-credit-acceptance.js";
 import {
 	type CommentRecord,
 	commentToRecord,
@@ -74,6 +83,7 @@ export const COMMENT_COLLECTION = "org.anthers.comment";
 export const REVIEW_COLLECTION = "org.anthers.review";
 export const VOTE_COLLECTION = "org.anthers.vote";
 export const FOLLOW_COLLECTION = "org.anthers.follow";
+export { CREDIT_ACCEPTANCE_COLLECTION };
 
 /**
  * One record type, described by everything the planner needs to know about it.
@@ -318,6 +328,30 @@ export const FOLLOW_KIND: RecordKind<FollowInput, FollowRecord, UnpublishableRea
 	removes: readerRemoves,
 	toRecord: ({ follow, creatorDid }) => followToRecord(follow, creatorDid),
 	validator: followRecord,
+};
+
+// ── The credit-acceptance record ───────────────────────────────────────────────────────────
+//
+// 🚨 This record is written into the CONTRIBUTOR's repository, not the work author's. It is
+// the credited person saying "yes, I did this." Because the record's owner is the
+// contributor, a refusal is always the contributor withdrawing their acceptance, so
+// `removes` returns true for every refusal: the only way an acceptance record comes down is
+// as its owner's own act.
+
+function creditAcceptanceRemoves(_reason: UnpublishableCreditAcceptanceReason): boolean {
+	return true;
+}
+
+export const CREDIT_ACCEPTANCE_KIND: RecordKind<
+	PublishableCreditAcceptance,
+	CreditAcceptanceRecord,
+	UnpublishableCreditAcceptanceReason
+> = {
+	collection: CREDIT_ACCEPTANCE_COLLECTION,
+	reasonFor: unpublishableCreditAcceptanceReason,
+	removes: creditAcceptanceRemoves,
+	toRecord: creditAcceptanceToRecord,
+	validator: creditAcceptanceRecord,
 };
 
 // ── The creator's two ────────────────────────────────────────────────────────────────────
