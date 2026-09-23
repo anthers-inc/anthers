@@ -31,7 +31,7 @@ import { eq } from "drizzle-orm";
 import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js";
 import { getAtprotoClient, grantedScopeFor, recordGrantedScope } from "./atproto-client.js";
 import { type RecordRef, RepoAuthError, type RepoWriter } from "./atproto-repo.js";
-import { missingRepoActions, scopeAllowsWriting } from "./atproto-scope.js";
+import { missingRepoActions, scopeCoversCollection } from "./atproto-scope.js";
 
 /** Why no writer could be made over a creator's own grant. */
 export type NoOauthWriterReason =
@@ -81,7 +81,7 @@ export async function oauthWriterFor(
 	// The cheap gate. Most accounts will never have granted this, and answering them costs one
 	// column read rather than a conversation with somebody else's authorization server.
 	const stored = await grantedScopeFor(did);
-	if (!collections.every((collection) => scopeAllowsWriting(stored, collection))) {
+	if (!collections.every((collection) => scopeCoversCollection(stored, collection))) {
 		return { writer: null, reason: "not_granted" };
 	}
 
@@ -127,7 +127,12 @@ export async function oauthWriterFor(
 	if (granted !== undefined) {
 		await recordGrantedScope(did, granted);
 		for (const collection of collections) {
-			const missing = missingRepoActions(granted, collection);
+			// Narrow the acceptance collection to its real grant (create + delete), exactly as
+			// `scopeCoversCollection` does, so a correct grant is not read as missing `update`.
+			const missing =
+				collection.length > 0 && !scopeCoversCollection(granted, collection)
+					? missingRepoActions(granted, collection)
+					: [];
 			if (missing.length > 0) {
 				console.log(
 					`[oauth-repo-writer] ${did}: the stored grant no longer covers ` +

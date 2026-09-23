@@ -147,3 +147,28 @@ export function missingRepoActions(
 export function scopeAllowsWriting(scope: string | null | undefined, collection: string): boolean {
 	return missingRepoActions(scope, collection).length === 0;
 }
+
+/** The collection an `org.anthers.creditAcceptance` record lives in. */
+export const CREDIT_ACCEPTANCE_COLLECTION = "org.anthers.creditAcceptance";
+
+/** The actions an acceptance record ever takes. Assent is written once, never edited. */
+const CREDIT_ACCEPTANCE_ACTIONS: readonly RepoAction[] = ["create", "delete"];
+
+/**
+ * Whether a scope lets Anthers write the records a collection exists for.
+ *
+ * ⚠️ `creditAcceptance` is the one collection that does not take edits: an acceptance is assent
+ * written once, and a change of heart is a withdraw plus a fresh acceptance rather than an update —
+ * which is why its permission set grants create and delete and nothing more. Asking for all three
+ * here would read every correctly-granted account as unpermissioned. Every other collection is
+ * judged by the full three, the same as `scopeAllowsWriting`.
+ */
+export function scopeCoversCollection(
+	scope: string | null | undefined,
+	collection: string,
+): boolean {
+	if (collection === CREDIT_ACCEPTANCE_COLLECTION) {
+		return missingRepoActions(scope, collection, CREDIT_ACCEPTANCE_ACTIONS).length === 0;
+	}
+	return scopeAllowsWriting(scope, collection);
+}
