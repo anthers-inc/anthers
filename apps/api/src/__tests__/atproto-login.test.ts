@@ -194,7 +194,9 @@ describe("where a sign-in lands", () => {
 		// votes are Anthers working; a creator's sign-in also carries the creator set through —
 		// `atproto-publishing.test.ts` pins that half, and asking for less there would silently
 		// discard a grant they had made.
-		expect(lastAuthorize?.options.scope).toBe("atproto include:org.anthers.userPermissions");
+		expect(lastAuthorize?.options.scope).toBe(
+			"atproto include:org.anthers.userPermissions include:org.anthers.creditConfirmation",
+		);
 	});
 });
 

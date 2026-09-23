@@ -140,14 +140,14 @@ export function recordUrlFor(
  */
 export function planWorkRecord(
 	work: PublishableWork,
-	opts: { baseUrl: string; existingUri?: string | null },
+	opts: { baseUrl: string; existingUri?: string | null; confirmedCredits?: Set<string> },
 ): WorkRecordPlan {
 	const existingUri = opts.existingUri ?? null;
 	const rkey = existingUri ? rkeyFromAtUri(existingUri, WORK_COLLECTION) : null;
 
 	// An unreadable stored URI is refused rather than treated as "no record". Treating it as
 	// absent would create a second listing and orphan the first, and a duplicate public
-	// record is far harder to clean up than a row somebody has to look at.
+	// listing is far harder to clean up than a row somebody has to look at.
 	if (existingUri && rkey === null) {
 		return { action: "invalid", problem: `unreadable atproto_uri: ${existingUri}` };
 	}
@@ -157,7 +157,10 @@ export function planWorkRecord(
 		return rkey ? { action: "delete", rkey, reason } : { action: "none", reason };
 	}
 
-	const record = workToRecord(work, { baseUrl: opts.baseUrl });
+	const record = workToRecord(work, {
+		baseUrl: opts.baseUrl,
+		confirmedCredits: opts.confirmedCredits,
+	});
 	// Unreachable while `unpublishableReason` is the only thing that makes the mapper return
 	// null, and checked rather than asserted so the two staying in step is enforced instead
 	// of assumed.
@@ -188,7 +191,7 @@ export interface WorkRecordOutcome {
 export async function syncWorkRecord(
 	writer: RepoWriter,
 	work: PublishableWork,
-	opts: { baseUrl: string; existingUri?: string | null },
+	opts: { baseUrl: string; existingUri?: string | null; confirmedCredits?: Set<string> },
 ): Promise<WorkRecordOutcome> {
 	const plan = planWorkRecord(work, opts);
 

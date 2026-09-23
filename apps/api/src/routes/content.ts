@@ -141,6 +141,7 @@ import {
 	declareRating,
 	fileRatingAppeal,
 } from "../services/content-rating.js";
+import { acceptCredit, findRejectedCredit, rejectCredit } from "../services/credit-acceptance.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -363,6 +364,14 @@ async function authorUpvote(subjectType: VoteSubject, subjectId: number, userId:
 		console.error(`author upvote on ${subjectType} ${subjectId} failed:`, error);
 	}
 }
+
+/**
+ * Refusal returned when a credit names a contributor whose rejection is already on file.
+ */
+const REJECTED_CREDIT_REFUSAL = {
+	error: "This credit was rejected by the contributor and can't be added again.",
+	code: "credit_rejected",
+} as const;
 
 /**
  * The upvote and downvote totals for a set of subjects, plus the viewer’s own vote.
@@ -3477,6 +3486,12 @@ const contentRoutes = new Hono()
 		const declaredOnCreate = declaredRating(data.maturityRows, gridFor(data.type));
 		const publicId = await makeUniquePublicId(works);
 
+		// A rejected DID credit cannot be re-added.
+		if (data.credits && data.credits.length > 0) {
+			const rejected = await findRejectedCredit(-1, data.credits);
+			if (rejected) return c.json(REJECTED_CREDIT_REFUSAL, 400);
+		}
+
 		const [work] = await db
 			.insert(works)
 			.values({
@@ -4171,6 +4186,13 @@ const contentRoutes = new Hono()
 		// ahead of these gates. The credits are overlaid for the same reason: a save can tick a
 		// Created box and release in one request, and refusing it for the credits it just replaced
 		// would be `credits_creator_required` answering a request that satisfied it.
+
+		// A rejected DID credit cannot be re-added.
+		if (data.credits !== undefined && data.credits.length > 0) {
+			const rejected = await findRejectedCredit(id, data.credits);
+			if (rejected) return c.json(REJECTED_CREDIT_REFUSAL, 400);
+		}
+
 		const asLeft: typeof work = {
 			...(work.type === "text" && data.bodyHtml !== undefined
 				? { ...work, bodyHtml: sanitizePostHtml(data.bodyHtml) }
@@ -5838,6 +5860,111 @@ const contentRoutes = new Hono()
 			);
 		}
 		return c.json({ error: "Not found" }, 404);
+	})
+
+	/**
+	 * Accept credit for a Work. The caller must be the credited person (any signed-in
+	 * account). The acceptance record is written into the caller's own repository.
+	 */
+	.post("/works/:id/credits/accept", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = parseNumericId(c.req.param("id"));
+		if (workId == null) return c.json({ error: "Work not found" }, 404);
+
+		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+		const role = typeof body.role === "string" ? body.role : "";
+		if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
+
+		const [work] = await db
+			.select({ atprotoUri: works.atprotoUri })
+			.from(works)
+			.where(eq(works.id, workId))
+			.limit(1);
+		if (!work?.atprotoUri) {
+			return c.json(
+				{ error: "This Work has no public listing to accept credit for.", code: "no_listing" },
+				404,
+			);
+		}
+
+		const [account] = await db
+			.select({ did: users.atprotoDid })
+			.from(users)
+			.where(eq(users.id, user.id))
+			.limit(1);
+		if (!account?.did) {
+			return c.json(
+				{ error: "This account has no identity to accept credit with.", code: "no_identity" },
+				400,
+			);
+		}
+
+		const result = await acceptCredit({
+			callerUserId: user.id,
+			callerDid: account.did,
+			workId,
+			workUri: work.atprotoUri,
+			role,
+		});
+
+		if (!result.ok) {
+			const message =
+				result.code === "not_credited"
+					? "You are not credited on this Work with that role."
+					: result.code === "already_accepted"
+						? "You already accepted this credit."
+						: result.code === "rejected"
+							? "You rejected this credit, so you cannot accept it."
+							: result.code === "no_identity"
+								? "This account has no identity to accept credit with."
+								: "Anthers needs your permission to write the acceptance record in your repository.";
+			return c.json({ error: message, code: result.code }, 400);
+		}
+
+		return c.json({ accepted: true, atprotoUri: result.atprotoUri });
+	})
+
+	/**
+	 * Reject credit for a Work. The caller must be the credited person (any signed-in
+	 * account). Rejection removes the credit from the Work and blocks re-adding it.
+	 */
+	.post("/works/:id/credits/reject", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = parseNumericId(c.req.param("id"));
+		if (workId == null) return c.json({ error: "Work not found" }, 404);
+
+		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+		const role = typeof body.role === "string" ? body.role : "";
+		if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
+
+		const [account] = await db
+			.select({ did: users.atprotoDid })
+			.from(users)
+			.where(eq(users.id, user.id))
+			.limit(1);
+		if (!account?.did) {
+			return c.json(
+				{ error: "This account has no identity to reject credit with.", code: "no_identity" },
+				400,
+			);
+		}
+
+		const result = await rejectCredit({
+			callerUserId: user.id,
+			callerDid: account.did,
+			workId,
+			role,
+		});
+
+		if (!result.ok) {
+			const message =
+				result.code === "not_credited"
+					? "You are not credited on this Work with that role."
+					: "You already rejected this credit.";
+			return c.json({ error: message, code: result.code }, 400);
+		}
+
+		return c.json({ rejected: true });
 	});
 
 export { contentRoutes };

@@ -258,3 +258,114 @@ describe("the canonical url", () => {
 		);
 	});
 });
+
+describe("credits on the public listing", () => {
+	it("omits a did credit that has not been accepted", () => {
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Written by", contributor: "did:plc:alice", types: ["created"] }],
+			}),
+			{ baseUrl: BASE },
+		);
+		expect(record).not.toHaveProperty("credits");
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("includes a did credit that has been accepted", () => {
+		const confirmed = new Set(["did:plc:alice|Written by"]);
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Written by", contributor: "did:plc:alice", types: ["created"] }],
+			}),
+			{ baseUrl: BASE, confirmedCredits: confirmed },
+		);
+		expect(record?.credits).toEqual([
+			{
+				role: "Written by",
+				contributor: { $type: "org.anthers.work#didContributor", did: "did:plc:alice" },
+				types: ["created"],
+			},
+		]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("always includes a name credit regardless of acceptance", () => {
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Art by", contributor: "Jordan Doe", types: ["created"] }],
+			}),
+			{ baseUrl: BASE },
+		);
+		expect(record?.credits).toEqual([
+			{
+				role: "Art by",
+				contributor: { $type: "org.anthers.work#namedContributor", name: "Jordan Doe" },
+				types: ["created"],
+			},
+		]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("omits the credits field entirely when no credit is publicly visible", () => {
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Written by", contributor: "did:plc:alice", types: ["created"] }],
+			}),
+			{ baseUrl: BASE },
+		);
+		expect(record).not.toHaveProperty("credits");
+	});
+
+	it("mixes accepted did credits and name credits", () => {
+		const confirmed = new Set(["did:plc:alice|Written by"]);
+		const record = workToRecord(
+			openWork({
+				credits: [
+					{ role: "Written by", contributor: "did:plc:alice", types: ["created"] },
+					{ role: "Art by", contributor: "Jordan Doe", types: ["created"] },
+					{ role: "Music by", contributor: "did:plc:bob", types: ["created"] },
+				],
+			}),
+			{ baseUrl: BASE, confirmedCredits: confirmed },
+		);
+		expect(record?.credits).toEqual([
+			{
+				role: "Written by",
+				contributor: { $type: "org.anthers.work#didContributor", did: "did:plc:alice" },
+				types: ["created"],
+			},
+			{
+				role: "Art by",
+				contributor: { $type: "org.anthers.work#namedContributor", name: "Jordan Doe" },
+				types: ["created"],
+			},
+		]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("publishes an anonymous licensed credit with no contributor field", () => {
+		// A `licensed` row may name nobody (the settled rule), and an anonymous credit carries no
+		// contributor object at all rather than an empty name — absence, not an empty value.
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "Cover art from", contributor: "", types: ["licensed"] }],
+			}),
+			{ baseUrl: BASE, confirmedCredits: new Set() },
+		);
+		expect(record?.credits).toEqual([{ role: "Cover art from", types: ["licensed"] }]);
+		expect(record?.credits?.[0]).not.toHaveProperty("contributor");
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("omits a blank role and keeps a bare ai assertion publishable", () => {
+		// A bare `ai` row carries only the type signal — no role, no contributor — and is valid.
+		const record = workToRecord(
+			openWork({
+				credits: [{ role: "   ", contributor: "", types: ["ai"] }],
+			}),
+			{ baseUrl: BASE, confirmedCredits: new Set() },
+		);
+		expect(record?.credits).toEqual([{ types: ["ai"] }]);
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+});

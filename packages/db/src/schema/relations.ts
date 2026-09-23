@@ -12,6 +12,8 @@ import {
 	assets,
 	bookmarks,
 	comments,
+	creditAcceptances,
+	creditRejections,
 	inlineImages,
 	posts,
 	postWorkRefs,
@@ -156,6 +158,8 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	purchases: many(purchases),
 	bookmarks: many(bookmarks),
 	reviews: many(reviews),
+	creditAcceptances: many(creditAcceptances),
+	creditRejections: many(creditRejections),
 }));
 
 export const postWorkRefsRelations = relations(postWorkRefs, ({ one }) => ({

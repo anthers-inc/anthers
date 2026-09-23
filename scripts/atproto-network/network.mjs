@@ -31,7 +31,7 @@ import { mockNetworkUtilities, TestNetworkNoAppView, TestPds } from "@atproto/de
 const PLC_PORT = Number(process.env.PLC_PORT ?? 2582);
 const PDS_PORT = Number(process.env.PDS_PORT ?? 2583);
 const BLUESKY_PORT = Number(process.env.BLUESKY_PORT ?? 2586);
-/** Where `lexicons-published/` is, so the network can serve the schemas Anthers has published. */
+/** Where `lexicons/` is mounted, so the network can resolve the permission sets Anthers asks for — published or still a draft in-session. */
 const LEXICONS_DIR = process.env.LEXICONS_DIR;
 
 const network = await TestNetworkNoAppView.create({
@@ -77,16 +77,19 @@ for (const server of servers) {
 }
 
 /**
- * Serve the schemas Anthers has published, from an Anthers account on the Bluesky stand-in — where
+ * Serve the `org.anthers.*` schemas from an Anthers account on the Bluesky stand-in — where
  * `anthers.org` really lives on `bsky.social`.
  *
  * 🚨 **Without this the Bluesky door cannot be signed through at all.** Anthers asks for its
- * published permission sets (`include:org.anthers.userPermissions`), and an authorization server
- * resolves a permission set's Lexicon through the `_lexicon.anthers.org` DNS record — the real
- * network, which a private one must not reach and cannot. So the published copies are written into
- * a local account exactly as the publisher writes them, and the stand-in's resolver is pointed at
- * that account through the override the reference server provides for this (`PDS_LEXICON_AUTHORITY_DID`),
- * set once the account's DID exists. Only the DNS step is replaced; the fetch is the real one.
+ * permission sets by name (`include:org.anthers.userPermissions`, `…creditConfirmation`), and an
+ * authorization server resolves a permission set's Lexicon through the `_lexicon.anthers.org` DNS
+ * record — the real network, which a private one must not reach and cannot. So the schemas are
+ * written into a local account exactly as the publisher writes them, and the stand-in's resolver is
+ * pointed at that account through the override the reference server provides for this
+ * (`PDS_LEXICON_AUTHORITY_DID`), set once the account's DID exists. Only the DNS step is replaced;
+ * the fetch is the real one. ⚠️ The directory is the source `lexicons/`, so a set the app asks for
+ * resolves in-session even before its publish — which is the only way a draft set's sign-in can be
+ * exercised ahead of the deliberate publish step.
  */
 async function publishAnthersLexicons(server, dir) {
 	const password = crypto.randomUUID();

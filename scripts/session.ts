@@ -407,11 +407,13 @@ async function startNetwork(
 		`PDS_PORT=${pds}`,
 		"-e",
 		`BLUESKY_PORT=${bluesky}`,
-		// The schemas Anthers has published, so the stand-in can resolve its permission sets.
+		// The schemas the network serves to resolve permission sets. Source `lexicons/`, not the
+		// published copies: a session must be able to sign in through a draft permission set the
+		// app already asks for, ahead of its publish (which is a separate, deliberate act).
 		"-v",
-		`${join(REPO_ROOT, "lexicons-published")}:/lexicons-published:ro`,
+		`${join(REPO_ROOT, "lexicons")}:/lexicons:ro`,
 		"-e",
-		"LEXICONS_DIR=/lexicons-published",
+		"LEXICONS_DIR=/lexicons",
 		"-p",
 		`127.0.0.1:${plc}:${plc}`,
 		"-p",

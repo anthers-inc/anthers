@@ -25,6 +25,9 @@ export interface LexiconValidator {
 
 export type { Main as CommentRecordValue } from "./generated/lexicons/org/anthers/comment.defs.js";
 export { default as commentRecord } from "./generated/lexicons/org/anthers/comment.js";
+export type { Main as CreditAcceptanceRecordValue } from "./generated/lexicons/org/anthers/creditAcceptance.defs.js";
+export { default as creditAcceptanceRecord } from "./generated/lexicons/org/anthers/creditAcceptance.js";
+export { default as creditConfirmationPermissionSet } from "./generated/lexicons/org/anthers/creditConfirmation.js";
 export type { Main as FollowRecordValue } from "./generated/lexicons/org/anthers/follow.defs.js";
 export { default as followRecord } from "./generated/lexicons/org/anthers/follow.js";
 export type { Main as PostRecordValue } from "./generated/lexicons/org/anthers/post.defs.js";
@@ -35,5 +38,10 @@ export type { Main as ReviewRecordValue } from "./generated/lexicons/org/anthers
 export { default as reviewRecord } from "./generated/lexicons/org/anthers/review.js";
 export type { Main as VoteRecordValue } from "./generated/lexicons/org/anthers/vote.defs.js";
 export { default as voteRecord } from "./generated/lexicons/org/anthers/vote.js";
-export type { Main as WorkRecordValue } from "./generated/lexicons/org/anthers/work.defs.js";
+export type {
+	Credit as WorkCreditValue,
+	DidContributor as WorkDidContributorValue,
+	Main as WorkRecordValue,
+	NamedContributor as WorkNamedContributorValue,
+} from "./generated/lexicons/org/anthers/work.defs.js";
 export { default as workRecord } from "./generated/lexicons/org/anthers/work.js";

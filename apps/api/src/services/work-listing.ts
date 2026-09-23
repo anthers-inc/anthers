@@ -30,8 +30,8 @@
  * already been told.
  */
 import { db } from "@anthers/db";
-import { users, works } from "@anthers/db/schema";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { creditAcceptances, users, type WorkCredit, works } from "@anthers/db/schema";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { recordGrantedScope, revokeAtprotoGrant } from "./atproto-client.js";
 import {
 	RepoAuthError,
@@ -92,6 +92,7 @@ export async function syncWorkListing(
 			streamEnabled: works.streamEnabled,
 			downloadEnabled: works.downloadEnabled,
 			seedAccess: works.seedAccess,
+			credits: works.credits,
 			atprotoUri: works.atprotoUri,
 		})
 		.from(works)
@@ -111,10 +112,13 @@ export async function syncWorkListing(
 	});
 	if (!opened.writer) return { status: "skipped", reason: opened.reason };
 
+	const confirmedCredits = await loadConfirmedCredits(workId, work.credits);
+
 	try {
 		const outcome = await syncWorkRecord(opened.writer, work, {
 			baseUrl: baseUrl(),
 			existingUri: work.atprotoUri,
+			confirmedCredits,
 		});
 
 		// ⚠️ **Written only when it changed, and cleared with an explicit null.** The column is
@@ -144,6 +148,29 @@ export async function syncWorkListing(
 		console.error(`[work-listing] ${workId}: ${error}`);
 		return { status: "failed", error };
 	}
+}
+
+/**
+ * Which credits on a Work have been accepted, keyed for `workToRecord`.
+ *
+ * The key is `${contributorDid}|${role}` so the mapper can match a stored credit row to an
+ * acceptance without re-parsing the contributor string.
+ */
+async function loadConfirmedCredits(
+	workId: number,
+	credits: WorkCredit[] | null,
+): Promise<Set<string>> {
+	if (!credits || credits.length === 0) return new Set<string>();
+	const dids = credits.filter((c) => c.contributor.startsWith("did:")).map((c) => c.contributor);
+	if (dids.length === 0) return new Set<string>();
+
+	const rows = await db
+		.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
+		.from(creditAcceptances)
+		.where(
+			and(eq(creditAcceptances.workId, workId), inArray(creditAcceptances.contributorDid, dids)),
+		);
+	return new Set(rows.map((r) => `${r.contributorDid}|${r.role}`));
 }
 
 /**

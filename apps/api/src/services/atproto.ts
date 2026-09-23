@@ -20,7 +20,7 @@ import {
 	grantedScopeFor,
 	USER_COLLECTIONS,
 } from "./atproto-client.js";
-import { scopeAllowsWriting } from "./atproto-scope.js";
+import { scopeAllowsWriting, scopeCoversCollection } from "./atproto-scope.js";
 import { type PdsHealth, pdsHealth } from "./pds-health.js";
 
 export interface AtprotoIdentity {
@@ -573,7 +573,11 @@ function grantCoversCreatorRecords(scope: string | null | undefined): boolean {
 	return CREATOR_COLLECTIONS.every((collection) => scopeAllowsWriting(scope, collection));
 }
 
-/** Whether a granted scope lets Anthers write an account's comments, reviews, votes and follows. */
+/**
+ * Whether a granted scope lets Anthers write an account's comments, reviews, votes, follows and
+ * credit acceptances. `scopeCoversCollection` knows the acceptance set grants only create and
+ * delete, so a correctly-granted account reads as permissioned rather than tripping the banner.
+ */
 function grantCoversUserRecords(scope: string | null | undefined): boolean {
-	return USER_COLLECTIONS.every((collection) => scopeAllowsWriting(scope, collection));
+	return USER_COLLECTIONS.every((collection) => scopeCoversCollection(scope, collection));
 }
