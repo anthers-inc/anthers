@@ -75,7 +75,7 @@ export const moderationReports = pgTable(
 	"moderation_reports",
 	{
 		id: serial("id").primaryKey(),
-		subjectType: text("subject_type").notNull(), // comment | rating
+		subjectType: text("subject_type").notNull(), // comment | review | user | work
 		subjectId: integer("subject_id").notNull(),
 		// Nullable + set null: the report is a record, and it survives its reporter.
 		reporterId: integer("reporter_id").references(() => users.id, { onDelete: "set null" }),
@@ -180,9 +180,9 @@ export const moderationActions = pgTable(
 	"moderation_actions",
 	{
 		id: serial("id").primaryKey(),
-		subjectType: text("subject_type").notNull(), // comment | rating
+		subjectType: text("subject_type").notNull(), // comment | review | user | work
 		subjectId: integer("subject_id").notNull(),
-		action: text("action").notNull(), // hide | restore
+		action: text("action").notNull(), // hide | restore | reclassify | suspend | unsuspend
 		// Nullable + set null for the same reason as reporterId: the decision
 		// outlives the account that made it.
 		//

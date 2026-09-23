@@ -169,6 +169,16 @@ test("the settings menu actually changes the playback rate", async ({ page }) =>
 	await expect.poll(async () => (await videoState(page))?.rate).toBe(1.5);
 });
 
+test("the settings menu offers Listen as podcast when the rendition exists", async ({ page }) => {
+	await openPlayer(page);
+	const controls = page.locator(CONTROLS);
+	await controls.getByRole("button", { name: "Playback settings" }).click();
+	// The fixture video carries the audio-only rendition the transcode job produces,
+	// so the hand-off row is in its settings panel.
+	await expect(page.getByTestId("podcast-this")).toBeVisible();
+	await expect(page.getByRole("button", { name: /listen as podcast/i })).toBeVisible();
+});
+
 test("volume is remembered across a reload", async ({ page }) => {
 	await openPlayer(page);
 

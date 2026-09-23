@@ -65,6 +65,7 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
+import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
@@ -365,7 +366,10 @@ const accountRoutes = new Hono()
 			// by construction. Filtered anyway: "it can't happen because of what another
 			// function does" is the reasoning that leaves a leak behind when that other
 			// function changes, and a block that leaks is worse than no block.
-			.where(notBlockedBy(sessionUser.id, users.id));
+			// The follow does NOT end on a suspension, so this list genuinely holds
+			// suspended accounts until it is filtered — the same "filter anyway" argument
+			// as the block, with nothing severing the relationship upstream.
+			.where(and(notBlockedBy(sessionUser.id, users.id), notSuspendedAccount(users.id)));
 
 		return c.json({
 			// `flatMap` rather than `map`, so an account that has not claimed a handle is
@@ -397,6 +401,10 @@ const accountRoutes = new Hono()
 				and(
 					eq(follows.followerId, sessionUser.id),
 					notBlockedBy(sessionUser.id, follows.creatorId),
+					// Suspension keeps the follow but ends the feed — filtered here, at the
+					// source, for the same reason the block is: every downstream feed
+					// query reads from this id list.
+					notSuspendedAccount(follows.creatorId),
 				),
 			);
 
@@ -584,7 +592,13 @@ const accountRoutes = new Hono()
 			// Discover's people half. A blocked creator is absent from the listing entirely,
 			// in both directions — this is the surface where two users are most likely to
 			// run into each other without going looking.
-			.where(and(eq(users.isCreator, true), notBlockedBy(currentUserId, users.id)));
+			.where(
+				and(
+					eq(users.isCreator, true),
+					notBlockedBy(currentUserId, users.id),
+					notSuspendedAccount(users.id),
+				),
+			);
 
 		return c.json({
 			creators: creatorList.map((row) =>
@@ -619,7 +633,13 @@ const accountRoutes = new Hono()
 		// block. That is not the same as concealing it, and we don't claim it is; a
 		// profile that used to load and now 404s is inferrable. What Anthers holds is
 		// that it never *says* so, and offers no surface reporting who blocked whom.
-		if (!account || (currentUserId != null && (await isBlocked(currentUserId, account.id)))) {
+		// A suspended profile is the identical answer for a different rule — the
+		// account has gone dark, and the ordinary not-found is all the reader gets.
+		if (
+			!account ||
+			(currentUserId != null && (await isBlocked(currentUserId, account.id))) ||
+			(await isSuspendedAccount(account.id))
+		) {
 			return c.json({ error: "User not found" }, 404);
 		}
 

@@ -29,10 +29,13 @@ import { db } from "@anthers/db/client";
 import {
 	adminAccounts,
 	comments,
+	invoiceLines,
+	invoices,
 	moderationActions,
 	moderationReports,
 	posts,
 	reviews,
+	sessions,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -48,12 +51,36 @@ import {
 	moderationReasonLabel,
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
-import { and, count, desc, eq, exists, inArray, isNull, max, or, sql } from "drizzle-orm";
+import {
+	and,
+	count,
+	desc,
+	eq,
+	exists,
+	inArray,
+	isNotNull,
+	isNull,
+	lte,
+	max,
+	or,
+	sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
 import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
+import { resumePausedRenewals } from "./invoices.js";
 import { notify } from "./notifications.js";
 import { queueRecordSync } from "./record-sync.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
+
+/** Whether an account is suspended right now. The one predicate every reader shares. */
+export function isAccountSuspended(row: {
+	suspendedAt: Date | null;
+	suspendedUntil: Date | null;
+}): boolean {
+	if (!row.suspendedAt) return false;
+	return !row.suspendedUntil || row.suspendedUntil.getTime() > Date.now();
+}
 
 /**
  * Subject type → the table it lives in. The only place the mapping is written down.
@@ -61,9 +88,10 @@ import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.
  * `user` is deliberately absent. The two entries here are *content* tables sharing a
  * shape — an `id`, an author, and a `moderation_status` — and everything keyed off
  * this map (hide, restore, the browse filters) assumes all three columns. A `users`
- * row has none of them in that sense: it has no author but is one, and it carries no
- * moderation status because suspending an account is not built. Adding it here to
- * make the map look complete is what would produce a hide path that half-works.
+ * row has none of them in that sense: it has no author but is one, and its moderation
+ * state is the `suspended_at`/`suspended_until` pair on the row itself, which
+ * `suspendAccount`/`unsuspendAccount` write instead. Adding `users` here to make the
+ * map look complete is what would produce a hide path that half-works.
  */
 const CONTENT_SUBJECTS = {
 	comment: comments,
@@ -82,7 +110,11 @@ export interface ModerationSubjectRow {
 	 * it: the words are still there, and hiding them is still the operator's call.
 	 */
 	userId: number | null;
-	/** Always `"visible"` for a `user` subject — accounts carry no moderation status. */
+	/**
+	 * Always `"visible"` for a `user` subject — an account's moderation state is the
+	 * `suspended_at`/`suspended_until` pair on its row, not this string, which exists
+	 * so report validation reads one shape for every subject type.
+	 */
 	moderationStatus: string;
 }
 
@@ -512,6 +544,285 @@ export async function dismissReports(input: {
 		)
 		.returning({ id: moderationReports.id });
 	return { dismissed: dismissed.length };
+}
+
+// ── Account suspension ─────────────────────────────────────────────────────
+
+/**
+ * Suspend an account and record why. Returns null if the account doesn't exist.
+ *
+ * Suspension is a **state, never a delete**, applied to an account on the same rule
+ * as content removal. One transaction does four things, because any subset is a lie
+ * about what happened:
+ *
+ * 1. **The row records the state.** `suspended_at` is stamped; `suspended_until` is
+ *    the end for a temporary suspension and null for an indefinite one — "indefinite"
+ *    is a missing value, not a different kind, and a sweep lifts an expired one with
+ *    the same record an operator's lift writes. The *reasoning* never goes on the
+ *    row: it is appended to `moderation_actions`, so the row answers only "is this
+ *    account suspended" and the log answers everything an appeal would ask.
+ * 2. **Sessions are destroyed.** A suspended account cannot act — validation refuses
+ *    a living session and sign-in refuses a new one — so the tokens are deleted
+ *    outright; leaving them would make the refusal one check per reader rather than
+ *    one fact. Deleting sessions is not deleting content: a session is a credential,
+ *    and `deleteExpiredSessions` already destroys them as routine hygiene.
+ * 3. **The decision is appended** as a `suspend` row naming the admin who decided
+ *    and the reason they gave. A suspended account with no record of who suspended
+ *    it is precisely the state the append-only log exists to prevent.
+ * 4. **Open reports against the account are resolved** in the same transaction —
+ *    acting on the person is the answer to the report, exactly as `hideSubject` treats
+ *    acting on the content.
+ *
+ * What this deliberately does NOT touch, each chosen rather than emergent:
+ *
+ * - **Nothing is written to the account's ATProto repository**, and its DID, handle
+ *   and records resolve exactly as before. Suspension is an Anthers-platform act;
+ *   pretending to reach the identity layer would overclaim a reach the wiki's *How
+ *   Removal Works* already says Anthers does not have. Reinstatement therefore
+ *   rebuilds nothing.
+ * - **The account's Works and purchases are untouched at this layer.** Their pages
+ *   stop serving because every reader filters on the account's state; a buyer's
+ *   existing Library access survives, because what you buy stays yours. Any final
+ *   disposition of the catalog belongs to repeat-infringer termination, which is
+ *   built on this state and not part of it.
+ * - **Subscriptions and payouts are governed by their own services.** This is the
+ *   account state those mechanisms read, not their implementation.
+ * - **Legal holds are not consulted.** A hold suspends *destruction*; suspension
+ *   destroys nothing, so a preservation order has nothing to say here — and a hold
+ *   that could keep an account dark would be a preservation tool doing moderation.
+ */
+export async function suspendAccount(input: {
+	userId: number;
+	/** The admin account acting. */
+	adminId: number;
+	reason: string;
+	note?: string;
+	/** When the suspension lifts itself. Omit for an indefinite suspension. */
+	until?: Date | null;
+}): Promise<{ status: "suspended" } | null> {
+	const [account] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.id, input.userId))
+		.limit(1);
+	if (!account) return null;
+
+	const note = (input.note ?? "").trim().slice(0, MODERATION_NOTE_MAX);
+
+	await db.transaction(async (tx) => {
+		await tx
+			.update(users)
+			.set({ suspendedAt: new Date(), suspendedUntil: input.until ?? null })
+			.where(eq(users.id, input.userId));
+
+		await tx.delete(sessions).where(eq(sessions.userId, input.userId));
+
+		await tx.insert(moderationActions).values({
+			subjectType: "user",
+			subjectId: input.userId,
+			action: "suspend" satisfies ModerationActionType,
+			adminActorId: input.adminId,
+			actorRole: "operator",
+			reason: input.reason,
+			note,
+		});
+
+		await tx
+			.update(moderationReports)
+			.set({ status: "resolved", resolvedAt: new Date(), resolvedByAdminId: input.adminId })
+			.where(
+				and(
+					eq(moderationReports.subjectType, "user"),
+					eq(moderationReports.subjectId, input.userId),
+					eq(moderationReports.status, "open"),
+				),
+			);
+	});
+
+	// The holder is told, by email, the moment the state lands. `essential` category:
+	// nobody may opt out of being told their account was acted on. The message names the
+	// reason category and any end, and points at the appeal path — a suspension somebody
+	// learns of from a generic sign-in failure is a support ticket, not a moderation record.
+	// The dedupe keys on THIS suspension (by its timestamp), so a re-suspension after a
+	// lift mails again while a retry of this same action does not.
+	void notify({
+		userId: input.userId,
+		category: "essential",
+		kind: "account_suspended",
+		title: "Your Anthers account has been suspended",
+		body:
+			`Anthers has suspended your account${input.until ? ` until ${input.until.toISOString()}` : ""}. ` +
+			`Reason: ${moderationReasonLabel(input.reason)}. ` +
+			`While suspended you cannot sign in, and your presence and your works are not shown publicly. ` +
+			`If you believe this is a mistake, reply to this email to appeal.`,
+		linkPath: "/suspended",
+		dedupeKey: `account-suspended:${input.userId}:${Date.now()}`,
+	}).catch(() => {});
+
+	return { status: "suspended" };
+}
+
+/**
+ * Lift a suspension. The reversal is a NEW `unsuspend` row, never an edit of the
+ * `suspend` row — the log reads as the sequence of decisions actually taken,
+ * including this one.
+ *
+ * `adminId` is null when the expiry sweep lifts a suspension whose `suspended_until`
+ * has passed: the two null actor columns then read as "automated", same convention
+ * as everywhere else in the log. Returns null if the account doesn't exist, and is a
+ * no-op on an account that is not suspended.
+ */
+export async function unsuspendAccount(input: {
+	userId: number;
+	/** The admin account acting, when a person lifted it. Null from the expiry sweep. */
+	adminId?: number | null;
+	note?: string;
+}): Promise<{ status: "visible" } | null> {
+	const [account] = await db
+		.select({ id: users.id, suspendedAt: users.suspendedAt })
+		.from(users)
+		.where(eq(users.id, input.userId))
+		.limit(1);
+	if (!account) return null;
+	if (!account.suspendedAt) return { status: "visible" };
+
+	const note = (input.note ?? "").trim().slice(0, MODERATION_NOTE_MAX);
+
+	await db.transaction(async (tx) => {
+		await tx
+			.update(users)
+			.set({ suspendedAt: null, suspendedUntil: null })
+			.where(eq(users.id, input.userId));
+
+		await tx.insert(moderationActions).values({
+			subjectType: "user",
+			subjectId: input.userId,
+			action: "unsuspend" satisfies ModerationActionType,
+			adminActorId: input.adminId ?? null,
+			actorRole: "operator",
+			reason: "",
+			note,
+		});
+	});
+
+	// Renewal pause is a state rather than a canceled subscription, so this is the moment
+	// the months that ran under suspension rejoin the books — their paid invoices come off
+	// `paused` and land against the reinstatement month, where settlement credits what the
+	// suspension withheld. Deliberately NOT in the transaction above: a Stripe id was
+	// already its own record, and a re-key whose insert had to roll back the whole lift
+	// would hold a suspension open on a bookkeeping failure.
+	const resumed = await resumePausedRenewals(input.userId, new Date());
+	if (resumed > 0) console.log(`moderation: resumed ${resumed} paused renewal(s) on reinstatement`);
+
+	// Told, whoever lifted it — an operator's reversal or the clock. The dedupe keys on
+	// the lift itself (`Date.now()`), symmetric with the suspension notice: a later
+	// re-suspension and lift is a fresh sequence and mails again.
+	void notify({
+		userId: input.userId,
+		category: "essential",
+		kind: "account_reinstated",
+		title: "Your Anthers account is reinstated",
+		body:
+			"Your account's suspension has ended and you can sign in again. " +
+			"Your presence and your works are shown publicly once more, and any support paused during the suspension resumes at its next renewal.",
+		linkPath: "/login",
+		dedupeKey: `account-reinstated:${input.userId}:${Date.now()}`,
+	}).catch(() => {});
+
+	return { status: "visible" };
+}
+
+/**
+ * Lift every temporary suspension whose end has passed. The sweep's job.
+ *
+ * Each account is its own `unsuspendAccount` call — its own transaction and its own
+ * `unsuspend` record — so one failure strands nobody else and the log still reads as
+ * one decision per account. Both actor columns are null on each, which is how the
+ * log says "the clock lifted this one".
+ */
+export async function liftExpiredSuspensions(now: Date = new Date()): Promise<number> {
+	const due = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(
+			and(
+				isNotNull(users.suspendedAt),
+				isNotNull(users.suspendedUntil),
+				lte(users.suspendedUntil, now),
+			),
+		);
+
+	let lifted = 0;
+	for (const account of due) {
+		const result = await unsuspendAccount({
+			userId: account.id,
+			note: "Suspension reached its scheduled end.",
+		});
+		if (result) lifted += 1;
+	}
+	if (lifted > 0) console.log(`moderation: lifted ${lifted} expired suspension(s)`);
+	return lifted;
+}
+
+/**
+ * Tell each supporter of a suspended creator that their renewal is paused.
+ *
+ * Runs from a sweep rather than inline in `suspendAccount` for two reasons. First, the
+ * supporter set is derived from the invoice ledger — a supporter is whoever's invoice
+ * carried a line naming this creator — and that read wants no part of the suspension
+ * transaction. Second, each notice is idempotent by its dedupe key, so a sweep that
+ * re-runs after a partial failure tells nobody twice, and an hour's latency on a
+ * billing notice is invisible where a sign-in refusal's is not.
+ *
+ * One notice per (supporter, creator, suspension), keyed on the suspension's own
+ * `suspendedAt` so a re-suspension after a lift correctly tells supporters again. The
+ * message says what is true: renewal is paused (not canceled), it resumes if the
+ * suspension lifts, cancel any time. `essential`, because money is moving (or rather,
+ * deliberately not moving) and that is not a thing anyone gets to be un-told.
+ */
+export async function notifySupportersOfSuspensions(): Promise<number> {
+	// The line names the creator (`creatorId` non-null is a creator line; null is the
+	// Anthers line) and the invoice names the supporter. Two `users` joins: the line's
+	// creator for the suspension state, the invoice's supporter for who to tell.
+	const creator = alias(users, "creator");
+	const rows = await db
+		.selectDistinct({
+			supporterId: invoices.userId,
+			creatorId: invoiceLines.creatorId,
+			suspendedAt: creator.suspendedAt,
+			creatorHandle: creator.atprotoHandle,
+		})
+		.from(invoiceLines)
+		.innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
+		.innerJoin(creator, eq(invoiceLines.creatorId, creator.id))
+		.where(
+			and(
+				isNotNull(invoiceLines.creatorId),
+				isNotNull(creator.suspendedAt),
+				isNotNull(invoices.userId),
+			),
+		);
+
+	let sent = 0;
+	for (const row of rows) {
+		if (row.supporterId == null || row.creatorId == null || row.suspendedAt == null) continue;
+		const { emailed } = await notify({
+			userId: row.supporterId,
+			category: "essential",
+			kind: "subscription_paused_suspension",
+			title: "Your support is paused while this creator is suspended",
+			body:
+				`The creator you support (@${row.creatorHandle ?? "unknown"}) has been suspended. ` +
+				`Your renewal did not charge and will not while the suspension stands — this is a pause, not a cancellation. ` +
+				`If the suspension lifts, your support resumes at its next renewal. You can cancel any time from your account settings.`,
+			linkPath: "/settings",
+			dedupeKey: `subscription-paused-suspension:${row.supporterId}:${row.creatorId}:${row.suspendedAt.getTime()}`,
+		});
+		if (emailed) sent += 1;
+	}
+	if (sent > 0)
+		console.log(`moderation: notified ${sent} supporter(s) of a suspension pausing their renewal`);
+	return sent;
 }
 
 // ── The operator queue ──────────────────────────────────────────────────────

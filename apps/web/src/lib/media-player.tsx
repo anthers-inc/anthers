@@ -27,6 +27,7 @@
  *    single-track hook was never built to avoid.
  */
 
+import type HlsInstance from "hls.js";
 import {
 	createContext,
 	type ReactNode,
@@ -39,6 +40,7 @@ import {
 } from "react";
 import { effectiveVolume, useVolume } from "../components/media/transport/volume";
 import { useAttentionClaim } from "./attention";
+import { readPosition, writePosition } from "./listen-positions";
 import {
 	cycleRepeat as cycleRepeatState,
 	EMPTY_QUEUE,
@@ -57,6 +59,7 @@ import {
 	upcoming as upcomingIn,
 } from "./music-queue";
 import { refreshBudget, useMeteredBudget } from "./public-access";
+import { readSpokenRate, SPOKEN_RATE_EVENT } from "./spoken-rate";
 
 export type { QueueTrack, RepeatMode };
 
@@ -185,9 +188,28 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 
 		audio.addEventListener("ended", onEnded);
 		audio.addEventListener("error", onError);
+
+		// Persist resume state for spoken tracks — throttled on ticks, flushed on pause
+		// and pagehide. Music never writes one: a song does not resume mid-song.
+		const onTimeUpdate = () => {
+			if (current?.kind === "audio")
+				writePosition(current.workId, audio.currentTime, audio.duration || null);
+		};
+		const onPauseFlush = () => {
+			if (current?.kind === "audio")
+				writePosition(current.workId, audio.currentTime, audio.duration || null, { force: true });
+		};
+		const onPageHide = onPauseFlush;
+		audio.addEventListener("timeupdate", onTimeUpdate);
+		audio.addEventListener("pause", onPauseFlush);
+		window.addEventListener("pagehide", onPageHide);
+
 		return () => {
 			audio.removeEventListener("ended", onEnded);
 			audio.removeEventListener("error", onError);
+			audio.removeEventListener("timeupdate", onTimeUpdate);
+			audio.removeEventListener("pause", onPauseFlush);
+			window.removeEventListener("pagehide", onPageHide);
 		};
 	}, [state, current]);
 
@@ -213,12 +235,82 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 			audio.load();
 			return;
 		}
+
+		/*
+		 * An HLS source — today, a video listened to as a podcast — needs hls.js where a
+		 * plain endpoint does not. Lazy-imported so the bar's base bundle stays unchanged
+		 * for music, which only ever carries the progressive URL. The instance's lifecycle
+		 * is this effect's: created on a manifest src, destroyed on a change away or on
+		 * unmount below. Mirrors the pattern in VideoPlayer.tsx, including the 402
+		 * backstop — the element itself cannot report the status that emptied allowance.
+		 */
+		if (src.endsWith(".m3u8")) {
+			let hls: HlsInstance | null = null;
+			let canceled = false;
+			void import("hls.js").then(({ default: Hls }) => {
+				if (canceled || !Hls.isSupported()) return;
+				hls = new Hls({
+					// Same cookie rule as the video player: our manifest endpoint is
+					// access-checked and same-origin; signed CDN segments must not carry
+					// credentials.
+					xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+						if (/\/api\/content\/works\/[^/]+\/hls\//.test(url)) {
+							xhr.withCredentials = true;
+						}
+					},
+				});
+				hls.on(Hls.Events.ERROR, (_evt, data) => {
+					if (data?.response?.code === 402) {
+						setRefused(true);
+						refreshBudget();
+						audio.pause();
+					}
+				});
+				hls.loadSource(src);
+				hls.attachMedia(audio);
+				if (current?.kind === "audio") {
+					// Resume once the manifest has given the element a duration to seek into.
+					const stored = readPosition(current.workId);
+					if (stored != null) {
+						hls.on(Hls.Events.MANIFEST_PARSED, () => {
+							audio.currentTime = stored;
+						});
+					}
+				}
+				audio.addEventListener("canplay", () => void audio.play().catch(() => {}), { once: true });
+			});
+			return () => {
+				canceled = true;
+				hls?.destroy();
+				audio.pause();
+				audio.removeAttribute("src");
+				audio.load();
+			};
+		}
+
 		audio.src = src;
+		// A spoken track resumes where the listener left it; a song never does — an album
+		// track does not restart mid-song across sessions. The floor and the finish rules
+		// are `listen-positions.ts`'s.
+		if (current?.kind === "audio") {
+			const stored = readPosition(current.workId);
+			const seekOnce = () => {
+				if (stored != null && Number.isFinite(audio.duration) && audio.duration > 0) {
+					audio.currentTime = Math.min(stored, audio.duration);
+				}
+			};
+			// Setting currentTime before metadata lands is clamped to zero by some
+			// engines, so seek on `loadedmetadata` as well as immediately.
+			if (stored != null) {
+				seekOnce();
+				audio.addEventListener("loadedmetadata", seekOnce, { once: true });
+			}
+		}
 		void audio.play().catch(() => {
 			// Autoplay refusal (no user gesture yet) is not an error worth surfacing — the
 			// bar simply shows a paused track with a play button, which is the truth.
 		});
-	}, [src]);
+	}, [src, current?.kind, current?.workId]);
 
 	// The app-wide remembered volume, shared with both inline players.
 	useEffect(() => {
@@ -227,6 +319,20 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		audio.volume = effectiveVolume(volume);
 		audio.muted = volume.muted;
 	}, [volume]);
+
+	// The shared spoken preference applies to spoken tracks in the bar, so the rate a
+	// listener chose on a Work page follows the same episode into the mini-player. Music
+	// plays at its recorded tempo — no rate control exists for it there.
+	useEffect(() => {
+		const audio = audioRef.current;
+		if (!audio) return;
+		const apply = () => {
+			audio.playbackRate = current?.kind === "audio" ? readSpokenRate() : 1;
+		};
+		apply();
+		window.addEventListener(SPOKEN_RATE_EVENT, apply);
+		return () => window.removeEventListener(SPOKEN_RATE_EVENT, apply);
+	}, [current?.kind]);
 
 	// Stop the buffered tail the moment the allowance goes. Without this, playback runs on
 	// under the notice — crediting attention the listener is no longer entitled to spend,

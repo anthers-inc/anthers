@@ -37,6 +37,7 @@ export function trackFromWork(work: WorkWithCreator, creator?: TrackCreator | nu
 
 	return {
 		workId: work.id,
+		kind: work.type === "audio" ? "audio" : "music",
 		slug: work.slug ?? "",
 		publicId: work.publicId ?? 0,
 		title: work.title || "Untitled",

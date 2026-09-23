@@ -19,6 +19,7 @@ import {
 	Cog6ToothIcon,
 	PauseIcon,
 	PlayIcon,
+	SpeakerWaveIcon,
 } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
 import { formatTime } from "./transport/format";
@@ -53,6 +54,11 @@ export default function VideoControls({
 	onRate,
 	onLevel,
 	onToggleFullscreen,
+	/**
+	 * The Podcast-This hand-off, present only on a video whose audio rendition exists —
+	 * the `audioManifestUrl` gate lives in VideoPlayer, which owns the unload.
+	 */
+	onPodcastThis,
 }: {
 	playing: boolean;
 	position: number;
@@ -74,6 +80,7 @@ export default function VideoControls({
 	onRate: (rate: number) => void;
 	onLevel: (index: number) => void;
 	onToggleFullscreen: () => void;
+	onPodcastThis?: () => void;
 }) {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const settingsRef = useRef<HTMLDivElement>(null);
@@ -160,7 +167,7 @@ export default function VideoControls({
 								<>
 									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
 										Quality
-									</p>
+									</p>{" "}
 									<ul className="menu menu-sm w-full">
 										<li>
 											<button
@@ -187,6 +194,28 @@ export default function VideoControls({
 												</button>
 											</li>
 										))}
+									</ul>
+								</>
+							)}
+							{onPodcastThis && (
+								<>
+									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
+										Listen
+									</p>
+									<ul className="menu menu-sm w-full">
+										<li>
+											<button
+												type="button"
+												data-testid="podcast-this"
+												onClick={() => {
+													setSettingsOpen(false);
+													onPodcastThis();
+												}}
+											>
+												<SpeakerWaveIcon className="size-4" />
+												Listen as podcast
+											</button>
+										</li>
 									</ul>
 								</>
 							)}

@@ -41,6 +41,7 @@ import {
 	users,
 	votes,
 	workPages,
+	workPanels,
 	works,
 } from "@anthers/db/schema";
 import {
@@ -53,6 +54,7 @@ import {
 	type CommentSubjectType,
 	embedUrlProblem,
 	isOwnThumbnail,
+	isPaged,
 	isReviewVerdict,
 	processingFor,
 	REVIEW_MAX,
@@ -91,6 +93,7 @@ import {
 	desc,
 	eq,
 	inArray,
+	isNotNull,
 	isNull,
 	like,
 	ne,
@@ -114,6 +117,7 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
@@ -445,13 +449,36 @@ async function listComments(
 		blockedUserIds(viewerId),
 	]);
 
+	// A suspended author's comments go dark with the rest of their account. They render
+	// through the same gap the moderation-removed path already draws, so the thread
+	// around them still reads and nothing states the suspension — a tombstoned (null)
+	// author stays readable, since that gap belongs to a deleted account's promise.
+	// One grouped lookup rather than a predicate per row, matching how `blocked` loads.
+	const authorIds = [...new Set(rows.map((r) => r.comment.userId).filter((id) => id != null))];
+	const suspendedAuthors = new Set<number>(
+		authorIds.length === 0
+			? []
+			: (
+					await db
+						.select({ id: users.id })
+						.from(users)
+						.where(and(inArray(users.id, authorIds), isNotNull(users.suspendedAt)))
+				).map((r) => r.id),
+	);
+
 	const visibleIds = rows
-		.filter((r) => r.comment.moderationStatus === "visible")
+		.filter(
+			(r) =>
+				r.comment.moderationStatus === "visible" &&
+				(r.comment.userId == null || !suspendedAuthors.has(r.comment.userId)),
+		)
 		.map((r) => r.comment.id);
 	const { tallies, mine } = await voteTallies("comment", visibleIds, viewerId);
 
 	const nodes = rows.map((r) => {
-		const visible = r.comment.moderationStatus === "visible";
+		const visible =
+			r.comment.moderationStatus === "visible" &&
+			(r.comment.userId == null || !suspendedAuthors.has(r.comment.userId));
 		return {
 			row: r,
 			id: r.comment.id,
@@ -1411,18 +1438,51 @@ function viewerTranscoding(
 	job: TranscodingJobRow | null,
 	canAccess: boolean,
 	delivery: DeliveryCtx | null,
-): TranscodingJobRow | null {
-	if (!job) return null;
-	if (!canAccess) return { ...job, hlsManifestUrl: null, outputFileUrl: null };
-	if (!delivery || job.status !== "completed") return job;
+): Promise<TranscodingJobRow | null> {
+	// See the async boundary below: the rendition check is the only lookup in here.
+	return (async () => {
+		if (!job) return null;
+		if (!canAccess)
+			return { ...job, hlsManifestUrl: null, audioManifestUrl: null, outputFileUrl: null };
+		if (!delivery || job.status !== "completed") {
+			// No delivery context means local storage, where every object is served
+			// unsigned — the row's URLs are already the playable ones. The audio
+			// rendition still has to be reported, or the Podcast-This row never renders
+			// in a dev browser at all; its URL is the manifest's sibling, same shape as
+			// the raw storage URL the row already carries.
+			if (job.mediaType === "video" && job.hlsManifestUrl && job.status === "completed") {
+				const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+				const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
+				if (hasAudioRendition) {
+					return {
+						...job,
+						audioManifestUrl: job.hlsManifestUrl.replace(/[^/]+$/, "audio.m3u8"),
+					};
+				}
+			}
+			return job;
+		}
 
-	if (job.mediaType === "video" && job.hlsManifestUrl) {
-		return { ...job, hlsManifestUrl: buildHlsManifestUrl(delivery, job.workId) };
-	}
-	if (job.mediaType === "audio" && job.outputFileUrl) {
-		return { ...job, outputFileUrl: buildAudioUrl(delivery, job.workId) };
-	}
-	return job;
+		if (job.mediaType === "video" && job.hlsManifestUrl) {
+			// The audio-only rendition rides the same access-checked route. Its URL is
+			// serialized only when the rendition genuinely exists — a video transcoded
+			// before the job produced one has an `audio.m3u8` that 404s, and reporting it
+			// anyway would draw a Podcast-This affordance that plays nothing.
+			const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+			const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
+			return {
+				...job,
+				hlsManifestUrl: buildHlsManifestUrl(delivery, job.workId),
+				audioManifestUrl: hasAudioRendition
+					? buildHlsManifestUrl(delivery, job.workId, "audio.m3u8")
+					: null,
+			};
+		}
+		if (job.mediaType === "audio" && job.outputFileUrl) {
+			return { ...job, outputFileUrl: buildAudioUrl(delivery, job.workId) };
+		}
+		return job;
+	})();
 }
 
 /** Parse an `:id` path param, rejecting anything that isn't a positive integer. */
@@ -1704,7 +1764,7 @@ async function parentalTimeGate(
  * only on access. A denied viewer gets no pointer at the payload at all: not a signed
  * one, not an expired one, none.
  */
-function serializeWorkForViewer(
+async function serializeWorkForViewer(
 	work: WorkRow,
 	workAssets: AssetRow[],
 	job: TranscodingJobRow | null,
@@ -1844,7 +1904,7 @@ function serializeWorkForViewer(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
-		transcoding: viewerTranscoding(job, canAccess, delivery),
+		transcoding: await viewerTranscoding(job, canAccess, delivery),
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -1971,8 +2031,8 @@ async function loadPostWorks(
 		allowanceSpent(viewerId),
 	]);
 
-	return refs
-		.map((ref) => {
+	const serialized = await Promise.all(
+		refs.map(async (ref) => {
 			const work = worksById.get(ref.workId);
 			if (!work) return null;
 			// 🚨 A post announcing an Adult Work does not announce it to somebody who has
@@ -1990,7 +2050,7 @@ async function loadPostWorks(
 			}
 			return {
 				position: ref.position,
-				work: serializeWorkForViewer(
+				work: await serializeWorkForViewer(
 					work,
 					assetsByWork.get(work.id) ?? [],
 					jobByWork.get(work.id) ?? null,
@@ -2000,8 +2060,9 @@ async function loadPostWorks(
 					pagesByWork.get(work.id) ?? 0,
 				),
 			};
-		})
-		.filter((r): r is NonNullable<typeof r> => r !== null);
+		}),
+	);
+	return serialized.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /**
@@ -2167,6 +2228,12 @@ const contentRoutes = new Hono()
 
 		if (search) {
 			conditions.push(or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)) as SQL);
+		}
+
+		// A suspended account goes dark: its posts drop out of the public feed before any
+		// LIMIT, beside the block and maturity filters rather than after the page is cut.
+		if (mine !== "true") {
+			conditions.push(notSuspendedAccount(posts.creatorId) as SQL);
 		}
 
 		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
@@ -2357,6 +2424,17 @@ const contentRoutes = new Hono()
 		// the permalink 404s for everyone else, matching how drafts are hidden from feeds.
 		const viewerId = await getOptionalUserId(c);
 		if (!post.isPublished && viewerId !== post.creatorId) {
+			return c.json({ error: "Post not found" }, 404);
+		}
+
+		// A suspended author's permalink reads as absent for the same reason a hidden
+		// entity's does: the account's presence stops being served, and the ordinary
+		// 404 is the least informative answer the reader already renders.
+		if (
+			post.creatorId != null &&
+			viewerId !== post.creatorId &&
+			(await isSuspendedAccount(post.creatorId))
+		) {
 			return c.json({ error: "Post not found" }, 404);
 		}
 
@@ -2587,6 +2665,10 @@ const contentRoutes = new Hono()
 	.get("/posts/:slug/comments", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
+		// The thread of a suspended author's post is as absent as the post itself.
+		if (post.creatorId != null && (await isSuspendedAccount(post.creatorId))) {
+			return c.json({ error: "Post not found" }, 404);
+		}
 		return c.json({ comments: await listComments("post", post.id, await getOptionalUserId(c)) });
 	})
 
@@ -2770,6 +2852,12 @@ const contentRoutes = new Hono()
 			const work = await findWorkRow(c.req.param("id"));
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
+			// A suspended creator's Work has no public review surface — the same 404 the
+			// Work page itself returns, since this list is a section of that page.
+			if (work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
+				return c.json({ error: "Work not found" }, 404);
+			}
+
 			const currentUserId = await getOptionalUserId(c);
 			const window = c.req.valid("query").window ?? "month";
 
@@ -2804,7 +2892,12 @@ const contentRoutes = new Hono()
 						),
 				})
 				.from(reviews)
-				.where(and(eq(reviews.workId, work.id), visibleReview));
+				// Suspension joins `visibleReview` here because it is viewer-independent —
+				// exactly the property the aggregate's no-block carve-out rests on, so the
+				// two rules never ask the same number to disagree with itself.
+				.where(
+					and(eq(reviews.workId, work.id), visibleReview, notSuspendedAccount(reviews.userId)),
+				);
 
 			// The written reviews themselves. Hidden ones are withheld here for the same
 			// reason they're excluded from the aggregate — this is a public read. Blocked
@@ -2827,6 +2920,10 @@ const contentRoutes = new Hono()
 						eq(reviews.workId, work.id),
 						visibleReview,
 						notBlockedBy(currentUserId, reviews.userId),
+						// A suspended reviewer's words go with the rest of their account;
+						// listed beside the block filter because both answer "who may meet
+						// the reader here".
+						notSuspendedAccount(reviews.userId),
 					),
 				);
 
@@ -3023,7 +3120,9 @@ const contentRoutes = new Hono()
 		// around it. Status still flows to a denied viewer; only the payload URLs don't.
 		const access = await workAccessFor(c, work);
 		return c.json({
-			jobs: jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+			jobs: await Promise.all(
+				jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+			),
 		});
 	})
 
@@ -3107,6 +3206,150 @@ const contentRoutes = new Hono()
 		c.header("Cache-Control", "no-store");
 		return c.redirect(url, 302);
 	})
+
+	// ── Panels (comic page regions) ──────────────────────────────────────────────
+	// The panel geometry for a Work, for the reader's panel mode and the Studio's
+	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
+	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
+	.get("/works/:id/panels", requireViewerOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const pages = await db
+			.select({
+				pageNumber: workPages.pageNumber,
+				width: workPages.width,
+				height: workPages.height,
+				panelNumber: workPanels.panelNumber,
+				x: workPanels.x,
+				y: workPanels.y,
+				panelWidth: workPanels.width,
+				panelHeight: workPanels.height,
+				auto: workPanels.auto,
+			})
+			.from(workPages)
+			.leftJoin(workPanels, eq(workPanels.pageId, workPages.id))
+			.where(eq(workPages.workId, work.id))
+			.orderBy(workPages.pageNumber, workPanels.panelNumber);
+
+		const grouped = new Map<
+			number,
+			{
+				pageNumber: number;
+				width: number | null;
+				height: number | null;
+				panels: Array<{
+					panelNumber: number;
+					x: number;
+					y: number;
+					width: number;
+					height: number;
+					auto: boolean;
+				}>;
+			}
+		>();
+		for (const row of pages) {
+			const page = grouped.get(row.pageNumber) ?? {
+				pageNumber: row.pageNumber,
+				width: row.width,
+				height: row.height,
+				panels: [],
+			};
+			if (row.panelNumber != null) {
+				page.panels.push({
+					panelNumber: row.panelNumber,
+					x: row.x ?? 0,
+					y: row.y ?? 0,
+					width: row.panelWidth ?? 1,
+					height: row.panelHeight ?? 1,
+					auto: row.auto ?? true,
+				});
+			}
+			grouped.set(row.pageNumber, page);
+		}
+
+		return c.json({ pages: Array.from(grouped.values()) });
+	})
+
+	.patch(
+		"/works/:id/panels",
+		requireAuth,
+		requireCreator,
+		zValidator(
+			"json",
+			z.object({
+				pageNumber: z.number().int().positive(),
+				panels: z.array(
+					z.object({
+						panelNumber: z.number().int().positive().optional(),
+						x: z.number().min(0).max(1),
+						y: z.number().min(0).max(1),
+						width: z.number().min(0).max(1),
+						height: z.number().min(0).max(1),
+					}),
+				),
+			}),
+			invalidBody,
+		),
+		async (c) => {
+			const work = await findWorkRow(c.req.param("id") ?? "");
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			const userId = await getOptionalUserId(c);
+			if (userId !== work.creatorId) return c.json({ error: "Forbidden" }, 403);
+			if (!isPaged(work.type)) return c.json({ error: "Not a paged Work" }, 400);
+
+			const { pageNumber, panels } = c.req.valid("json");
+			for (const p of panels) {
+				if (p.width === 0 || p.height === 0) {
+					return c.json({ error: "Panel width and height must be greater than 0" }, 400);
+				}
+				if (p.x + p.width > 1 || p.y + p.height > 1) {
+					return c.json({ error: "Panel exceeds page bounds" }, 400);
+				}
+			}
+
+			const [page] = await db
+				.select({ id: workPages.id, width: workPages.width, height: workPages.height })
+				.from(workPages)
+				.where(and(eq(workPages.workId, work.id), eq(workPages.pageNumber, pageNumber)))
+				.limit(1);
+			if (!page) return c.json({ error: "Page not found" }, 404);
+
+			await db.transaction(async (tx) => {
+				await tx.delete(workPanels).where(eq(workPanels.pageId, page.id));
+				if (panels.length > 0) {
+					await tx.insert(workPanels).values(
+						panels
+							.sort((a, b) => {
+								const rowA = Math.round(a.y * 100);
+								const rowB = Math.round(b.y * 100);
+								if (rowA !== rowB) return rowA - rowB;
+								return Math.round(a.x * 100) - Math.round(b.x * 100);
+							})
+							.map((p, i) => ({
+								pageId: page.id,
+								panelNumber: i + 1,
+								x: p.x,
+								y: p.y,
+								width: p.width,
+								height: p.height,
+								auto: false,
+							})),
+					);
+				}
+			});
+
+			return c.json({ ok: true });
+		},
+	)
 
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
@@ -3384,6 +3627,30 @@ const contentRoutes = new Hono()
 			if (!access.canReach) return c.json({ error: "Work not found" }, 404);
 		}
 
+		// A suspended creator's Work reads as absent — the same 404 a private Work gets,
+		// never a differently-worded one, because naming the state would leak it. Placed
+		// after the withdrawn-purchaser branch deliberately: a suspension removes the
+		// creator from circulation; it does not confiscate what a buyer already owns.
+		if (!isOwner && work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
+			const stillOwned =
+				work.visibility === "withdrawn" ||
+				(viewerId != null &&
+					(
+						await db
+							.select({ id: purchases.id })
+							.from(purchases)
+							.where(
+								and(
+									eq(purchases.workId, work.id),
+									eq(purchases.buyerId, viewerId),
+									eq(purchases.status, "completed"),
+								),
+							)
+							.limit(1)
+					).length > 0);
+			if (!stillOwned) return c.json({ error: "Work not found" }, 404);
+		}
+
 		const [workAssets, jobRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, work.id)),
 			db
@@ -3458,7 +3725,7 @@ const contentRoutes = new Hono()
 
 		return c.json({
 			work: {
-				...serializeWorkForViewer(
+				...(await serializeWorkForViewer(
 					work,
 					workAssets,
 					jobRows[0] ?? null,
@@ -3473,7 +3740,7 @@ const contentRoutes = new Hono()
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
 					(await parentalTimeGate(viewerId, work)) !== null,
-				),
+				)),
 				creator,
 				creatorHasStripe,
 				// Who sent them, when they arrived by a share link — a display name and nothing
@@ -3566,6 +3833,7 @@ const contentRoutes = new Hono()
 				seedAccess: works.seedAccess,
 				takedownStatus: works.takedownStatus,
 				quarantineStatus: works.quarantineStatus,
+				creatorId: works.creatorId,
 				sharerName: users.displayName,
 				sharerHandle: users.atprotoHandle,
 			})
@@ -3579,6 +3847,13 @@ const contentRoutes = new Hono()
 		// the existence the rung withholds. Withdrawn, gated or taken-down Works fail the same
 		// check, and a link to one of those has nothing left to open either.
 		if (!row || !isShareable(row)) {
+			return c.json({ error: "This link is no longer available" }, 404);
+		}
+
+		// A suspended creator's Work is no longer openable, so a link to one has nothing
+		// left to point at — the same "no longer available" a revoked link gets, rather
+		// than a response that would state the suspension.
+		if (row.creatorId != null && (await isSuspendedAccount(row.creatorId))) {
 			return c.json({ error: "This link is no longer available" }, 404);
 		}
 
@@ -3629,6 +3904,9 @@ const contentRoutes = new Hono()
 					eq(works.streamEnabled, true),
 					openToEveryone(works.seedAccess),
 					notBlockedBy(viewerId, works.creatorId),
+					// Suspended accounts are out of the commons entirely, beside the block
+					// filter a reader already sees here.
+					notSuspendedAccount(works.creatorId),
 					// 🚨 **Load-bearing here, not belt-and-braces.** Adult work MAY be Public
 					// Access since 2026-08-28, so this listing genuinely holds rows that must
 					// not reach a reader who has not opted in and verified. It was the
@@ -3680,13 +3958,19 @@ const contentRoutes = new Hono()
 				? await accountByHandle(resolution.redirectToHandle)
 				: undefined);
 		if (!account) return c.json({ error: "Creator not found" }, 404);
+		const viewerId = await getOptionalUserId(c);
+		// A suspended creator's Catalog is gone with the rest of their presence — the
+		// same 404 an unknown handle returns, from the route that already treats hidden
+		// as absent.
+		if (viewerId !== account.id && (await isSuspendedAccount(account.id))) {
+			return c.json({ error: "Creator not found" }, 404);
+		}
 		const creator = {
 			id: account.id,
 			handle: account.atprotoHandle,
 			displayName: account.displayName,
 		};
 
-		const viewerId = await getOptionalUserId(c);
 		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
 		// A creator browsing their own Catalog sees drafts too; nobody else does.
 		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
@@ -3727,15 +4011,17 @@ const contentRoutes = new Hono()
 
 		return c.json({
 			creator,
-			works: rows.map((w) =>
-				serializeWorkForViewer(
-					w,
-					assetsByWork.get(w.id) ?? [],
-					jobByWork.get(w.id) ?? null,
-					resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
-					deliveryCtx(),
-					catalogSpent,
-					pagesByWork.get(w.id) ?? 0,
+			works: await Promise.all(
+				rows.map((w) =>
+					serializeWorkForViewer(
+						w,
+						assetsByWork.get(w.id) ?? [],
+						jobByWork.get(w.id) ?? null,
+						resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
+						deliveryCtx(),
+						catalogSpent,
+						pagesByWork.get(w.id) ?? 0,
+					),
 				),
 			),
 		});
@@ -4320,6 +4606,9 @@ const contentRoutes = new Hono()
 			conditions.push(eq(projects.creatorId, userId));
 		} else {
 			conditions.push(eq(projects.isPublished, true));
+			// A suspended account's Projects go dark with everything else it made, before
+			// any LIMIT, the same way the feed drops its posts.
+			conditions.push(notSuspendedAccount(projects.creatorId) as SQL);
 		}
 
 		// 🚨 **A project whose released Works are all ones the viewer may not see is absent too.**
@@ -4573,7 +4862,16 @@ const contentRoutes = new Hono()
 			})
 			.from(projects)
 			.innerJoin(users, eq(projects.creatorId, users.id))
-			.where(eq(projects.slug, slug))
+			.where(
+				and(
+					eq(projects.slug, slug),
+					// A suspended creator's Project page reads as not found — the listing's
+					// filter is the route's WHERE so the answer never depends on which
+					// surface was asked. Viewer-independent, so the owner's own row drops
+					// too; a suspended account cannot sign in to reach it anyway.
+					notSuspendedAccount(projects.creatorId),
+				),
+			)
 			.limit(1);
 
 		if (result.length === 0) return c.json({ error: "Project not found" }, 404);
@@ -4640,21 +4938,23 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				}),
-				works: itemRows.map((m) => ({
-					sortOrder: m.sortOrder,
-					...serializeWorkForViewer(
-						m.work,
-						assetsByWork.get(m.work.id) ?? [],
-						jobByWork.get(m.work.id) ?? null,
-						resolveAccessSync(
-							m.work as AccessibleWork,
-							contextFor(m.work, viewerId, workCtx, previewRequest(c)),
-						),
-						deliveryCtx(),
-						projectSpent,
-						pagesByWork.get(m.work.id) ?? 0,
-					),
-				})),
+				works: await Promise.all(
+					itemRows.map(async (m) => ({
+						sortOrder: m.sortOrder,
+						...(await serializeWorkForViewer(
+							m.work,
+							assetsByWork.get(m.work.id) ?? [],
+							jobByWork.get(m.work.id) ?? null,
+							resolveAccessSync(
+								m.work as AccessibleWork,
+								contextFor(m.work, viewerId, workCtx, previewRequest(c)),
+							),
+							deliveryCtx(),
+							projectSpent,
+							pagesByWork.get(m.work.id) ?? 0,
+						)),
+					})),
+				),
 				// No per-post access verdict: a post has no gates. The Works a member post
 				// links resolve on their own gates, at the post's own endpoint.
 				posts: memberRows.map((m) => ({
@@ -5401,53 +5701,55 @@ const contentRoutes = new Hono()
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 
 		return c.json({
-			items: rows
-				.map((row) => {
-					const base = {
-						id: row.id,
-						hidden: row.hidden,
-						sortOrder: row.sortOrder,
-						savedAt: row.savedAt,
-					};
-					if (row.workId != null) {
-						const w = workById.get(row.workId);
-						if (!w) return null;
+			items: (
+				await Promise.all(
+					rows.map(async (row) => {
+						const base = {
+							id: row.id,
+							hidden: row.hidden,
+							sortOrder: row.sortOrder,
+							savedAt: row.savedAt,
+						};
+						if (row.workId != null) {
+							const w = workById.get(row.workId);
+							if (!w) return null;
+							return {
+								...base,
+								kind: "work" as const,
+								// Derived from `purchases` on every read, never stamped on the row —
+								// so a refund releases the entry with nothing to keep in step.
+								purchased: permanent.has(w.id),
+								work: await serializeWorkForViewer(
+									w,
+									assetsByWork.get(w.id) ?? [],
+									jobByWork.get(w.id) ?? null,
+									resolveAccessSync(w as AccessibleWork, ctx),
+									deliveryCtx(),
+									spent,
+									pagesByWork.get(w.id) ?? 0,
+								),
+							};
+						}
+						const p = row.projectId != null ? projectById.get(row.projectId) : null;
+						if (!p) return null;
+						// A Project is a shelf, not a payload: it has no gates of its own and
+						// nothing to withhold. Its members resolve their own access when opened.
+						const counts = countsByProject.get(p.id);
 						return {
 							...base,
-							kind: "work" as const,
-							// Derived from `purchases` on every read, never stamped on the row —
-							// so a refund releases the entry with nothing to keep in step.
-							purchased: permanent.has(w.id),
-							work: serializeWorkForViewer(
-								w,
-								assetsByWork.get(w.id) ?? [],
-								jobByWork.get(w.id) ?? null,
-								resolveAccessSync(w as AccessibleWork, ctx),
-								deliveryCtx(),
-								spent,
-								pagesByWork.get(w.id) ?? 0,
-							),
+							kind: "project" as const,
+							purchased: false,
+							project: {
+								...p,
+								trackCount: counts?.workCount ?? 0,
+								// Every released member is music — i.e. this is a record, not a
+								// folder that happens to contain some music.
+								isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.musicCount,
+							},
 						};
-					}
-					const p = row.projectId != null ? projectById.get(row.projectId) : null;
-					if (!p) return null;
-					// A Project is a shelf, not a payload: it has no gates of its own and
-					// nothing to withhold. Its members resolve their own access when opened.
-					const counts = countsByProject.get(p.id);
-					return {
-						...base,
-						kind: "project" as const,
-						purchased: false,
-						project: {
-							...p,
-							trackCount: counts?.workCount ?? 0,
-							// Every released member is music — i.e. this is a record, not a
-							// folder that happens to contain some music.
-							isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.musicCount,
-						},
-					};
-				})
-				.filter((x) => x != null),
+					}),
+				)
+			).filter((x) => x != null),
 			truncated,
 			limit: SHELF_LIMIT,
 		});

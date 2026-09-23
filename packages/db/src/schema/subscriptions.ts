@@ -297,11 +297,17 @@ export const invoices = pgTable(
 		/** The month this invoice pays for — `YYYY-MM-01`. See the note above. */
 		billingCycle: text("billing_cycle").notNull(),
 		/**
-		 * `paid` · `refunded` · `disputed` · `uncollectible`.
+		 * `paid` · `paused` · `refunded` · `disputed` · `uncollectible`.
 		 *
 		 * A renewal still inside Stripe's retry window has no row here at all, because nothing
 		 * is credited from an invoice that has not been paid — which is the defect this table
 		 * exists to fix. It appears when it is paid, against the month it paid for.
+		 *
+		 * `paused` is a renewal that fired while its supporter's account was suspended:
+		 * paid to Stripe, booked here for the record, and credited to nobody while the
+		 * suspension stands. `resumePausedRenewals` re-keys it against the reinstatement
+		 * month, which is the only write that moves it to `paid`. Settlement reads `paid`
+		 * rows only, so a paused row's lines settle nothing wherever they sit.
 		 */
 		status: text("status").notNull().default("paid"),
 		/** What the lines came to, after any day-exact reduction and before tax. */

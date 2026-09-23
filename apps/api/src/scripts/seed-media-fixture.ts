@@ -42,6 +42,8 @@ import {
 	stripeAccounts,
 	transcodingJobs,
 	users,
+	workPages,
+	workPanels,
 	works,
 } from "@anthers/db/schema";
 import { type ProcessingKind, processingFor } from "@anthers/shared/content";
@@ -53,6 +55,7 @@ import { transcodeVideo } from "../jobs/transcode-video.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { storage } from "../services/storage/index.js";
+import { urlToKey } from "../services/storage/keys.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
@@ -115,8 +118,25 @@ async function generatePdf(pages: number): Promise<string> {
 		const contentId = 4 + i * 2;
 		const pageId = 3 + i * 2;
 		kids.push(`${pageId} 0 R`);
-		const text = `Page ${i + 1}`;
-		const stream = `BT /F1 48 Tf 72 500 Td (${text}) Tj ET`;
+		// Page 1 carries a 2x2 grid of black rectangles separated by white gutters, so
+		// rasterize-time panel detection has something to find and the panel-mode e2e
+		// has a real layout to walk rather than four whole-page fallbacks. The other
+		// pages stay text-only: detection on them returns one whole-page panel each,
+		// which is exactly the fallback case the detector is built to handle.
+		const stream =
+			i === 0
+				? [
+						"0 0 0 rg",
+						"72 500 220 120 re f",
+						"320 500 220 120 re f",
+						"72 200 220 120 re f",
+						"320 200 220 120 re f",
+						"BT /F1 14 Tf 92 550 Td (1) Tj ET",
+						"BT /F1 14 Tf 340 550 Td (2) Tj ET",
+						"BT /F1 14 Tf 92 250 Td (3) Tj ET",
+						"BT /F1 14 Tf 340 250 Td (4) Tj ET",
+					].join("\n")
+				: `BT /F1 48 Tf 72 500 Td (Page ${i + 1}) Tj ET`;
 		objects.push(
 			`${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
 				`/Resources << /Font << /F1 1 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`,
@@ -324,11 +344,35 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 /** Whether this Work already has media we can trust, so the encode can be skipped. */
 async function alreadyPlayable(workId: number): Promise<boolean> {
 	const [job] = await db
-		.select({ status: transcodingJobs.status })
+		.select({
+			status: transcodingJobs.status,
+			mediaType: transcodingJobs.mediaType,
+			hlsManifestUrl: transcodingJobs.hlsManifestUrl,
+		})
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.workId, workId))
 		.limit(1);
-	return job?.status === "completed";
+	if (job?.status !== "completed") return false;
+	// A completed-from-before-the-rendition video is not playable in the sense the browser
+	// suite needs — the Podcast-This row is gated on `audio.m3u8` existing in storage,
+	// and a fixture seeded on an older branch has no such object. Re-encode it.
+	if (job.mediaType === "video" && job.hlsManifestUrl) {
+		const prefix = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
+		return await storage.exists(`${prefix}/audio.m3u8`);
+	}
+	// A comic/ebook whose rasterize ran before the panel detector shipped has pages but
+	// no `work_panels` rows, which is exactly the case the reader spec exercises — and
+	// reads as a broken Work rather than as an old fixture. Re-rasterize it.
+	if (job.mediaType === "ebook") {
+		const [panelRow] = await db
+			.select({ id: workPanels.id })
+			.from(workPanels)
+			.innerJoin(workPages, eq(workPanels.pageId, workPages.id))
+			.where(eq(workPages.workId, workId))
+			.limit(1);
+		return panelRow != null;
+	}
+	return true;
 }
 
 async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<void> {
