@@ -41,6 +41,7 @@ import {
 	users,
 	votes,
 	workPages,
+	workPanels,
 	works,
 } from "@anthers/db/schema";
 import {
@@ -53,6 +54,7 @@ import {
 	type CommentSubjectType,
 	embedUrlProblem,
 	isOwnThumbnail,
+	isPaged,
 	isReviewVerdict,
 	processingFor,
 	REVIEW_MAX,
@@ -3204,6 +3206,150 @@ const contentRoutes = new Hono()
 		c.header("Cache-Control", "no-store");
 		return c.redirect(url, 302);
 	})
+
+	// ── Panels (comic page regions) ──────────────────────────────────────────────
+	// The panel geometry for a Work, for the reader's panel mode and the Studio's
+	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
+	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
+	.get("/works/:id/panels", requireViewerOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const pages = await db
+			.select({
+				pageNumber: workPages.pageNumber,
+				width: workPages.width,
+				height: workPages.height,
+				panelNumber: workPanels.panelNumber,
+				x: workPanels.x,
+				y: workPanels.y,
+				panelWidth: workPanels.width,
+				panelHeight: workPanels.height,
+				auto: workPanels.auto,
+			})
+			.from(workPages)
+			.leftJoin(workPanels, eq(workPanels.pageId, workPages.id))
+			.where(eq(workPages.workId, work.id))
+			.orderBy(workPages.pageNumber, workPanels.panelNumber);
+
+		const grouped = new Map<
+			number,
+			{
+				pageNumber: number;
+				width: number | null;
+				height: number | null;
+				panels: Array<{
+					panelNumber: number;
+					x: number;
+					y: number;
+					width: number;
+					height: number;
+					auto: boolean;
+				}>;
+			}
+		>();
+		for (const row of pages) {
+			const page = grouped.get(row.pageNumber) ?? {
+				pageNumber: row.pageNumber,
+				width: row.width,
+				height: row.height,
+				panels: [],
+			};
+			if (row.panelNumber != null) {
+				page.panels.push({
+					panelNumber: row.panelNumber,
+					x: row.x ?? 0,
+					y: row.y ?? 0,
+					width: row.panelWidth ?? 1,
+					height: row.panelHeight ?? 1,
+					auto: row.auto ?? true,
+				});
+			}
+			grouped.set(row.pageNumber, page);
+		}
+
+		return c.json({ pages: Array.from(grouped.values()) });
+	})
+
+	.patch(
+		"/works/:id/panels",
+		requireAuth,
+		requireCreator,
+		zValidator(
+			"json",
+			z.object({
+				pageNumber: z.number().int().positive(),
+				panels: z.array(
+					z.object({
+						panelNumber: z.number().int().positive().optional(),
+						x: z.number().min(0).max(1),
+						y: z.number().min(0).max(1),
+						width: z.number().min(0).max(1),
+						height: z.number().min(0).max(1),
+					}),
+				),
+			}),
+			invalidBody,
+		),
+		async (c) => {
+			const work = await findWorkRow(c.req.param("id") ?? "");
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			const userId = await getOptionalUserId(c);
+			if (userId !== work.creatorId) return c.json({ error: "Forbidden" }, 403);
+			if (!isPaged(work.type)) return c.json({ error: "Not a paged Work" }, 400);
+
+			const { pageNumber, panels } = c.req.valid("json");
+			for (const p of panels) {
+				if (p.width === 0 || p.height === 0) {
+					return c.json({ error: "Panel width and height must be greater than 0" }, 400);
+				}
+				if (p.x + p.width > 1 || p.y + p.height > 1) {
+					return c.json({ error: "Panel exceeds page bounds" }, 400);
+				}
+			}
+
+			const [page] = await db
+				.select({ id: workPages.id, width: workPages.width, height: workPages.height })
+				.from(workPages)
+				.where(and(eq(workPages.workId, work.id), eq(workPages.pageNumber, pageNumber)))
+				.limit(1);
+			if (!page) return c.json({ error: "Page not found" }, 404);
+
+			await db.transaction(async (tx) => {
+				await tx.delete(workPanels).where(eq(workPanels.pageId, page.id));
+				if (panels.length > 0) {
+					await tx.insert(workPanels).values(
+						panels
+							.sort((a, b) => {
+								const rowA = Math.round(a.y * 100);
+								const rowB = Math.round(b.y * 100);
+								if (rowA !== rowB) return rowA - rowB;
+								return Math.round(a.x * 100) - Math.round(b.x * 100);
+							})
+							.map((p, i) => ({
+								pageId: page.id,
+								panelNumber: i + 1,
+								x: p.x,
+								y: p.y,
+								width: p.width,
+								height: p.height,
+								auto: false,
+							})),
+					);
+				}
+			});
+
+			return c.json({ ok: true });
+		},
+	)
 
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
