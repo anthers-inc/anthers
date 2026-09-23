@@ -201,7 +201,7 @@ describe("what the client is allowed to ask for", () => {
 	// record the account will ever own, which is what this whole design avoids. And each set must
 	// name exactly the collections the code judges a grant against, or a grant would be read as
 	// covering records it does not.
-	it("asks for exactly the collections the code writes, and three actions, in each set", async () => {
+	it("asks for exactly the collections the code writes, and the right actions, in each set", async () => {
 		async function loadPermissionSet(name: string) {
 			const set = (await Bun.file(`lexicons/org/anthers/${name}.json`).json()) as {
 				id: string;
@@ -221,18 +221,29 @@ describe("what the client is allowed to ask for", () => {
 			const [permission] = set.defs.main.permissions;
 			expect(permission.resource).toBe("repo");
 			expect(permission.collection).not.toContain("*");
-			expect([...permission.action].sort()).toEqual(["create", "delete", "update"]);
 			expect(set.defs.main.title.length).toBeGreaterThan(0);
 			expect(set.defs.main.detail.length).toBeGreaterThan(0);
-			return permission.collection;
+			return permission;
 		}
 
-		const userCollections = await loadPermissionSet("userPermissions");
-		const creditCollections = await loadPermissionSet("creditConfirmation");
-		const creatorCollections = await loadPermissionSet("creatorPermissions");
+		// The two record-writing tiers carry all three actions — their records are edited
+		// (a post revised, a comment rewritten), so update is genuinely needed.
+		const user = await loadPermissionSet("userPermissions");
+		expect([...user.action].sort()).toEqual(["create", "delete", "update"]);
+		const creator = await loadPermissionSet("creatorPermissions");
+		expect([...creator.action].sort()).toEqual(["create", "delete", "update"]);
+
+		// The credit-confirmation set is different by design: an acceptance is assent written
+		// once, never edited — a change of heart is a withdraw and a fresh acceptance, so the
+		// grant is create and delete and nothing more.
+		const credit = await loadPermissionSet("creditConfirmation");
+		expect([...credit.action].sort()).toEqual(["create", "delete"]);
 
 		// The reader tier is spread across two permission sets: the original reader records and the
 		// credit-confirmation set that lets Anthers publish an acceptance in the reader's repo.
+		const userCollections = user.collection;
+		const creditCollections = credit.collection;
+		const creatorCollections = creator.collection;
 		expect([...new Set([...userCollections, ...creditCollections])].sort()).toEqual(
 			[...USER_COLLECTIONS].sort(),
 		);
