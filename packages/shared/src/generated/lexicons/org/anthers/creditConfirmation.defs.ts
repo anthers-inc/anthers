@@ -10,6 +10,6 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.creditAcceptance"],"action":["create","update","delete"]})], {"title":"Confirm Your Credits","detail":"Let Anthers write a public record in your own repository when you accept or update credit for a work you contributed to."});
+const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.creditAcceptance"],"action":["create","delete"]})], {"title":"Confirm Your Credits","detail":"Let Anthers write a public record in your own repository when you accept credit for a work you contributed to — and remove it again if you withdraw. Accepting or withdrawing is always your call; this writes nothing else."});
 
 export { main };
