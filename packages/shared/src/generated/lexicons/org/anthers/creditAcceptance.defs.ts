@@ -10,28 +10,28 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-/** That the holder of THIS repository accepts a credit naming them on somebody's work — the vouching pattern of `app.bsky.graph.verification`, where the record lives in the repository of the person it vouches for rather than the one making the claim. It exists only because a credit naming an on-network identity is a public assertion about a third party; Anthers withholds such a credit from the work's published listing until this record exists, and a stranger reading the network should treat an identity-credit with no matching acceptance as unconfirmed. A rejection is deliberately NOT a record — it is a private signal that removes the credit, never a public accusation — so this collection only ever holds assent. Written either by Anthers into a repository it hosts (no grant needed), or by the credited person themselves over their own session, under `org.anthers.creditConfirmation`. */
+/** A credited person's acceptance that they contributed to a work. It lives in the contributor's own repository, and is written only when the person Anthers names as a contributor agrees to be named there. */
 type Main = { $type: "org.anthers.creditAcceptance";
 
   /**
-   * The work listing this acceptance concerns — the address of the `org.anthers.work` record carrying the credit being confirmed. An address rather than a copy, so the acceptance follows the listing rather than freezing a version of it. A bare at-uri is acceptable here (not an object) because the record's own collection already says everything else the relationship needs: who is vouching is the repository that holds this record.
+   * The address of the work listing this person is accepting credit for.
    */
   "work":l.AtUriString;
 
   /**
-   * The contribution the acceptance confirms, matching the credit's `role` on the work record, so a person credited for several things on one work can confirm each (or one) deliberately rather than all at once.
+   * What the credited person agrees they did, as the creator asserted it.
    */
   "role":string;
 
   /**
-   * When the credit was accepted. Record-creation time is already encoded in the record key, so this is usually redundant — it exists so that a record written by a later tooling pass does not silently re-date the acceptance.
+   * When the contributor accepted the credit.
    */
   "acceptedAt":l.DatetimeString };
 
 export type { Main };
 
-/** That the holder of THIS repository accepts a credit naming them on somebody's work — the vouching pattern of `app.bsky.graph.verification`, where the record lives in the repository of the person it vouches for rather than the one making the claim. It exists only because a credit naming an on-network identity is a public assertion about a third party; Anthers withholds such a credit from the work's published listing until this record exists, and a stranger reading the network should treat an identity-credit with no matching acceptance as unconfirmed. A rejection is deliberately NOT a record — it is a private signal that removes the credit, never a public accusation — so this collection only ever holds assent. Written either by Anthers into a repository it hosts (no grant needed), or by the credited person themselves over their own session, under `org.anthers.creditConfirmation`. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"work":/*#__PURE__*/ l.string({"format":"at-uri","maxLength":2048}),"role":/*#__PURE__*/ l.string({"maxGraphemes":120,"maxLength":1200}),"acceptedAt":/*#__PURE__*/ l.string({"format":"datetime","maxLength":64})}));
+/** A credited person's acceptance that they contributed to a work. It lives in the contributor's own repository, and is written only when the person Anthers names as a contributor agrees to be named there. */
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"work":/*#__PURE__*/ l.string({"format":"at-uri"}),"role":/*#__PURE__*/ l.string({"maxLength":255}),"acceptedAt":/*#__PURE__*/ l.string({"format":"datetime"})}));
 
 export { main };
 

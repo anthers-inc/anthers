@@ -10,6 +10,6 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.creditAcceptance"],"action":["create","delete"]})], {"title":"Confirm a Credit That Names You","detail":"Record, in your own repository, that you accept a credit naming you on somebody's work. This is the only thing it permits — it is not permission over your posts, projects or works, and a person who is credited but creates nothing on Anthers needs no other set."});
+const main = /*#__PURE__*/ l.permissionSet($nsid, [/*#__PURE__*/ l.permission("repo", {"collection":["org.anthers.creditAcceptance"],"action":["create","update","delete"]})], {"title":"Confirm Your Credits","detail":"Let Anthers write a public record in your own repository when you accept or update credit for a work you contributed to."});
 
 export { main };
