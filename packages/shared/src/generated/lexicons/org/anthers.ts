@@ -4,6 +4,8 @@
 
 export * as comment from "./anthers/comment.js";
 export * as creatorPermissions from "./anthers/creatorPermissions.js";
+export * as creditAcceptance from "./anthers/creditAcceptance.js";
+export * as creditConfirmation from "./anthers/creditConfirmation.js";
 export * as follow from "./anthers/follow.js";
 export * as post from "./anthers/post.js";
 export * as project from "./anthers/project.js";
