@@ -251,9 +251,27 @@ export default function ModerationQueue() {
 		}
 	};
 
-	const act = async (item: QueueItem, action: "restore" | "dismiss") => {
+	const act = async (item: QueueItem, action: "restore" | "dismiss" | "copyright") => {
 		setActing(true);
 		try {
+			if (action === "copyright") {
+				// The route-out, which the Admin lane named as missing: a report that is
+				// really a copyright claim clears here, answers the reporter with the path
+				// that can handle it, and takes no action on the content — a bare user
+				// report is not a DMCA notice and must never cause a removal.
+				const res = await apiFetch("/api/admin/moderation/route-to-copyright", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ subjectType: item.subjectType, subjectId: item.subjectId }),
+				});
+				if (!res.ok) {
+					const body = (await res.json().catch(() => null)) as { error?: string } | null;
+					setError(body?.error || "That item couldn't be routed to copyright.");
+					return;
+				}
+				await load();
+				return;
+			}
 			const endpoint =
 				action === "restore"
 					? client.api.admin.moderation.restore.$post
@@ -505,15 +523,26 @@ export default function ModerationQueue() {
 											</button>
 										)}
 										{item.openReports > 0 && (
-											<button
-												type="button"
-												className="btn btn-xs btn-ghost ml-1"
-												disabled={acting}
-												onClick={() => act(item, "dismiss")}
-												title="Clear the reports, leave the content up"
-											>
-												Dismiss
-											</button>
+											<>
+												<button
+													type="button"
+													className="btn btn-xs btn-ghost ml-1"
+													disabled={acting}
+													onClick={() => act(item, "dismiss")}
+													title="Clear the reports, leave the content up"
+												>
+													Dismiss
+												</button>
+												<button
+													type="button"
+													className="btn btn-xs btn-ghost ml-1"
+													disabled={acting}
+													onClick={() => act(item, "copyright")}
+													title="This is really a copyright claim: clear the reports and answer the reporter with the notice path. Nothing is taken down — a bare user report is not a DMCA notice."
+												>
+													Route to Copyright
+												</button>
+											</>
 										)}
 									</td>
 								</tr>
