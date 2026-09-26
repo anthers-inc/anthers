@@ -57,6 +57,8 @@ import {
 import {
 	dismissReports,
 	hideSubject,
+	loadPeople,
+	loadPersonDetail,
 	loadQueue,
 	moderationSummary,
 	type QueueFilter,
@@ -66,6 +68,7 @@ import {
 	unsuspendAccount,
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
+import { releasePayoutHold, suspensionPayoutReview } from "../services/payouts.js";
 import {
 	clearObjectQuarantine,
 	clearQuarantine,
@@ -554,6 +557,69 @@ const adminRoutes = new Hono<AdminEnv>()
 		if (!result) return c.json({ error: "Account not found" }, 404);
 		return c.json(result);
 	})
+
+	// ── People ─────────────────────────────────────────────────────────────
+	// The console's view of Anthers accounts as moderation subjects: suspended
+	// or reported accounts by default, or one an operator names in a search.
+	// Deliberately NOT a directory — see `loadPeople` for the line this holds.
+
+	.get("/people", async (c) => {
+		const query = c.req.query("q")?.trim();
+		return c.json({ people: await loadPeople({ query: query || undefined }) });
+	})
+
+	.get("/people/:id", async (c) => {
+		const id = Number(c.req.param("id"));
+		const detail = await loadPersonDetail(id);
+		if (!detail) return c.json({ error: "No account with that id" }, 404);
+		// The payout hold reads beside the moderation detail because the two answer
+		// one question — what does an operator need before acting on this person?
+		// Null for an account whose payout was never held; the view treats it as absent.
+		const payout = await suspensionPayoutReview(id);
+		return c.json({ ...detail, payout });
+	})
+
+	// Conclude a suspended creator's earnings review. The default disposition is
+	// payout of everything held, so `taintedAmount` is what a finding names and
+	// its absence is a clear — the hold ends either way, and the reasoning is
+	// recorded in the log by `releasePayoutHold` rather than here.
+	.post(
+		"/people/:id/payout-review",
+		zValidator(
+			"json",
+			z.object({
+				/** What the finding says was earned by the violation itself, in dollars. Omitted on a clear. */
+				taintedAmount: z
+					.string()
+					.regex(/^\d+(\.\d{1,2})?$/, "A dollar amount, like 12.50")
+					.optional(),
+				note: z.string().max(MODERATION_NOTE_MAX).optional(),
+			}),
+			invalidBody,
+		),
+		async (c) => {
+			const admin = c.get("admin");
+			const id = Number(c.req.param("id"));
+			const { taintedAmount, note } = c.req.valid("json");
+			const released = await releasePayoutHold({
+				userId: id,
+				adminId: admin.id,
+				taintedAmount,
+				note,
+			});
+			if (!released) {
+				return c.json(
+					{
+						error:
+							"There is no open payout review for this account — it is not suspended, or the review already concluded.",
+						code: "no_open_review",
+					},
+					409,
+				);
+			}
+			return c.json({ released: true });
+		},
+	)
 
 	// Clear a subject's reports without touching the content — the "I looked, it's
 	// fine" outcome. Distinct from hiding, and it has to be, or the only way to

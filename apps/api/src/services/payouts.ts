@@ -41,8 +41,9 @@
  */
 
 import { db } from "@anthers/db/client";
-import { creatorCredits, stripeAccounts, users } from "@anthers/db/schema";
+import { creatorCredits, moderationActions, stripeAccounts, users } from "@anthers/db/schema";
 import { PAYOUT_REVIEW_WINDOW_DAYS } from "@anthers/shared/constants";
+import { MODERATION_NOTE_MAX, type ModerationActionType } from "@anthers/shared/moderation";
 import Decimal from "decimal.js";
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
@@ -181,8 +182,10 @@ export async function suspensionPayoutReview(
  * between them is the ordinary case.
  *
  * `taintedAmount` is what a finding names as earned by the violation itself, in
- * dollars; it is recorded in the review's own note rather than written anywhere
- * the money moves, because this module never moves money — it ends the hold.
+ * dollars. The finding is recorded as a `payout_review` row in `moderation_actions`
+ * — the same append-only log every other moderation decision lands in, so an
+ * appeal reads one sequence — and this module never moves money: it ends the hold
+ * and writes the reasoning.
  */
 export async function releasePayoutHold(input: {
 	userId: number;
@@ -190,6 +193,8 @@ export async function releasePayoutHold(input: {
 	adminId?: number | null;
 	/** What a finding found tainted, in dollars; omitted on a clear. */
 	taintedAmount?: string;
+	/** The operator's own note on the conclusion, on a finding and a clear alike. */
+	note?: string;
 }): Promise<boolean> {
 	const rows = await db
 		.update(users)
@@ -202,7 +207,30 @@ export async function releasePayoutHold(input: {
 			),
 		)
 		.returning({ id: users.id });
-	return rows.length > 0;
+	if (rows.length === 0) return false;
+
+	// The reasoning, appended rather than edited, exactly like every other decision in the
+	// log. A finding names its tainted amount; a clear says the hold released everything;
+	// the lapsed-window sweep names itself as the release with no operator behind it.
+	const tainted = input.taintedAmount != null ? new Decimal(input.taintedAmount).toFixed(2) : null;
+	const noteParts = [
+		tainted != null
+			? `Finding: ${tainted} of the held balance was earned by the violation itself.`
+			: input.adminId == null
+				? "The review window lapsed with no finding recorded, so the held amount released automatically."
+				: "Review concluded with no tainted-earnings finding, so the held amount pays out in full.",
+		(input.note ?? "").trim(),
+	];
+	await db.insert(moderationActions).values({
+		subjectType: "user",
+		subjectId: input.userId,
+		action: "payout_review" satisfies ModerationActionType,
+		adminActorId: input.adminId ?? null,
+		actorRole: "operator",
+		reason: "",
+		note: noteParts.filter(Boolean).join(" — ").slice(0, MODERATION_NOTE_MAX),
+	});
+	return true;
 }
 
 /**

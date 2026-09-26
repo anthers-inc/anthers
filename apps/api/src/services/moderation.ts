@@ -57,6 +57,7 @@ import {
 	desc,
 	eq,
 	exists,
+	ilike,
 	inArray,
 	isNotNull,
 	isNull,
@@ -1422,4 +1423,206 @@ export async function moderationSummary(): Promise<{
 		hiddenComments: Number(hiddenC?.n ?? 0),
 		hiddenReviews: Number(hiddenR?.n ?? 0),
 	};
+}
+
+// ── The People surface ───────────────────────────────────────────────────────
+
+/**
+ * One Anthers account as the console's People surface reads it.
+ *
+ * This is a moderation view, not a user directory: an account appears here because it is
+ * suspended or has open reports against it, or because an operator named it in a search —
+ * never because "every account, newest first" browsed it under a moderation header, the
+ * line the queue's People filter already holds (see `loadQueue`).
+ */
+export interface PersonRow {
+	id: number;
+	handle: string;
+	displayName: string;
+	bio: string | null;
+	isCreator: boolean;
+	/** When moderation suspended the account, and when the suspension lifts itself. */
+	suspendedAt: string | null;
+	suspendedUntil: string | null;
+	/** Open reports naming this account as the subject, and ever. */
+	openReports: number;
+	totalReports: number;
+	/** The reasons across those reports, for the list's one-line why. */
+	reasons: string[];
+}
+
+/** The list of accounts the People surface shows: suspended, reported, or named in a search. */
+export async function loadPeople(input: { query?: string }): Promise<PersonRow[]> {
+	// 🚨 The correlated references below are written as `users.id` by hand rather than
+	// through `${users.id}`: in a select list Drizzle renders that interpolation
+	// UNQUALIFIED, and a bare `"id"` inside these subqueries binds to
+	// `moderation_reports.id` — comparing the report's subject to the report's own row
+	// and silently counting zero. The WHERE-clause interpolation renders qualified and
+	// works, which is exactly why the difference is easy to miss until a row with a
+	// real report reads zero reports. Raw names, inner alias, no interpolation.
+	const suspendedOrReported = or(
+		isNotNull(users.suspendedAt),
+		sql`EXISTS (
+			SELECT 1 FROM moderation_reports mr
+			WHERE mr.subject_type = 'user'
+				AND mr.subject_id = users.id
+				AND mr.status = 'open'
+		)`,
+	);
+
+	const rows = await db
+		.select({
+			id: users.id,
+			handle: users.atprotoHandle,
+			displayName: users.displayName,
+			bio: users.bio,
+			isCreator: users.isCreator,
+			suspendedAt: users.suspendedAt,
+			suspendedUntil: users.suspendedUntil,
+			openReports: sql<number>`(
+				SELECT count(*)::int FROM moderation_reports mr
+				WHERE mr.subject_type = 'user'
+					AND mr.subject_id = users.id
+					AND mr.status = 'open'
+			)`,
+			totalReports: sql<number>`(
+				SELECT count(*)::int FROM moderation_reports mr
+				WHERE mr.subject_type = 'user'
+					AND mr.subject_id = users.id
+			)`,
+			reasons: sql<string[]>`COALESCE((
+				SELECT array_agg(DISTINCT mr.reason) FROM moderation_reports mr
+				WHERE mr.subject_type = 'user'
+					AND mr.subject_id = users.id
+					AND mr.status = 'open'
+			), '{}')`,
+		})
+		.from(users)
+		.where(
+			input.query
+				? or(
+						ilike(users.atprotoHandle, `%${input.query}%`),
+						ilike(users.displayName, `%${input.query}%`),
+						// A report names an id, and an operator holding one types the number
+						// they have rather than going to find the handle first.
+						sql`${users.id}::text = ${input.query}`,
+					)
+				: suspendedOrReported,
+		)
+		.orderBy(desc(users.suspendedAt), desc(users.createdAt))
+		.limit(QUEUE_LIMIT);
+
+	return rows.map((r) => ({
+		...r,
+		// Same nullable-default reads as `loadPersonDetail`.
+		displayName: r.displayName ?? "",
+		isCreator: r.isCreator === true,
+		suspendedAt: r.suspendedAt?.toISOString() ?? null,
+		suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
+		reasons: (r.reasons ?? []).filter((reason) => reason !== ""),
+	}));
+}
+
+/**
+ * The console's full view of one account: the person, their recorded moderation
+ * history, and the open reports naming them — everything an operator reads before
+ * acting on a person rather than a thing they made.
+ *
+ * Returns null for an id that names nobody. The actions are ordered oldest first so
+ * the log reads as the sequence it is.
+ */
+export async function loadPersonDetail(userId: number): Promise<{
+	person: PersonRow;
+	actions: {
+		id: number;
+		action: string;
+		reason: string;
+		note: string;
+		createdAt: string;
+		actor: string | null;
+	}[];
+} | null> {
+	// Directly, not through loadPeople: the detail is by id, and bending the search
+	// to it would make an account that is neither suspended nor reported unreachable
+	// from a search link — which is exactly when an operator needs the full view.
+	const [row] = await db
+		.select({
+			id: users.id,
+			handle: users.atprotoHandle,
+			displayName: users.displayName,
+			bio: users.bio,
+			isCreator: users.isCreator,
+			suspendedAt: users.suspendedAt,
+			suspendedUntil: users.suspendedUntil,
+		})
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	if (!row) return null;
+
+	const [reports] = await db
+		.select({
+			open: sql<number>`count(*) FILTER (WHERE ${moderationReports.status} = 'open')::int`,
+			total: count(moderationReports.id),
+			reasons: sql<
+				string[]
+			>`COALESCE(array_agg(DISTINCT ${moderationReports.reason}) FILTER (WHERE ${moderationReports.status} = 'open'), '{}')`,
+		})
+		.from(moderationReports)
+		.where(and(eq(moderationReports.subjectType, "user"), eq(moderationReports.subjectId, userId)));
+
+	return {
+		person: {
+			...row,
+			// `.default("")`/`.default(false)` columns read nullable through Drizzle; the
+			// defaults are real, so a null here is the column's default arriving unwritten.
+			displayName: row.displayName ?? "",
+			isCreator: row.isCreator === true,
+			suspendedAt: row.suspendedAt?.toISOString() ?? null,
+			suspendedUntil: row.suspendedUntil?.toISOString() ?? null,
+			openReports: Number(reports?.open ?? 0),
+			totalReports: Number(reports?.total ?? 0),
+			reasons: (reports?.reasons ?? []).filter((reason) => reason !== ""),
+		},
+		actions: await loadPersonActions(userId),
+	};
+}
+
+/**
+ * The recorded moderation actions naming this account — one query, oldest first,
+ * with the actor's display name so the console renders who decided, not an id.
+ */
+export async function loadPersonActions(userId: number): Promise<
+	{
+		id: number;
+		action: string;
+		reason: string;
+		note: string;
+		createdAt: string;
+		actor: string | null;
+	}[]
+> {
+	const rows = await db
+		.select({
+			id: moderationActions.id,
+			action: moderationActions.action,
+			reason: moderationActions.reason,
+			note: moderationActions.note,
+			createdAt: moderationActions.createdAt,
+			adminActor: adminAccounts.displayName,
+			userActor: users.atprotoHandle,
+		})
+		.from(moderationActions)
+		.leftJoin(adminAccounts, eq(moderationActions.adminActorId, adminAccounts.id))
+		.leftJoin(users, eq(moderationActions.actorId, users.id))
+		.where(and(eq(moderationActions.subjectType, "user"), eq(moderationActions.subjectId, userId)))
+		.orderBy(moderationActions.createdAt);
+	return rows.map((r) => ({
+		id: r.id,
+		action: r.action,
+		reason: r.reason,
+		note: r.note,
+		createdAt: r.createdAt.toISOString(),
+		actor: r.adminActor ?? r.userActor ?? null,
+	}));
 }

@@ -18,11 +18,11 @@
  * "I looked, it's fine" answer. Without it the only way to empty the queue would
  * be to take things down, which is a queue that teaches the wrong reflex.
  *
- * **A reported person can only be dismissed**, and the row says so rather than
- * offering a disabled button with no explanation. Hiding an account is suspension,
- * which has to answer what becomes of their Works, their buyers' purchases, the
- * support pointed at them and any payout in flight — none of it decided. So the
- * operator acts out of band and the console is honest about that being the case.
+ * **A reported person can be dismissed, or suspended, or routed to copyright.**
+ * Hiding an account was never the action — suspension is, and it is built: the
+ * form here records the reason and any end exactly the way the People detail
+ * does, and a full account view (held payouts, the earnings-review window, the
+ * recorded-action log) is one click through to People.
  *
  * Nothing here deletes. Hiding is a state transition on the row; the content, its
  * author and its timestamps survive it, which is what keeps appeals and
@@ -45,6 +45,7 @@ import { profileUrl } from "@anthers/web-shared/profile";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSession } from "../../lib/session";
 
 // ── Response shapes (mirror apps/api/src/services/moderation.ts) ─────────────
@@ -122,6 +123,7 @@ function SummaryChip({ label, value, alert }: { label: string; value: number; al
 
 export default function ModerationQueue() {
 	const { siteLink } = useSession();
+	const navigate = useNavigate();
 	const [filter, setFilter] = useState<Filter>("reported");
 	const [data, setData] = useState<QueueResponse | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -152,6 +154,43 @@ export default function ModerationQueue() {
 	useEffect(() => {
 		load();
 	}, [load]);
+
+	/** A reported person is suspended from the row, with the reason captured like a hide's. */
+	const [suspending, setSuspending] = useState<QueueItem | null>(null);
+	const [suspendReason, setSuspendReason] = useState("");
+	const [suspendNote, setSuspendNote] = useState("");
+	const [suspendDays, setSuspendDays] = useState("");
+
+	const confirmSuspend = async () => {
+		if (!suspending || !suspendReason) return;
+		setActing(true);
+		try {
+			const res = await apiFetch("/api/admin/moderation/suspend", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					userId: suspending.subjectId,
+					reason: suspendReason,
+					note: suspendNote.trim() || undefined,
+					...(suspendDays
+						? { until: new Date(Date.now() + Number(suspendDays) * 86_400_000).toISOString() }
+						: {}),
+				}),
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				setError(body?.error || "That account couldn't be suspended.");
+				return;
+			}
+			setSuspending(null);
+			setSuspendReason("");
+			setSuspendNote("");
+			setSuspendDays("");
+			await load();
+		} finally {
+			setActing(false);
+		}
+	};
 
 	const confirmHide = async () => {
 		if (!hiding || !hideReason) return;
@@ -212,9 +251,27 @@ export default function ModerationQueue() {
 		}
 	};
 
-	const act = async (item: QueueItem, action: "restore" | "dismiss") => {
+	const act = async (item: QueueItem, action: "restore" | "dismiss" | "copyright") => {
 		setActing(true);
 		try {
+			if (action === "copyright") {
+				// The route-out, which the Admin lane named as missing: a report that is
+				// really a copyright claim clears here, answers the reporter with the path
+				// that can handle it, and takes no action on the content — a bare user
+				// report is not a DMCA notice and must never cause a removal.
+				const res = await apiFetch("/api/admin/moderation/route-to-copyright", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ subjectType: item.subjectType, subjectId: item.subjectId }),
+				});
+				if (!res.ok) {
+					const body = (await res.json().catch(() => null)) as { error?: string } | null;
+					setError(body?.error || "That item couldn't be routed to copyright.");
+					return;
+				}
+				await load();
+				return;
+			}
 			const endpoint =
 				action === "restore"
 					? client.api.admin.moderation.restore.$post
@@ -357,7 +414,7 @@ export default function ModerationQueue() {
 										{!item.moderatable ? (
 											<span
 												className="badge badge-sm badge-ghost"
-												title="Suspending an account isn't built — act out of band."
+												title="Hiding an account isn't the action — suspension is, from this row."
 											>
 												account
 											</span>
@@ -415,14 +472,33 @@ export default function ModerationQueue() {
 										)}
 									</td>
 									<td className="whitespace-nowrap text-right">
-										{/* A person gets no hide button, and a sentence instead of a disabled
-										    control — "grayed out with no explanation" reads as a bug, and this
-										    is a decision. Dismiss below is still offered: it is the one
-										    outcome that exists for a reported account. */}
+										{/* A person is suspended from here or opened in People for the full
+										    account view — the held payout, the earnings-review window, the
+										    recorded-action log. Dismiss stays offered beside them: it is the
+										    one outcome that leaves the account alone. */}
 										{!item.moderatable ? (
-											<span className="text-xs text-base-content/50">
-												Act out of band — no account action exists
-											</span>
+											<>
+												<button
+													type="button"
+													className="btn btn-xs btn-error btn-outline"
+													disabled={acting}
+													onClick={() => {
+														setSuspending(item);
+														setSuspendReason(item.reasons[0] ?? "");
+														setSuspendNote("");
+														setSuspendDays("");
+													}}
+												>
+													Suspend
+												</button>
+												<button
+													type="button"
+													className="btn btn-xs btn-ghost ml-1"
+													onClick={() => void navigate(`/moderation/people/${item.subjectId}`)}
+												>
+													Account
+												</button>
+											</>
 										) : item.moderationStatus === "hidden" ? (
 											<button
 												type="button"
@@ -447,15 +523,26 @@ export default function ModerationQueue() {
 											</button>
 										)}
 										{item.openReports > 0 && (
-											<button
-												type="button"
-												className="btn btn-xs btn-ghost ml-1"
-												disabled={acting}
-												onClick={() => act(item, "dismiss")}
-												title="Clear the reports, leave the content up"
-											>
-												Dismiss
-											</button>
+											<>
+												<button
+													type="button"
+													className="btn btn-xs btn-ghost ml-1"
+													disabled={acting}
+													onClick={() => act(item, "dismiss")}
+													title="Clear the reports, leave the content up"
+												>
+													Dismiss
+												</button>
+												<button
+													type="button"
+													className="btn btn-xs btn-ghost ml-1"
+													disabled={acting}
+													onClick={() => act(item, "copyright")}
+													title="This is really a copyright claim: clear the reports and answer the reporter with the notice path. Nothing is taken down — a bare user report is not a DMCA notice."
+												>
+													Route to Copyright
+												</button>
+											</>
 										)}
 									</td>
 								</tr>
@@ -533,6 +620,83 @@ export default function ModerationQueue() {
 						type="button"
 						className="modal-backdrop"
 						onClick={() => setHiding(null)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
+
+			{/* Suspending a person from the queue — the policy stated at the moment of
+			    action, same as the People detail's form. The reason is required like a
+			    hide's: an unexplained suspension is the thing the record exists to
+			    prevent. */}
+			{suspending && (
+				<div className="modal modal-open">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Suspend this account?</h3>
+						<p className="py-2 text-sm text-base-content/70">{suspending.excerpt}</p>
+						<p className="pb-2 text-sm text-base-content/70">
+							Every session they hold ends and they cannot sign in; their presence and Works stop
+							appearing publicly, and existing buyers keep their purchases. Their held payouts
+							default to payout — even on termination — unless a review finds some was earned by the
+							violation itself, and a window that lapses with no finding releases the hold
+							automatically. They are emailed the reason and the appeal path.
+						</p>
+						<select
+							className="select select-bordered w-full"
+							value={suspendReason}
+							onChange={(e) => setSuspendReason(e.target.value)}
+							aria-label="Reason"
+						>
+							<option value="">Reason…</option>
+							{MODERATION_REASON_GROUPS.map((group) => (
+								<optgroup key={group.key} label={group.heading.toUpperCase()}>
+									{reasonsInGroup(group.key).map((r) => (
+										<option key={r.value} value={r.value}>
+											{r.label}
+										</option>
+									))}
+								</optgroup>
+							))}
+						</select>
+						<input
+							type="number"
+							min={1}
+							className="input input-bordered input-sm mt-2 w-56"
+							value={suspendDays}
+							onChange={(e) => setSuspendDays(e.target.value)}
+							placeholder="Days until it lifts itself (empty for no end)"
+						/>
+						<textarea
+							className="textarea textarea-bordered mt-2 w-full"
+							rows={2}
+							maxLength={MODERATION_NOTE_MAX}
+							placeholder="Note for the record (optional)"
+							value={suspendNote}
+							onChange={(e) => setSuspendNote(e.target.value)}
+						/>
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setSuspending(null)}
+								disabled={acting}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-error"
+								onClick={() => void confirmSuspend()}
+								disabled={acting || !suspendReason}
+							>
+								{acting ? "Suspending…" : "Suspend"}
+							</button>
+						</div>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setSuspending(null)}
 						aria-label="Close"
 					/>
 				</div>

@@ -341,8 +341,23 @@ export function isLegalReason(value: string): boolean {
  * rather than reassembling history across tables. A suspension lifted by the expiry sweep
  * is an `unsuspend` row with both actor columns null, identical in shape to the lift an
  * operator performs by hand.
+ *
+ * `payout_review` records the conclusion of a suspension's earnings review, so the money
+ * half of the sequence reads in the same log the account half does. The note carries the
+ * finding: what an operator's review named as tainted, or that a clear released everything.
+ * The subject is a `user` and the state it changes lives on the row (`payout_review_resolved_at`,
+ * written by `services/payouts.ts`); the log row is the reasoning, appended rather than
+ * edited, like every other entry here. A window that lapses releases the hold without a
+ * finding, and the sweep records that as a `payout_review` row with both actor columns
+ * null — the same convention as a swept `unsuspend`.
  */
-export type ModerationActionType = "hide" | "restore" | "reclassify" | "suspend" | "unsuspend";
+export type ModerationActionType =
+	| "hide"
+	| "restore"
+	| "reclassify"
+	| "suspend"
+	| "unsuspend"
+	| "payout_review";
 
 /**
  * Who decided. v1 has exactly one operator, but the column exists from day one
