@@ -70,10 +70,7 @@ test.afterAll(async () => {
 	await db
 		.delete(moderationActions)
 		.where(
-			and(
-				eq(moderationActions.subjectType, "user"),
-				eq(moderationActions.subjectId, subjectId),
-			),
+			and(eq(moderationActions.subjectType, "user"), eq(moderationActions.subjectId, subjectId)),
 		);
 	// Accounts are keyed by their handle now; the seed stamps this subject's name through
 	// the same handle-safe spelling every fixture uses, so resolve it the way they do.
@@ -95,117 +92,120 @@ test.afterAll(async () => {
 // account, and `fullyParallel` gives each test its own worker — which re-runs the
 // beforeAll and collides on the admin account's unique email. One worker, one
 // beforeAll, one operator.
-test.describe.serial("Admin app", () => {
-	test("an operator signs in by emailed code, places a hold and lifts it", async ({ page }) => {
-	// A signed-out load asks who is signed in and is told nobody (401), which Chromium logs as an
-	// error. That one answer is expected; anything else is not.
-	const errors = trackErrorsStrict(page, [/status of 401/]);
+test.describe
+	.serial("Admin app", () => {
+		test("an operator signs in by emailed code, places a hold and lifts it", async ({ page }) => {
+			// A signed-out load asks who is signed in and is told nobody (401), which Chromium logs as an
+			// error. That one answer is expected; anything else is not.
+			const errors = trackErrorsStrict(page, [/status of 401/]);
 
-	await page.goto(ADMIN_ORIGIN);
-	await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
-	await page.getByRole("button", { name: "Send a Code" }).click();
-	await expect(page.getByLabel("Code")).toBeVisible();
-	await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL));
-	await page.getByRole("button", { name: "Sign In" }).click();
+			await page.goto(ADMIN_ORIGIN);
+			await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
+			await page.getByRole("button", { name: "Send a Code" }).click();
+			await expect(page.getByLabel("Code")).toBeVisible();
+			await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL));
+			await page.getByRole("button", { name: "Sign In" }).click();
 
-	// Signed in: the frame shows who, and a reload keeps them there, which only a kept cookie does.
-	await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
-	await page.reload();
-	await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
+			// Signed in: the frame shows who, and a reload keeps them there, which only a kept cookie does.
+			await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
+			await page.reload();
+			await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
 
-	await page.getByRole("link", { name: "Legal Holds" }).click();
-	const holds = page
-		.locator("section", { has: page.getByRole("heading", { name: "Legal Holds" }) })
-		.first();
-	await expect(holds).toBeVisible();
+			await page.getByRole("link", { name: "Legal Holds" }).click();
+			const holds = page
+				.locator("section", { has: page.getByRole("heading", { name: "Legal Holds" }) })
+				.first();
+			await expect(holds).toBeVisible();
 
-	await holds.getByLabel("What Kind").selectOption("user");
-	await holds.getByLabel("Its ID").fill(String(subjectId));
-	await holds.getByLabel(/^Why/).fill(`E2E preservation, run ${RUN}`);
-	await holds.getByRole("button", { name: "Place Hold" }).click();
+			await holds.getByLabel("What Kind").selectOption("user");
+			await holds.getByLabel("Its ID").fill(String(subjectId));
+			await holds.getByLabel(/^Why/).fill(`E2E preservation, run ${RUN}`);
+			await holds.getByRole("button", { name: "Place Hold" }).click();
 
-	// The label, not a tick: it is what tells an operator they held the account they meant.
-	await expect(page.getByText(`Held @${subjectHandle}.`)).toBeVisible();
+			// The label, not a tick: it is what tells an operator they held the account they meant.
+			await expect(page.getByText(`Held @${subjectHandle}.`)).toBeVisible();
 
-	const row = holds.locator("tr", { hasText: `E2E preservation, run ${RUN}` }).first();
-	await expect(row).toBeVisible();
-	await expect(row.getByText("active")).toBeVisible();
-	await expect(
-		row.getByText(`E2E Operator ${RUN}`),
-		"the hold names the admin account that placed it",
-	).toBeVisible();
+			const row = holds.locator("tr", { hasText: `E2E preservation, run ${RUN}` }).first();
+			await expect(row).toBeVisible();
+			await expect(row.getByText("active")).toBeVisible();
+			await expect(
+				row.getByText(`E2E Operator ${RUN}`),
+				"the hold names the admin account that placed it",
+			).toBeVisible();
 
-	await holds.screenshot({ path: `.screenshots/admin-legal-holds-${RUN}.png` });
+			await holds.screenshot({ path: `.screenshots/admin-legal-holds-${RUN}.png` });
 
-	// Two clicks on purpose: lifting ends a preservation.
-	await row.getByRole("button", { name: "Lift", exact: true }).click();
-	await row.getByRole("button", { name: "Confirm Lift" }).click();
+			// Two clicks on purpose: lifting ends a preservation.
+			await row.getByRole("button", { name: "Lift", exact: true }).click();
+			await row.getByRole("button", { name: "Confirm Lift" }).click();
 
-	const lifted = holds.locator("tr", { hasText: `E2E preservation, run ${RUN}` }).first();
-	await expect(lifted, "a lifted hold must stay on the page").toBeVisible();
-	await expect(lifted.getByText("lifted")).toBeVisible();
+			const lifted = holds.locator("tr", { hasText: `E2E preservation, run ${RUN}` }).first();
+			await expect(lifted, "a lifted hold must stay on the page").toBeVisible();
+			await expect(lifted.getByText("lifted")).toBeVisible();
 
-	await page.getByRole("button", { name: "Sign Out" }).click();
-	await expect(page.getByRole("button", { name: "Send a Code" })).toBeVisible();
+			await page.getByRole("button", { name: "Sign Out" }).click();
+			await expect(page.getByRole("button", { name: "Send a Code" })).toBeVisible();
 
-	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
-});
+			expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+		});
 
-test("an operator suspends an account, reviews the held payout, and lifts it", async ({ page }) => {
-	// The suspension flow has to work at 2am for the same reason the legal-hold half
-	// above does: one person, under pressure, acting on a person rather than a thing
-	// they made. The unit suites prove the services; this proves the console renders
-	// the state, states the policy at the moment of action, and reverses cleanly.
-	const errors = trackErrorsStrict(page, [/status of 401/]);
+		test("an operator suspends an account, reviews the held payout, and lifts it", async ({
+			page,
+		}) => {
+			// The suspension flow has to work at 2am for the same reason the legal-hold half
+			// above does: one person, under pressure, acting on a person rather than a thing
+			// they made. The unit suites prove the services; this proves the console renders
+			// the state, states the policy at the moment of action, and reverses cleanly.
+			const errors = trackErrorsStrict(page, [/status of 401/]);
 
-	await page.goto(ADMIN_ORIGIN);
-	await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
-	await page.getByRole("button", { name: "Send a Code" }).click();
-	// Only the code THIS test's sign-in just triggered — the first test's codes for the
-	// same address are still in the catcher, and `sentAtOrAfter` is the parameter that
-	// exists to skip them.
-	await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL, 15_000, Date.now()));
-	await page.getByRole("button", { name: "Sign In" }).click();
-	await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
+			await page.goto(ADMIN_ORIGIN);
+			await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
+			await page.getByRole("button", { name: "Send a Code" }).click();
+			// Only the code THIS test's sign-in just triggered — the first test's codes for the
+			// same address are still in the catcher, and `sentAtOrAfter` is the parameter that
+			// exists to skip them.
+			await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL, 15_000, Date.now()));
+			await page.getByRole("button", { name: "Sign In" }).click();
+			await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
 
-	await page.getByRole("link", { name: "People" }).click();
-	const people = page
-		.locator("section", { has: page.getByRole("heading", { name: "People" }) })
-		.first();
+			await page.getByRole("link", { name: "People" }).click();
+			const people = page
+				.locator("section", { has: page.getByRole("heading", { name: "People" }) })
+				.first();
 
-	// Search by the account id — a report in hand names one, not a handle.
-	await people.getByLabel("Search accounts").fill(String(subjectId));
-	await people.getByRole("button", { name: "Search" }).click();
-	await people.getByRole("link", { name: "Open" }).first().click();
+			// Search by the account id — a report in hand names one, not a handle.
+			await people.getByLabel("Search accounts").fill(String(subjectId));
+			await people.getByRole("button", { name: "Search" }).click();
+			await people.getByRole("link", { name: "Open" }).first().click();
 
-	// The detail. Suspend with a reason; the form has already said what the hold does.
-	const detail = page.locator("main");
-	await detail.getByLabel("Reason").selectOption("spam");
-	await detail.getByRole("button", { name: "Suspend", exact: true }).click();
-	await expect(detail.getByText("suspended — no end")).toBeVisible();
+			// The detail. Suspend with a reason; the form has already said what the hold does.
+			const detail = page.locator("main");
+			await detail.getByLabel("Reason").selectOption("spam");
+			await detail.getByRole("button", { name: "Suspend", exact: true }).click();
+			await expect(detail.getByText("suspended — no end")).toBeVisible();
 
-	// The held payout shows on the detail, and concluding with no finding records it.
-	await expect(detail.getByText(/\$\d/).first()).toBeVisible();
-	await detail.getByRole("button", { name: "Conclude with No Finding" }).click();
-	await expect(
-		detail.getByText("Review concluded with no finding. The held amount pays out in full."),
-	).toBeVisible();
+			// The held payout shows on the detail, and concluding with no finding records it.
+			await expect(detail.getByText(/\$\d/).first()).toBeVisible();
+			await detail.getByRole("button", { name: "Conclude with No Finding" }).click();
+			await expect(
+				detail.getByText("Review concluded with no finding. The held amount pays out in full."),
+			).toBeVisible();
 
-	// The recorded actions read as the sequence: suspend, then the review, then the lift.
-	await expect(detail.getByRole("cell", { name: /Suspended — Spam or advertising/ })).toBeVisible();
-	await expect(
-		detail.getByRole("cell", { name: /Earnings review concluded/ }),
-	).toBeVisible();
+			// The recorded actions read as the sequence: suspend, then the review, then the lift.
+			await expect(
+				detail.getByRole("cell", { name: /Suspended — Spam or advertising/ }),
+			).toBeVisible();
+			await expect(detail.getByRole("cell", { name: /Earnings review concluded/ })).toBeVisible();
 
-	// Lift it — two clicks, because reinstatement deserves the same pause a hold does.
-	await detail.getByRole("button", { name: "Lift the Suspension" }).click();
-	await detail.getByRole("button", { name: "Confirm Lift" }).click();
-	await expect(detail.getByText("Lifted.")).toBeVisible();
-	await expect(detail.getByText("Suspension lifted")).toBeVisible();
+			// Lift it — two clicks, because reinstatement deserves the same pause a hold does.
+			await detail.getByRole("button", { name: "Lift the Suspension" }).click();
+			await detail.getByRole("button", { name: "Confirm Lift" }).click();
+			await expect(detail.getByText("Lifted.")).toBeVisible();
+			await expect(detail.getByText("Suspension lifted")).toBeVisible();
 
-	await page.getByRole("button", { name: "Sign Out" }).click();
-	await expect(page.getByRole("button", { name: "Send a Code" })).toBeVisible();
+			await page.getByRole("button", { name: "Sign Out" }).click();
+			await expect(page.getByRole("button", { name: "Send a Code" })).toBeVisible();
 
-	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
-});
-});
+			expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+		});
+	});

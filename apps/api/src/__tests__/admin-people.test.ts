@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { moderationActions, moderationReports, users } from "@anthers/db/schema";
+import { moderationActions, moderationReports } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -125,16 +125,20 @@ describe("Admin People surface", () => {
 		expect(suspended.suspendedAt).not.toBeNull();
 	});
 
-	it("finds a quiet account only when the search names it", async () => {
-		const res = await req(`/api/admin/people?q=${encodeURIComponent(quietHandle)}`, {
-			headers: { Cookie: adminCookie },
-		});
-		expect(res.status).toBe(200);
-		const body = (await res.json()) as { people: { id: number }[] };
-		const ids = body.people.map((p) => p.id);
-		expect(ids).toContain(quietId);
-		// And the search is the only way it appears: the bare list already excluded it.
-	}, DB_SETUP_TIMEOUT);
+	it(
+		"finds a quiet account only when the search names it",
+		async () => {
+			const res = await req(`/api/admin/people?q=${encodeURIComponent(quietHandle)}`, {
+				headers: { Cookie: adminCookie },
+			});
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { people: { id: number }[] };
+			const ids = body.people.map((p) => p.id);
+			expect(ids).toContain(quietId);
+			// And the search is the only way it appears: the bare list already excluded it.
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
 	it("answers 401 without an admin session", async () => {
 		const res = await req("/api/admin/people");
@@ -175,31 +179,43 @@ describe("Admin People surface", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("concludes a review with a finding, and the finding is recorded in the log", async () => {
-		const res = await req(`/api/admin/people/${suspendedCreatorId}/payout-review`, {
-			method: "POST",
-			headers: { Cookie: adminCookie, "Content-Type": "application/json", Origin: "http://localhost:3000" },
-			body: JSON.stringify({ taintedAmount: "12.50", note: `finding fixture ${run}` }),
-		});
-		expect(res.status).toBe(200);
-		const body = (await res.json()) as { released: boolean };
-		expect(body.released).toBe(true);
+	it(
+		"concludes a review with a finding, and the finding is recorded in the log",
+		async () => {
+			const res = await req(`/api/admin/people/${suspendedCreatorId}/payout-review`, {
+				method: "POST",
+				headers: {
+					Cookie: adminCookie,
+					"Content-Type": "application/json",
+					Origin: "http://localhost:3000",
+				},
+				body: JSON.stringify({ taintedAmount: "12.50", note: `finding fixture ${run}` }),
+			});
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { released: boolean };
+			expect(body.released).toBe(true);
 
-		// The record: a payout_review row in the log, naming the operator and the amount.
-		const rows = await db
-			.select({ action: moderationActions.action, note: moderationActions.note })
-			.from(moderationActions)
-			.where(eq(moderationActions.subjectId, suspendedCreatorId));
-		const review = rows.find((r) => r.action === "payout_review");
-		expect(review).toBeDefined();
-		expect(review!.note).toContain("12.50");
-		expect(review!.note).toContain("earned by the violation");
-	}, DB_SETUP_TIMEOUT);
+			// The record: a payout_review row in the log, naming the operator and the amount.
+			const rows = await db
+				.select({ action: moderationActions.action, note: moderationActions.note })
+				.from(moderationActions)
+				.where(eq(moderationActions.subjectId, suspendedCreatorId));
+			const review = rows.find((r) => r.action === "payout_review");
+			expect(review).toBeDefined();
+			expect(review!.note).toContain("12.50");
+			expect(review!.note).toContain("earned by the violation");
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
 	it("refuses to conclude a review twice, and says why in a sentence the operator reads", async () => {
 		const res = await req(`/api/admin/people/${suspendedCreatorId}/payout-review`, {
 			method: "POST",
-			headers: { Cookie: adminCookie, "Content-Type": "application/json", Origin: "http://localhost:3000" },
+			headers: {
+				Cookie: adminCookie,
+				"Content-Type": "application/json",
+				Origin: "http://localhost:3000",
+			},
 			body: JSON.stringify({}),
 		});
 		expect(res.status).toBe(409);
@@ -211,7 +227,11 @@ describe("Admin People surface", () => {
 	it("refuses a malformed tainted amount at the edge rather than as a 500", async () => {
 		const res = await req(`/api/admin/people/${reportedId}/payout-review`, {
 			method: "POST",
-			headers: { Cookie: adminCookie, "Content-Type": "application/json", Origin: "http://localhost:3000" },
+			headers: {
+				Cookie: adminCookie,
+				"Content-Type": "application/json",
+				Origin: "http://localhost:3000",
+			},
 			body: JSON.stringify({ taintedAmount: "twelve dollars" }),
 		});
 		expect(res.status).toBe(400);

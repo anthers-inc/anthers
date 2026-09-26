@@ -1564,12 +1564,12 @@ export async function loadPersonDetail(userId: number): Promise<{
 		.select({
 			open: sql<number>`count(*) FILTER (WHERE ${moderationReports.status} = 'open')::int`,
 			total: count(moderationReports.id),
-			reasons: sql<string[]>`COALESCE(array_agg(DISTINCT ${moderationReports.reason}) FILTER (WHERE ${moderationReports.status} = 'open'), '{}')`,
+			reasons: sql<
+				string[]
+			>`COALESCE(array_agg(DISTINCT ${moderationReports.reason}) FILTER (WHERE ${moderationReports.status} = 'open'), '{}')`,
 		})
 		.from(moderationReports)
-		.where(
-			and(eq(moderationReports.subjectType, "user"), eq(moderationReports.subjectId, userId)),
-		);
+		.where(and(eq(moderationReports.subjectType, "user"), eq(moderationReports.subjectId, userId)));
 
 	return {
 		person: {

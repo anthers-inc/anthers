@@ -212,8 +212,7 @@ export async function releasePayoutHold(input: {
 	// The reasoning, appended rather than edited, exactly like every other decision in the
 	// log. A finding names its tainted amount; a clear says the hold released everything;
 	// the lapsed-window sweep names itself as the release with no operator behind it.
-	const tainted =
-		input.taintedAmount != null ? new Decimal(input.taintedAmount).toFixed(2) : null;
+	const tainted = input.taintedAmount != null ? new Decimal(input.taintedAmount).toFixed(2) : null;
 	const noteParts = [
 		tainted != null
 			? `Finding: ${tainted} of the held balance was earned by the violation itself.`

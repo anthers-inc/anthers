@@ -68,10 +68,7 @@ import {
 	unsuspendAccount,
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
-import {
-	releasePayoutHold,
-	suspensionPayoutReview,
-} from "../services/payouts.js";
+import { releasePayoutHold, suspensionPayoutReview } from "../services/payouts.js";
 import {
 	clearObjectQuarantine,
 	clearQuarantine,
@@ -592,7 +589,10 @@ const adminRoutes = new Hono<AdminEnv>()
 			"json",
 			z.object({
 				/** What the finding says was earned by the violation itself, in dollars. Omitted on a clear. */
-				taintedAmount: z.string().regex(/^\d+(\.\d{1,2})?$/, "A dollar amount, like 12.50").optional(),
+				taintedAmount: z
+					.string()
+					.regex(/^\d+(\.\d{1,2})?$/, "A dollar amount, like 12.50")
+					.optional(),
 				note: z.string().max(MODERATION_NOTE_MAX).optional(),
 			}),
 			invalidBody,

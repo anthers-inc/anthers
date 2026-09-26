@@ -604,16 +604,13 @@ export default function ModerationQueue() {
 				<div className="modal modal-open">
 					<div className="modal-box">
 						<h3 className="text-lg font-bold">Suspend this account?</h3>
-						<p className="py-2 text-sm text-base-content/70">
-							{suspending.excerpt}
-						</p>
+						<p className="py-2 text-sm text-base-content/70">{suspending.excerpt}</p>
 						<p className="pb-2 text-sm text-base-content/70">
-							Every session they hold ends and they cannot sign in; their presence and
-							Works stop appearing publicly, and existing buyers keep their purchases.
-							Their held payouts default to payout — even on termination — unless a review
-							finds some was earned by the violation itself, and a window that lapses
-							with no finding releases the hold automatically. They are emailed the reason
-							and the appeal path.
+							Every session they hold ends and they cannot sign in; their presence and Works stop
+							appearing publicly, and existing buyers keep their purchases. Their held payouts
+							default to payout — even on termination — unless a review finds some was earned by the
+							violation itself, and a window that lapses with no finding releases the hold
+							automatically. They are emailed the reason and the appeal path.
 						</p>
 						<select
 							className="select select-bordered w-full"

@@ -20,9 +20,14 @@
  * Nothing here deletes. Suspension is a state; the lift is a second recorded decision
  * rather than an edit of the first, and the action log below renders the sequence.
  */
-import { MODERATION_NOTE_MAX, MODERATION_REASON_GROUPS, moderationReasonLabel, reasonsInGroup } from "@anthers/shared/moderation";
+import {
+	MODERATION_NOTE_MAX,
+	MODERATION_REASON_GROUPS,
+	moderationReasonLabel,
+	reasonsInGroup,
+} from "@anthers/shared/moderation";
 import { profileUrl } from "@anthers/web-shared/profile";
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ErrorAlert, Loading, PageHeader, SectionHeading } from "../../components/ui";
 import { adminPost, useAdminData } from "../../lib/load";
@@ -130,9 +135,7 @@ function SuspendForm({
 		event.preventDefault();
 		if (!reason) return;
 		setBusy(true);
-		const until = days
-			? new Date(Date.now() + Number(days) * 86_400_000).toISOString()
-			: undefined;
+		const until = days ? new Date(Date.now() + Number(days) * 86_400_000).toISOString() : undefined;
 		const result = await adminPost("/api/admin/moderation/suspend", {
 			userId: person.id,
 			reason,
@@ -154,11 +157,11 @@ function SuspendForm({
 	return (
 		<form onSubmit={suspend} className="rounded-box border border-base-300 bg-base-100 p-4">
 			<p className="mb-3 text-sm text-base-content/70">
-				Suspending ends every session the account holds and stops it signing in; their presence
-				and their Works stop appearing publicly, and existing buyers keep their purchases. The
-				payouts they already earned are <strong>held for review, not taken</strong>: the default
-				is that everything pays out — on reinstatement and on termination alike — unless a
-				review affirmatively finds some of it was earned by the violation itself.
+				Suspending ends every session the account holds and stops it signing in; their presence and
+				their Works stop appearing publicly, and existing buyers keep their purchases. The payouts
+				they already earned are <strong>held for review, not taken</strong>: the default is that
+				everything pays out — on reinstatement and on termination alike — unless a review
+				affirmatively finds some of it was earned by the violation itself.
 			</p>
 			<select
 				className="select select-bordered w-full"
@@ -257,10 +260,10 @@ function PayoutReviewForm({
 			}}
 		>
 			<p className="mb-3 text-sm text-base-content/70">
-				<strong>${heldAmount} is held</strong> — money this creator earned before the
-				suspension. The default disposition is payout of all of it; a finding names only what
-				was earned by the violation itself. If the window lapses with no finding recorded,
-				the hold releases automatically — an anti-corruption rule you can wait out is not one.
+				<strong>${heldAmount} is held</strong> — money this creator earned before the suspension.
+				The default disposition is payout of all of it; a finding names only what was earned by the
+				violation itself. If the window lapses with no finding recorded, the hold releases
+				automatically — an anti-corruption rule you can wait out is not one.
 			</p>
 			<label className="block">
 				<span className="mb-1 block text-sm text-base-content/70">
@@ -391,10 +394,7 @@ function PeopleList() {
 											{p.reasons.map(moderationReasonLabel).join(", ") || "—"}
 										</td>
 										<td className="text-right">
-											<Link
-												to={`/moderation/people/${p.id}`}
-												className="btn btn-xs btn-ghost"
-											>
+											<Link to={`/moderation/people/${p.id}`} className="btn btn-xs btn-ghost">
 												Open
 											</Link>
 											{p.handle && (
@@ -424,9 +424,7 @@ function PersonDetail() {
 	const { id } = useParams();
 	const navigate = useNavigate();
 	const { siteLink } = useSession();
-	const { data, loading, error, reload } = useAdminData<PersonResponse>(
-		`/api/admin/people/${id}`,
-	);
+	const { data, loading, error, reload } = useAdminData<PersonResponse>(`/api/admin/people/${id}`);
 	const [message, setMessage] = useState<string | null>(null);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [lifting, setLifting] = useState(false);
@@ -444,8 +442,10 @@ function PersonDetail() {
 		await reload();
 	}
 
+	// Clear the transient banners whenever the account being viewed changes; `useAdminData`
+	// keys on the same id, so the reload it triggers renders clean banners.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: id is the point — a navigation to a different account clears banners the data reload alone wouldn't.
 	useEffect(() => {
-		// Clear the transient banners whenever the account being viewed changes.
 		setMessage(null);
 		setActionError(null);
 	}, [id]);
@@ -542,8 +542,8 @@ function PersonDetail() {
 							)}
 						</div>
 						<p className="mt-3 text-xs text-base-content/50">
-							The lift is recorded as its own decision; the original suspension stays in the
-							log below.
+							The lift is recorded as its own decision; the original suspension stays in the log
+							below.
 						</p>
 					</div>
 				) : (
