@@ -23,9 +23,10 @@ import {
 	adminAccounts,
 	adminSessions,
 	legalHolds,
+	moderationActions,
 	users,
 } from "@anthers/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { ADMIN_ORIGIN, API_URL, emailedCode, expect, test, trackErrorsStrict } from "./fixtures";
 
 const RUN = Date.now().toString(36);
@@ -63,6 +64,17 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
 	await db.delete(legalHolds).where(eq(legalHolds.subjectId, subjectId));
+	// The moderation walk suspends and lifts this same subject; its recorded decisions
+	// reference the account by subject with a set-null actor column, so they outlive the
+	// account purge like every real decision. Fixture rows are noise, not record.
+	await db
+		.delete(moderationActions)
+		.where(
+			and(
+				eq(moderationActions.subjectType, "user"),
+				eq(moderationActions.subjectId, subjectId),
+			),
+		);
 	// Accounts are keyed by their handle now; the seed stamps this subject's name through
 	// the same handle-safe spelling every fixture uses, so resolve it the way they do.
 	const handle = await gauntletHandle(API_URL, SUBJECT);
@@ -79,7 +91,12 @@ test.afterAll(async () => {
 	}
 });
 
-test("an operator signs in by emailed code, places a hold and lifts it", async ({ page }) => {
+// 🚨 Serial on purpose: both tests share this file's operator account and subject
+// account, and `fullyParallel` gives each test its own worker — which re-runs the
+// beforeAll and collides on the admin account's unique email. One worker, one
+// beforeAll, one operator.
+test.describe.serial("Admin app", () => {
+	test("an operator signs in by emailed code, places a hold and lifts it", async ({ page }) => {
 	// A signed-out load asks who is signed in and is told nobody (401), which Chromium logs as an
 	// error. That one answer is expected; anything else is not.
 	const errors = trackErrorsStrict(page, [/status of 401/]);
@@ -132,4 +149,63 @@ test("an operator signs in by emailed code, places a hold and lifts it", async (
 	await expect(page.getByRole("button", { name: "Send a Code" })).toBeVisible();
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});
+
+test("an operator suspends an account, reviews the held payout, and lifts it", async ({ page }) => {
+	// The suspension flow has to work at 2am for the same reason the legal-hold half
+	// above does: one person, under pressure, acting on a person rather than a thing
+	// they made. The unit suites prove the services; this proves the console renders
+	// the state, states the policy at the moment of action, and reverses cleanly.
+	const errors = trackErrorsStrict(page, [/status of 401/]);
+
+	await page.goto(ADMIN_ORIGIN);
+	await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
+	await page.getByRole("button", { name: "Send a Code" }).click();
+	// Only the code THIS test's sign-in just triggered — the first test's codes for the
+	// same address are still in the catcher, and `sentAtOrAfter` is the parameter that
+	// exists to skip them.
+	await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL, 15_000, Date.now()));
+	await page.getByRole("button", { name: "Sign In" }).click();
+	await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
+
+	await page.getByRole("link", { name: "People" }).click();
+	const people = page
+		.locator("section", { has: page.getByRole("heading", { name: "People" }) })
+		.first();
+
+	// Search by the account id — a report in hand names one, not a handle.
+	await people.getByLabel("Search accounts").fill(String(subjectId));
+	await people.getByRole("button", { name: "Search" }).click();
+	await people.getByRole("link", { name: "Open" }).first().click();
+
+	// The detail. Suspend with a reason; the form has already said what the hold does.
+	const detail = page.locator("main");
+	await detail.getByLabel("Reason").selectOption("spam");
+	await detail.getByRole("button", { name: "Suspend", exact: true }).click();
+	await expect(detail.getByText("suspended — no end")).toBeVisible();
+
+	// The held payout shows on the detail, and concluding with no finding records it.
+	await expect(detail.getByText(/\$\d/).first()).toBeVisible();
+	await detail.getByRole("button", { name: "Conclude with No Finding" }).click();
+	await expect(
+		detail.getByText("Review concluded with no finding. The held amount pays out in full."),
+	).toBeVisible();
+
+	// The recorded actions read as the sequence: suspend, then the review, then the lift.
+	await expect(detail.getByRole("cell", { name: /Suspended — Spam or advertising/ })).toBeVisible();
+	await expect(
+		detail.getByRole("cell", { name: /Earnings review concluded/ }),
+	).toBeVisible();
+
+	// Lift it — two clicks, because reinstatement deserves the same pause a hold does.
+	await detail.getByRole("button", { name: "Lift the Suspension" }).click();
+	await detail.getByRole("button", { name: "Confirm Lift" }).click();
+	await expect(detail.getByText("Lifted.")).toBeVisible();
+	await expect(detail.getByText("Suspension lifted")).toBeVisible();
+
+	await page.getByRole("button", { name: "Sign Out" }).click();
+	await expect(page.getByRole("button", { name: "Send a Code" })).toBeVisible();
+
+	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});
 });

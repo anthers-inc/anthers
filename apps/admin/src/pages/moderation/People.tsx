@@ -317,7 +317,7 @@ function PeopleList() {
 	const { siteLink } = useSession();
 
 	return (
-		<div>
+		<section>
 			<PageHeader
 				title="People"
 				description="Accounts that are suspended or reported, or one you name. This is a moderation view, not a directory of everybody."
@@ -415,7 +415,7 @@ function PeopleList() {
 					</div>
 				))
 			)}
-		</div>
+		</section>
 	);
 }
 
