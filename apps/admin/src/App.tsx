@@ -16,6 +16,7 @@ import LegalHolds from "./pages/legal/LegalHolds";
 import Quarantine from "./pages/legal/Quarantine";
 import RightsRequests from "./pages/legal/RightsRequests";
 import ModerationQueue from "./pages/moderation/ModerationQueue";
+import People from "./pages/moderation/People";
 import RatingAppeals from "./pages/moderation/RatingAppeals";
 import SignIn from "./pages/SignIn";
 
@@ -36,6 +37,8 @@ export default function App() {
 				<Route path="legal/holds" element={<LegalHolds />} />
 				<Route path="moderation" element={<ModerationQueue />} />
 				<Route path="moderation/appeals" element={<RatingAppeals />} />
+				<Route path="moderation/people" element={<People />} />
+				<Route path="moderation/people/:id" element={<People />} />
 				<Route path="infrastructure" element={<Infrastructure />} />
 				<Route
 					path="accounts"

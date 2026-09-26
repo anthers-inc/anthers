@@ -35,6 +35,7 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 		items: [
 			{ to: "/moderation", label: "Queue", end: true },
 			{ to: "/moderation/appeals", label: "Rating Appeals" },
+			{ to: "/moderation/people", label: "People" },
 		],
 	},
 	{ title: "Infrastructure", items: [{ to: "/infrastructure", label: "Jobs and Services" }] },
