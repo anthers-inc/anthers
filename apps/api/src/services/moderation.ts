@@ -1453,13 +1453,20 @@ export interface PersonRow {
 
 /** The list of accounts the People surface shows: suspended, reported, or named in a search. */
 export async function loadPeople(input: { query?: string }): Promise<PersonRow[]> {
+	// 🚨 The correlated references below are written as `users.id` by hand rather than
+	// through `${users.id}`: in a select list Drizzle renders that interpolation
+	// UNQUALIFIED, and a bare `"id"` inside these subqueries binds to
+	// `moderation_reports.id` — comparing the report's subject to the report's own row
+	// and silently counting zero. The WHERE-clause interpolation renders qualified and
+	// works, which is exactly why the difference is easy to miss until a row with a
+	// real report reads zero reports. Raw names, inner alias, no interpolation.
 	const suspendedOrReported = or(
 		isNotNull(users.suspendedAt),
 		sql`EXISTS (
-			SELECT 1 FROM ${moderationReports}
-			WHERE ${moderationReports.subjectType} = 'user'
-				AND ${moderationReports.subjectId} = ${users.id}
-				AND ${moderationReports.status} = 'open'
+			SELECT 1 FROM moderation_reports mr
+			WHERE mr.subject_type = 'user'
+				AND mr.subject_id = users.id
+				AND mr.status = 'open'
 		)`,
 	);
 
@@ -1473,21 +1480,21 @@ export async function loadPeople(input: { query?: string }): Promise<PersonRow[]
 			suspendedAt: users.suspendedAt,
 			suspendedUntil: users.suspendedUntil,
 			openReports: sql<number>`(
-				SELECT count(*)::int FROM ${moderationReports}
-				WHERE ${moderationReports.subjectType} = 'user'
-					AND ${moderationReports.subjectId} = ${users.id}
-					AND ${moderationReports.status} = 'open'
+				SELECT count(*)::int FROM moderation_reports mr
+				WHERE mr.subject_type = 'user'
+					AND mr.subject_id = users.id
+					AND mr.status = 'open'
 			)`,
 			totalReports: sql<number>`(
-				SELECT count(*)::int FROM ${moderationReports}
-				WHERE ${moderationReports.subjectType} = 'user'
-					AND ${moderationReports.subjectId} = ${users.id}
+				SELECT count(*)::int FROM moderation_reports mr
+				WHERE mr.subject_type = 'user'
+					AND mr.subject_id = users.id
 			)`,
 			reasons: sql<string[]>`COALESCE((
-				SELECT array_agg(DISTINCT ${moderationReports.reason}) FROM ${moderationReports}
-				WHERE ${moderationReports.subjectType} = 'user'
-					AND ${moderationReports.subjectId} = ${users.id}
-					AND ${moderationReports.status} = 'open'
+				SELECT array_agg(DISTINCT mr.reason) FROM moderation_reports mr
+				WHERE mr.subject_type = 'user'
+					AND mr.subject_id = users.id
+					AND mr.status = 'open'
 			), '{}')`,
 		})
 		.from(users)
