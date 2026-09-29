@@ -28,7 +28,13 @@ import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
-import { getStripe } from "../lib/stripe.js";
+import {
+	createCustomer,
+	createProduct,
+	listActiveProducts,
+	listCardPaymentMethods,
+	paymentsConfigured,
+} from "../lib/processor.js";
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
@@ -78,24 +84,25 @@ export async function ensureAnthersProduct(): Promise<string> {
 	if (pinned) return pinned;
 	if (cachedAnthersProduct) return cachedAnthersProduct;
 
-	const stripe = getStripe();
-	if (!stripe) throw new Error("Stripe not configured");
+	if (!paymentsConfigured()) throw new Error("Stripe not configured");
 
 	// `metadata.anthers = "platform"` is the stamp, and it is why this survives a restart
 	// without a database column: the Product is found by what it IS, not by an id someone
 	// wrote down. Search is eventually consistent on new objects, so the list is the
 	// authority and search is not used here.
-	for await (const product of stripe.products.list({ limit: 100, active: true })) {
+	const active = listActiveProducts();
+	for await (const product of active ?? []) {
 		if (product.metadata?.anthers === "platform") {
 			cachedAnthersProduct = product.id;
 			return product.id;
 		}
 	}
 
-	const created = await stripe.products.create({
+	const created = await createProduct({
 		name: "Support for Anthers",
 		metadata: { anthers: "platform" },
 	});
+	if (!created) throw new Error("Stripe not configured");
 	cachedAnthersProduct = created.id;
 	return created.id;
 }
@@ -218,14 +225,14 @@ export function periodStartFromSub(sub: Stripe.Subscription): number | null {
  * signup would make registering an account depend on Stripe being reachable.
  */
 export async function ensureCreatorProduct(creatorId: number, handle: string): Promise<string> {
-	const stripe = getStripe();
-	if (!stripe) throw new Error("Stripe not configured");
+	if (!paymentsConfigured()) throw new Error("Stripe not configured");
 	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, creatorId)).limit(1);
 	if (acct?.stripeProductId) return acct.stripeProductId;
-	const product = await stripe.products.create({
+	const product = await createProduct({
 		name: `Support for @${handle}`,
 		metadata: { creatorId: String(creatorId) },
 	});
+	if (!product) throw new Error("Stripe not configured");
 	await db
 		.update(accounts)
 		.set({ stripeProductId: product.id, updatedAt: new Date() })
@@ -371,14 +378,14 @@ export function planItemChange(
 
 /** Create (once) and persist the user's Stripe customer id. */
 export async function ensureStripeCustomer(userId: number, email: string): Promise<string> {
-	const stripe = getStripe();
-	if (!stripe) throw new Error("Stripe not configured");
+	if (!paymentsConfigured()) throw new Error("Stripe not configured");
 	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, userId)).limit(1);
 	if (acct?.stripeCustomerId) return acct.stripeCustomerId;
-	const customer = await stripe.customers.create({
+	const customer = await createCustomer({
 		email: email || undefined,
 		metadata: { userId: String(userId) },
 	});
+	if (!customer) throw new Error("Stripe not configured");
 	// ⚠️ Upserts rather than updates. **Signing up does not create an `accounts` row** — one
 	// appears on first payment — so a plain UPDATE affected nothing for a user who had never
 	// paid, and this returned a customer id it had not persisted. Every existing caller
@@ -398,10 +405,8 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
 export async function savedCardFor(
 	customerId: string,
 ): Promise<{ id: string; brand: string; last4: string } | null> {
-	const stripe = getStripe();
-	if (!stripe) return null;
-	const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
-	const pm = pms.data[0];
+	const pms = await listCardPaymentMethods({ customer: customerId, type: "card", limit: 1 });
+	const pm = pms?.data[0];
 	return pm?.card ? { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 } : null;
 }
 

@@ -2,6 +2,11 @@
 /**
  * Payment routes — Stripe Connect onboarding, checkout, purchases, charitable ledger.
  *
+ * ⚠️ **No payment operation is a direct SDK call.** This route goes through
+ * `lib/processor.ts`, the processor boundary — see that module's header for why the
+ * vendor must stay swappable and why every new payment operation belongs there rather
+ * than here as `stripe.<resource>.<op>`.
+ *
  * Direct purchases run as Stripe destination charges. Since 2026-08-03 the listed
  * price IS the advertised price: card processing comes **out of** it and sales tax
  * is the only thing added on top, so the buyer is charged price + tax, the creator's
@@ -31,7 +36,13 @@ import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
-import { getStripe } from "../lib/stripe.js";
+import {
+	createAccountOnboardingLink,
+	createConnectAccount,
+	createPaymentIntent,
+	paymentsConfigured,
+	verifyWebhookSignature,
+} from "../lib/processor.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
@@ -205,8 +216,7 @@ const paymentRoutes = new Hono()
 
 	.post("/stripe/onboard", requireAuth, async (c) => {
 		const user = c.get("user");
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Check for existing Stripe account
 		const [existing] = await db
@@ -223,13 +233,15 @@ const paymentRoutes = new Hono()
 		// (destination charges route money to it — it needs `transfers`, not to accept cards).
 		let accountId = existing?.stripeAccountId;
 		if (!accountId) {
-			const account = await stripe.accounts.create({
+			const account = await createConnectAccount({
 				type: "express",
 				email: user.email ?? undefined,
 				capabilities: { transfers: { requested: true } },
 				metadata: { userId: String(user.id) },
 			});
-			accountId = account.id;
+			// Null only when payments are unconfigured, which the guard above already refused.
+			accountId = account?.id ?? "";
+			if (!accountId) return c.json({ error: "Payments are not configured." }, 503);
 			await db.insert(stripeAccounts).values({ userId: user.id, stripeAccountId: accountId });
 		}
 
@@ -242,13 +254,14 @@ const paymentRoutes = new Hono()
 		// passes. What a creator sees is the end of onboarding landing nowhere.
 		const base =
 			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
-		const link = await stripe.accountLinks.create({
+		const link = await createAccountOnboardingLink({
 			account: accountId,
 			refresh_url: `${base}${STRIPE_RETURN_PATHS.connectRefresh}`,
 			return_url: `${base}${STRIPE_RETURN_PATHS.connectReturn}`,
 			type: "account_onboarding",
 		});
 
+		if (!link?.url) return c.json({ error: "Payments are not configured." }, 503);
 		return c.json({ url: link.url });
 	})
 
@@ -275,8 +288,7 @@ const paymentRoutes = new Hono()
 		if (!q.ok) return c.json({ error: q.error }, q.status);
 		const { work, amount, fees } = q;
 
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		// A connected creator is a HARD PRECONDITION, not a mode switch. Anthers does not
 		// sell a creator's work when the money cannot reach them: this route used to fall
@@ -339,7 +351,8 @@ const paymentRoutes = new Hono()
 			params.transfer_data = { destination: creatorAccount.stripeAccountId };
 		}
 
-		const paymentIntent = await stripe.paymentIntents.create(params);
+		const paymentIntent = await createPaymentIntent(params);
+		if (!paymentIntent) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Record the purchase as pending; the webhook flips it to completed on success,
 		// and access unlocks the moment a completed row exists.
@@ -434,8 +447,7 @@ const paymentRoutes = new Hono()
 		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Same hard precondition as a single purchase: Anthers does not sell a creator's
 		// work when the money cannot reach them.
@@ -469,7 +481,8 @@ const paymentRoutes = new Hono()
 			params.transfer_data = { destination: creatorAccount.stripeAccountId };
 		}
 
-		const paymentIntent = await stripe.paymentIntents.create(params);
+		const paymentIntent = await createPaymentIntent(params);
+		if (!paymentIntent) return c.json({ error: "Payments are not configured." }, 503);
 
 		/**
 		 * One row per Work, all sharing the PaymentIntent — because access, refunds and
@@ -692,8 +705,7 @@ const paymentRoutes = new Hono()
 
 	// ── Stripe Webhook ───────────────────────────────────────────────────────
 	.post("/stripe/webhook", async (c) => {
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		const sig = c.req.header("stripe-signature");
 
@@ -730,7 +742,7 @@ const paymentRoutes = new Hono()
 		let event: Stripe.Event | undefined;
 		for (const secret of secrets) {
 			try {
-				event = await stripe.webhooks.constructEventAsync(raw, sig, secret);
+				event = (await verifyWebhookSignature(raw, sig, secret)) ?? undefined;
 				break;
 			} catch {
 				// Try the next one. Falling through every secret is the failure.

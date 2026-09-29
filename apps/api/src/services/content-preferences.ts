@@ -69,7 +69,7 @@ import {
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { eq, type SQL, sql } from "drizzle-orm";
-import { getStripe } from "../lib/stripe.js";
+import { createSetupIntent, listCardPaymentMethods, paymentsConfigured } from "../lib/processor.js";
 import { ensureStripeCustomer } from "./billing.js";
 import { maturityLocked } from "./parental-controls.js";
 
@@ -377,22 +377,21 @@ export async function verifyAdulthoodByCardFunding(
 	customerId: string | null,
 	now: Date = new Date(),
 ): Promise<{ verifiedAt: Date; method: string } | AdultEnableRefusal> {
-	const stripe = getStripe();
-	if (!stripe) return "unavailable";
+	if (!paymentsConfigured()) return "unavailable";
 	if (!customerId) return "no_card";
 
 	// 🚨 A failure to reach Stripe is a failure to verify, never a pass. Letting the request
 	// 500 would also have failed closed, but it reads to the person as a broken site rather
 	// than a check that did not complete — and to whoever is watching, as an outage rather
 	// than as the gate holding.
-	let methods: Awaited<ReturnType<typeof stripe.paymentMethods.list>>;
+	let methods: Awaited<ReturnType<typeof listCardPaymentMethods>>;
 	try {
-		methods = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 10 });
+		methods = await listCardPaymentMethods({ customer: customerId, type: "card", limit: 10 });
 	} catch {
 		return "unavailable";
 	}
 
-	const cards = methods.data.filter((pm) => pm.card);
+	const cards = (methods?.data ?? []).filter((pm) => pm.card);
 	if (cards.length === 0) return "no_card";
 
 	// 🚨 Any credit-funded card on the account passes, and this reads every card rather than
@@ -442,12 +441,11 @@ export async function beginAdultVerification(
 	// card to an account that was never going to be allowed to use it.
 	if (await maturityLocked(userId)) return "parental_locked";
 
-	const stripe = getStripe();
-	if (!stripe) return "unavailable";
+	if (!paymentsConfigured()) return "unavailable";
 
 	try {
 		const customerId = await ensureStripeCustomer(userId, email);
-		const intent = await stripe.setupIntents.create({
+		const intent = await createSetupIntent({
 			customer: customerId,
 			payment_method_types: ["card"],
 			// Reusable later, so somebody who verifies and then supports a creator is not
@@ -455,7 +453,7 @@ export async function beginAdultVerification(
 			usage: "off_session",
 			metadata: { purpose: "adult_verification", userId: String(userId) },
 		});
-		return intent.client_secret ? { clientSecret: intent.client_secret } : "unavailable";
+		return intent?.client_secret ? { clientSecret: intent.client_secret } : "unavailable";
 	} catch {
 		return "unavailable";
 	}

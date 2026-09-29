@@ -27,7 +27,12 @@ import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type Stripe from "stripe";
-import { getStripe } from "../lib/stripe.js";
+import {
+	createCoupon,
+	paymentsConfigured,
+	retrieveSubscription,
+	updateInvoiceLines,
+} from "../lib/processor.js";
 import { itemsFromSub } from "./billing.js";
 import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
@@ -97,8 +102,7 @@ interface Owed {
  * harmless when there is nothing owed, which is the overwhelming majority of invoices.
  */
 export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise<number> {
-	const stripe = getStripe();
-	if (!stripe) return 0;
+	if (!paymentsConfigured()) return 0;
 
 	// Only a draft can still be changed, and only a renewal has lines a reduction belongs
 	// against. The invoice for a mid-month raise is deliberately excluded: it is the charge
@@ -167,7 +171,8 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 		.orderBy(asc(supportReductions.id));
 	if (owed.length === 0) return 0;
 
-	const sub = await stripe.subscriptions.retrieve(subscriptionId);
+	const sub = await retrieveSubscription(subscriptionId);
+	if (!sub) return 0;
 	const destinationOfItem = new Map(
 		itemsFromSub(sub).map((i) => [i.itemId, destinationLabel(i.creatorId)]),
 	);
@@ -188,7 +193,7 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 	const updates: { id: string; discounts: [{ coupon: string }] }[] = [];
 	for (const [lineId, dollars] of plan.perLine) {
 		if (dollars.lessThanOrEqualTo(0)) continue;
-		const coupon = await stripe.coupons.create({
+		const coupon = await createCoupon({
 			amount_off: dollars.times(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber(),
 			currency: "usd",
 			duration: "once",
@@ -198,11 +203,12 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 			name: `Days before you started, ${cycle.slice(0, 7)}`,
 			metadata: { anthers: "support_reduction", userId: String(acct.userId), cycle },
 		});
+		if (!coupon) return 0;
 		updates.push({ id: lineId, discounts: [{ coupon: coupon.id }] });
 	}
 
 	if (updates.length > 0) {
-		await stripe.invoices.updateLines(invoice.id, { lines: updates });
+		await updateInvoiceLines(invoice.id, { lines: updates });
 	}
 
 	// ── Book what was spent, and carry what was not ──────────────────────────

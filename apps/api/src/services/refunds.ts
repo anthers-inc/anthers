@@ -52,7 +52,7 @@ import { crfLedger, purchases } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
-import { getStripe } from "../lib/stripe.js";
+import { issueRefund, paymentsConfigured } from "../lib/processor.js";
 
 type Purchase = typeof purchases.$inferSelect;
 
@@ -174,8 +174,7 @@ export async function refundPurchase(
 			};
 	}
 
-	const stripe = getStripe();
-	if (!stripe)
+	if (!paymentsConfigured())
 		return { ok: false, code: "not_configured", message: "Payments are not configured." };
 
 	/**
@@ -217,7 +216,7 @@ export async function refundPurchase(
 
 	let refundId: string;
 	try {
-		const refund = await stripe.refunds.create(
+		const refund = await issueRefund(
 			{
 				payment_intent: purchase.stripePaymentIntentId,
 				...(itemCents !== undefined ? { amount: itemCents } : {}),
@@ -243,7 +242,8 @@ export async function refundPurchase(
 			// purchase id is the stable name for "this reversal".
 			{ idempotencyKey: `refund_purchase_${purchase.id}` },
 		);
-		refundId = refund.id;
+		refundId = refund?.id ?? "";
+		if (!refundId) throw new Error("The refund could not be processed.");
 	} catch (err) {
 		return {
 			ok: false,
