@@ -746,11 +746,11 @@ const accessRowSchema = z.object({
 		// least the floor" predicate rather than a minimum.
 		.refine(isChargeableAmount, { message: CHARGEABLE_AMOUNT_MESSAGE }),
 	allow: z.boolean(),
-	// 🚨 **The floor sits on the PRICE, never on the buyer's total.** `calculateFees` adds
-	// sales tax on top, so flooring the total would make a $0.47 Work purchasable in a taxed
-	// jurisdiction and not in an untaxed one — and `SALES_TAX_RATE` is an illustrative rate
-	// rather than a real per-jurisdiction one, so the boundary would move with a figure that
-	// is not even claimed to be accurate.
+	// 🚨 **The floor sits on the PRICE, never on the buyer's total.** Sales tax is added on
+	// top of the price at the charge, so flooring the total would make a $0.47 Work
+	// purchasable in a taxed jurisdiction and not in an untaxed one — and the tax rate is
+	// resolved by Stripe Tax per buyer location rather than being one flat figure, so the
+	// boundary would move with wherever the buyer happened to be.
 	price: z
 		.string()
 		.regex(MONEY)

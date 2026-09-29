@@ -54,6 +54,30 @@ export async function createPaymentIntent(
 	return (await getStripe()?.paymentIntents.create(params)) ?? null;
 }
 
+/**
+ * Mirrors `stripe.checkout.sessions.create` — a Checkout Session, the only charge shape that
+ * can carry a product tax code and so the only path a purchase may be charged through since
+ * real tax calculation landed. In `ui_mode: "elements"` the session's `client_secret` is
+ * handed to the browser, which mounts the Payment Element from it and confirms there.
+ */
+export async function createCheckoutSession(
+	params: Stripe.Checkout.SessionCreateParams,
+): Promise<Stripe.Checkout.Session | null> {
+	return (await getStripe()?.checkout.sessions.create(params)) ?? null;
+}
+
+/**
+ * Mirrors `stripe.checkout.sessions.list` — sessions by filter, here to find the one a
+ * completed PaymentIntent belongs to. The session id does not exist when the
+ * PaymentIntent's metadata is written (Stripe creates the intent inside the session), so
+ * the session cannot be named in advance — it has to be looked up by the intent.
+ */
+export function listCheckoutSessions(
+	params: Stripe.Checkout.SessionListParams,
+): Stripe.ApiListPromise<Stripe.Checkout.Session> | null {
+	return getStripe()?.checkout.sessions.list(params) ?? null;
+}
+
 /** Mirrors `stripe.webhooks.constructEventAsync` — signature verification for an inbound event. */
 export async function verifyWebhookSignature(
 	payload: string,
@@ -120,6 +144,17 @@ export async function createProduct(
 	params: Stripe.ProductCreateParams,
 ): Promise<Stripe.Product | null> {
 	return (await getStripe()?.products.create(params)) ?? null;
+}
+
+/**
+ * Mirrors `stripe.products.update` — changing a Product, here to keep its tax code honest
+ * when what a creator's support buys changes (a gate ladder appearing or disappearing).
+ */
+export async function updateProduct(
+	productId: string,
+	params: Stripe.ProductUpdateParams,
+): Promise<Stripe.Product | null> {
+	return (await getStripe()?.products.update(productId, params)) ?? null;
 }
 
 /** Mirrors `stripe.customers.create` — a new Customer. */
