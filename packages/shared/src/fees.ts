@@ -10,7 +10,6 @@ import {
 	CARD_RATE,
 	FOUNDATION_SPLIT,
 	FREE_STORAGE_GIB,
-	SALES_TAX_RATE,
 	SELF_HOST_FEE,
 	STORAGE_PER_GIB_MONTH,
 	supportAmount,
@@ -251,6 +250,16 @@ export type PurchaseType = "digital" | "physical" | "service";
  * `deliveryFee` and `crfFee` keep their legacy key names and are **always zero** —
  * the purchase fee went 2026-08-03, the delivery charge 2026-08-12. Both columns
  * are `NOT NULL`, so they stay; dropping them is a separate migration.
+ *
+ * 🚨 `salesTax` is **also always zero**, since real tax calculation moved to Stripe Tax.
+ * A PaymentIntent cannot carry a product tax code, so purchases are charged through a
+ * Checkout Session with `automatic_tax` and a code per line; the tax a buyer pays is
+ * whatever Stripe Tax resolves from their billing address, recorded on the purchase row
+ * at completion. Anthers' arithmetic cannot know the buyer's location at quote time, so
+ * this field stopped pretending to — `buyerTotal` is the price itself, and the tax joins
+ * it in the Checkout Session. Do not reintroduce a flat rate here: over-collected tax is
+ * a liability of its own, and `scripts/illustrative-tax-guard.test.ts` fails any charge
+ * path that reaches for the illustrative rate.
  */
 export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {}) {
 	// `type` no longer changes the arithmetic — it did while digital sales carried
@@ -259,12 +268,12 @@ export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {
 	void opts.type;
 
 	// The list price IS the advertised price: card processing comes out of it, not
-	// on top of it. Sales tax is the only thing added, because a government-imposed
-	// tax is the sole carve-out mandatory-fee disclosure law allows.
+	// on top of it. Sales tax is the only thing added — and it is added by Stripe Tax,
+	// from the buyer's billing address, at the Checkout Session; nothing here can know it.
 	const processingFee = CENTS(amount.mul(CARD_RATE).plus(CARD_FLAT));
-	const salesTax = CENTS(amount.mul(SALES_TAX_RATE));
+	const salesTax = new Decimal(0);
 	const creatorEarnings = amount.minus(processingFee);
-	const buyerTotal = amount.plus(salesTax);
+	const buyerTotal = amount;
 
 	return {
 		processingFee,
