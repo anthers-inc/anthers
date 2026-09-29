@@ -731,10 +731,11 @@ describe("Webhook: payment_intent.succeeded", () => {
 	});
 
 	it("refuses completion for a session billed outside the US, leaving the row pending", async () => {
-		// The posture sells to US buyers at launch; the Billing Address Element cannot
-		// enforce it (no country allow-list on the Checkout flavor), so this refusal is
-		// the enforcement. The row stays `pending` — no access, no ledger entry — and
-		// the money is returned by hand.
+		// The buy surfaces collect the address through Anthers' own US-only form, so a
+		// browser-built session is US by construction — this refusal is the backstop for
+		// what that cannot see: a hand-rolled API session, a modified client. The row
+		// stays `pending` — no access, no ledger entry — and the money is returned by
+		// hand.
 		const piId = `pi_${uid()}`;
 		const sessionId = `cs_${uid()}`;
 		await db.insert(purchases).values({

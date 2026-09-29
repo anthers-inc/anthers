@@ -216,12 +216,15 @@ async function resolveBasket(workIds: number[], userId: number) {
  * Creator Terms already put it. `refund_application_fee` in `services/refunds.ts` stays
  * unset for the same reason.
  *
- * ⚠️ **US billing addresses only, enforced server-side.** The Checkout-flavored Billing
- * Address Element offers no country allow-list (the standalone Elements AddressElement
- * does, and this is not it), so the posture's boundary is enforced where it can be: the
- * completion path below refuses a session whose resolved billing address is not US,
- * leaving the rows `pending` for a hand refund, and the buy surfaces say the US is the
- * launch market. The refusal is the enforcement; the element is the collection.
+ * ⚠️ **US billing addresses only, enforced client-side by construction, backstopped
+ * here.** The purchase surfaces collect the address through Anthers' own US-only form
+ * (the Checkout-flavored Billing Address Element offers no country allow-list, which is
+ * why it was replaced), so the session a browser creates carries a US address by
+ * construction — there is no country field to enter anything else into. The completion
+ * path below is the backstop for anything that reaches the API anyway: a hand-rolled
+ * session built against the API directly, or a form a modified client skipped. It
+ * refuses a session whose resolved billing address is not US, leaving the rows `pending`
+ * for a hand refund — the boundary holds even when the client's half does not.
  *
  * `buyerTotal` is the price itself: tax joins it inside the session, resolved per buyer,
  * and `total_details.amount_tax` is what the completion path stamps onto the purchase rows.
@@ -308,11 +311,13 @@ function workLineItem(
  * why the columns are stamped here rather than derived later. `salesTax` was zero at
  * checkout because Anthers' arithmetic cannot know the buyer's location; the session can.
  *
- * ⚠️ **US billing only, enforced here.** The posture sells to US buyers at launch, and the
- * Billing Address Element offers only the US — but the element is a suggestion a determined
- * or proxied buyer can route around, so the completed session is re-read and a non-US
- * address is a hard failure that leaves the rows `pending` and the money to be returned by
- * hand. Refusing loudly beats collecting tax Anthers is not registered to collect.
+ * ⚠️ **US billing only, enforced here as the backstop.** The buy surfaces collect the
+ * address through Anthers' own US-only form — there is no country field to enter
+ * anything else into, so a browser-built session carries a US address by construction.
+ * This refusal is the defense in depth for what that cannot see: a hand-rolled API
+ * call, a modified client, a form skipped. A non-US address is a hard failure that
+ * leaves the rows `pending` and the money to be returned by hand. Refusing loudly beats
+ * collecting tax Anthers is not registered to collect.
  *
  * Idempotent by the same latch the rest of the webhook uses: only `pending` rows move.
  */
