@@ -722,6 +722,13 @@
 			"when": 1790124853661,
 			"tag": "0102_tricky_jimmy_woo",
 			"breakpoints": true
+		},
+		{
+			"idx": 103,
+			"version": "7",
+			"when": 1790705356509,
+			"tag": "0103_perfect_anthem",
+			"breakpoints": true
 		}
 	]
 }

@@ -59,6 +59,14 @@ export const accounts = pgTable("accounts", {
 	 * reachable. See `services/billing.ts` for why a Product is needed at all.
 	 */
 	stripeProductId: text("stripe_product_id").default(""),
+	/**
+	 * The tax code that Product was last stamped with. A subscription item has no
+	 * `tax_code` param — the code rides on the Product — so when a creator's gates appear
+	 * or disappear, what their support buys changes and the Product has to follow. This
+	 * column is what lets `ensureCreatorProduct` know a re-stamp is owed without a
+	 * Stripe round-trip to read the Product back.
+	 */
+	stripeProductTaxCode: text("stripe_product_tax_code").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active support subscription
 
 	// ── Adult access (the wiki's *Content Standards* § The funding type is the age signal) ──
