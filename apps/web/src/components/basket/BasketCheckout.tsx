@@ -11,13 +11,18 @@
  */
 import { client } from "@anthers/web-shared/rpc";
 import {
-	BillingAddressElement,
 	CheckoutElementsProvider,
 	PaymentElement,
 	useCheckoutElements,
 } from "@stripe/react-stripe-js/checkout";
 import { useEffect, useState } from "react";
 import { getStripe } from "../../lib/stripe";
+import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import {
+	mayConfirm,
+	sessionTotals,
+	useSessionBillingAddress,
+} from "../payments/useSessionBillingAddress";
 
 interface BasketCheckoutProps {
 	workIds: number[];
@@ -28,13 +33,16 @@ interface BasketCheckoutProps {
 
 function CheckoutForm({ workIds, buyerTotal, onComplete }: BasketCheckoutProps) {
 	const checkoutState = useCheckoutElements();
+	const billing = useSessionBillingAddress(checkoutState);
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (checkoutState.type !== "success") return;
+		// The address must already be on the session — its own submit step resolved the
+		// tax. Confirming without one would charge a total whose rate was never resolved.
+		if (checkoutState.type !== "success" || !billing.accepted) return;
 		setProcessing(true);
 		setError(null);
 
@@ -76,21 +84,33 @@ function CheckoutForm({ workIds, buyerTotal, onComplete }: BasketCheckoutProps) 
 		);
 	}
 
-	const canConfirm = checkoutState.type === "success" && checkoutState.checkout.canConfirm;
+	// What the session itself totals once the address is on it — the tax-inclusive figure
+	// the buyer is charged. Null until the address resolves, so the button says "+ tax"
+	// rather than quoting a number nobody has calculated yet.
+	const totals = checkoutState.type === "success" ? sessionTotals(checkoutState.checkout) : null;
+
+	// 🚨 Two gates, and neither implies the other: Stripe's `canConfirm` tracks the
+	// Payment Element, `accepted` is our own record that the session took a US address.
+	const canConfirm =
+		checkoutState.type === "success" &&
+		mayConfirm(checkoutState.checkout.canConfirm, billing.accepted);
 
 	return (
 		<form onSubmit={handleSubmit} className="space-y-3">
-			{/* Tax is calculated from this address — the rate varies by location. Anthers
-			    sells to US billing addresses at launch; anything else is refused at completion. */}
+			{/* Anthers' own US-only form, not Stripe's Billing Address Element — the element
+			    offers no country allow-list, so this form is US by construction. Submitting
+			    it resolves the session's tax, which is what makes the button's total real. */}
+			<CheckoutBillingAddressBlock billing={billing} />
 			<div className="rounded-lg border border-base-300 p-3">
-				<BillingAddressElement options={{ fields: { phone: "never" } }} />
-			</div>
-			<div className="rounded-lg border border-base-300 p-3">
-				<PaymentElement />
+				{/* `fields.billingDetails: "never"` because the address above already
+				    collected everything AVS would check — asking twice on one screen is
+				    the double collection this option exists to prevent, and the card's
+				    own AVS check runs against the session's address. */}
+				<PaymentElement options={{ fields: { billingDetails: "never" } }} />
 			</div>
 			<p className="text-xs text-base-content/50">
-				Sales tax is calculated from your billing address and shown before you pay — the rate varies
-				by location.
+				Sales tax is calculated from your billing address — the rate varies by location, and Anthers
+				sells to US billing addresses at launch.
 			</p>
 			{error && (
 				<div className="alert alert-error text-sm">
@@ -102,7 +122,11 @@ function CheckoutForm({ workIds, buyerTotal, onComplete }: BasketCheckoutProps) 
 				className="btn btn-primary w-full"
 				disabled={!canConfirm || processing || workIds.length === 0}
 			>
-				{processing ? "Processing…" : `Pay $${buyerTotal} + tax`}
+				{processing
+					? "Processing…"
+					: totals?.buyerTotal
+						? `Pay $${Number(totals.buyerTotal).toFixed(2)}`
+						: `Pay $${buyerTotal} + tax`}
 			</button>
 		</form>
 	);

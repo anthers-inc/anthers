@@ -2,13 +2,18 @@
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import {
-	BillingAddressElement,
 	CheckoutElementsProvider,
 	PaymentElement,
 	useCheckoutElements,
 } from "@stripe/react-stripe-js/checkout";
 import { useEffect, useState } from "react";
 import { getStripe } from "../../lib/stripe";
+import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import {
+	mayConfirm,
+	sessionTotals,
+	useSessionBillingAddress,
+} from "../payments/useSessionBillingAddress";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
 interface ProjectPricingProps {
@@ -29,12 +34,14 @@ interface Quote {
 }
 
 /**
- * The server-computed receipt. Tax is deliberately absent: the rate varies by location and
- * is calculated at checkout, so the receipt shows where the price goes and names the tax as
- * coming — an "estimated" figure here would be the flat-rate charge this flow exists to
- * retire, one screen earlier.
+ * The server-computed receipt. Tax is resolved by Stripe Tax at the session, from the
+ * buyer's billing address — so the receipt carries the quote's price breakdown plus,
+ * once the address is on the session, the real tax the session resolved and the
+ * tax-inclusive total. Before that, the tax line is named as coming rather than shown:
+ * an "estimated" figure here would be the flat-rate charge this flow exists to retire,
+ * one screen earlier.
  */
-function receiptFromQuote(q: Quote) {
+function receiptFromQuote(q: Quote, sessionBuyerTotal: string | null, sessionTax: string | null) {
 	const n = (s: string) => Number(s);
 	const lines: { label: string; amount: number; note?: string; added?: boolean }[] = [];
 	// Everything except tax comes OUT of the listed price. Two of the quote's fields are
@@ -44,9 +51,17 @@ function receiptFromQuote(q: Quote) {
 	// ignores a field the server sent would stop reconciling the moment one came back
 	// non-zero.
 	lines.push({ label: "Card processing", amount: n(q.processingFee), note: "at cost" });
+	if (sessionTax !== null) {
+		lines.push({
+			label: "Sales tax",
+			amount: n(sessionTax),
+			note: "from your address",
+			added: true,
+		});
+	}
 	return {
 		price: n(q.amount),
-		buyerTotal: n(q.amount),
+		buyerTotal: sessionBuyerTotal !== null ? n(sessionBuyerTotal) : n(q.amount),
 		lines,
 		creatorReceives: n(q.amount) - n(q.processingFee) - n(q.deliveryFee),
 	};
@@ -55,11 +70,13 @@ function receiptFromQuote(q: Quote) {
 /**
  * The Checkout form, inside `CheckoutElementsProvider`.
  *
- * The Payment Element collects the card and the minimum billing details; the Billing
- * Address Element collects the full address, offered to the US only, because that is the
- * address tax resolves from and the posture sells to US buyers at launch. The session
- * itself — created server-side — carries the line item's tax code and the automatic-tax
- * setting; this side only mounts what Stripe built and confirms.
+ * The Payment Element collects the card and nothing else — the billing address is
+ * collected by Anthers' own US-only form (`CheckoutBillingAddressBlock`) and submitted
+ * to the session as its own step before confirm, because Stripe's Checkout-flavored
+ * Billing Address Element offers no country allow-list and the posture sells to US
+ * billing addresses only. The session itself — created server-side — carries the line
+ * item's tax code and the automatic-tax setting; this side collects the address,
+ * resolves the tax onto the session, and confirms.
  */
 function CheckoutForm({
 	slug,
@@ -74,6 +91,7 @@ function CheckoutForm({
 	const [succeeded, setSucceeded] = useState(false);
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [quoteFailed, setQuoteFailed] = useState(false);
+	const billing = useSessionBillingAddress(checkoutState);
 
 	// The server is the ONLY thing that prices this purchase. There used to be a client
 	// estimate rendered until the quote arrived, and it drifted: it recomputed the card
@@ -106,11 +124,30 @@ function CheckoutForm({
 		};
 	}, [slug]);
 
-	const receipt = quote ? receiptFromQuote(quote) : null;
+	// What the session itself totals once the address is on it: the tax-inclusive figure
+	// the buyer is charged and the tax that was added. Null until the address resolves —
+	// the buyer sees "+ tax" rather than a number nobody has calculated yet.
+	const totals = checkoutState.type === "success" ? sessionTotals(checkoutState.checkout) : null;
+
+	// The receipt's buyer total is the session's once the address resolved the tax, and
+	// the price itself until then — with the tax line named as coming rather than shown.
+	const receipt = quote
+		? receiptFromQuote(quote, totals?.buyerTotal ?? null, totals?.tax ?? null)
+		: null;
+
+	// 🚨 Two gates, and neither implies the other. `canConfirm` is Stripe's readiness for
+	// the Payment Element; `accepted` is our own record that the session took a US
+	// address. A buyer must clear both: no card, no confirm; no address, no confirm.
+	const canConfirm =
+		checkoutState.type === "success" &&
+		mayConfirm(checkoutState.checkout.canConfirm, billing.accepted);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (checkoutState.type !== "success") return;
+		// The address must already be on the session — its own submit step resolved the
+		// tax and re-armed this gate. Confirming without one would charge a buyer whose
+		// rate was never resolved, which is what the gate exists to prevent.
+		if (checkoutState.type !== "success" || !billing.accepted) return;
 
 		setProcessing(true);
 		setError(null);
@@ -128,7 +165,7 @@ function CheckoutForm({
 
 			// Checkout confirms in place for cards — the session carries the line item, its
 			// tax code and the automatic-tax setting, and Stripe Tax resolves the buyer's
-			// rate from the address the elements collected.
+			// rate from the address the form submitted onto the session.
 			const result = await checkoutState.checkout.confirm();
 			if (result.type === "error") {
 				setError(result.error.message || "Payment failed.");
@@ -167,8 +204,6 @@ function CheckoutForm({
 		);
 	}
 
-	const canConfirm = checkoutState.type === "success" && checkoutState.checkout.canConfirm;
-
 	return (
 		<form onSubmit={handleSubmit} className="flex flex-col gap-4">
 			{receipt ? (
@@ -178,19 +213,23 @@ function CheckoutForm({
 				<div className="skeleton h-40 w-full" aria-hidden="true" />
 			)}
 
-			{/* Tax is calculated from this address — the rate varies by location. Anthers sells
-			    to US billing addresses at launch; anything else is refused at completion. */}
-			<div className="border border-base-300 rounded-lg p-3 bg-base-100">
-				<BillingAddressElement options={{ fields: { phone: "never" } }} />
-			</div>
+			{/* Anthers' own US-only form, not Stripe's Billing Address Element — the element
+			    offers no country allow-list, so this form is US by construction. Submitting
+			    it resolves the session's tax, which is what fills the receipt's real total. */}
+			<CheckoutBillingAddressBlock billing={billing} />
 
 			<div className="border border-base-300 rounded-lg p-3 bg-base-100">
-				<PaymentElement />
+				{/* `fields.billingDetails: "never"` because the address above already
+				    collected everything AVS would check — asking twice on one screen is
+				    the double collection this option exists to prevent. The card's own
+				    AVS check runs against the session's address (the one
+				    `updateBillingAddress` wrote), so nothing is lost by not re-asking. */}
+				<PaymentElement options={{ fields: { billingDetails: "never" } }} />
 			</div>
 
 			<p className="text-xs text-base-content/50">
-				Sales tax is calculated from your billing address and shown before you pay — the rate varies
-				by location.
+				Sales tax is calculated from your billing address — the rate varies by location, and Anthers
+				sells to US billing addresses at launch.
 			</p>
 
 			{error && (
@@ -207,7 +246,9 @@ function CheckoutForm({
 				{processing
 					? "Processing..."
 					: receipt
-						? `Buy for $${receipt.buyerTotal.toFixed(2)} + tax`
+						? totals?.buyerTotal
+							? `Buy for $${Number(totals.buyerTotal).toFixed(2)}`
+							: `Buy for $${receipt.buyerTotal.toFixed(2)} + tax`
 						: "Loading price…"}
 			</button>
 		</form>
