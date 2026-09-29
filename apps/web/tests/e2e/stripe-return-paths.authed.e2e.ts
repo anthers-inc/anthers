@@ -71,7 +71,10 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	 * redirect is the exception rather than a state the page reports.
 	 */
 	checkoutReturn: async (page) => {
-		await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
+		// Exact: the page also renders "Your Library is empty" as a heading, and a
+		// partial match resolves to both — a strict-mode violation rather than a
+		// wrong-page pass.
+		await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
 	},
 };
 
