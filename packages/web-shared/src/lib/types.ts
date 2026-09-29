@@ -681,9 +681,19 @@ export interface CheckoutResponse {
 	deliveryFee: string; // always "0.00" since 2026-08-12 — delivery is free
 	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
 	creatorEarnings: string;
-	buyerTotal: string; // price + fees — what the buyer is charged
-	salesTax: string;
-	clientSecret: string | null; // Stripe PaymentIntent client secret (null only on error)
+	/**
+	 * Null since real tax calculation landed: the rate is resolved by Stripe Tax from the
+	 * buyer's billing address at the Checkout Session, so there is no figure to quote —
+	 * the buy surfaces say "calculated at checkout" and the session carries the number.
+	 */
+	buyerTotal: string | null;
+	/** Null for the same reason as `buyerTotal` — the tax lives in the session. */
+	salesTax: string | null;
+	/**
+	 * The Checkout Session's client secret — the browser mounts Checkout (elements mode)
+	 * from it and confirms there. Null only on error.
+	 */
+	clientSecret: string | null;
 }
 
 export interface Purchase {

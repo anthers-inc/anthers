@@ -71,8 +71,8 @@ import {
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	formatMultiple,
+	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
-	SALES_TAX_RATE,
 	stickerBudgetFor,
 	storageGibFor,
 	TIME_POOL_RATE,
@@ -514,8 +514,13 @@ function renderReceiptMarkdown(): string {
 		pad("  Free access & programs (the remainder)", `$${r.remainder}`),
 		"─".repeat(66),
 		pad("Support subtotal (all-in)", `$${r.supportSubtotal}`),
+		// The rate a buyer actually pays is resolved by Stripe Tax from their billing
+		// address at the charge, so the sample receipt can only illustrate: a US average,
+		// named as one, with the copy saying the real rate varies by location. Saying
+		// "6.5%" flat would charge every reader the same illustrative figure the checkout
+		// no longer charges.
 		pad(
-			`Sales tax (${(SALES_TAX_RATE * 100).toFixed(1)}%, the only thing added on top)`,
+			`Sales tax (illustrative ${(ILLUSTRATIVE_SALES_TAX_RATE * 100).toFixed(1)}% — the real rate varies by location, calculated at checkout)`,
 			`+$${r.salesTax}`,
 		),
 		`${" ".repeat(56)}──────`,

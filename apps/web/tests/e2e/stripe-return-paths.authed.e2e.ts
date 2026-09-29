@@ -63,6 +63,16 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 			page.getByRole("heading", { name: /Your Anthers|Account unavailable/ }),
 		).toBeVisible();
 	},
+
+	/**
+	 * The Library page — where a buyer returning from a redirect-based payment method
+	 * lands. The heading proves the route matched; the `?stripe=return` parameter is
+	 * deliberately not asserted to render anything, because cards confirm in place and a
+	 * redirect is the exception rather than a state the page reports.
+	 */
+	checkoutReturn: async (page) => {
+		await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
+	},
 };
 
 test("every Stripe return path is pinned here", () => {

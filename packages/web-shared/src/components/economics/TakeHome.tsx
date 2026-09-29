@@ -130,7 +130,9 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 			<p className="mt-1 text-xs text-base-content/60">
 				{/* Never "our fee" and never a percentage on its own — Anthers keeps $0 here, and
 				    saying so plainly is the claim that survives (the wiki's *How Anthers Talks About Itself* § Claims). */}
-				Anthers takes <strong>nothing</strong>. The {usd(fee)} is card processing, paid to Stripe.
+				Anthers takes <strong>nothing</strong>. The {usd(fee)} is card processing, paid to Stripe —
+				and on sales where Stripe calculates tax, its 0.5% tax fee comes out of the price too, at
+				cost, so you receive up to 0.5% less than shown.
 			</p>
 
 			{underwater && (
