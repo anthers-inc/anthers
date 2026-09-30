@@ -31,6 +31,7 @@ import { QUEUES } from "../jobs/queue.js";
 import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
 import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
+import { parseFilingPeriod, salesTaxWorksheet } from "../services/books.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
@@ -403,6 +404,27 @@ const adminRoutes = new Hono<AdminEnv>()
 			pgboss: { available: pgbossPresent, queues: queueHealth, failures },
 			transcodes: { counts: transcodeCounts, problems: transcodeProblems },
 		});
+	})
+
+	// ── Books ──────────────────────────────────────────────────────────────
+	// The financial half of the console, starting with the sales-tax return
+	// worksheet. The totals come from the purchase and invoice rows; the
+	// state-vs-city split does not, and the worksheet's notes say so rather
+	// than filling it — see services/books.ts for the boundary.
+	.get("/books/sales-tax-worksheet", async (c) => {
+		const raw = c.req.query("period")?.trim() ?? "";
+		const period = parseFilingPeriod(raw);
+		if (!period) {
+			return c.json(
+				{
+					error:
+						"Name the filing period as a month (2026-09), a quarter (2026-Q3) or a year (2026).",
+					code: "bad_period",
+				},
+				400,
+			);
+		}
+		return c.json(await salesTaxWorksheet(period));
 	})
 
 	// ── Data-rights requests ────────────────────────────────────────────────
