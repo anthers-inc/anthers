@@ -2,10 +2,9 @@
 /**
  * The admin app's frame: the sections down the side, and who is signed in.
  *
- * The sections are Legal, Moderation, Infrastructure and Accounts, grouped so that a later split by
+ * The sections are Legal, Moderation, Infrastructure, Books and Accounts, grouped so that a later split by
  * capability is one check per section. Accounts is the only one with a check today, because it is
  * super-admin only; the API refuses it too, so hiding the link is courtesy rather than the gate.
- * Books is not here yet — it appears with its first tool.
  */
 import { applyTheme, storeTheme, useTheme } from "@anthers/web-shared/theme";
 import { MoonIcon, SunIcon } from "@heroicons/react/24/outline";
@@ -39,6 +38,10 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 		],
 	},
 	{ title: "Infrastructure", items: [{ to: "/infrastructure", label: "Jobs and Services" }] },
+	{
+		title: "Books",
+		items: [{ to: "/books/sales-tax", label: "Sales-Tax Worksheet" }],
+	},
 	{
 		title: "Accounts",
 		items: [{ to: "/accounts", label: "Admin Accounts" }],
