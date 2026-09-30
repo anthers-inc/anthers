@@ -65,7 +65,15 @@ import sharp from "sharp";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { accountByHandle, resolveHandle } from "../lib/handles.js";
-import { getStripe } from "../lib/stripe.js";
+import {
+	createBillingPortalSession,
+	createSubscription,
+	listCardPaymentMethods,
+	paymentsConfigured,
+	previewInvoice,
+	retrieveSubscription,
+	updateSubscription,
+} from "../lib/processor.js";
 import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import {
 	type AccessibleWork,
@@ -567,8 +575,7 @@ const subscriptionRoutes = new Hono()
 		if (!Number.isFinite(target) || target < 0 || target > MAX_ANTHERS_SUPPORT) {
 			return c.json({ error: "Invalid amount" }, 400);
 		}
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		const acct = await ensureAccount(user.id);
 
@@ -577,7 +584,7 @@ const subscriptionRoutes = new Hono()
 			if (!acct.stripeSubscriptionId || supportAmount(acct.anthersSupport) === 0) {
 				return c.json({ error: "Nothing given to Anthers to cancel" }, 400);
 			}
-			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
+			const sub = await retrieveSubscription(acct.stripeSubscriptionId);
 			return c.json({
 				isCancel: true,
 				anthersSupport: 0,
@@ -591,12 +598,12 @@ const subscriptionRoutes = new Hono()
 		// The card on file — attached when a subscription's first payment is confirmed.
 		let savedCard: { id: string; brand: string; last4: string } | null = null;
 		if (acct.stripeCustomerId) {
-			const pms = await stripe.paymentMethods.list({
+			const pms = await listCardPaymentMethods({
 				customer: acct.stripeCustomerId,
 				type: "card",
 				limit: 1,
 			});
-			const pm = pms.data[0];
+			const pm = pms?.data[0];
 			if (pm?.card) savedCard = { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 };
 		}
 
@@ -605,7 +612,7 @@ const subscriptionRoutes = new Hono()
 		let chargeNow = price.toFixed(2);
 		let nextBillingUnix: number | null = null;
 		if (acct.stripeSubscriptionId) {
-			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
+			const sub = await retrieveSubscription(acct.stripeSubscriptionId);
 			if (sub && (sub.status === "active" || sub.status === "trialing")) {
 				isChange = true;
 				const product = await ensureAnthersProduct();
@@ -614,7 +621,7 @@ const subscriptionRoutes = new Hono()
 					// price a change to every creator the user supports as well, which is not
 					// what this modal is asking about.
 					const existing = itemsFromSub(sub).find((i) => i.creatorId === null);
-					const preview = await stripe.invoices.createPreview({
+					const preview = await previewInvoice({
 						customer: acct.stripeCustomerId ?? undefined,
 						subscription: sub.id,
 						subscription_details: {
@@ -634,6 +641,7 @@ const subscriptionRoutes = new Hono()
 							proration_behavior: "always_invoice",
 						},
 					});
+					if (!preview) return c.json({ error: "Payments are not configured." }, 503);
 					chargeNow = Math.max(0, preview.amount_due / 100).toFixed(2);
 					nextBillingUnix = periodEndFromSub(sub);
 				}
@@ -697,8 +705,7 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { anthersSupport, directed = [] } = c.req.valid("json");
-			const stripe = getStripe();
-			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 			const acct = await ensureAccount(user.id);
 			const directedTotal = directed.reduce((sum, d) => sum + d.amount, 0);
@@ -707,7 +714,7 @@ const subscriptionRoutes = new Hono()
 			// Nothing at all → cancel the subscription at period end (webhook reverts).
 			if (total === 0) {
 				if (acct.stripeSubscriptionId) {
-					await stripe.subscriptions.update(acct.stripeSubscriptionId, {
+					await updateSubscription(acct.stripeSubscriptionId, {
 						cancel_at_period_end: true,
 					});
 					await db
@@ -803,7 +810,8 @@ const subscriptionRoutes = new Hono()
 			 * coupon is attached to on the renewal invoice — see `services/support-reductions.ts`.
 			 */
 			if (acct.stripeSubscriptionId) {
-				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
+				const sub = await retrieveSubscription(acct.stripeSubscriptionId);
+				if (!sub) return c.json({ error: "Payments are not configured." }, 503);
 				/**
 				 * 🚨 **A subscription whose renewal failed is refused, never replaced.** Falling
 				 * through to the create path below opened a second subscription beside the first,
@@ -839,7 +847,7 @@ const subscriptionRoutes = new Hono()
 						const periodStart =
 							periodStartFromSub(sub) ??
 							Math.floor(cycleStart(currentCycleKey(now)).getTime() / 1000);
-						await stripe.subscriptions.update(sub.id, {
+						await updateSubscription(sub.id, {
 							items: change.raises,
 							proration_behavior: "always_invoice",
 							proration_date: periodStart,
@@ -848,7 +856,7 @@ const subscriptionRoutes = new Hono()
 						});
 					}
 					if (change.drops.length > 0) {
-						await stripe.subscriptions.update(sub.id, {
+						await updateSubscription(sub.id, {
 							items: change.drops,
 							// No proration and no invoice: the price changes and the next charge
 							// on the 1st is the only thing that moves. What was already paid for
@@ -862,7 +870,7 @@ const subscriptionRoutes = new Hono()
 					if (change.raises.length === 0 && change.drops.length === 0) {
 						// Nothing moved — still clear a pending cancellation, which is the one
 						// thing a no-op change is legitimately used for.
-						await stripe.subscriptions.update(sub.id, { cancel_at_period_end: false });
+						await updateSubscription(sub.id, { cancel_at_period_end: false });
 					}
 
 					await recordReductions(user.id, now, change.started);
@@ -872,7 +880,7 @@ const subscriptionRoutes = new Hono()
 
 			// New subscription → create it incomplete and hand back the confirmation secret so
 			// the user confirms the first payment inline; the webhook applies it on success.
-			const sub = await stripe.subscriptions.create({
+			const sub = await createSubscription({
 				customer: customerId,
 				items,
 				// 🚨 **Backdated to the 1st, which is what puts every account on one calendar
@@ -887,6 +895,7 @@ const subscriptionRoutes = new Hono()
 				expand: ["latest_invoice.confirmation_secret"],
 				metadata: { userId: String(user.id) },
 			});
+			if (!sub) return c.json({ error: "Payments are not configured." }, 503);
 			await db
 				.update(accounts)
 				.set({ stripeSubscriptionId: sub.id, updatedAt: new Date() })
@@ -967,14 +976,13 @@ const subscriptionRoutes = new Hono()
 		// Stripe, so billing would keep charging a user the UI showed as canceled. That was
 		// filed as harmless while prod carried no Stripe config; prod now runs Stripe in
 		// test mode, so the guard is doing real work.
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Cancel at period end — the support keeps working until the cycle ends, then the
 		// subscription.deleted webhook reverts to 0. An account with no Stripe subscription
 		// (nothing to cancel remotely) still cancels locally: the flag is its whole state.
 		if (acct.stripeSubscriptionId) {
-			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: true });
+			await updateSubscription(acct.stripeSubscriptionId, { cancel_at_period_end: true });
 		}
 		await db.update(accounts).set({ canceledAt: new Date() }).where(eq(accounts.id, acct.id));
 		const updated = await getAccount(user.id);
@@ -989,11 +997,10 @@ const subscriptionRoutes = new Hono()
 			return c.json({ error: "No canceled subscription to resume" }, 400);
 		}
 		// Same guard as cancel — see the note there on why `if (stripe && …)` was wrong.
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		if (acct.stripeSubscriptionId) {
-			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: false });
+			await updateSubscription(acct.stripeSubscriptionId, { cancel_at_period_end: false });
 		}
 		await db.update(accounts).set({ canceledAt: null }).where(eq(accounts.id, acct.id));
 		const updated = await getAccount(user.id);
@@ -1002,16 +1009,16 @@ const subscriptionRoutes = new Hono()
 
 	// ── Billing Portal ───────────────────────────────────────────────────────
 	.post("/billing-portal", requireAuth, async (c) => {
-		const stripe = getStripe();
-		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 		const user = c.get("user");
 		const customerId = await ensureStripeCustomer(user.id, user.email);
 		const base =
 			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
-		const session = await stripe.billingPortal.sessions.create({
+		const session = await createBillingPortalSession({
 			customer: customerId,
 			return_url: `${base}${STRIPE_RETURN_PATHS.billingPortalReturn}`,
 		});
+		if (!session?.url) return c.json({ error: "Payments are not configured." }, 503);
 		return c.json({ portalUrl: session.url });
 	})
 

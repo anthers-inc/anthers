@@ -10,7 +10,7 @@
  */
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import type Stripe from "stripe";
-import { getStripe } from "../lib/stripe.js";
+import { listInvoiceLineItems } from "../lib/processor.js";
 
 /**
  * The month an invoice pays for, read from its subscription lines' service period.
@@ -46,10 +46,10 @@ export function cycleInvoicePaysFor(invoice: Stripe.Invoice): string {
 export async function allInvoiceLines(invoice: Stripe.Invoice): Promise<Stripe.InvoiceLineItem[]> {
 	const embedded = invoice.lines?.data ?? [];
 	if (!invoice.lines?.has_more || !invoice.id) return embedded;
-	const stripe = getStripe();
-	if (!stripe) return embedded;
+	const rest = listInvoiceLineItems(invoice.id);
+	if (!rest) return embedded;
 	const all: Stripe.InvoiceLineItem[] = [];
-	for await (const line of stripe.invoices.listLineItems(invoice.id, { limit: 100 })) {
+	for await (const line of rest) {
 		all.push(line);
 	}
 	return all;

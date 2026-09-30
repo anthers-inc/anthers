@@ -19,7 +19,13 @@ import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
-import { getStripe } from "../lib/stripe.js";
+import {
+	listPaidInvoicePayments,
+	paymentsConfigured,
+	retrieveCharge,
+	retrievePaymentIntent,
+	retrieveSubscription,
+} from "../lib/processor.js";
 import { itemsFromSub } from "./billing.js";
 import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
@@ -138,12 +144,16 @@ async function recordLines(
 	invoice: Stripe.Invoice,
 	subtotal: Decimal,
 ): Promise<void> {
-	const stripe = getStripe();
 	const subscriptionId = subscriptionOf(invoice);
 	const creatorOfItem = new Map<string, number | null>();
-	if (stripe && subscriptionId) {
-		const sub = await stripe.subscriptions.retrieve(subscriptionId);
-		for (const item of itemsFromSub(sub)) creatorOfItem.set(item.itemId, item.creatorId);
+	if (subscriptionId) {
+		const sub = await retrieveSubscription(subscriptionId);
+		// A retrieve that comes back empty leaves every line unmapped, which credits
+		// each line to Anthers — the same documented fallback as an unstamped item.
+		for (const item of itemsFromSub(
+			sub ?? ({ items: { data: [] } } as unknown as Stripe.Subscription),
+		))
+			creatorOfItem.set(item.itemId, item.creatorId);
 	}
 
 	const byCreator = new Map<number | null, Decimal>();
@@ -198,15 +208,14 @@ interface InvoicePaymentRef {
  */
 async function paymentOf(invoiceId: string): Promise<InvoicePaymentRef> {
 	const none = { paymentIntentId: null, chargeId: null };
-	const stripe = getStripe();
-	if (!stripe) return none;
+	if (!paymentsConfigured()) return none;
 	try {
-		const list = await stripe.invoicePayments.list({
+		const list = await listPaidInvoicePayments({
 			invoice: invoiceId,
 			status: "paid",
 			limit: 1,
 		});
-		const payment = list.data[0]?.payment;
+		const payment = list?.data[0]?.payment;
 		if (!payment) return none;
 		const idOf = (ref: string | { id: string } | undefined) =>
 			ref == null ? null : typeof ref === "string" ? ref : ref.id;
@@ -232,21 +241,20 @@ async function paymentOf(invoiceId: string): Promise<InvoicePaymentRef> {
  * out loud when it meets one.
  */
 async function processingFeeFor(invoiceId: string, payment: InvoicePaymentRef): Promise<Decimal> {
-	const stripe = getStripe();
-	if (!stripe) return new Decimal(0);
+	if (!paymentsConfigured()) return new Decimal(0);
 	try {
 		let bt: string | Stripe.BalanceTransaction | null | undefined;
 		if (payment.paymentIntentId) {
-			const intent = await stripe.paymentIntents.retrieve(payment.paymentIntentId, {
+			const intent = await retrievePaymentIntent(payment.paymentIntentId, {
 				expand: ["latest_charge.balance_transaction"],
 			});
-			const charge = intent.latest_charge;
+			const charge = intent?.latest_charge;
 			bt = charge && typeof charge !== "string" ? charge.balance_transaction : null;
 		} else if (payment.chargeId) {
-			const charge = await stripe.charges.retrieve(payment.chargeId, {
+			const charge = await retrieveCharge(payment.chargeId, {
 				expand: ["balance_transaction"],
 			});
-			bt = charge.balance_transaction;
+			bt = charge?.balance_transaction;
 		}
 		if (bt && typeof bt !== "string") return dollars(bt.fee ?? 0);
 	} catch (error) {
