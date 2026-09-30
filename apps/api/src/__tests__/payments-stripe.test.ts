@@ -48,6 +48,23 @@ function req(path: string, options?: RequestInit) {
 
 // ── The fake Stripe client ───────────────────────────────────────────────────
 
+/**
+ * An async-iterable shaped like Stripe's `ApiListPromise` results — `{ data: [...] }`
+ * that `for await` walks. The completion path iterates a session list, so a test shapes
+ * what it sees with this.
+ */
+function asyncList(data: unknown[]) {
+	return {
+		data,
+		[Symbol.asyncIterator]:
+			data.length > 0
+				? async function* () {
+						for (const item of data) yield item;
+					}
+				: async function* () {},
+	};
+}
+
 interface Call {
 	method: string;
 	args: unknown[];
@@ -96,6 +113,31 @@ function fakeStripe() {
 				const id = `pi_${uid()}`;
 				return { id, client_secret: `${id}_secret_test` };
 			}),
+		},
+		checkout: {
+			sessions: {
+				// A Checkout Session in elements mode: a fresh id per call (the rows are
+				// keyed by it) and a client secret the browser mounts Checkout from.
+				create: record("checkout.sessions.create", () => {
+					const id = `cs_${uid()}`;
+					return { id, client_secret: `${id}_secret_test` };
+				}),
+				// The completion path finds a session by its PaymentIntent, iterating the
+				// list — so the fake returns an async-iterable shaped like Stripe's.
+				// A test sets `responses["checkout.sessions.list"]` to an `asyncList([...])`
+				// to shape what completion sees.
+				//
+				// 🚨 NOT wrapped in `record`'s Promise.resolve: the real SDK returns the
+				// async-iterable ApiListPromise synchronously, and the route iterates it
+				// directly — `for await` over a *promise of* an async-iterable throws, so
+				// the fake has to match the real shape here rather than the fake's usual
+				// promise-wrapped one.
+				list: (...args: unknown[]) => {
+					calls.push({ method: "checkout.sessions.list", args });
+					const canned = responses["checkout.sessions.list"];
+					return (canned !== undefined ? canned : asyncList([])) as never;
+				},
+			},
 		},
 		subscriptions: {
 			create: record("subscriptions.create", () => ({
@@ -582,6 +624,26 @@ describe("Webhook signature verification", () => {
 	});
 });
 
+// The fake records call ARGS, not return values, so a session completion test shapes
+// what the list returns with `asyncList([session])`, iterated by the completion path.
+function fakeSessionFor(intentId: string, opts: { country?: string; taxCents?: number } = {}) {
+	return {
+		id: `cs_${uid()}`,
+		payment_intent: intentId,
+		total_details: { amount_tax: opts.taxCents ?? 0, amount_discount: 0, amount_shipping: null },
+		customer_details: {
+			address: {
+				country: opts.country ?? "US",
+				state: "CO",
+				postal_code: "80202",
+				line1: "1701 Wewatta St",
+				line2: null,
+				city: "Denver",
+			},
+		},
+	};
+}
+
 describe("Webhook: payment_intent.succeeded", () => {
 	it("completes a pending post purchase and books the ledger row once", async () => {
 		const piId = `pi_${uid()}`;
@@ -624,6 +686,120 @@ describe("Webhook: payment_intent.succeeded", () => {
 			stripeEvent("payment_intent.succeeded", { id: `pi_${uid()}`, object: "payment_intent" }),
 		);
 		expect(res.status).toBe(200);
+	});
+
+	it("re-keys a session purchase onto its PaymentIntent and stamps the tax and address", async () => {
+		// A purchase charged through a Checkout Session is keyed by the session at
+		// checkout; this is the completion moment — the webhook resolves the session from
+		// the PaymentIntent, re-keys the row, and stamps what Stripe Tax actually
+		// collected plus the buyer's address, which is what the return worksheets and
+		// the threshold forecast read.
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		await db.insert(purchases).values({
+			buyerId,
+			workId: webhookWorkId,
+			type: "digital",
+			amount: "5.00",
+			processingFee: "0.45",
+			crfFee: "0.00",
+			creatorEarnings: "4.55",
+			stripePaymentIntentId: sessionId,
+			status: "pending",
+		});
+
+		const session = fakeSessionFor(piId, { taxCents: 36 });
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", { id: piId, object: "payment_intent" });
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		const [row] = await db
+			.select()
+			.from(purchases)
+			.where(eq(purchases.stripePaymentIntentId, piId));
+		expect(row).toBeDefined();
+		expect(row.status).toBe("completed");
+		// The tax Stripe Tax collected, in dollars on the row.
+		expect(new Decimal(row.salesTax).toFixed(2)).toBe("0.36");
+		// The buyer's location, as resolved — the remittance record.
+		expect(row.buyerCountry).toBe("US");
+		expect(row.buyerState).toBe("CO");
+		expect(row.buyerPostalCode).toBe("80202");
+		expect(row.buyerCity).toBe("Denver");
+		expect(row.buyerAddressLine1).toBe("1701 Wewatta St");
+	});
+
+	it("refuses completion for a session billed outside the US, leaving the row pending", async () => {
+		// The buy surfaces collect the address through Anthers' own US-only form, so a
+		// browser-built session is US by construction — this refusal is the backstop for
+		// what that cannot see: a hand-rolled API session, a modified client. The row
+		// stays `pending` — no access, no ledger entry — and the money is returned by
+		// hand.
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		await db.insert(purchases).values({
+			buyerId,
+			workId: webhookWorkId,
+			type: "digital",
+			amount: "5.00",
+			processingFee: "0.45",
+			crfFee: "0.00",
+			creatorEarnings: "4.55",
+			stripePaymentIntentId: sessionId,
+			status: "pending",
+		});
+
+		const session = fakeSessionFor(piId, { country: "DE", taxCents: 0 });
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", { id: piId, object: "payment_intent" });
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		const [row] = await db
+			.select()
+			.from(purchases)
+			.where(eq(purchases.stripePaymentIntentId, sessionId));
+		expect(row.status).toBe("pending");
+		// And no ledger entry was booked for the refused completion.
+		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, row.id));
+		expect(ledger).toHaveLength(0);
+	});
+
+	it("apportions a basket session's tax across its rows by value", async () => {
+		// Three rows on one session, odd prices so the pro-rata split cannot divide
+		// evenly: the last row absorbs the rounding remainder, and the rows must sum to
+		// exactly what Stripe collected.
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		const amounts = ["3.33", "3.33", "3.34"];
+		for (const amount of amounts) {
+			await db.insert(purchases).values({
+				buyerId,
+				workId: webhookWorkId,
+				type: "digital",
+				amount,
+				processingFee: "0.40",
+				crfFee: "0.00",
+				creatorEarnings: amount,
+				stripePaymentIntentId: sessionId,
+				status: "pending",
+			});
+		}
+
+		const session = fakeSessionFor(piId, { taxCents: 73 });
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", { id: piId, object: "payment_intent" });
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		const rows = await db.select().from(purchases).where(eq(purchases.stripePaymentIntentId, piId));
+		expect(rows).toHaveLength(3);
+		expect(rows.every((r) => r.status === "completed")).toBe(true);
+		const sum = rows.reduce((acc, r) => acc.plus(new Decimal(r.salesTax)), new Decimal(0));
+		expect(sum.toFixed(2)).toBe("0.73");
+		// And the address is stamped on every row — each row is a remittance record.
+		expect(rows.every((r) => r.buyerState === "CO")).toBe(true);
 	});
 });
 
@@ -903,30 +1079,49 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(new Decimal(body.processingFee).lessThan(separately)).toBe(true);
 	});
 
-	it("asks Stripe for exactly the buyer total, at the right destination", async () => {
+	it("builds one session for the whole basket, one line per Work, each coded", async () => {
 		const { body } = await basket(items.map((i) => i.id));
-		const params = fake.lastCall("paymentIntents.create")
-			?.args[0] as Stripe.PaymentIntentCreateParams;
+		const params = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
 
-		expect(params.amount).toBe(Math.round(Number(body.buyerTotal) * 100));
-		expect(params.transfer_data?.destination).toBeTruthy();
-		// On a destination charge the creator receives `amount − application_fee_amount`,
-		// so that difference has to BE their earnings on the whole basket.
-		const transferred = new Decimal(params.amount as number)
-			.minus(params.application_fee_amount as number)
-			.dividedBy(100);
-		expect(transferred.toFixed(2)).toBe(body.creatorEarnings);
+		// The lines are the price of each item, and the whole session carries the
+		// automatic-tax setting and the exclusive behavior — the tax each buyer pays is
+		// resolved per address, per line, from the code the line carries.
+		expect(params.line_items).toHaveLength(3);
+		expect(params.automatic_tax).toEqual({ enabled: true });
+		for (const line of params.line_items as {
+			price_data: {
+				product_data: { tax_code?: string };
+				tax_behavior?: string;
+				unit_amount?: number;
+			};
+		}[]) {
+			// The basket fixture is three games — downloaded software.
+			expect(line.price_data.product_data.tax_code).toBe("txcd_10201000");
+			expect(line.price_data.tax_behavior).toBe("exclusive");
+			expect(line.price_data.unit_amount).toBe(333);
+		}
+
+		// The transfer is the whole basket's earnings, on the sum — the fixed $0.30 is per
+		// charge, which is the entire point of the basket.
+		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
+		expect(
+			(params.payment_intent_data as { transfer_data?: { amount?: number } }).transfer_data?.amount,
+		).toBe(Math.round(expected.creatorEarnings.toNumber() * 100));
+		// No tax figure in the response: the rate is resolved at the session.
+		expect(body.salesTax).toBeNull();
+		expect(body.buyerTotal).toBeNull();
 	});
 
-	it("writes one purchase row per Work, and they reconcile to the charge", async () => {
+	it("writes one purchase row per Work, keyed by the session, and they reconcile", async () => {
 		const { body } = await basket(items.map((i) => i.id));
-		// The fake records call ARGS, not return values, so the intent id comes back off
-		// the response's own client secret — `pi_xxx_secret_test`.
-		const intentId = String(body.clientSecret).split("_secret")[0];
+		// The fake records call ARGS, not return values, so the session id comes back off
+		// the response's own client secret — `cs_xxx_secret_test`.
+		const sessionId = String(body.clientSecret).split("_secret")[0];
 		const rows = await db
 			.select()
 			.from(purchases)
-			.where(eq(purchases.stripePaymentIntentId, intentId));
+			.where(eq(purchases.stripePaymentIntentId, sessionId));
 
 		expect(rows).toHaveLength(3);
 		const sum = (f: (r: (typeof rows)[number]) => string) =>
@@ -936,19 +1131,22 @@ describe("Basket checkout — one charge, one card fee", () => {
 		// is why an odd unit price is used: $3.33 x 3 cannot split a fee evenly.
 		expect(sum((r) => r.amount).toFixed(2)).toBe(body.subtotal);
 		expect(sum((r) => r.processingFee).toFixed(2)).toBe(body.processingFee);
-		expect(sum((r) => r.salesTax).toFixed(2)).toBe(body.salesTax);
 		expect(sum((r) => r.creatorEarnings).toFixed(2)).toBe(body.creatorEarnings);
 
 		// And no row invented its own flat fee — the giveaway that fees were computed
 		// per item. Three separate $0.30s would put every row's fee above $0.30.
 		for (const r of rows) expect(new Decimal(r.processingFee).lessThan("0.30")).toBe(true);
+
+		// Tax is zero on every row at checkout — the webhook stamps the collected figure
+		// at completion, apportioned across the rows by value.
+		expect(sum((r) => r.salesTax).toFixed(2)).toBe("0.00");
 	});
 
-	it("refuses a basket spanning two creators, and creates no charge", async () => {
+	it("refuses a basket spanning two creators, and creates no session", async () => {
 		const { res, body } = await basket([items[0].id, otherCreatorWorkId]);
 		expect(res.status).toBe(400);
 		expect(body.code).toBe("mixed_creators");
-		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
+		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 	});
 
 	it("quotes the saving without creating anything", async () => {
@@ -961,7 +1159,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 		// The saving is what makes the basket legible, so it has to be real and positive.
 		expect(new Decimal(body.creatorGains).greaterThan(0)).toBe(true);
 		expect(new Decimal(body.feeSeparately).greaterThan(new Decimal(body.processingFee))).toBe(true);
-		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
+		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 	});
 
 	it("refuses an empty basket", async () => {
@@ -970,7 +1168,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 	});
 });
 
-describe("Checkout — destination charge construction", () => {
+describe("Checkout — session construction under automatic tax", () => {
 	/** The fee breakdown the route should be quoting, computed independently here. */
 	const expected = calculateFees(new Decimal(PRICE), { type: "digital" });
 
@@ -1005,22 +1203,29 @@ describe("Checkout — destination charge construction", () => {
 		expect(res.status).toBe(200);
 
 		// The list price is what the buyer was shown; the creator receives it less the
-		// at-cost card processing and the first download. Anthers retains none of it.
+		// at-cost card processing. Anthers retains none of it.
 		expect(body.amount).toBe(PRICE);
 		expect(body.crfFee).toBe("0.00");
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 		expect(new Decimal(body.creatorEarnings).lessThan(new Decimal(PRICE))).toBe(true);
 		expect(body.deliveryFee).toBe(expected.deliveryFee.toFixed(2));
-		expect(body.crfFee).toBe(expected.crfFee.toFixed(2));
 		expect(body.processingFee).toBe(expected.processingFee.toFixed(2));
-		expect(body.salesTax).toBe(expected.salesTax.toFixed(2));
-		expect(body.buyerTotal).toBe(expected.buyerTotal.toFixed(2));
+		// No tax figure, on purpose: the rate is resolved by Stripe Tax from the buyer's
+		// billing address at the session, so the quote presents nothing rather than an
+		// illustration wearing the clothes of a charge.
+		expect(body.salesTax).toBeNull();
+		expect(body.buyerTotal).toBeNull();
+		// And the session's client secret is what the browser mounts Checkout from.
+		expect(String(body.clientSecret)).toMatch(/^cs_.+_secret_test$/);
 
-		const created = fake.lastCall("paymentIntents.create");
-		const params = created?.args[0] as Stripe.PaymentIntentCreateParams;
-		expect(params.amount).toBe(Math.round(expected.buyerTotal.toNumber() * 100));
-		expect(params.currency).toBe("usd");
-		expect(params.metadata).toMatchObject({
+		const created = fake.lastCall("checkout.sessions.create");
+		const params = created?.args[0] as Stripe.Checkout.SessionCreateParams;
+		expect(params.line_items).toHaveLength(1);
+		// The PaymentIntent's metadata — where the route carries the purchase facts — is
+		// nested under `payment_intent_data`, not at the top level.
+		expect(
+			(params.payment_intent_data as { metadata?: Record<string, string> }).metadata,
+		).toMatchObject({
 			kind: "direct_purchase",
 			workId: String(paidWorkId),
 			buyerId: String(buyerId),
@@ -1031,13 +1236,13 @@ describe("Checkout — destination charge construction", () => {
 	// when the creator had no connected account. It was unreachable from the product — the
 	// buy UI refuses to render without `creatorHasStripe` — and survived precisely because
 	// nothing asserted it. A connected creator is now a precondition, and the failure is
-	// loud: no charge is created at all, so no money moves that nobody can settle.
-	it("refuses checkout, and creates no PaymentIntent, when the creator can't be paid", async () => {
+	// loud: no session is created at all, so no money moves that nobody can settle.
+	it("refuses checkout, and creates no session, when the creator can't be paid", async () => {
 		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
 
 		const { res } = await checkout();
 		expect(res.status).toBe(409);
-		expect(fake.lastCall("paymentIntents.create")).toBeUndefined();
+		expect(fake.lastCall("checkout.sessions.create")).toBeUndefined();
 
 		await connectCreator();
 	});
@@ -1054,58 +1259,83 @@ describe("Checkout — destination charge construction", () => {
 
 		const { res } = await checkout();
 		expect(res.status).toBe(409);
-		expect(fake.lastCall("paymentIntents.create")).toBeUndefined();
+		expect(fake.lastCall("checkout.sessions.create")).toBeUndefined();
 
 		await connectCreator();
 	});
 
-	it("routes the creator their earnings and retains no platform cut", async () => {
+	it("enables automatic tax and codes the line for what the buyer receives", async () => {
+		await connectCreator();
+
+		const { res } = await checkout();
+		expect(res.status).toBe(200);
+
+		const params = fake.lastCall("checkout.sessions.create")?.args[0] as
+			| Stripe.Checkout.SessionCreateParams
+			| undefined;
+		// Automatic tax is on, with no `liability` — Anthers is the marketplace facilitator
+		// and the tax liability, so the calculation stays on the platform side where the
+		// Creator Terms already put it.
+		expect(params?.automatic_tax).toEqual({ enabled: true });
+		expect(params?.ui_mode).toBe("elements");
+		expect(params?.billing_address_collection).toBe("required");
+		// The paid post fixture is a game — downloaded software, `txcd_10201000`.
+		const line = params?.line_items?.[0] as
+			| (Stripe.Checkout.SessionCreateParams.LineItem & {
+					price_data: { product_data: { tax_code?: string }; tax_behavior?: string };
+			  })
+			| undefined;
+		expect(line?.price_data?.product_data?.tax_code).toBe("txcd_10201000");
+		// US prices are tax-exclusive: the buyer's total varies with their location.
+		expect(line?.price_data?.tax_behavior).toBe("exclusive");
+	});
+
+	it("pins the creator's transfer to their earnings, location-independent", async () => {
 		const acctId = await connectCreator();
 
 		const { res, body } = await checkout();
 		expect(res.status).toBe(200);
 
-		const params = fake.lastCall("paymentIntents.create")?.args[0] as
-			| Stripe.PaymentIntentCreateParams
+		const params = fake.lastCall("checkout.sessions.create")?.args[0] as
+			| Stripe.Checkout.SessionCreateParams
 			| undefined;
-		expect(params?.transfer_data).toEqual({ destination: acctId });
+		const transfer = (
+			params?.payment_intent_data as { transfer_data?: { destination?: string; amount?: number } }
+		)?.transfer_data;
 
-		const totalCents = Math.round(expected.buyerTotal.toNumber() * 100);
-		expect(params?.amount).toBe(totalCents);
-
-		// The assertion that matters, stated in STRIPE's terms rather than ours: on a
-		// destination charge the connected account receives `amount −
-		// application_fee_amount`, so that difference has to BE the creator's earnings.
-		// Anything else and the transfer disagrees with the `creator_earnings` we
-		// record, which is how money goes missing without an error.
+		// The assertion that matters, stated in STRIPE's terms rather than ours: the
+		// creator's transfer is PINNED to their earnings rather than left as "everything
+		// that is not the application fee", because under automatic tax the tax varies
+		// with the buyer's address and no static fee can capture it. Whatever tax Stripe
+		// adds stays on the platform side by construction, so the creator's take-home
+		// never depends on where the buyer lives.
 		//
-		// This is deliberately not written as `total − fee − processing === earnings`.
-		// That was the old assertion, and it passed for two months against a fee that
-		// was short by exactly the card processing — because it restated the route's own
-		// formula instead of Stripe's semantics, so it could only ever agree with the
-		// code. Stripe debits its processing from the PLATFORM, never from the transfer.
-		const feeCents = params?.application_fee_amount ?? 0;
-		expect(totalCents - feeCents).toBe(Math.round(expected.creatorEarnings.toNumber() * 100));
-
-		// And what the platform is left holding, once Stripe has taken its cut, is sales
-		// tax owed to the state and NOTHING else — no platform cut, and since 2026-08-12
-		// no delivery either, so this is now an exact equality with the tax.
-		const processingCents = Math.round(expected.processingFee.toNumber() * 100);
-		expect(feeCents - processingCents).toBe(Math.round(expected.salesTax.toNumber() * 100));
+		// And deliberately NO `application_fee_amount` anywhere: a static fee was the
+		// old structure's way of holding the tax back, and resurrecting it beside a
+		// pinned transfer would double-count the same money.
+		expect(transfer).toEqual({
+			destination: acctId,
+			amount: Math.round(expected.creatorEarnings.toNumber() * 100),
+		});
+		expect(
+			(params?.payment_intent_data as { application_fee_amount?: number }).application_fee_amount,
+		).toBeUndefined();
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 	});
 
-	it("writes the pending purchase keyed by the PaymentIntent", async () => {
+	it("writes the pending purchase keyed by the Checkout Session", async () => {
 		const { res, body } = await checkout();
 		expect(res.status).toBe(200);
 
-		// The route hands back the PaymentIntent's client secret; the row it wrote must be
-		// keyed by that same intent, because the webhook has nothing else to match on.
-		const intentId = String(body.clientSecret).replace(/_secret_test$/, "");
+		// The route hands back the session's client secret; the row it wrote must be keyed
+		// by that same session, because the PaymentIntent does not exist until the buyer
+		// confirms inside the session, and the webhook resolves the session from the
+		// PaymentIntent when it does.
+		const sessionId = String(body.clientSecret).replace(/_secret_test$/, "");
 		const [row] = await db
 			.select()
 			.from(purchases)
-			.where(eq(purchases.stripePaymentIntentId, intentId))
+			.where(eq(purchases.stripePaymentIntentId, sessionId))
 			.limit(1);
 
 		expect(row).toBeDefined();
@@ -1117,11 +1347,10 @@ describe("Checkout — destination charge construction", () => {
 		// The purchase fee was removed 2026-08-03; the NOT NULL column stays and
 		// is always zero, so a row that ever carries a non-zero value is a regression.
 		expect(new Decimal(row.crfFee).toFixed(2)).toBe("0.00");
-		// Sales tax is charged inside `buyerTotal` and owed onward, so the row has to record
-		// it — the amount collected is otherwise unrecoverable from the purchase, which is a
-		// remittance-reporting gap rather than a display bug.
-		expect(new Decimal(row.salesTax).toFixed(2)).toBe(expected.salesTax.toFixed(2));
-		expect(new Decimal(row.salesTax).greaterThan(0)).toBe(true);
+		// Sales tax is zero at checkout — Stripe Tax resolves the real figure from the
+		// buyer's address at completion and the webhook stamps it. A non-zero here would
+		// mean a charge path reintroduced a flat rate Anthers cannot know in advance.
+		expect(new Decimal(row.salesTax).toFixed(2)).toBe("0.00");
 	});
 
 	it("refuses to sell a Work the buyer can already access", async () => {
@@ -1133,6 +1362,7 @@ describe("Checkout — destination charge construction", () => {
 			.where(and(eq(purchases.buyerId, buyerId), eq(purchases.workId, paidWorkId)))
 			.orderBy(sql`${purchases.id} DESC`)
 			.limit(1);
+		expect(row).toBeDefined();
 		await db.update(purchases).set({ status: "completed" }).where(eq(purchases.id, row.id));
 
 		const { res, body } = await checkout();
@@ -1170,6 +1400,34 @@ describe("Checkout — what isn't for sale", () => {
 		expect(res.status).toBe(400);
 		expect((await res.json()).error).toBe("This work is not available for direct purchase");
 		// Nothing was sent to Stripe for a Work that was never purchasable.
-		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
+		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+	});
+
+	it("refuses a physical or service Work — nothing fulfills them yet", async () => {
+		// The posture's refusal, not a judgment about the types: there is no shipping
+		// lane for a physical Work and no fulfillment mechanism for a service one, so a
+		// buyer would pay for a thing that never arrives — and there is no tax code that
+		// honestly describes an undelivered thing. `resolvePurchase` is the door both
+		// the single and the basket path go through, so both refuse.
+		for (const type of ["physical", "service"] as const) {
+			const work = await insertWork({
+				creatorId,
+				type,
+				title: `Unfulfillable ${type} ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				seedAccess: FOR_SALE,
+			});
+
+			const res = await req(`/api/payments/checkout/${work.slug}`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
+			});
+			expect(res.status, type).toBe(400);
+			const body = (await res.json()) as { error?: string };
+			expect(body.error, type).toMatch(/can't be bought yet/i);
+		}
+		// And nothing was charged for either.
+		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 	});
 });

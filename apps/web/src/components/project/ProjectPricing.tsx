@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
-import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useEffect, useMemo, useState } from "react";
+import {
+	CheckoutElementsProvider,
+	PaymentElement,
+	useCheckoutElements,
+} from "@stripe/react-stripe-js/checkout";
+import { useEffect, useState } from "react";
 import { getStripe } from "../../lib/stripe";
+import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import {
+	mayConfirm,
+	sessionTotals,
+	useSessionBillingAddress,
+} from "../payments/useSessionBillingAddress";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
 interface ProjectPricingProps {
@@ -18,50 +28,56 @@ interface Quote {
 	processingFee: string;
 	deliveryFee: string;
 	crfFee: string;
-	salesTax: string;
-	buyerTotal: string;
+	/** Null — the tax is resolved by Stripe Tax at the session, from the buyer's address. */
+	salesTax: string | null;
+	buyerTotal: string | null;
 }
 
-/** The exact server-computed receipt — the total here matches what Stripe charges. */
-function receiptFromQuote(q: Quote) {
+/**
+ * The server-computed receipt. Tax is resolved by Stripe Tax at the session, from the
+ * buyer's billing address — so the receipt carries the quote's price breakdown plus,
+ * once the address is on the session, the real tax the session resolved and the
+ * tax-inclusive total. Before that, the tax line is named as coming rather than shown:
+ * an "estimated" figure here would be the flat-rate charge this flow exists to retire,
+ * one screen earlier.
+ */
+function receiptFromQuote(q: Quote, sessionBuyerTotal: string | null, sessionTax: string | null) {
 	const n = (s: string) => Number(s);
 	const lines: { label: string; amount: number; note?: string; added?: boolean }[] = [];
 	// Everything except tax comes OUT of the listed price. Two of the quote's fields are
 	// structurally zero on any new purchase and neither is rendered: `crfFee` (Anthers
 	// takes no cut of a purchase, 2026-08-03) and `deliveryFee` (delivery is free at any
-	// volume, 2026-08-12 — `calculateFees` no longer even takes a size). Both stay in the
-	// arithmetic below, because a receipt that ignores a field the server sent would stop
-	// reconciling the moment one came back non-zero.
+	// volume, 2026-08-12). Both stay in the arithmetic below, because a receipt that
+	// ignores a field the server sent would stop reconciling the moment one came back
+	// non-zero.
 	lines.push({ label: "Card processing", amount: n(q.processingFee), note: "at cost" });
-	lines.push({ label: "Sales tax", amount: n(q.salesTax), note: "est.", added: true });
+	if (sessionTax !== null) {
+		lines.push({
+			label: "Sales tax",
+			amount: n(sessionTax),
+			note: "from your address",
+			added: true,
+		});
+	}
 	return {
 		price: n(q.amount),
-		buyerTotal: n(q.buyerTotal),
+		buyerTotal: sessionBuyerTotal !== null ? n(sessionBuyerTotal) : n(q.amount),
 		lines,
 		creatorReceives: n(q.amount) - n(q.processingFee) - n(q.deliveryFee),
 	};
 }
 
 /**
- * Stripe Elements only accepts concrete colors (hex/rgb) — not `oklch()` or CSS
- * vars. Resolve a themed color to an `rgb(a)` string by rasterising one pixel, so
- * the card input still tracks the active light/dark theme.
+ * The Checkout form, inside `CheckoutElementsProvider`.
+ *
+ * The Payment Element collects the card and nothing else — the billing address is
+ * collected by Anthers' own US-only form (`CheckoutBillingAddressBlock`) and submitted
+ * to the session as its own step before confirm, because Stripe's Checkout-flavored
+ * Billing Address Element offers no country allow-list and the posture sells to US
+ * billing addresses only. The session itself — created server-side — carries the line
+ * item's tax code and the automatic-tax setting; this side collects the address,
+ * resolves the tax onto the session, and confirms.
  */
-function toRgb(cssColor: string): string {
-	if (typeof document === "undefined") return "#111111";
-	const probe = document.createElement("span");
-	probe.style.color = cssColor;
-	document.body.appendChild(probe);
-	const computed = getComputedStyle(probe).color;
-	probe.remove();
-	const ctx = document.createElement("canvas").getContext("2d");
-	if (!ctx) return computed;
-	ctx.fillStyle = computed;
-	ctx.fillRect(0, 0, 1, 1);
-	const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-	return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(2)})`;
-}
-
 function CheckoutForm({
 	slug,
 	onPurchaseComplete,
@@ -69,13 +85,13 @@ function CheckoutForm({
 	slug: string;
 	onPurchaseComplete?: () => void;
 }) {
-	const stripe = useStripe();
-	const elements = useElements();
+	const checkoutState = useCheckoutElements();
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [quoteFailed, setQuoteFailed] = useState(false);
+	const billing = useSessionBillingAddress(checkoutState);
 
 	// The server is the ONLY thing that prices this purchase. There used to be a client
 	// estimate rendered until the quote arrived, and it drifted: it recomputed the card
@@ -108,23 +124,30 @@ function CheckoutForm({
 		};
 	}, [slug]);
 
-	const receipt = quote ? receiptFromQuote(quote) : null;
+	// What the session itself totals once the address is on it: the tax-inclusive figure
+	// the buyer is charged and the tax that was added. Null until the address resolves —
+	// the buyer sees "+ tax" rather than a number nobody has calculated yet.
+	const totals = checkoutState.type === "success" ? sessionTotals(checkoutState.checkout) : null;
 
-	// Resolve the themed card colors once; Stripe rejects oklch()/var().
-	const cardStyle = useMemo(
-		() => ({
-			base: {
-				fontSize: "16px",
-				color: toRgb("oklch(var(--bc))"),
-				"::placeholder": { color: toRgb("oklch(var(--bc) / 0.4)") },
-			},
-		}),
-		[],
-	);
+	// The receipt's buyer total is the session's once the address resolved the tax, and
+	// the price itself until then — with the tax line named as coming rather than shown.
+	const receipt = quote
+		? receiptFromQuote(quote, totals?.buyerTotal ?? null, totals?.tax ?? null)
+		: null;
+
+	// 🚨 Two gates, and neither implies the other. `canConfirm` is Stripe's readiness for
+	// the Payment Element; `accepted` is our own record that the session took a US
+	// address. A buyer must clear both: no card, no confirm; no address, no confirm.
+	const canConfirm =
+		checkoutState.type === "success" &&
+		mayConfirm(checkoutState.checkout.canConfirm, billing.accepted);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!stripe || !elements) return;
+		// The address must already be on the session — its own submit step resolved the
+		// tax and re-armed this gate. Confirming without one would charge a buyer whose
+		// rate was never resolved, which is what the gate exists to prevent.
+		if (checkoutState.type !== "success" || !billing.accepted) return;
 
 		setProcessing(true);
 		setError(null);
@@ -140,19 +163,12 @@ function CheckoutForm({
 				return;
 			}
 
-			const cardElement = elements.getElement(CardElement);
-			if (!cardElement) {
-				setError("Card element not found.");
-				setProcessing(false);
-				return;
-			}
-
-			const { error: stripeError } = await stripe.confirmCardPayment(checkout.clientSecret, {
-				payment_method: { card: cardElement },
-			});
-
-			if (stripeError) {
-				setError(stripeError.message || "Payment failed.");
+			// Checkout confirms in place for cards — the session carries the line item, its
+			// tax code and the automatic-tax setting, and Stripe Tax resolves the buyer's
+			// rate from the address the form submitted onto the session.
+			const result = await checkoutState.checkout.confirm();
+			if (result.type === "error") {
+				setError(result.error.message || "Payment failed.");
 			} else {
 				setSucceeded(true);
 				onPurchaseComplete?.();
@@ -168,6 +184,14 @@ function CheckoutForm({
 		return (
 			<div className="alert alert-success">
 				<span>Purchase complete! Downloads are now available.</span>
+			</div>
+		);
+	}
+
+	if (checkoutState.type === "error") {
+		return (
+			<div className="alert alert-error text-sm">
+				<span>Checkout couldn't load. Please refresh and try again.</span>
 			</div>
 		);
 	}
@@ -189,11 +213,24 @@ function CheckoutForm({
 				<div className="skeleton h-40 w-full" aria-hidden="true" />
 			)}
 
-			<div className="form-control">
-				<div className="border border-base-300 rounded-lg p-3 bg-base-100">
-					<CardElement options={{ style: cardStyle }} />
-				</div>
+			{/* Anthers' own US-only form, not Stripe's Billing Address Element — the element
+			    offers no country allow-list, so this form is US by construction. Submitting
+			    it resolves the session's tax, which is what fills the receipt's real total. */}
+			<CheckoutBillingAddressBlock billing={billing} />
+
+			<div className="border border-base-300 rounded-lg p-3 bg-base-100">
+				{/* `fields.billingDetails: "never"` because the address above already
+				    collected everything AVS would check — asking twice on one screen is
+				    the double collection this option exists to prevent. The card's own
+				    AVS check runs against the session's address (the one
+				    `updateBillingAddress` wrote), so nothing is lost by not re-asking. */}
+				<PaymentElement options={{ fields: { billingDetails: "never" } }} />
 			</div>
+
+			<p className="text-xs text-base-content/50">
+				Sales tax is calculated from your billing address — the rate varies by location, and Anthers
+				sells to US billing addresses at launch.
+			</p>
 
 			{error && (
 				<div className="alert alert-error text-sm">
@@ -203,17 +240,50 @@ function CheckoutForm({
 
 			<button
 				type="submit"
-				className={`btn btn-primary ${processing ? "btn-disabled" : ""}`}
-				disabled={!stripe || processing || !receipt}
+				className={`btn btn-primary ${processing || !canConfirm ? "btn-disabled" : ""}`}
+				disabled={!canConfirm || processing}
 			>
 				{processing
 					? "Processing..."
 					: receipt
-						? `Buy for $${receipt.buyerTotal.toFixed(2)}`
+						? totals?.buyerTotal
+							? `Buy for $${Number(totals.buyerTotal).toFixed(2)}`
+							: `Buy for $${receipt.buyerTotal.toFixed(2)} + tax`
 						: "Loading price…"}
 			</button>
 		</form>
 	);
+}
+
+/** Fetch a session's client secret from the server and hand Checkout the promise. */
+function useClientSecret(slug: string) {
+	const [secret, setSecret] = useState<string | null>(null);
+	const [failed, setFailed] = useState(false);
+	useEffect(() => {
+		let canceled = false;
+		client.api.payments.checkout[":slug"]
+			.$post({ param: { slug } })
+			.then(async (res) => {
+				if (canceled) return;
+				if (!res.ok) {
+					setFailed(true);
+					return;
+				}
+				const checkout = (await res.json()) as CheckoutResponse;
+				if (!checkout.clientSecret) {
+					setFailed(true);
+					return;
+				}
+				setSecret(checkout.clientSecret);
+			})
+			.catch(() => {
+				if (!canceled) setFailed(true);
+			});
+		return () => {
+			canceled = true;
+		};
+	}, [slug]);
+	return { secret, failed };
 }
 
 export default function ProjectPricing({
@@ -222,6 +292,13 @@ export default function ProjectPricing({
 	creatorHasStripe = false,
 	onPurchaseComplete,
 }: ProjectPricingProps) {
+	// Fetch the session's client secret up front, before any branch: hooks must run in
+	// the same order on every render, and the early returns below (free, owned, signed
+	// out) would skip one if this sat where it is used. The fetch is wasted on the
+	// branches that never mount Checkout, which is a POST the buyer never reaches on
+	// those branches anyway — and cheap against a rule the linter can enforce.
+	const { secret, failed } = useClientSecret(slug);
+
 	// Free posts have nothing to sell.
 	if (access.isFree) return null;
 
@@ -247,10 +324,16 @@ export default function ProjectPricing({
 						Payments not available yet—the creator hasn't connected Stripe.
 					</p>
 				</div>
+			) : failed ? (
+				<div className="alert alert-warning text-sm">
+					<span>Checkout couldn't start. Please refresh and try again.</span>
+				</div>
+			) : !secret ? (
+				<div className="skeleton h-64 w-full" aria-hidden="true" />
 			) : (
-				<Elements stripe={getStripe()}>
+				<CheckoutElementsProvider stripe={getStripe()} options={{ clientSecret: secret }}>
 					<CheckoutForm slug={slug} onPurchaseComplete={onPurchaseComplete} />
-				</Elements>
+				</CheckoutElementsProvider>
 			)}
 		</div>
 	);

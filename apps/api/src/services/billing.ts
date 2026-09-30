@@ -22,9 +22,16 @@
  * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, invoices, seedAllocations } from "@anthers/db/schema";
+import {
+	accountCycles,
+	accounts,
+	creatorGates,
+	invoices,
+	seedAllocations,
+} from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
+import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -34,6 +41,7 @@ import {
 	listActiveProducts,
 	listCardPaymentMethods,
 	paymentsConfigured,
+	updateProduct,
 } from "../lib/processor.js";
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
@@ -100,6 +108,10 @@ export async function ensureAnthersProduct(): Promise<string> {
 
 	const created = await createProduct({
 		name: "Support for Anthers",
+		// The Badge buys unlimited Public Access — a streamed audiovisual subscription,
+		// per the posture's What Gets Taxed table. A Product has no line to code later,
+		// so the code is stamped here where the Product is born.
+		tax_code: STREAMED_SUBSCRIPTION_TAX_CODE,
 		metadata: { anthers: "platform" },
 	});
 	if (!created) throw new Error("Stripe not configured");
@@ -214,7 +226,8 @@ export function periodStartFromSub(sub: Stripe.Subscription): number | null {
 }
 
 /**
- * The Stripe Product a creator's line is billed against, created on first use.
+ * The Stripe Product a creator's line is billed against, created on first use, carrying the
+ * tax code for what support for this creator buys.
  *
  * `price_data` on a subscription item takes a Product **id**, not a name — so without one
  * per creator every line on a supporter's invoice would carry the same label and the
@@ -223,21 +236,70 @@ export function periodStartFromSub(sub: Stripe.Subscription): number | null {
  *
  * Lazy rather than eager: a creator nobody supports needs no Product, and creating one at
  * signup would make registering an account depend on Stripe being reachable.
+ *
+ * 🚨 **The Product's tax code follows the creator's gates, and is RE-STAMPED when they
+ * change.** A subscription item has no `tax_code` param — the code rides on the Product —
+ * so a creator whose gate ladder appears or disappears changes what their support buys,
+ * and the Product has to follow or every renewal after the change is taxed as the wrong
+ * thing. `creatorProductTaxCode` reads the gate state; the update is best-effort so a
+ * Stripe hiccup cannot cost a supporter their subscription change.
  */
 export async function ensureCreatorProduct(creatorId: number, handle: string): Promise<string> {
 	if (!paymentsConfigured()) throw new Error("Stripe not configured");
 	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, creatorId)).limit(1);
-	if (acct?.stripeProductId) return acct.stripeProductId;
+	const taxCode = await creatorProductTaxCode(creatorId);
+	if (acct?.stripeProductId) {
+		// The gate state may have moved since the Product was made; the code follows it.
+		if (acct.stripeProductTaxCode !== taxCode) {
+			await updateProduct(acct.stripeProductId, { tax_code: taxCode }).catch(() => null);
+			await db
+				.update(accounts)
+				.set({ stripeProductTaxCode: taxCode, updatedAt: new Date() })
+				.where(eq(accounts.userId, creatorId));
+		}
+		return acct.stripeProductId;
+	}
 	const product = await createProduct({
 		name: `Support for @${handle}`,
+		// What support for this creator buys, as a tax code — see `creatorProductTaxCode`.
+		tax_code: taxCode,
 		metadata: { creatorId: String(creatorId) },
 	});
 	if (!product) throw new Error("Stripe not configured");
 	await db
 		.update(accounts)
-		.set({ stripeProductId: product.id, updatedAt: new Date() })
+		.set({ stripeProductId: product.id, stripeProductTaxCode: taxCode, updatedAt: new Date() })
 		.where(eq(accounts.userId, creatorId));
 	return product.id;
+}
+
+/**
+ * The product tax code a creator's support Product carries, per the posture's What Gets
+ * Taxed table.
+ *
+ * A subscription item has no `tax_code` param — the code lives on the **Product** the
+ * line's `price_data` names, so `ensureCreatorProduct` stamps it and this recomputes it
+ * when a creator's gates change. A creator whose gate ladder exists is one whose support
+ * opens gated Works — a streamed/downloaded subscription, `txcd_10402200` on the whole
+ * line. A creator with no gates sells support that buys nothing at all, the cash-donation
+ * code `txcd_90000001`, which Stripe Tax treats as a gratuity outside Colorado (PLR
+ * 22-005's shape). The Anthers line's Product buys unlimited Public Access — also
+ * `txcd_10402200`, stamped where that Product is provisioned.
+ *
+ * ⚠️ **Perk-tagging arrives with the Badge Maker and is not built yet.** A creator whose
+ * support carries a service or a physical good will be coded from what its creator tagged
+ * (`txcd_20030000` general services, `txcd_99999999` tangible goods, shipping on its own
+ * line) — until the tagging exists, a gate ladder is the one honest discriminator, and a
+ * rung carrying more than one kind of perk is taxed at its most-taxable kind only once
+ * there is a kind to read.
+ */
+export async function creatorProductTaxCode(creatorId: number): Promise<string> {
+	const [gate] = await db
+		.select({ id: creatorGates.id })
+		.from(creatorGates)
+		.where(eq(creatorGates.creatorId, creatorId))
+		.limit(1);
+	return gate ? STREAMED_SUBSCRIPTION_TAX_CODE : DONATION_TAX_CODE;
 }
 
 /**
@@ -248,6 +310,12 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
  * Anthers. Adding a destination here without stamping it therefore routes a creator's
  * support into the Time Pool silently, which is the N-item shape of the hazard PR #223
  * paid for.
+ *
+ * 🚨 **`tax_behavior: "exclusive"` on every line, because US prices are tax-exclusive** —
+ * the buyer's total varies with their location, which is the point of automatic tax, and a
+ * line left unspecified blocks tax calculation when no default behavior is set in the
+ * Stripe Tax settings. The tax code itself rides on the Product each line names, stamped
+ * by `ensureCreatorProduct` and `ensureAnthersProduct`.
  */
 export function supportItems(
 	anthersProduct: string,
@@ -260,6 +328,7 @@ export function supportItems(
 			product,
 			unit_amount: Math.round(dollars * 100),
 			recurring: { interval: "month" as const },
+			tax_behavior: "exclusive" as const,
 		},
 		quantity: 1,
 		metadata: { destination },
@@ -343,6 +412,8 @@ export function planItemChange(
 			product: d.product,
 			unit_amount: Math.round(d.amount * 100),
 			recurring: { interval: "month" as const },
+			// Tax-exclusive, as at creation — see `supportItems`.
+			tax_behavior: "exclusive" as const,
 		},
 		quantity: 1,
 		// 🚨 The stamp is what says whose money this line is — `itemsFromSub` reads it back,

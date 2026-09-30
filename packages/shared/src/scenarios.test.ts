@@ -12,8 +12,8 @@ import {
 	AFF_INFRA_RATE,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
+	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
-	SALES_TAX_RATE,
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
 import {
@@ -99,7 +99,9 @@ describe("sampleReceipt", () => {
 	test("the subtotal is what was given, and tax is the ONLY thing added", () => {
 		const subtotal = D((r.anthersDollars + r.creatorDollars).toFixed(2));
 		expect(r.supportSubtotal).toBe(subtotal.toFixed(2));
-		expect(r.salesTax).toBe(subtotal.mul(SALES_TAX_RATE).toDecimalPlaces(2).toFixed(2));
+		expect(r.salesTax).toBe(
+			subtotal.mul(ILLUSTRATIVE_SALES_TAX_RATE).toDecimalPlaces(2).toFixed(2),
+		);
 		expect(r.totalBilled).toBe(subtotal.plus(r.salesTax).toFixed(2));
 	});
 

@@ -49,6 +49,14 @@ export const STRIPE_RETURN_PATHS = {
 	connectRefresh: "/studio/settings?stripe=refresh",
 	/** Somebody leaving the Stripe billing portal, back to their own subscription. */
 	billingPortalReturn: "/subscription",
+	/**
+	 * Where a redirect-based payment method returns a buyer mid-Checkout. The buy surfaces
+	 * host Checkout embedded (`ui_mode: "elements"`), and cards confirm in place — this
+	 * is only navigated when a redirect-based method is enabled on a session, which the
+	 * session requires the URL for. The Library page answers, and its purchases list is
+	 * what a returning buyer is there to see.
+	 */
+	checkoutReturn: "/library?stripe=return",
 } as const;
 
 export type StripeReturnPath = keyof typeof STRIPE_RETURN_PATHS;

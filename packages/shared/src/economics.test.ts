@@ -270,9 +270,14 @@ describe("badgeViews", () => {
 });
 
 describe("calculateFees — direct purchase, all-in list price, zero platform cut", () => {
-	test("the buyer pays the list price plus sales tax and nothing else", () => {
+	test("the buyer's charge from Anthers' arithmetic is the list price — tax joins it at checkout", () => {
 		const f = calculateFees(new Decimal("20.00"), { type: "service" });
-		expect(f.buyerTotal.toFixed(2)).toBe(new Decimal("20.00").plus(f.salesTax).toFixed(2));
+		// Real tax is resolved by Stripe Tax from the buyer's billing address at the
+		// Checkout Session, so `buyerTotal` — what OUR arithmetic charges — is the price
+		// itself and `salesTax` is zero. The quote surfaces say so; this pins that no
+		// charge path quietly reintroduced a flat rate.
+		expect(f.buyerTotal.toFixed(2)).toBe("20.00");
+		expect(f.salesTax.toFixed(2)).toBe("0.00");
 	});
 
 	test("Anthers takes $0 — the purchase fee was removed 2026-08-03", () => {
@@ -307,9 +312,7 @@ describe("calculateFees — direct purchase, all-in list price, zero platform cu
 		expect(digital.creatorEarnings.toFixed(2)).toBe(service.creatorEarnings.toFixed(2));
 		expect(digital.deliveryFee.toNumber()).toBe(0);
 		// The buyer was always unaffected by size; now the creator is too.
-		expect(digital.buyerTotal.toFixed(2)).toBe(
-			new Decimal("20.00").plus(digital.salesTax).toFixed(2),
-		);
+		expect(digital.buyerTotal.toFixed(2)).toBe("20.00");
 	});
 
 	test("the flat $0.30 dominates at the small end — this is the number Studio must show", () => {

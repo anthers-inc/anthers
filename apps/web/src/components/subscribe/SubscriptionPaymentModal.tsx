@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { client } from "@anthers/web-shared/rpc";
-import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import type { StripeCardElement } from "@stripe/stripe-js";
+import {
+	AddressElement,
+	CardElement,
+	Elements,
+	useElements,
+	useStripe,
+} from "@stripe/react-stripe-js";
+import type { StripeAddressElementChangeEvent, StripeCardElement } from "@stripe/stripe-js";
 import { useMemo, useState } from "react";
 import { getStripe } from "../../lib/stripe";
 import { cardElementStyle } from "../../lib/stripeCard";
@@ -77,6 +83,16 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 	const [useNewCard, setUseNewCard] = useState(!preview.savedCard);
 	const cardStyle = useMemo(cardElementStyle, []);
 
+	/**
+	 * The billing address a new supporter enters, collected because the subscription's
+	 * automatic tax resolves the rate from it. Anthers sells to US billing addresses at
+	 * launch, so the element offers only the US; the address rides on the payment
+	 * method's `billing_details` at confirm, which is what Stripe Tax reads.
+	 */
+	const [billingAddress, setBillingAddress] = useState<
+		StripeAddressElementChangeEvent["value"] | null
+	>(null);
+
 	const nextDate = formatDate(preview.nextBillingUnix);
 	const { savedCard, isChange } = preview;
 
@@ -131,7 +147,12 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 					setProcessing(false);
 					return;
 				}
-				let payment_method: string | { card: StripeCardElement };
+				let payment_method:
+					| string
+					| {
+							card: StripeCardElement;
+							billing_details: { address: StripeAddressElementChangeEvent["value"]["address"] };
+					  };
 				if (savedCard && !useNewCard) {
 					payment_method = savedCard.id;
 				} else {
@@ -141,7 +162,16 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 						setProcessing(false);
 						return;
 					}
-					payment_method = { card };
+					// The billing address rides on the new payment method — this is what
+					// Stripe Tax resolves the subscription's rate from. A saved card carries
+					// its own address, already on the customer.
+					const address = billingAddress?.address;
+					if (!address) {
+						setError("Enter your billing address — sales tax is calculated from it.");
+						setProcessing(false);
+						return;
+					}
+					payment_method = { card, billing_details: { address } };
 				}
 				const { error: err } = await stripe.confirmCardPayment(data.clientSecret, {
 					payment_method,
@@ -214,6 +244,16 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 						</div>
 					) : (
 						<div>
+							{/* The billing address the subscription's tax is calculated from.
+							    Offered to the US only — that is the posture's launch market, and a
+							    saved card's address is already on the customer for the saved-card
+							    path. */}
+							<div className="border border-base-300 rounded-lg p-3 bg-base-100 mb-3">
+								<AddressElement
+									options={{ mode: "billing", allowedCountries: ["US"] }}
+									onChange={(e) => setBillingAddress(e.complete ? e.value : null)}
+								/>
+							</div>
 							<div className="border border-base-300 rounded-lg p-3 bg-base-100">
 								<CardElement options={{ style: cardStyle }} />
 							</div>

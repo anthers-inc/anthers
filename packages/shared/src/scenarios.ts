@@ -25,8 +25,8 @@ import {
 	CARD_RATE,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
+	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
-	SALES_TAX_RATE,
 	thresholdForBadge,
 	timePoolFor,
 } from "./constants.js";
@@ -126,7 +126,9 @@ export function sampleReceipt(anthersDollars = 6, creatorDollars = 6): ReceiptSc
 	const s = supportBreakdown({ anthersDollars, creatorDollars });
 	const split = paymentsSplit(anthersDollars, creatorDollars);
 	const anthers = anthersSupportBreakdown(anthersDollars, { payments: split.anthers });
-	const salesTax = new Decimal(s.supportSubtotal).mul(SALES_TAX_RATE).toDecimalPlaces(2);
+	const salesTax = new Decimal(s.supportSubtotal)
+		.mul(ILLUSTRATIVE_SALES_TAX_RATE)
+		.toDecimalPlaces(2);
 	return {
 		anthersDollars,
 		creatorDollars,
@@ -830,7 +832,7 @@ export function directedSupportWorstCase(monthly = PUBLIC_ACCESS_PRICE) {
  *
  * `anthers` and `creators` are the two ASSUMPTIONS — what this person gives Anthers
  * and what they point at creators. Everything else derives. Sales tax is the only
- * thing added on top of a support charge, per `SALES_TAX_RATE`.
+ * thing added on top of a support charge, per `ILLUSTRATIVE_SALES_TAX_RATE`.
  */
 export const USER_CASES: { name: string; anthers: number; creators: number; note: string }[] = [
 	{ name: "Parker", anthers: PUBLIC_ACCESS_PRICE, creators: 25.5, note: "seven creators" },
@@ -848,7 +850,7 @@ export function userCases() {
 			directed: money(new Decimal(creators)),
 			// What they actually pay: the support charge carries its own card cost
 			// inside it, and tax is the only thing added.
-			total: money(b.total.times(1 + SALES_TAX_RATE)),
+			total: money(b.total.times(1 + ILLUSTRATIVE_SALES_TAX_RATE)),
 			// What reaches creators is directed support net of its share of the card
 			// fee, plus the Time Pool half of what went to Anthers.
 			directedNet: money(b.creatorNet),
@@ -873,7 +875,7 @@ export function purchaseCase(prices = [30, 60], rivalCut = 0.3) {
 		const r = calculateFees(list, { type: "digital" });
 		return {
 			price: money(list),
-			buyerPays: money(list.times(1 + SALES_TAX_RATE)),
+			buyerPays: money(list.times(1 + ILLUSTRATIVE_SALES_TAX_RATE)),
 			creatorReceives: money(r.creatorEarnings),
 			cardFee: money(r.processingFee),
 			rivalReceives: money(list.times(1 - rivalCut)),

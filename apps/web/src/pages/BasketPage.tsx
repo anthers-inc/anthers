@@ -29,9 +29,11 @@ interface Quote {
 	items: { workId: number; slug: string; title: string | null; price: string }[];
 	subtotal: string;
 	processingFee: string;
-	salesTax: string;
+	/** Null — the tax is resolved at the session, from the buyer's billing address. */
+	salesTax: string | null;
 	creatorEarnings: string;
-	buyerTotal: string;
+	/** Null for the same reason as `salesTax` — the total lives in the session. */
+	buyerTotal: string | null;
 	feeSeparately: string;
 	creatorGains: string;
 }
@@ -144,15 +146,17 @@ export default function BasketPage() {
 							</span>
 							<span className="tabular-nums">−${quote.processingFee}</span>
 						</div>
+						{/* No "est." figure anymore: the rate varies by location and is resolved
+						    from the billing address at checkout, where the buyer sees the real
+						    number before confirming. Saying a number here would be the flat-rate
+						    charge this flow exists to retire. */}
 						<div className="flex justify-between py-1 text-base-content/60">
-							<span>
-								Sales tax <span className="text-xs">est.</span>
-							</span>
-							<span className="tabular-nums">+${quote.salesTax}</span>
+							<span>Sales tax</span>
+							<span className="text-xs">calculated at checkout</span>
 						</div>
 						<div className="mt-2 flex justify-between border-t border-base-300 pt-2 font-semibold">
-							<span>You pay</span>
-							<span className="tabular-nums">${quote.buyerTotal}</span>
+							<span>Subtotal you pay</span>
+							<span className="tabular-nums">${quote.subtotal}</span>
 						</div>
 						<div className="mt-1 flex justify-between text-success">
 							<span>{creator} receives</span>
@@ -178,7 +182,7 @@ export default function BasketPage() {
 						{user ? (
 							<BasketCheckout
 								workIds={items.map((i) => i.workId)}
-								buyerTotal={quote.buyerTotal}
+								buyerTotal={quote.subtotal}
 								onComplete={() => {
 									clear();
 									void refresh();

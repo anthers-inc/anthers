@@ -185,23 +185,35 @@ export async function refundPurchase(
 	 * PaymentIntent, and refunding one of five must not return the other four — they are
 	 * separate things the buyer chose to keep. So where the charge carries siblings, the
 	 * refund names an explicit `amount`: this row's price plus its apportioned share of
-	 * the sales tax, which is exactly what the buyer paid for it.
+	 * the sales tax, which is exactly what the buyer paid for it — the tax share read off
+	 * the row, where completion stamped what Stripe Tax actually collected.
 	 *
 	 * **The transfer reversal then lands exactly right, and that is arithmetic rather than
 	 * luck.** `reverse_transfer` on a partial refund reverses *proportionally*, and
 	 * because both the card fee and the tax are apportioned pro-rata by item value, the
 	 * proportion resolves to the item's own earnings:
 	 *
-	 *     reversal = (S − p) × [aᵢ(1 + t/S)] ÷ (S + t) = aᵢ(S − p)/S = the row's earnings
+	 *     reversal = E × [aᵢ(1 + t/S)] ÷ (S + t) = aᵢE/S = the row's earnings
 	 *
-	 * (S = subtotal, p = card fee, t = tax, aᵢ = this item's price.) Rounding can leave a
-	 * cent between Stripe's proportion and the row's stored figure; that lands in the
-	 * shortfall the ledger already books, which is what the remainder is for.
+	 * (S = subtotal, t = tax, aᵢ = this item's price, E = the pinned transfer — the
+	 * creator's earnings on the whole charge, fixed at session creation by
+	 * `transfer_data[amount]`.) Rounding can leave a cent between Stripe's proportion
+	 * and the row's stored figure; that lands in the shortfall the ledger already books,
+	 * which is what the remainder is for.
 	 *
 	 * **A lone purchase still sends no `amount` at all.** Its share *is* the whole charge,
-	 * so the two are equivalent — but the no-amount call is the long-tested path for the
-	 * overwhelmingly common case, and there is no reason to move it onto a new one for
-	 * symmetry's sake.
+	 * so the two are equivalent — and the whole charge's refund returns the whole tax
+	 * with it, on Stripe's side, automatically: the tax was part of what the buyer paid,
+	 * so refunding it in full hands every cent back. The no-amount call is the
+	 * long-tested path for the overwhelmingly common case, and there is no reason to
+	 * move it onto a new one for symmetry's sake.
+	 *
+	 * ⚠️ **`reverse_transfer` reverses the pinned transfer, never more.** The creator's
+	 * transfer is their earnings, decoupled from the tax by the session's construction,
+	 * so a full refund claws back exactly their earnings and the tax returns from the
+	 * platform side — Anthers' own liability, as the facilitator. The refund record
+	 * keeps the row's `sales_tax` figure, which is what the return worksheet nets a
+	 * refund against.
 	 */
 	const siblingCount = (
 		await db

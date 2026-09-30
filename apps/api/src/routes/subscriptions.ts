@@ -852,6 +852,11 @@ const subscriptionRoutes = new Hono()
 							proration_behavior: "always_invoice",
 							proration_date: periodStart,
 							cancel_at_period_end: false,
+							// Automatic tax rides on the update too, so a subscription that
+							// predates it is brought on the moment its items next change —
+							// an update that omitted it would leave the old subscription
+							// untaxed while its new lines carry tax codes.
+							automatic_tax: { enabled: true },
 							metadata: { ...sub.metadata, userId: String(user.id) },
 						});
 					}
@@ -864,6 +869,7 @@ const subscriptionRoutes = new Hono()
 							// account's own amounts up to match.
 							proration_behavior: "none",
 							cancel_at_period_end: false,
+							automatic_tax: { enabled: true },
 							metadata: { ...sub.metadata, userId: String(user.id) },
 						});
 					}
@@ -880,9 +886,19 @@ const subscriptionRoutes = new Hono()
 
 			// New subscription → create it incomplete and hand back the confirmation secret so
 			// the user confirms the first payment inline; the webhook applies it on success.
+			//
+			// 🚨 **Automatic tax is on, with no `liability` — the platform is the tax
+			// liability.** Monthly support is Anthers' own sale (it settles on Anthers'
+			// account, creators are paid by transfer), and the Creator Terms promise Anthers
+			// collects and remits, so the liability stays on the platform by construction.
+			// Pointing it at a connected account would be both wrong and impossible here —
+			// one subscription pays many creators. Stripe test mode confirmed on 2026-09-15
+			// that this calculates correctly through the renewal rule, reduced renewals
+			// included.
 			const sub = await createSubscription({
 				customer: customerId,
 				items,
+				automatic_tax: { enabled: true },
 				// 🚨 **Backdated to the 1st, which is what puts every account on one calendar
 				// cycle.** The first invoice then covers the whole month, charges in full today,
 				// and lands the renewal on the 1st with no anchor arithmetic anywhere else. A

@@ -7,12 +7,17 @@
  * vendor must stay swappable and why every new payment operation belongs there rather
  * than here as `stripe.<resource>.<op>`.
  *
- * Direct purchases run as Stripe destination charges. Since 2026-08-03 the listed
- * price IS the advertised price: card processing comes **out of** it and sales tax
- * is the only thing added on top, so the buyer is charged price + tax, the creator's
- * connected account receives the price less that at-cost deduction, and the
- * application fee is the remainder — which is tax, never a cut. Anthers keeps $0. A
- * creator with no connected account is a hard 409, not a platform-held fallback.
+ * Direct purchases run as Stripe destination charges, through a **Checkout Session in
+ * elements mode with automatic tax** — a PaymentIntent cannot carry a product tax code,
+ * so it cannot charge real tax, and real tax is what every charge now owes. Since
+ * 2026-08-03 the listed price IS the advertised price: card processing comes **out of**
+ * it, and sales tax is the only thing added on top — resolved by Stripe Tax from the
+ * buyer's billing address at the session, per the product tax code each line carries
+ * (the posture's What Gets Taxed table). The creator's connected account receives the
+ * price less that at-cost deduction, pinned by `transfer_data[amount]` so it never
+ * varies with the buyer's location; the tax lands on the platform side by construction,
+ * because Anthers is the marketplace facilitator and the liability. Anthers keeps $0.
+ * A creator with no connected account is a hard 409, not a platform-held fallback.
  *
  * A digital sale also carried the first download's bandwidth at cost until
  * 2026-08-12. Delivery is free on R2, so `deliveryFee` is now always $0.00 and every
@@ -32,14 +37,17 @@ import { cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
 import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
+import type { WorkType } from "@anthers/shared/tax-codes";
+import { purchaseTaxCode } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
 import {
 	createAccountOnboardingLink,
+	createCheckoutSession,
 	createConnectAccount,
-	createPaymentIntent,
+	listCheckoutSessions,
 	paymentsConfigured,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
@@ -92,6 +100,20 @@ async function resolvePurchase(slug: string, userId: number) {
 	const amount = new Decimal(access.price);
 	if (amount.lte(0))
 		return { ok: false as const, status: 400 as const, error: "This work is free" };
+
+	// 🚨 **A physical or service Work is refused at checkout, because nothing fulfills
+	// it yet.** There is no shipping lane for a physical Work and no fulfillment
+	// mechanism for a service one, so a buyer would pay for a thing that never arrives —
+	// and there is no tax code that honestly describes an undelivered thing either
+	// (`purchaseTaxCode` returns null for both). This is the posture's refusal rather
+	// than a judgment about the types: selling them arrives with whatever fulfills
+	// them, and until then checkout is the one door that has to say no.
+	if (work.type === "physical" || work.type === "service")
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: "This kind of work can't be bought yet — there's nothing to deliver it.",
+		};
 
 	// 🚨 **A price the processor will not accept, caught here rather than at Stripe.** The
 	// validators refuse a sub-floor price on the way in, but a Work priced before that
@@ -174,6 +196,205 @@ async function resolveBasket(workIds: number[], userId: number) {
 	const subtotal = items.reduce((acc, i) => acc.plus(i.amount), new Decimal(0));
 	const fees = calculateFees(subtotal, { type: "digital" });
 	return { ok: true as const, items, subtotal, fees, creatorId: items[0].work.creatorId };
+}
+
+/**
+ * Build the Checkout Session a purchase is charged through — the one charge shape that can
+ * carry a product tax code, and so the only path a purchase has been charged through since
+ * real tax calculation landed (2026-09-29).
+ *
+ * 🚨 **`transfer_data[amount]`, not `application_fee_amount` — the destination-charge
+ * structure this switch exists for.** A static application fee was workable only while the
+ * tax was a flat figure Anthers computed itself, because the fee had to be
+ * `buyerTotal − creatorEarnings` and both were known at session creation. Under automatic
+ * tax the amount varies with the buyer's address, so nothing static can capture it. Instead
+ * the creator's transfer is pinned to their **earnings** — `price − cardFee(price)`, fixed
+ * and location-independent — and whatever tax Stripe adds lands on the platform side by
+ * construction, because it never entered the transfer. Anthers is the marketplace
+ * facilitator and the tax liability (the Creator Terms say so), so `automatic_tax` carries
+ * no `liability`: plain `enabled: true` keeps the liability on the platform, where the
+ * Creator Terms already put it. `refund_application_fee` in `services/refunds.ts` stays
+ * unset for the same reason.
+ *
+ * ⚠️ **US billing addresses only, enforced client-side by construction, backstopped
+ * here.** The purchase surfaces collect the address through Anthers' own US-only form
+ * (the Checkout-flavored Billing Address Element offers no country allow-list, which is
+ * why it was replaced), so the session a browser creates carries a US address by
+ * construction — there is no country field to enter anything else into. The completion
+ * path below is the backstop for anything that reaches the API anyway: a hand-rolled
+ * session built against the API directly, or a form a modified client skipped. It
+ * refuses a session whose resolved billing address is not US, leaving the rows `pending`
+ * for a hand refund — the boundary holds even when the client's half does not.
+ *
+ * `buyerTotal` is the price itself: tax joins it inside the session, resolved per buyer,
+ * and `total_details.amount_tax` is what the completion path stamps onto the purchase rows.
+ */
+function purchaseSession(params: {
+	/** The web origin the buyer's browser will return to after a redirect-based method. */
+	origin: string;
+	/** One line per Work, each carrying the tax code for what the buyer receives. */
+	lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
+	/** The creator's connected account. */
+	destination: string;
+	/** The creator's earnings in cents — the fixed, location-independent transfer. */
+	transferAmountCents: number;
+	metadata: Record<string, string>;
+}): Stripe.Checkout.SessionCreateParams {
+	return {
+		mode: "payment",
+		ui_mode: "elements",
+		// The buyer's billing address is what tax resolves from, and it is required in full
+		// because local tax is address-level rather than state-level — the same full street
+		// address the return worksheets and the threshold forecast later read off the row.
+		billing_address_collection: "required",
+		// A Customer is created for every buyer, so the address and email survive the
+		// session and are readable at completion.
+		customer_creation: "always",
+		payment_method_types: ["card"],
+		line_items: params.lineItems,
+		automatic_tax: { enabled: true },
+		payment_intent_data: {
+			// The creator's earnings, fixed at session creation — see the header.
+			transfer_data: {
+				destination: params.destination,
+				amount: params.transferAmountCents,
+			},
+			metadata: params.metadata,
+		},
+		// Where a redirect-based payment method sends the buyer back; cards don't use it,
+		// but the session requires it when one is enabled. `STRIPE_RETURN_PATHS` owns every
+		// URL the server hands Stripe — see `scripts/stripe-redirect-guard.test.ts`.
+		return_url: `${params.origin}${STRIPE_RETURN_PATHS.checkoutReturn}`,
+	};
+}
+
+/**
+ * One line item per Work, carrying the tax code for what the buyer receives.
+ *
+ * 🚨 **The code follows the Work's type, from `purchaseTaxCode` — never a default.** A
+ * session without a code falls back to Stripe's preset, which would tax every line as
+ * generic tangible goods and quietly mis-tax downloads, streams and donations alike. The
+ * caller has already refused the types with no code (physical, service).
+ */
+function workLineItem(
+	work: { id: number; title: string | null; type: string },
+	amountCents: number,
+	taxCode: string,
+): Stripe.Checkout.SessionCreateParams.LineItem {
+	return {
+		price_data: {
+			currency: "usd",
+			// US prices are tax-exclusive: the buyer's total varies with their location,
+			// which is the point of automatic tax.
+			tax_behavior: "exclusive",
+			unit_amount: amountCents,
+			product_data: {
+				// A Work's title is nullable in the database; the Work's slug-anchored page
+				// is what names it publicly, but a receipt line needs something, and a
+				// fallback reads better on a card statement than an empty string.
+				name: work.title || `Work #${work.id}`,
+				tax_code: taxCode,
+			},
+		},
+		quantity: 1,
+	};
+}
+
+/**
+ * Complete the purchases a Checkout Session was created for: re-key the rows from the
+ * session id to the PaymentIntent it produced, and stamp the tax Stripe Tax collected plus
+ * the buyer's resolved billing address.
+ *
+ * 🚨 **This is where the remittance record becomes real.** The purchase rows are what the
+ * sales-tax return worksheet and the threshold forecast read, and both need per-charge tax
+ * and buyer location — retrofitting onto past charges is the expensive direction, which is
+ * why the columns are stamped here rather than derived later. `salesTax` was zero at
+ * checkout because Anthers' arithmetic cannot know the buyer's location; the session can.
+ *
+ * ⚠️ **US billing only, enforced here as the backstop.** The buy surfaces collect the
+ * address through Anthers' own US-only form — there is no country field to enter
+ * anything else into, so a browser-built session carries a US address by construction.
+ * This refusal is the defense in depth for what that cannot see: a hand-rolled API
+ * call, a modified client, a form skipped. A non-US address is a hard failure that
+ * leaves the rows `pending` and the money to be returned by hand. Refusing loudly beats
+ * collecting tax Anthers is not registered to collect.
+ *
+ * Idempotent by the same latch the rest of the webhook uses: only `pending` rows move.
+ */
+async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void> {
+	// The session id does not exist when the PaymentIntent's metadata is written (Stripe
+	// creates the intent inside the session), so the session cannot be named in the
+	// intent's metadata — it is found by listing sessions for the intent.
+	const list = listCheckoutSessions({ payment_intent: pi.id, limit: 1 });
+	if (!list) return;
+	let session: Stripe.Checkout.Session | null = null;
+	for await (const found of list) {
+		session = found;
+		break;
+	}
+	if (!session) return;
+
+	// The buyer's address as Checkout resolved it. Null on a session that never asked for
+	// one, which ours always do — a null here means the session shape changed and the
+	// posture's record is incomplete, so it fails toward refusing the completion.
+	const address = session.customer_details?.address ?? null;
+	if (address?.country !== "US") {
+		console.error(
+			`purchase completion refused: session ${session.id} billed outside the US (${address?.country ?? "no address"}) — refund by hand`,
+		);
+		return;
+	}
+
+	const intentId =
+		typeof session.payment_intent === "string"
+			? session.payment_intent
+			: session.payment_intent?.id;
+	if (!intentId || intentId !== pi.id) return;
+
+	// The tax Stripe Tax actually collected on the whole charge, in cents.
+	const taxCents = session.total_details?.amount_tax ?? 0;
+	const tax = new Decimal(taxCents).dividedBy(100).toFixed(2);
+
+	// Re-key the rows onto the PaymentIntent, stamping the location and the tax. Only
+	// `pending` rows move, so a redelivered event is a no-op — the same latch the
+	// PI-keyed branch below relies on.
+	const rows = await db
+		.select()
+		.from(purchases)
+		.where(and(eq(purchases.stripePaymentIntentId, session.id), eq(purchases.status, "pending")));
+	if (rows.length === 0) return;
+
+	// A basket splits the whole charge's tax pro-rata by item value, the same split the
+	// card fee gets at checkout, so the rows sum to what Stripe collected exactly. The
+	// last row absorbs the rounding remainder, for the same reason it does there.
+	const subtotal = rows.reduce((acc, r) => acc.plus(new Decimal(r.amount)), new Decimal(0));
+	const taxTotal = new Decimal(tax);
+	let allocated = new Decimal(0);
+	const stamped = rows.map((row, idx) => {
+		const isLast = idx === rows.length - 1;
+		const share = isLast
+			? taxTotal.minus(allocated)
+			: taxTotal.times(new Decimal(row.amount)).dividedBy(subtotal).toDecimalPlaces(2);
+		if (!isLast) allocated = allocated.plus(share);
+		return { row, share };
+	});
+
+	for (const { row, share } of stamped) {
+		await db
+			.update(purchases)
+			.set({
+				stripePaymentIntentId: intentId,
+				salesTax: share.toFixed(2),
+				buyerCountry: address.country,
+				buyerState: address.state ?? null,
+				buyerPostalCode: address.postal_code ?? null,
+				buyerAddressLine1: address.line1 ?? null,
+				buyerAddressLine2: address.line2 ?? null,
+				buyerCity: address.city ?? null,
+				updatedAt: new Date(),
+			})
+			.where(and(eq(purchases.id, row.id), eq(purchases.status, "pending")));
+	}
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -276,7 +497,12 @@ const paymentRoutes = new Hono()
 			processingFee: fees.processingFee.toFixed(2),
 			deliveryFee: fees.deliveryFee.toFixed(2),
 			crfFee: fees.crfFee.toFixed(2),
-			salesTax: fees.salesTax.toFixed(2),
+			// Real tax is resolved by Stripe Tax from the buyer's billing address at the
+			// Checkout Session — Anthers' arithmetic cannot know the buyer's location, so
+			// the quote presents no tax figure at all rather than an illustrative one
+			// wearing the clothes of a charge. `null` is the contract: the buy surfaces
+			// render "calculated at checkout" from it, and `buyerTotal` is the price.
+			salesTax: null,
 			buyerTotal: fees.buyerTotal.toFixed(2),
 		});
 	})
@@ -314,48 +540,43 @@ const paymentRoutes = new Hono()
 		}
 
 		const totalCents = Math.round(fees.buyerTotal.toNumber() * 100);
-		// On a destination charge, the connected account receives `amount −
-		// application_fee_amount`. So this figure is not "what Anthers keeps" — it is
-		// **everything the buyer pays that is not the creator's transfer**, and the
-		// creator's earnings are defined as the price less card processing and
-		// delivery. Subtract exactly that, and nothing else.
-		//
-		// It used to subtract `processingFee` a second time here, reasoning that
-		// "card processing is Stripe's own cut and is never part of the application
-		// fee". True of a direct charge and false of this one: Stripe debits its fee
-		// from the **platform**, not from the transfer, so leaving processing out of
-		// the application fee doesn't route it to Stripe — it routes it to the
-		// creator. On a $5.00 sale that transferred $4.98 against a recorded
-		// `creator_earnings` of $4.53 and left Anthers holding $0.35 against a $0.45
-		// Stripe fee and a $0.33 sales-tax liability: net −$0.10 held, $0.33 owed, on
-		// every direct purchase. Same shape as the gross-vs-net Seed bug of
-		// 2026-08-08 — the model said net, the code paid gross, and Anthers silently
-		// absorbed the difference.
-		const applicationFeeCents = Math.round(
-			fees.buyerTotal.minus(fees.creatorEarnings).toNumber() * 100,
-		);
+		// The creator's transfer: their earnings in cents — the price less the at-cost card
+		// processing, FIXED at session creation. This is the destination-charge structure
+		// under automatic tax: `transfer_data[amount]` pins what reaches the creator so it
+		// never varies with the buyer's location, and whatever tax Stripe adds stays on
+		// the platform side by construction. See `purchaseSession`.
+		const transferCents = Math.round(fees.creatorEarnings.toNumber() * 100);
 
-		const params: Stripe.PaymentIntentCreateParams = {
-			amount: totalCents,
-			currency: "usd",
-			payment_method_types: ["card"],
-			metadata: { kind: "direct_purchase", workId: String(work.id), buyerId: String(user.id) },
-		};
-		// The buyer pays the all-in list price plus sales tax; the creator's transfer is
-		// that price less the at-cost card processing. Of what the platform is left
-		// holding, Stripe takes its processing fee and the rest is sales tax owed to the
-		// state — Anthers retains $0. Guarded because a fee at or above the total would
-		// be rejected by Stripe anyway.
-		if (applicationFeeCents < totalCents) {
-			params.application_fee_amount = applicationFeeCents;
-			params.transfer_data = { destination: creatorAccount.stripeAccountId };
+		// 🚨 Every line carries the product tax code for what the buyer receives, per the
+		// posture's What Gets Taxed table. The connected-creator and type refusals above
+		// mean `purchaseTaxCode` cannot return null here — but a future Work type lands
+		// unmapped unless the mapping grows with it, so a null is a refusal rather than a
+		// fallback to a generic code that would mis-tax the line in both directions.
+		const taxCode = purchaseTaxCode(work.type as WorkType);
+		if (!taxCode) {
+			return c.json({ error: "This work can't be taxed yet, so it can't be sold." }, 400);
 		}
 
-		const paymentIntent = await createPaymentIntent(params);
-		if (!paymentIntent) return c.json({ error: "Payments are not configured." }, 503);
+		const session = await createCheckoutSession(
+			purchaseSession({
+				origin:
+					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
+				lineItems: [workLineItem(work, totalCents, taxCode)],
+				destination: creatorAccount.stripeAccountId,
+				transferAmountCents: transferCents,
+				metadata: {
+					kind: "direct_purchase",
+					workId: String(work.id),
+					buyerId: String(user.id),
+				},
+			}),
+		);
+		if (!session?.client_secret) return c.json({ error: "Payments are not configured." }, 503);
 
-		// Record the purchase as pending; the webhook flips it to completed on success,
-		// and access unlocks the moment a completed row exists.
+		// Record the purchase as pending, keyed by the SESSION — the PaymentIntent does not
+		// exist until the buyer confirms inside the session, and the webhook resolves the
+		// session from the PaymentIntent's metadata when it does. Stamped with the real tax
+		// and the buyer's location at completion, from the session.
 		await db.insert(purchases).values({
 			buyerId: user.id,
 			workId: work.id,
@@ -370,12 +591,11 @@ const paymentRoutes = new Hono()
 			processingFee: fees.processingFee.toFixed(2),
 			deliveryFee: fees.deliveryFee.toFixed(2),
 			crfFee: fees.crfFee.toFixed(2),
-			// Recorded because it is collected and owed onward — the row is the
-			// remittance record. It rides inside `buyerTotal`, so without this column
-			// the amount of tax charged could not be recovered from the purchase.
-			salesTax: fees.salesTax.toFixed(2),
+			// Zero until the webhook stamps what Stripe Tax actually collected — see the
+			// schema note on the buyer_* columns.
+			salesTax: "0.00",
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
-			stripePaymentIntentId: paymentIntent.id,
+			stripePaymentIntentId: session.id,
 			status: "pending",
 		});
 
@@ -384,10 +604,12 @@ const paymentRoutes = new Hono()
 			processingFee: fees.processingFee.toFixed(2), // out of the price, to Stripe
 			deliveryFee: fees.deliveryFee.toFixed(2), // always "0.00" — delivery is free
 			crfFee: fees.crfFee.toFixed(2), // always "0.00" — Anthers takes no cut
-			salesTax: fees.salesTax.toFixed(2),
+			// No figure: the tax is resolved at the session, from the buyer's address.
+			salesTax: null,
 			creatorEarnings: fees.creatorEarnings.toFixed(2), // price − processing
-			buyerTotal: fees.buyerTotal.toFixed(2), // price + tax — what the buyer is charged
-			clientSecret: paymentIntent.client_secret,
+			buyerTotal: null, // the total lives in the session, with the tax in it
+			// The Checkout Session's client secret — the browser mounts Checkout from it.
+			clientSecret: session.client_secret,
 		});
 	})
 
@@ -432,13 +654,13 @@ const paymentRoutes = new Hono()
 	})
 
 	/**
-	 * Buy a basket on one charge — one PaymentIntent, one card fee, one row per Work.
+	 * Buy a basket on one charge — one Checkout Session, one card fee, one row per Work.
 	 *
 	 * Deliberately a sibling of `/checkout/:slug` rather than a replacement: a single
 	 * purchase is the overwhelming case and there is no reason to make it travel through
 	 * a list. What the two must share is the *money*, and they do — both quote
-	 * `calculateFees`, both use a destination charge, and both subtract exactly
-	 * `buyerTotal − creatorEarnings` as the application fee.
+	 * `calculateFees`, both charge through a Checkout Session with automatic tax, and
+	 * both pin the creator's transfer to their earnings via `transfer_data[amount]`.
 	 */
 	.post("/basket/checkout", requireAuth, requireVerified, async (c) => {
 		const user = c.get("user");
@@ -461,28 +683,35 @@ const paymentRoutes = new Hono()
 			return c.json({ error: "This creator can't accept payments yet." }, 409);
 		}
 
-		const totalCents = Math.round(q.fees.buyerTotal.toNumber() * 100);
-		const applicationFeeCents = Math.round(
-			q.fees.buyerTotal.minus(q.fees.creatorEarnings).toNumber() * 100,
-		);
-
-		const params: Stripe.PaymentIntentCreateParams = {
-			amount: totalCents,
-			currency: "usd",
-			payment_method_types: ["card"],
-			metadata: {
-				kind: "direct_purchase_basket",
-				workIds: q.items.map((i) => i.work.id).join(","),
-				buyerId: String(user.id),
-			},
-		};
-		if (applicationFeeCents < totalCents) {
-			params.application_fee_amount = applicationFeeCents;
-			params.transfer_data = { destination: creatorAccount.stripeAccountId };
+		// One line per Work, each with its own tax code — a basket can span media, and a
+		// video and an image are not taxed as the same thing in every jurisdiction.
+		const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+		for (const { work, amount } of q.items) {
+			const taxCode = purchaseTaxCode(work.type as WorkType);
+			// `resolvePurchase` already refused the types with no code, so this is the
+			// belt on a door the single-purchase path refuses at.
+			if (!taxCode)
+				return c.json({ error: "This work can't be taxed yet, so it can't be sold." }, 400);
+			lineItems.push(workLineItem(work, Math.round(amount.toNumber() * 100), taxCode));
 		}
 
-		const paymentIntent = await createPaymentIntent(params);
-		if (!paymentIntent) return c.json({ error: "Payments are not configured." }, 503);
+		const session = await createCheckoutSession(
+			purchaseSession({
+				origin:
+					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
+				lineItems,
+				destination: creatorAccount.stripeAccountId,
+				// The whole basket's earnings, on the sum — the fixed $0.30 is per charge,
+				// which is the entire point of the basket.
+				transferAmountCents: Math.round(q.fees.creatorEarnings.toNumber() * 100),
+				metadata: {
+					kind: "direct_purchase_basket",
+					workIds: q.items.map((i) => i.work.id).join(","),
+					buyerId: String(user.id),
+				},
+			}),
+		);
+		if (!session?.client_secret) return c.json({ error: "Payments are not configured." }, 503);
 
 		/**
 		 * One row per Work, all sharing the PaymentIntent — because access, refunds and
@@ -510,6 +739,10 @@ const paymentRoutes = new Hono()
 						)
 					: total.times(amount).dividedBy(q.subtotal).toDecimalPlaces(2);
 			const processing = share(q.fees.processingFee);
+			// The session's tax is stamped per charge at completion and apportioned across
+			// the rows then; at checkout every row is zero, because Anthers' arithmetic
+			// knows no buyer location. The apportioning still runs so the shape of the
+			// row building is unchanged, and a zero total apportions to zero exactly.
 			const tax = share(q.fees.salesTax);
 			return {
 				buyerId: user.id,
@@ -525,7 +758,9 @@ const paymentRoutes = new Hono()
 				crfFee: "0.00",
 				salesTax: tax.toFixed(2),
 				creatorEarnings: amount.minus(processing).toFixed(2),
-				stripePaymentIntentId: paymentIntent.id,
+				// The session id, as on the single-purchase path — the PaymentIntent is
+				// resolved from the session at completion and the rows re-keyed to it.
+				stripePaymentIntentId: session.id,
 				status: "pending" as const,
 			};
 		});
@@ -534,11 +769,13 @@ const paymentRoutes = new Hono()
 		return c.json({
 			subtotal: q.subtotal.toFixed(2),
 			processingFee: q.fees.processingFee.toFixed(2),
-			salesTax: q.fees.salesTax.toFixed(2),
+			// No figure — the tax is resolved at the session, from the buyer's address.
+			salesTax: null,
 			creatorEarnings: q.fees.creatorEarnings.toFixed(2),
-			buyerTotal: q.fees.buyerTotal.toFixed(2),
+			buyerTotal: null,
 			itemCount: q.items.length,
-			clientSecret: paymentIntent.client_secret,
+			// The Checkout Session's client secret — the browser mounts Checkout from it.
+			clientSecret: session.client_secret,
 		});
 	})
 
@@ -752,6 +989,13 @@ const paymentRoutes = new Hono()
 
 		if (event.type === "payment_intent.succeeded") {
 			const pi = event.data.object as Stripe.PaymentIntent;
+			// A purchase charged through a Checkout Session is keyed by the session id at
+			// checkout, because the PaymentIntent does not exist until the buyer confirms.
+			// This re-keys those rows onto the PaymentIntent, stamping the collected tax and
+			// the buyer's address, so the generic completion below — which matches by
+			// PaymentIntent id — finds them and does the rest. A session that billed outside
+			// the US leaves its rows `pending` and is refunded by hand; see the helper.
+			await completeSessionPurchases(pi);
 			// Idempotent: only a still-pending row flips, so redelivered events are no-ops.
 			//
 			// 🚨 **Every** row, not the first. This destructured a single `[completed]`

@@ -208,6 +208,13 @@ async function completedPurchase(
 		 * their books have to close the same way they were opened.
 		 */
 		deliveryFee?: string;
+		/**
+		 * The tax Stripe Tax actually collected, as completion stamps it. Left off, the
+		 * fixture is a pre-tax row (the figure `calculateFees` used to invent); set, it
+		 * is a purchase completed under automatic tax, and the refund has to return this
+		 * figure with the rest.
+		 */
+		salesTax?: string;
 	} = {},
 ) {
 	const workId = opts.workId === undefined ? await makeWork(`Refund work ${uid()}`) : opts.workId;
@@ -225,7 +232,9 @@ async function completedPurchase(
 			processingFee: fees.processingFee.toFixed(2),
 			deliveryFee: opts.deliveryFee ?? fees.deliveryFee.toFixed(2),
 			crfFee: "0.00",
-			salesTax: fees.salesTax.toFixed(2),
+			// The stamped figure when given — what Stripe Tax actually collected — and
+			// `calculateFees`'s (now zero) otherwise, which is the pre-tax row's shape.
+			salesTax: opts.salesTax ?? fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
 			stripePaymentIntentId: `pi_${uid()}`,
 			status: "completed",
@@ -546,6 +555,33 @@ describe("What the remainder absorbs", () => {
 		// And the creator is never charged beyond what they were paid — the reversal
 		// is their earnings exactly, which is what stops a refund becoming a cut.
 		expect(absorbed.greaterThanOrEqualTo(new Decimal(purchase.processingFee))).toBe(true);
+	});
+
+	/**
+	 * A purchase completed under automatic tax carries the figure Stripe Tax actually
+	 * collected, stamped at completion — and the refund has to hand it back with the
+	 * rest, because collected tax that is not remitted has to be returned. The refund
+	 * amount a buyer sees is price + tax, the transfer reversal is the pinned earnings,
+	 * and the tax returns from the platform side where it landed.
+	 */
+	it("returns the tax a taxed purchase actually collected", async () => {
+		const purchase = await completedPurchase({ salesTax: "0.46" });
+		const res = await refundAs(buyerCookie, purchase.id);
+
+		// The route reports price + tax as the refunded amount — the buyer's whole charge.
+		const body = (await res.json()) as { amount?: string };
+		expect(body.amount).toBe(new Decimal(purchase.amount).plus("0.46").toFixed(2));
+
+		// And the balance still closes with the tax as its own term: the creator gives
+		// back their earnings only, the tax goes back to the buyer, and the ledger books
+		// the sunk processing as the shortfall.
+		const buyerTotal = new Decimal(purchase.amount).plus(purchase.salesTax);
+		const taxReturned = new Decimal(purchase.salesTax);
+		const creatorReversed = new Decimal(purchase.creatorEarnings);
+		const absorbed = new Decimal((await ledgerFor(purchase.id))[0].amount).negated();
+		expect(buyerTotal.minus(creatorReversed).minus(taxReturned).minus(absorbed).toFixed(2)).toBe(
+			"0.00",
+		);
 	});
 });
 

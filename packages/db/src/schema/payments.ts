@@ -92,6 +92,25 @@ export const purchases = pgTable(
 		salesTax: numeric("sales_tax").notNull().default("0.00"),
 		creatorEarnings: numeric("creator_earnings").notNull(),
 		/**
+		 * 🚨 **Stamped at checkout COMPLETION, never at quote time** — `salesTax` above is
+		 * zero until Stripe Tax has actually resolved the buyer's address, which happens
+		 * inside the Checkout Session. The webhook that flips a purchase `pending →
+		 * completed` reads the session's `total_details.amount_tax` back and writes it
+		 * here, because this row is the remittance record the return worksheets and the
+		 * threshold forecast read, and retrofitting buyer location onto past charges is
+		 * the expensive direction.
+		 */
+		buyerCountry: text("buyer_country"),
+		/** State or subdivision code, as Stripe resolved it (e.g. "CO"). */
+		buyerState: text("buyer_state"),
+		/** Postal code — the grain home-rule city rates turn on. */
+		buyerPostalCode: text("buyer_postal_code"),
+		/** The buyer's street address as entered at checkout, for the record. */
+		buyerAddressLine1: text("buyer_address_line1"),
+		buyerAddressLine2: text("buyer_address_line2"),
+		/** City as entered — null when the buyer's row predates the column. */
+		buyerCity: text("buyer_city"),
+		/**
 		 * 🚨 **Indexed, not UNIQUE** (changed 2026-08-13, migration `0033`).
 		 *
 		 * It was unique while one charge could only ever mean one purchase, and that

@@ -8,8 +8,10 @@
 // splits into Time Pool (half) + the at-cost Payments line (card 2.9%+$0.30) +
 // the remainder funding free access and the charitable programs. There is no
 // bandwidth term — delivery costs $0 at any volume (retired 2026-08-12). Sales tax
-// (~6.5%) is the ONLY thing added on top, because a government-imposed tax is the
-// sole carve-out mandatory-fee disclosure law allows. Anthers keeps $0.
+// (an illustrative ~6.5% average here; the real rate varies by location and is
+// calculated at checkout) is the ONLY thing added on top, because a
+// government-imposed tax is the sole carve-out mandatory-fee disclosure law
+// allows. Anthers keeps $0.
 
 import {
 	BADGE_ORDER,
@@ -17,7 +19,7 @@ import {
 	type BadgeKey,
 	badgeLabel,
 	cardFeeDisplay,
-	SALES_TAX_RATE,
+	ILLUSTRATIVE_SALES_TAX_RATE,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -33,12 +35,12 @@ const serif = { fontFamily: FONTS.fraunces };
 
 // ─── Rates — single source of truth: @anthers/shared (the same numbers the API
 // charges). Only the presentation (the badge's shape, field color and emoji) lives here. ───
-const TAX_PCT = SALES_TAX_RATE;
+const TAX_PCT = ILLUSTRATIVE_SALES_TAX_RATE;
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 const TAX_TIP =
-	"An average U.S. combined sales-tax rate. Your actual rate depends on your state and may be higher or lower.";
+	"An illustrative average U.S. sales-tax rate. The rate you actually pay varies by location and is calculated at checkout from your billing address.";
 
 // ─── Badge presentation. Every Badge is a patch: a shape and a field color bound in the
 // same edging, with an emoji sewn onto it. ───
@@ -332,7 +334,10 @@ export function SubscriptionCalculator() {
 					<div className="flex items-center justify-between gap-3 text-sm">
 						<span className="text-base-content/75">
 							<span className="font-medium text-base-content/90">Sales tax</span>
-							<span className="text-base-content/55"> — added on top, owed to your state </span>
+							<span className="text-base-content/55">
+								{" "}
+								— added on top, varies by location, set at checkout{" "}
+							</span>
 							<InfoDot tip={TAX_TIP} />
 						</span>
 						<span className="shrink-0 font-mono tabular-nums">~{money(tax)}</span>
@@ -399,9 +404,11 @@ export function PurchaseExample({
 		},
 		{
 			label: "Sales tax",
+			// The real rate varies by location and is calculated at checkout — this is the
+			// illustrative average, named as one in the tooltip.
 			desc: (
 				<>
-					added on top, owed to your state <InfoDot tip={TAX_TIP} />
+					added on top, varies by location, set at checkout <InfoDot tip={TAX_TIP} />
 				</>
 			),
 			amount: tax,

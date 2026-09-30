@@ -594,8 +594,22 @@ export const SELF_HOST_FEE = 0;
  */
 export const CARD_RATE = 0.029;
 export const CARD_FLAT = 0.3;
-/** US average combined state+local sales tax, illustrative. */
-export const SALES_TAX_RATE = 0.065;
+/**
+ * An illustrative US-average combined sales-tax rate — never charged to anybody.
+ *
+ * Real tax is calculated and collected by Stripe Tax at the moment of the charge, from the
+ * buyer's billing address and the product tax code each line carries, so the rate a buyer
+ * pays varies with where they are and this figure is **not** it. It survives only where an
+ * illustration is the point — the sample receipts and case studies `scenarios.ts` renders,
+ * and the economics display — and `scripts/illustrative-tax-guard.test.ts` fails the build
+ * if any charge path (checkout, basket, subscription) reaches for it. `calculateFees`
+ * returns a zero `salesTax` and its callers record the tax Stripe actually collected.
+ *
+ * ⚠️ Kept as a rate rather than deleted, because the published sample receipts and case
+ * studies need *some* tax figure and an illustrative average is what they say it is: the
+ * copy beside them names the rate as varying by location.
+ */
+export const ILLUSTRATIVE_SALES_TAX_RATE = 0.065;
 
 /**
  * The card fee, in floats, for **display only** — marketing pages and calculators.
