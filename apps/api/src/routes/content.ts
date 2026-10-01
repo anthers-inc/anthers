@@ -141,7 +141,14 @@ import {
 	declareRating,
 	fileRatingAppeal,
 } from "../services/content-rating.js";
-import { acceptCredit, findRejectedCredit, rejectCredit } from "../services/credit-acceptance.js";
+import {
+	acceptCredit,
+	creditsForOwner,
+	creditsForViewer,
+	findRejectedCredit,
+	notifyCreditedAccounts,
+	rejectCredit,
+} from "../services/credit-acceptance.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -1102,8 +1109,17 @@ async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
 	}
 }
 
-/** Serialize a library content item (owner-facing: full media keys + latest transcode). */
-function serializeWork(
+/**
+ * Serialize a library content item (owner-facing: full media keys + latest transcode).
+ *
+ * ⚠️ Async, and the credits are why: the owner's own serialization still runs the credit
+ * overlay (`creditsForOwner`), so a creator editing a Work that names an on-network identity
+ * can see which credits are still awaiting that person's confirmation. The overlay keeps the
+ * stored contributor EXACTLY as written — the Studio edit form round-trips this field
+ * verbatim on save, so resolving an identity to its rendered name here would overwrite the
+ * stored DID and destroy the acceptance linkage. The flags are the only thing added.
+ */
+async function serializeWork(
 	item: WorkRow,
 	workAssets: AssetRow[] = [],
 	job: TranscodingJobRow | null = null,
@@ -1143,7 +1159,9 @@ function serializeWork(
 		streamEnabled: item.streamEnabled,
 		downloadEnabled: item.downloadEnabled,
 		seedAccess: item.seedAccess,
-		credits: item.credits,
+		// Owner-facing overlay: everything the creator wrote, with the credits that name an
+		// unconfirmed on-network identity flagged as awaiting that person's confirmation.
+		credits: await creditsForOwner(item),
 		isPinned: item.isPinned,
 		tags: item.tags,
 		websiteUrl: item.websiteUrl,
@@ -1791,6 +1809,19 @@ async function serializeWorkForViewer(
 	 */
 	allowanceSpent: boolean,
 	/**
+	 * Who is asking to see this Work, or null for a signed-out viewer.
+	 *
+	 * 🚨 **Required, not optional, for the same reason as `allowanceSpent`.** The credits
+	 * pass through the viewer overlay (`creditsForViewer`), which withholds an unaccepted
+	 * `did`-naming credit from everybody except the person it names and this Work's creator.
+	 * An optional parameter would default to "nobody" — which is the signed-out answer and
+	 * therefore safe for a third-party viewer, but silently WRONG for the two parties who
+	 * must see the credit: the credited person would have no way to discover a pending
+	 * credit, and the creator's own page would hide what they just saved. Every call site
+	 * has to decide who is asking, and the compiler is what makes them.
+	 */
+	viewerId: number | null,
+	/**
 	 * How many pages an ebook has, or 0.
 	 *
 	 * ⚠️ The COUNT is public even when the Work is locked, and the page *keys* never are.
@@ -1867,8 +1898,11 @@ async function serializeWorkForViewer(
 		// do not, except that a creator said something is absent.
 		maturityRows: work.maturityRows ?? {},
 		originallyReleased: work.originallyReleased,
-		// The creator's provenance table — public liner notes, ungated like the description.
-		credits: work.credits,
+		// The creator's provenance table — public liner notes, ungated like the description,
+		// EXCEPT where a credit names an on-network identity that has not accepted: the
+		// overlay (`creditsForViewer`) withholds that from everyone but the named person and
+		// the creator, and resolves an accepted one to a handle rather than a bare DID.
+		credits: await creditsForViewer(work, viewerId),
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 		isPinned: work.isPinned,
@@ -2066,6 +2100,7 @@ async function loadPostWorks(
 					resolveAccessSync(work as AccessibleWork, ctx),
 					delivery,
 					spent,
+					viewerId,
 					pagesByWork.get(work.id) ?? 0,
 				),
 			};
@@ -3540,7 +3575,9 @@ const contentRoutes = new Hono()
 		const job = await queueTranscodeForWork(work);
 		await queueScansForWork(work);
 		await resolveWorkThumbnail(work);
-		return c.json({ work: serializeWork(work, [], job) }, 201);
+		// No credit notification here: a Work is born private, and the notification is owed
+		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
+		return c.json({ work: await serializeWork(work, [], job) }, 201);
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
@@ -3578,8 +3615,10 @@ const contentRoutes = new Hono()
 		await Promise.all(items.map(resolveWorkThumbnail));
 		const pdsUrl = await pdsUrlOf(user.id);
 		return c.json({
-			works: items.map((i) =>
-				serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null, pdsUrl),
+			works: await Promise.all(
+				items.map((i) =>
+					serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null, pdsUrl),
+				),
 			),
 		});
 	})
@@ -3693,7 +3732,9 @@ const contentRoutes = new Hono()
 		 */
 		if (isOwner && previewRequest(c) === null) {
 			const pdsUrl = await pdsUrlOf(work.creatorId);
-			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl) });
+			return c.json({
+				work: await serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl),
+			});
 		}
 
 		// Fire-and-forget view count, owners excluded.
@@ -3750,6 +3791,7 @@ const contentRoutes = new Hono()
 					),
 					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
 					await allowanceSpent(viewerId, sharedBy),
+					viewerId,
 					pageRow?.count ?? 0,
 					// The one page a reader actually opens a text Work, a game or an image
 					// from, so it is the one that has to consult a household's time limit —
@@ -4035,6 +4077,7 @@ const contentRoutes = new Hono()
 						resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
 						deliveryCtx(),
 						catalogSpent,
+						viewerId,
 						pagesByWork.get(w.id) ?? 0,
 					),
 				),
@@ -4299,6 +4342,15 @@ const contentRoutes = new Hono()
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 
+		// The credited are told when the credit becomes PUBLIC: on the request that releases
+		// the Work, or when credits change on one already released. A private Work's credits
+		// notify nobody — the page the link points at would 404 for the contributor, and the
+		// accept route refuses until a listing exists. The dedupe key collapses a re-save
+		// (and an un-release/re-release) to one notification. See `notifyCreditedAccounts`.
+		if (releasing || (data.credits !== undefined && updated.visibility === "released")) {
+			await notifyCreditedAccounts(updated, user.id);
+		}
+
 		// ⭐ **Fired on every edit rather than only on release**, because the record carries the
 		// title, the description and the access state — so an ordinary edit changes what the
 		// listing says, and working out which edits matter is exactly the reasoning the job was
@@ -4320,7 +4372,9 @@ const contentRoutes = new Hono()
 
 		await resolveWorkThumbnail(updated);
 		const pdsUrl = await pdsUrlOf(updated.creatorId);
-		return c.json({ work: serializeWork(updated, workAssets, jobRows[0] ?? null, pdsUrl) });
+		return c.json({
+			work: await serializeWork(updated, workAssets, jobRows[0] ?? null, pdsUrl),
+		});
 	})
 
 	/**
@@ -4973,6 +5027,7 @@ const contentRoutes = new Hono()
 							),
 							deliveryCtx(),
 							projectSpent,
+							viewerId,
 							pagesByWork.get(m.work.id) ?? 0,
 						)),
 					})),
@@ -5748,6 +5803,7 @@ const contentRoutes = new Hono()
 									resolveAccessSync(w as AccessibleWork, ctx),
 									deliveryCtx(),
 									spent,
+									user.id,
 									pagesByWork.get(w.id) ?? 0,
 								),
 							};
@@ -5865,106 +5921,122 @@ const contentRoutes = new Hono()
 	/**
 	 * Accept credit for a Work. The caller must be the credited person (any signed-in
 	 * account). The acceptance record is written into the caller's own repository.
+	 *
+	 * ⚠️ The body goes through a validator rather than a raw `c.req.json()` read: the
+	 * typed client derives what it may send from the route's schema, so a raw read leaves
+	 * the front-end with a `$post` that refuses a `json` argument at compile time and the
+	 * UI hand-rolling a fetch to work around its own client.
 	 */
-	.post("/works/:id/credits/accept", requireAuth, async (c) => {
-		const user = c.get("user");
-		const workId = parseNumericId(c.req.param("id"));
-		if (workId == null) return c.json({ error: "Work not found" }, 404);
+	.post(
+		"/works/:id/credits/accept",
+		requireAuth,
+		zValidator("json", z.object({ role: z.string().min(1) }), invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const workId = parseNumericId(c.req.param("id") ?? "");
+			if (workId == null) return c.json({ error: "Work not found" }, 404);
 
-		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-		const role = typeof body.role === "string" ? body.role : "";
-		if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
+			const role = c.req.valid("json").role;
+			if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
 
-		const [work] = await db
-			.select({ atprotoUri: works.atprotoUri })
-			.from(works)
-			.where(eq(works.id, workId))
-			.limit(1);
-		if (!work?.atprotoUri) {
-			return c.json(
-				{ error: "This Work has no public listing to accept credit for.", code: "no_listing" },
-				404,
-			);
-		}
+			const [work] = await db
+				.select({ atprotoUri: works.atprotoUri })
+				.from(works)
+				.where(eq(works.id, workId))
+				.limit(1);
+			if (!work?.atprotoUri) {
+				return c.json(
+					{ error: "This Work has no public listing to accept credit for.", code: "no_listing" },
+					404,
+				);
+			}
 
-		const [account] = await db
-			.select({ did: users.atprotoDid })
-			.from(users)
-			.where(eq(users.id, user.id))
-			.limit(1);
-		if (!account?.did) {
-			return c.json(
-				{ error: "This account has no identity to accept credit with.", code: "no_identity" },
-				400,
-			);
-		}
+			const [account] = await db
+				.select({ did: users.atprotoDid })
+				.from(users)
+				.where(eq(users.id, user.id))
+				.limit(1);
+			if (!account?.did) {
+				return c.json(
+					{ error: "This account has no identity to accept credit with.", code: "no_identity" },
+					400,
+				);
+			}
 
-		const result = await acceptCredit({
-			callerUserId: user.id,
-			callerDid: account.did,
-			workId,
-			workUri: work.atprotoUri,
-			role,
-		});
+			const result = await acceptCredit({
+				callerUserId: user.id,
+				callerDid: account.did,
+				workId,
+				workUri: work.atprotoUri,
+				role,
+			});
 
-		if (!result.ok) {
-			const message =
-				result.code === "not_credited"
-					? "You are not credited on this Work with that role."
-					: result.code === "already_accepted"
-						? "You already accepted this credit."
-						: result.code === "rejected"
-							? "You rejected this credit, so you cannot accept it."
-							: result.code === "no_identity"
-								? "This account has no identity to accept credit with."
-								: "Anthers needs your permission to write the acceptance record in your repository.";
-			return c.json({ error: message, code: result.code }, 400);
-		}
+			if (!result.ok) {
+				const message =
+					result.code === "not_credited"
+						? "You are not credited on this Work with that role."
+						: result.code === "already_accepted"
+							? "You already accepted this credit."
+							: result.code === "rejected"
+								? "You rejected this credit, so you cannot accept it."
+								: result.code === "no_identity"
+									? "This account has no identity to accept credit with."
+									: "Anthers needs your permission to write the acceptance record in your repository.";
+				return c.json({ error: message, code: result.code }, 400);
+			}
 
-		return c.json({ accepted: true, atprotoUri: result.atprotoUri });
-	})
+			return c.json({ accepted: true, atprotoUri: result.atprotoUri });
+		},
+	)
 
 	/**
 	 * Reject credit for a Work. The caller must be the credited person (any signed-in
 	 * account). Rejection removes the credit from the Work and blocks re-adding it.
+	 *
+	 * ⚠️ Validator rather than a raw `c.req.json()` read, for the same reason as the accept
+	 * route beside this: the typed client sends what the route's schema says it may.
 	 */
-	.post("/works/:id/credits/reject", requireAuth, async (c) => {
-		const user = c.get("user");
-		const workId = parseNumericId(c.req.param("id"));
-		if (workId == null) return c.json({ error: "Work not found" }, 404);
+	.post(
+		"/works/:id/credits/reject",
+		requireAuth,
+		zValidator("json", z.object({ role: z.string().min(1) }), invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const workId = parseNumericId(c.req.param("id") ?? "");
+			if (workId == null) return c.json({ error: "Work not found" }, 404);
 
-		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-		const role = typeof body.role === "string" ? body.role : "";
-		if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
+			const role = c.req.valid("json").role;
+			if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
 
-		const [account] = await db
-			.select({ did: users.atprotoDid })
-			.from(users)
-			.where(eq(users.id, user.id))
-			.limit(1);
-		if (!account?.did) {
-			return c.json(
-				{ error: "This account has no identity to reject credit with.", code: "no_identity" },
-				400,
-			);
-		}
+			const [account] = await db
+				.select({ did: users.atprotoDid })
+				.from(users)
+				.where(eq(users.id, user.id))
+				.limit(1);
+			if (!account?.did) {
+				return c.json(
+					{ error: "This account has no identity to reject credit with.", code: "no_identity" },
+					400,
+				);
+			}
 
-		const result = await rejectCredit({
-			callerUserId: user.id,
-			callerDid: account.did,
-			workId,
-			role,
-		});
+			const result = await rejectCredit({
+				callerUserId: user.id,
+				callerDid: account.did,
+				workId,
+				role,
+			});
 
-		if (!result.ok) {
-			const message =
-				result.code === "not_credited"
-					? "You are not credited on this Work with that role."
-					: "You already rejected this credit.";
-			return c.json({ error: message, code: result.code }, 400);
-		}
+			if (!result.ok) {
+				const message =
+					result.code === "not_credited"
+						? "You are not credited on this Work with that role."
+						: "You already rejected this credit.";
+				return c.json({ error: message, code: result.code }, 400);
+			}
 
-		return c.json({ rejected: true });
-	});
+			return c.json({ rejected: true });
+		},
+	);
 
 export { contentRoutes };

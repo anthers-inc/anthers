@@ -75,14 +75,38 @@ export type WorkCreditType = "created" | "licensed" | "ai";
 
 /**
  * One row of a Work's credits — the creator saying who or what made which part. Public
- * liner notes: ungated on every Work serialization. A `created` credit always names its
- * contributor; a pure `licensed`/`ai` row may not. Mirrors `WorkCredit` in
- * `packages/db/src/schema/content.ts` — the two are one shape and change together.
+ * liner notes. A `created` credit always names its contributor; a pure `licensed`/`ai` row
+ * may not. Mirrors `WorkCredit` in `packages/db/src/schema/content.ts` — the two are one
+ * shape and change together, except for the two flag fields below, which the API's credit
+ * overlay emits and no database stores.
+ *
+ * **Serialization rules for an identity credit** (a contributor that is a `did:` string in
+ * storage): on the viewer-facing path, one that has been accepted by the person it names
+ * ships with `contributor` resolved to their display name or handle — never a bare `did:`
+ * string — and one that has not is withheld from every viewer except the two it belongs to.
+ * The owner-facing path (the Studio load and create/PATCH responses) is the deliberate
+ * exception: the edit form sends `contributor` back verbatim on save, so it always keeps
+ * the stored identity — resolving it to a name there would overwrite the DID on the next
+ * save and break the acceptance linkage.
  */
 export interface WorkCredit {
 	role: string;
 	contributor: string;
 	types: WorkCreditType[];
+	/**
+	 * Present only when this credit names the viewer's own identity and awaits their
+	 * confirmation. The viewer-facing serialization emits it so the front-end can render
+	 * Accept/Decline controls; the credit ships with role and types intact because those
+	 * are what the named person needs to act. Never stored.
+	 */
+	awaitingYourConfirmation?: true;
+	/**
+	 * Present only in an owner-facing serialization (the Studio load and create/PATCH
+	 * responses), on a credit that names an on-network identity nobody has accepted yet.
+	 * Tells the creator which of their credits are still pending the contributor's word.
+	 * Never stored.
+	 */
+	awaitingContributorConfirmation?: true;
 }
 
 /**
@@ -289,7 +313,10 @@ export interface Work {
 	originallyReleased?: string | null;
 	/**
 	 * The credits — who or what made which part of it, as public liner notes. Ungated for
-	 * every viewer; null/absent means none were asserted, which renders as nothing.
+	 * every viewer; null/absent means none were asserted, which renders as nothing. A
+	 * credit naming an on-network identity follows the serialization rules on `WorkCredit`:
+	 * accepted ones resolve to a name, unaccepted ones reach only the person named and the
+	 * Work's creator.
 	 */
 	credits?: WorkCredit[] | null;
 

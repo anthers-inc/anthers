@@ -26,12 +26,15 @@
  *
  * ⚠️ **This is the only path that releases a Work without anybody making a request**, so it is
  * the one listing sync that cannot be inferred from a route — the same reason `publish-scheduled`
- * asks for its post's record itself.
+ * asks for its post's record itself. The same goes for the credit-offered notification: credits
+ * saved while the Work was private have told nobody, and this release is their first public
+ * moment.
  */
 
 import { db } from "@anthers/db";
 import { users, works } from "@anthers/db/schema";
 import { and, eq, isNotNull, lte, ne } from "drizzle-orm";
+import { notifyCreditedAccounts } from "../services/credit-acceptance.js";
 import { notify } from "../services/notifications.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
@@ -117,6 +120,12 @@ export async function releaseScheduled(now: Date = new Date()): Promise<ReleaseS
 		if (!released) continue;
 		result.released += 1;
 		await queueWorkListingSync(work.id);
+		// The release the nobody-attended path makes public is the release the credited are
+		// told about — credits saved while private notify here and nowhere else. Re-read the
+		// row: `work` above is the pre-release read, and the notification's title and link
+		// should carry what a released Work actually says.
+		const [current] = await db.select().from(works).where(eq(works.id, work.id)).limit(1);
+		if (current) await notifyCreditedAccounts(current, current.creatorId ?? work.creatorId);
 		console.log(`[release-scheduled] Released Work ${work.id} (${work.slug})`);
 	}
 
