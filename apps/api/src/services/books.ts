@@ -38,7 +38,6 @@ import { db } from "@anthers/db/client";
 import {
 	earliestWindowStart,
 	STATE_THRESHOLDS,
-	thresholdFor,
 	windowFor,
 } from "@anthers/shared/sales-tax-thresholds";
 import { sql } from "drizzle-orm";
@@ -304,7 +303,6 @@ export async function salesTaxWorksheet(period: FilingPeriod): Promise<SalesTaxW
  * it. So the forecast reads `completed` AND `refunded` rows, and the two tools disagree on
  * purpose.
  */
-const FORECAST_STATUSES = ["completed", "refunded"] as const;
 
 /** The status band a state sits in, by how close the nearest prong is. */
 export type ForecastStatus = "clear" | "approaching" | "crossed";
@@ -378,16 +376,16 @@ export interface SalesTaxForecast {
  * rather than infer it. Returns null where a prong does not exist or nothing has elapsed.
  */
 function firesFirst(
-	dollars: number,
-	transactions: number,
 	row: { dollarThreshold: number | null; transactionThreshold: number | null },
 	projection: { dollars: number; transactions: number } | null,
 ): "dollar" | "transactions" | null {
 	const thresholds: { prong: "dollar" | "transactions"; value: number }[] = [];
-	if (row.dollarThreshold !== null) thresholds.push({ prong: "dollar", value: row.dollarThreshold });
+	if (row.dollarThreshold !== null)
+		thresholds.push({ prong: "dollar", value: row.dollarThreshold });
 	if (row.transactionThreshold !== null)
 		thresholds.push({ prong: "transactions", value: row.transactionThreshold });
-	if (thresholds.length < 2 || !projection) return thresholds.length === 1 ? thresholds[0].prong : null;
+	if (thresholds.length < 2 || !projection)
+		return thresholds.length === 1 ? thresholds[0].prong : null;
 	// Where each prong's projected end sits against its own threshold: the smaller overshoot is
 	// the one that fires first at this pace. A prong already over has "0 left" and fires first.
 	let best: { prong: "dollar" | "transactions"; left: number } | null = null;
@@ -479,7 +477,11 @@ export async function salesTaxForecast(now: Date = new Date()): Promise<SalesTax
 		const dollarOver = row.dollarThreshold !== null && dollars >= row.dollarThreshold;
 		const txOver = row.transactionThreshold !== null && transactions >= row.transactionThreshold;
 		const crossed =
-			row.relation === "and" ? dollarOver && txOver : row.relation === "or" ? dollarOver || txOver : dollarOver || txOver;
+			row.relation === "and"
+				? dollarOver && txOver
+				: row.relation === "or"
+					? dollarOver || txOver
+					: dollarOver || txOver;
 
 		// The straight-line projection: where this window ends if the pace held. The elapsed
 		// portion is the whole window's span, not the time since the first sale.
@@ -504,10 +506,10 @@ export async function salesTaxForecast(now: Date = new Date()): Promise<SalesTax
 			(row.transactionThreshold !== null && transactionFraction >= APPROACHING_FRACTION);
 
 		const first = firesFirst(
-			dollars,
-			transactions,
 			row,
-			projection ? { dollars: Number(projection.dollars), transactions: projection.transactions } : null,
+			projection
+				? { dollars: Number(projection.dollars), transactions: projection.transactions }
+				: null,
 		);
 
 		return {
@@ -524,7 +526,11 @@ export async function salesTaxForecast(now: Date = new Date()): Promise<SalesTax
 			relation: row.relation,
 			dollarFraction: dollarOver ? Math.max(dollarFraction, 1) : dollarFraction,
 			transactionFraction: txOver ? Math.max(transactionFraction, 1) : transactionFraction,
-			status: crossed ? ("crossed" as const) : approaching ? ("approaching" as const) : ("clear" as const),
+			status: crossed
+				? ("crossed" as const)
+				: approaching
+					? ("approaching" as const)
+					: ("clear" as const),
 			firesFirst: first,
 			projection,
 			window: { label: w.label, start: w.start.toISOString(), end: w.end.toISOString() },

@@ -60,9 +60,7 @@ function pct(fraction: number): string {
 /** A threshold's own line: "$100,000 OR 200 transactions" for the row's subtitle. */
 function thresholdLine(row: ForecastState): string {
 	const dollar =
-		row.dollarThreshold !== null
-			? `$${row.dollarThreshold.toLocaleString("en-US")}`
-			: null;
+		row.dollarThreshold !== null ? `$${row.dollarThreshold.toLocaleString("en-US")}` : null;
 	const tx = row.transactionThreshold !== null ? `${row.transactionThreshold} transactions` : null;
 	if (dollar && tx) return `${dollar} ${row.relation === "and" ? "AND" : "OR"} ${tx}`;
 	if (dollar) return dollar;
@@ -89,7 +87,7 @@ function StateRow({ row }: { row: ForecastState }) {
 				<td colSpan={5} className="text-base-content/60">
 					{row.homeState
 						? "Home state — no threshold applies. Colorado's filing-frequency bands are the worksheet's job."
-						: row.note ?? "No facilitator duty to forecast."}
+						: (row.note ?? "No facilitator duty to forecast.")}
 				</td>
 				<td />
 			</tr>
@@ -105,14 +103,20 @@ function StateRow({ row }: { row: ForecastState }) {
 					<span className="ml-1 text-xs text-base-content/60">effectively always-on</span>
 				)}
 				{!row.verified && (
-					<span className="ml-1 text-xs text-warning" title="The Playbook marks this row unverified">
+					<span
+						className="ml-1 text-xs text-warning"
+						title="The Playbook marks this row unverified"
+					>
 						unverified
 					</span>
 				)}
 			</td>
 			<td className="tabular-nums">
 				<div>
-					${row.dollars} {row.dollarThreshold !== null && <span className="text-base-content/50">({pct(row.dollarFraction)})</span>}
+					${row.dollars}{" "}
+					{row.dollarThreshold !== null && (
+						<span className="text-base-content/50">({pct(row.dollarFraction)})</span>
+					)}
 				</div>
 				<div>
 					{row.transactions.toLocaleString("en-US")}{" "}
@@ -132,7 +136,8 @@ function StateRow({ row }: { row: ForecastState }) {
 						</div>
 						<div className="text-base-content/50">
 							straight-line projection, {pct(projection.elapsedFraction)} through the window
-							{row.firesFirst && `; the ${row.firesFirst === "transactions" ? "transaction" : "dollar"} prong fires first`}
+							{row.firesFirst &&
+								`; the ${row.firesFirst === "transactions" ? "transaction" : "dollar"} prong fires first`}
 						</div>
 					</div>
 				) : (
@@ -178,7 +183,9 @@ export default function SalesTaxForecast() {
 										.map((s) => s.name)
 										.join(" and ")}{" "}
 									{"has crossed a threshold"}
-									{data.states.filter((s) => s.status === "crossed").length > 1 ? " — registration runs on each state's own clock, and a Department of Revenue settles the row first." : " — registration runs on the state's own clock, and the Department of Revenue settles the row first."}
+									{data.states.filter((s) => s.status === "crossed").length > 1
+										? " — registration runs on each state's own clock, and a Department of Revenue settles the row first."
+										: " — registration runs on the state's own clock, and the Department of Revenue settles the row first."}
 								</span>
 							</div>
 						)}

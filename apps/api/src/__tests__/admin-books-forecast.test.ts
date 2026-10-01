@@ -24,8 +24,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { purchases } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
 import { STATE_THRESHOLDS, windowFor } from "@anthers/shared/sales-tax-thresholds";
+import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
