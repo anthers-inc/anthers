@@ -20,7 +20,9 @@
  * a shared fixture must come back to empty even when a walk fails halfway.
  */
 
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_VIEWER_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
@@ -73,7 +75,12 @@ async function syncListing(workId: number): Promise<void> {
 	// notices the child exit (the child finishes, prints, and the parent hangs), where the
 	// async form returns exactly once. The result travels through a file the script writes,
 	// so nothing depends on the child's stdio draining.
-	const outFile = `/tmp/opencode/credit-walk-sync-${workId}.json`;
+	//
+	// The scratch dir is `os.tmpdir()` + `mkdtempSync`, the same pattern
+	// `work-upload.authed.e2e.ts` uses — never a hand-named `/tmp` path, which exists on
+	// the machine it was written on and nowhere CI runs.
+	const dir = mkdtempSync(join(tmpdir(), "anthers-credit-walk-"));
+	const outFile = join(dir, `sync-${workId}.json`);
 	const script = `const { syncWorkListing } = await import(${JSON.stringify(
 		`${REPO_ROOT}/apps/api/src/services/work-listing.js`,
 	)});
@@ -85,7 +92,7 @@ console.log("synced");
 // would linger after its work is done — the same reason the seed scripts exit explicitly.
 process.exit(0);
 `;
-	const file = `/tmp/opencode/credit-walk-sync-${workId}.ts`;
+	const file = join(dir, `sync-${workId}.ts`);
 	writeFileSync(file, script);
 	try {
 		const proc = Bun.spawn(["bun", file], { cwd: REPO_ROOT, stdin: "ignore" });
@@ -96,8 +103,7 @@ process.exit(0);
 			"synced",
 		);
 	} finally {
-		rmSync(file, { force: true });
-		rmSync(outFile, { force: true });
+		rmSync(dir, { force: true, recursive: true });
 	}
 }
 
