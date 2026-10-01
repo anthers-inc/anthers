@@ -21,6 +21,7 @@
  */
 import { index, integer, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
 
+// org — operational telemetry about Anthers' own infrastructure, never a creator's anything.
 export const resourceSnapshots = pgTable(
 	"resource_snapshots",
 	{
