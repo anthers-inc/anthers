@@ -29,7 +29,8 @@
 		"./lexicons": "./src/lexicons.ts",
 		"./studio-panels": "./src/studio-panels.ts",
 		"./organization": "./src/organization.ts",
-		"./tax-codes": "./src/tax-codes.ts"
+		"./tax-codes": "./src/tax-codes.ts",
+		"./sales-tax-thresholds": "./src/sales-tax-thresholds.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
