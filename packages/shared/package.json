@@ -26,6 +26,7 @@
 		"./handles": "./src/handles.ts",
 		"./signup": "./src/signup.ts",
 		"./figures": "./src/figures.generated.ts",
+		"./version": "./src/version.ts",
 		"./lexicons": "./src/lexicons.ts",
 		"./studio-panels": "./src/studio-panels.ts",
 		"./organization": "./src/organization.ts",

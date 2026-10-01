@@ -219,10 +219,29 @@ if (liveCommits.size > 1) {
 
 const liveCommit = [...liveCommits][0];
 
+// The running version: the `v*` tag on the commit production is serving, if one
+// exists. The tag is applied by CI's deploy job once a deploy verifies, so an
+// untagged live commit means either this release predates versioning or the tag
+// step has not reached this deploy — both reported as "no version tag" rather
+// than guessed at.
+const liveVersion = await run(["git", "tag", "--points-at", liveCommit]);
+const versionTags = liveVersion.stdout
+	.split("\n")
+	.map((t) => t.trim())
+	.filter((t) => t.startsWith("v"));
+const runningVersion = versionTags.find((t) => /^v\d{4}\.\d{1,2}\.\d+$/.test(t))?.slice(1) ?? "";
+
 const agree = refFull === liveCommit || refCommit === liveCommit.slice(0, 7);
 
 const ageMs = Date.now() - new Date(active.created_at).getTime();
 const ageHours = (ageMs / 3_600_000).toFixed(1);
+
+/** The `live:` line every branch prints, version included. A deploy promoted with a
+ * version tag reports it; one without (every deploy before versioning, or a tag step
+ * that has not run) says so plainly rather than silently omitting the line. */
+const liveLine = () =>
+	`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})` +
+	(runningVersion ? `  version: ${runningVersion}` : "  version: none (no tag on this commit)");
 
 /**
  * How far `release` trails the branch work is merged to — the question this tool could not
@@ -261,9 +280,7 @@ if (agree && unshipped > 0) {
 	);
 	console.log(`  ${PROMOTE_FROM.padEnd(8)} ${promoteHead}`);
 	console.log(`  ${REF.padEnd(8)} ${refCommit}`);
-	console.log(
-		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
-	);
+	console.log(liveLine());
 	console.log("");
 	console.log(`  🚨 Production does NOT contain work merged to ${PROMOTE_FROM}. This is not a`);
 	console.log("     deploy failure — it is work that was never promoted. Ship it with:");
@@ -276,9 +293,7 @@ if (agree) {
 	console.log(`deploy-status: in sync ✓`);
 	if (promoteHead) console.log(`  ${PROMOTE_FROM.padEnd(8)} ${promoteHead}`);
 	console.log(`  ${REF.padEnd(8)} ${refCommit}`);
-	console.log(
-		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
-	);
+	console.log(liveLine());
 	process.exit(0);
 }
 
@@ -299,9 +314,7 @@ const liveIsDescendant = (await run(["git", "merge-base", "--is-ancestor", REF, 
 if (inFlightIsRef) {
 	console.log(`deploy-status: deploy in flight ✓`);
 	console.log(`  ${REF.padEnd(8)} ${refCommit}`);
-	console.log(
-		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
-	);
+	console.log(liveLine());
 	console.log(`  in flight: ${refCommit}  (${inFlight?.phase.toLowerCase()})`);
 	console.log("");
 	console.log(`  Production has not caught up to ${REF} YET, and is on its way. Nothing to do`);
@@ -312,9 +325,7 @@ if (inFlightIsRef) {
 
 console.error(`deploy-status: DRIFT — live and ${REF} disagree.`);
 console.error(`  ${REF.padEnd(8)} ${refCommit}`);
-console.error(
-	`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
-);
+console.error(liveLine());
 console.error("");
 if (liveIsDescendant) {
 	console.error(`  Live is AHEAD of ${REF} — production has commits your ref does not.`);
@@ -351,9 +362,7 @@ if (liveIsDescendant) {
 		const runName = ci.situation.pending.name ?? "a workflow";
 		console.log(`deploy-status: CI still running ✓`);
 		console.log(`  ${REF.padEnd(8)} ${refCommit}`);
-		console.log(
-			`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
-		);
+		console.log(liveLine());
 		console.log(
 			`  ${runName} is ${ci.situation.pending.status.replace("_", " ")} for ${refCommit} — the deploy job has not reached`,
 		);
