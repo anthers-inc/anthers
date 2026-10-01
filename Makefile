@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
-        spec-diff spec-apply deploy-status webhook-check stripe-walk dev-local \
+        spec-diff spec-apply deploy-status resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
 
 # ─── OS detection ───
@@ -337,6 +337,19 @@ spec-apply: ## Apply .do/app.yaml, preserving live secrets (APPLY=1 sends, FROM_
 # Anthers account; REF=origin/release to compare against an arbitrary ref.
 deploy-status: ## Assert the live deployment's commit matches release (DOCTL_CONTEXT=anthers)
 	bun run scripts/deploy-status.ts
+
+# One resource snapshot of the live App Platform app, appended to resource_snapshots — the
+# trend behind the admin console's Resources section. A local operator script by design:
+# the app holds no DO credentials, so it cannot read its own metrics. Run daily (the
+# docblock carries the cron line); DOCTL_CONTEXT=anthers for the Anthers account.
+resource-snapshot: ## Append a live resource snapshot to resource_snapshots (DOCTL_CONTEXT=anthers)
+	bun run scripts/resource-snapshot.ts
+
+# Wire the App Platform metric alerts (CPU, memory, restarts) to OPS_ALERT_EMAIL. Renders the
+# spec fragments to paste into .do/app.yaml (apply with spec-apply — this script never runs
+# `doctl apps update --spec` itself), then verifies the live alerts and fixes destinations.
+resource-alerts: ## Verify App Platform metric alerts and set their destinations (DOCTL_CONTEXT=anthers)
+	bun run scripts/resource-alerts.ts
 
 # Assert Stripe can actually reach the webhook and that production holds secrets that work.
 # Production once ran for weeks with no registered endpoint and a `stripe listen` secret

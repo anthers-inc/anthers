@@ -184,6 +184,7 @@
       "name": "@anthers/scripts",
       "version": "0.0.0",
       "dependencies": {
+        "@anthers/db": "workspace:*",
         "@anthers/shared": "workspace:*",
       },
       "devDependencies": {
