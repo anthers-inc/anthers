@@ -53,7 +53,6 @@ import {
 	DEFERRED_DEADLINE_SOURCES,
 	type DeadlineItem,
 	gatherDeadlines,
-	isPastDue,
 	longDeadlineDate,
 } from "../services/deadlines.js";
 import { escapeHtml, sendDeadlineReminderEmail, terminalSecondLegLine } from "../services/email.js";
@@ -81,7 +80,10 @@ function leadsFor(item: DeadlineItem): number[] {
  * Pure — the caller (`runDeadlineReminderSweep`) sends and records; this decides. Exported for
  * the tests, which assert the decisions rather than the sends.
  */
-export function remindersDue(items: DeadlineItem[], now: Date): { item: DeadlineItem; kind: string }[] {
+export function remindersDue(
+	items: DeadlineItem[],
+	now: Date,
+): { item: DeadlineItem; kind: string }[] {
 	const out: { item: DeadlineItem; kind: string }[] = [];
 	for (const item of items) {
 		const dueAt = item.dueAt.getTime();
@@ -112,9 +114,8 @@ function dedupeKeyFor(item: DeadlineItem, kind: string): string {
 	return `deadline:${item.key}:${kind}`;
 }
 
-/** The email's subject: names the item and the date, because a subject line is what gets read. */
-function subjectFor(item: DeadlineItem, kind: string): string {
-	const word = kind === "arrival" ? "is on the calendar" : "is coming due";
+/** The email's subject: names the item and its date, because a subject line is what gets read. */
+function subjectFor(item: DeadlineItem): string {
 	const date = longDeadlineDate(item.dueAt);
 	return `Deadline: ${item.title} — ${date}`;
 }
@@ -129,7 +130,9 @@ function emailBodyFor(item: DeadlineItem, kind: string, now: Date): string {
 	const lines: string[] = [];
 
 	if (kind === "arrival") {
-		lines.push(`<p style="margin:0 0 18px;">A new deadline is on the calendar: <strong>${escapeHtml(item.title)}</strong>.</p>`);
+		lines.push(
+			`<p style="margin:0 0 18px;">A new deadline is on the calendar: <strong>${escapeHtml(item.title)}</strong>.</p>`,
+		);
 	} else {
 		const days = Math.ceil((item.dueAt.getTime() - now.getTime()) / DAY_MS);
 		lines.push(
@@ -152,12 +155,12 @@ function emailBodyFor(item: DeadlineItem, kind: string, now: Date): string {
 	}
 	if (item.unconfirmed) {
 		lines.push(
-			"<p style=\"margin:0 0 18px;\">⚠️ The source calendar marks this date's underlying text as unconfirmed. Verify it before relying on it.</p>",
+			'<p style="margin:0 0 18px;">⚠️ The source calendar marks this date\'s underlying text as unconfirmed. Verify it before relying on it.</p>',
 		);
 	}
 	if (item.selfImposed) {
 		lines.push(
-			"<p style=\"margin:0 0 18px;\">This review is self-imposed rather than statutory — required to keep accurate, ours to schedule.</p>",
+			'<p style="margin:0 0 18px;">This review is self-imposed rather than statutory — required to keep accurate, ours to schedule.</p>',
 		);
 	}
 	if (item.note) {
@@ -172,10 +175,12 @@ function emailBodyFor(item: DeadlineItem, kind: string, now: Date): string {
 			`<p style="margin:0 0 22px;"><a href="${escapeHtml(adminUrl + item.actUrl)}" style="color:#7c3aed;">Open it in the admin app</a> to act on it.</p>`,
 		);
 	} else if (item.actUrl) {
-		lines.push(`<p style="margin:0 0 22px;">To act on it, open ${escapeHtml(item.actUrl)} in the admin app.</p>`);
+		lines.push(
+			`<p style="margin:0 0 22px;">To act on it, open ${escapeHtml(item.actUrl)} in the admin app.</p>`,
+		);
 	} else {
 		lines.push(
-			"<p style=\"margin:0 0 22px;\">There is no admin screen for this yet — it is handled wherever the filing itself is made. The admin home lists it beside everything else with a due date.</p>",
+			'<p style="margin:0 0 22px;">There is no admin screen for this yet — it is handled wherever the filing itself is made. The admin home lists it beside everything else with a due date.</p>',
 		);
 	}
 
@@ -239,7 +244,7 @@ export async function runDeadlineReminderSweep(now: Date = new Date()): Promise<
 
 		const { sent: went } = await sendDeadlineReminderEmail({
 			to,
-			subject: subjectFor(item, kind),
+			subject: subjectFor(item),
 			html: emailBodyFor(item, kind, now),
 		});
 		if (went) {
