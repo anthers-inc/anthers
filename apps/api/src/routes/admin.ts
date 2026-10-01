@@ -17,6 +17,8 @@
 import { db } from "@anthers/db/client";
 import { adminAccounts, type DmcaNoticeStatus, rightsRequests } from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
+import type { ResourceBand } from "@anthers/shared/resource-thresholds";
+import { RESOURCE_THRESHOLDS } from "@anthers/shared/resource-thresholds";
 import {
 	HOLD_SUBJECT_TYPES,
 	isModerationReason,
@@ -926,6 +928,118 @@ const adminRoutes = new Hono<AdminEnv>()
 			return c.json({ messageId: null, status: null, reason: "not_escalated" });
 		}
 		return c.json({ messageId, status, reason: status ? null : "awaiting_provider_event" });
+	})
+
+	// ── Resources ────────────────────────────────────────────────────────────
+	// The resource view's data half: per component, the LATEST SNAPSHOT's recorded size and
+	// count, the shared threshold table, and the recent trend. Everything reads from the
+	// `resource_snapshots` rows `scripts/resource-snapshot.ts` writes — this endpoint never
+	// talks to DigitalOcean, because the app holds no DO credentials and inventing a
+	// server-side credentials path would widen the credential surface for a question the
+	// operator can answer from their own machine (the snapshot script's docblock carries the
+	// reasoning).
+	//
+	// ⚠️ An empty state is real and rendered rather than fabricated: with no snapshots, the
+	// response says so and names the command, rather than inventing sizes from the committed
+	// spec — which is documentation of intent and drifts by default.
+	//
+	// Spend is deliberately NOT here. DigitalOcean reports spend per account, not per
+	// component, in every surface doctl and the API expose, so a per-component figure cannot
+	// be derived honestly — the Infrastructure page's Billing and Usage deep-link is where
+	// spend lives, and this view carries the reasoning rather than a number.
+	.get("/infrastructure/resources", async (c) => {
+		const TRENDED = ["api", "worker", "migrate"] as const;
+		const TREND_POINTS = 14; // two weeks of daily snapshots
+
+		const rows = await db.execute(sql`
+			SELECT component, taken_at, instance_size, instance_count, cpu_pct, memory_pct, restart_count, notes
+			FROM resource_snapshots
+			WHERE taken_at >= (SELECT max(taken_at) FROM resource_snapshots) - interval '30 days'
+			ORDER BY taken_at DESC
+		`);
+		const all = rowsOf<{
+			component: string;
+			taken_at: string;
+			instance_size: string | null;
+			instance_count: number | null;
+			cpu_pct: number | null;
+			memory_pct: number | null;
+			restart_count: number | null;
+			notes: string;
+		}>(rows);
+
+		// Every component the shared table carries renders, even one with no snapshot yet —
+		// the page says "no snapshot yet" for those rather than dropping the card.
+		const components: Array<{
+			component: string;
+			kind: string;
+			note: string;
+			bands: readonly ResourceBand[];
+			instanceSize: string | null;
+			instanceCount: number | null;
+			snapshottedAt: string | null;
+			latest: {
+				cpuPct: number | null;
+				memoryPct: number | null;
+				restartCount: number | null;
+				notes: string;
+			} | null;
+			trend: Array<{
+				takenAt: string;
+				cpuPct: number | null;
+				memoryPct: number | null;
+				restartCount: number | null;
+			}>;
+		}> = RESOURCE_THRESHOLDS.map((t) => ({
+			component: t.component,
+			kind: t.kind,
+			note: t.note,
+			bands: t.bands,
+			instanceSize: null,
+			instanceCount: null,
+			snapshottedAt: null,
+			latest: null,
+			trend: [],
+		}));
+
+		const byComponent = new Map(components.map((entry) => [entry.component, entry]));
+		// The rows are newest-first; the per-component walk below takes the first of each
+		// (the latest) and collects the trend behind it.
+		for (const row of all) {
+			const entry = byComponent.get(row.component);
+			if (!entry) continue;
+			if (!entry.snapshottedAt) {
+				entry.snapshottedAt = row.taken_at;
+				entry.instanceSize = row.instance_size;
+				entry.instanceCount = row.instance_count;
+				entry.latest = {
+					cpuPct: row.cpu_pct,
+					memoryPct: row.memory_pct,
+					restartCount: row.restart_count,
+					notes: row.notes,
+				};
+			}
+			if ((TRENDED as readonly string[]).includes(row.component) && entry.trend.length < TREND_POINTS) {
+				entry.trend.push({
+					takenAt: row.taken_at,
+					cpuPct: row.cpu_pct,
+					memoryPct: row.memory_pct,
+					restartCount: row.restart_count,
+				});
+			}
+		}
+
+		const empty = all.length === 0;
+		return c.json({
+			hasSnapshots: !empty,
+			// The honest empty state names the command, so the operator's next step is one
+			// line rather than a hunt through the repository's scripts.
+			howToSnapshot: "make resource-snapshot",
+			components,
+			// The spend boundary stated where the reader is, not only in this docblock.
+			spendNote:
+				"Spend is per account in DigitalOcean's billing, not per component, so the Billing and Usage link is where it lives.",
+		});
 	})
 
 	// ── DMCA ────────────────────────────────────────────────────────────────────
