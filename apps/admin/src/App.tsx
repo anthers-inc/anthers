@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 import { useSession } from "./lib/session";
 import Accounts from "./pages/Accounts";
+import SalesTaxWorksheet from "./pages/books/SalesTax";
 import Home from "./pages/Home";
 import Infrastructure from "./pages/Infrastructure";
 import AbuseReports from "./pages/legal/AbuseReports";
@@ -40,6 +41,7 @@ export default function App() {
 				<Route path="moderation/people" element={<People />} />
 				<Route path="moderation/people/:id" element={<People />} />
 				<Route path="infrastructure" element={<Infrastructure />} />
+				<Route path="books/sales-tax" element={<SalesTaxWorksheet />} />
 				<Route
 					path="accounts"
 					element={account.isSuperAdmin ? <Accounts /> : <Navigate to="/" replace />}
