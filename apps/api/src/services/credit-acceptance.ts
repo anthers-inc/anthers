@@ -428,11 +428,55 @@ export async function creditsForViewer(
 
 /**
  * The credits for an owner-facing serialization — the Studio load and the create/PATCH
- * responses. The creator sees everything they wrote, with the contributor's own
- * confirmation state as a flag.
+ * responses. The creator sees everything they wrote, exactly as it is stored, with the
+ * contributor's own confirmation state as a flag.
+ *
+ * 🚨 **The raw stored contributor, never a resolved name.** The Studio edit form loads
+ * `credits` from this shape and sends `contributor` back verbatim on every save, so an
+ * owner shape that substitutes a rendered name for the stored identity is a
+ * data-destroying save, not a nicer read: the acceptance row keys on the DID, and the
+ * stored DID replaced by a display name would stop matching it — the published record
+ * would then withhold a credit the person had accepted, and an unrelated title edit
+ * would be what destroyed the linkage. Resolution-to-name is the VIEWER overlay's job
+ * (`creditsForViewer`), because the public Work page only renders.
+ *
+ * The flags carry the only thing an owner cannot see from the raw rows alone: which
+ * identity credits are still awaiting their contributor's word.
  */
 export async function creditsForOwner(work: OverlayWork): Promise<ViewerWorkCredit[]> {
-	return creditsForViewer(work, work.creatorId);
+	const credits = work.credits ?? [];
+	if (!credits.some((c) => creditContributorIsDid(c.contributor))) return credits;
+
+	const didCredits = credits.filter((c) => creditContributorIsDid(c.contributor));
+	const dids = [...new Set(didCredits.map((c) => c.contributor))];
+	const [acceptedRows, rejectedRows] = await Promise.all([
+		db
+			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
+			.from(creditAcceptances)
+			.where(
+				and(eq(creditAcceptances.workId, work.id), inArray(creditAcceptances.contributorDid, dids)),
+			),
+		db
+			.select({ contributorDid: creditRejections.contributorDid, role: creditRejections.role })
+			.from(creditRejections)
+			.where(
+				and(eq(creditRejections.workId, work.id), inArray(creditRejections.contributorDid, dids)),
+			),
+	]);
+	const decided = new Set(
+		[...acceptedRows, ...rejectedRows].map((r) => `${r.contributorDid}|${r.role}`),
+	);
+
+	// Pass-through-plus-flags: every credit ships with its stored contributor untouched.
+	// A rejected credit is absent from `works.credits` (the reject flow removed it), so the
+	// rejection read above is belt-and-braces — it keeps a hand-edited row from reporting
+	// itself as merely pending.
+	return credits.map((credit) =>
+		creditContributorIsDid(credit.contributor) &&
+		!decided.has(`${credit.contributor}|${credit.role}`)
+			? { ...credit, awaitingContributorConfirmation: true }
+			: credit,
+	);
 }
 
 // ─── Telling the credited person ──────────────────────────────────────────────
@@ -440,9 +484,14 @@ export async function creditsForOwner(work: OverlayWork): Promise<ViewerWorkCred
 /**
  * Notify every on-network person a Work's credits newly name.
  *
- * Called by the Work create and PATCH routes — the two places credits change. A credit that
- * names a `did:` is a claim about a third party, and the person it names is owed the chance
- * to see it: without this they have no way to discover the credit exists.
+ * Called by whatever makes the credit PUBLIC — the PATCH route when it releases the Work
+ * or changes credits on an already-released one, and the scheduled-release sweep for the
+ * releases nobody attends. A Work is born private and the accept route refuses with
+ * `no_listing` until its record exists, so notifying on a draft would link the
+ * contributor to a page that 404s and an Accept control that refuses; the notification
+ * is owed when the Work can actually be seen and acted on. A credit that names a `did`
+ * is a claim about a third party, and the person it names is owed the chance to see it:
+ * without this they have no way to discover the credit exists.
  *
  * Skips, in order, everything that must not produce a notification:
  *

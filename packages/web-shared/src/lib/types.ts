@@ -81,9 +81,13 @@ export type WorkCreditType = "created" | "licensed" | "ai";
  * overlay emits and no database stores.
  *
  * **Serialization rules for an identity credit** (a contributor that is a `did:` string in
- * storage): one that has been accepted by the person it names ships with `contributor`
- * resolved to their display name or handle — never a bare `did:` string — and one that has
- * not is withheld from every viewer except the two it belongs to.
+ * storage): on the viewer-facing path, one that has been accepted by the person it names
+ * ships with `contributor` resolved to their display name or handle — never a bare `did:`
+ * string — and one that has not is withheld from every viewer except the two it belongs to.
+ * The owner-facing path (the Studio load and create/PATCH responses) is the deliberate
+ * exception: the edit form sends `contributor` back verbatim on save, so it always keeps
+ * the stored identity — resolving it to a name there would overwrite the DID on the next
+ * save and break the acceptance linkage.
  */
 export interface WorkCredit {
 	role: string;

@@ -7,14 +7,18 @@
  *
  * 1. **The overlay.** An unaccepted identity-credit is withheld from everyone except the
  *    person it names and the Work's creator; an accepted one resolves to a handle and never
- *    ships a bare `did:` string; a named credit is untouched in every case.
- * 2. **The notification.** Saving a Work that names an on-network person tells them once
- *    per (work, contributor, role) — block-checked, self-DID excluded, and excluded once the
- *    credit has been accepted.
+ *    ships a bare `did:` string on the viewer path; a named credit is untouched in every
+ *    case. The OWNER shape keeps the stored identity verbatim — the Studio round-trips
+ *    `contributor` on save, so a resolved name there would destroy the acceptance linkage.
+ * 2. **The notification.** Making a credit public — releasing the Work, or changing
+ *    credits on a released one — tells the person it names, once per (work, contributor,
+ *    role), block-checked, self-DID excluded, and excluded once the credit has been
+ *    accepted. A private Work tells nobody: the link would 404 and the accept route
+ *    refuses until a listing exists.
  *
  * Overlay cases are staged through `insertWork` (no route, so no notification side effects);
- * notification cases go through the create/PATCH routes because the dedupe guarantee only
- * means anything across real saves.
+ * notification cases go through the create/PATCH routes and the scheduled sweep, because the
+ * dedupe guarantee only means anything across real saves and real releases.
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -24,10 +28,12 @@ import {
 	userBlocks,
 	users,
 	type WorkCredit,
+	works,
 } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import app from "../index.js";
 import { queue } from "../jobs/queue.js";
+import { releaseScheduled } from "../jobs/release-scheduled.js";
 import { blockUser } from "../services/blocks.js";
 import {
 	acceptCredit,
@@ -37,7 +43,8 @@ import {
 } from "../services/credit-acceptance.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere, purgeWorkIds } from "./cleanup";
-import { insertWork } from "./work-fixtures";
+import { enablePayouts } from "./payouts-fixture.js";
+import { giveWorkAFile, insertWork } from "./work-fixtures";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -209,6 +216,46 @@ describe("creditsForViewer", () => {
 		const seen = await creditsForViewer(overlayWork, null);
 		expect(seen.find((c) => c.role === "Written by")?.contributor).toBe("Contributor Display Name");
 	});
+
+	it("keeps the raw did in the owner shape after acceptance, so a Studio save round-trips it", async () => {
+		// The Studio edit form loads `credits` from the owner serializer and sends
+		// `contributor` back verbatim on every save. The credit was accepted two tests ago
+		// and the display name is set, so this is the exact state that would silently
+		// destroy the linkage if the owner shape resolved: the acceptance row keys on the
+		// DID, and a save writing the display name over it would stop the match — the
+		// published record would then withhold a credit the person had accepted.
+		const seen = await creditsForOwner(overlayWork);
+		expect(seen).toHaveLength(2);
+		const stored = seen.find((c) => c.role === "Written by");
+		expect(stored?.contributor).toBe(contributor.did);
+		// Accepted, so no awaiting flag — but the identity is untouched either way.
+		expect(stored?.awaitingYourConfirmation).toBeUndefined();
+		expect(stored?.awaitingContributorConfirmation).toBeUndefined();
+		// The named credit beside it is untouched too.
+		expect(seen.find((c) => c.role === "Edited by")?.contributor).toBe("An Editor");
+
+		// The creator's viewer-path serialization of the SAME work still resolves — the
+		// public page only renders, and a stranger must never meet a bare did: string.
+		const viewed = await creditsForViewer(overlayWork, creator.userId);
+		expect(viewed.find((c) => c.role === "Written by")?.contributor).toBe(
+			"Contributor Display Name",
+		);
+	});
+
+	it("keeps the awaiting flag off an accepted credit and on an unaccepted one, in the owner shape", async () => {
+		// `overlayWork` carries one accepted DID credit; a second Work carries one that is
+		// not, so the owner shape has to tell the two apart by the acceptance row alone.
+		const pending = await insertWork({
+			creatorId: creator.userId,
+			type: "text",
+			credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
+		});
+		fixtureWorkIds.push(pending.id);
+		const seen = await creditsForOwner(pending);
+		expect(seen).toHaveLength(1);
+		expect(seen[0]?.contributor).toBe(contributor.did);
+		expect(seen[0]?.awaitingContributorConfirmation).toBe(true);
+	});
 });
 
 // ─── The serialization paths ──────────────────────────────────────────────────
@@ -291,7 +338,7 @@ describe("notifyCreditedAccounts", () => {
 		{ role: "Written by", contributor: contributor.did, types: ["created"] },
 	];
 
-	/** A private Work straight through the create route — the route is what notifies. */
+	/** A private Work straight through the create route — a Work is born private. */
 	async function createWorkViaRoute(credits: WorkCredit[]): Promise<{
 		id: number;
 		slug: string;
@@ -316,7 +363,11 @@ describe("notifyCreditedAccounts", () => {
 		return body.work;
 	}
 
-	it("notifies a newly did-credited person once, with the work-shaped dedupe key", async () => {
+	it("creates no notification when a private Work names a did", async () => {
+		// A Work is born private, and the accept route refuses with `no_listing` until the
+		// Work has a published record — so a notification here would link the contributor
+		// to a page that 404s and an Accept control that refuses. The notification is owed
+		// when the credit becomes public.
 		const work = await createWorkViaRoute(didCredits());
 		const rows = await creditNotifications(
 			contributor.userId,
@@ -324,61 +375,34 @@ describe("notifyCreditedAccounts", () => {
 			work.id,
 			"Written by",
 		);
-		expect(rows).toHaveLength(1);
-		expect(rows[0].category).toBe("activity");
-		expect(rows[0].linkPath).toBe(`/works/${work.slug}-${work.publicId}`);
-		expect(rows[0].title).toContain("credited");
-
-		// A re-save of the same credits is the dedupe guarantee's whole subject.
-		const res = await patchReq(work.id, creator.token, { credits: didCredits() });
-		expect(res.status).toBe(200);
-		const again = await creditNotifications(
-			contributor.userId,
-			contributor.did,
-			work.id,
-			"Written by",
-		);
-		expect(again).toHaveLength(1);
-	});
-
-	it("does not notify for an already-accepted credit", async () => {
-		const work = await createWorkViaRoute(didCredits());
-		// The first save notified; accepting is the contributor answering it.
-		await acceptCredit({
-			callerUserId: contributor.userId,
-			callerDid: contributor.did,
-			workId: work.id,
-			workUri: `at://${creator.did}/org.anthers.work/abc456`,
-			role: "Written by",
-		});
-		// A save that arrives after the acceptance — removing and re-adding the same credit —
-		// must not produce a second notification.
-		const res = await patchReq(work.id, creator.token, {
-			credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
-		});
-		expect(res.status).toBe(200);
-		const rows = await creditNotifications(
-			contributor.userId,
-			contributor.did,
-			work.id,
-			"Written by",
-		);
-		expect(rows).toHaveLength(1);
+		expect(rows).toHaveLength(0);
 	});
 
 	it("does not notify the creator about their own did", async () => {
-		const work = await createWorkViaRoute([
-			{ role: "Written by", contributor: creator.did, types: ["created"] },
-		]);
+		const work = await insertWork({
+			creatorId: creator.userId,
+			type: "game",
+			visibility: "released",
+			credits: [{ role: "Written by", contributor: creator.did, types: ["created"] }],
+		});
+		fixtureWorkIds.push(work.id);
 		const rows = await creditNotifications(creator.userId, creator.did, work.id, "Written by");
 		expect(rows).toHaveLength(0);
 	});
 
 	it("does not notify a person who is blocked from the creator, in either direction", async () => {
-		// The contributor blocks the creator, so the contributor never hears about the credit.
+		// The contributor blocks the creator, so the contributor never hears about the
+		// credit — even on a released Work.
 		await blockUser(contributor.userId, creator.userId);
 		try {
-			const work = await createWorkViaRoute(didCredits());
+			const work = await insertWork({
+				creatorId: creator.userId,
+				type: "game",
+				visibility: "released",
+				credits: didCredits(),
+			});
+			fixtureWorkIds.push(work.id);
+			await notifyCreditedAccounts(work, creator.userId);
 			const rows = await creditNotifications(
 				contributor.userId,
 				contributor.did,
@@ -400,9 +424,14 @@ describe("notifyCreditedAccounts", () => {
 
 	it("does not notify for a did with no account on the platform", async () => {
 		const offPlatformDid = "did:plc:no-such-account-on-this-network";
-		const work = await createWorkViaRoute([
-			{ role: "Written by", contributor: offPlatformDid, types: ["created"] },
-		]);
+		const work = await insertWork({
+			creatorId: creator.userId,
+			type: "game",
+			visibility: "released",
+			credits: [{ role: "Written by", contributor: offPlatformDid, types: ["created"] }],
+		});
+		fixtureWorkIds.push(work.id);
+		await notifyCreditedAccounts(work, creator.userId);
 		const rows = await db
 			.select()
 			.from(notifications)
@@ -415,11 +444,18 @@ describe("notifyCreditedAccounts", () => {
 		expect(rows).toHaveLength(0);
 	});
 
-	it("notifies separately per role on the same work and did", async () => {
-		const work = await createWorkViaRoute([
-			{ role: "Written by", contributor: contributor.did, types: ["created"] },
-			{ role: "Produced by", contributor: contributor.did, types: ["created"] },
-		]);
+	it("notifies separately per role on the same work and did, when the work is released", async () => {
+		const work = await insertWork({
+			creatorId: creator.userId,
+			type: "game",
+			visibility: "released",
+			credits: [
+				{ role: "Written by", contributor: contributor.did, types: ["created"] },
+				{ role: "Produced by", contributor: contributor.did, types: ["created"] },
+			],
+		});
+		fixtureWorkIds.push(work.id);
+		await notifyCreditedAccounts(work, creator.userId);
 		const written = await creditNotifications(
 			contributor.userId,
 			contributor.did,
@@ -434,6 +470,234 @@ describe("notifyCreditedAccounts", () => {
 		);
 		expect(written).toHaveLength(1);
 		expect(produced).toHaveLength(1);
+	});
+});
+
+// ─── The notify sites: create, PATCH, and the scheduled sweep ─────────────────
+
+describe("when saving tells the credited person", () => {
+	const didCredits = (): WorkCredit[] => [
+		{ role: "Written by", contributor: contributor.did, types: ["created"] },
+	];
+
+	/**
+	 * The full save → notify path needs a Work the release gates will pass: a releasable
+	 * fixture (`giveWorkAFile` for media, a complete rating matrix by default) AND a creator
+	 * with payout setup — `publishRefusal` is the standing condition only the creator can
+	 * fix, and no fixture stubs it. `enablePayouts` is how every other suite gets past it.
+	 */
+	let payoutCreator: Awaited<ReturnType<typeof createAccount>>;
+	let releaseReady: Awaited<ReturnType<typeof insertWork>>;
+
+	beforeAll(async () => {
+		payoutCreator = await createAccount(`${RUN}-paid`, { emailVerified: true });
+		await enablePayouts(payoutCreator.name);
+	});
+
+	it("does not notify on create, however the credits read", async () => {
+		const work = await app.request("/api/content/works", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: `session=${payoutCreator.token}`,
+				Origin: ORIGIN,
+			},
+			body: JSON.stringify({
+				type: "game",
+				title: `Credit notice ${RUN}`,
+				credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
+			}),
+		});
+		expect(work.status).toBe(201);
+		const body = await work.json();
+		fixtureWorkIds.push(body.work.id);
+		const rows = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			body.work.id,
+			"Written by",
+		);
+		expect(rows).toHaveLength(0);
+	});
+
+	it("notifies when a PATCH releases the Work, once, with a link that resolves", async () => {
+		releaseReady = await insertWork({
+			creatorId: payoutCreator.userId,
+			type: "game",
+			visibility: "private",
+			credits: didCredits(),
+		});
+		fixtureWorkIds.push(releaseReady.id);
+		await giveWorkAFile(releaseReady.id);
+
+		const res = await patchReq(releaseReady.id, payoutCreator.token, {
+			visibility: "released",
+		});
+		expect(res.status).toBe(200);
+		const saved = await res.json();
+		// The link target has to be a Work a stranger — the contributor — can open.
+		expect(saved.work.visibility).toBe("released");
+
+		const rows = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			releaseReady.id,
+			"Written by",
+		);
+		expect(rows).toHaveLength(1);
+		expect(rows[0].category).toBe("activity");
+		expect(rows[0].linkPath).toBe(`/works/${releaseReady.slug}-${releaseReady.publicId}`);
+		expect(rows[0].title).toContain("credited");
+
+		// Un-releasing and re-releasing re-fires the call, and the dedupe key collapses it —
+		// one notification is what the contributor is owed, however many times the Work
+		// flips its visibility.
+		await patchReq(releaseReady.id, payoutCreator.token, { visibility: "private" });
+		await patchReq(releaseReady.id, payoutCreator.token, { visibility: "released" });
+		const again = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			releaseReady.id,
+			"Written by",
+		);
+		expect(again).toHaveLength(1);
+	});
+
+	it("notifies when a credits change lands on an already-released Work", async () => {
+		const released = await insertWork({
+			creatorId: payoutCreator.userId,
+			type: "game",
+			visibility: "released",
+			credits: [{ role: "Made by", contributor: "Fixture Creator", types: ["created"] }],
+		});
+		fixtureWorkIds.push(released.id);
+
+		// Adding a did-credit to a released Work is the credit becoming public in the same
+		// request — the page the link points at exists.
+		const res = await patchReq(released.id, payoutCreator.token, {
+			credits: [
+				{ role: "Made by", contributor: "Fixture Creator", types: ["created"] },
+				{ role: "Written by", contributor: contributor.did, types: ["created"] },
+			],
+		});
+		expect(res.status).toBe(200);
+		const rows = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			released.id,
+			"Written by",
+		);
+		expect(rows).toHaveLength(1);
+
+		// A re-save of the same credits is the dedupe guarantee's whole subject.
+		const resave = await patchReq(released.id, payoutCreator.token, {
+			credits: [
+				{ role: "Made by", contributor: "Fixture Creator", types: ["created"] },
+				{ role: "Written by", contributor: contributor.did, types: ["created"] },
+			],
+		});
+		expect(resave.status).toBe(200);
+		const again = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			released.id,
+			"Written by",
+		);
+		expect(again).toHaveLength(1);
+	});
+
+	it("does not notify when a credits change lands on a private Work", async () => {
+		const work = await insertWork({
+			creatorId: payoutCreator.userId,
+			type: "game",
+			visibility: "private",
+			credits: [{ role: "Made by", contributor: "Fixture Creator", types: ["created"] }],
+		});
+		fixtureWorkIds.push(work.id);
+
+		const res = await patchReq(work.id, payoutCreator.token, { credits: didCredits() });
+		expect(res.status).toBe(200);
+		const rows = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			work.id,
+			"Written by",
+		);
+		expect(rows).toHaveLength(0);
+	});
+
+	it("does not notify for an already-accepted credit on a released Work", async () => {
+		const released = await insertWork({
+			creatorId: payoutCreator.userId,
+			type: "game",
+			visibility: "released",
+			credits: didCredits(),
+		});
+		fixtureWorkIds.push(released.id);
+
+		// The save notifies; accepting is the contributor answering it.
+		await patchReq(released.id, payoutCreator.token, { credits: didCredits() });
+		const before = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			released.id,
+			"Written by",
+		);
+		expect(before).toHaveLength(1);
+
+		await acceptCredit({
+			callerUserId: contributor.userId,
+			callerDid: contributor.did,
+			workId: released.id,
+			workUri: `at://${payoutCreator.did}/org.anthers.work/abc456`,
+			role: "Written by",
+		});
+		// A credits save that arrives after the acceptance must not produce a second
+		// notification — the decided credit is not news.
+		const res = await patchReq(released.id, payoutCreator.token, { credits: didCredits() });
+		expect(res.status).toBe(200);
+		const after = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			released.id,
+			"Written by",
+		);
+		expect(after).toHaveLength(1);
+	});
+
+	it("tells the credited person when the scheduled sweep releases the Work", async () => {
+		// The sweep releases with nobody making a request, so credits saved while private
+		// would never notify anywhere else. This is the whole sweep-path coverage: a due,
+		// ready Work whose credits name the contributor, released by the sweep itself.
+		const work = await insertWork({
+			creatorId: payoutCreator.userId,
+			type: "game",
+			visibility: "private",
+			credits: didCredits(),
+		});
+		fixtureWorkIds.push(work.id);
+		await giveWorkAFile(work.id);
+		await db
+			.update(works)
+			.set({ scheduledReleaseAt: new Date(Date.now() - 60_000) })
+			.where(eq(works.id, work.id));
+
+		const result = await releaseScheduled();
+		expect(result.released).toBeGreaterThan(0);
+		const [stored] = await db
+			.select({ visibility: works.visibility })
+			.from(works)
+			.where(eq(works.id, work.id));
+		expect(stored.visibility).toBe("released");
+
+		const rows = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			work.id,
+			"Written by",
+		);
+		expect(rows).toHaveLength(1);
+		expect(rows[0].linkPath).toBe(`/works/${work.slug}-${work.publicId}`);
 	});
 });
 

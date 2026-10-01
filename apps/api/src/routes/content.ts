@@ -1113,10 +1113,11 @@ async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
  * Serialize a library content item (owner-facing: full media keys + latest transcode).
  *
  * ⚠️ Async, and the credits are why: the owner's own serialization still runs the credit
- * overlay (`creditsForOwner`), because a creator saving a Work that names an on-network
- * identity needs to see which credits are still awaiting that person's confirmation. The
- * credits a viewer never sees are visible here, flagged — an owner is editing their own
- * provenance table, not reading someone else's claim about a third party.
+ * overlay (`creditsForOwner`), so a creator editing a Work that names an on-network identity
+ * can see which credits are still awaiting that person's confirmation. The overlay keeps the
+ * stored contributor EXACTLY as written — the Studio edit form round-trips this field
+ * verbatim on save, so resolving an identity to its rendered name here would overwrite the
+ * stored DID and destroy the acceptance linkage. The flags are the only thing added.
  */
 async function serializeWork(
 	item: WorkRow,
@@ -3574,9 +3575,8 @@ const contentRoutes = new Hono()
 		const job = await queueTranscodeForWork(work);
 		await queueScansForWork(work);
 		await resolveWorkThumbnail(work);
-		// The credits a save names somebody by are news to that somebody, once per
-		// (work, contributor, role) — see `notifyCreditedAccounts`.
-		await notifyCreditedAccounts(work, user.id);
+		// No credit notification here: a Work is born private, and the notification is owed
+		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
 		return c.json({ work: await serializeWork(work, [], job) }, 201);
 	})
 
@@ -4342,10 +4342,12 @@ const contentRoutes = new Hono()
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 
-		// Only a save that actually sent credits can have changed who the Work names, so
-		// only that save re-tells them — and the dedupe key keeps a re-save from telling
-		// anybody twice. See `notifyCreditedAccounts`.
-		if (data.credits !== undefined) {
+		// The credited are told when the credit becomes PUBLIC: on the request that releases
+		// the Work, or when credits change on one already released. A private Work's credits
+		// notify nobody — the page the link points at would 404 for the contributor, and the
+		// accept route refuses until a listing exists. The dedupe key collapses a re-save
+		// (and an un-release/re-release) to one notification. See `notifyCreditedAccounts`.
+		if (releasing || (data.credits !== undefined && updated.visibility === "released")) {
 			await notifyCreditedAccounts(updated, user.id);
 		}
 
