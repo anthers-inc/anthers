@@ -141,7 +141,14 @@ import {
 	declareRating,
 	fileRatingAppeal,
 } from "../services/content-rating.js";
-import { acceptCredit, findRejectedCredit, rejectCredit } from "../services/credit-acceptance.js";
+import {
+	acceptCredit,
+	creditsForOwner,
+	creditsForViewer,
+	findRejectedCredit,
+	notifyCreditedAccounts,
+	rejectCredit,
+} from "../services/credit-acceptance.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -1102,8 +1109,16 @@ async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
 	}
 }
 
-/** Serialize a library content item (owner-facing: full media keys + latest transcode). */
-function serializeWork(
+/**
+ * Serialize a library content item (owner-facing: full media keys + latest transcode).
+ *
+ * ⚠️ Async, and the credits are why: the owner's own serialization still runs the credit
+ * overlay (`creditsForOwner`), because a creator saving a Work that names an on-network
+ * identity needs to see which credits are still awaiting that person's confirmation. The
+ * credits a viewer never sees are visible here, flagged — an owner is editing their own
+ * provenance table, not reading someone else's claim about a third party.
+ */
+async function serializeWork(
 	item: WorkRow,
 	workAssets: AssetRow[] = [],
 	job: TranscodingJobRow | null = null,
@@ -1143,7 +1158,9 @@ function serializeWork(
 		streamEnabled: item.streamEnabled,
 		downloadEnabled: item.downloadEnabled,
 		seedAccess: item.seedAccess,
-		credits: item.credits,
+		// Owner-facing overlay: everything the creator wrote, with the credits that name an
+		// unconfirmed on-network identity flagged as awaiting that person's confirmation.
+		credits: await creditsForOwner(item),
 		isPinned: item.isPinned,
 		tags: item.tags,
 		websiteUrl: item.websiteUrl,
@@ -1791,6 +1808,19 @@ async function serializeWorkForViewer(
 	 */
 	allowanceSpent: boolean,
 	/**
+	 * Who is asking to see this Work, or null for a signed-out viewer.
+	 *
+	 * 🚨 **Required, not optional, for the same reason as `allowanceSpent`.** The credits
+	 * pass through the viewer overlay (`creditsForViewer`), which withholds an unaccepted
+	 * `did`-naming credit from everybody except the person it names and this Work's creator.
+	 * An optional parameter would default to "nobody" — which is the signed-out answer and
+	 * therefore safe for a third-party viewer, but silently WRONG for the two parties who
+	 * must see the credit: the credited person would have no way to discover a pending
+	 * credit, and the creator's own page would hide what they just saved. Every call site
+	 * has to decide who is asking, and the compiler is what makes them.
+	 */
+	viewerId: number | null,
+	/**
 	 * How many pages an ebook has, or 0.
 	 *
 	 * ⚠️ The COUNT is public even when the Work is locked, and the page *keys* never are.
@@ -1867,8 +1897,11 @@ async function serializeWorkForViewer(
 		// do not, except that a creator said something is absent.
 		maturityRows: work.maturityRows ?? {},
 		originallyReleased: work.originallyReleased,
-		// The creator's provenance table — public liner notes, ungated like the description.
-		credits: work.credits,
+		// The creator's provenance table — public liner notes, ungated like the description,
+		// EXCEPT where a credit names an on-network identity that has not accepted: the
+		// overlay (`creditsForViewer`) withholds that from everyone but the named person and
+		// the creator, and resolves an accepted one to a handle rather than a bare DID.
+		credits: await creditsForViewer(work, viewerId),
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 		isPinned: work.isPinned,
@@ -2066,6 +2099,7 @@ async function loadPostWorks(
 					resolveAccessSync(work as AccessibleWork, ctx),
 					delivery,
 					spent,
+					viewerId,
 					pagesByWork.get(work.id) ?? 0,
 				),
 			};
@@ -3540,7 +3574,10 @@ const contentRoutes = new Hono()
 		const job = await queueTranscodeForWork(work);
 		await queueScansForWork(work);
 		await resolveWorkThumbnail(work);
-		return c.json({ work: serializeWork(work, [], job) }, 201);
+		// The credits a save names somebody by are news to that somebody, once per
+		// (work, contributor, role) — see `notifyCreditedAccounts`.
+		await notifyCreditedAccounts(work, user.id);
+		return c.json({ work: await serializeWork(work, [], job) }, 201);
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
@@ -3578,8 +3615,10 @@ const contentRoutes = new Hono()
 		await Promise.all(items.map(resolveWorkThumbnail));
 		const pdsUrl = await pdsUrlOf(user.id);
 		return c.json({
-			works: items.map((i) =>
-				serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null, pdsUrl),
+			works: await Promise.all(
+				items.map((i) =>
+					serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null, pdsUrl),
+				),
 			),
 		});
 	})
@@ -3693,7 +3732,9 @@ const contentRoutes = new Hono()
 		 */
 		if (isOwner && previewRequest(c) === null) {
 			const pdsUrl = await pdsUrlOf(work.creatorId);
-			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl) });
+			return c.json({
+				work: await serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl),
+			});
 		}
 
 		// Fire-and-forget view count, owners excluded.
@@ -3750,6 +3791,7 @@ const contentRoutes = new Hono()
 					),
 					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
 					await allowanceSpent(viewerId, sharedBy),
+					viewerId,
 					pageRow?.count ?? 0,
 					// The one page a reader actually opens a text Work, a game or an image
 					// from, so it is the one that has to consult a household's time limit —
@@ -4035,6 +4077,7 @@ const contentRoutes = new Hono()
 						resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
 						deliveryCtx(),
 						catalogSpent,
+						viewerId,
 						pagesByWork.get(w.id) ?? 0,
 					),
 				),
@@ -4299,6 +4342,13 @@ const contentRoutes = new Hono()
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 
+		// Only a save that actually sent credits can have changed who the Work names, so
+		// only that save re-tells them — and the dedupe key keeps a re-save from telling
+		// anybody twice. See `notifyCreditedAccounts`.
+		if (data.credits !== undefined) {
+			await notifyCreditedAccounts(updated, user.id);
+		}
+
 		// ⭐ **Fired on every edit rather than only on release**, because the record carries the
 		// title, the description and the access state — so an ordinary edit changes what the
 		// listing says, and working out which edits matter is exactly the reasoning the job was
@@ -4320,7 +4370,9 @@ const contentRoutes = new Hono()
 
 		await resolveWorkThumbnail(updated);
 		const pdsUrl = await pdsUrlOf(updated.creatorId);
-		return c.json({ work: serializeWork(updated, workAssets, jobRows[0] ?? null, pdsUrl) });
+		return c.json({
+			work: await serializeWork(updated, workAssets, jobRows[0] ?? null, pdsUrl),
+		});
 	})
 
 	/**
@@ -4973,6 +5025,7 @@ const contentRoutes = new Hono()
 							),
 							deliveryCtx(),
 							projectSpent,
+							viewerId,
 							pagesByWork.get(m.work.id) ?? 0,
 						)),
 					})),
@@ -5748,6 +5801,7 @@ const contentRoutes = new Hono()
 									resolveAccessSync(w as AccessibleWork, ctx),
 									deliveryCtx(),
 									spent,
+									user.id,
 									pagesByWork.get(w.id) ?? 0,
 								),
 							};
