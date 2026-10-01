@@ -24,6 +24,7 @@
  * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
+import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
 import { assertDevCheckout } from "./dev-only.js";
@@ -78,10 +79,20 @@ function numFlag(name: string, min: number, max: number): number | undefined {
 	return Math.round(n * 100) / 100;
 }
 
-/** First day of the current month, `YYYY-MM-DD` — the app's billing-cycle key. */
+/**
+ * First day of the current month, `YYYY-MM-DD` — the app's billing-cycle key.
+ *
+ * 🚨 **UTC, via the shared `cycleKeyFor`, never a local-time read.** This was
+ * `getFullYear`/`getMonth` until 2026-10-01, which on a machine behind UTC answered
+ * *September* during the first hours of October while the meter — reading the same
+ * "month" through `cycleKeyFor` — already counted October. A fixture that anchors its
+ * attention walk and its seed allocations at the cycle start then placed every row in
+ * the month the meter was no longer counting, and the gauntlet's near-the-limit rungs
+ * failed for the rest of the local day. This is the exact failure `billing-cycle.ts`
+ * was created to eliminate; never read the calendar directly here again.
+ */
 function currentBillingCycle(): string {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+	return cycleKeyFor(new Date());
 }
 
 /**
@@ -159,27 +170,24 @@ async function main(): Promise<void> {
 			.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
 
 		if (watchedMinutes > 0) {
-			// The endpoint caps one range at 600s, so a realistic month is many rows. Match
-			// that shape rather than writing one enormous row — and lay them END TO END,
-			// not overlapping: the meter reads ranges through the cross-tab split, so a
-			// stack of identical windows would be divided by the row count and the
-			// fixture would under-spend by exactly that factor.
-			//
-			// 🚨 The walk ends at the START of the current cycle, never "now". The meter
-			// credits a range only inside the calendar month, and a walk ending now runs
-			// past the cycle start whenever the month is younger than the walk is long —
-			// so for the first `watchedMinutes` of every UTC month the fixture silently
-			// under-spent (570 minutes at 03:00 on the 1st credited about 180) and the
-			// near-the-limit rungs failed. Walking back from the cycle start spends the
-			// full amount at any hour of any day.
+			// 🚨 The walk STARTS at the current cycle's first instant and runs FORWARD,
+			// never backwards from now. Two directions both break: a walk ending "now"
+			// runs past the cycle start whenever the month is younger than the walk is
+			// long (570 minutes at 03:00 on the 1st credited about 180), and a walk
+			// ENDING at the cycle start lies entirely before the meter's window, whose
+			// overlap test is `ended > windowStart` — a range ending at the boundary
+			// credits nothing at all. Forward from the boundary, the whole walk lies
+			// inside the month at any hour of any day. A tail extending past "now" early
+			// in the month is harmless: the read-side split clips ranges to the window,
+			// and the fixture is synthetic rows either way.
 			const CHUNK = 600;
 			let left = watchedMinutes * 60;
-			let end = new Date(`${currentBillingCycle()}T00:00:00.000Z`).getTime();
+			let start = new Date(`${currentBillingCycle()}T00:00:00.000Z`).getTime();
 			const rows: (typeof attentionEvents.$inferInsert)[] = [];
 			while (left > 0) {
 				const durationSeconds = Math.min(CHUNK, left);
-				const endedAt = new Date(end);
-				const startedAt = new Date(end - durationSeconds * 1_000);
+				const startedAt = new Date(start);
+				const endedAt = new Date(start + durationSeconds * 1_000);
 				rows.push({
 					userId: viewerId,
 					creatorId,
@@ -191,7 +199,7 @@ async function main(): Promise<void> {
 					publicAccess: true,
 				});
 				left -= durationSeconds;
-				end -= durationSeconds * 1_000;
+				start += durationSeconds * 1_000;
 			}
 			for (let i = 0; i < rows.length; i += 500) {
 				await db.insert(attentionEvents).values(rows.slice(i, i + 500));
