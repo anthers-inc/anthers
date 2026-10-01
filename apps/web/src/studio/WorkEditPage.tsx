@@ -1527,7 +1527,17 @@ function CreditsSection({
 		const types = checked ? [...row.types, type] : row.types.filter((t) => t !== type);
 		// Contributor is created-only: unticking the last Created clears it rather than
 		// leaving a name attached to a credit that no longer asserts one.
-		setRow(index, { ...row, types, contributor: types.includes("created") ? row.contributor : "" });
+		//
+		// ⚠️ The overlay flag drops here rather than surviving the edit: the flag says
+		// "this identity has not confirmed yet," and a creator editing the row has
+		// changed what the person would be confirming. The flag is display state the
+		// server re-derives on the next load, never something this form sends back.
+		setRow(index, {
+			...row,
+			types,
+			contributor: types.includes("created") ? row.contributor : "",
+			awaitingContributorConfirmation: undefined,
+		});
 	};
 	const missingContributor = (row: WorkCredit) =>
 		row.types.includes("created") && row.contributor.trim() === "";
@@ -1590,6 +1600,13 @@ function CreditsSection({
 					>
 						Remove
 					</button>
+					{row.awaitingContributorConfirmation && (
+						<p className="w-full text-xs text-base-content/50">
+							Waiting on the contributor of this {row.role || "credit"} to confirm it. The DID stays
+							as written — it is who the acceptance keys on, and it shows as their name once they
+							confirm.
+						</p>
+					)}
 					{missingContributor(row) && (
 						<p className="w-full text-xs text-error">
 							A Created credit names its contributor — say who made this part.

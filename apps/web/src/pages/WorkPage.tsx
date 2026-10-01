@@ -328,8 +328,10 @@ export default function WorkPage() {
 
 			{!isWriting(work.type) && <WorkDescription work={work} />}
 
-			{/* The liner notes — who and what made it, public whether or not it is gated. */}
-			<WorkCredits work={work} />
+			{/* The liner notes — who and what made it, public whether or not it is gated. A credit
+		    naming this viewer's own identity carries the confirm ask, and a decision re-reads
+		    the Work so the credits settle from the server's own answer. */}
+			<WorkCredits work={work} onCreditDecided={refetch} />
 
 			{work.assets.length > 0 && (
 				<ProjectDownloads

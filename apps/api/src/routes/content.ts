@@ -5921,106 +5921,122 @@ const contentRoutes = new Hono()
 	/**
 	 * Accept credit for a Work. The caller must be the credited person (any signed-in
 	 * account). The acceptance record is written into the caller's own repository.
+	 *
+	 * ⚠️ The body goes through a validator rather than a raw `c.req.json()` read: the
+	 * typed client derives what it may send from the route's schema, so a raw read leaves
+	 * the front-end with a `$post` that refuses a `json` argument at compile time and the
+	 * UI hand-rolling a fetch to work around its own client.
 	 */
-	.post("/works/:id/credits/accept", requireAuth, async (c) => {
-		const user = c.get("user");
-		const workId = parseNumericId(c.req.param("id"));
-		if (workId == null) return c.json({ error: "Work not found" }, 404);
+	.post(
+		"/works/:id/credits/accept",
+		requireAuth,
+		zValidator("json", z.object({ role: z.string().min(1) }), invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const workId = parseNumericId(c.req.param("id") ?? "");
+			if (workId == null) return c.json({ error: "Work not found" }, 404);
 
-		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-		const role = typeof body.role === "string" ? body.role : "";
-		if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
+			const role = c.req.valid("json").role;
+			if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
 
-		const [work] = await db
-			.select({ atprotoUri: works.atprotoUri })
-			.from(works)
-			.where(eq(works.id, workId))
-			.limit(1);
-		if (!work?.atprotoUri) {
-			return c.json(
-				{ error: "This Work has no public listing to accept credit for.", code: "no_listing" },
-				404,
-			);
-		}
+			const [work] = await db
+				.select({ atprotoUri: works.atprotoUri })
+				.from(works)
+				.where(eq(works.id, workId))
+				.limit(1);
+			if (!work?.atprotoUri) {
+				return c.json(
+					{ error: "This Work has no public listing to accept credit for.", code: "no_listing" },
+					404,
+				);
+			}
 
-		const [account] = await db
-			.select({ did: users.atprotoDid })
-			.from(users)
-			.where(eq(users.id, user.id))
-			.limit(1);
-		if (!account?.did) {
-			return c.json(
-				{ error: "This account has no identity to accept credit with.", code: "no_identity" },
-				400,
-			);
-		}
+			const [account] = await db
+				.select({ did: users.atprotoDid })
+				.from(users)
+				.where(eq(users.id, user.id))
+				.limit(1);
+			if (!account?.did) {
+				return c.json(
+					{ error: "This account has no identity to accept credit with.", code: "no_identity" },
+					400,
+				);
+			}
 
-		const result = await acceptCredit({
-			callerUserId: user.id,
-			callerDid: account.did,
-			workId,
-			workUri: work.atprotoUri,
-			role,
-		});
+			const result = await acceptCredit({
+				callerUserId: user.id,
+				callerDid: account.did,
+				workId,
+				workUri: work.atprotoUri,
+				role,
+			});
 
-		if (!result.ok) {
-			const message =
-				result.code === "not_credited"
-					? "You are not credited on this Work with that role."
-					: result.code === "already_accepted"
-						? "You already accepted this credit."
-						: result.code === "rejected"
-							? "You rejected this credit, so you cannot accept it."
-							: result.code === "no_identity"
-								? "This account has no identity to accept credit with."
-								: "Anthers needs your permission to write the acceptance record in your repository.";
-			return c.json({ error: message, code: result.code }, 400);
-		}
+			if (!result.ok) {
+				const message =
+					result.code === "not_credited"
+						? "You are not credited on this Work with that role."
+						: result.code === "already_accepted"
+							? "You already accepted this credit."
+							: result.code === "rejected"
+								? "You rejected this credit, so you cannot accept it."
+								: result.code === "no_identity"
+									? "This account has no identity to accept credit with."
+									: "Anthers needs your permission to write the acceptance record in your repository.";
+				return c.json({ error: message, code: result.code }, 400);
+			}
 
-		return c.json({ accepted: true, atprotoUri: result.atprotoUri });
-	})
+			return c.json({ accepted: true, atprotoUri: result.atprotoUri });
+		},
+	)
 
 	/**
 	 * Reject credit for a Work. The caller must be the credited person (any signed-in
 	 * account). Rejection removes the credit from the Work and blocks re-adding it.
+	 *
+	 * ⚠️ Validator rather than a raw `c.req.json()` read, for the same reason as the accept
+	 * route beside this: the typed client sends what the route's schema says it may.
 	 */
-	.post("/works/:id/credits/reject", requireAuth, async (c) => {
-		const user = c.get("user");
-		const workId = parseNumericId(c.req.param("id"));
-		if (workId == null) return c.json({ error: "Work not found" }, 404);
+	.post(
+		"/works/:id/credits/reject",
+		requireAuth,
+		zValidator("json", z.object({ role: z.string().min(1) }), invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const workId = parseNumericId(c.req.param("id") ?? "");
+			if (workId == null) return c.json({ error: "Work not found" }, 404);
 
-		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-		const role = typeof body.role === "string" ? body.role : "";
-		if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
+			const role = c.req.valid("json").role;
+			if (!role.trim()) return c.json({ error: "A role is required.", code: "role_required" }, 400);
 
-		const [account] = await db
-			.select({ did: users.atprotoDid })
-			.from(users)
-			.where(eq(users.id, user.id))
-			.limit(1);
-		if (!account?.did) {
-			return c.json(
-				{ error: "This account has no identity to reject credit with.", code: "no_identity" },
-				400,
-			);
-		}
+			const [account] = await db
+				.select({ did: users.atprotoDid })
+				.from(users)
+				.where(eq(users.id, user.id))
+				.limit(1);
+			if (!account?.did) {
+				return c.json(
+					{ error: "This account has no identity to reject credit with.", code: "no_identity" },
+					400,
+				);
+			}
 
-		const result = await rejectCredit({
-			callerUserId: user.id,
-			callerDid: account.did,
-			workId,
-			role,
-		});
+			const result = await rejectCredit({
+				callerUserId: user.id,
+				callerDid: account.did,
+				workId,
+				role,
+			});
 
-		if (!result.ok) {
-			const message =
-				result.code === "not_credited"
-					? "You are not credited on this Work with that role."
-					: "You already rejected this credit.";
-			return c.json({ error: message, code: result.code }, 400);
-		}
+			if (!result.ok) {
+				const message =
+					result.code === "not_credited"
+						? "You are not credited on this Work with that role."
+						: "You already rejected this credit.";
+				return c.json({ error: message, code: result.code }, 400);
+			}
 
-		return c.json({ rejected: true });
-	});
+			return c.json({ rejected: true });
+		},
+	);
 
 export { contentRoutes };
