@@ -7,10 +7,10 @@
 import { describe, expect, it } from "bun:test";
 import {
 	alertKey,
+	type LiveAlert,
 	missingAlerts,
 	renderAlertsYaml,
 	wantedAlerts,
-	type LiveAlert,
 } from "./resource-alerts-lib.js";
 
 const EMAIL = "ops@example.test"; // not_a_real address — fixture only
@@ -39,7 +39,9 @@ describe("The wanted policies", () => {
 		// The api's now-band for CPU is 90; the alert must fire at exactly that, because the
 		// console renders 90 as "now" and an alert at a different number would disagree with
 		// the screen an operator is looking at.
-		const apiCpu = wantedAlerts(EMAIL).find((w) => w.component === "api" && w.rule === "CPU_UTILIZATION");
+		const apiCpu = wantedAlerts(EMAIL).find(
+			(w) => w.component === "api" && w.rule === "CPU_UTILIZATION",
+		);
 		expect(apiCpu?.value).toBe(90);
 		const workerRestarts = wantedAlerts(EMAIL).find(
 			(w) => w.component === "worker" && w.rule === "RESTART_COUNT",
@@ -65,8 +67,12 @@ describe("The rendered YAML fragments", () => {
 	it("gives the restart-count rule the widest window, and CPU and memory five minutes", () => {
 		const yaml = renderAlertsYaml(EMAIL);
 		expect(yaml).toContain("rule: RESTART_COUNT");
-		expect(yaml).toMatch(/rule: RESTART_COUNT\n\s+operator: GREATER_THAN\n\s+value: \d+\n\s+window: ONE_HOUR/);
-		expect(yaml).toMatch(/rule: CPU_UTILIZATION\n\s+operator: GREATER_THAN\n\s+value: 90\n\s+window: FIVE_MINUTES/);
+		expect(yaml).toMatch(
+			/rule: RESTART_COUNT\n\s+operator: GREATER_THAN\n\s+value: \d+\n\s+window: ONE_HOUR/,
+		);
+		expect(yaml).toMatch(
+			/rule: CPU_UTILIZATION\n\s+operator: GREATER_THAN\n\s+value: 90\n\s+window: FIVE_MINUTES/,
+		);
 	});
 
 	it("names the email and the spec-apply command, so the fragment is actionable alone", () => {
@@ -86,7 +92,10 @@ describe("The idempotency decision", () => {
 	});
 
 	it("reports nothing to do when every wanted alert is live and notifying", () => {
-		const { absent, needEmail } = missingAlerts(wanted, wanted.map((w) => live(w.component, w.rule)));
+		const { absent, needEmail } = missingAlerts(
+			wanted,
+			wanted.map((w) => live(w.component, w.rule)),
+		);
 		expect(absent).toEqual([]);
 		expect(needEmail).toEqual([]);
 	});
@@ -98,8 +107,14 @@ describe("The idempotency decision", () => {
 	});
 
 	it("treats a disabled alert as absent, not as covering", () => {
-		const disabled: LiveAlert = { ...live("api", "CPU_UTILIZATION"), spec: { rule: "CPU_UTILIZATION", disabled: true } };
-		const { absent } = missingAlerts(wanted, [disabled, ...wanted.filter((w) => w.component === "worker").map((w) => live(w.component, w.rule))]);
+		const disabled: LiveAlert = {
+			...live("api", "CPU_UTILIZATION"),
+			spec: { rule: "CPU_UTILIZATION", disabled: true },
+		};
+		const { absent } = missingAlerts(wanted, [
+			disabled,
+			...wanted.filter((w) => w.component === "worker").map((w) => live(w.component, w.rule)),
+		]);
 		expect(absent.map((a) => a.rule)).toContain("CPU_UTILIZATION");
 	});
 

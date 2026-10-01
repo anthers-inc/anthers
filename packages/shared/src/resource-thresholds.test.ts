@@ -19,8 +19,8 @@ import { describe, expect, it } from "bun:test";
 import {
 	bandFor,
 	RESOURCE_THRESHOLDS,
-	thresholdsFor,
 	type ResourceSignal,
+	thresholdsFor,
 } from "./resource-thresholds";
 
 describe("Band resolution", () => {

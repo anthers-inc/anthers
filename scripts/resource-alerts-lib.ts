@@ -110,7 +110,7 @@ export function renderAlertsYaml(opsAlertEmail: string): string {
 		for (const alert of alerts) {
 			const window = alert.rule === "RESTART_COUNT" ? "ONE_HOUR" : alert.window;
 			blocks.push(
-				"    - rule: " + alert.rule,
+				`    - rule: ${alert.rule}`,
 				`      operator: ${alert.operator}`,
 				`      value: ${alert.value}`,
 				`      window: ${window}`,
@@ -158,7 +158,8 @@ export function missingAlerts(
 ): { absent: WantedAlert[]; needEmail: LiveAlert[] } {
 	const liveByKey = new Map<string, LiveAlert>();
 	for (const alert of live) {
-		if (alert.spec?.rule) liveByKey.set(alertKey(alert.component_name ?? "app", alert.spec.rule), alert);
+		if (alert.spec?.rule)
+			liveByKey.set(alertKey(alert.component_name ?? "app", alert.spec.rule), alert);
 	}
 
 	const absent: WantedAlert[] = [];

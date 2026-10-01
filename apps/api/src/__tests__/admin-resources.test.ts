@@ -59,11 +59,22 @@ interface ComponentView {
 	component: string;
 	kind: string;
 	note: string;
-	bands: Array<{ signal: string; soonAt: number; nowAt: number; remedy: string; precondition: string | null }>;
+	bands: Array<{
+		signal: string;
+		soonAt: number;
+		nowAt: number;
+		remedy: string;
+		precondition: string | null;
+	}>;
 	instanceSize: string | null;
 	instanceCount: number | null;
 	snapshottedAt: string | null;
-	latest: { cpuPct: number | null; memoryPct: number | null; restartCount: number | null; notes: string } | null;
+	latest: {
+		cpuPct: number | null;
+		memoryPct: number | null;
+		restartCount: number | null;
+		notes: string;
+	} | null;
 	trend: TrendPoint[];
 }
 
@@ -77,15 +88,13 @@ interface ResourcesBody {
 let adminCookie: string;
 let plainCookie: string;
 
-/** Every snapshot row this suite writes carries a timestamp older than this, its own sweep. */
-const SUITE_EPOCH = new Date("2001-01-01T00:00:00Z");
-
 beforeAll(async () => {
 	savedAdminUrl = process.env.ADMIN_URL;
 	process.env.ADMIN_URL = ADMIN_HOST;
 
 	adminCookie = (await createAdminFixture("resources")).cookie;
-	plainCookie = (await createAccount(`resources_visitor_${crypto.randomUUID().slice(0, 8)}`)).cookie;
+	plainCookie = (await createAccount(`resources_visitor_${crypto.randomUUID().slice(0, 8)}`))
+		.cookie;
 }, DB_SETUP_TIMEOUT);
 
 /** A snapshot row this suite owns, dated under its own epoch so the sweep cannot miss it. */
@@ -112,7 +121,9 @@ async function insertSnapshot(opts: {
 }
 
 async function resources(): Promise<ResourcesBody> {
-	const res = await req("/api/admin/infrastructure/resources", { headers: { Cookie: adminCookie } });
+	const res = await req("/api/admin/infrastructure/resources", {
+		headers: { Cookie: adminCookie },
+	});
 	expect(res.status).toBe(200);
 	return (await res.json()) as ResourcesBody;
 }
@@ -179,10 +190,43 @@ describe("Rendering from seeded snapshots", () => {
 	const late = new Date("2001-01-01T02:00:00Z");
 
 	beforeAll(async () => {
-		await insertSnapshot({ component: "api", takenAt: early, instanceSize: "basic-xxs", instanceCount: 1, cpuPct: 10, memoryPct: 20, restartCount: 0 });
-		await insertSnapshot({ component: "api", takenAt: mid, instanceSize: "basic-xxs", instanceCount: 2, cpuPct: 40, memoryPct: 50, restartCount: 1 });
-		await insertSnapshot({ component: "api", takenAt: late, instanceSize: "basic-xs", instanceCount: 2, cpuPct: 80, memoryPct: 60, restartCount: 2, notes: "" });
-		await insertSnapshot({ component: "worker", takenAt: late, instanceSize: "basic-s", instanceCount: 1, cpuPct: 5, memoryPct: 30, restartCount: 0 });
+		await insertSnapshot({
+			component: "api",
+			takenAt: early,
+			instanceSize: "basic-xxs",
+			instanceCount: 1,
+			cpuPct: 10,
+			memoryPct: 20,
+			restartCount: 0,
+		});
+		await insertSnapshot({
+			component: "api",
+			takenAt: mid,
+			instanceSize: "basic-xxs",
+			instanceCount: 2,
+			cpuPct: 40,
+			memoryPct: 50,
+			restartCount: 1,
+		});
+		await insertSnapshot({
+			component: "api",
+			takenAt: late,
+			instanceSize: "basic-xs",
+			instanceCount: 2,
+			cpuPct: 80,
+			memoryPct: 60,
+			restartCount: 2,
+			notes: "",
+		});
+		await insertSnapshot({
+			component: "worker",
+			takenAt: late,
+			instanceSize: "basic-s",
+			instanceCount: 1,
+			cpuPct: 5,
+			memoryPct: 30,
+			restartCount: 0,
+		});
 	});
 
 	it("renders the LATEST snapshot's recorded size and count, not the committed spec's", async () => {
@@ -231,5 +275,7 @@ afterAll(async () => {
 	if (savedAdminUrl === undefined) delete process.env.ADMIN_URL;
 	else process.env.ADMIN_URL = savedAdminUrl;
 
-	await db.delete(resourceSnapshots).where(lt(resourceSnapshots.takenAt, new Date("2002-01-01T00:00:00Z")));
+	await db
+		.delete(resourceSnapshots)
+		.where(lt(resourceSnapshots.takenAt, new Date("2002-01-01T00:00:00Z")));
 });

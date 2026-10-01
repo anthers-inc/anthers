@@ -47,7 +47,10 @@ const APP_NAME = "anthers";
 /** How far back the snapshot reads metrics: one hour of series, averaged. */
 const WINDOW_SECONDS = 3_600;
 
-async function run(cmd: string[], env?: Record<string, string>): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+async function run(
+	cmd: string[],
+	env?: Record<string, string>,
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
 	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
@@ -69,7 +72,15 @@ if (!CONTEXT) {
 }
 
 // Resolve the app id by name, exactly as deploy-status.ts resolves it.
-const list = await run(["doctl", "apps", "list", "--format", "ID,Spec.Name", "--no-header", ...ctxArgs]);
+const list = await run([
+	"doctl",
+	"apps",
+	"list",
+	"--format",
+	"ID,Spec.Name",
+	"--no-header",
+	...ctxArgs,
+]);
 if (!list.ok) {
 	console.log(`resource-snapshot: doctl could not list apps.\n${list.stderr.trim()}`);
 	process.exit(2);
@@ -130,10 +141,11 @@ interface MetricReading {
 function meanOf(series: unknown): MetricReading {
 	const values = Array.isArray(series)
 		? (series as [number, string][])
-			.filter(([, v]) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
-			.map(([, v]) => Number(v))
+				.filter(([, v]) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
+				.map(([, v]) => Number(v))
 		: [];
-	if (values.length === 0) return { value: null, why: "the metrics API answered no points for this window" };
+	if (values.length === 0)
+		return { value: null, why: "the metrics API answered no points for this window" };
 	return { value: values.reduce((a, b) => a + b, 0) / values.length, why: "" };
 }
 
@@ -167,7 +179,8 @@ async function readMetric(metric: string, component: string): Promise<MetricRead
 	}
 	const body = (await res.json()) as MetricsResponse;
 	const series = body.data?.result ?? [];
-	if (series.length === 0) return { value: null, why: "the metrics API answered no points for this window" };
+	if (series.length === 0)
+		return { value: null, why: "the metrics API answered no points for this window" };
 	return meanOf(series[0]?.values ?? []);
 }
 

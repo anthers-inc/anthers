@@ -61,10 +61,23 @@ if (!CONTEXT) {
 	process.exit(2);
 }
 
-import { type LiveAlert, missingAlerts, renderAlertsYaml, wantedAlerts } from "./resource-alerts-lib.js";
+import {
+	type LiveAlert,
+	missingAlerts,
+	renderAlertsYaml,
+	wantedAlerts,
+} from "./resource-alerts-lib.js";
 
 // Resolve the app id by name, exactly as deploy-status.ts does.
-const list = await run(["doctl", "apps", "list", "--format", "ID,Spec.Name", "--no-header", ...ctxArgs]);
+const list = await run([
+	"doctl",
+	"apps",
+	"list",
+	"--format",
+	"ID,Spec.Name",
+	"--no-header",
+	...ctxArgs,
+]);
 if (!list.ok) {
 	console.log(`resource-alerts: doctl could not list apps.\n${list.stderr.trim()}`);
 	process.exit(2);
@@ -119,11 +132,11 @@ if (needEmail.length > 0) {
 			alert.id,
 			"--app-alert-destinations",
 			// A path is what doctl takes, so write the destinations JSON to a temp file.
-			(await (async () => {
+			await (async () => {
 				const path = `/tmp/opencode/alert-dest-${alert.id}.json`;
 				await Bun.write(path, JSON.stringify({ emails: [OPS_ALERT_EMAIL], slack_webhooks: [] }));
 				return path;
-			})()),
+			})(),
 			...ctxArgs,
 		]);
 		if (dest.ok) console.log(`  ✓ ${alert.component_name ?? "app"} ${alert.spec?.rule}`);

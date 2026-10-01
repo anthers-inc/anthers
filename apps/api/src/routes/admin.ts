@@ -17,14 +17,14 @@
 import { db } from "@anthers/db/client";
 import { adminAccounts, type DmcaNoticeStatus, rightsRequests } from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
-import type { ResourceBand } from "@anthers/shared/resource-thresholds";
-import { RESOURCE_THRESHOLDS } from "@anthers/shared/resource-thresholds";
 import {
 	HOLD_SUBJECT_TYPES,
 	isModerationReason,
 	isModerationSubjectType,
 	MODERATION_NOTE_MAX,
 } from "@anthers/shared/moderation";
+import type { ResourceBand } from "@anthers/shared/resource-thresholds";
+import { RESOURCE_THRESHOLDS } from "@anthers/shared/resource-thresholds";
 import { zValidator } from "@hono/zod-validator";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -1019,7 +1019,10 @@ const adminRoutes = new Hono<AdminEnv>()
 					notes: row.notes,
 				};
 			}
-			if ((TRENDED as readonly string[]).includes(row.component) && entry.trend.length < TREND_POINTS) {
+			if (
+				(TRENDED as readonly string[]).includes(row.component) &&
+				entry.trend.length < TREND_POINTS
+			) {
 				entry.trend.push({
 					takenAt: row.taken_at,
 					cpuPct: row.cpu_pct,
