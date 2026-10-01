@@ -125,7 +125,7 @@ function defaultPeriodKey(): string {
 
 /** The QuickBooks Online journal-import CSV: Date, Description, Account, Debits, Credits, Memo. */
 function qboCsv(pkg: ClosePackage): string {
-	const esc = (v: string) => /[",\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v;
+	const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
 	// The posting date is the settlement date — the month's books close when it settles.
 	const date = pkg.period.settledAt.slice(0, 10);
 	const head = ["Date", "Description", "Account", "Debits", "Credits", "Memo"];
@@ -141,7 +141,7 @@ function qboCsv(pkg: ClosePackage): string {
 			line.credit,
 			line.memo,
 		]);
-	return [head, ...rows].map((row) => row.map(esc).join(",")).join("\r\n") + "\r\n";
+	return `${[head, ...rows].map((row) => row.map(esc).join(",")).join("\r\n")}\r\n`;
 }
 
 function Disclosure({
@@ -289,8 +289,8 @@ export default function ClosePackage() {
 							<div role="alert" className="alert alert-error">
 								<span>
 									Due to creators disagrees with the creator balances in Anthers' database by $
-									{data.controls.dueToCreators.difference}. The control's note names the two
-									causes; do not post the entry until it is resolved.
+									{data.controls.dueToCreators.difference}. The control's note names the two causes;
+									do not post the entry until it is resolved.
 								</span>
 							</div>
 						)}
@@ -310,8 +310,11 @@ export default function ClosePackage() {
 										</tr>
 									</thead>
 									<tbody>
-										{data.entry.lines.map((line, i) => (
-											<tr key={i} className={line.unbuilt ? "text-base-content/50" : undefined}>
+										{data.entry.lines.map((line) => (
+											<tr
+												key={`${line.event}|${line.account}|${line.debit}|${line.credit}`}
+												className={line.unbuilt ? "text-base-content/50" : undefined}
+											>
 												<td className="font-medium">{line.event}</td>
 												<td>{line.account}</td>
 												<td className="text-right tabular-nums">
@@ -517,8 +520,10 @@ export default function ClosePackage() {
 										</tbody>
 									</table>
 								</div>
-								{[...data.schedules.settlement.remainder, ...data.schedules.settlement.refundShortfalls].length >
-								0 && (
+								{[
+									...data.schedules.settlement.remainder,
+									...data.schedules.settlement.refundShortfalls,
+								].length > 0 && (
 									<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
 										<table className="table table-sm">
 											<thead>

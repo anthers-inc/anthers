@@ -259,11 +259,12 @@ const BOUNDARY_NOTES = [
  */
 export async function closePackage(rawPeriod: string): Promise<ClosePackageResult> {
 	const period = parseFilingPeriod(rawPeriod);
-	if (!period || period.kind !== "month") {
+	if (!period?.kind || period.kind !== "month") {
 		return {
 			ok: false,
 			code: "bad_period",
-			error: "Name the close period as a month (2026-09) — the package closes one settled month at a time.",
+			error:
+				"Name the close period as a month (2026-09) — the package closes one settled month at a time.",
 		};
 	}
 
@@ -349,8 +350,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		);
 	}
 	const creatorOf = (id: number) => creatorByInvoice.get(id) ?? ZERO;
-	const anthersOf = (row: (typeof invoiceRows)[number]) =>
-		D(row.subtotal).minus(creatorOf(row.id));
+	const anthersOf = (row: (typeof invoiceRows)[number]) => D(row.subtotal).minus(creatorOf(row.id));
 
 	// The purchases charged in the month — `completed`, plus `refunded` rows whose charge
 	// happened in this month (their refund is a separate event below, so the pair nets).
@@ -499,7 +499,9 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	// events and nets to the processing fee — the same keying the schedules show.
 	const entryInvoices = invoiceRows.filter((r) => r.status !== "paused");
 	const settledInvoices = entryInvoices.filter((r) => r.settled_at != null);
-	const refundedInvoices = entryInvoices.filter((r) => r.status === "refunded" || r.status === "disputed");
+	const refundedInvoices = entryInvoices.filter(
+		(r) => r.status === "refunded" || r.status === "disputed",
+	);
 
 	const lines: ClosePackageLine[] = [];
 	const push = (
@@ -528,21 +530,49 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 
 	// 1. An invoice is paid — money in, for every invoice that was charged (a refunded one
 	//    was paid before its money returned, and its refund event below reverses it).
-	const invNet = entryInvoices.reduce((s, r) => s.plus(D(r.total).minus(D(r.processing_fee))), ZERO);
+	const invNet = entryInvoices.reduce(
+		(s, r) => s.plus(D(r.total).minus(D(r.processing_fee))),
+		ZERO,
+	);
 	const invFee = entryInvoices.reduce((s, r) => s.plus(D(r.processing_fee)), ZERO);
 	const invTax = entryInvoices.reduce((s, r) => s.plus(D(r.tax)), ZERO);
 	const invCreator = entryInvoices.reduce((s, r) => s.plus(creatorOf(r.id)), ZERO);
 	const invAnthers = entryInvoices.reduce((s, r) => s.plus(anthersOf(r)), ZERO);
-	push("An invoice is paid", "Stripe clearing", "debit", invNet,
-		`Invoices paid for ${period.label}, net of processing fees — the fee never reached the clearing balance.`);
-	push("An invoice is paid", "Payment processing expense", "debit", invFee,
-		"Card processing recorded on the month's paid invoices — Anthers' own charge.");
-	push("An invoice is paid", "Sales tax payable", "credit", invTax,
-		"Sales tax collected on the month's paid invoices — the only thing added on top.");
-	push("An invoice is paid", "Support collected not yet settled", "credit", invCreator,
-		"The creator-directed lines, gross — held until the month settles.");
-	push("An invoice is paid", "Badge revenue", "credit", invAnthers,
-		"The Badge (Anthers) line of the month's paid invoices — program-service revenue.");
+	push(
+		"An invoice is paid",
+		"Stripe clearing",
+		"debit",
+		invNet,
+		`Invoices paid for ${period.label}, net of processing fees — the fee never reached the clearing balance.`,
+	);
+	push(
+		"An invoice is paid",
+		"Payment processing expense",
+		"debit",
+		invFee,
+		"Card processing recorded on the month's paid invoices — Anthers' own charge.",
+	);
+	push(
+		"An invoice is paid",
+		"Sales tax payable",
+		"credit",
+		invTax,
+		"Sales tax collected on the month's paid invoices — the only thing added on top.",
+	);
+	push(
+		"An invoice is paid",
+		"Support collected not yet settled",
+		"credit",
+		invCreator,
+		"The creator-directed lines, gross — held until the month settles.",
+	);
+	push(
+		"An invoice is paid",
+		"Badge revenue",
+		"credit",
+		invAnthers,
+		"The Badge (Anthers) line of the month's paid invoices — program-service revenue.",
+	);
 
 	// 2. A month settles — the bridge from gross to net, through the expense account.
 	const supportCredits = creditGroups
@@ -552,12 +582,27 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	// The creator-borne share of card processing is the difference between what settlement
 	// relieved and what it credited — derived from the rows, never recomputed from a rate.
 	const feeShare = Decimal.max(0, settledGross.minus(supportCredits));
-	push("A month settles", "Support collected not yet settled", "debit", supportCredits.plus(feeShare),
-		"The settled invoices' directed lines, relieved from the holding account.");
-	push("A month settles", "Due to creators", "credit", supportCredits,
-		"Support credited at settlement, net of the creator-borne share of card processing.");
-	push("A month settles", "Payment processing expense", "credit", feeShare,
-		"The creator-borne share of card processing, credited back — creators bear it at cost, so it never touches the profit and loss.");
+	push(
+		"A month settles",
+		"Support collected not yet settled",
+		"debit",
+		supportCredits.plus(feeShare),
+		"The settled invoices' directed lines, relieved from the holding account.",
+	);
+	push(
+		"A month settles",
+		"Due to creators",
+		"credit",
+		supportCredits,
+		"Support credited at settlement, net of the creator-borne share of card processing.",
+	);
+	push(
+		"A month settles",
+		"Payment processing expense",
+		"credit",
+		feeShare,
+		"The creator-borne share of card processing, credited back — creators bear it at cost, so it never touches the profit and loss.",
+	);
 
 	// 3. The Time Pool is distributed — one line per funding, because the two are different
 	//    kinds of money that happen to settle identically (the schema's own ⭐ note).
@@ -567,18 +612,38 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	const poolAnthers = creditGroups
 		.filter((g) => g.kind !== "support" && g.funded_by === "anthers")
 		.reduce((s, g) => s.plus(D(g.total)), ZERO);
-	push("The Time Pool is distributed", "Time Pool distributions (program)", "debit", poolSupporter,
+	push(
+		"The Time Pool is distributed",
+		"Time Pool distributions (program)",
+		"debit",
+		poolSupporter,
 		"Time Pool and Stickers paid by time this month, from what supporters gave — a program-service expense against the Badge revenue that funded it.",
-		"supporter");
-	push("The Time Pool is distributed", "Due to creators", "credit", poolSupporter,
+		"supporter",
+	);
+	push(
+		"The Time Pool is distributed",
+		"Due to creators",
+		"credit",
+		poolSupporter,
 		"The pool's credits at settlement, from the supporters' own money.",
-		"supporter");
-	push("The Time Pool is distributed", "Time Pool distributions (program)", "debit", poolAnthers,
+		"supporter",
+	);
+	push(
+		"The Time Pool is distributed",
+		"Time Pool distributions (program)",
+		"debit",
+		poolAnthers,
 		"The free accounts' Time Pool — Anthers' own money spent on their behalf, a genuine program-service expense.",
-		"anthers");
-	push("The Time Pool is distributed", "Due to creators", "credit", poolAnthers,
+		"anthers",
+	);
+	push(
+		"The Time Pool is distributed",
+		"Due to creators",
+		"credit",
+		poolAnthers,
 		"The free pool's credits at settlement, from Anthers' own funds.",
-		"anthers");
+		"anthers",
+	);
 
 	// 4. A Work is purchased — Anthers' share only; the destination charge sent the
 	//    creator's share straight to the creator's own balance, so no liability arises.
@@ -591,29 +656,56 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		(s, r) => s.plus(D(r.processing_fee)).plus(D(r.delivery_fee)),
 		ZERO,
 	);
-	push("A Work is purchased", "Stripe clearing", "debit", purClearing,
-		"Purchases charged this month — Anthers' share only: the tax plus the platform side of the price. The destination charge sent the creator's share straight to the creator's balance.");
-	push("A Work is purchased", "Sales tax payable", "credit", purTax,
-		"Sales tax collected on purchases — Anthers is the marketplace facilitator.");
-	push("A Work is purchased", "Payment processing expense", "credit", purFee,
-		"Card processing on purchases, borne by the creator's share of the price — credited, never an Anthers expense.");
+	push(
+		"A Work is purchased",
+		"Stripe clearing",
+		"debit",
+		purClearing,
+		"Purchases charged this month — Anthers' share only: the tax plus the platform side of the price. The destination charge sent the creator's share straight to the creator's balance.",
+	);
+	push(
+		"A Work is purchased",
+		"Sales tax payable",
+		"credit",
+		purTax,
+		"Sales tax collected on purchases — Anthers is the marketplace facilitator.",
+	);
+	push(
+		"A Work is purchased",
+		"Payment processing expense",
+		"credit",
+		purFee,
+		"Card processing on purchases, borne by the creator's share of the price — credited, never an Anthers expense.",
+	);
 
 	// 5. Purchase refunds in the month — the buyer's charge returns and the creator's
 	//    transfer is clawed back in their own balance, which the books never held.
 	const refPurTax = refundedPurchases.reduce((s, r) => s.plus(D(r.sales_tax)), ZERO);
 	const refPurShortfall = refundedPurchases.reduce(
-		(s, r) =>
-			s
-				.plus(D(r.processing_fee))
-				.plus(r.downloaded_at ? D(r.delivery_fee) : ZERO),
+		(s, r) => s.plus(D(r.processing_fee)).plus(r.downloaded_at ? D(r.delivery_fee) : ZERO),
 		ZERO,
 	);
-	push("A refund or chargeback", "Sales tax payable", "debit", refPurTax,
-		"Tax returned with refunded purchases.");
-	push("A refund or chargeback", "Payment processing expense", "debit", refPurShortfall,
-		"What the refund could not recover — the sunk processing fee, absorbed by the remainder.");
-	push("A refund or chargeback", "Stripe clearing", "credit", refPurTax.plus(refPurShortfall),
-		"Purchase refunds this month — the buyer's charge returned; the creator's transfer was clawed back in their own balance.");
+	push(
+		"A refund or chargeback",
+		"Sales tax payable",
+		"debit",
+		refPurTax,
+		"Tax returned with refunded purchases.",
+	);
+	push(
+		"A refund or chargeback",
+		"Payment processing expense",
+		"debit",
+		refPurShortfall,
+		"What the refund could not recover — the sunk processing fee, absorbed by the remainder.",
+	);
+	push(
+		"A refund or chargeback",
+		"Stripe clearing",
+		"credit",
+		refPurTax.plus(refPurShortfall),
+		"Purchase refunds this month — the buyer's charge returned; the creator's transfer was clawed back in their own balance.",
+	);
 
 	// 6. Subscription refunds and disputes — the buyer's renewal charge returns in full,
 	//    with the relief booked where the money was sitting when it returned.
@@ -626,16 +718,41 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		.reduce((s, r) => s.plus(creatorOf(r.id)), ZERO);
 	const refInvAnthers = refundedInvoices.reduce((s, r) => s.plus(anthersOf(r)), ZERO);
 	const refInvTotal = refundedInvoices.reduce((s, r) => s.plus(D(r.total)), ZERO);
-	push("A refund or chargeback", "Sales tax payable", "debit", refInvTax,
-		"Tax returned with refunded and disputed renewals.");
-	push("A refund or chargeback", "Support collected not yet settled", "debit", refInvUnsettled,
-		"Directed support returned before its month settled — it never credited anybody.");
-	push("A refund or chargeback", "Due to creators", "debit", refInvSettled,
-		"Directed support returned after settlement — the ledger's credits stand until the reversal build lands, and the Due-to-creators control flags that gap.");
-	push("A refund or chargeback", "Badge revenue", "debit", refInvAnthers,
-		"Badge revenue returned with the refunded renewals.");
-	push("A refund or chargeback", "Stripe clearing", "credit", refInvTotal,
-		"The buyer's renewal charge returned in full; Stripe kept its fee, which the entry expensed when the invoice was paid.");
+	push(
+		"A refund or chargeback",
+		"Sales tax payable",
+		"debit",
+		refInvTax,
+		"Tax returned with refunded and disputed renewals.",
+	);
+	push(
+		"A refund or chargeback",
+		"Support collected not yet settled",
+		"debit",
+		refInvUnsettled,
+		"Directed support returned before its month settled — it never credited anybody.",
+	);
+	push(
+		"A refund or chargeback",
+		"Due to creators",
+		"debit",
+		refInvSettled,
+		"Directed support returned after settlement — the ledger's credits stand until the reversal build lands, and the Due-to-creators control flags that gap.",
+	);
+	push(
+		"A refund or chargeback",
+		"Badge revenue",
+		"debit",
+		refInvAnthers,
+		"Badge revenue returned with the refunded renewals.",
+	);
+	push(
+		"A refund or chargeback",
+		"Stripe clearing",
+		"credit",
+		refInvTotal,
+		"The buyer's renewal charge returned in full; Stripe kept its fee, which the entry expensed when the invoice was paid.",
+	);
 
 	// 7. The events whose builds do not exist yet — shown at zero, never invented.
 	for (const unbuilt of UNBUILT_EVENTS) {
@@ -687,7 +804,10 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	const dueDifference = expectedCredits.minus(impliedDue);
 
 	const empty =
-		entryInvoices.length === 0 && purchaseRows.length === 0 && refundedPurchases.length === 0 && creditGroups.length === 0;
+		entryInvoices.length === 0 &&
+		purchaseRows.length === 0 &&
+		refundedPurchases.length === 0 &&
+		creditGroups.length === 0;
 
 	return {
 		ok: true,
@@ -737,12 +857,9 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 						creatorEarnings: money(D(r.creator_earnings)),
 						status: r.status,
 						createdAt: new Date(r.created_at).toISOString(),
-						refundedAt:
-							refundedPurchases.find((p) => p.id === r.id)?.refunded_at
-								? new Date(
-										refundedPurchases.find((p) => p.id === r.id)!.refunded_at!,
-									).toISOString()
-								: null,
+						refundedAt: refundedPurchases.find((p) => p.id === r.id)?.refunded_at
+							? new Date(refundedPurchases.find((p) => p.id === r.id)!.refunded_at!).toISOString()
+							: null,
 					})),
 					count: purchaseRows.length,
 					totals: {
@@ -750,7 +867,9 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 						salesTax: money(purTax),
 						processingFee: money(purchaseRows.reduce((s, r) => s.plus(D(r.processing_fee)), ZERO)),
 						deliveryFee: money(purchaseRows.reduce((s, r) => s.plus(D(r.delivery_fee)), ZERO)),
-						creatorEarnings: money(purchaseRows.reduce((s, r) => s.plus(D(r.creator_earnings)), ZERO)),
+						creatorEarnings: money(
+							purchaseRows.reduce((s, r) => s.plus(D(r.creator_earnings)), ZERO),
+						),
 					},
 				},
 				settlement: {

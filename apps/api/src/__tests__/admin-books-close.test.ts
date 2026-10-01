@@ -25,7 +25,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { creatorCredits, invoiceLines, invoices, monthSettlements, purchases } from "@anthers/db/schema";
+import {
+	creatorCredits,
+	invoiceLines,
+	invoices,
+	monthSettlements,
+	purchases,
+} from "@anthers/db/schema";
+import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -132,14 +139,12 @@ async function insertInvoice(opts: {
 	tax: string;
 	processingFee: string;
 	status?: string;
-	settledAt?: string | null;
+	settledAt?: Date | null;
 	creatorLine?: string | null;
 }) {
 	const id = `in_close_${run}_${invoiceStripeIds.length}`;
 	invoiceStripeIds.push(id);
-	const total = new (await import("decimal.js")).default(opts.subtotal)
-		.plus(opts.tax)
-		.toFixed(2);
+	const total = new Decimal(opts.subtotal).plus(opts.tax).toFixed(2);
 	const [row] = await db
 		.insert(invoices)
 		.values({
@@ -159,7 +164,9 @@ async function insertInvoice(opts: {
 	// The Anthers line is the residual of the subtotal, which is how `recordPaidInvoice`
 	// splits a charge — so a creator line is written and the Badge line is not.
 	if (opts.creatorLine != null) {
-		await db.insert(invoiceLines).values({ invoiceId: row.id, creatorId, amount: opts.creatorLine });
+		await db
+			.insert(invoiceLines)
+			.values({ invoiceId: row.id, creatorId, amount: opts.creatorLine });
 	}
 	return row;
 }
@@ -366,7 +373,9 @@ describe("Admin close package", () => {
 		// The Time Pool books one line per funding — a supporter's pool is a pass-through
 		// against Badge revenue, a free account's is Anthers' own money spent.
 		const poolLines = pkg.entry.lines.filter(
-			(l) => l.event === "The Time Pool is distributed" && l.account === "Time Pool distributions (program)",
+			(l) =>
+				l.event === "The Time Pool is distributed" &&
+				l.account === "Time Pool distributions (program)",
 		);
 		expect(poolLines.map((l) => l.debit).sort()).toEqual(["0.25", "3.00"]);
 
@@ -380,8 +389,12 @@ describe("Admin close package", () => {
 		});
 
 		// The refund events, both halves.
-		expect(line(pkg, "A refund or chargeback", "Stripe clearing")).toMatchObject({ credit: "15.44" });
-		expect(line(pkg, "A refund or chargeback", "Sales tax payable")).toMatchObject({ debit: "2.56" });
+		expect(line(pkg, "A refund or chargeback", "Stripe clearing")).toMatchObject({
+			credit: "15.44",
+		});
+		expect(line(pkg, "A refund or chargeback", "Sales tax payable")).toMatchObject({
+			debit: "2.56",
+		});
 		// The purchase refund's sunk processing is an Anthers expense — debited at the
 		// refund event, distinct from the invoice-paid fee debit.
 		expect(
