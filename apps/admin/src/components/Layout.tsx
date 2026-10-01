@@ -43,6 +43,7 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 		items: [
 			{ to: "/books/sales-tax", label: "Sales-Tax Worksheet" },
 			{ to: "/books/sales-tax-forecast", label: "Sales-Tax Forecast" },
+			{ to: "/books/close-package", label: "Monthly Close Package" },
 		],
 	},
 	{
