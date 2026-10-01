@@ -99,6 +99,8 @@ export interface ClosePackageLine {
 	debit: string;
 	credit: string;
 	memo: string;
+	/** What separates genuinely different money under the same event and account. */
+	key?: string;
 	/** An event with no supporting rows yet — shown at zero, never invented, never exported. */
 	unbuilt?: boolean;
 }
@@ -506,6 +508,12 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		side: "debit" | "credit",
 		amount: Decimal,
 		memo: string,
+		/**
+		 * What separates this line from another under the same event and account when the
+		 * two are genuinely different money — the Time Pool's two fundings, whose memos
+		 * name different kinds of money and must never merge into one line.
+		 */
+		key?: string,
 	) => {
 		if (amount.isZero()) return;
 		lines.push({
@@ -514,6 +522,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 			debit: side === "debit" ? money(amount) : "0.00",
 			credit: side === "credit" ? money(amount) : "0.00",
 			memo,
+			key,
 		});
 	};
 
@@ -559,13 +568,17 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		.filter((g) => g.kind !== "support" && g.funded_by === "anthers")
 		.reduce((s, g) => s.plus(D(g.total)), ZERO);
 	push("The Time Pool is distributed", "Time Pool distributions (program)", "debit", poolSupporter,
-		"Time Pool and Stickers paid by time this month, from what supporters gave — a program-service expense against the Badge revenue that funded it.");
+		"Time Pool and Stickers paid by time this month, from what supporters gave — a program-service expense against the Badge revenue that funded it.",
+		"supporter");
 	push("The Time Pool is distributed", "Due to creators", "credit", poolSupporter,
-		"The pool's credits at settlement, from the supporters' own money.");
+		"The pool's credits at settlement, from the supporters' own money.",
+		"supporter");
 	push("The Time Pool is distributed", "Time Pool distributions (program)", "debit", poolAnthers,
-		"The free accounts' Time Pool — Anthers' own money spent on their behalf, a genuine program-service expense.");
+		"The free accounts' Time Pool — Anthers' own money spent on their behalf, a genuine program-service expense.",
+		"anthers");
 	push("The Time Pool is distributed", "Due to creators", "credit", poolAnthers,
-		"The free pool's credits at settlement, from Anthers' own funds.");
+		"The free pool's credits at settlement, from Anthers' own funds.",
+		"anthers");
 
 	// 4. A Work is purchased — Anthers' share only; the destination charge sent the
 	//    creator's share straight to the creator's own balance, so no liability arises.
@@ -636,11 +649,30 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		});
 	}
 
-	const totalDebits = lines.reduce((s, l) => s.plus(D(l.debit)), ZERO);
-	const totalCredits = lines.reduce((s, l) => s.plus(D(l.credit)), ZERO);
+	// The decision calls for "about eight lines a month": a summary entry, not a
+	// transaction-per-row ledger — so the same account under the same event merges into
+	// one line, with its memos combined. The schedules carry the per-row detail; the
+	// entry is what a person checks and posts.
+	const merged = new Map<string, ClosePackageLine>();
+	for (const line of lines) {
+		const key = `${line.event}||${line.account}||${line.key ?? ""}`;
+		const existing = merged.get(key);
+		if (!existing) {
+			merged.set(key, { ...line });
+			continue;
+		}
+		existing.debit = money(D(existing.debit).plus(D(line.debit)));
+		existing.credit = money(D(existing.credit).plus(D(line.credit)));
+		if (line.memo !== existing.memo) existing.memo = `${existing.memo} ${line.memo}`;
+	}
+
+	const entryLines = [...merged.values()].map(({ key, ...line }) => line);
+
+	const totalDebits = entryLines.reduce((s, l) => s.plus(D(l.debit)), ZERO);
+	const totalCredits = entryLines.reduce((s, l) => s.plus(D(l.credit)), ZERO);
 
 	// ── The reconciliation controls ────────────────────────────────────────────────
-	const clearingMovement = lines
+	const clearingMovement = entryLines
 		.filter((l) => l.account === "Stripe clearing" && !l.unbuilt)
 		.reduce((s, l) => s.plus(D(l.debit)).minus(D(l.credit)), ZERO);
 	const impliedClearing = D(invoiceImplied?.implied ?? 0).plus(D(purchaseImplied?.implied ?? 0));
@@ -663,7 +695,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 			period: { key: rawPeriod.trim(), label: period.label, cycle, settledAt },
 			empty,
 			entry: {
-				lines,
+				lines: entryLines,
 				totalDebits: money(totalDebits),
 				totalCredits: money(totalCredits),
 				balanced: money(totalDebits) === money(totalCredits),
