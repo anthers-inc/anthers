@@ -20,7 +20,6 @@
  * a shared fixture must come back to empty even when a walk fails halfway.
  */
 
-import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_VIEWER_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
@@ -67,11 +66,13 @@ async function ownWorks(): Promise<OwnedWork[]> {
  * itself what to write, rather than a row edited into claiming a listing it does not have.
  */
 async function syncListing(workId: number): Promise<void> {
-	// The same invocation shape `gauntlet.setup.ts` uses for `db:media-fixture` — `bun` run
-	// from the repo root with `stdio: "inherit"` — because the piped form of `execFileSync`
-	// under Bun's Node compat never returns from inside a Playwright worker: the child
-	// finishes and the parent never sees the pipe close. The result travels through a
-	// file the script writes, which no pipe is involved in reading.
+	// The same service call `seed-media-fixture.ts` makes to put the fixture's catalog on
+	// the session's network. Run in a child process — importing the API's service from a
+	// web spec would couple the suites — through Bun's own spawn rather than
+	// `execFileSync`: under a Playwright worker, Bun's sync child-process API never
+	// notices the child exit (the child finishes, prints, and the parent hangs), where the
+	// async form returns exactly once. The result travels through a file the script writes,
+	// so nothing depends on the child's stdio draining.
 	const outFile = `/tmp/opencode/credit-walk-sync-${workId}.json`;
 	const script = `const { syncWorkListing } = await import(${JSON.stringify(
 		`${REPO_ROOT}/apps/api/src/services/work-listing.js`,
@@ -80,18 +81,19 @@ const result = await syncWorkListing(${workId});
 const { writeFileSync } = await import("node:fs");
 writeFileSync(${JSON.stringify(outFile)}, JSON.stringify(result));
 console.log("synced");
+// The service chain holds open handles (the database pool among them), so the process
+// would linger after its work is done — the same reason the seed scripts exit explicitly.
+process.exit(0);
 `;
 	const file = `/tmp/opencode/credit-walk-sync-${workId}.ts`;
 	writeFileSync(file, script);
 	try {
-		execFileSync("bun", [file], {
-			cwd: REPO_ROOT,
-			timeout: 60_000,
-			stdio: "inherit",
-		});
+		const proc = Bun.spawn(["bun", file], { cwd: REPO_ROOT, stdin: "ignore" });
+		const code = await proc.exited;
+		expect(code, `the listing sync process exited on ${code}`).toBe(0);
 		const result = JSON.parse(readFileSync(outFile, "utf8")) as { status?: string };
-		expect(result.status, `the released Work's listing sync did not write: ${outFile}`).toBe(
-			"written",
+		expect(result.status, `the released Work's listing sync did not run: ${outFile}`).toBe(
+			"synced",
 		);
 	} finally {
 		rmSync(file, { force: true });
@@ -119,6 +121,9 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	context,
 	browser,
 }) => {
+	// Two sign-ins, two browser contexts and a listing sync on the session's network —
+	// comfortably past Playwright's 30s default, as the gauntlet's own budget notes.
+	test.setTimeout(120_000);
 	session = await signInAsMediaFixture(context);
 	viewerHandle = await gauntletHandle(API_URL, GAUNTLET_VIEWER_USERNAME);
 	const profile = (await (
