@@ -19,9 +19,9 @@
  */
 import { describe, expect, it } from "bun:test";
 import {
-	calendarDeadlines,
 	COMPLIANCE_OBLIGATIONS,
 	type ComplianceObligation,
+	calendarDeadlines,
 	obligationInstanceIn,
 	reminderLeadDays,
 } from "./compliance-calendar.js";
@@ -69,7 +69,9 @@ describe("COMPLIANCE_OBLIGATIONS — the Calendar's dated and annual tables", ()
 		expect(obligationInstanceIn(byId("charity-registration-renewal"), 2027).dueAt).toEqual(
 			at("2027-05-15T00:00:00Z"),
 		);
-		expect(obligationInstanceIn(byId("form-990-t"), 2027).dueAt).toEqual(at("2027-05-15T00:00:00Z"));
+		expect(obligationInstanceIn(byId("form-990-t"), 2027).dueAt).toEqual(
+			at("2027-05-15T00:00:00Z"),
+		);
 		// The window: June 1 opens it, October 31 closes it, and the deadline is the closing date.
 		const window = obligationInstanceIn(byId("periodic-report"), 2027);
 		expect(window.windowStart).toEqual(at("2027-06-01T00:00:00Z"));

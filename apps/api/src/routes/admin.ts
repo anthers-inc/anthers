@@ -33,13 +33,13 @@ import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
 import { closePackage } from "../services/close-package.js";
+import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import {
 	DEFERRED_DEADLINE_SOURCES,
 	gatherDeadlines,
 	isPastDue,
 	sortDeadlines,
 } from "../services/deadlines.js";
-import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
 	counterNoticeRestoreWindow,

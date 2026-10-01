@@ -40,7 +40,14 @@
 export type CalendarRecurrence =
 	| { kind: "fixed"; date: string }
 	| { kind: "annual"; first: string; month: number; day: number }
-	| { kind: "annual-window"; first: string; startMonth: number; startDay: number; endMonth: number; endDay: number };
+	| {
+			kind: "annual-window";
+			first: string;
+			startMonth: number;
+			startDay: number;
+			endMonth: number;
+			endDay: number;
+	  };
 
 /** One dated obligation, transcribed from the Calendar's tables. */
 export interface ComplianceObligation {
@@ -140,7 +147,8 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 		consequence:
 			"Real corporate tax if the storefront is unrelated business income — not hypothetical.",
 		terminal: false,
-		condition: "Only if there is unrelated business income — a flag to check rather than a date to assert.",
+		condition:
+			"Only if there is unrelated business income — a flag to check rather than a date to assert.",
 		recurrence: { kind: "annual", first: "2027-05-15", month: 5, day: 15 },
 	},
 	{

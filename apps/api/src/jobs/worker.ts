@@ -16,7 +16,6 @@ import {
 	deleteExpiredAdminSignInCodes,
 } from "../services/admin-accounts.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
-import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import {
 	finalizeNotice,
 	isNoticeStatusRefusal,
@@ -34,6 +33,7 @@ import { releaseStalePayoutHolds } from "../services/payouts.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
+import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
@@ -360,9 +360,7 @@ async function start() {
 			if (refused) {
 				console.warn(`[deadline-reminders] job ${job.id}: ${refused}`);
 			} else if (sent + skipped > 0) {
-				console.log(
-					`[deadline-reminders] job ${job.id}: sent ${sent}, already sent ${skipped}`,
-				);
+				console.log(`[deadline-reminders] job ${job.id}: sent ${sent}, already sent ${skipped}`);
 			}
 		}
 	});

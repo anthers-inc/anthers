@@ -31,7 +31,7 @@
 
 import { db } from "@anthers/db/client";
 import { dmcaNotices, legalHolds, rightsRequests } from "@anthers/db/schema";
-import { calendarDeadlines, type CalendarDeadline } from "@anthers/shared/compliance-calendar";
+import { type CalendarDeadline, calendarDeadlines } from "@anthers/shared/compliance-calendar";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
 /** Where a deadline came from. The calendar is the only source with terminal items. */
