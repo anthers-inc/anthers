@@ -31,7 +31,7 @@ import { QUEUES } from "../jobs/queue.js";
 import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
 import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
-import { parseFilingPeriod, salesTaxWorksheet } from "../services/books.js";
+import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
@@ -425,6 +425,14 @@ const adminRoutes = new Hono<AdminEnv>()
 			);
 		}
 		return c.json(await salesTaxWorksheet(period));
+	})
+
+	// The second Books tool: the threshold forecast. Each state's numbers come from
+	// the purchase rows cut to that state's own measurement window, and the
+	// support-renewal half is named as not-yet-countable in the response rather
+	// than silently missing — see services/books.ts for the boundary.
+	.get("/books/sales-tax-forecast", async (c) => {
+		return c.json(await salesTaxForecast());
 	})
 
 	// ── Data-rights requests ────────────────────────────────────────────────

@@ -35,6 +35,12 @@
  */
 
 import { db } from "@anthers/db/client";
+import {
+	earliestWindowStart,
+	STATE_THRESHOLDS,
+	thresholdFor,
+	windowFor,
+} from "@anthers/shared/sales-tax-thresholds";
 import { sql } from "drizzle-orm";
 
 /**
@@ -288,4 +294,253 @@ export async function salesTaxWorksheet(period: FilingPeriod): Promise<SalesTaxW
 		directFileCities,
 		notes: [...BOUNDARY_NOTES],
 	};
+}
+
+/**
+ * 🚨 **The forecast counts a refunded charge, unlike the worksheet above.** The worksheet is
+ * about money that still moves — a refunded charge's tax went back to the buyer, so remitting it
+ * would overpay. The forecast is about whether a threshold was *crossed*, and a refunded charge
+ * still crossed it when it was made: a state does not un-count a sale because the buyer returned
+ * it. So the forecast reads `completed` AND `refunded` rows, and the two tools disagree on
+ * purpose.
+ */
+const FORECAST_STATUSES = ["completed", "refunded"] as const;
+
+/** The status band a state sits in, by how close the nearest prong is. */
+export type ForecastStatus = "clear" | "approaching" | "crossed";
+
+/** At or above this fraction of either prong, a state reads "approaching" — the vendor-decision band. */
+export const APPROACHING_FRACTION = 0.7;
+
+/** One state's forecast row. */
+export interface StateForecast {
+	state: string;
+	name: string;
+	homeState: boolean;
+	noSalesTax: boolean;
+	/** The Playbook's unverified mark, carried to the screen. */
+	verified: boolean;
+	effectivelyAlwaysOn: boolean;
+	/** Dollars in this window, two-place string. */
+	dollars: string;
+	transactions: number;
+	dollarThreshold: number | null;
+	transactionThreshold: number | null;
+	relation: "or" | "and" | null;
+	/** Fraction of the dollar prong already reached, 0 when the prong does not exist. */
+	dollarFraction: number;
+	/** Fraction of the transaction prong already reached, 0 when the prong does not exist. */
+	transactionFraction: number;
+	/** `clear` / `approaching` (≥70% of either prong) / `crossed`. */
+	status: ForecastStatus;
+	/** Which prong fires first at the current run rate, or null where only one prong exists. */
+	firesFirst: "dollar" | "transactions" | null;
+	/**
+	 * The straight-line projection: where the window's dollars and transactions land if the
+	 * pace held, labeled as a projection rather than a prediction. Null where the window has
+	 * not opened yet (the prior-year states in January), where there is nothing to project
+	 * (no sales and no elapsed window), or where no threshold applies.
+	 */
+	projection: {
+		dollars: string;
+		transactions: number;
+		/** How far through the window `now` is, 0–1. */
+		elapsedFraction: number;
+	} | null;
+	/** The window these numbers are measured over — each state's own. */
+	window: { label: string; start: string; end: string } | null;
+	note: string | null;
+	/** One line from the Playbook: what crossing starts, on the state's own clock. */
+	crossingStarts: string | null;
+}
+
+/** What the forecast can and cannot count, carried to the screen verbatim. */
+const FORECAST_BOUNDARY_NOTES = [
+	"Support renewals are not yet counted by state: an invoice row records its tax but not the buyer's location, so renewal sales into a state are missing from these counts until the per-jurisdiction work lands. The Work-purchase half is complete; the renewal half joins it when invoice rows carry their jurisdiction.",
+	"Refunded purchases still count toward these thresholds — a charge crossed a threshold when it was made, and a refund does not un-count it. This is the forecast's opposite of the worksheet's rule, which excludes refunded tax because the money went back.",
+	"Whether a non-taxable transaction counts toward a transaction threshold varies by state; these counts are all facilitated charges, and the state's Department of Revenue settles a row before it is acted on.",
+	"Every figure is a straight-line projection of the current pace, not a prediction — it says where the window ends if nothing changes, which is the input to the Stripe Tax decision rather than a forecast of it.",
+	"The threshold table is research from secondary sources, and the rows marked unverified are flagged as such. A state's Department of Revenue settles any row before it is acted on.",
+] as const;
+
+/** The forecast response. */
+export interface SalesTaxForecast {
+	states: StateForecast[];
+	/** The boundary notes, carried to the screen like the worksheet's. */
+	notes: string[];
+	/** The moment the forecast was computed — every window resolves around it. */
+	asOf: string;
+}
+
+/**
+ * Which prong crosses first at the current run rate — the trajectory's own answer, since the
+ * transaction prong fires first at Anthers' ticket sizes and the operator needs to see that
+ * rather than infer it. Returns null where a prong does not exist or nothing has elapsed.
+ */
+function firesFirst(
+	dollars: number,
+	transactions: number,
+	row: { dollarThreshold: number | null; transactionThreshold: number | null },
+	projection: { dollars: number; transactions: number } | null,
+): "dollar" | "transactions" | null {
+	const thresholds: { prong: "dollar" | "transactions"; value: number }[] = [];
+	if (row.dollarThreshold !== null) thresholds.push({ prong: "dollar", value: row.dollarThreshold });
+	if (row.transactionThreshold !== null)
+		thresholds.push({ prong: "transactions", value: row.transactionThreshold });
+	if (thresholds.length < 2 || !projection) return thresholds.length === 1 ? thresholds[0].prong : null;
+	// Where each prong's projected end sits against its own threshold: the smaller overshoot is
+	// the one that fires first at this pace. A prong already over has "0 left" and fires first.
+	let best: { prong: "dollar" | "transactions"; left: number } | null = null;
+	for (const t of thresholds) {
+		const projected = t.prong === "dollar" ? projection.dollars : projection.transactions;
+		const left = (t.value - projected) / t.value;
+		if (!best || left < best.left) best = { prong: t.prong, left };
+	}
+	return best!.prong;
+}
+
+/**
+ * Assemble the threshold forecast. Sales are counted by the buyer's state against each state's
+ * own measurement window, so one fetch spans the widest window and each state's rows are cut
+ * to its own span. The base is combined facilitated sales — every creator's sales plus
+ * Anthers' own — which is what a facilitator threshold measures, so no per-creator cut is
+ * made anywhere in the count.
+ */
+export async function salesTaxForecast(now: Date = new Date()): Promise<SalesTaxForecast> {
+	// The one fetch: every purchase since the widest window opens, by buyer state and day.
+	const counts = rowsOf<{
+		state: string | null;
+		day: string;
+		purchases: number;
+		dollars: string;
+	}>(
+		await db.execute(sql`
+			SELECT
+				buyer_state AS state,
+				date_trunc('day', created_at)::text AS day,
+				count(*)::int AS purchases,
+				COALESCE(sum(amount), 0)::numeric(14, 2)::text AS dollars
+			FROM purchases
+			WHERE status IN ('completed', 'refunded')
+				AND buyer_state IS NOT NULL
+				AND created_at >= ${earliestWindowStart(now).toISOString()}::timestamptz
+				AND created_at <= ${now.toISOString()}::timestamptz
+			GROUP BY buyer_state, date_trunc('day', created_at)
+			ORDER BY buyer_state
+		`),
+	);
+
+	const states: StateForecast[] = STATE_THRESHOLDS.map((row) => {
+		const w = windowFor(row.state, now);
+		// The threshold states: nothing to count, and the row says why.
+		if (!w) {
+			return {
+				state: row.state,
+				name: row.name,
+				homeState: row.homeState ?? false,
+				noSalesTax: row.noSalesTax ?? false,
+				verified: row.verified,
+				effectivelyAlwaysOn: row.effectivelyAlwaysOn ?? false,
+				dollars: "0.00",
+				transactions: 0,
+				dollarThreshold: null,
+				transactionThreshold: null,
+				relation: null,
+				dollarFraction: 0,
+				transactionFraction: 0,
+				status: "clear" as const,
+				firesFirst: null,
+				projection: null,
+				window: null,
+				note: row.note,
+				crossingStarts: null,
+			};
+		}
+
+		// This state's rows: inside its own window only.
+		const start = w.start.getTime();
+		const end = w.end.getTime();
+		let dollars = 0;
+		let transactions = 0;
+		for (const r of counts) {
+			const t = new Date(`${r.day.slice(0, 10)}T00:00:00.000Z`).getTime();
+			if (r.state === row.state && t >= start && t < end) {
+				transactions += r.purchases;
+				dollars += Number(r.dollars);
+			}
+		}
+
+		const dollarFraction = row.dollarThreshold ? dollars / row.dollarThreshold : 0;
+		const transactionFraction = row.transactionThreshold
+			? transactions / row.transactionThreshold
+			: 0;
+		// The prong already crossed, under the row's own OR/AND relation. Under OR, either
+		// prong crossing crosses the threshold; under AND both are required.
+		const dollarOver = row.dollarThreshold !== null && dollars >= row.dollarThreshold;
+		const txOver = row.transactionThreshold !== null && transactions >= row.transactionThreshold;
+		const crossed =
+			row.relation === "and" ? dollarOver && txOver : row.relation === "or" ? dollarOver || txOver : dollarOver || txOver;
+
+		// The straight-line projection: where this window ends if the pace held. The elapsed
+		// portion is the whole window's span, not the time since the first sale.
+		const span = end - start;
+		const elapsed = Math.min(Math.max(now.getTime() - start, 0), span);
+		const elapsedFraction = span > 0 ? elapsed / span : 0;
+		const projected = (n: number) => (elapsedFraction > 0 ? n / elapsedFraction : n);
+		const projection =
+			row.dollarThreshold === null && row.transactionThreshold === null
+				? null
+				: elapsedFraction > 0
+					? {
+							dollars: projected(dollars).toFixed(2),
+							transactions: Math.floor(projected(transactions)),
+							elapsedFraction,
+						}
+					: null;
+
+		const approaching =
+			crossed ||
+			(row.dollarThreshold !== null && dollarFraction >= APPROACHING_FRACTION) ||
+			(row.transactionThreshold !== null && transactionFraction >= APPROACHING_FRACTION);
+
+		const first = firesFirst(
+			dollars,
+			transactions,
+			row,
+			projection ? { dollars: Number(projection.dollars), transactions: projection.transactions } : null,
+		);
+
+		return {
+			state: row.state,
+			name: row.name,
+			homeState: false,
+			noSalesTax: false,
+			verified: row.verified,
+			effectivelyAlwaysOn: row.effectivelyAlwaysOn ?? false,
+			dollars: dollars.toFixed(2),
+			transactions,
+			dollarThreshold: row.dollarThreshold,
+			transactionThreshold: row.transactionThreshold,
+			relation: row.relation,
+			dollarFraction: dollarOver ? Math.max(dollarFraction, 1) : dollarFraction,
+			transactionFraction: txOver ? Math.max(transactionFraction, 1) : transactionFraction,
+			status: crossed ? ("crossed" as const) : approaching ? ("approaching" as const) : ("clear" as const),
+			firesFirst: first,
+			projection,
+			window: { label: w.label, start: w.start.toISOString(), end: w.end.toISOString() },
+			note: row.note,
+			crossingStarts: crossed ? row.crossingStarts : null,
+		};
+	});
+
+	// Sorted by proximity to threshold, nearest on top: max fraction first, so the state
+	// nearest its line is what the operator reads first. Colorado and the no-tax states sink
+	// to the bottom in code order.
+	states.sort((a, b) => {
+		const proximity = (r: StateForecast) => Math.max(r.dollarFraction, r.transactionFraction);
+		if (proximity(b) !== proximity(a)) return proximity(b) - proximity(a);
+		return a.state.localeCompare(b.state);
+	});
+
+	return { states, notes: [...FORECAST_BOUNDARY_NOTES], asOf: now.toISOString() };
 }
