@@ -24,10 +24,10 @@ import { deadlineReminders, legalHolds, rightsRequests } from "@anthers/db/schem
 import { and, eq, like } from "drizzle-orm";
 import {
 	ARRIVAL_HORIZON_DAYS,
-	type DeadlineItem,
 	remindersDue,
 	runDeadlineReminderSweep,
 } from "../jobs/deadline-reminders.js";
+import type { DeadlineItem } from "../services/deadlines.js";
 import * as email from "../services/email.js";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
