@@ -9,5 +9,9 @@
 	"devDependencies": {
 		"sharp": "0.34.5",
 		"typescript": "^5.8.0"
+	},
+	"dependencies": {
+		"@anthers/db": "workspace:*",
+		"@anthers/shared": "workspace:*"
 	}
 }
