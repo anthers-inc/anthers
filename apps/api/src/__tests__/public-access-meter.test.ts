@@ -31,6 +31,7 @@ import {
 	transcodingJobs,
 	users,
 } from "@anthers/db/schema";
+import { cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import { and, eq, sql } from "drizzle-orm";
@@ -95,11 +96,17 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 
 /** Put `seconds` of Public Access on the clock for a viewer, this month. */
 async function spend(userId: number, seconds: number, publicAccess = true) {
-	// A range, matching the model: the interval just ended, running `seconds` long.
-	// Duration-only rows are pre-range history; a fixture that needs the split to see
-	// its spend has to record the window, which is all the meter reads.
-	const endedAt = new Date();
-	const startedAt = new Date(endedAt.getTime() - seconds * 1_000);
+	// A range, matching the model, anchored at the START of the current cycle rather than
+	// "just ended". The meter credits a range by splitting it against the calendar-month
+	// window, and a range ending now can credit at most the portion of the month that has
+	// elapsed — so for the first `seconds` of every UTC month the spend silently undercounted
+	// and the spent-allowance tests failed. Anchoring at the cycle start credits exactly
+	// `seconds` at any hour of any day. Duration-only rows are pre-range history; a fixture
+	// that needs the split to see its spend has to record the window, which is all the meter
+	// reads.
+	const endedAt = cycleStart(cycleKeyFor(new Date()));
+	endedAt.setUTCSeconds(endedAt.getUTCSeconds() + seconds);
+	const startedAt = cycleStart(cycleKeyFor(new Date()));
 	await db.insert(attentionEvents).values({
 		userId,
 		creatorId,
