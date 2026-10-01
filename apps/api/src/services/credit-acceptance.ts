@@ -17,8 +17,20 @@
  * decide nothing.
  */
 import { db } from "@anthers/db/client";
-import { creditAcceptances, creditRejections, users, type WorkCredit, works } from "@anthers/db/schema";
+import {
+	creditAcceptances,
+	creditRejections,
+	users,
+	type WorkCredit,
+	works,
+} from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import {
+	CREDIT_ACCEPTANCE_COLLECTION,
+	CREDIT_ACCEPTANCE_KIND,
+	carryOutPlan,
+	planRecord,
+} from "./atproto-record-plan.js";
 /**
  * Whether a credit's contributor string names an on-network identity.
  *
@@ -28,12 +40,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import { creditContributorIsDid } from "./atproto-records.js";
 import { isBlocked } from "./blocks.js";
 import { notify } from "./notifications.js";
-import {
-	CREDIT_ACCEPTANCE_COLLECTION,
-	CREDIT_ACCEPTANCE_KIND,
-	carryOutPlan,
-	planRecord,
-} from "./atproto-record-plan.js";
 import { writerForAccount } from "./repo-writer.js";
 import { queueWorkListingSync } from "./work-listing.js";
 

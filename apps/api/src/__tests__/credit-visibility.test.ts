@@ -106,7 +106,11 @@ beforeAll(async () => {
 
 describe("creditsForViewer", () => {
 	let overlayWork: Awaited<ReturnType<typeof insertWork>>;
-	const namedCredit: WorkCredit = { role: "Edited by", contributor: "An Editor", types: ["created"] };
+	const namedCredit: WorkCredit = {
+		role: "Edited by",
+		contributor: "An Editor",
+		types: ["created"],
+	};
 
 	beforeAll(async () => {
 		overlayWork = await insertWork({
@@ -157,9 +161,9 @@ describe("creditsForViewer", () => {
 	it("flags the same credit as awaiting through the owner shape", async () => {
 		const seen = await creditsForOwner(overlayWork);
 		expect(seen).toHaveLength(2);
-		expect(seen.find((c) => c.contributor === contributor.did)?.awaitingContributorConfirmation).toBe(
-			true,
-		);
+		expect(
+			seen.find((c) => c.contributor === contributor.did)?.awaitingContributorConfirmation,
+		).toBe(true);
 	});
 
 	it("resolves an accepted did-credit to the account's name for every viewer", async () => {
@@ -203,9 +207,7 @@ describe("creditsForViewer", () => {
 			.set({ displayName: "Contributor Display Name" })
 			.where(eq(users.id, contributor.userId));
 		const seen = await creditsForViewer(overlayWork, null);
-		expect(seen.find((c) => c.role === "Written by")?.contributor).toBe(
-			"Contributor Display Name",
-		);
+		expect(seen.find((c) => c.role === "Written by")?.contributor).toBe("Contributor Display Name");
 	});
 });
 
@@ -316,7 +318,12 @@ describe("notifyCreditedAccounts", () => {
 
 	it("notifies a newly did-credited person once, with the work-shaped dedupe key", async () => {
 		const work = await createWorkViaRoute(didCredits());
-		const rows = await creditNotifications(contributor.userId, contributor.did, work.id, "Written by");
+		const rows = await creditNotifications(
+			contributor.userId,
+			contributor.did,
+			work.id,
+			"Written by",
+		);
 		expect(rows).toHaveLength(1);
 		expect(rows[0].category).toBe("activity");
 		expect(rows[0].linkPath).toBe(`/works/${work.slug}-${work.publicId}`);
@@ -380,12 +387,14 @@ describe("notifyCreditedAccounts", () => {
 			);
 			expect(rows).toHaveLength(0);
 		} finally {
-			await db.delete(userBlocks).where(
-				and(
-					eq(userBlocks.blockerId, contributor.userId),
-					eq(userBlocks.blockedId, creator.userId),
-				),
-			);
+			await db
+				.delete(userBlocks)
+				.where(
+					and(
+						eq(userBlocks.blockerId, contributor.userId),
+						eq(userBlocks.blockedId, creator.userId),
+					),
+				);
 		}
 	});
 
