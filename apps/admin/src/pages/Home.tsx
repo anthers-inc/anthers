@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The admin app's home: what is waiting on somebody, then how the platform is growing.
+ * The admin app's home: what is owed on a date, what is waiting on somebody, then how the
+ * platform is growing.
  *
- * What is waiting comes first because it is what an operator opens the app for. Each count links to
- * the screen where it is dealt with, and each loads on its own, so one slow queue does not hold up
- * the rest.
+ * Deadlines come first because a missed one is the costliest thing on this page: every obligation
+ * with a due date, from the rights requests and DMCA windows in the database to the Compliance
+ * Calendar's filings, in one list — past due at the top, terminal misses marked. Below it, the
+ * queues of work waiting on somebody, then growth. Each section loads on its own, so one slow
+ * queue does not hold up the rest.
  */
 import { Link } from "react-router-dom";
 import {
@@ -26,6 +29,115 @@ interface Activity {
 	comments: { new24h: number; new7d: number };
 	uploads: { total: number };
 	series: { date: string; signups: number; posts: number }[];
+}
+
+interface DeadlineRow {
+	source: string;
+	key: string;
+	title: string;
+	dueAt: string;
+	windowStart: string | null;
+	pastDue: boolean;
+	terminal: boolean;
+	consequence: string;
+	actUrl: string | null;
+	note: string | null;
+	unconfirmed: boolean | null;
+	selfImposed: boolean | null;
+	condition: string | null;
+}
+
+interface DeadlinesResponse {
+	deadlines: DeadlineRow[];
+	deferred: { id: string; note: string }[];
+}
+
+/** Where a deadline came from, as a label. Title case — a label is copy and takes the rule. */
+const SOURCE_LABELS: Record<string, string> = {
+	"rights-request": "Rights Request",
+	"dmca-counter-notice": "DMCA Counter-Notice Window",
+	"dmca-restore": "DMCA Restore Window",
+	"legal-hold": "Legal Hold",
+	"compliance-calendar": "Compliance Calendar",
+};
+
+function deadlineDueLabel(row: DeadlineRow): string {
+	const due = new Date(row.dueAt).toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: "UTC",
+	});
+	if (!row.windowStart) return due;
+	const start = new Date(row.windowStart).toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: "UTC",
+	});
+	return `${start} → ${due}`;
+}
+
+function DeadlineRowCard({ row }: { row: DeadlineRow }) {
+	// Past due first and visually distinct — a missed deadline is owed more urgently than any
+	// future one, and the eye should find it without reading anything.
+	const body = (
+		<div
+			className={`rounded-box border bg-base-100 p-4 ${row.pastDue ? "border-error" : "border-base-300"}`}
+		>
+			<div className="flex items-start justify-between gap-3">
+				<div>
+					<div className="text-xs uppercase tracking-wide text-base-content/50">
+						{SOURCE_LABELS[row.source] ?? row.source}
+					</div>
+					<div className="mt-1 font-semibold">{row.title}</div>
+				</div>
+				<div className="flex shrink-0 items-center gap-1.5">
+					{row.terminal && (
+						<span
+							className="badge badge-error badge-outline"
+							title="A miss here is terminal — it ends in dissolution, lost safe harbor or revocation."
+						>
+							Terminal Miss
+						</span>
+					)}
+					{row.unconfirmed && (
+						<span className="badge badge-warning badge-outline">Unconfirmed Text</span>
+					)}
+					{row.selfImposed && <span className="badge badge-ghost">Self-Imposed</span>}
+					{row.pastDue && <span className="badge badge-error">Past Due</span>}
+				</div>
+			</div>
+			<div className="mt-2 text-sm">
+				{row.pastDue ? (
+					<span className="font-semibold text-error">Was due {deadlineDueLabel(row)}</span>
+				) : (
+					<span>Due {deadlineDueLabel(row)}</span>
+				)}
+				{row.condition && <span className="text-base-content/60"> — {row.condition}</span>}
+			</div>
+			<div className="mt-1.5 text-sm text-base-content/70">{row.consequence}</div>
+			{row.actUrl ? (
+				<div className="mt-2 text-sm">
+					<span className="text-base-content/60">Act on it: </span>
+					<span className="text-primary">{row.actUrl}</span>
+				</div>
+			) : (
+				// An honest absent rather than an invented route: there is no admin screen for a
+				// filing yet, and a link to nothing is a reference nobody can follow.
+				<div className="mt-2 text-sm text-base-content/60">
+					There is no admin screen for this yet — it is handled wherever the filing is made.
+				</div>
+			)}
+		</div>
+	);
+	return row.actUrl ? (
+		<Link to={row.actUrl} className="block transition-opacity hover:opacity-80">
+			{body}
+		</Link>
+	) : (
+		body
+	);
 }
 
 function AttentionCard({
@@ -67,9 +179,13 @@ export default function Home() {
 	const dmca = useAdminData<{
 		summary: { received: number; counterNoticed: number };
 	}>("/api/admin/dmca");
+	const deadlines = useAdminData<DeadlinesResponse>("/api/admin/deadlines");
 
 	const a = activity.data;
 	const dmcaOpen = dmca.data ? dmca.data.summary.received + dmca.data.summary.counterNoticed : null;
+	const pastDueCount = deadlines.data
+		? deadlines.data.deadlines.filter((d) => d.pastDue).length
+		: 0;
 
 	return (
 		<div>
@@ -77,6 +193,33 @@ export default function Home() {
 				title="Home"
 				description="What is waiting on somebody, and how the platform is growing."
 			/>
+
+			{/* Everything with a due date, from every source — the list half of the decision that
+			    anything with a deadline reaches the operator by email and is acted on in the app.
+			    Past-due items sit at the top and carry the error border; the endpoint has already
+			    sorted them. */}
+			<section className="mb-10">
+				<SectionHeading>
+					Deadlines
+					{pastDueCount > 0 && (
+						<span className="ml-2 badge badge-error">{pastDueCount} past due</span>
+					)}
+				</SectionHeading>
+				{deadlines.error && <ErrorAlert>{deadlines.error}</ErrorAlert>}
+				{!deadlines.data ? (
+					deadlines.error ? null : (
+						<Loading />
+					)
+				) : deadlines.data.deadlines.length === 0 ? (
+					<p className="text-sm text-base-content/60">Nothing with a due date is open right now.</p>
+				) : (
+					<div className="grid gap-3">
+						{deadlines.data.deadlines.map((row) => (
+							<DeadlineRowCard key={row.key} row={row} />
+						))}
+					</div>
+				)}
+			</section>
 
 			<section className="mb-10">
 				<SectionHeading>Needs Attention</SectionHeading>

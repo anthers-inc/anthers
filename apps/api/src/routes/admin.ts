@@ -34,6 +34,12 @@ import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
 import { closePackage } from "../services/close-package.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
+import {
+	DEFERRED_DEADLINE_SOURCES,
+	gatherDeadlines,
+	isPastDue,
+	sortDeadlines,
+} from "../services/deadlines.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
 	counterNoticeRestoreWindow,
@@ -444,6 +450,36 @@ const adminRoutes = new Hono<AdminEnv>()
 		const result = await closePackage(c.req.query("period") ?? "");
 		if (!result.ok) return c.json({ error: result.error, code: result.code }, 400);
 		return c.json(result.package);
+	})
+
+	// ── Deadlines ────────────────────────────────────────────────────────────
+	// Everything with a due date, from every source — the admin home half of the 2026-09-14
+	// decision. The worker emails the operator about these; this endpoint is where the whole
+	// list is visible rather than only the ones a screen already shows. The deferred sources
+	// ride along in the response, so the list's absences are named rather than silent: three
+	// kinds of deadline join once their mechanisms exist, and the operator should be able to
+	// see that they are coming rather than trust an empty list.
+	.get("/deadlines", async (c) => {
+		const now = new Date();
+		const items = sortDeadlines(await gatherDeadlines(now), now);
+		return c.json({
+			deadlines: items.map((item) => ({
+				source: item.source,
+				key: item.key,
+				title: item.title,
+				dueAt: item.dueAt.toISOString(),
+				windowStart: item.windowStart?.toISOString() ?? null,
+				pastDue: isPastDue(item, now),
+				terminal: item.terminal,
+				consequence: item.consequence,
+				actUrl: item.actUrl,
+				note: item.note,
+				unconfirmed: item.unconfirmed ?? null,
+				selfImposed: item.selfImposed ?? null,
+				condition: item.condition ?? null,
+			})),
+			deferred: DEFERRED_DEADLINE_SOURCES,
+		});
 	})
 
 	// ── Data-rights requests ────────────────────────────────────────────────

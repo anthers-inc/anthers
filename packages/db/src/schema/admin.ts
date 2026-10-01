@@ -27,6 +27,7 @@ import {
 	serial,
 	text,
 	timestamp,
+	uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // org — the people who run the platform. Not a creator's own identity and never on a node.
@@ -135,4 +136,53 @@ export const adminSignInCodes = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [index("idx_admin_sign_in_codes_expires").on(table.expiresAt)],
+);
+
+/**
+ * The record that a deadline reminder reached the operator — the deadline system's dedupe and its
+ * evidence in one table.
+ *
+ * The 2026-09-14 decision is that anything with a deadline reaches the operator by email and is
+ * acted on in the admin app. The email is only half of that promise; this table is the other half.
+ * Its shape follows the `notifications` table's `dedupeKey` reasoning rather than borrowing the
+ * table itself, for two reasons:
+ *
+ * 1. **The recipient is not a `users` row.** Every deadline reminder goes to the operator's
+ *    address (`OPERATOR_EMAIL`), and the operator is an email identity configured per deployment,
+ *    not an account — a `users.id` column would be a guess at who was told, which is the exact
+ *    opposite of what a record of telling somebody is for.
+ * 2. **A sweep re-evaluates the same rows every day.** Without the unique key the daily job would
+ *    mail the operator again every run for the same deadline; the key is caller-supplied and
+ *    natural (`deadline:<source>:<id>[:<instance>]:<kind>`) rather than a body hash, because the
+ *    body is copy and copy gets edited.
+ *
+ * A row is written BEFORE the email goes out, so a crash between the two produces a lost reminder
+ * rather than a duplicate one — the safe direction to fail in, since a duplicate deadline email
+ * costs attention and a lost one costs the filing. `sentAt` stays null when the provider refused,
+ * which makes an unsent reminder visible in the data rather than indistinguishable from a sent one.
+ */
+// org — the operator is the organization, and the record that a deadline reached them is the
+// evidence half of a compliance promise. A creator node has no deadlines of this kind.
+export const deadlineReminders = pgTable(
+	"deadline_reminders",
+	{
+		id: serial("id").primaryKey(),
+		/** Caller-supplied natural key: `deadline:<source>:<id>[:<instance>]:<kind>`. */
+		dedupeKey: text("dedupe_key").notNull(),
+		/** Which source the item came from — `rights-request`, `dmca-counter-notice`, and so on. */
+		source: text("source").notNull(),
+		/** What the reminder was about, as the operator read it in the email. */
+		title: text("title").notNull(),
+		/** `arrival` or `before-due-<lead>` — the two kinds the decision names. */
+		kind: text("kind").notNull(),
+		/** The email the reminder was addressed to, so a reconfigured operator is auditable. */
+		recipient: text("recipient").notNull(),
+		/** Set when the provider accepted the email; null when it did not, whatever the reason. */
+		sentAt: timestamp("sent_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_deadline_reminders_dedupe").on(table.dedupeKey),
+		index("idx_deadline_reminders_created").on(table.createdAt),
+	],
 );

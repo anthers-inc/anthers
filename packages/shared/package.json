@@ -30,7 +30,8 @@
 		"./studio-panels": "./src/studio-panels.ts",
 		"./organization": "./src/organization.ts",
 		"./tax-codes": "./src/tax-codes.ts",
-		"./sales-tax-thresholds": "./src/sales-tax-thresholds.ts"
+		"./sales-tax-thresholds": "./src/sales-tax-thresholds.ts",
+		"./compliance-calendar": "./src/compliance-calendar.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

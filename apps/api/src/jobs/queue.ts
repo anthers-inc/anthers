@@ -273,6 +273,10 @@ export const QUEUES = {
 	// ⭐ It is in the HUB's worker rather than beside the server it watches, which is the
 	// only arrangement where the alarm survives the compromise it describes.
 	WATCH_IDENTITIES: "watch-identities",
+	// Email the operator when a deadline item arrives and again before it is due — the worker
+	// half of the 2026-09-14 decision. Deduped per item+kind through `deadline_reminders`, so
+	// a daily re-gather of the same rows never mails twice.
+	DEADLINE_REMINDERS: "deadline-reminders",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -361,6 +365,13 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	[QUEUES.WATCH_IDENTITIES]: {
 		retryLimit: 1,
 		expireInMinutes: 15,
+	},
+	// Safe to retry and safe to run twice: each reminder is claimed through the unique
+	// `dedupeKey` before its email goes out, so a retry after a partial failure re-selects
+	// only the pairs it never claimed and cannot double-send one it did.
+	[QUEUES.DEADLINE_REMINDERS]: {
+		retryLimit: 2,
+		expireInMinutes: 30,
 	},
 };
 
@@ -452,4 +463,10 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// until 3 the next morning. Nothing is waiting on a person, so it is hourly rather
 	// than five-minutely.
 	[QUEUES.RESCAN_OWED, "20 * * * *"],
+	// 6:45 AM daily, after the night's other sweeps and off the shared marks. Daily is
+	// enough because the nearest deadline any source carries is days out, not hours — a
+	// 30-day rights request, a 10-business-day counter-notice window, a calendar of
+	// filings months apart — so a sweep that runs once a day delivers each reminder within
+	// a day of the moment it becomes due, inside every window's tolerance.
+	[QUEUES.DEADLINE_REMINDERS, "45 6 * * *"],
 ] as const;

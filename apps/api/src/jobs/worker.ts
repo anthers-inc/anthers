@@ -33,6 +33,7 @@ import { releaseStalePayoutHolds } from "../services/payouts.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
+import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
@@ -346,6 +347,21 @@ async function start() {
 		for (const job of jobs) {
 			const sent = await rescanOwed();
 			if (sent > 0) console.log(`[rescan-owed] job ${job.id}: re-queued ${sent} scan(s)`);
+		}
+	});
+
+	// Email the operator when a deadline arrives and before it is due. Quiet when everything
+	// was already sent, for the same reason the other sweeps are quiet: a daily "0 reminders"
+	// line makes the worker log unreadable, and the one log that must stay readable is the one
+	// a person reads to find out what they owe.
+	await queue.work(QUEUES.DEADLINE_REMINDERS, async (jobs) => {
+		for (const job of jobs) {
+			const { sent, skipped, refused } = await runDeadlineReminderSweep();
+			if (refused) {
+				console.warn(`[deadline-reminders] job ${job.id}: ${refused}`);
+			} else if (sent + skipped > 0) {
+				console.log(`[deadline-reminders] job ${job.id}: sent ${sent}, already sent ${skipped}`);
+			}
 		}
 	});
 
