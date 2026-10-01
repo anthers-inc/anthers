@@ -40,7 +40,10 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 	{ title: "Infrastructure", items: [{ to: "/infrastructure", label: "Jobs and Services" }] },
 	{
 		title: "Books",
-		items: [{ to: "/books/sales-tax", label: "Sales-Tax Worksheet" }],
+		items: [
+			{ to: "/books/sales-tax", label: "Sales-Tax Worksheet" },
+			{ to: "/books/sales-tax-forecast", label: "Sales-Tax Forecast" },
+		],
 	},
 	{
 		title: "Accounts",
