@@ -32,6 +32,7 @@ import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware
 import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
+import { closePackage } from "../services/close-package.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
@@ -433,6 +434,16 @@ const adminRoutes = new Hono<AdminEnv>()
 	// than silently missing — see services/books.ts for the boundary.
 	.get("/books/sales-tax-forecast", async (c) => {
 		return c.json(await salesTaxForecast());
+	})
+
+	// The third Books tool: the monthly close package. One settled month's journal
+	// entry, the schedules behind it, and the two reconciliation controls — a
+	// person posts the export into QuickBooks Online by hand; nothing writes to
+	// any API. An unsettled month is refused rather than estimated.
+	.get("/books/close-package", async (c) => {
+		const result = await closePackage(c.req.query("period") ?? "");
+		if (!result.ok) return c.json({ error: result.error, code: result.code }, 400);
+		return c.json(result.package);
 	})
 
 	// ── Data-rights requests ────────────────────────────────────────────────

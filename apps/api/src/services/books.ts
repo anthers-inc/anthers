@@ -165,8 +165,9 @@ export interface SalesTaxWorksheet {
 }
 
 // postgres-js returns the rows array directly from db.execute(); other drivers wrap
-// them in { rows }. Normalized so this is driver-agnostic, the same as admin.ts's `rowsOf`.
-function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
+// them in { rows }. Normalized so this is driver-agnostic. Exported because the close
+// package (`services/close-package.ts`) reads raw SQL the same way.
+export function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
 	if (Array.isArray(res)) return res as T[];
 	const maybe = (res as { rows?: T[] } | null)?.rows;
 	return Array.isArray(maybe) ? maybe : [];
