@@ -163,11 +163,18 @@ async function main(): Promise<void> {
 			// that shape rather than writing one enormous row — and lay them END TO END,
 			// not overlapping: the meter reads ranges through the cross-tab split, so a
 			// stack of identical windows would be divided by the row count and the
-			// fixture would under-spend by exactly that factor. Consecutive ranges ending
-			// now, walking backwards, credit in full.
+			// fixture would under-spend by exactly that factor.
+			//
+			// 🚨 The walk ends at the START of the current cycle, never "now". The meter
+			// credits a range only inside the calendar month, and a walk ending now runs
+			// past the cycle start whenever the month is younger than the walk is long —
+			// so for the first `watchedMinutes` of every UTC month the fixture silently
+			// under-spent (570 minutes at 03:00 on the 1st credited about 180) and the
+			// near-the-limit rungs failed. Walking back from the cycle start spends the
+			// full amount at any hour of any day.
 			const CHUNK = 600;
 			let left = watchedMinutes * 60;
-			let end = Date.now();
+			let end = new Date(`${currentBillingCycle()}T00:00:00.000Z`).getTime();
 			const rows: (typeof attentionEvents.$inferInsert)[] = [];
 			while (left > 0) {
 				const durationSeconds = Math.min(CHUNK, left);
