@@ -183,6 +183,9 @@
     "scripts": {
       "name": "@anthers/scripts",
       "version": "0.0.0",
+      "dependencies": {
+        "@anthers/shared": "workspace:*",
+      },
       "devDependencies": {
         "sharp": "0.34.5",
         "typescript": "^5.8.0",
