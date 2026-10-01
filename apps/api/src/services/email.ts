@@ -571,3 +571,43 @@ export async function sendOperationalAlert(args: {
 	}
 	return sendEmail({ to, subject: args.subject, html: args.html });
 }
+
+// ─── What the operator is told about a deadline ──────────────────────────────
+
+/**
+ * One deadline reminder, addressed to whoever operates Anthers.
+ *
+ * ⚠️ **The recipient is configuration and there is no default**, for the same reason
+ * `sendOperationalAlert` refuses to guess at a mailbox: the operator's address is a fact about
+ * the deployment, and a reminder delivered to a bouncing address is indistinguishable from no
+ * reminder at all. Unset, this logs loudly and reports that it did not send — the sweep records
+ * nothing on top of that, so the missed reminder stays visible in the log rather than being
+ * papered over by a row that says it went.
+ *
+ * ⭐ **One email per reminder, never a digest** — the decision is that a deadline reaches the
+ * operator by email, and a digest of five deadlines is one email the operator skims, not five
+ * things each of which is actionable alone.
+ */
+export async function sendDeadlineReminderEmail(args: {
+	to: string;
+	subject: string;
+	html: string;
+}): Promise<SendResult> {
+	return sendEmail({ to: args.to, subject: args.subject, html: args.html });
+}
+
+/**
+ * The line every terminal-item reminder carries: the Calendar's own rule that one channel is not
+ * redundancy, said plainly so this email never claims to be the second leg.
+ *
+ * The Calendar names the SOS and Copyright Office's own notification emails as the genuinely
+ * independent leg — two channels that live on the same laptop are one channel with two copies —
+ * so the reminder's job is to be one leg and to point at the other.
+ */
+export function terminalSecondLegLine(): string {
+	return (
+		"An item whose miss ends the organization gets two reminders from Anthers, and this is one of them. " +
+		"The other, genuinely independent leg is the Colorado Secretary of State's and the Copyright Office's own " +
+		"notification emails — make sure those reach a mailbox somebody reads."
+	);
+}

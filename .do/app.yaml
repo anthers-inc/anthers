@@ -458,6 +458,13 @@ workers:
       - key: OPS_ALERT_EMAIL
         scope: RUN_TIME
         value: admin@anthers.org
+      # Where deadline reminders go — the operator's own mailbox, per the 2026-09-14 decision
+      # that anything with a deadline reaches the operator by email. Unset, the daily
+      # deadline-reminders sweep logs one warning and sends nothing rather than guessing at an
+      # address, which is the same refusal discipline the operational alerts above carry.
+      - key: OPERATOR_EMAIL
+        scope: RUN_TIME
+        value: parker@anthers.org
 
 jobs:
   - name: migrate
