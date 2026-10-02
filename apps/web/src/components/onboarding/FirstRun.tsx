@@ -11,9 +11,9 @@
  * 2026-08-12). Three people reach this page having been asked completely different
  * things, and one message hedged to fit all of them fits none:
  *
- *   • **supporting** — came through `/subscribe` and gave. Telling them to "set up
+ *   • **supporting** — came through `/signup` and gave. Telling them to "set up
  *     your support" is telling them to do what they just did.
- *   • **free** — came through `/subscribe` and took the free account. They have already
+ *   • **free** — came through `/signup` and took the free account. They have already
  *     declined once, and asking again ninety seconds later is how a funnel becomes a nag.
  *   • **cold** — came through the classic signup page and was never asked anything.
  *
@@ -32,13 +32,13 @@ import { Link } from "@anthers/web-shared/router";
 
 const serif = { fontFamily: FONTS.fraunces };
 
-/** Where `/subscribe` leaves what the visitor chose. Must match `PICKS_KEY` there. */
-const PICKS_KEY = "anthers_subscribe_picks";
+/** Where `/signup` leaves what the visitor chose. Must match `PICKS_KEY` there. */
+const PICKS_KEY = "anthers_signup_picks";
 
 /**
  * How this account arrived.
  *
- * Read from the picks `/subscribe` left rather than from the server, and the reason is
+ * Read from the picks `/signup` left rather than from the server, and the reason is
  * timing: **what a user gives is applied by a Stripe webhook**, so an account that has just
  * paid may still read `anthersSupport: 0` for a moment. Branching on server truth would
  * greet someone who just paid with the free-tier message — the single worst outcome
@@ -186,7 +186,7 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 			<p className="mt-3 text-base leading-relaxed text-base-content/70">
 				When you want to go further, it's ${PUBLIC_ACCESS_PRICE} a month, pointed at Anthers or
 				straight at a creator.{" "}
-				<Link to="/subscribe" className="link link-primary">
+				<Link to="/signup" className="link link-primary">
 					How support works
 				</Link>
 			</p>

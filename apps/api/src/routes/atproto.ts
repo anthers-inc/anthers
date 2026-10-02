@@ -417,7 +417,7 @@ const atprotoRoutes = new Hono()
 				// 🚨 A DID nobody has linked and no signup in progress, reached through the
 				// sign-in door. This is a signup and the sign-in door cannot perform one — it
 				// asked for identity only, so it holds no address and could not create an
-				// account it can mail. `/subscribe` is where signing up happens, exactly as it
+				// account it can mail. `/signup` is where signing up happens, exactly as it
 				// is for everyone else.
 				return fail("signup_disabled");
 			}
@@ -426,7 +426,7 @@ const atprotoRoutes = new Hono()
 				// ── Signup ───────────────────────────────────────────────────
 				// 🚨 **A signup NEVER completes here, whatever the PDS said.** The identity is
 				// proved and parked, and the address is confirmed by our own emailed code on
-				// `/subscribe` before any account exists.
+				// `/signup` before any account exists.
 				//
 				// This branch used to short-circuit when the PDS reported `emailConfirmed: true`,
 				// creating the account outright and skipping our verification. That trusted the
@@ -447,7 +447,7 @@ const atprotoRoutes = new Hono()
 				// address rides along as a prefill; the code is what makes it true.
 				//
 				// ⚠️ **The identity lands on the pending signup this browser already started at
-				// `/subscribe`**, rather than starting a fresh one — that row is holding the
+				// `/signup`**, rather than starting a fresh one — that row is holding the
 				// choices somebody made before they left, and dropping them here is precisely
 				// the "sign up again, with no sign anything succeeded" that this flow exists to
 				// fix. `bindIdentityToPending` starts one only when there is nothing to add to.

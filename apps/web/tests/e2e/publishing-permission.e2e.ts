@@ -61,7 +61,7 @@ async function signUpWithBluesky(
 	expect(created.status).toBe(200);
 	const { did } = (await created.json()) as { did: string };
 
-	await page.goto(`${ORIGIN}/subscribe`);
+	await page.goto(`${ORIGIN}/signup`);
 	const card = page.locator('[data-signup="top"]');
 	await card.getByRole("tab", { name: "Bluesky", exact: true }).click();
 	await card.getByLabel("Bluesky handle").fill(handle);

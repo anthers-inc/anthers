@@ -12,7 +12,7 @@
  * trip) and one they are asking Anthers to issue (a handle on `anthers.social`). The address is
  * proved on both, by a code Anthers sends, but it is never the identity.
  *
- * **What a pending signup is for.** `/subscribe` is where a visitor makes their choices;
+ * **What a pending signup is for.** `/signup` is where a visitor makes their choices;
  * pressing the button writes them here and takes the person off that page to one whose only
  * job is finishing. Two things follow from writing the row at that moment rather than at the
  * end. The next thing asked of somebody is the only thing in front of them, rather than a
@@ -32,7 +32,7 @@
  * 🚨 **The pre-account state lives here rather than on `users`, and the hazard decides
  * that.** `users.email` is `NOT NULL UNIQUE`, so a pending row on `users` would claim an
  * address before anybody had proved they could read it — type a stranger's address into
- * `/subscribe` and its real owner cannot sign up until the row expires. That is a new
+ * `/signup` and its real owner cannot sign up until the row expires. That is a new
  * hazard rather than an existing one, since today's pre-account claim lives in
  * `signup_codes`, a row that expires on its own and mints nothing. This table is the same
  * shape, for the same reason.
@@ -280,7 +280,7 @@ export function picksOf(row: PendingSignup): SignupPicks {
  *
  * ⚠️ **The address the PDS gave us lands here as a prefill and never as proof.** It is
  * written only when the row has none of its own: a person who typed an address at
- * `/subscribe` and then connected Bluesky meant the one they typed.
+ * `/signup` and then connected Bluesky meant the one they typed.
  */
 export async function bindIdentityToPending(
 	token: string | undefined,

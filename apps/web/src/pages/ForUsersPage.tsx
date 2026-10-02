@@ -95,11 +95,11 @@ export default function ForUsersPage() {
 					</Reveal>
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
-							{/* 🚨 /subscribe is the one signup door, so this button goes nowhere else. It is
+							{/* 🚨 /signup is the one signup door, so this button goes nowhere else. It is
 							    where a reader picks a handle or brings their Bluesky identity, and it puts the
 							    creator picker in front of a new account, which is the thing this page leads
 							    with. The sentence below has to stay true of what that page asks for. */}
-							<Link to="/subscribe" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
+							<Link to="/signup" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
 								Start Exploring
 							</Link>
 						</div>
@@ -384,8 +384,8 @@ export default function ForUsersPage() {
 							month, free forever. No ads, no data brokers, nothing to cancel.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
-							{/* /subscribe for the same reason as the hero CTA — see the note there. */}
-							<Link to="/subscribe" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
+							{/* /signup for the same reason as the hero CTA — see the note there. */}
+							<Link to="/signup" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
 								Start Exploring
 							</Link>
 						</div>

@@ -5,7 +5,7 @@
 // This is the gate half of `scripts/mobile-overflow.ts`, which found all seven
 // overflowing routes fixed in PR #168 and was then wired into nothing at all — no
 // Makefile target, no CI job, no script entry. The fix held by luck rather than by
-// coverage: `SubscribePage` was rebuilt wholesale in PR #223 afterwards with nothing
+// coverage: `SignupPage` was rebuilt wholesale in PR #223 afterwards with nothing
 // watching it. Living here rather than in a Makefile step means `make verify` and CI's
 // `browser` job both run it without either being told to.
 //

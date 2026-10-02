@@ -24,7 +24,7 @@ export interface SubscriptionPreview {
 interface Props {
 	/**
 	 * ⚠️ **Dollars a month, not a count.** It is `number` either way, so a caller passing a
-	 * count typechecks and bills the wrong amount — which `/subscribe` did between the Seed
+	 * count typechecks and bills the wrong amount — which `/signup` did between the Seed
 	 * retirement and 2026-08-16, subscribing people at $1.
 	 */
 	anthersSupport: number;
@@ -103,7 +103,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 	 * This modal is the only place that holds both: `preview.recurring.amount`, which is
 	 * what the user has just read, and `anthersSupport + directed`, which is what the POST
 	 * will bill. They are derived independently by the caller, and on 2026-08-16
-	 * `/subscribe` derived them **differently** — quoting $9 and charging $1 — with nothing
+	 * `/signup` derived them **differently** — quoting $9 and charging $1 — with nothing
 	 * between the discrepancy and the card.
 	 *
 	 * ⚠️ Honest about what it is: `recurring.amount` echoes the amount the client asked

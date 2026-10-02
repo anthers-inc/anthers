@@ -186,7 +186,7 @@ export interface BadgeView {
 
 /**
  * The rung ladder as view models, low → high (free … blossom). Pure and static —
- * derived from the dials, no per-user data — so the Subscribe page, the
+ * derived from the dials, no per-user data — so the signup page, the
  * `/subscriptions/badges` route, and inline-unlock all render the same numbers and
  * can't drift. "Supports Anthers" is the remainder — what is left of the charge
  * after the Time Pool, funding free access and the charitable programs.

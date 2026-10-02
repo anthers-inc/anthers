@@ -6,7 +6,7 @@
  * 🚨 **It links to the one signup door rather than signing anybody up in place** (Parker,
  * 2026-09-13). Every account is an ATProto identity, so an account needs a handle chosen or a
  * Bluesky identity proved before it can exist, and a second copy of that ceremony under a video
- * would be a second place that mints accounts. `/subscribe` asks for nothing more than that —
+ * would be a second place that mints accounts. `/signup` asks for nothing more than that —
  * the support ladder on it is an offer, not a step — and `next` brings the person straight back
  * to this Work once they have finished, signed in and watching on their own allowance.
  *
@@ -38,7 +38,7 @@ export default function SharedWorkBanner({
 			{/* The share token stays out of `next`: a signed-in reader watches on their own
 			    allowance, which is the point of making the account. */}
 			<Link
-				to={withNextPath("/subscribe", location.pathname)}
+				to={withNextPath("/signup", location.pathname)}
 				className="btn btn-primary btn-sm mt-3"
 			>
 				Create a Free Account

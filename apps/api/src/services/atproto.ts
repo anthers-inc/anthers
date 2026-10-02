@@ -516,7 +516,7 @@ export interface PdsEmail {
  * Ask the PDS for the account's email address, to save somebody typing it.
  *
  * ⚠️ **This is a convenience and never evidence.** Whatever comes back becomes a prefill on
- * `/subscribe`, and the emailed code is what makes it true — see `confirmed` above for the
+ * `/signup`, and the emailed code is what makes it true — see `confirmed` above for the
  * shortcut this used to have and why it is gone.
  *
  * ⭐ **The granted scope is read from the token rather than assumed from the request.**

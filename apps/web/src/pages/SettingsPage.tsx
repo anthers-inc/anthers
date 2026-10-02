@@ -1751,7 +1751,7 @@ export default function SettingsPage() {
  * ⭐ **Listed by default, and this is the control the promise points at** (Parker,
  * 2026-09-04). The wiki offers "a place on the supporters page, if you want one", and an
  * opt-out default keeps that promise only when the person was told at the moment they
- * started supporting *and* can find the switch afterwards. `/subscribe` does the telling;
+ * started supporting *and* can find the switch afterwards. `/signup` does the telling;
  * this is the finding.
  *
  * ⚠️ **Renders nothing for somebody who has never supported.** A switch controlling whether

@@ -4,7 +4,7 @@
 //
 // 🚨 **These answers became four surfaces on 2026-08-28, and that is what earns them a
 // test.** While the FAQ was one page, a wrong answer was one wrong page. It now renders on
-// the homepage, /for-creators, /subscribe and /faq, so a claim that goes stale here goes
+// the homepage, /for-creators, /signup and /faq, so a claim that goes stale here goes
 // stale on the four pages a visitor is most likely to read — and unlike the marketing
 // prose around it, this copy is a long way from the section that would contradict it.
 //

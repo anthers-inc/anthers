@@ -4,8 +4,8 @@
  *
  * 🚨 **Its whole reason for existing is legibility, so legibility is what this spec pins.**
  * Parker walked the Bluesky signup on 2026-08-25 and could not tell whether it had worked:
- * `/subscribe` sent him to bsky.social, brought him back to `/subscribe`, and apparently
- * asked him to sign up again. Coming back to finish is the design — an address a PDS calls
+ * `/subscribe` (the signup page's name until 2026-10-02) sent him to bsky.social, brought
+ * him back, and apparently asked him to sign up again. Coming back to finish is the design — an address a PDS calls
  * confirmed is somebody else's assertion, and a code we sent is ours — but nothing said so.
  * What is asserted below is that a person can now *see* where they are: a rail naming the
  * steps, the choices they made read back, and one thing to do.
@@ -45,7 +45,7 @@ const handleName = () =>
 /**
  * Start a signup at the one door and land where it takes you.
  *
- * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/subscribe`
+ * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/signup`
  * stopped asking for an address: signing up begins by picking a handle, and the address is
  * taken at `/finish`. A spec that filled `input[type="email"]` here was filling a field that
  * no longer exists, which is why these read as failures the moment the card changed.
@@ -54,7 +54,7 @@ const handleName = () =>
  * `available` for a fresh name, so nothing here needs to stub it.
  */
 async function startSignup(page: Page, picks?: () => Promise<void>) {
-	await page.goto("/subscribe");
+	await page.goto("/signup");
 	if (picks) await picks();
 	await expect(topSignup(page).getByRole("tab", { name: "Anthers", exact: true })).toBeVisible();
 	await topSignup(page).getByLabel("The handle you'd like").fill(handleName());
@@ -71,7 +71,7 @@ test.describe("it cannot be an entry point", () => {
 		// that offered to start one instead would be the second door the wiki's *Making an Account* forbids.
 		await page.goto("/finish");
 
-		await expect(page).toHaveURL(/\/subscribe$/);
+		await expect(page).toHaveURL(/\/signup$/);
 		await expect(page.getByRole("heading", { name: /anthers is free/i })).toBeVisible();
 	});
 
@@ -80,7 +80,7 @@ test.describe("it cannot be an entry point", () => {
 
 		// ⚠️ **Wait for something only `/finish` draws before counting anything.** `toHaveURL`
 		// resolves the instant a client-side route changes, which is before React has
-		// unmounted `/subscribe` — and `.count()` is a one-shot read with no retry behind it,
+		// unmounted `/signup` — and `.count()` is a one-shot read with no retry behind it,
 		// unlike a web-first assertion. So for a moment both pages' inputs are in the
 		// document and the count is the sum of them, which is how this failed with two email
 		// fields on a page that has one. The rail is the cheapest tell that the swap is done.
@@ -117,7 +117,7 @@ test.describe("a person can see where they are", () => {
 			await expect(page.getByRole("radio", { name: /^blossom/i })).toBeChecked();
 		});
 
-		// 🚨 **The other half of getting somebody off `/subscribe`.** Their choices are no
+		// 🚨 **The other half of getting somebody off `/signup`.** Their choices are no
 		// longer in front of them, so a page that asked for a code while saying nothing about
 		// what it was for would trade one kind of disorientation for another. $12 rather than
 		// the entry price, because Root cannot catch a substitution — the amount a reader
@@ -140,12 +140,12 @@ test.describe("starting over", () => {
 	test("abandoning drops the signup rather than leaving it to expire", async ({ page }) => {
 		await startSignup(page);
 		await page.getByRole("button", { name: /start over/i }).click();
-		await expect(page).toHaveURL(/\/subscribe$/);
+		await expect(page).toHaveURL(/\/signup$/);
 
 		// The row went with the cookie, so coming back finds nothing — an unfinished signup
 		// nobody is claiming is a row waiting to expire, and this is somebody saying so.
 		await page.goto("/finish");
-		await expect(page).toHaveURL(/\/subscribe$/);
+		await expect(page).toHaveURL(/\/signup$/);
 	});
 });
 

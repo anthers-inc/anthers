@@ -103,7 +103,7 @@ const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
-const SubscribePage = lazy(() => import("./pages/SubscribePage"));
+const SignupPage = lazy(() => import("./pages/SignupPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
@@ -196,12 +196,13 @@ export default function App() {
 						<Route path="/supporters" element={<SupportersPage />} />
 					</Route>
 					<Route path="/wiki/*" element={<WikiPage />} />
-					{/* Logging in to an account that already exists. Signing UP is /subscribe —
+					{/* Logging in to an account that already exists. Signing UP is /signup —
 					    one door, one ceremony (email → code → /welcome to land). The four-field Create Account card was deleted 2026-08-17; see
-					    pages/LoginPage.tsx. /signup is kept as a redirect because it is the URL
-					    people (and old links, and the browser's own autofill heuristics) expect. */}
+					    pages/LoginPage.tsx. /subscribe is kept as a redirect because the old URL is
+					    in circulation — marketing surfaces and links already sent out name it, and
+					    they must keep resolving. */}
 					<Route path="/login" element={<LoginPage />} />
-					<Route path="/signup" element={<Navigate to="/subscribe" replace />} />
+					<Route path="/subscribe" element={<Navigate to="/signup" replace />} />
 					<Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
 					{/* Finishing a signup, and it belongs in the LOGGED-OUT shell beside the other
 					    two: the person standing here has a pending signup and no account, so the
@@ -209,7 +210,7 @@ export default function App() {
 					    It is deliberately not behind `ProtectedRoute` either — what admits
 					    somebody is the pending signup rather than a session. 🚨 The page's own
 					    guard is what stops this becoming a second signup door: with no pending
-					    record it sends you to `/subscribe`, and there is no way to start one
+					    record it sends you to `/signup`, and there is no way to start one
 					    from here. */}
 					<Route path="/finish" element={<FinishSignupPage />} />
 				</Route>
@@ -325,7 +326,7 @@ export default function App() {
 					    the one exception to "consuming a Work requires an account", and it opens
 					    nothing the recipient could not otherwise have opened. */}
 					<Route path="/s/:token" element={<SharedWorkPage />} />
-					<Route path="/subscribe" element={<SubscribePage />} />
+					<Route path="/signup" element={<SignupPage />} />
 					<Route path="/faq" element={<FAQPage />} />
 					{/* Published PENDING — no effective date, and a banner saying so. See
 				    pages/LegalPage.tsx: the date is what turns a draft into a

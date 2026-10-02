@@ -41,7 +41,7 @@ export default function WelcomePage() {
 
 	/**
 	 * Where the visitor was headed before signing up interrupted them, carried here from
-	 * `/subscribe` (which got it from the gated-post unlock modal). Sanitized rather than
+	 * `/signup` (which got it from the gated-post unlock modal). Sanitized rather than
 	 * read raw — it is attacker-controlled and it decides where somebody lands moments
 	 * after typing a code from their inbox. See `shared/next-path.ts`.
 	 */
@@ -57,7 +57,7 @@ export default function WelcomePage() {
 	 * reproduces exactly the problem the requirement exists to solve, while looking
 	 * compliant from the server's side.
 	 *
-	 * This is the *only* place the ceremony asks. `/subscribe` collects an identity and
+	 * This is the *only* place the ceremony asks. `/signup` collects an identity and
 	 * nothing else, and the account is created the moment the code checks out — so the
 	 * first run is where the terms are presented and agreed to.
 	 */
@@ -171,7 +171,7 @@ export default function WelcomePage() {
 				</p>
 
 				{/* The honest surface, not the enforcement — the API requires this too. It sits
-				    here rather than on /subscribe because that page collects an identity and
+				    here rather than on /signup because that page collects an identity and
 				    nothing else, and this is the first moment the ceremony can ask. */}
 				<label className="mt-8 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3">
 					<input

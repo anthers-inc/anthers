@@ -52,7 +52,7 @@ const TAX_TIP =
  * It carried a `free: { emoji: "🌰" }` entry until then, and nothing on this page ever
  * used it: the picker below branches on `b === "free"` and renders a bare label. That is
  * the shape of the hazard — a convention every caller had to remember, sitting next to an
- * entry that rewarded forgetting. `/subscribe`'s ladder duly forgot, drew the acorn, and
+ * entry that rewarded forgetting. `/signup`'s ladder duly forgot, drew the acorn, and
  * looked deliberate. Dropping `free` from the key makes the compiler carry the rule
  * instead: indexing this with a possibly-free key is now a type error.
  */

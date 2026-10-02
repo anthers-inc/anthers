@@ -311,7 +311,7 @@ export default function AboutPage() {
 
 				<Reveal delay={220}>
 					<p className="mt-10 text-base-content/70">
-						<Link to="/subscribe" className="link link-primary">
+						<Link to="/signup" className="link link-primary">
 							See where every dollar goes
 						</Link>
 						, line by line.
@@ -407,7 +407,7 @@ export default function AboutPage() {
 							Whether you make things or you'd just like to find good ones, you're welcome here.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
-							<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
+							<Link to="/signup" className="btn btn-primary rounded-full px-7">
 								Support a creator
 							</Link>
 							<Link

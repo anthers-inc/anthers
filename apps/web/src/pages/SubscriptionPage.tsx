@@ -9,7 +9,7 @@
  *   2. The budget for creators + per-creator allocations (directed, any amount).
  *   3. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
  *
- * The amount to Anthers is changed on /subscribe; here it is directed at creators.
+ * The amount to Anthers is changed on /signup; here it is directed at creators.
  * There is no bandwidth line — streaming and downloads are unlimited and free.
  */
 
@@ -553,7 +553,7 @@ export default function SubscriptionPage() {
 			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
 				<h1 className="text-2xl font-bold mb-4">Account unavailable</h1>
 				<p className="mb-4">{error ?? "We couldn't load your account. Please try again."}</p>
-				<Link to="/subscribe" className="btn btn-primary">
+				<Link to="/signup" className="btn btn-primary">
 					Support Anthers
 				</Link>
 			</div>
@@ -640,7 +640,7 @@ export default function SubscriptionPage() {
 					</div>
 
 					<div className="md:w-40 flex md:justify-end order-3">
-						<Link to="/subscribe" className="btn btn-primary btn-sm">
+						<Link to="/signup" className="btn btn-primary btn-sm">
 							Adjust support
 						</Link>
 					</div>
@@ -764,7 +764,7 @@ export default function SubscriptionPage() {
 							{seedBudget <= 0 ? (
 								<div className="text-sm text-base-content/50 text-center py-4">
 									<p>You've given nothing to creators this cycle.</p>
-									<Link to="/subscribe" className="link link-primary text-sm">
+									<Link to="/signup" className="link link-primary text-sm">
 										Upgrade to support creators
 									</Link>
 								</div>

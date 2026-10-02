@@ -14,7 +14,7 @@
  * would have agreed with the broken version just as happily. Verified to fail against the
  * unqualified form before being committed against the fixed one.
  *
- * `mediums` is covered here too — it is the field /subscribe's medium chips shuffle on,
+ * `mediums` is covered here too — it is the field /signup's medium chips shuffle on,
  * and it shares the same correlation, so it shares the same failure mode.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

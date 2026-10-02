@@ -67,7 +67,7 @@ export default function ATProtoCallbackPage() {
 
 		// ⚠️ Refreshing the auth context unmounts this page, because the shell swaps layout
 		// components on auth state — so it is the last thing before navigating, and nothing
-		// may be queued after. The same ordering bug cost `/subscribe` a real defect.
+		// may be queued after. The same ordering bug cost `/signup` a real defect.
 		if (success === "login") {
 			// Every account carries its handle from creation now — there is no usernameless
 			// state left to route around, so a login lands where it was headed, or the feed.
@@ -83,9 +83,10 @@ export default function ATProtoCallbackPage() {
 		// deliberately does NOT refresh the auth context, because there is nothing new to
 		// learn about who is signed in.
 		//
-		// ⚠️ **It went to `/subscribe?atproto=1` until 2026-08-26**, and that is the defect
-		// this whole flow was rebuilt to fix: dropping somebody back on a marketing page with
-		// a prefilled email box is indistinguishable from having accomplished nothing.
+		// ⚠️ **It went to `/subscribe?atproto=1` until 2026-08-26** (the signup page's name
+		// until 2026-10-02), and that is the defect this whole flow was rebuilt to fix:
+		// dropping somebody back on a marketing page with a prefilled email box is
+		// indistinguishable from having accomplished nothing.
 		// `resume_signup` is the same landing reached from the *sign-in* door by somebody
 		// whose signup was still unfinished — different cause, same destination, because a
 		// page whose only job is finishing can only be about finishing.
@@ -135,7 +136,7 @@ export default function ATProtoCallbackPage() {
 							    somebody without an account gets pointed at the door, and one act
 							    should have one name wherever it is offered. */}
 							{noAccount && (
-								<Link to="/subscribe" className="btn btn-primary btn-sm">
+								<Link to="/signup" className="btn btn-primary btn-sm">
 									Sign up free
 								</Link>
 							)}

@@ -5,7 +5,7 @@
 // 🚨 **This exists because the page got it wrong for real, in the direction that matters
 // most.** `supportTotal` was `1 + directed.length` — a COUNT — and both of its consumers
 // take dollars: `GET /subscriptions/preview/:amount` and the `anthersSupport` field on the
-// subscribe body. That was correct while amounts were multiples of one price and the server
+// signup body. That was correct while amounts were multiples of one price and the server
 // multiplied by it, and became wrong the moment the retirement made the server take
 // dollars, without anything failing:
 //
@@ -27,7 +27,7 @@
 import { describe, expect, test } from "bun:test";
 import { ANTHERS_BADGES, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { supportTotal } from "@anthers/shared/signup";
-import { marginalRows, RUNG_AMOUNTS } from "./SubscribePage";
+import { marginalRows, RUNG_AMOUNTS } from "./SignupPage";
 
 const creator = (amount: number) => ({ amount });
 

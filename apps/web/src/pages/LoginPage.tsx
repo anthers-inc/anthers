@@ -26,20 +26,21 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *
  * 🚨 **This was `AuthPage`, a card that toggled between logging in and a four-field
  * Create Account form, and the form is GONE (2026-08-17).** There is one signup door now
- * and it is `/subscribe` — an identity (an Anthers handle or Bluesky), then an email address
- * and a code at `/finish`, then `/welcome` for the first-run. `/signup` redirects there. The old card asked for a username + email +
+ * and it is `/signup` — an identity (an Anthers handle or Bluesky), then an email address
+ * and a code at `/finish`, then `/welcome` for the first-run. `/subscribe` redirects there —
+ * it is the same page's old URL, kept resolving because links already sent out name it. The old card asked for a username + email +
  * password + confirm before an account existed at all, which is the cost this platform
  * decided not to charge at the moment of decision; keeping it alive as a second door
  * meant two flows that had to agree about terms acceptance, onboarding and where a new
  * account lands, and they had already drifted.
  *
  * So: **do not add a signup form here.** If this page needs a way onward for someone
- * without an account, it is a link to `/subscribe`.
+ * without an account, it is a link to `/signup`.
  *
  * 🚨 **Sign-in is the emailed code and nothing else (Parker, 2026-09-13).** No account
  * holds a password, so there is no password field on this page and no route it could post
  * to: the one form here asks for an email address, mails it a six-character code, and opens
- * the same code field `/subscribe` uses.
+ * the same code field `/signup` uses.
  * - It posts to **`/auth/signin/*`, never `/auth/signup/*`.** The difference is the whole
  *   point: the signup pair *creates an account* for an address it doesn't know, which
  *   would make a mistyped address at the login page mint an account that never saw the
@@ -149,7 +150,7 @@ export default function LoginPage() {
 	 * `/login` renders inside `PublicShell`, which returns `LoggedOutLayout` or
 	 * `LoggedInLayout` by auth state — different component types, so React tears the
 	 * subtree down the moment `refreshUser()` resolves. That cost a real bug on
-	 * `/subscribe`, where work queued after the refresh landed on an unmounted component
+	 * `/signup`, where work queued after the refresh landed on an unmounted component
 	 * and simply never happened. Nothing may follow the `navigate` below.
 	 */
 	const verifyCode = useCallback(
@@ -286,7 +287,7 @@ export default function LoginPage() {
 						    monthly Public Access limit in the same breath, per the wiki's *How Anthers Talks About Itself*. */}
 								<div className="text-center text-sm text-base-content/70">
 									New to Anthers?{" "}
-									<Link to="/subscribe" className="link link-primary">
+									<Link to="/signup" className="link link-primary">
 										Sign up free
 									</Link>
 								</div>

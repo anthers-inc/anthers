@@ -45,7 +45,7 @@ interface AuthContextValue {
 	 * holding the chosen identity, `/finish` proves the address with an emailed code,
 	 * `/signup/verify` (or `/signup/complete`) creates the account with its identity and issues
 	 * the session, and `/welcome` closes out the first run. It lives in
-	 * `pages/SubscribePage.tsx` and `pages/FinishSignupPage.tsx` because the ordering matters.
+	 * `pages/SignupPage.tsx` and `pages/FinishSignupPage.tsx` because the ordering matters.
 	 *
 	 * ⚠️ **There is no password sign-up route on the server either — and no password sign-in
 	 * route since 2026-09-20.** What must not come back is a second place that mints accounts,
@@ -74,7 +74,7 @@ interface AuthContextValue {
 	 * nothing: it starts an OAuth round trip whose callback parks the proved identity on the
 	 * pending signup, and the account — if there is to be one — is created server-side by
 	 * `/auth/signup/verify` or `/signup/complete`.
-	 * It also lives on **`/subscribe`**, the one signup page, rather than adding a second
+	 * It also lives on **`/signup`**, the one signup page, rather than adding a second
 	 * place in the UI that people can join from. What the deleted `signUp` did that this
 	 * does not is create an account straight from a form, with its own idea of onboarding.
 	 *

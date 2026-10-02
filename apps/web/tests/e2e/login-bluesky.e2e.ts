@@ -52,7 +52,7 @@ test.describe("logging in with Bluesky", () => {
 		const card = page.locator("[data-auth-fade]");
 		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute(
 			"href",
-			"/subscribe",
+			"/signup",
 		);
 	});
 

@@ -2,7 +2,7 @@
 /**
  * The two identity fields signup asks for: a handle Anthers issues, and a Bluesky handle.
  *
- * Shared by `/subscribe`, where a signup begins, and `/finish`, where somebody resuming a signup
+ * Shared by `/signup`, where a signup begins, and `/finish`, where somebody resuming a signup
  * in another browser chooses or confirms its identity. ⚠️ **One copy, because the markup is
  * load-bearing in ways that are easy to break** — the sizer that keeps the suffix flush against
  * the typed name, the label that makes the whole box clickable, and the status line that must

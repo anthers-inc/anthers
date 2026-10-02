@@ -6,7 +6,7 @@
 // 🚨 **One pool, several surfaces, and that is the whole reason this file exists.** The
 // answers lived inside `FAQPage.tsx` until 2026-08-28, which was fine while /faq was the
 // only page that had any. Adding a short FAQ to the bottom of the homepage, /for-creators
-// and /subscribe would otherwise have meant three more copies of *"how much do creators
+// and /signup would otherwise have meant three more copies of *"how much do creators
 // keep?"* — and a copy of an answer is a second place for it to go stale, in a repository
 // that has already paid for that lesson with a hand-typed $9.40 and with five marketing
 // pages describing a bandwidth allowance two days after it was deleted.
@@ -413,7 +413,7 @@ export const PAGE_FAQS: Record<FAQSurface, FAQId[]> = {
 		"creator-ownership",
 		"creator-exclusivity",
 	],
-	// /subscribe. Every question here is one somebody asks with their hand on the button,
+	// /signup. Every question here is one somebody asks with their hand on the button,
 	// so the sequence is the order the doubts arrive: what will this cost me, what do I
 	// get, can I get out, and what happens to my data. `creator-countries` closes it
 	// because "I was thinking of publishing" is itself a hand-on-the-button doubt, and it

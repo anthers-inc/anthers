@@ -93,9 +93,10 @@ const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();
-	// /subscribe is the one signup door since 2026-08-17 — /signup is now only a
-	// redirect to it, and a hop through a redirect is not better than a direct link.
-	const startHref = isAuthenticated ? "/dashboard" : "/subscribe";
+	// /signup is the one signup door since 2026-10-02 — /subscribe is now only a
+	// redirect to it (the old URL is in circulation in marketing surfaces), and a hop
+	// through a redirect is not better than a direct link.
+	const startHref = isAuthenticated ? "/dashboard" : "/signup";
 
 	return (
 		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>

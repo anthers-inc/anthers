@@ -4,7 +4,7 @@
 // pending signup carries — or sign into the one that is already there.
 //
 // Two doors onto one code table, and the difference between them is the property this file
-// exists to pin. `/auth/signup/*` (from `/subscribe`) may CREATE an account; `/auth/signin/*`
+// exists to pin. `/auth/signup/*` (from `/signup`) may CREATE an account; `/auth/signin/*`
 // (from `/login`) never can. A login page that minted accounts as a side effect of a mistyped
 // address would be the second signup door the 2026-08-17 consolidation removed, and nothing
 // about it would look wrong from either page.
@@ -386,7 +386,7 @@ describe("issueSignInCode", () => {
 
 		expect(issued.code).not.toBeNull();
 		expect(issued.existingAccount).toBe(true);
-		// One code table, two doors — a code minted here is the same row `/subscribe`
+		// One code table, two doors — a code minted here is the same row `/signup`
 		// would have minted, and is spent the same way.
 		expect((await checkSignupCode(email, issued.code as string)).ok).toBe(true);
 	});
@@ -400,7 +400,7 @@ describe("issueSignInCode", () => {
 
 		// 🚨 The row is the half that is easy to miss. Writing one and declining to send it
 		// would leave a live code nobody received *and* start the resend throttle — so the
-		// same person walking on to /subscribe seconds later would be told to check an
+		// same person walking on to /signup seconds later would be told to check an
 		// inbox nothing had been sent to.
 		const rows = await db.select().from(signupCodes).where(eq(signupCodes.email, email));
 		expect(rows).toHaveLength(0);
@@ -457,7 +457,7 @@ describe("POST /auth/signin/verify", () => {
 	});
 
 	test("🚨 a valid code for an address with no account creates NOTHING", async () => {
-		// The one way to reach this line: a code minted by /subscribe (which issues for any
+		// The one way to reach this line: a code minted by /signup (which issues for any
 		// address) typed into the login page instead. `/signin/start` never issues one.
 		const email = addr("siv-nomint");
 		const issued = await issueSignupCode(email);

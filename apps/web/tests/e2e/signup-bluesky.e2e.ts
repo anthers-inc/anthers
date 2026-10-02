@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Bluesky door on `/subscribe`.
+ * The Bluesky door on `/signup`.
  *
- * `/subscribe` is the single signup door, and this spec's job is to keep it single. Adding
+ * `/signup` is the single signup door, and this spec's job is to keep it single. Adding
  * a way to join through Bluesky is the sort of change that grows a second one by accident —
  * the 2026-08-17 consolidation deleted a Create Account card for exactly that reason, and
  * the two doors it replaced had already drifted about terms and onboarding.
@@ -34,7 +34,7 @@ import { expect, test } from "./fixtures";
 /**
  * The signup control at the top of the page.
  *
- * ⚠️ **`/subscribe` renders two of them** (2026-08-22): one above the optional support
+ * ⚠️ **`/signup` renders two of them** (2026-08-22): one above the optional support
  * sections and one in the closing summary. Their buttons share a label, which is right for
  * a reader — it is the same act — and ambiguous for a locator. Naming which one is meant
  * beats `.first()`, whose answer changes the day somebody reorders the page.
@@ -59,7 +59,7 @@ test.describe("signing up with Bluesky", () => {
 	test("the tab reveals the handle field, and the Anthers door is the default", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		// 🚨 **Wait for the tab before asserting the field is absent.** The Bluesky door is
 		// only drawn once `GET /api/atproto/config` answers, so on first paint there are no
@@ -90,7 +90,7 @@ test.describe("signing up with Bluesky", () => {
 	});
 
 	test("the handle typed into the card is what starts the round trip", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openBlueskyDoor(page);
 
 		// A button wired to nothing looks identical to one wired to something until you
@@ -111,7 +111,7 @@ test.describe("signing up with Bluesky", () => {
 			await route.fulfill({
 				status: 200,
 				contentType: "application/json",
-				body: JSON.stringify({ authorization_url: "/subscribe?handed-off=1" }),
+				body: JSON.stringify({ authorization_url: "/signup?handed-off=1" }),
 			});
 		});
 
@@ -134,7 +134,7 @@ test.describe("signing up with Bluesky", () => {
 	});
 
 	test("it warns that Bluesky will be asked for an email address", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openBlueskyDoor(page);
 
 		// ⭐ No press needed. This lives on the panel rather than behind the button, so a
@@ -172,7 +172,7 @@ test.describe("signing up with Bluesky", () => {
 	test("this door says it creates an account, where the login one says it cannot", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openBlueskyDoor(page);
 		await expect(page.getByText(/doesn't create one/i)).toHaveCount(0);
 
@@ -185,12 +185,13 @@ test.describe("signing up with Bluesky", () => {
 
 	test("this page never becomes the one that finishes a Bluesky signup", async ({ page }) => {
 		// ⚠️ **`/subscribe?atproto=1` was where the callback used to land, and the state it
-		// put this page into is gone** (2026-08-26). Dropping somebody back on a marketing
+		// put this page into is gone** (2026-08-26; the page was called `/subscribe` until
+		// the 2026-10-02 rename). Dropping somebody back on a marketing
 		// page with a prefilled email box is exactly what Parker's walkthrough could not tell
 		// apart from having accomplished nothing; `/finish` owns that job now, and this page
 		// must not grow a second copy of it. Where a design says there is only one of
 		// something, that claim needs a test, because a second one arrives silently.
-		await page.goto("/subscribe?atproto=1");
+		await page.goto("/signup?atproto=1");
 
 		await expect(page.getByText(/signing up as @/i)).toHaveCount(0);
 		await expect(page.getByText(/bluesky confirmed you as/i)).toHaveCount(0);

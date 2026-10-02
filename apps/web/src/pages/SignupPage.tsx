@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Support page (route: /subscribe) — the middle of the funnel.
+// The Support page (route: /signup) — the middle of the funnel.
 //
 // Its job is to explain how support works and then open a door: a free account, or a
 // monthly amount pointed at Anthers and at creators. It is NOT a report on what a user
@@ -188,7 +188,7 @@ const MEDIUMS = [
 ] as const;
 
 /** Picks survive a trip through signup, so nobody loses their choices to a redirect. */
-const PICKS_KEY = "anthers_subscribe_picks";
+const PICKS_KEY = "anthers_signup_picks";
 
 /** The marketing display face, as the other marketing pages set it. */
 const serif = { fontFamily: FONTS.fraunces };
@@ -1569,7 +1569,7 @@ type Door = "bluesky" | "handle";
  * since the panel above it became a field and a button and nothing else. `transition:email`
  * is a real consent screen on somebody else's website, and meeting it unannounced is how a
  * signup gets abandoned at the last step — so the note carries that rather than narrating the
- * redirect, which the button it sits under already names. `subscribe-bluesky.e2e.ts` pins the
+ * redirect, which the button it sits under already names. `signup-bluesky.e2e.ts` pins the
  * sentence.
  */
 function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
@@ -2112,7 +2112,7 @@ function Summary({
 			    this is the moment they commit. Being listed is the one perk that discloses
 			    something about them, so it is the one that has to be said twice. */}
 			{/* ⚠️ Held in place at $0 rather than dropped, exactly as the tax line above is and
-			    for the same reason: `subscribe-free-first.e2e.ts` asserts that choosing a rung
+			    for the same reason: `signup-free-first.e2e.ts` asserts that choosing a rung
 			    moves nothing on the page, and rendering this conditionally grew the page by
 			    sixty pixels the moment somebody picked a paid rung. */}
 			<p
@@ -2133,7 +2133,7 @@ function Summary({
 
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
-export default function SubscribePage() {
+export default function SignupPage() {
 	const { user, refreshUser, signUpWithBluesky } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -2420,7 +2420,7 @@ export default function SubscribePage() {
 	 * Tell the auth context about the new session, then go.
 	 *
 	 * 🚨 **Refreshing the context is what unmounts this page, so it must be the LAST
-	 * thing the ceremony does.** `/subscribe` renders inside `PublicShell`, which returns
+	 * thing the ceremony does.** `/signup` renders inside `PublicShell`, which returns
 	 * `LoggedOutLayout` or `LoggedInLayout` depending on `isAuthenticated`. Those are
 	 * different component types, so the moment `refreshUser()` resolves React tears the
 	 * subtree down and rebuilds it — and this page goes with it.
@@ -2514,7 +2514,7 @@ export default function SubscribePage() {
 	 * arrangement read like.** The ceremony was a modal over this page, so the last thing
 	 * asked of somebody sat on top of a page still inviting them to add and drop picks — and
 	 * through the Bluesky door it was worse, because coming back from bsky.social landed on
-	 * `/subscribe` with a prefilled email box, which is indistinguishable from having
+	 * `/subscribe` (this page's name until 2026-10-02) with a prefilled email box, which is indistinguishable from having
 	 * accomplished nothing. `/finish` is a page with one job, and the picks travel with the
 	 * pending signup rather than being left behind on a page nobody is looking at.
 	 */

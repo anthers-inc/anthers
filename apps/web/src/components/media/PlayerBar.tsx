@@ -165,7 +165,7 @@ export default function PlayerBar() {
 					<Notice>
 						That's your {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access this month — the music
 						stays free, the hours reset.{" "}
-						<Link to="/subscribe" className="link link-primary">
+						<Link to="/signup" className="link link-primary">
 							Support Anthers
 						</Link>
 					</Notice>

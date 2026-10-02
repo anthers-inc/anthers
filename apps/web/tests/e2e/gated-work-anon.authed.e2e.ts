@@ -61,7 +61,7 @@ test.describe("a gated Work, signed out", () => {
 
 		// And both carry this exact Work as their return destination.
 		await expect(login).toHaveAttribute("href", `/login?next=${encodeURIComponent(here)}`);
-		await expect(signup).toHaveAttribute("href", `/subscribe?next=${encodeURIComponent(here)}`);
+		await expect(signup).toHaveAttribute("href", `/signup?next=${encodeURIComponent(here)}`);
 	});
 
 	test("the destination survives the trip to the signup page", async ({ page }) => {
@@ -71,7 +71,7 @@ test.describe("a gated Work, signed out", () => {
 		// `?next=` is still on the URL when the ceremony's own page loads, which is what
 		// lets it survive a reload while the visitor goes to read their email.
 		await expect(page).toHaveURL(
-			new RegExp(`/subscribe\\?next=${encodeURIComponent(GATED).replace(/\//g, "%2F")}-\\d+$`),
+			new RegExp(`/signup\\?next=${encodeURIComponent(GATED).replace(/\//g, "%2F")}-\\d+$`),
 		);
 		await expect(page.getByRole("heading", { name: /anthers is free/i })).toBeVisible();
 	});
@@ -108,7 +108,7 @@ test.describe("a Public Access Work, signed out", () => {
 		// probably has none.
 		const signup = card.getByRole("link", { name: /create a free account/i });
 		await expect(signup).toBeVisible();
-		await expect(signup).toHaveAttribute("href", `/subscribe?next=${encodeURIComponent(here)}`);
+		await expect(signup).toHaveAttribute("href", `/signup?next=${encodeURIComponent(here)}`);
 		await expect(card.getByRole("link", { name: /log in/i })).toHaveAttribute(
 			"href",
 			`/login?next=${encodeURIComponent(here)}`,
