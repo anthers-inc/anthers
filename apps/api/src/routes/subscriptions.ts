@@ -17,7 +17,10 @@ import {
 	accounts,
 	attentionEvents,
 	comments,
+	creatorCredits,
 	creatorGates,
+	creatorTransferCredits,
+	creatorTransfers,
 	poolDistributions,
 	posts,
 	seedAllocations,
@@ -58,7 +61,8 @@ import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { isGiveable, stickerAmount } from "@anthers/shared/stickers";
 import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import Decimal from "decimal.js";
+import { and, desc, eq, gte, inArray, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import sharp from "sharp";
@@ -1389,6 +1393,27 @@ const subscriptionRoutes = new Hono()
 
 		const total = (Number(earnings.poolTotal) + Number(earnings.seedTotal)).toFixed(2);
 
+		// The transfer split, beside the month's figures: what settlement has credited
+		// that is still held (no coverage row names it) and what has already moved into
+		// the connected account. Both are lifetime totals, not per-cycle — a credit's
+		// hold and transfer are about when it settled, not the month it was earned in,
+		// so the two figures this surface exists to show do not follow the `cycle` param.
+		const covered = db
+			.selectDistinct({ creditId: creatorTransferCredits.creditId })
+			.from(creatorTransferCredits);
+		const [split] = await db
+			.select({
+				heldTotal: sql<string>`COALESCE(SUM(${creatorCredits.amount}), 0)`,
+			})
+			.from(creatorCredits)
+			.where(and(eq(creatorCredits.creatorId, user.id), notInArray(creatorCredits.id, covered)));
+		const [moved] = await db
+			.select({
+				transferredTotal: sql<string>`COALESCE(SUM(${creatorTransfers.amount}), 0)`,
+			})
+			.from(creatorTransfers)
+			.where(eq(creatorTransfers.creatorId, user.id));
+
 		return c.json({
 			poolTotal: earnings.poolTotal,
 			seedTotal: earnings.seedTotal,
@@ -1401,6 +1426,15 @@ const subscriptionRoutes = new Hono()
 			 * paid, so the two can differ; a page showing the running month must say which it is.
 			 */
 			settled: Number(earnings.estimateRows) === 0 && Number(earnings.subscriberCount) > 0,
+			/**
+			 * Settled money that has not yet been transferred into the connected account —
+			 * held behind its own 14-day hold or the account's readiness, and still owed.
+			 * The figure the Studio shows beside "estimated/settled" so a creator can see
+			 * the money that is theirs but not yet in their Stripe balance.
+			 */
+			heldTotal: new Decimal(split.heldTotal).toFixed(2),
+			/** Money already transferred into the connected account, read from the coverage rows. */
+			transferredTotal: new Decimal(moved.transferredTotal).toFixed(2),
 		});
 	})
 

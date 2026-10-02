@@ -50,11 +50,8 @@ import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
-import {
-	type TransferHeldCreditsData,
-	transferHeldCredits,
-} from "./transfer-held-credits.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
+import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
 import { watchHostedIdentities } from "./watch-identities.js";
 
 async function start() {
@@ -165,7 +162,9 @@ async function start() {
 		for (const job of jobs) {
 			const { creators } = await transferHeldCredits(job.data);
 			if (creators > 0)
-				console.log(`[transfer-held-credits] job ${job.id}: moved money for ${creators} creator(s)`);
+				console.log(
+					`[transfer-held-credits] job ${job.id}: moved money for ${creators} creator(s)`,
+				);
 		}
 	});
 

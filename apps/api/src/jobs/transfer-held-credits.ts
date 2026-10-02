@@ -77,7 +77,7 @@ import {
 	users,
 } from "@anthers/db/schema";
 import Decimal from "decimal.js";
-import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, eq, lt, notInArray } from "drizzle-orm";
 import { createTransfer, paymentsConfigured } from "../lib/processor.js";
 import { payoutStanding } from "../services/payouts.js";
 

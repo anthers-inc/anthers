@@ -319,6 +319,18 @@ function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 						<div className="text-lg font-bold">{earnings.subscriberCount}</div>
 					</div>
 				</div>
+				{/* The transfer split — settled money still waiting out its hold, beside what
+						has already moved into the connected account. */}
+				<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+					<div>
+						<div className="text-xs text-base-content/50">Held</div>
+						<div className="text-lg font-bold">${earnings.heldTotal}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50">Transferred</div>
+						<div className="text-lg font-bold">${earnings.transferredTotal}</div>
+					</div>
+				</div>
 				{earnings.cycle && (
 					<p className="text-xs text-base-content/40 mt-2">
 						<EarningsBasis earnings={earnings} />

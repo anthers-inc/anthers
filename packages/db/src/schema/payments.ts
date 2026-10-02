@@ -223,6 +223,8 @@ export const crfSubsidies = pgTable(
  * creator's balance on their own authority and never touch these rows, which is what keeps
  * this table a pure record of what left the platform balance and when.
  */
+// org — a movement of the platform's own balance into a creator's connected account.
+// Money; org-only, doubly so: the row is the platform's record of the platform's money.
 export const creatorTransfers = pgTable(
 	"creator_transfers",
 	{
@@ -252,6 +254,7 @@ export const creatorTransfers = pgTable(
  * pair (transfer, credit) is unique so a coverage set can never name a credit twice. This is
  * the "held vs transferred" split's only source of truth.
  */
+// org — the coverage link between a transfer and the credits it moved. Money; org-only.
 export const creatorTransferCredits = pgTable(
 	"creator_transfer_credits",
 	{

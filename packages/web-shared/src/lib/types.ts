@@ -854,6 +854,14 @@ export interface CreatorEarnings {
 	cycle: string;
 	/** False while the month is the nightly estimate; true once settlement has credited it. */
 	settled: boolean;
+	/**
+	 * Settled money not yet transferred into the connected account — behind its 14-day
+	 * hold or the account's readiness, and still owed. Lifetime, not per-cycle: a hold is
+	 * counted from when each credit settled, not the month it was earned in.
+	 */
+	heldTotal: string;
+	/** Money already transferred into the connected account (the transfer rows' total). */
+	transferredTotal: string;
 }
 
 export interface SeedAllocation {
