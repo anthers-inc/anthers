@@ -1255,9 +1255,20 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
 	// CI has none and skips this silently. Its blocks are already checked the same way.
 	const pub = findPublicWiki();
 	if ("path" in pub) {
+		// The task board scans only when --wiki is requested (2026-10-02). Under the
+		// location publish boundary every public task note is published copy, so the
+		// scan is right to cover them — but the board is an audit trail carrying retired
+		// vocabulary by design, and the 100-or-so hits that follow are an accepted
+		// backlog (Parker, 2026-10-02) that the exporter's task-publishing slice owns.
+		// Leaving them in the default scan turns every pre-push `make verify` red on
+		// copy nobody is about to publish, which is the "guard people route around"
+		// failure this file already knows. The publishing gate is `make wiki-figures
+		// CHECK=1`, which runs with --wiki and sees the board.
+		const scanTasks = process.argv.includes("--wiki");
 		for await (const path of markdownFiles(pub.path)) {
 			const file = relative(pub.path, path);
-			if (await unpublished(pub.path, file)) continue;
+			if (file.startsWith("00-09 Metafiles/01 Tasks/") && !scanTasks) continue;
+			if (await unpublished(file)) continue;
 			out.push({ root: pub.path, file: `[wiki] ${file}` });
 		}
 	}
@@ -1280,22 +1291,25 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
  * goes for `Internal Wiki/`, where the reasoning behind a retired mechanism is exactly what
  * is being kept.
  *
- * ⚠️ **A task that opts in IS published and IS scanned.** `task-public: true` is the
- * boundary, so the exception is read from the note rather than assumed from its folder —
- * otherwise the first task Parker publishes would be the first one nothing checks.
+ * ⚠️ **A task outside `Internal Wiki/` IS published and IS scanned** (2026-10-02: the
+ * `task-public: true` property method was retired before any task ever carried it — the
+ * boundary is location alone). The task-board machinery under `00-09 Metafiles/` is
+ * skipped, but a task note in it is public copy like any other, so the exception is read
+ * from its path rather than from a frontmatter property.
  */
-async function unpublished(root: string, file: string): Promise<boolean> {
-	// Never served: kept back by location, which is the vault's opt-out mechanism.
+async function unpublished(file: string): Promise<boolean> {
+	// Never served: kept back by location, which is the vault's opt-out mechanism — for
+	// documents directly and for tasks via the mirrored board inside it (2026-10-02).
 	if (file.startsWith("Internal Wiki/")) return true;
 	// Agent instructions. Written for whoever is working on Anthers, not for a reader.
 	// `CLAUDE.md` sits at the root where reference pages sit, and is machinery: it exists
 	// only so the harness auto-loads something that routes to the Agents Hub.
 	if (file.startsWith("90-99 Agents/") || file === "CLAUDE.md") return true;
-	// Vault machinery — attachments, conventions, templates, the task board's Base — with
-	// the one exception that a task note may opt in to being published.
-	if (!file.startsWith("00-09 Metafiles/")) return false;
-	const head = (await Bun.file(join(root, file)).text()).slice(0, 400);
-	return !/^task-public:\s*true\s*$/m.test(head);
+	// The task board's Base and the templates are machinery; a task note is public copy.
+	if (file.startsWith("00-09 Metafiles/01 Tasks/")) return false;
+	// Vault machinery — attachments, conventions, templates, the task board's Base.
+	if (file.startsWith("00-09 Metafiles/")) return true;
+	return false;
 }
 
 /**
