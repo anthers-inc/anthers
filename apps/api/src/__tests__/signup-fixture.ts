@@ -36,6 +36,31 @@ export async function clearThrottle(email: string): Promise<void> {
 	await db.delete(signupCodes).where(eq(signupCodes.email, email.trim().toLowerCase()));
 }
 
+/**
+ * Solve the signup proof-of-work, at whatever difficulty the environment's knob says.
+ *
+ * 🚨 **The env knob is how the suites get this for free, and that is what it exists
+ * for** — `scripts/session.ts` hands test sessions `SIGNUP_POW_DIFFICULTY=0`, so a
+ * suite that neither sets nor restores it solves instantly. A suite that raises the
+ * difficulty for its own tests must restore it in `afterEach`, on the same rule as
+ * every other env a test touches.
+ */
+export async function solvePow(): Promise<{ id: number; nonce: number }> {
+	const res = await app.request("/api/auth/signup/challenge");
+	if (!res.ok) throw new Error("could not fetch a signup challenge");
+	const { id, challenge, difficulty } = (await res.json()) as {
+		id: number;
+		challenge: string;
+		difficulty: number;
+	};
+	// The pure solver from `@anthers/shared/signup-pow`, imported directly so the grind
+	// the suites run is the same one the browser runs — not a re-implementation that
+	// could drift.
+	const { solve } = await import("@anthers/shared/signup-pow");
+	const nonce = await solve(challenge, difficulty);
+	return { id, nonce: Number(nonce) };
+}
+
 /** Spend a real code at a verify route, carrying the pending-signup token when there is one. */
 export async function spendCode(path: string, email: string, token?: string): Promise<Response> {
 	await clearThrottle(email);

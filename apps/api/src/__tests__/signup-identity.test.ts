@@ -31,6 +31,7 @@ import {
 	NODE_URL,
 	pendingCookie,
 	signUp,
+	solvePow,
 	spendCode,
 	stubNetwork,
 } from "./signup-fixture";
@@ -74,7 +75,13 @@ async function begin(
 	const res = await app.request("/api/auth/signup/begin", {
 		method: "POST",
 		headers: { ...JSON_HEADERS, ...(token ? { Cookie: `signup_pending=${token}` } : {}) },
-		body: JSON.stringify({ picks: { anthers: 0, follow: [], seed: [] }, ...body }),
+		// The proof-of-work every real press carries; the session's difficulty-0 knob
+		// makes `solvePow` instant here.
+		body: JSON.stringify({
+			pow: await solvePow(),
+			picks: { anthers: 0, follow: [], seed: [] },
+			...body,
+		}),
 	});
 	return { res, token: pendingCookie(res.headers.get("set-cookie")) };
 }

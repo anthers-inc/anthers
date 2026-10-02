@@ -35,6 +35,7 @@ import {
 import { issueSignupCode } from "../services/signup-codes.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { solvePow } from "./signup-fixture";
 
 purgeAccountsCreatedHere();
 
@@ -529,7 +530,10 @@ describe("the proved identity on a pending signup", () => {
 		const begin = await app.request("/api/auth/signup/begin", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
-			body: JSON.stringify({ picks: { anthers: 6, follow: ["alice"], seed: ["alice"] } }),
+			body: JSON.stringify({
+				pow: await solvePow(),
+				picks: { anthers: 6, follow: ["alice"], seed: ["alice"] },
+			}),
 		});
 		const started = pendingCookie(begin.headers.get("set-cookie") ?? "") as string;
 		expect(started).toBeTruthy();
