@@ -86,8 +86,9 @@ export function MeadowVines({
 	vine?: VineStyle;
 	/**
 	 * Breakpoint at which the vines appear (default "xl"). The site shell keeps the
-	 * default so the wider marketing content isn't crowded; the narrower SiteGate opts
-	 * into "lg". Both literal classes below keep Tailwind emitting each variant.
+	 * default so the wider marketing content isn't crowded; a narrower single-column
+	 * surface opts into "lg". Both literal classes below keep Tailwind emitting
+	 * each variant.
 	 */
 	from?: "lg" | "xl";
 }) {

@@ -6,7 +6,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_EMAIL } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
-import { type BrowserContext, test as base, expect, type Page } from "@playwright/test";
+import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
 /**
  * The static preview the browser loads (playwright.config.ts webServer #1), on the port the
@@ -21,8 +21,8 @@ export const ADMIN_ORIGIN = `http://localhost:${process.env.ADMIN_PREVIEW_PORT ?
  */
 export const API_URL = `http://localhost:${process.env.API_PORT ?? 8000}`;
 /**
- * Where the setup project writes the signed-in viewer's storage state (session cookie +
- * SiteGate flag). The gauntlet project loads it via its `use.storageState`.
+ * Where the setup project writes the signed-in viewer's storage state (the session
+ * cookie). The gauntlet project loads it via its `use.storageState`.
  */
 export const AUTH_STATE_PATH = fileURLToPath(
 	new URL("./.auth/gauntlet-viewer.json", import.meta.url),
@@ -38,22 +38,10 @@ export const CREATED_CREDIT = [
 	{ role: "Everything", contributor: "The Creator", types: ["created"] },
 ];
 
-// The whole app is wrapped in SiteGate (the pre-launch "Team access" wall),
-// which is authorized purely by the `anthers_site_access` localStorage flag.
-// Seed it before any app script runs so every test lands on the real app
-// instead of the gate — the standard way to walk an e2e harness past a
-// client-side access wall. If SiteGate's storage key changes, update it here
-// AND in the storageState the setup project writes.
-export const test = base.extend({
-	page: async ({ page }, use) => {
-		await page.addInitScript(() => {
-			try {
-				localStorage.setItem("anthers_site_access", "true");
-			} catch {}
-		});
-		await use(page);
-	},
-});
+// The `page` fixture used to extend Playwright's to seed the pre-launch gate's
+// localStorage flag before any app script ran; the gate is gone and the fixture is
+// the plain Playwright one now, re-exported so specs keep importing it from here.
+export { test };
 
 /**
  * Strict console/page-error tracking for the authenticated specs.

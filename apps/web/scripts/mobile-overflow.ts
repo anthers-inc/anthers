@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Mobile horizontal-overflow DIAGNOSTIC. Boots the production preview (serve.ts
-// against ./dist), seeds the SiteGate flag, then for each route loads the page at
+// against ./dist), then for each route loads the page at
 // a narrow mobile viewport and walks the DOM for any element whose right edge
 // extends past the viewport's right edge (i.e. contributes to horizontal
 // scroll). Reports each offender's tag, class, computed width, and how far past
@@ -74,12 +74,6 @@ try {
 		isMobile: true,
 		hasTouch: true,
 	});
-	await ctx.addInitScript(() => {
-		try {
-			localStorage.setItem("anthers_site_access", "true");
-		} catch {}
-	});
-
 	for (const route of routes) {
 		const page = await ctx.newPage();
 		await page.goto(`${BASE}${route}`, { waitUntil: "networkidle" });

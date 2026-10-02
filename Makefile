@@ -89,7 +89,7 @@ hooks: ## Point git at the repo's tracked hooks (.githooks/)
 # `.env` cannot shadow the vault.
 #
 # The fallback is warned rather than silent, and it is safe to have here for a reason worth
-# stating: getting it wrong costs you a dev server with a sealed site gate, which is loud
+# stating: getting it wrong costs you a dev server missing its secrets, which is loud
 # and local. That is the opposite of `spec-apply`, where a wrong source reaches production —
 # which is why that one refuses instead of falling back.
 dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
@@ -99,9 +99,9 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 			bws run --project-id $$PID -- '$(MAKE) dev-local'; \
 	else \
 		echo "  -> bws unavailable; secrets must come from .env, which no longer holds them"; \
-		echo "     by default. Expect a sealed site gate unless you filled these in yourself:"; \
-		echo "       SITE_PASSWORD  SITE_ACCESS_KEYS  STRIPE_SECRET_KEY"; \
-		echo "       STRIPE_WEBHOOK_SECRET  RESEND_API_KEY   (use DEV values, never prod's)"; \
+		echo "     by default. Expect missing secrets unless you filled these in yourself:"; \
+		echo "       STRIPE_SECRET_KEY  STRIPE_WEBHOOK_SECRET  RESEND_API_KEY"; \
+		echo "       (use DEV values, never prod's)"; \
 		$(MAKE) dev-local; \
 	fi
 
@@ -306,7 +306,7 @@ format: ## Format code with Biome
 
 # ─── Browser testing (Playwright) ───
 # Drives Playwright's own bundled Chromium (not your installed browser). See
-# apps/web/tests/README.md — notably the SiteGate localStorage bypass.
+# apps/web/tests/README.md for the three layers.
 
 # CORS_ONLY=1 is the one mode that needs no credentials — a preflight is an unauthenticated
 # OPTIONS, and the non-secret STORAGE_* come from .do/app.yaml — which is why deploy-watch

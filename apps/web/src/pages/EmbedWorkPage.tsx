@@ -17,7 +17,7 @@
  * fetches the ordinary Work detail carrying the token, exactly as the full page does. What
  * differs is presentation (no chrome, player only), never access.
  *
- * It renders bare like `/site-gate`, outside every shell, so a site embedding it gets the
+ * It renders bare, outside every shell, so a site embedding it gets the
  * player and nothing else.
  */
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";

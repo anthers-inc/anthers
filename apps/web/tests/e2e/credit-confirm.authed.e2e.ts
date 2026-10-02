@@ -236,11 +236,6 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 		storageState: "tests/e2e/.auth/gauntlet-viewer.json",
 	});
 	const viewerPage = await viewerContext.newPage();
-	await viewerPage.addInitScript(() => {
-		try {
-			localStorage.setItem("anthers_site_access", "true");
-		} catch {}
-	});
 	await viewerPage.goto(`/works/${work.publicId}`);
 
 	// The confirm ask renders, with the credit's own role — and the DID is what the
@@ -293,11 +288,6 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// ── A stranger sees no ask and no DID ─────────────────────────────────────────
 	const stranger = await browser.newContext();
 	const strangerPage = await stranger.newPage();
-	await strangerPage.addInitScript(() => {
-		try {
-			localStorage.setItem("anthers_site_access", "true");
-		} catch {}
-	});
 	await strangerPage.goto(`/works/${work.publicId}`);
 	await expect(strangerPage.getByText("You're credited — confirm?")).toHaveCount(0);
 	await expect(strangerPage.getByRole("button", { name: "Accept", exact: true })).toHaveCount(0);

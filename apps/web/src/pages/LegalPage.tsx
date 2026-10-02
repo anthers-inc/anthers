@@ -8,8 +8,8 @@
  * published. That gate held until six of its nine markers were cleared.
  *
  * 🚨 **What makes serving them honest now is the `pending` state, not the fact that
- * most of it is true.** These carry **no effective date**, say plainly that they are
- * not yet in force, and are behind SiteGate. Parker's call, 2026-08-10: publish as
+ * most of it is true.** These carry **no effective date** and say plainly that they are
+ * not yet in force. Parker's call, 2026-08-10: publish as
  * pending, date them as in force once the outstanding legal review clears.
  *
  * So there is exactly one rule for whoever touches this next: **do not give a document

@@ -32,8 +32,8 @@ const server = serve({
 	development: { hmr: true, console: true },
 	routes: {
 		// The dev-only web-build harness, shared with serve.ts (the static preview). More
-		// specific than "/*", so it wins over the SPA fallback — and it must, because the SPA
-		// would boot into the SiteGate and the harness is meant to sit beside the gated app.
+		// specific than "/*", so it wins over the SPA fallback — and it must, so the
+		// harness stays reachable beside the SPA itself.
 		"/dev/web-build": (req: Request) => devBuildPage(devBuildApiOrigin(req)),
 		// Static files under public/. More specific than "/*", so these win.
 		"/fonts/*": publicFile,

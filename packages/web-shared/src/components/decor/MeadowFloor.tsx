@@ -23,7 +23,7 @@ export function MeadowFloor({
 	/**
 	 * Tailwind height utility for the floor band (default `h-56`). Kept as a prop
 	 * rather than hardcoded so a caller can run a shorter band where vertical space
-	 * is tight (e.g. the single-viewport SiteGate). The grass tile scales to the band
+	 * is tight (e.g. a single-viewport surface). The grass tile scales to the band
 	 * height (`background-size: auto 100%`), so a shorter band just yields shorter grass.
 	 */
 	heightClass?: string;

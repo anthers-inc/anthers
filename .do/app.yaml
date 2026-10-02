@@ -7,8 +7,6 @@
 #   - worker     worker    — pg-boss job worker (transcode/audio/scans/records + crons)
 #   - migrate    PRE_DEPLOY job — runs Drizzle migrations before each release
 #   - web        static site — the React SPA on the CDN
-# The whole site sits behind SiteGate (SITE_PASSWORD) until public launch;
-# SITE_ACCESS_KEYS holds the invite keys for ?invite= links that skip it.
 #
 # Deploys from the `release` branch on push. Apply with:
 #   doctl apps create --spec .do/app.yaml         (first time only)
@@ -149,12 +147,6 @@ envs:
   - key: STORAGE_SECRET
     scope: RUN_TIME
     type: SECRET
-  - key: SITE_PASSWORD
-    scope: RUN_TIME
-    type: SECRET
-  - key: SITE_ACCESS_KEYS
-    scope: RUN_TIME
-    type: SECRET
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
@@ -205,8 +197,8 @@ envs:
   # catch and very nearly didn't: the two entries sat at different paths, so a key-set
   # comparison reported "one here, one there" without ever comparing the values.
   # Stripe — TEST MODE in production, deliberately. Every Stripe object here is
-  # test-mode (livemode:false), so no real money can move;
-  # the site is behind SiteGate besides. This block was missing from this file
+  # test-mode (livemode:false), so no real money can move.
+  # This block was missing from this file
   # entirely while prod carried the values, which is how the drift went unnoticed:
   # `lib/stripe.ts` builds its client from STRIPE_SECRET_KEY alone, so having that
   # set silently deactivated all seven `503 Payments are not configured` guards
@@ -408,8 +400,8 @@ services:
       - key: HOSTED_PDS_INVITE_CODE
         scope: RUN_TIME
         type: SECRET
-      # SITE_PASSWORD, RESEND_API_KEY and HOSTED_ACCOUNT_KEY live at app level (see the
-      # envs: block above) to avoid component-level shadowing.
+      # RESEND_API_KEY and HOSTED_ACCOUNT_KEY live at app level (see the envs: block
+      # above) to avoid component-level shadowing.
 
 workers:
   - name: worker
