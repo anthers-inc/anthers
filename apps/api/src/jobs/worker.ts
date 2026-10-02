@@ -51,6 +51,7 @@ import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
+import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
 import { watchHostedIdentities } from "./watch-identities.js";
 
 async function start() {
@@ -151,6 +152,19 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[settle-cycle] Processing job ${job.id}`);
 			await settleCycle(job.data);
+		}
+	});
+
+	// The half of the payouts decision settlement is the other half of: what settlement
+	// credited, this moves into the creator's connected account once its own hold has
+	// passed. Quiet on a clean sweep, like the settle handler, for the same reason.
+	await queue.work<TransferHeldCreditsData>(QUEUES.TRANSFER_HELD_CREDITS, async (jobs) => {
+		for (const job of jobs) {
+			const { creators } = await transferHeldCredits(job.data);
+			if (creators > 0)
+				console.log(
+					`[transfer-held-credits] job ${job.id}: moved money for ${creators} creator(s)`,
+				);
 		}
 	});
 

@@ -117,15 +117,21 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 								<Stat label="Total" value={`$${data.earnings.total}`} />
 								<Stat label="Supporters" value={data.earnings.subscriberCount} />
 							</div>
-							{data.earnings.cycle && (
-								<p className="mt-2 text-xs text-base-content/50">
-									Cycle:{" "}
-									{new Date(data.earnings.cycle).toLocaleDateString("en-US", {
+							{/* The transfer split — what is the creator's but not yet in their Stripe
+								 balance, and what already moved. Lifetime figures beside the month's. */}
+							<div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+								<Stat label="Held" value={`$${data.earnings.heldTotal}`} />
+								<Stat label="Transferred" value={`$${data.earnings.transferredTotal}`} />
+							</div>
+							<p className="mt-2 text-xs text-base-content/50">
+								Held is settled money waiting out its 14-day hold; transferred is what has moved
+								into your Stripe balance.{" "}
+								{data.earnings.cycle &&
+									`Cycle: ${new Date(data.earnings.cycle).toLocaleDateString("en-US", {
 										month: "long",
 										year: "numeric",
-									})}
-								</p>
-							)}
+									})}`}
+							</p>
 						</>
 					) : (
 						<p className="text-sm text-base-content/60">

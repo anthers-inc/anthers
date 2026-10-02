@@ -722,13 +722,6 @@ export const RECORD_REDACTION_YEARS = 3;
 
 // ── Payouts ──────────────────────────────────────────────────────────────────
 /**
- * Minimum accrued creator balance before a Connect payout fires ($). Higher →
- * fewer payout events → cheaper, but the smallest creators wait longer. Launch
- * value; ratchet down as the creator ratio matures, and → 0 once direct-ACH lands.
- */
-export const PAYOUT_THRESHOLD = 20;
-
-/**
  * How long a suspension's payout hold stands open for review, in days, counted from
  * the suspension. A lapsed window with no finding recorded releases the hold
  * automatically — `services/payouts.ts`'s `releaseStalePayoutHolds` runs the pass and
