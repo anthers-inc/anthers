@@ -15,6 +15,7 @@
 
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import type { Page } from "@playwright/test";
+import { CHANGELOG } from "../../src/content/changelog";
 import { expect, test } from "./fixtures";
 
 /**
@@ -24,7 +25,7 @@ import { expect, test } from "./fixtures";
  * links. Pointing a test at it lands on `RootRedirect`'s spinner while `/auth/me`
  * resolves, which is how the first draft of this file "passed": see `copy()`.
  */
-const PAGES = ["/", "/for-creators", "/about", "/faq", "/parents", "/roadmap"];
+const PAGES = ["/", "/for-creators", "/about", "/faq", "/parents", "/roadmap", "/changelog"];
 
 /**
  * Navigate, prove the page actually rendered, and hand back its text.
@@ -108,5 +109,25 @@ test.describe("FAQ", () => {
 		const q = page.getByText("How do gated content and gates work?", { exact: false }).first();
 		await q.click();
 		await expect(page.getByText("There is one kind of gate on Anthers")).toBeVisible();
+	});
+});
+
+test.describe("changelog", () => {
+	// Presence-of-structure, not copy assertion: the page links back to the roadmap
+	// (the closing button), and every release in the data module has a section on the
+	// page. The version headings are read from `CHANGELOG` rather than hardcoded, so a
+	// new release that fails to render fails here without anyone updating the test.
+	test("every release renders, and the page links back to the roadmap", async ({ page }) => {
+		await page.goto("/changelog");
+		await expect(page.locator("h1").first()).toBeVisible();
+
+		for (const release of CHANGELOG) {
+			await expect(page.locator("h2", { hasText: release.version }).first()).toBeVisible();
+		}
+
+		await expect(page.getByRole("link", { name: "The Roadmap" })).toHaveAttribute(
+			"href",
+			"/roadmap",
+		);
 	});
 });

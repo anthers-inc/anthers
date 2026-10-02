@@ -27,7 +27,11 @@ const CALVER = /^(\d{4})\.(\d{1,2})\.(\d+)$/;
 /** Reported as `version (entry N)` so a failure names the entry, not an index. */
 function located(): { where: string; entry: string; release: ChangelogRelease }[] {
 	return CHANGELOG.flatMap((release) =>
-		release.entries.map((entry, i) => ({ where: `${release.version} (entry ${i})`, entry, release })),
+		release.entries.map((entry, i) => ({
+			where: `${release.version} (entry ${i})`,
+			entry,
+			release,
+		})),
 	);
 }
 
