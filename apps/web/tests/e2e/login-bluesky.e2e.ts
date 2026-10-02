@@ -50,10 +50,7 @@ test.describe("logging in with Bluesky", () => {
 		// (`/^sign up$/`) pins a call to action's *wording* while pretending to test where
 		// it goes, and `.first()` answers a question about document order that nobody asked.
 		const card = page.locator("[data-auth-fade]");
-		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute(
-			"href",
-			"/signup",
-		);
+		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/signup");
 	});
 
 	test("a handle that resolves to nothing is refused in place", async ({ page }) => {

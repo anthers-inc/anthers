@@ -171,10 +171,7 @@ test.describe("one signup door", () => {
 		const card = page.locator("[data-auth-fade]");
 		// The prompt used to flip this same card into signup mode. It is a link now, and
 		// where it points is the whole property.
-		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute(
-			"href",
-			"/signup",
-		);
+		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/signup");
 	});
 });
 
