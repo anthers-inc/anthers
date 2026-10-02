@@ -660,11 +660,10 @@ jobs:
       # tag that exists is correct by definition, because it names this commit.
       - uses: actions/checkout@v4
         with:
-          # Only the tag step below needs the repo; the deploy itself is doctl. A
-          # shallow single-commit fetch is all the step reads — the version constant
-          # and the commit being tagged — and tags come along because the
-          # existing-tag check consults them.
-          fetch-depth: 1
+          # The tag step reads the version constant and the commit being tagged; the
+          # changelist step reads every commit back to the previous calver tag, so
+          # the fetch carries full history and tags rather than a single commit.
+          fetch-depth: 0
           fetch-tags: true
       - name: Tag the release v<APP_VERSION>
         run: |
@@ -689,3 +688,13 @@ jobs:
           git tag -a "v${VERSION}" -m "Anthers ${VERSION}" "$GITHUB_SHA"
           git push origin "refs/tags/v${VERSION}"
           echo "::notice::Tagged ${GITHUB_SHA:0:7} as v${VERSION} ✓"
+      - name: Publish the changelist as the release
+        # The raw changelist — every change between this tag and the previous one,
+        # one line per squash commit, unedited — as the GitHub release on the tag
+        # the step above just applied. The logic lives in scripts/release-changelist.sh
+        # so it is testable; its test stubs git and gh and drives every branch,
+        # including the ones a green deploy can never reach.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: bash scripts/release-changelist.sh
