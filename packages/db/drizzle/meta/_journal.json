@@ -743,6 +743,13 @@
       "when": 1790881333949,
       "tag": "0105_sleepy_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1790970716399,
+      "tag": "0106_solid_satana",
+      "breakpoints": true
     }
   ]
 }

@@ -478,6 +478,57 @@ export const atprotoOauthState = pgTable("atproto_oauth_state", {
 });
 
 /**
+ * One proof-of-work puzzle standing in front of `POST /auth/signup/begin` — the door
+ * that reserves a handle and writes a pending signup, and therefore the door a script
+ * must not be able to walk for free.
+ *
+ * The scheme is hashcash, per Anubis's design: the browser grinds SHA-256 of
+ * `challenge + nonce` until the digest carries `difficulty` leading hex zeros, and the
+ * server re-hashes once with the client's nonce to verify. No vendor, no third party in
+ * the funnel.
+ *
+ * 🚨 **The challenge is deliberately NOT bound to an IP address.** A person's network
+ * can change mid-ceremony (Wi-Fi to cellular, VPN connecting), and a puzzle that died
+ * with the address it was issued on would lock those people out of signup while
+ * stopping no script — a script that can hold a connection can hold an IP. Single-use
+ * and short-lived do the replay-prevention work on their own.
+ *
+ * **Single-use is `consumedAt`, and atomicity is the whole design.** The spend is a
+ * conditional `UPDATE ... WHERE consumed_at IS NULL`, so two requests presenting the
+ * same puzzle race and exactly one wins — replay prevention is ours to implement and
+ * this is where. The row is *marked* spent rather than deleted so a replay reads as a
+ * replay (`already_spent`) rather than as a puzzle that never existed.
+ *
+ * Consumed and expired rows are pure garbage — they carry no secret (the challenge
+ * string is public the moment it is handed to a browser) and mint nothing — so
+ * `PRUNE_CREDENTIALS` sweeps them beside `signup_codes`.
+ */
+// org — pre-account ceremony state, exactly as `signup_codes` beside it: the puzzle
+// guards a door that runs *before any user row exists*, so there is no node yet to own
+// it and it is org-side by elimination. Not IP-bound and carrying nothing personal
+// beyond "somebody fetched a challenge", but the gate itself is the org's.
+export const signupChallenges = pgTable(
+	"signup_challenges",
+	{
+		id: serial("id").primaryKey(),
+		/** Random hex from `generateToken()` — public the moment it is issued, guessable to nobody. */
+		challenge: text("challenge").notNull().unique(),
+		/**
+		 * How many leading hex zeros the digest must carry. Stored per row rather than read
+		 * from the environment at verify time, so a knob turned between issue and solve
+		 * cannot retroactively void puzzles already in people's browsers.
+		 */
+		difficulty: integer("difficulty").notNull(),
+		issuedAt: timestamp("issued_at", { withTimezone: true }).defaultNow().notNull(),
+		/** Null until spent — single-use is the point, and this is what enforces it. */
+		consumedAt: timestamp("consumed_at", { withTimezone: true }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+	},
+	// Swept by PRUNE_CREDENTIALS alongside the other expiring credential tables.
+	(table) => [index("idx_signup_challenges_expires").on(table.expiresAt)],
+);
+
+/**
  * A signup somebody has asked for and not yet finished — the **pending account**.
  *
  * 🚨 **It is a table of its own rather than a row in `users`, and the hazard decides
