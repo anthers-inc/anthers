@@ -648,7 +648,6 @@ export const ROADMAP: RoadmapGroup[] = [
 							"A separate admin app with its own accounts, where reports, appeals, copyright notices, quarantines and legal holds are handled from a screen.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
-						note: "Passing a report on to the copyright process is the one action without a screen.",
 						doc: { id: "51.02", title: "How Removal Works" },
 					},
 				],
@@ -893,8 +892,8 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "A Changelog",
 						blurb:
 							"What actually shipped, and when, so progress is checkable rather than asserted.",
-						bucket: "planned",
-						note: "Does not exist.",
+						bucket: "launched",
+						quarter: "Q4 2026",
 					},
 				],
 			},

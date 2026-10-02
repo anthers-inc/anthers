@@ -30,6 +30,7 @@ import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
+import { CHANGELOG } from "../content/changelog";
 import {
 	BUCKETS,
 	type Bucket,
@@ -204,8 +205,32 @@ function ItemCard({ item, accent }: { item: RoadmapItem; accent: (typeof ACCENT)
 			{item.note && (
 				<p className="mt-2 text-sm leading-relaxed text-base-content/45">{item.note}</p>
 			)}
+			{item.bucket === "launched" && <ShippedChip itemId={item.id} />}
 			{item.doc && <DocChip doc={item.doc} />}
 		</article>
+	);
+}
+
+/**
+ * The reverse half of the two-way changelog link: which release launched this item,
+ * as a chip back to `/changelog#<version>`. Computed here from the changelog data
+ * (the oldest release that claims the id) rather than stored on the roadmap item,
+ * so `roadmap.ts` gains no field and the changelog remains the one source of the
+ * relationship.
+ */
+function ShippedChip({ itemId }: { itemId: string }) {
+	// `CHANGELOG` is newest first, so the last match is the oldest release that shipped
+	// the item — the one that launched it.
+	const release = [...CHANGELOG].reverse().find((r) => r.roadmapIds?.includes(itemId));
+	if (!release) return null;
+
+	return (
+		<Link
+			to={`/changelog#${release.version}`}
+			className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-base-content/15 px-3 py-1 text-xs text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary"
+		>
+			<span className="truncate">Shipped in {release.version}</span>
+		</Link>
 	);
 }
 

@@ -76,6 +76,7 @@ function StudioLayout() {
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
 const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
+const ChangelogPage = lazy(() => import("./pages/ChangelogPage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
 const CompareItchPage = lazy(() => import("./pages/CompareItchPage"));
 const CreatorMonetizationCalculatorPage = lazy(
@@ -340,6 +341,7 @@ export default function App() {
 					    rather than on a 404. Parker, 2026-08-25. */}
 					<Route path="/abuse" element={<Navigate to="/safety" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
+					<Route path="/changelog" element={<ChangelogPage />} />
 
 					{/* Resource tools / calculators — public, work logged-in or out. */}
 					<Route element={<MeadowDecorLayout />}>
