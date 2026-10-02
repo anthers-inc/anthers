@@ -60,7 +60,7 @@ export function Lede({ children }: { children: React.ReactNode }) {
 }
 
 /** A signpost card for the support model's two directions. `tone` tints the card in
- *  the same color language as the two Subscribe cards — amber for backing the Anthers
+ *  the same color language as the two signup-page support cards — amber for backing the Anthers
  *  commons, green for backing a creator — via a colored border, a soft wash, the
  *  numbered chip, and the list bullets. `step` is optional (omit for an unnumbered pair). */
 export function SignpostCard({

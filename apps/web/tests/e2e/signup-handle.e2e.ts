@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The handle door on `/subscribe` — the one where Anthers issues the identity, and the one a
+ * The handle door on `/signup` — the one where Anthers issues the identity, and the one a
  * visitor now meets first.
  *
- * `/subscribe` is the single signup door and this spec's job, like its Bluesky sibling's, is
+ * `/signup` is the single signup door and this spec's job, like its Bluesky sibling's, is
  * to keep it single. A new tab is exactly the change that grows a second way in by accident:
  * the 2026-08-17 consolidation deleted a Create Account card for that reason, and the two
  * doors it replaced had already drifted about terms and onboarding.
@@ -30,7 +30,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-/** The signup control at the top of the page; `/subscribe` renders two. See its sibling. */
+/** The signup control at the top of the page; `/signup` renders two. See its sibling. */
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /** Answer the availability check without leaving the browser. */
@@ -64,7 +64,7 @@ async function openHandleDoor(page: Page) {
 
 test.describe("signing up with a handle Anthers issues", () => {
 	test("the handle is the door a visitor meets, and there is no address door", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openHandleDoor(page);
 
 		await expect(topSignup(page).getByLabel("The handle you'd like")).toBeVisible();
@@ -99,7 +99,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	test("the butterfly sits at the end, where the strongest color does no harm", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		const tabs = topSignup(page).getByRole("tab");
 		await expect(tabs).toHaveCount(2);
 		await expect(tabs.nth(1)).toHaveAccessibleName("Bluesky");
@@ -110,7 +110,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	// makes it the same kind of promise as the Bluesky panel's email-scope warning, pinned for
 	// the same reason.
 	test("it says an email address is coming next", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openHandleDoor(page);
 		// Filtered to the visible copy: the card sizes itself by stacking every note it can show
 		// and hiding all but one, so this sentence is in the DOM at every reading of the page.
@@ -124,7 +124,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	});
 
 	test("a name that is taken is refused before anybody commits to it", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await stubAvailability(page, (name) => ({
 			status: "taken",
 			handle: `${name}.anthers.social`,
@@ -143,7 +143,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	// suffix is the part somebody has not thought about, and they are choosing a domain name
 	// they will effectively control — saying it once, here, is cheaper than explaining it later.
 	test("an available name is shown in full, suffix and all", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await stubAvailability(page, (name) => ({
 			status: "available",
 			handle: `${name}.anthers.social`,
@@ -159,7 +159,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	test("a check that could not be made says so, and still lets the signup through", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await stubAvailability(page, () => ({ status: "unknown", handle: "" }));
 		await openHandleDoor(page);
 
@@ -172,7 +172,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 	});
 
 	test("the name typed into the card is what the pending signup carries", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await stubAvailability(page, (name) => ({
 			status: "available",
 			handle: `${name}.anthers.social`,
@@ -218,7 +218,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 			status: "available",
 			handle: `${name}.anthers.social`,
 		}));
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openHandleDoor(page);
 		// ⚠️ **A fresh name every run, because asking reserves it.** A fixed name is held by the
 		// previous run's pending signup for a week, and the second run would be refused.
@@ -261,7 +261,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 				body: JSON.stringify({ hostedIdentityOffered: false, hostedHandleSuffix: "" }),
 			});
 		});
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		await expect(topSignup(page).getByLabel("Bluesky handle")).toBeVisible();
 		await expect(topSignup(page).getByRole("tab")).toHaveCount(0);
@@ -285,7 +285,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 				body: JSON.stringify({ error: "heldname.anthers.test is taken." }),
 			});
 		});
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openHandleDoor(page);
 		await topSignup(page).getByLabel("The handle you'd like").fill("heldname");
 		await topSignup(page)
@@ -293,7 +293,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 			.click();
 
 		await expect(topSignup(page).getByText("heldname.anthers.test is taken.")).toBeVisible();
-		await expect(page).toHaveURL(/\/subscribe/);
+		await expect(page).toHaveURL(/\/signup/);
 		await expect(
 			topSignup(page).getByRole("button", { name: /sign up with anthers/i }),
 		).toBeDisabled();
@@ -311,7 +311,7 @@ test.describe("signing up with a handle Anthers issues", () => {
 			asked += 1;
 			await route.abort();
 		});
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await openHandleDoor(page);
 
 		await topSignup(page).getByLabel("The handle you'd like").fill("bad_name");

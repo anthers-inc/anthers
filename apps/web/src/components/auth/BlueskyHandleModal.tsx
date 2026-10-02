@@ -13,11 +13,11 @@
  * of leaves. A step that opens over the page costs the card nothing.
  *
  * ⚠️ **This is `/login`'s prompt and only `/login`'s, since 2026-08-24.** It carried a
- * `mode` prop and a second set of copy for signing up, because `/subscribe` opened it too.
+ * `mode` prop and a second set of copy for signing up, because `/signup` opened it too.
  * That card has room this one does not, so the handle is asked for inline there and the
  * signup branch here had no caller left. The promises it used to make — that Bluesky will
  * be asked for an email address, that Anthers confirms it regardless, and that a name and
- * the terms still follow — moved with the field and are pinned by `subscribe-bluesky.e2e`.
+ * the terms still follow — moved with the field and are pinned by `signup-bluesky.e2e`.
  *
  * Same contract as `EmailCodeModal`: the caller owns the outcome. `onSubmit` starts
  * whatever flow it starts and **throws an `Error` whose message is shown in the field**
@@ -38,7 +38,7 @@ interface Props {
 
 /**
  * 🚨 The last sentence is the one that matters: this door **cannot** create an account, and
- * saying so is what keeps it distinct from the signup door on `/subscribe`. A reader who
+ * saying so is what keeps it distinct from the signup door on `/signup`. A reader who
  * assumed otherwise would find out at the end of a round trip through another website.
  */
 const COPY = {

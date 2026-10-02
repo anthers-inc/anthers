@@ -3,15 +3,15 @@
  * Finishing a signup (route: `/finish`) — the page whose whole job is finishing.
  *
  * 🚨 **It exists because of what the old arrangement read like from the outside.** Signing
- * up used to end where it began: a modal over `/subscribe`, on a page still inviting you to
- * add and drop picks behind it. Through the Bluesky door that was worse — you left for
- * bsky.social, came back to `/subscribe`, and were apparently asked to sign up again with no
- * sign that anything had succeeded. Parker walked it on 2026-08-25 and could not tell
- * whether it had worked.
+ * up used to end where it began: a modal over `/subscribe` (the signup page's name until
+ * 2026-10-02), on a page still inviting you to add and drop picks behind it. Through the
+ * Bluesky door that was worse — you left for bsky.social, came back to `/subscribe`, and
+ * were apparently asked to sign up again with no sign that anything had succeeded. Parker
+ * walked it on 2026-08-25 and could not tell whether it had worked.
  *
  * Two things make this better than a modal, and both come from the same move.
  *
- * **The next thing asked of somebody is the only thing in front of them.** `/subscribe` is
+ * **The next thing asked of somebody is the only thing in front of them.** `/signup` is
  * where the choices get made; pressing *Create My Account* writes them down and brings the
  * person here, where there is nothing to reconsider and one thing to do.
  *
@@ -32,7 +32,7 @@
  * second place *in the UI that mints accounts*, and a page reachable only by already having
  * a pending signup is a continuation of the one door rather than a rival to it. That is a
  * property of the guard below, not of the URL: somebody who navigates here directly with no
- * pending record is sent to `/subscribe`, and there is deliberately no way to start one from
+ * pending record is sent to `/signup`, and there is deliberately no way to start one from
  * this page.
  */
 
@@ -133,7 +133,7 @@ export default function FinishSignupPage() {
 	const [email, setEmail] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	/** The identity step's fields, the same two `/subscribe` offers. */
+	/** The identity step's fields, the same two `/signup` offers. */
 	const [hostedName, setHostedName] = useState("");
 	const [hostedRefusal, setHostedRefusal] = useState<string | null>(null);
 	const [hostedOpen, setHostedOpen] = useState(false);
@@ -157,7 +157,7 @@ export default function FinishSignupPage() {
 	 *
 	 * Refs rather than state because `commit` reads them in the same turn it sets them — a
 	 * state update would not have landed, and the account would be left on this page instead
-	 * of being sent to onboarding. The same shape `/subscribe` uses, for the same reason.
+	 * of being sent to onboarding. The same shape `/signup` uses, for the same reason.
 	 */
 	const destination = useRef<string | null>(null);
 
@@ -183,7 +183,7 @@ export default function FinishSignupPage() {
 		 * list is the one that matters.** A pick is stored as a handle and the charge needs
 		 * the creator's id, so the list is what turns one into the other — and a page that
 		 * accepted a code while it was still in flight would either quote support it then
-		 * failed to bill, or bill support it never showed. `/subscribe` carries the same
+		 * failed to bill, or bill support it never showed. `/signup` carries the same
 		 * hazard in a milder form (a pick made before the list loaded was quotable and
 		 * unbillable); here the whole charge is assembled in one turn, so it is closed by
 		 * waiting rather than by reconciling afterwards.
@@ -203,7 +203,7 @@ export default function FinishSignupPage() {
 				if (!row) {
 					// ⚠️ **The guard that keeps this from being an entry point.** There is nothing
 					// to finish, so there is nowhere to be but the page that starts one.
-					navigate("/subscribe", { replace: true });
+					navigate("/signup", { replace: true });
 					return;
 				}
 				setCreators(list);
@@ -224,7 +224,7 @@ export default function FinishSignupPage() {
 	}, [isLoading, user, navigate]);
 
 	// Whether Anthers can issue a handle here, and the suffix it hangs under — for the identity
-	// step, which offers the same two doors `/subscribe` does.
+	// step, which offers the same two doors `/signup` does.
 	useEffect(() => {
 		let live = true;
 		client.api.atproto.config
@@ -248,7 +248,7 @@ export default function FinishSignupPage() {
 
 	const byHandle = new Map(creators.map((c) => [c.handle, c]));
 	/**
-	 * 🚨 **One list, and the charge and the summary are both built from it.** `/subscribe`
+	 * 🚨 **One list, and the charge and the summary are both built from it.** `/signup`
 	 * derived what it displayed and what it billed by two routes until 2026-08-16 and quoted
 	 * $9 while charging $1. This page shows a total too, so it inherits the rule rather than
 	 * the defect.
@@ -264,7 +264,7 @@ export default function FinishSignupPage() {
 	 *
 	 * 🚨 **Refreshing the context is what unmounts this page, so it must be the LAST thing.**
 	 * `PublicShell` returns a different component type for a signed-in visitor, so the moment
-	 * `refreshUser()` resolves React tears this subtree down. `/subscribe` paid for that
+	 * `refreshUser()` resolves React tears this subtree down. `/signup` paid for that
 	 * lesson with a payment modal that never opened.
 	 */
 	const leave = useCallback(
@@ -467,7 +467,7 @@ export default function FinishSignupPage() {
 
 	const abandon = async () => {
 		await client.api.auth.signup.cancel.$post().catch(() => {});
-		navigate("/subscribe", { replace: true });
+		navigate("/signup", { replace: true });
 	};
 
 	if (face === "loading" || !pending) {
@@ -747,7 +747,7 @@ export default function FinishSignupPage() {
 /**
  * What is waiting on the other side of the code — the picks, read back.
  *
- * ⭐ **This is the other half of the fix.** Getting somebody off `/subscribe` means their
+ * ⭐ **This is the other half of the fix.** Getting somebody off `/signup` means their
  * choices are no longer in front of them, and a page that asked for a code while saying
  * nothing about what it was for would have traded one kind of disorientation for another.
  * It is a summary and not a control: changing a pick is what *Start over* is for, because a

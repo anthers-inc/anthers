@@ -158,7 +158,7 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
  * `WHERE creator_id = ${users.id}` silently becomes `WHERE creator_id = follows.id`.
  * Postgres raises nothing, the shape of the result is right, and every count is wrong:
  * follower counts, project counts and `isFollowing` all read 0 for accounts that had
- * followers, posts and follows. Found 2026-08-11 while building /subscribe, which is the
+ * followers, posts and follows. Found 2026-08-11 while building the signup page, which is the
  * first surface to render these numbers where being wrong is obvious.
  *
  * The lesson generalizes past this file: **a correlated subquery in a select list must
@@ -573,7 +573,7 @@ const accountRoutes = new Hono()
 				projectCount: publishedProjectCount.as("project_count"),
 				// What a creator actually makes, taken from what they have released rather
 				// than from anything they declare — a self-described medium drifts the moment
-				// the catalog does. Feeds the medium chips on /subscribe.
+				// the catalog does. Feeds the medium chips on /signup.
 				mediums: sql<
 					string[]
 				>`COALESCE((SELECT array_agg(DISTINCT w.type) FROM works w WHERE w.creator_id = ${usersId} AND w.visibility = 'released'), ARRAY[]::text[])`.as(

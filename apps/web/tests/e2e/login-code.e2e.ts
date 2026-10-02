@@ -4,7 +4,7 @@
  *
  * No account holds a password (Parker, 2026-09-13), so this page has no password field
  * and no route it could post one to: the one form asks for an email address, mails it a
- * six-character code, and opens the same six-box field `/subscribe` uses.
+ * six-character code, and opens the same six-box field `/signup` uses.
  *
  * ⚠️ **Completing a sign-in with the real code is `emailed-code.e2e.ts`'s job**, which reads the
  * code out of the session's mail catcher. This spec pins the page around it — including that
@@ -63,7 +63,7 @@ test.describe("signing in with an emailed code", () => {
 
 		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
 		await expect(page.locator('input[aria-label^="Code character"]')).toHaveCount(6);
-		// Stays on /login. Sending someone to /subscribe to sign in is what this replaced.
+		// Stays on /login. Sending someone to the signup page to sign in is what this replaced.
 		expect(new URL(page.url()).pathname).toBe("/login");
 
 		// 🚨 The lede is conditional — "if there's an Anthers account for …" — because the

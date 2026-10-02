@@ -3,7 +3,7 @@
 // The last check before money moves: what the user was quoted must be what gets billed.
 //
 // 🚨 **This guard exists because the two numbers were derived by different routes and
-// diverged.** On 2026-08-16 `/subscribe` asked `preview/:amount` about the whole charge
+// diverged.** On 2026-08-16 `/signup` asked `preview/:amount` about the whole charge
 // and then POSTed a destination COUNT as the amount, so the modal displayed $9 and the
 // subscribe body said $1. Nothing sat between that discrepancy and the card.
 //

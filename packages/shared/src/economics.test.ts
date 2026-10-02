@@ -211,7 +211,7 @@ describe("supportBreakdown", () => {
 		expect(s.foundation.toNumber()).toBe(0);
 		expect(s.payments.toFixed(2)).toBe("0.39"); // worst case: $0.30 borne alone
 		expect(s.creatorNet.toFixed(2)).toBe("2.61");
-		expect(s.total.toFixed(2)).toBe("3.00"); // matches the Subscribe page
+		expect(s.total.toFixed(2)).toBe("3.00"); // matches the signup page
 	});
 });
 

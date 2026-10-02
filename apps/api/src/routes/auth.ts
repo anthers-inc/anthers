@@ -70,7 +70,7 @@ const emailCodeStartSchema = z.object({
 });
 
 /**
- * The choices `/subscribe` is holding when somebody presses *Create My Account*.
+ * The choices `/signup` is holding when somebody presses *Create My Account*.
  *
  * ⚠️ **Bounded rather than accepted as posted.** This arrives from a browser and is stored
  * as jsonb on a row nobody has yet proved anything about, so the ceiling is here rather
@@ -86,7 +86,7 @@ const signupPicksSchema = z.object({
 /**
  * Asking for an account.
  *
- * The address is **optional**, because the Bluesky door leaves `/subscribe` before it has
+ * The address is **optional**, because the Bluesky door leaves `/signup` before it has
  * one: the identity is proved first and the PDS may or may not hand an address over, so the
  * row is written with the picks alone and the address lands on it later.
  */
@@ -352,7 +352,7 @@ async function mintFromProvedAddress(c: Context, email: string, pendingToken: st
 const authRoutes = new Hono()
 	// ── Signup ceremony: ask, prove the address, then build the account ──────
 	//
-	// The order is the feature. `/subscribe` is where a visitor makes their choices;
+	// The order is the feature. `/signup` is where a visitor makes their choices;
 	// pressing *Create My Account* writes them down and takes the person **off** that page
 	// to one whose only job is finishing. This is where that happens. Parker's reasoning:
 	// every account should arrive with a confirmed address, the public page should ask for
@@ -485,7 +485,7 @@ const authRoutes = new Hono()
 	//
 	// ⚠️ This is the **resend**, and the address it is given may be a new one: somebody whose
 	// PDS gave us no address types theirs here, and somebody who mistyped theirs at
-	// `/subscribe` corrects it. Either way the pending row has to follow, or the account
+	// `/signup` corrects it. Either way the pending row has to follow, or the account
 	// would be minted against the address they abandoned.
 	.post("/signup/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
@@ -572,13 +572,13 @@ const authRoutes = new Hono()
 	// ⚠️ **The two things it insists on are what keep it from being a second signup door.**
 	// It needs a pending signup bound to this browser by cookie, and that row must already
 	// carry the stamp. Neither can be produced by asking: the row only exists because
-	// somebody pressed *Create My Account* at `/subscribe`, and the stamp only exists
+	// somebody pressed *Create My Account* at `/signup`, and the stamp only exists
 	// because somebody read a code out of the mailbox on it.
 	.post("/signup/complete", async (c) => {
 		const pendingToken = getCookie(c, PENDING_SIGNUP_COOKIE);
 		const row = await readPendingSignup(pendingToken);
 		if (!row?.email || !row.emailProvedAt) {
-			return c.json({ error: "There's nothing to finish here — start at /subscribe." }, 404);
+			return c.json({ error: "There's nothing to finish here — start at /signup." }, 404);
 		}
 
 		const minted = await mintFromProvedAddress(c, row.email, pendingToken);
@@ -619,7 +619,7 @@ const authRoutes = new Hono()
 	//
 	// 🚨 **Why this is not just `/signup/start` called from a second page.** That pair
 	// *creates an account* when the address is unknown, which is the one thing the login
-	// page must never do — `/subscribe` is the single signup door precisely so that terms
+	// page must never do — `/signup` is the single signup door precisely so that terms
 	// acceptance, onboarding and where a new account lands have one description rather than
 	// two that drift. A page that mints accounts as a side effect of a mistyped address is
 	// that second door, however little it looks like one.
@@ -707,7 +707,7 @@ const authRoutes = new Hono()
 
 			// Reachable only by someone holding a live code for an address with no account and
 			// no pending signup — which `/signin/start` never issues, so it means a code minted
-			// at `/subscribe` was typed in here instead. Naming that plainly costs nothing:
+			// at `/signup` was typed in here instead. Naming that plainly costs nothing:
 			// reaching this line already requires reading the mailbox, so there is no
 			// enumeration left to protect. What it must not do is quietly create the account.
 			return c.json(

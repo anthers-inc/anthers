@@ -4,7 +4,7 @@
  * so it is tested the way an access rule is: the refusals matter more than the passes.
  *
  * ⚠️ The hazard is *not* hypothetical-looking. `?next=` travels the whole signup detour
- * now (`/subscribe` → `/welcome`), which means a link someone is sent — "sign up here to
+ * now (`/signup` → `/welcome`), which means a link someone is sent — "sign up here to
  * read this" — carries the destination they land on at the end of it, right after typing
  * a code from their inbox. That is the moment an off-origin redirect is worth the most.
  */

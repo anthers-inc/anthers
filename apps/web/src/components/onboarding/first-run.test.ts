@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { readArrival } from "./FirstRun";
 
-const PICKS_KEY = "anthers_subscribe_picks";
+const PICKS_KEY = "anthers_signup_picks";
 
 function setPicks(picks: unknown) {
 	localStorage.setItem("_", "_"); // touch, so a broken stub fails loudly rather than silently

@@ -12,7 +12,7 @@
  *
  * ⭐ **Two sizes, and that is the whole design.** One measurement cannot tell a foreground
  * that scales from a fixed one that happens to look right at the size you checked. The same
- * ratio at `h-24` on `/for-users` and `h-14` on `/subscribe` can only come from a foreground
+ * ratio at `h-24` on `/for-users` and `h-14` on `/signup` can only come from a foreground
  * measured against its badge, so anything absolute fails the second half even if it passes
  * the first.
  *
@@ -57,7 +57,7 @@ async function artShare(badge: Locator) {
 test.describe("Badge art is sized to its Badge", () => {
 	for (const [route, name] of [
 		["/for-users", "Blossom"],
-		["/subscribe", "Sprout"],
+		["/signup", "Sprout"],
 	] as const) {
 		test(`🚨 the art fills its share of the Badge on ${route}`, async ({ page }) => {
 			await page.goto(route);
@@ -76,7 +76,7 @@ test.describe("Badge art is sized to its Badge", () => {
 	test("⭐ the same art fills the same share at two different Badge sizes", async ({ page }) => {
 		await page.goto("/for-users");
 		const big = await artShare(badgeNamed(page, "Sprout"));
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		const small = await artShare(badgeNamed(page, "Sprout"));
 		expect(
 			small.badgeWidth,

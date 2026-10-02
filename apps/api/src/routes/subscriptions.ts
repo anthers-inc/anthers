@@ -138,7 +138,7 @@ const MAX_ANTHERS_SUPPORT = 300;
 const MIN_INVOICE_TOTAL = STRIPE_MIN_CHARGE;
 
 /** The Badge ladder (Free … Blossom), each with its monthly amount + decomposition. Shared
- *  with the Subscribe page via `badgeViews()` so the two never drift. */
+ *  with the signup page via `badgeViews()` so the two never drift. */
 const BADGE_VIEWS = badgeViews();
 
 // ── Stickers ─────────────────────────────────────────────────────────────────
@@ -746,7 +746,7 @@ const subscriptionRoutes = new Hono()
 			 * 🚨 **The Anthers line is $0 or at least $3.** $3 is what unlimited Public Access
 			 * costs and it is the bottom rung of the ladder, so anything between buys a Badge's
 			 * worth of nothing — no rung cleared, no meter lifted, and a supporter with no way
-			 * to find that out except by comparing their account page against `/subscribe`.
+			 * to find that out except by comparing their account page against `/signup`.
 			 *
 			 * ⚠️ **It bounds the Anthers destination only, and must never be allowed to spread
 			 * to `directed`.** A creator sets their own Badge levels to any chargeable amount,

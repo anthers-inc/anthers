@@ -4,7 +4,7 @@
  * into.
  *
  * 🚨 **One copy, because the subtle half is the part that would be copied wrong.** Two surfaces
- * ask this question now — the signup card at `/subscribe` and the identity section in settings
+ * ask this question now — the signup card at `/signup` and the identity section in settings
  * — and the rule that makes either of them correct is that a stale answer is discarded rather
  * than displayed. A second hand-written copy of that would work in every test anybody thinks to
  * write and would be wrong on a slow connection, which is exactly how seven copies of the API

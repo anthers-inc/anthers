@@ -36,7 +36,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		// "Subscribe" until 2026-08-17, which named the URL rather than the thing.
 		title: "Users",
 		links: [
-			["Sign Up Free", "/subscribe"],
+			["Sign Up Free", "/signup"],
 			["Log In", "/login"],
 		],
 	},
@@ -209,14 +209,14 @@ export default function LoggedOutLayout() {
 
 						⚠️ This was ONE button reading "Start Exploring", pointing at /signup — the
 						four-field Create Account card — until 2026-08-17. Two things changed
-						together: that card is gone (signing up is /subscribe now, one door), and a
+						together: that card is gone (signing up is one door, /signup), and a
 						returning user had no visible way in from the marketing site at all, since
 						"Start Exploring" said nothing about logging in and the only /login links
 						lived inside gated-content modals. Naming the two acts is what makes the
 						contrast legible; "Start Exploring" named neither.
 
 						🚨 **"Sign Up Free", and the word is doing real work** (2026-08-22). The
-						button leads to `/subscribe`, a page that also asks about supporting a
+						button leads to `/signup`, a page that also asks about supporting a
 						creator and supporting Anthers — so a bare "Sign Up" invites the reader to
 						assume the door has a price on it. It does not: an email address is the
 						whole of it. The claim is safe to make outright because the free tier is
@@ -228,7 +228,7 @@ export default function LoggedOutLayout() {
 						the eye met the quiet button on its way to the loud one. */}
 					<div className="flex flex-1 items-center justify-end gap-1 sm:gap-2">
 						<Link
-							to="/subscribe"
+							to="/signup"
 							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
 						>
 							Sign Up Free

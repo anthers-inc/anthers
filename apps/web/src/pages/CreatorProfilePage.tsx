@@ -331,7 +331,7 @@ function BadgesTab({
 							Support Anthers monthly to start unlocking Badges, and {creatorName} to back them
 							directly.
 						</p>
-						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
+						<Link to="/signup" className="btn btn-primary btn-sm mx-auto">
 							Get Started
 						</Link>
 					</div>

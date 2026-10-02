@@ -28,7 +28,7 @@ import LoggedOutLayout from "./LoggedOutLayout";
  * the user is standing on and all of its state.
  *
  * **So any flow that signs somebody in AND THEN KEEPS WORKING on the same page has this
- * shape, and it fails silently.** The subscribe ceremony is the case that found it: it
+ * shape, and it fails silently.** The signup ceremony is the case that found it: it
  * refreshed the auth context the moment the emailed code verified, the payment modal's
  * state update then landed on an unmounted component, and the modal simply never opened.
  * No error, no warning, no failing test — React discards a state update on an unmounted

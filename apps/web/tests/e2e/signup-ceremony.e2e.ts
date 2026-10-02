@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Starting an account from `/subscribe`, and the one door rule around it.
+ * Starting an account from `/signup`, and the one door rule around it.
  *
  * ⚠️ **The ceremony stopped happening on this page on 2026-08-26.** Pressing *Create My
  * Account* writes the choices down as a pending signup and hands the visitor to `/finish`,
@@ -10,7 +10,7 @@
  * 🚨 **This page had no e2e coverage at all**, which is recorded in the Agents Hub as a
  * known gap — it was rebuilt wholesale in #223 with `make verify` green throughout, and
  * verified only by driving a browser by hand. That gap then cost a real bug during the
- * ceremony work: `/subscribe` renders inside `PublicShell`, which returns
+ * ceremony work: `/signup` renders inside `PublicShell`, which returns
  * `LoggedOutLayout` or `LoggedInLayout` depending on auth state, so refreshing the auth
  * context tore the page down mid-flow and the payment modal silently never opened. No
  * error, no failing test, and nothing a route test could have seen.
@@ -33,7 +33,7 @@ const addr = () =>
 /**
  * The signup control at the top of the page — the one a visitor meets first.
  *
- * ⚠️ **`/subscribe` carries two of these**, since 2026-08-22: one above the optional
+ * ⚠️ **`/signup` carries two of these**, since 2026-08-22: one above the optional
  * support sections and one in the closing summary. They share state and their buttons
  * share a label, which is correct for a reader and ambiguous for a locator — so every
  * assertion here names which one it means rather than relying on `.first()`, whose answer
@@ -50,7 +50,7 @@ const handleName = () =>
 /**
  * Ask for an account and land on the page that finishes it.
  *
- * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/subscribe`
+ * ⚠️ **Through the handle door, because that is the door now** (2026-09-08). `/signup`
  * stopped asking for an address: signing up begins by picking a handle, and the address is
  * taken at `/finish`. The availability check asks the browser session's own identity server,
  * which answers `available` for a fresh name, so nothing here needs to stub it.
@@ -94,11 +94,12 @@ const rung = (page: Page, name: RegExp) =>
 	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
 
 /**
- * There is exactly ONE way to mint an account from the browser, and it is `/subscribe`.
+ * There is exactly ONE way to mint an account from the browser, and it is `/signup`.
  *
  * 🚨 These are the *absence* assertions for the 2026-08-17 consolidation, and they exist
  * because the thing they guard cannot fail loudly. The four-field Create Account card at
- * `/signup` was deleted; nothing breaks if someone adds a second signup form back, and
+ * `/signup` (the route it lived on until the 2026-08-17 consolidation made it a redirect)
+ * was deleted; nothing breaks if someone adds a second signup form back, and
  * the cost of one is not obvious from either page — two doors have to keep agreeing about
  * terms acceptance, onboarding, and where a new account lands, and the pair that existed
  * had already drifted (only `/welcome` asks for the terms now, so a second door that
@@ -108,11 +109,11 @@ const rung = (page: Page, name: RegExp) =>
  * something, that claim needs a test, because a second one arrives silently.
  */
 test.describe("one signup door", () => {
-	test("/signup is a redirect to /subscribe, not a form", async ({ page }) => {
-		await page.goto("/signup");
+	test("/subscribe is a redirect to /signup, not a form", async ({ page }) => {
+		await page.goto("/subscribe");
 
 		await expect(page.getByRole("heading", { name: /anthers is free/i })).toBeVisible();
-		expect(new URL(page.url()).pathname).toBe("/subscribe");
+		expect(new URL(page.url()).pathname).toBe("/signup");
 	});
 
 	test("no page in the logged-out surface offers a password, or a second account form", async ({
@@ -128,7 +129,7 @@ test.describe("one signup door", () => {
 		// the input with no `htmlFor`, so `getByLabel` matches nothing on this site whether
 		// or not a form is there. It passed against the deleted card as happily as against
 		// the live page. Count what the DOM actually contains.
-		for (const path of ["/subscribe", "/login"]) {
+		for (const path of ["/signup", "/login"]) {
 			await page.goto(path);
 			await expect(page.locator("h1").first()).toBeVisible();
 			await expect(
@@ -153,10 +154,10 @@ test.describe("one signup door", () => {
 		// "Sign Up Free" since 2026-08-22 — the word is load-bearing, because the button
 		// leads to a page that also discusses paying and a bare "Sign Up" invites the reader
 		// to assume the door has a price on it. Where it points is what this test is about;
-		// what it promises is `subscribe-free-first.e2e.ts`'s.
+		// what it promises is `signup-free-first.e2e.ts`'s.
 		await expect(header.getByRole("link", { name: "Sign Up Free", exact: true })).toHaveAttribute(
 			"href",
-			"/subscribe",
+			"/signup",
 		);
 	});
 
@@ -170,18 +171,15 @@ test.describe("one signup door", () => {
 		const card = page.locator("[data-auth-fade]");
 		// The prompt used to flip this same card into signup mode. It is a link now, and
 		// where it points is the whole property.
-		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute(
-			"href",
-			"/subscribe",
-		);
+		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/signup");
 	});
 });
 
-test.describe("starting an account from /subscribe", () => {
+test.describe("starting an account from /signup", () => {
 	test("pressing the button takes the visitor off this page, with no modal over it", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		await askForAccount(page, /sign up with anthers/i);
 
@@ -200,7 +198,7 @@ test.describe("starting an account from /subscribe", () => {
 	test("a chosen Badge changes the ask, and the flow says a payment is coming", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		// The Anthers ladder, which was a yes/no card until 2026-08-24. Root is the rung
 		// that used to be the only expressible answer, so it is the one that keeps this
 		// test comparable to what it asserted before.
@@ -224,7 +222,7 @@ test.describe("starting an account from /subscribe", () => {
 		// meet tells them the flow is longer than it is.
 		await expect(page).toHaveURL(/\/finish$/);
 		// ⚠️ **Scoped to the rail by its accessible name.** An unscoped `listitem` filter
-		// matched `/subscribe`'s own fee breakdown, which has two rows reading "Payments" —
+		// matched `/signup`'s own fee breakdown, which has two rows reading "Payments" —
 		// and reported a strict-mode violation where it meant to report a missing step.
 		await expect(
 			page.getByRole("list", { name: "Signup Progress" }).getByText("Payment", { exact: true }),
@@ -247,7 +245,7 @@ test.describe("starting an account from /subscribe", () => {
 	test("a rung above Root is quoted at its own amount, not at the entry price", async ({
 		page,
 	}) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await rung(page, /^blossom/i).click();
 
 		const monthly = page.getByText("Monthly", { exact: true }).locator("..");
@@ -258,7 +256,7 @@ test.describe("starting an account from /subscribe", () => {
 	});
 
 	test("the free path has no payment step to promise", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await askForAccount(page, /sign up with anthers/i);
 		const rail = page.getByRole("list", { name: "Signup Progress" });
 		await expect(rail.getByText("Your Email", { exact: true })).toBeVisible();
@@ -276,7 +274,7 @@ test.describe("starting an account from /subscribe", () => {
  */
 test.describe("the code field", () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await askForAccount(page);
 		await giveAddress(page);
 

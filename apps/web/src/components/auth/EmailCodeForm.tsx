@@ -10,7 +10,7 @@
  *
  * ⚠️ **It was split out of `EmailCodeModal` on 2026-08-26, when a third caller appeared that
  * is not a modal at all.** The page that finishes a signup asks for the code *in place* —
- * getting somebody off `/subscribe` and then opening a popup over the page that replaced it
+ * getting somebody off `/signup` and then opening a popup over the page that replaced it
  * would reproduce the layer this whole change exists to remove. The modal now wraps this;
  * `/login` still meets it as a modal, and the finishing page renders it inline.
  *

@@ -189,7 +189,7 @@ export async function mintEmailedCode(
  * Mint a code **only for an address somebody has already asked us for** — the `/login` door.
  *
  * 🚨 **The difference from `issueSignupCode` is the whole reason this exists: it can never
- * lead to an account being created out of nothing.** `/subscribe` is the one signup door,
+ * lead to an account being created out of nothing.** `/signup` is the one signup door,
  * and a login page that mailed a code to a stranger's address would be a second one — the
  * code would be spendable, and whatever spent it would have to decide what to do with an
  * address nobody has an account for. Refusing to issue at all is what keeps that decision
@@ -197,20 +197,20 @@ export async function mintEmailedCode(
  *
  * ⭐ **"Already asked us for" is two things rather than one**, and the second is what makes a
  * signup resumable in a different browser: an address with an account, and an address with
- * an **unfinished signup** somebody started at `/subscribe`. Both are addresses Anthers is
+ * an **unfinished signup** somebody started at `/signup`. Both are addresses Anthers is
  * already in a relationship with, so mailing a code to either tells an outsider nothing they
  * did not already have to know. What the second one may lead to is `POST /signup/complete`,
  * on the signup pair, where minting belongs — never a `users` row written from here.
  *
  * ⚠️ **A mistyped address at `/login` still cannot mint anything**, which is the property
  * this function exists to hold. There is no pending signup for an address nobody has typed
- * into `/subscribe`, so the miss branch below is exactly as unreachable as it ever was.
+ * into `/signup`, so the miss branch below is exactly as unreachable as it ever was.
  *
  * Two consequences that are easy to get wrong, so they live here rather than at the route:
  *
  *   • **No row is written for an unknown address.** Issuing one and declining to send it
  *     would leave a live code in `signup_codes` that nobody received — and, worse, would
- *     start the resend throttle, so the same person walking on to `/subscribe` seconds
+ *     start the resend throttle, so the same person walking on to `/signup` seconds
  *     later would be told to check an inbox nothing was ever sent to.
  *   • **The miss branch does the same argon2 work as the hit branch**, so the two cannot be
  *     told apart by how long the response takes. The body is identical by construction (the

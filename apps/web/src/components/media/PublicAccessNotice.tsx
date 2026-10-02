@@ -90,7 +90,7 @@ export function PublicAccessCountdown() {
 				)}
 			</p>
 			<SeedPitch compact />
-			<Link to="/subscribe" className="btn btn-primary btn-sm mt-3">
+			<Link to="/signup" className="btn btn-primary btn-sm mt-3">
 				Support Anthers
 			</Link>
 		</div>
@@ -120,7 +120,7 @@ export function PublicAccessWall({ budget }: { budget: PublicAccessBudget }) {
 			<div className="max-w-md">
 				<SeedPitch />
 			</div>
-			<Link to="/subscribe" className="btn btn-primary mt-1">
+			<Link to="/signup" className="btn btn-primary mt-1">
 				Support Anthers
 			</Link>
 			{/* "watched" was wrong here on three of the four media — the allowance is one pool

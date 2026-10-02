@@ -31,7 +31,7 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 	const name = `e2e${stamp()}`.slice(0, 18);
 	const address = `e2e-signup-${stamp()}@example.com`;
 
-	await page.goto("/subscribe");
+	await page.goto("/signup");
 	await topSignup(page).getByLabel("The handle you'd like").fill(name);
 	await topSignup(page)
 		.getByRole("button", { name: /sign up with anthers|create my account/i })

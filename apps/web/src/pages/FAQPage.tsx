@@ -7,7 +7,7 @@
 // Nunito, and the closing band.
 //
 // ⚠️ **The questions themselves moved out on 2026-08-28** to `content/faq.tsx`, when the
-// homepage, /for-creators and /subscribe each grew a short FAQ of their own. This page is
+// homepage, /for-creators and /signup each grew a short FAQ of their own. This page is
 // the **union** — every question in the pool renders here, grouped by category — which is
 // what lets each of those pages carry six and truthfully point at "the rest" rather than
 // keeping a private copy of an answer to drift out of step. See the pool's header for the

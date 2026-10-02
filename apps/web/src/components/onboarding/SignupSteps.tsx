@@ -24,7 +24,7 @@
 import { FONTS } from "@anthers/web-shared/fonts";
 import { CheckIcon } from "@heroicons/react/24/solid";
 
-/** The same face `/welcome` and `/subscribe` set their headings in. */
+/** The same face `/welcome` and `/signup` set their headings in. */
 const serif = { fontFamily: FONTS.fraunces };
 
 export interface SignupStep {
@@ -101,7 +101,7 @@ export default function SignupSteps({
 			    the sequence at every width instead. */}
 			{/* ⚠️ **Named, and the name is load-bearing for more than assistive tech.** An
 			    unnamed `<ol>` is indistinguishable from every other list on the site, and the
-			    first spec written against these steps matched `/subscribe`'s fee breakdown
+			    first spec written against these steps matched `/signup`'s fee breakdown
 			    instead — two list items reading "Payments" — and reported a strict-mode
 			    violation where it meant to report a missing step. */}
 			<ol aria-label="Signup Progress" className="flex flex-wrap items-center gap-x-6 gap-y-2">

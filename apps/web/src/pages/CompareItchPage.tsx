@@ -85,7 +85,7 @@ export default function CompareItchPage() {
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/subscribe"}
+								to={isAuthenticated ? "/dashboard" : "/signup"}
 								className="btn btn-primary rounded-full px-8"
 							>
 								Try Anthers Free
@@ -412,7 +412,7 @@ export default function CompareItchPage() {
 				<Reveal delay={120}>
 					<div className="mt-9 flex flex-wrap justify-center gap-3">
 						<Link
-							to={isAuthenticated ? studioUrl("/works/new") : "/subscribe"}
+							to={isAuthenticated ? studioUrl("/works/new") : "/signup"}
 							className="btn btn-primary rounded-full px-7"
 						>
 							{isAuthenticated ? "Add a Work" : "Get Started"}
@@ -445,7 +445,7 @@ export default function CompareItchPage() {
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/subscribe"}
+								to={isAuthenticated ? "/dashboard" : "/signup"}
 								className="btn btn-primary rounded-full px-7"
 							>
 								Create Your Account

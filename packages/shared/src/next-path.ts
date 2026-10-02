@@ -7,7 +7,7 @@
  * failure this exists to prevent. `/login` has read a `?next=` for a long time; the
  * signup path lost its equivalent on 2026-08-17 when the Create Account card — which
  * honored `location.state.from` — was deleted, so the destination now travels as a
- * query parameter through `/subscribe` → `/welcome` instead.
+ * query parameter through `/signup` → `/welcome` instead.
  *
  * 🚨 **A redirect target that arrives from the URL is attacker-controlled, and that is
  * the whole reason this module exists rather than a `searchParams.get("next")` at each

@@ -335,7 +335,7 @@ async function resetGates(creatorId: number): Promise<void> {
  */
 async function resetViewer(viewerId: number, creatorId: number, postIds: number[]): Promise<void> {
 	// Badge back to Free and support back to zero. Upsert: the account row may not exist yet
-	// if this login has never visited /subscribe.
+	// if this login has never visited /signup.
 	const [account] = await db
 		.select({ id: accounts.id })
 		.from(accounts)

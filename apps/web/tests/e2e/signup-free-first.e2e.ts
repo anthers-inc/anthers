@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * `/subscribe` opens with the door, not with the ask.
+ * `/signup` opens with the door, not with the ask.
  *
  * 🚨 **This is a product position, not a layout preference, which is why it gets a test.**
  * Parker's instruction (2026-08-22): joining must never read as something you pay for, and
@@ -54,9 +54,9 @@ const rung = (page: Page, name: RegExp) =>
 const scrollsSideways = (page: Page) =>
 	page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 
-test.describe("/subscribe leads with the free door", () => {
+test.describe("/signup leads with the free door", () => {
 	test("the signup control comes before either support ask", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		const signup = page.locator('[data-signup="top"]');
 		await expect(signup).toBeVisible();
@@ -77,7 +77,7 @@ test.describe("/subscribe leads with the free door", () => {
 	});
 
 	test("what free includes is stated above the signup control, limit and all", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		// 🚨 the wiki's *How Anthers Talks About Itself*: "free forever" and the cap are co-present, on the same rule as "no cut"
 		// and the take-home. A reader who meets the promise without the bound beside it
@@ -122,7 +122,7 @@ test.describe("/subscribe leads with the free door", () => {
 	});
 
 	test("staying free is a rung on the ladder, not the absence of one", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		// 🚨 **The property, restated for the ladder that replaced the yes/no card on
 		// 2026-08-24.** It used to be "the refusal has its own button and its own words";
@@ -177,7 +177,7 @@ test.describe("/subscribe leads with the free door", () => {
 		// further than "Root" does.
 		for (const width of [390, 1280]) {
 			await page.setViewportSize({ width, height: 900 });
-			await page.goto("/subscribe");
+			await page.goto("/signup");
 
 			const section = page.locator("#anthers-badges");
 			await expect(section).toBeVisible();
@@ -246,7 +246,7 @@ test.describe("/subscribe leads with the free door", () => {
 		const desk = { width: 1280, height: 900 };
 
 		await page.setViewportSize(phone);
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		const section = page.locator("#anthers-badges");
 		await expect(section).toBeVisible();
 		await expect(section.locator("table")).toHaveCount(0);
@@ -255,7 +255,7 @@ test.describe("/subscribe leads with the free door", () => {
 		expect(await scrollsSideways(page)).toBe(false);
 
 		await page.setViewportSize(desk);
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 		await expect(section.locator("table")).toHaveCount(1);
 		await expect(section.getByRole("radio")).toHaveCount(5);
 		expect(await scrollsSideways(page)).toBe(false);
@@ -284,7 +284,7 @@ test.describe("/subscribe leads with the free door", () => {
 		// all present, every layout assertion passed, and the DOM says `border-top-width: 1px`
 		// either way. The only thing that knows is the computed color.
 		await page.setViewportSize({ width: 1280, height: 900 });
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		const cell = page.locator("#anthers-badges tbody td").first();
 		await expect(cell).toBeVisible();
@@ -336,7 +336,7 @@ test.describe("/subscribe leads with the free door", () => {
 	});
 
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
-		await page.goto("/subscribe");
+		await page.goto("/signup");
 
 		// ⚠️ **Typed into the handle field rather than an address field** (2026-09-08). The card
 		// stopped asking for an address: signing up begins by picking a handle. The property is
@@ -359,7 +359,7 @@ test.describe("the way in is named as free", () => {
 		const signUp = page.getByRole("link", { name: /sign up free/i }).first();
 		const logIn = page.getByRole("banner").getByRole("link", { name: /^log in$/i });
 		await expect(signUp).toBeVisible();
-		await expect(signUp).toHaveAttribute("href", "/subscribe");
+		await expect(signUp).toHaveAttribute("href", "/signup");
 
 		// Reading order and visual weight should agree: the primary act first.
 		const signUpBox = await signUp.boundingBox();

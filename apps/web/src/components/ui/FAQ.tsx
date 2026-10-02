@@ -3,7 +3,7 @@
 // The FAQ accordion, and the block of them a marketing page ends on.
 //
 // Lifted out of `FAQPage.tsx` on 2026-08-28, when the homepage, /for-creators and
-// /subscribe each gained a short FAQ of their own. The content lives in
+// /signup each gained a short FAQ of their own. The content lives in
 // `content/faq.tsx`; this file is only how it looks.
 //
 // ⚠️ **The heading is generic and lives here, not on the pages.** Each page had its own

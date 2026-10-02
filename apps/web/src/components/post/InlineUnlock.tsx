@@ -69,7 +69,7 @@ export default function InlineUnlock({
 	 * do, not whether anything renders it.
 	 *
 	 * `?next=` rather than router state, because it has to survive the whole signup detour
-	 * — `/subscribe` → an emailed code → a possible payment modal → `/welcome` — and a
+	 * — `/signup` → an emailed code → a possible payment modal → `/welcome` — and a
 	 * reload in the middle of it, which is a normal thing to do while checking your email.
 	 * Sanitized at every read; see `shared/next-path.ts`.
 	 */
@@ -101,7 +101,7 @@ export default function InlineUnlock({
 					heading="Free to everyone on Anthers"
 					blurb={`This Work costs nothing to watch. Make a free account and it's yours — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access every month, and ${creatorName} is paid for the time you spend on it.`}
 				>
-					<Link to={withNextPath("/subscribe", back)} className="btn btn-primary btn-wide">
+					<Link to={withNextPath("/signup", back)} className="btn btn-primary btn-wide">
 						Create a free account
 					</Link>
 					<Link to={withNextPath("/login", back)} className="btn btn-ghost btn-sm">
@@ -116,7 +116,7 @@ export default function InlineUnlock({
 				<Link to={withNextPath("/login", back)} className="btn btn-primary btn-wide">
 					Log in to unlock
 				</Link>
-				<Link to={withNextPath("/subscribe", back)} className="btn btn-ghost btn-sm">
+				<Link to={withNextPath("/signup", back)} className="btn btn-ghost btn-sm">
 					Create an account
 				</Link>
 			</UnlockCard>

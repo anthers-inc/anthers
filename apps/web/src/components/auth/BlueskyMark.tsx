@@ -4,7 +4,7 @@
  * Bluesky's butterfly, as a single path.
  *
  * It sits here rather than inline because several surfaces draw it — the sign-in
- * affordance on `/login`, the signup card on `/subscribe`, the handle modal and the
+ * affordance on `/login`, the signup card on `/signup`, the handle modal and the
  * linking card in settings — and a logo pasted five times is a logo that gets updated
  * once. Purely decorative: every caller supplies its own visible label, so this is
  * `aria-hidden` and contributes nothing to the accessibility tree.

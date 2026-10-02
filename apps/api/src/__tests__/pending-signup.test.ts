@@ -133,7 +133,7 @@ describe("asking for an account writes it down", () => {
 	it("tells a browser holding no token nothing at all", async () => {
 		// 🚨 The guard that keeps `/finish` from being an entry point. It answers from the
 		// httpOnly cookie and nothing else, so a hand-typed URL gets null and the page sends
-		// the visitor to `/subscribe`.
+		// the visitor to `/signup`.
 		const res = await app.request("/api/auth/signup/pending");
 		expect(((await res.json()) as { pending: unknown }).pending).toBeNull();
 	});
@@ -329,7 +329,7 @@ describe("resuming it in another browser", () => {
 
 	it("still refuses an address with neither an account nor a signup", async () => {
 		// Reachable only by somebody holding a live code for an address `/signin/start` would
-		// never have mailed — which means a code minted at `/subscribe` was typed in here.
+		// never have mailed — which means a code minted at `/signup` was typed in here.
 		const res = await spendCode("/api/auth/signin/verify", addr("orphancode"), "");
 		expect(res.status).toBe(404);
 		expect(
