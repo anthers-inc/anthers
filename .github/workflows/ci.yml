@@ -564,6 +564,11 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The tag step below pushes `v<APP_VERSION>` back to the repository, which needs
+    # contents: write on exactly this job and nothing else — the default token would be
+    # read-only there and the tag step would fail on the first deploy that reaches it.
+    permissions:
+      contents: write
     # Two deploys of the same app at once is a race App Platform resolves by superseding
     # one, which makes the losing run's green mark a lie. Serialize instead, and never
     # cancel one in flight — an interrupted deploy is the one state worse than a slow one.
@@ -639,3 +644,48 @@ jobs:
             exit 1
           fi
           echo "::notice::Production is serving ${LIVE:0:7} ✓"
+
+      # ─── The release tag ───
+      #
+      # A promote is a release, and a release gets a name. The version lives as a committed
+      # calver constant (`packages/shared/src/version.ts`) so the deployed bundle already
+      # carries it in its footer — the tag is the same string, applied to the commit that
+      # just deployed, so the tag and the footer cannot disagree. It runs only after the
+      # verify step above, so a tag exists only for a build that is live and verified.
+      #
+      # 🚨 This is the canonical home of each version — the changelist job diffs between
+      # consecutive tags, so a deploy this step skips leaves a release with no name and a
+      # changelist with no boundary. If the tag already exists (a re-run of a green deploy
+      # run, a re-promote of the same commit), this is a no-op rather than a failure: the
+      # tag that exists is correct by definition, because it names this commit.
+      - uses: actions/checkout@v4
+        with:
+          # Only the tag step below needs the repo; the deploy itself is doctl. A
+          # shallow single-commit fetch is all the step reads — the version constant
+          # and the commit being tagged — and tags come along because the
+          # existing-tag check consults them.
+          fetch-depth: 1
+          fetch-tags: true
+      - name: Tag the release v<APP_VERSION>
+        run: |
+          set -uo pipefail
+          VERSION=$(awk -F'"' '/export const APP_VERSION/ {print $2}' packages/shared/src/version.ts)
+          if [ -z "$VERSION" ] || ! echo "$VERSION" | grep -Eq '^[0-9]{4}\.[0-9]{1,2}\.[0-9]+$'; then
+            echo "::error::APP_VERSION is missing or not calver (got \"${VERSION:-none}\")."
+            echo "  A release must carry a version — run scripts/promote-version.ts."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" > /dev/null; then
+            if [ "$(git rev-parse "refs/tags/v${VERSION}")" = "$GITHUB_SHA" ]; then
+              echo "::notice::Tag v${VERSION} already points at this commit — nothing to do."
+              exit 0
+            fi
+            echo "::error::Tag v${VERSION} already exists on a different commit."
+            echo "  A version name is one release. Bump APP_VERSION before promoting again."
+            exit 1
+          fi
+          git config user.name "anthers-release-bot"
+          git config user.email "releases@anthers.org"
+          git tag -a "v${VERSION}" -m "Anthers ${VERSION}" "$GITHUB_SHA"
+          git push origin "refs/tags/v${VERSION}"
+          echo "::notice::Tagged ${GITHUB_SHA:0:7} as v${VERSION} ✓"

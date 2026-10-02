@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { APP_VERSION } from "@anthers/shared/version";
 import { useAuth } from "@anthers/web-shared/auth";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-shared/router";
@@ -362,6 +363,16 @@ function LoggedInLayoutInner() {
 										</Link>
 									</nav>
 								</div>
+
+								{/* The running version, quiet at the bottom of the page. A support
+								    question or a bug report names the build it saw, and the footer is
+								    where a person looks for it. Logged-in view only (Parker, 2026-10-01):
+								    a logged-out visitor is being pitched to, not debugging. The value
+								    is a committed calver constant — `@anthers/shared/version`'s docblock
+								    carries why it is not computed from git at build time. */}
+								<p className="mt-8 text-center text-[10px] opacity-40 select-none">
+									Anthers {APP_VERSION}
+								</p>
 							</div>
 						</footer>
 					)}
