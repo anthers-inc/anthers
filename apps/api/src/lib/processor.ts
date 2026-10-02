@@ -223,3 +223,35 @@ export async function updateInvoiceLines(
 ): Promise<Stripe.Invoice | null> {
 	return (await getStripe()?.invoices.updateLines(invoiceId, params)) ?? null;
 }
+
+/**
+ * Mirrors `stripe.transfers.create` — moving settled, held money from Anthers' platform
+ * balance into a creator's connected-account balance (`transfer-held-credits.ts`, the
+ * monthly transfer step of the 2026-09-14 payouts decision). `options` carries the
+ * idempotency key, which is not optional at this call site: the job derives it
+ * deterministically from the coverage set so a crash between the Stripe call and the DB
+ * write cannot double-transfer on retry. See the job's docblock for the crash-window
+ * reasoning.
+ */
+export async function createTransfer(
+	params: Stripe.TransferCreateParams,
+	options?: Stripe.RequestOptions,
+): Promise<Stripe.Transfer | null> {
+	return (await getStripe()?.transfers.create(params, options)) ?? null;
+}
+
+/**
+ * Mirrors `stripe.transfers.retrieve` — a transfer by id, or null when unknown. The retry
+ * path uses this to confirm a transfer Stripe says already exists under the idempotency
+ * key, so a crash-window recovery reads the amount and the created moment from Stripe
+ * rather than guessing.
+ */
+export async function retrieveTransfer(
+	transferId: string,
+): Promise<Stripe.Transfer | null> {
+	return (
+		(await getStripe()
+			?.transfers.retrieve(transferId)
+			.catch(() => null)) ?? null
+	);
+}

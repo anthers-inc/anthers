@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Payments schema — see auth.ts for the role-classification legend. All four tables
+ * Payments schema — see auth.ts for the role-classification legend. All the tables here
  * are `org` by the treasury rule: payments, pools, payouts and KYC stay with the org, because a
  * treasury cannot be spread across machines other people run. No exceptions.
  */
@@ -18,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 import { works } from "./content.js";
+import { creatorCredits } from "./subscriptions.js";
 
 // org — a creator's Stripe Connect account. Money; org-only.
 export const stripeAccounts = pgTable("stripe_accounts", {
@@ -196,5 +197,76 @@ export const crfSubsidies = pgTable(
 	},
 	(table) => [
 		uniqueIndex("uq_crf_subsidies_creator_cycle").on(table.creatorId, table.billingCycle),
+	],
+);
+
+/**
+ * org — one transfer of a creator's held, settled money from Anthers' platform balance into
+ * their connected-account balance. Money; org-only by the treasury rule, and doubly so:
+ * the row is the platform's own record of a movement of the platform's own balance, which
+ * no creator node has any business holding.
+ *
+ * ⭐ **Append-only, and deliberately has no `status` column.** A transfer row is written
+ * once, after the Stripe call has succeeded, and is never updated — the coverage rows
+ * below are likewise written once and never changed. There is no "pending" state to
+ * reconcile because the idempotency mechanism does not need one (see
+ * `jobs/transfer-held-credits.ts` for the crash-window reasoning): the Stripe
+ * `idempotency_key` is derived deterministically from the coverage set, so a retry after a
+ * Stripe-success/DB-failure replays the same key and Stripe returns the original transfer
+ * rather than making a second one.
+ *
+ * 🚨 **The coverage rows ARE the link, not a denormalization.** A credit is "transferred"
+ * exactly when a coverage row names it, and by nothing else — `creator_credits` carries no
+ * transfer stamp precisely so this side stays append-only and a re-run can always find
+ * what is still held by asking what no coverage row names. Money that comes back
+ * (a refund or dispute after settlement) is other tasks' to move; they subtract from the
+ * creator's balance on their own authority and never touch these rows, which is what keeps
+ * this table a pure record of what left the platform balance and when.
+ */
+export const creatorTransfers = pgTable(
+	"creator_transfers",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * Who the money went to. Set null on delete, for the same reason `creator_credits`
+		 * is: the financial record outlives the account.
+		 */
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** The Stripe `tr_...` id. Unique, because one transfer is one movement of money. */
+		stripeTransferId: text("stripe_transfer_id").notNull().unique(),
+		/** Dollars, as the sum of the credits this transfer covered. */
+		amount: numeric("amount").notNull(),
+		currency: text("currency").notNull().default("usd"),
+		/** When Stripe accepted the transfer — stamped from the Stripe object, not from now. */
+		transferredAt: timestamp("transferred_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The held-credits read: what has already left for each creator.
+		index("idx_creator_transfers_creator").on(table.creatorId),
+	],
+);
+
+/**
+ * org — which credits one transfer covered. One row per credit id, never rewritten; the
+ * pair (transfer, credit) is unique so a coverage set can never name a credit twice. This is
+ * the "held vs transferred" split's only source of truth.
+ */
+export const creatorTransferCredits = pgTable(
+	"creator_transfer_credits",
+	{
+		id: serial("id").primaryKey(),
+		transferId: integer("transfer_id")
+			.notNull()
+			.references(() => creatorTransfers.id, { onDelete: "cascade" }),
+		creditId: integer("credit_id")
+			.notNull()
+			.references(() => creatorCredits.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_creator_transfer_credits_pair").on(table.transferId, table.creditId),
+		// The held read's other half: which credits are covered, in one index.
+		index("idx_creator_transfer_credits_credit").on(table.creditId),
 	],
 );

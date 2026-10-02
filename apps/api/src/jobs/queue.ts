@@ -177,6 +177,9 @@ export const QUEUES = {
 	RASTERIZE_EBOOK: "rasterize-ebook", // Render an uploaded PDF to private per-page images
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
+	// Move settled, held credits into each creator's connected-account balance, 14 days
+	// after each credit's own settlement. See transfer-held-credits.ts.
+	TRANSFER_HELD_CREDITS: "transfer-held-credits",
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
 	// Write, replace or remove a Work's public listing on the AT Protocol network. Carries only
 	// a Work id: the handler re-reads the Work and decides from its current state, so a
@@ -334,6 +337,15 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 30,
 	},
+	// ⚠️ **One retry, deliberately, and the idempotency key is why it is safe at all.** A
+	// Stripe-success/DB-failure crash replays the same deterministic idempotency key on
+	// the retry, so Stripe hands back the original transfer instead of making a second
+	// one — see the job's docblock. More retries would not be safer: the money moves once
+	// however many times the job runs.
+	[QUEUES.TRANSFER_HELD_CREDITS]: {
+		retryLimit: 1,
+		expireInMinutes: 30,
+	},
 	[QUEUES.RUN_DELETIONS]: {
 		// Each account is its own transaction, so a retry re-selects only what is still
 		// pending and cannot half-erase anyone.
@@ -406,6 +418,13 @@ export const CRON_SCHEDULES: ReadonlyArray<
 > = [
 	[QUEUES.DISTRIBUTE_POOL, "0 0 * * *"], // midnight daily
 	[QUEUES.SETTLE_CYCLE, "0 2 2 * *"], // 2 AM on the 2nd, clear of the renewals on the 1st
+	// 4 AM daily, deliberately AFTER settle-cycle's 2 AM on the 2nd — the money this job
+	// moves is the money settlement credited, so a settlement that lands at 2 AM is
+	// hold-eligible fourteen days from its own settledAt rather than waiting a night.
+	// 4 AM is otherwise free: run-deletions shares it but erases accounts, which has
+	// nothing to do with holding money, and a few hours' latency on a 14-day hold is
+	// invisible. The slot was picked per the brief (4 AM UTC, stated here).
+	[QUEUES.TRANSFER_HELD_CREDITS, "0 4 * * *"],
 	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
