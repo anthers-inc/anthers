@@ -124,8 +124,8 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 								<Stat label="Transferred" value={`$${data.earnings.transferredTotal}`} />
 							</div>
 							<p className="mt-2 text-xs text-base-content/50">
-								Held is settled money waiting out its 14-day hold; transferred is what has
-								moved into your Stripe balance.{" "}
+								Held is settled money waiting out its 14-day hold; transferred is what has moved
+								into your Stripe balance.{" "}
 								{data.earnings.cycle &&
 									`Cycle: ${new Date(data.earnings.cycle).toLocaleDateString("en-US", {
 										month: "long",

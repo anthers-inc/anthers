@@ -16,7 +16,7 @@
  * ⚠️ Each run is scoped per creator, because a full run finds every creator in the
  * database and this suite shares its database with every other suite in the run.
  */
-import { afterAll, beforeEach, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	creatorCredits,
@@ -29,7 +29,7 @@ import { eq, inArray } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
 import { HOLD_DAYS, transferHeldCredits } from "../jobs/transfer-held-credits";
-import { setStripeClient } from "../lib/stripe";
+import { getStripe, setStripeClient } from "../lib/stripe";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayoutsFor } from "./payouts-fixture";
@@ -172,17 +172,26 @@ function fakeStripe() {
 		client,
 		calls,
 		created: () => byKey.size,
-		createdFor: (amount: number) =>
-			[...byKey.values()].filter((t) => t.amount === amount).length,
+		createdFor: (amount: number) => [...byKey.values()].filter((t) => t.amount === amount).length,
 	};
 }
 
 let fake: ReturnType<typeof fakeStripe>;
 let realClient: Stripe | null;
 
+// 🚨 Captured once, in `beforeAll` — NOT in `beforeEach`, which is the leak this file
+// caught in its own first draft: assigning `realClient = setStripeClient(fake.client)` per
+// test means the second test's capture is the FIRST test's fake, and `afterAll` then
+// "restores" a fake as the shared client. The next suite to run — suspension-money,
+// which expects Stripe unconfigured — reads a client without `invoicePayments` on it and
+// dies in `processor.ts` for a reason that has nothing to do with it.
+beforeAll(() => {
+	realClient = getStripe();
+});
+
 beforeEach(() => {
 	fake = fakeStripe();
-	realClient = setStripeClient(fake.client);
+	setStripeClient(fake.client);
 });
 
 afterAll(async () => {
@@ -223,11 +232,7 @@ describe("the 14-day hold, counted from each credit's own settledAt", () => {
 		// neither jump ahead of money credited earlier nor restart the earlier clock.
 		const creatorId = await makeCreator();
 		const early = await credit(creatorId, "4.00", SETTLED_AT);
-		const late = await credit(
-			creatorId,
-			"6.00",
-			new Date(SETTLED_AT.getTime() + 10 * DAY_MS),
-		);
+		const late = await credit(creatorId, "6.00", new Date(SETTLED_AT.getTime() + 10 * DAY_MS));
 
 		// The early credit is 14+ days old; the late one is 4 days old.
 		const { creators } = await transferHeldCredits({
@@ -239,7 +244,7 @@ describe("the 14-day hold, counted from each credit's own settledAt", () => {
 		const [row] = await transfersFor(creatorId);
 		expect(row.amount).toBe("4.00");
 		expect(await coveredCreditsFor(creatorId)).toEqual([early]);
-		expect((await coveredCreditsFor(creatorId))).not.toContain(late);
+		expect(await coveredCreditsFor(creatorId)).not.toContain(late);
 
 		// Ten days later the late credit's own hold passes, and it transfers alone — the
 		// early one is already covered, and never re-transfers.

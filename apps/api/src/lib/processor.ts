@@ -246,9 +246,7 @@ export async function createTransfer(
  * key, so a crash-window recovery reads the amount and the created moment from Stripe
  * rather than guessing.
  */
-export async function retrieveTransfer(
-	transferId: string,
-): Promise<Stripe.Transfer | null> {
+export async function retrieveTransfer(transferId: string): Promise<Stripe.Transfer | null> {
 	return (
 		(await getStripe()
 			?.transfers.retrieve(transferId)
