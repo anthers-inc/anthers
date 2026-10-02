@@ -181,11 +181,13 @@ test.describe("signing up with a handle Anthers issues", () => {
 		let payload: unknown = null;
 		await page.route("**/api/auth/signup/begin", async (route) => {
 			payload = route.request().postDataJSON();
-			await route.fulfill({
-				status: 200,
-				contentType: "application/json",
-				body: JSON.stringify({ success: true }),
-			});
+			// 🚨 **Passed through rather than stubbed, since the proof-of-work landed.** A
+			// fulfilled `{success: true}` carries no `Set-Cookie`, so `/finish` finds no
+			// pending signup and its own guard bounces the browser straight back to
+			// `/signup` — the handoff this test exists to pin would read as broken when
+			// the app is fine. The real route runs instead (the browser session's difficulty
+			// is 0, so the page's own solve gets it through) and this intercept only reads.
+			await route.continue();
 		});
 
 		await openHandleDoor(page);

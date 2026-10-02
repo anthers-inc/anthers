@@ -5,9 +5,8 @@
  * harness's viewer in through the real sign-in route, and persist the resulting session
  * as the storageState the gauntlet project runs under.
  *
- * The storage state carries two things the walk needs before any app script runs:
- * the `session` cookie (from the API's Set-Cookie) and the SiteGate localStorage flag
- * for the preview origin — the same flag `fixtures.ts` seeds for anonymous specs.
+ * The storage state carries the one thing the walk needs before any app script runs:
+ * the `session` cookie from the API's Set-Cookie.
  *
  * GOTCHA (Playwright under Bun): any `request`/`page.request` call whose response
  * carries a Set-Cookie header crashes in Playwright's cookie parser (it receives the
@@ -70,7 +69,7 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 	expect(token, `no session cookie in Set-Cookie: "${setCookie}"`).toBeTruthy();
 
 	// The storage state, by hand (see the gotcha above): the session cookie for the API
-	// host plus the SiteGate flag for the preview origin.
+	// host, which is the whole of the viewer's state now that the pre-launch gate is gone.
 	const state = {
 		cookies: [
 			{
@@ -82,12 +81,6 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 				httpOnly: true,
 				secure: false,
 				sameSite: "Lax" as const,
-			},
-		],
-		origins: [
-			{
-				origin: WEB_ORIGIN,
-				localStorage: [{ name: "anthers_site_access", value: "true" }],
 			},
 		],
 	};

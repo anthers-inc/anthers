@@ -50,7 +50,6 @@ Things we care about especially, because of what they guard:
 
 **Out of scope**, unless you can show real impact:
 
-- **The pre-launch site gate (`SiteGate`).** It holds a soft launch closed; it is not a security boundary and was never built as one. Passing it is a client-side flag, so walking around it is expected rather than a finding. What sits behind it is the same content an unauthenticated visitor would see after launch — every decision about *private* content (a gated Work, a purchase, a draft, another account's data) is made server-side by the access resolver, and the gate is not part of it. A way past the gate is not a report; a way to reach something the resolver should have refused very much is.
 - Missing hardening headers, TLS configuration nitpicks, and scanner output with no demonstrated exploit.
 - Denial of service, volumetric attacks, and rate-limit findings that amount to "I sent a lot of requests."
 - Vulnerabilities in third-party services (Stripe, Cloudflare, DigitalOcean) — report those to the vendor.

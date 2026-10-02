@@ -25,6 +25,7 @@
 		"./redirect-paths": "./src/redirect-paths.ts",
 		"./handles": "./src/handles.ts",
 		"./signup": "./src/signup.ts",
+		"./signup-pow": "./src/signup-pow.ts",
 		"./figures": "./src/figures.generated.ts",
 		"./version": "./src/version.ts",
 		"./lexicons": "./src/lexicons.ts",

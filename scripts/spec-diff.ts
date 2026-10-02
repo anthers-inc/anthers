@@ -84,10 +84,9 @@ const SECRETS_ONLY = Bun.argv.includes("--secrets-only");
 /**
  * Live secrets that are *deliberately* empty, each with the reason.
  *
- * Currently none, and note that `SITE_PASSWORD` is NOT a candidate however tempting it
- * looks: empty seals the gate rather than lifting it (`matchesSitePassword` fails closed),
- * so retiring it at launch is a code change, not a cleared variable. See the block above it
- * in `.env.example`.
+ * Currently none. An entry is a claim that a production secret is empty on
+ * purpose — and a retired secret is removed from the spec in a code change, never
+ * emptied by hand, so there is no case where an empty secret is the plan.
  *
  * A check with no way to say "yes, on purpose" gets switched off wholesale the first time
  * it is inconvenient, so the escape hatch exists — but every entry is PRINTED on every run,

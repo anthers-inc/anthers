@@ -39,7 +39,7 @@ type Output = {
 
 // Heights are roughly three times the tallest place each cut is drawn — `<Logo>` is sized
 // by height utilities, up to `h-15` for the one-line cut, `h-24` for the tagline cut in
-// the footer and `h-28` for the stacked cut on the site gate — so a high-density screen
+// the footer and `h-28` for the stacked cut on roomy single-purpose pages — so a high-density screen
 // never scales one up.
 const LOCKUPS: [cut: string, sourceName: string, height: number][] = [
 	["oneline", "hone", 180],

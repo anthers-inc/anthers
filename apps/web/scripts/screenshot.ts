@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Screenshot / smoke helper for the web app (Tier 0 browser verification).
-// Boots the production preview (serve.ts against ./dist), seeds the SiteGate
-// localStorage flag so pages render past the pre-launch "Team access" wall,
-// screenshots each route, and flags real JS errors — separating them from the
-// expected no-backend API noise (there's no API in the static preview).
+// Boots the production preview (serve.ts against ./dist), screenshots each
+// route, and flags real JS errors — separating them from the expected
+// no-backend API noise (there's no API in the static preview).
 //
 //   make screenshots                         # default route list
 //   make screenshots ROUTES="/ /resources"   # custom routes
@@ -79,14 +78,6 @@ try {
 		// state a still image wants anyway.
 		reducedMotion: "reduce",
 	});
-	// SiteGate is a client-side wall keyed on this localStorage flag — seed it
-	// before any app script runs so we land on the real app, not the gate.
-	await ctx.addInitScript(() => {
-		try {
-			localStorage.setItem("anthers_site_access", "true");
-		} catch {}
-	});
-
 	for (const route of routes) {
 		const page = await ctx.newPage();
 		const pageErrors: string[] = [];

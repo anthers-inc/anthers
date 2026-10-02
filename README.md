@@ -17,7 +17,7 @@ This repository is the whole platform: the API, the web app, the creator Studio,
 
 ## Status
 
-**Pre-launch.** [anthers.org](https://anthers.org) is live but sits behind an invite wall while the platform grows through a deliberate ladder of admission phases — each with a ceiling on accounts and creators, and each opening on a readiness checklist rather than a date. It is run by one person right now, and the ceiling exists so that the things one person must keep safe are never outrun by signups.
+**Open.** [anthers.org](https://anthers.org) is live and public — anyone can sign up, with a proof-of-work challenge standing in front of the signup form as abuse protection rather than any admission requirement. It is run by one person right now; the things one person must keep safe are what that challenge is for.
 
 **The source is public; contributions are closed for the moment.** That is a temporary posture, not a philosophy. The model, the schema and the product surface are all still moving fast enough that an outside pull request would be an unkind thing to accept — we would be asking someone to build against a foundation we are still pouring. This repository is public because an open-source platform that handles other people's money and other people's work should be readable by the people it affects, and because building in the open is on the roadmap as a goal in its own right. When the platform reaches general availability and the ground stops shifting, this section is where the invitation will go.
 

@@ -10,7 +10,7 @@ import RouteSuspense from "./components/layout/RouteSuspense";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
-import { SiteGatePanel } from "./components/ui/SiteGate";
+
 import StudioRedirect from "./components/ui/StudioRedirect";
 
 /**
@@ -146,20 +146,11 @@ export default function App() {
 		<RouteSuspense>
 			<Routes>
 				{/*
-				Preview route for the pre-launch SiteGate. The gate normally renders as a
-				wall outside the router (see index.tsx), so once you're past it locally its
-				look can't be revisited without clearing the anthers_site_access flag. This
-				mounts the same panel on its own URL so it's easy to tinker with. Reaching
-				it at all means you're already authorized, so the panel is just a preview.
-			*/}
-				<Route path="/site-gate" element={<SiteGatePanel />} />
-
-				{/*
 				An embeddable player for a shared Work, rendered bare so a third-party site can
-				iframe it. Like /site-gate it sits outside every shell — the whole point is that
-				a page embedding it gets the player and none of the site's chrome. An embed is a
-				share link rendered as a player; the access rules are identical and live on the
-				server, so this route never interprets the token itself.
+				iframe it. It sits outside every shell — the whole point is that a page embedding
+				it gets the player and none of the site's chrome. An embed is a share link
+				rendered as a player; the access rules are identical and live on the server, so
+				this route never interprets the token itself.
 			*/}
 				<Route path="/embed/:token" element={<EmbedWorkPage />} />
 

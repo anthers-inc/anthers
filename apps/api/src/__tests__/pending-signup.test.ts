@@ -42,6 +42,7 @@ import {
 import { issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { solvePow } from "./signup-fixture";
 
 purgeAccountsCreatedHere();
 
@@ -73,7 +74,13 @@ async function begin(body: Record<string, unknown>): Promise<{ res: Response; to
 	const res = await app.request("/api/auth/signup/begin", {
 		method: "POST",
 		headers: JSON_HEADERS,
-		body: JSON.stringify({ picks: { anthers: 0, follow: [], seed: [] }, ...body }),
+		// The proof-of-work every real press carries. The session hands this suite
+		// `SIGNUP_POW_DIFFICULTY=0`, so `solvePow` returns instantly.
+		body: JSON.stringify({
+			pow: await solvePow(),
+			picks: { anthers: 0, follow: [], seed: [] },
+			...body,
+		}),
 	});
 	const token = (res.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1] ?? "";
 	return { res, token };
@@ -144,6 +151,7 @@ describe("asking for an account writes it down", () => {
 			method: "POST",
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${first.token}` },
 			body: JSON.stringify({
+				pow: await solvePow(),
 				email: addr("twice2"),
 				picks: { anthers: 0, follow: [], seed: [] },
 			}),

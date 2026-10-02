@@ -22,7 +22,7 @@ const SOURCES: Record<Variant, Record<"light" | "dark", string>> = {
  *   • "full"    — horizontal, with the "Our Creative Garden" tagline; the footer.
  *   • "oneline" — horizontal wordmark with no tagline; the compact navbar cut.
  *   • "stacked" — the orchids arched over the wordmark and tagline; roomy single-purpose
- *                 surfaces such as the site gate.
+ *                 surfaces such as a sign-in or onboarding page.
  *
  * useTheme() tracks the live `data-theme` on <html>, so flipping the topbar toggle swaps
  * the light/dark artwork instantly (no reload, no flash).

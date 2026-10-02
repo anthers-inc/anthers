@@ -14,11 +14,10 @@
  * tests exactly the wiring under test: the header reads the same `useBasket` hook the
  * Work page writes through, and the cross-component event is what keeps them in sync.
  *
- * ⚠️ **Seeding uses `evaluate` + reload, not `addInitScript`.** The `authed` project's
- * `page` fixture already queues an `addInitScript` for the SiteGate flag, and a second
- * `addInitScript` from the test body did not fire reliably alongside it (verified by
- * console.log — the script never ran). Setting localStorage after the first load and
- * reloading is the same end state and does not depend on init-script ordering.
+ * ⚠️ **Seeding uses `evaluate` + reload, not `addInitScript`.** An `addInitScript` from
+ * the test body was found not to fire reliably alongside another queued at context level
+ * (verified by console.log — the script never ran). Setting localStorage after the first
+ * load and reloading is the same end state and does not depend on init-script ordering.
  */
 import { expect, type Page, test } from "@playwright/test";
 

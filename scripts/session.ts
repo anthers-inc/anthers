@@ -126,6 +126,7 @@ export function sessionPorts(kind: SessionKind, freePort: () => number): Session
  */
 export function sessionEnvironment(
 	id: string,
+	kind: SessionKind,
 	ports: SessionPorts,
 	contentDir: string,
 	hosting: { inviteCode: string; accountKey: string },
@@ -142,6 +143,16 @@ export function sessionEnvironment(
 		env.PREVIEW_PORT = String(ports.preview);
 		if (ports.adminPreview !== undefined) env.ADMIN_PREVIEW_PORT = String(ports.adminPreview);
 		env.BASE_URL = `http://localhost:${ports.api}`;
+		// The browser session solves the signup proof-of-work at the difficulty the real
+		// funnel uses: `SIGNUP_POW_DIFFICULTY` is deliberately absent here so the API's
+		// protected default (4) holds — an e2e that needs it instant sets the var itself,
+		// and `make dev` is a human who should see the widget work.
+	}
+	if (kind !== "dev") {
+		// Test and browser sessions solve the signup proof-of-work instantly: an explicit
+		// difficulty-0 opt-in, never the default. `make dev` keeps the protected default
+		// (4) — a human is using it, and seeing the puzzle solve is part of the point.
+		env.SIGNUP_POW_DIFFICULTY = "0";
 	}
 	return env;
 }
@@ -553,7 +564,7 @@ export async function startSession(
 			startNetwork(id, ports.plc, ports.pds, ports.bluesky),
 			ports.mail !== undefined ? startMailCatcher(id, ports.mail) : Promise.resolve(""),
 		]);
-		env = sessionEnvironment(id, ports, contentDir, {
+		env = sessionEnvironment(id, kind, ports, contentDir, {
 			inviteCode: await mintInviteCode(ports.pds),
 			accountKey: randomBytes(32).toString("hex"),
 		});

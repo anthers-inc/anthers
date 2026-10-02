@@ -133,8 +133,12 @@ jobs:
       DATABASE_URL: postgres://anthers:anthers@postgres:5432/anthers
       # The job's service containers are this run's session, so the test preload and the
       # Playwright config use them rather than starting containers of their own
-      # (scripts/session.ts).
+      # (scripts/session.ts). The signup proof-of-work knob is CI's copy of what
+      # `sessionEnvironment` hands every test/browser session it starts: this job reuses
+      # the `ci` session instead of starting one, so without this line the suites would
+      # grind real difficulty-4 puzzles into their timeouts while passing locally.
       ANTHERS_SESSION: ci
+      SIGNUP_POW_DIFFICULTY: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -324,8 +328,12 @@ jobs:
       MAIL_CATCHER_URL: http://localhost:8025
       # The job's service containers are this run's session, so the test preload and the
       # Playwright config use them rather than starting containers of their own
-      # (scripts/session.ts).
+      # (scripts/session.ts). The signup proof-of-work knob is CI's copy of what
+      # `sessionEnvironment` hands every test/browser session it starts: this job reuses
+      # the `ci` session instead of starting one, so without this line the suites would
+      # grind real difficulty-4 puzzles into their timeouts while passing locally.
       ANTHERS_SESSION: ci
+      SIGNUP_POW_DIFFICULTY: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -472,8 +480,12 @@ jobs:
       MAIL_CATCHER_URL: http://mailpit:8025
       # The job's service containers are this run's session, so the test preload and the
       # Playwright config use them rather than starting containers of their own
-      # (scripts/session.ts).
+      # (scripts/session.ts). The signup proof-of-work knob is CI's copy of what
+      # `sessionEnvironment` hands every test/browser session it starts: this job reuses
+      # the `ci` session instead of starting one, so without this line the suites would
+      # grind real difficulty-4 puzzles into their timeouts while passing locally.
       ANTHERS_SESSION: ci
+      SIGNUP_POW_DIFFICULTY: "0"
 
     steps:
       - uses: actions/checkout@v4
