@@ -167,7 +167,7 @@ export default function CopyrightPage() {
 			    reason. Copyright notice-and-action and illegal-content notice-and-action are
 			    separate duties under separate statutes, and somebody scanning a copyright
 			    page for where to report child sexual abuse material is a bad two minutes to
-			    design. It leads with the page rather than the address now that `/safety`
+			    design. It leads with the page rather than the address now that `/abuse`
 			    carries a no-account form — the address stays beside it because an email is
 			    the thing that still works when a form does not, and because it is the address
 			    on the NCMEC registration. The mailbox is filtered and alerting; see the Contact Points and Published Addresses. */}
@@ -175,10 +175,10 @@ export default function CopyrightPage() {
 				<div>
 					<p className="font-semibold">Reporting something other than copyright?</p>
 					<p className="mt-1 text-sm">
-						This page is only for copyright. To report illegal content — including child sexual
-						abuse material — use{" "}
-						<Link className="link" to="/safety">
-							Reporting Illegal Content
+						This page is only for copyright. To report something illegal or against Anthers' rules —
+						including child sexual abuse material — use{" "}
+						<Link className="link" to="/abuse">
+							Report Abuse
 						</Link>
 						, or email{" "}
 						<a className="link" href={`mailto:${ABUSE_EMAIL}`}>

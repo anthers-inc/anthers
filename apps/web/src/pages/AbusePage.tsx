@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reporting illegal content, and what Anthers actually does about it.
+ * Reporting abuse on Anthers — both kinds — and what Anthers actually does about it.
  *
  * 🚨 **Every sentence here has to be true in the present tense, and the temptation is
  * the other direction.** Detection went live on 2026-08-26 and this page had to change the
@@ -21,10 +21,12 @@
  * never have. Everything temporary — *"we do not unpack archives yet"* — stays in the
  * wiki (the child-safety coverage map, which is deliberately not public).
  *
- * **Why this route rather than `/abuse`.** The subject-named URL matches the
- * `/privacy` · `/terms` · `/copyright` · `/parents` family and leaves room for the rest
- * of the trust-and-safety surface later; `/abuse` redirects here so the RFC 2142 name
- * providers and researchers guess still lands somewhere (Parker, 2026-08-25).
+ * **Why `/abuse` is canonical.** `abuse@anthers.org` is the address on the NCMEC
+ * registration, so the URL matches the mailbox a provider or researcher already has —
+ * and "abuse" is the idiomatic name for this page across platforms (Parker, 2026-10-02).
+ * The route carried the same name from 2026-08-25 until the same day, when the
+ * subject-named URL won on family grounds; `/safety` redirects here so that guess still
+ * lands somewhere rather than on a 404.
  *
  * 🚨 **It points away from copyright rather than absorbing it.** Copyright
  * notice-and-action and illegal-content notice-and-action are separate duties under
@@ -54,13 +56,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 	);
 }
 
-export default function SafetyPage() {
+export default function AbusePage() {
 	return (
 		<div className="container mx-auto max-w-3xl px-4 py-10">
-			<h1 className="text-3xl font-bold">Reporting Illegal Content</h1>
+			<h1 className="text-3xl font-bold">Report Abuse</h1>
 			<p className="mt-3 text-lg text-base-content/70">
-				Anyone can report illegal content on Anthers. You do not need an account, and you do not
-				need to tell us who you are.
+				Anyone can report content on Anthers — things that break the law and things that break our
+				rules. You do not need an account, and you do not need to tell us who you are.
 			</p>
 
 			<div className="mt-6 rounded-box border border-base-300 bg-base-200 p-5">
@@ -91,6 +93,14 @@ export default function SafetyPage() {
 					raises an alert rather than waiting in a queue.
 				</p>
 				<p>
+					The form asks you to choose what is wrong from two groups:{" "}
+					<strong>against the law</strong>, and <strong>against our rules</strong>. Things against
+					the law — child sexual abuse material, threats, anything else illegal — reach a person
+					straight away. Things against our rules — harassment, spam, pornographic material, work
+					that is not rated for what it shows — are reviewed by an operator. Pick the closest one if
+					you are unsure; you do not have to be certain.
+				</p>
+				<p>
 					Tell us <strong>where</strong> — the exact link — and <strong>what</strong> is wrong. We
 					cannot act on a report we cannot locate, and the link is the part people most often leave
 					out.
@@ -106,9 +116,8 @@ export default function SafetyPage() {
 					instead. Nothing on this page can remove content for a copyright claim.
 				</p>
 				<p>
-					If you are signed in and want to report a comment, review, or person rather than illegal
-					content, the report control on the item itself is the faster route — it tells us exactly
-					what you are looking at.
+					If you are signed in, the report control on the item itself is the faster route — it tells
+					us exactly what you are looking at, and it works the same for every kind of report.
 				</p>
 			</Section>
 
@@ -358,7 +367,7 @@ function AbuseReportForm() {
 					rows={5}
 					value={details}
 					onChange={(e) => setDetails(e.target.value)}
-					placeholder="What is on the page, and why you think it breaks the law."
+					placeholder="What is on the page, and why you think it breaks the law or our rules."
 					className="textarea textarea-bordered w-full"
 				/>
 				{/* Stated at the field rather than in a policy paragraph nobody reaches. */}

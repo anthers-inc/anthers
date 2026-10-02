@@ -361,8 +361,10 @@ function LoggedInLayoutInner() {
 										<Link to="/copyright" className="link link-hover">
 											Copyright
 										</Link>
-										<Link to="/safety" className="link link-hover">
-											Safety
+										{/* Matches the URL and the mailbox — see the note in
+										    LoggedOutLayout. */}
+										<Link to="/abuse" className="link link-hover">
+											Abuse
 										</Link>
 									</nav>
 								</div>

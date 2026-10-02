@@ -75,7 +75,9 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 			["Privacy", "/privacy"],
 			["Terms", "/terms"],
 			["Copyright", "/copyright"],
-			["Safety", "/safety"],
+			// The label matches the URL and the mailbox: /abuse and abuse@anthers.org, the
+			// address on the NCMEC registration (Parker, 2026-10-02).
+			["Abuse", "/abuse"],
 		],
 	},
 ];

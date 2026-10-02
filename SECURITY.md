@@ -4,7 +4,7 @@ Anthers handles people's money, people's creative work, and people's personal da
 
 ## Reporting a vulnerability
 
-Email **[contact@anthers.org](mailto:contact@anthers.org)** with `SECURITY` in the subject line. Please include:
+Email **[security@anthers.org](mailto:security@anthers.org)**. Please include:
 
 - What you found, and where — a URL, an endpoint, a file and line, whatever locates it.
 - How to reproduce it, in enough detail that we can see it happen.
