@@ -64,6 +64,7 @@ describe("the environment a session hands its command", () => {
 	it("points the database, the directory and the hosting server at the session's own", () => {
 		const env = sessionEnvironment(
 			"test-abc",
+			"test",
 			{ postgres: 40000, plc: 40001, pds: 40002, bluesky: 40003 },
 			"/tmp/s/content",
 			{ inviteCode: "localhost-abcde-fghij", accountKey: "k".repeat(64) },
@@ -79,11 +80,15 @@ describe("the environment a session hands its command", () => {
 		expect(env.API_PORT).toBeUndefined();
 		// A test run never sends mail, so it is given no inbox to send it to.
 		expect(env.MAIL_CATCHER_URL).toBeUndefined();
+		// A test session also solves the signup proof-of-work instantly, never at the
+		// protected default of 4 — the knob is what it exists for.
+		expect(env.SIGNUP_POW_DIFFICULTY).toBe("0");
 	});
 
 	it("gives a browser run the API and preview ports and the base URL they imply", () => {
 		const env = sessionEnvironment(
 			"browser-abc",
+			"browser",
 			{ postgres: 1, plc: 2, pds: 3, bluesky: 4, api: 40003, preview: 40004, mail: 40005 },
 			"/tmp/s",
 			{ inviteCode: "i", accountKey: "k" },

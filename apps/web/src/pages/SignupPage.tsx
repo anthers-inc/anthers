@@ -109,6 +109,7 @@ import {
 	type SignupPicks,
 	supportTotal,
 } from "@anthers/shared/signup";
+import { solve } from "@anthers/shared/signup-pow";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
@@ -1640,6 +1641,7 @@ function SignupForm({
 	idPrefix,
 	cta,
 	busy,
+	proving,
 	noteFor,
 	noteSizers,
 	error,
@@ -1664,6 +1666,13 @@ function SignupForm({
 	idPrefix: string;
 	cta: string;
 	busy: boolean;
+	/**
+	 * The proof-of-work is grinding — the button's honest state while the browser burns
+	 * the CPU that buys the right to reserve a handle. Separate from `busy` because the
+	 * two say different things: "Working…" is the server, "Checking you're a person…" is
+	 * the visitor's own machine, and neither may stand in for the other.
+	 */
+	proving: boolean;
 	/**
 	 * The line under the button, for whichever door is actually showing.
 	 *
@@ -1820,10 +1829,14 @@ function SignupForm({
 			    surface we control, which is where it belongs. */}
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg ${FIELD_BUTTON_GAP} w-full ${busy ? "btn-disabled" : ""}`}
-				disabled={busy || !handle.trim()}
+				className={`btn btn-primary btn-lg ${FIELD_BUTTON_GAP} w-full ${busy || proving ? "btn-disabled" : ""}`}
+				disabled={busy || proving || !handle.trim()}
 			>
-				{busy ? "Taking you to Bluesky…" : "Sign Up with Bluesky"}
+				{proving
+					? "Checking you're a person…"
+					: busy
+						? "Taking you to Bluesky…"
+						: "Sign Up with Bluesky"}
 			</button>
 		</form>
 	);
@@ -1859,10 +1872,12 @@ function SignupForm({
 			/>
 			<button
 				type="submit"
-				className={`btn btn-primary btn-lg ${FIELD_BUTTON_GAP} w-full ${busy ? "btn-disabled" : ""}`}
-				disabled={busy || !!hostedRefusal || !hostedNameSubmittable(hostedName, hostedStatus)}
+				className={`btn btn-primary btn-lg ${FIELD_BUTTON_GAP} w-full ${busy || proving ? "btn-disabled" : ""}`}
+				disabled={
+					busy || proving || !!hostedRefusal || !hostedNameSubmittable(hostedName, hostedStatus)
+				}
 			>
-				{busy ? "Working…" : cta}
+				{proving ? "Checking you're a person…" : busy ? "Working…" : cta}
 			</button>
 		</form>
 	);
@@ -2198,6 +2213,7 @@ export default function SignupPage() {
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [loadingCreators, setLoadingCreators] = useState(true);
 	const [busy, setBusy] = useState(false);
+	const [provingPersonhood, setProvingPersonhood] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 	const [pending, setPending] = useState<{
@@ -2517,14 +2533,41 @@ export default function SignupPage() {
 	 * `/subscribe` (this page's name until 2026-10-02) with a prefilled email box, which is indistinguishable from having
 	 * accomplished nothing. `/finish` is a page with one job, and the picks travel with the
 	 * pending signup rather than being left behind on a page nobody is looking at.
+	 *
+	 * 🚨 **The proof-of-work is solved HERE, on submit, never on page load** (the settled
+	 * decision, 2026-09-30). The funnel leads with creator support and the door must not
+	 * charge anybody CPU for arriving; the grind (about a second at the default difficulty)
+	 * buys the right to reserve a handle and write a pending signup, which is exactly what
+	 * the button was about to do. The button says what is happening while it runs — a small
+	 * honest state, no progress bar, no third party's branding — and a refusal sends the
+	 * person back to the card to press again with a fresh puzzle.
 	 */
 	const beginSignup = useCallback(
 		async (hostedHandle?: string) => {
+			setProvingPersonhood(true);
+			let pow: { id: number; nonce: number };
+			try {
+				const challengeRes = await client.api.auth.signup.challenge.$get();
+				if (!challengeRes.ok) throw new Error("couldn't get a signup challenge");
+				const { id, challenge, difficulty } = (await challengeRes.json()) as {
+					id: number;
+					challenge: string;
+					difficulty: number;
+				};
+				const nonce = await solve(challenge, difficulty);
+				// The solver returns the counter as a decimal string (the honest shape of a
+				// nonce); the route's schema takes an integer, and every difficulty the
+				// knob allows stays far inside JSON's exact-integer range.
+				pow = { id, nonce: Number(nonce) };
+			} finally {
+				setProvingPersonhood(false);
+			}
 			const res = await client.api.auth.signup.begin.$post({
 				json: {
 					...(hostedHandle ? { hostedHandle } : {}),
 					picks,
 					...(next ? { next } : {}),
+					pow,
 				},
 			});
 			if (!res.ok) {
@@ -2617,6 +2660,9 @@ export default function SignupPage() {
 				? "Create my account & continue"
 				: "Sign Up with Anthers",
 		busy,
+		// True only while the proof-of-work is grinding — a distinct state from `busy`, so
+		// the button can say the honest thing about the second or two it takes.
+		proving: provingPersonhood,
 		error,
 		success,
 		signedIn,
