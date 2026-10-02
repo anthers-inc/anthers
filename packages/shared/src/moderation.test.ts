@@ -71,7 +71,7 @@ describe("Report taxonomy", () => {
 	it("never names queer lives anywhere in the taxonomy", () => {
 		// 🚨 An early draft of the pornography hint listed "queer lives" as an example of
 		// mature work, which asserts precisely the premise the wiki's *Rating Standard* exists to refuse. The
-		// refusal belongs on /safety at a length that makes it a refusal, and nowhere
+		// refusal belongs on /abuse at a length that makes it a refusal, and nowhere
 		// shorter — anything that fits beside a radio button reads as the concession.
 		const copy = MODERATION_REASONS.map((r) => `${r.label} ${r.hint}`)
 			.join(" ")

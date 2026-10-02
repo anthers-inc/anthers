@@ -186,7 +186,7 @@ export interface ModerationReason {
  * pornography hint read *"Anthers allows mature work — nudity, sexuality as a subject, queer
  * lives"*, which asserts precisely the premise the wiki's *Rating Standard* exists to refuse: said at that length
  * it reads as agreement that queer life is an adult concept. The refusal belongs somewhere
- * long enough to *be* a refusal, which is `/safety`, and nowhere shorter — anything that
+ * long enough to *be* a refusal, which is `/abuse`, and nowhere shorter — anything that
  * fits in a hint reads as the concession rather than the refusal.
  */
 export const MODERATION_REASONS: readonly ModerationReason[] = [
