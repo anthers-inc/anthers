@@ -56,6 +56,7 @@ import {
 	startPendingSignup,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
+import { issueSignupChallenge, spendSignupChallenge } from "../services/signup-challenges.js";
 import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -94,6 +95,21 @@ const signupBeginSchema = z.object({
 	email: z.string().email().max(254).optional(),
 	picks: signupPicksSchema,
 	next: z.string().max(2048).optional(),
+	/**
+	 * The solved proof-of-work for this press — the puzzle from `GET /auth/signup/challenge`,
+	 * answered. `{ id, nonce }`, where the nonce is the counter whose digest carried the
+	 * required leading hex zeros.
+	 *
+	 * 🚨 **Required, and checked before anything this route reserves or writes.** A script
+	 * that cannot burn the CPU cannot reserve a handle, which is the whole point of the
+	 * gate — see `services/signup-challenges.ts`. This door is NOT enumeration-sensitive
+	 * (unlike `/signup/start` below), so its refusal is a distinguishable 400 carrying
+	 * `reason: "pow_required"`.
+	 */
+	pow: z.object({
+		id: z.number().int().positive(),
+		nonce: z.number().int().min(0),
+	}),
 	/**
 	 * The name somebody asked Anthers to issue them a handle under — the Anthers door.
 	 *
@@ -360,7 +376,28 @@ const authRoutes = new Hono()
 	// thing in front of them rather than a modal over a page still inviting them to change
 	// their picks.
 	//
+	// Step -1 — issue the proof-of-work puzzle that the button below must answer.
+	//
+	// 🚨 **Not rate-limited the way the doors below are deliberately silent**, because this
+	// is the opposite kind of door: it hands out a puzzle, not a judgment, and there is
+	// nothing to learn from the answer. A browser fetches exactly one per press of the
+	// button (see SignupPage's solver — the solve happens on submit, never on page load,
+	// so arriving burns no CPU), and a flood of issued-but-unsolved rows is bounded by the
+	// five-minute TTL and the PRUNE_CREDENTIALS sweep.
+	.get("/signup/challenge", async (c) => {
+		const challenge = await issueSignupChallenge();
+		return c.json(challenge);
+	})
+
 	// Step 0 — write the pending account down and send the code.
+	//
+	// 🚨 **The proof-of-work is spent FIRST, before any handle is judged or any row is
+	// written.** That order is the entire point of the gate: a script that cannot burn the
+	// CPU cannot reserve a handle or write a pending signup, and putting the check after
+	// the write would gate nothing. Unlike the doors below it, this refusal is
+	// deliberately distinguishable — `{ error, reason: "pow_required" }` — because this
+	// door is not enumeration-sensitive: there is no address, no handle and no account to
+	// learn about, only a puzzle the caller was handed seconds ago.
 	//
 	// 🚨 **The row is written before anything is proved, which is exactly why it is not a
 	// `users` row.** `users.email` is `NOT NULL UNIQUE`, so a pending account there would
@@ -370,69 +407,109 @@ const authRoutes = new Hono()
 	// It answers 200 whatever happened, for the same reason `/signup/start` does: the
 	// moment this endpoint answers differently for an address that already has an account,
 	// it becomes a way to ask "is this person on Anthers?" and get a reliable answer.
-	.post("/signup/begin", zValidator("json", signupBeginSchema, invalidBody), async (c) => {
-		const { email, picks, next, hostedHandle } = c.req.valid("json");
-
-		// Opportunistic rather than scheduled. `prune-credentials` sweeps these overnight
-		// too; doing it here as well means the table cannot grow unboundedly between runs on
-		// the one route that creates rows in it.
-		void sweepExpiredPendingSignups().catch(() => {});
-
-		const previousToken = getCookie(c, PENDING_SIGNUP_COOKIE);
-
-		// 🚨 **The requested handle is reserved by this request, so it is judged here rather than
-		// at the end.** A name somebody cannot have is refused while they are still on the card
-		// that asked for it, and one they can have is held for them from this moment. Normalized
-		// here rather than at the browser, since the row is what identity creation reads and a
-		// name that arrives in somebody's own spelling has to be stored in the node's.
-		let requestedHandle: string | null = null;
-		if (hostedHandle) {
-			if (!(await hostedIdentityOffered())) {
-				return c.json({ error: "Anthers isn't issuing handles right now." }, 503);
-			}
-			requestedHandle = await normalizeHandleName(hostedHandle);
-			const refusal = await handleRefusal(requestedHandle, previousToken);
-			if (refusal) return c.json({ error: refusal.error }, refusal.status);
-		}
-
-		let token: string;
-		try {
-			token = await startPendingSignup({
-				previousToken,
-				email,
-				picks,
-				next,
-				hostedHandle: requestedHandle,
-			});
-		} catch (err) {
-			if (err instanceof HandleReservedError && requestedHandle) {
-				return c.json({ error: `${await hostedHandleFor(requestedHandle)} is taken.` }, 409);
-			}
-			throw err;
-		}
-		setPendingSignupCookie(c, token);
-
-		// Failures are swallowed on purpose, exactly as at `/signup/start`. A mail outage, a
-		// throttled repeat and an address that already has an account must all look identical
-		// from out here.
-		if (email) {
-			try {
-				const issued = await issueSignupCode(email);
-				if (issued.code) {
-					await (issued.existingAccount
-						? sendSignInCodeEmail(email, issued.code)
-						: sendSignupCodeEmail(email, issued.code));
+	// 🚨 **A body with no `pow` at all must refuse with the same distinguishable
+	// `pow_required` reason as a wrong one**, not with a bare validation 400 — a script
+	// probing the door and a browser whose solve raced a deploy are the same caller to
+	// the page, and both get the same actionable answer. The schema still bounds the
+	// shape (so a nonsense `pow` cannot reach the service), and this hook turns the
+	// missing-field case into the same refusal the service returns.
+	.post(
+		"/signup/begin",
+		zValidator("json", signupBeginSchema, (result, c) => {
+			if (!result.success) {
+				const missing = result.error.issues.some(
+					(issue) => issue.path[0] === "pow" && issue.code === "invalid_type",
+				);
+				if (missing) {
+					return c.json(
+						{
+							error: "Let's make sure you're a person — the page will try again.",
+							reason: "pow_required",
+						},
+						400,
+					);
 				}
-				// Stamped whether or not a code was minted: a throttled repeat means one went
-				// out a moment ago, which is exactly the state the finishing page should show.
-				await markCodeSent(token);
-			} catch (err) {
-				console.error("[signup/begin] failed to issue a code:", err);
+				return invalidBody(result, c);
 			}
-		}
+		}),
+		async (c) => {
+			const { email, picks, next, hostedHandle, pow } = c.req.valid("json");
 
-		return c.json({ success: true });
-	})
+			// The gate, before anything below it can reserve or write. A refused proof leaves
+			// no pending signup and holds no handle — and the browser is told to fetch a fresh
+			// challenge, which is all it can usefully do.
+			const proof = await spendSignupChallenge(pow.id, pow.nonce);
+			if (!proof.ok) {
+				return c.json(
+					{
+						error: "Let's make sure you're a person — the page will try again.",
+						reason: "pow_required",
+					},
+					400,
+				);
+			}
+
+			// Opportunistic rather than scheduled. `prune-credentials` sweeps these overnight
+			// too; doing it here as well means the table cannot grow unboundedly between runs on
+			// the one route that creates rows in it.
+			void sweepExpiredPendingSignups().catch(() => {});
+
+			const previousToken = getCookie(c, PENDING_SIGNUP_COOKIE);
+
+			// 🚨 **The requested handle is reserved by this request, so it is judged here rather than
+			// at the end.** A name somebody cannot have is refused while they are still on the card
+			// that asked for it, and one they can have is held for them from this moment. Normalized
+			// here rather than at the browser, since the row is what identity creation reads and a
+			// name that arrives in somebody's own spelling has to be stored in the node's.
+			let requestedHandle: string | null = null;
+			if (hostedHandle) {
+				if (!(await hostedIdentityOffered())) {
+					return c.json({ error: "Anthers isn't issuing handles right now." }, 503);
+				}
+				requestedHandle = await normalizeHandleName(hostedHandle);
+				const refusal = await handleRefusal(requestedHandle, previousToken);
+				if (refusal) return c.json({ error: refusal.error }, refusal.status);
+			}
+
+			let token: string;
+			try {
+				token = await startPendingSignup({
+					previousToken,
+					email,
+					picks,
+					next,
+					hostedHandle: requestedHandle,
+				});
+			} catch (err) {
+				if (err instanceof HandleReservedError && requestedHandle) {
+					return c.json({ error: `${await hostedHandleFor(requestedHandle)} is taken.` }, 409);
+				}
+				throw err;
+			}
+			setPendingSignupCookie(c, token);
+
+			// Failures are swallowed on purpose, exactly as at `/signup/start`. A mail outage, a
+			// throttled repeat and an address that already has an account must all look identical
+			// from out here.
+			if (email) {
+				try {
+					const issued = await issueSignupCode(email);
+					if (issued.code) {
+						await (issued.existingAccount
+							? sendSignInCodeEmail(email, issued.code)
+							: sendSignupCodeEmail(email, issued.code));
+					}
+					// Stamped whether or not a code was minted: a throttled repeat means one went
+					// out a moment ago, which is exactly the state the finishing page should show.
+					await markCodeSent(token);
+				} catch (err) {
+					console.error("[signup/begin] failed to issue a code:", err);
+				}
+			}
+
+			return c.json({ success: true });
+		},
+	)
 
 	// What the finishing page needs in order to say whose signup it is finishing, and to
 	// show the choices it is about to commit. Answers from the cookie and nothing else.

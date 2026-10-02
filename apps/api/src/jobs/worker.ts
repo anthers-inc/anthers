@@ -31,6 +31,7 @@ import {
 } from "../services/moderation.js";
 import { releaseStalePayoutHolds } from "../services/payouts.js";
 import { runRetentionSweep } from "../services/retention.js";
+import { sweepSignupChallenges } from "../services/signup-challenges.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
@@ -186,17 +187,32 @@ async function start() {
 
 	await queue.work(QUEUES.PRUNE_CREDENTIALS, async (jobs) => {
 		for (const job of jobs) {
-			const [sessionsGone, tokensGone, codesGone, adminSessionsGone, adminCodesGone] =
-				await Promise.all([
-					deleteExpiredSessions(),
-					deleteExpiredTokens(),
-					deleteExpiredSignupCodes(),
-					deleteExpiredAdminSessions(),
-					deleteExpiredAdminSignInCodes(),
-				]);
-			if (sessionsGone + tokensGone + codesGone + adminSessionsGone + adminCodesGone > 0) {
+			const [
+				sessionsGone,
+				tokensGone,
+				codesGone,
+				adminSessionsGone,
+				adminCodesGone,
+				challengesGone,
+			] = await Promise.all([
+				deleteExpiredSessions(),
+				deleteExpiredTokens(),
+				deleteExpiredSignupCodes(),
+				deleteExpiredAdminSessions(),
+				deleteExpiredAdminSignInCodes(),
+				sweepSignupChallenges(),
+			]);
+			if (
+				sessionsGone +
+					tokensGone +
+					codesGone +
+					adminSessionsGone +
+					adminCodesGone +
+					challengesGone >
+				0
+			) {
 				console.log(
-					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${tokensGone} expired token(s), ${codesGone} expired signup code(s), ${adminSessionsGone} expired admin session(s), ${adminCodesGone} expired admin sign-in code(s)`,
+					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${tokensGone} expired token(s), ${codesGone} expired signup code(s), ${adminSessionsGone} expired admin session(s), ${adminCodesGone} expired admin sign-in code(s), ${challengesGone} spent or expired signup challenge(s)`,
 				);
 			}
 		}
