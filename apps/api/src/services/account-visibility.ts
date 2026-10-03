@@ -25,6 +25,35 @@ import { users } from "@anthers/db/schema";
 import { eq, type SQL, sql } from "drizzle-orm";
 
 /**
+ * The handle of the production automated-test account — the account the live-site test
+ * suite signs in as and exercises the real routes through, kept rather than spun down
+ * because automated testing needs a standing account to be. It is hidden from every
+ * public listing by handle rather than by a row flag, so nothing about the account
+ * itself has to change to hide it; scope decided with Parker 2026-10-02 — this one
+ * account, not a general mechanism.
+ */
+export const HIDDEN_TEST_ACCOUNT_HANDLE = "anthers-test.anthers.social";
+
+/**
+ * A SQL predicate excluding rows whose `userColumn` names the automated-test account —
+ * the listing half only. Its Works, posts and profile stay reachable by direct link,
+ * because direct links are the point of keeping the account: the test suite drives real
+ * routes at it, and a reader who follows a link somewhere still arrives at a page that
+ * answers. What it drops out of is every listing — the feed, Discover, the commons, the
+ * follow and project lists — beside `notSuspendedAccount` so the account reads as absent
+ * rather than as a state somebody could name.
+ *
+ * Matches on the handle alone: a handle no row holds matches nothing, so dev sessions
+ * (where no account carries this handle) run unchanged without any configuration.
+ */
+export function notTestAccount(userColumn: SQL | unknown): SQL | undefined {
+	return sql`NOT EXISTS (
+		SELECT 1 FROM ${users} u
+		WHERE u.id = ${userColumn} AND u.atproto_handle = ${HIDDEN_TEST_ACCOUNT_HANDLE}
+	)`;
+}
+
+/**
  * A SQL predicate excluding rows whose `userColumn` names a suspended account.
  *
  * Written as a NOT EXISTS over `users` rather than a join so it composes into an

@@ -117,7 +117,11 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
+import {
+	isSuspendedAccount,
+	notSuspendedAccount,
+	notTestAccount,
+} from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
@@ -2278,6 +2282,9 @@ const contentRoutes = new Hono()
 		// LIMIT, beside the block and maturity filters rather than after the page is cut.
 		if (mine !== "true") {
 			conditions.push(notSuspendedAccount(posts.creatorId) as SQL);
+			// The automated-test account is hidden from the feed the same way, on the
+			// pattern above — a query condition, not a change to the account itself.
+			conditions.push(notTestAccount(posts.creatorId) as SQL);
 		}
 
 		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
@@ -2940,7 +2947,13 @@ const contentRoutes = new Hono()
 				// exactly the property the aggregate's no-block carve-out rests on, so the
 				// two rules never ask the same number to disagree with itself.
 				.where(
-					and(eq(reviews.workId, work.id), visibleReview, notSuspendedAccount(reviews.userId)),
+					and(
+						eq(reviews.workId, work.id),
+						visibleReview,
+						// The automated-test account's review is counted away with it.
+						notTestAccount(reviews.userId),
+						notSuspendedAccount(reviews.userId),
+					),
 				);
 
 			// The written reviews themselves. Hidden ones are withheld here for the same
@@ -2966,8 +2979,10 @@ const contentRoutes = new Hono()
 						notBlockedBy(currentUserId, reviews.userId),
 						// A suspended reviewer's words go with the rest of their account;
 						// listed beside the block filter because both answer "who may meet
-						// the reader here".
+						// the reader here". The automated-test account is hidden here on
+						// the same listing rule.
 						notSuspendedAccount(reviews.userId),
+						notTestAccount(reviews.userId),
 					),
 				);
 
@@ -3964,6 +3979,9 @@ const contentRoutes = new Hono()
 					// Suspended accounts are out of the commons entirely, beside the block
 					// filter a reader already sees here.
 					notSuspendedAccount(works.creatorId),
+					// So is the automated-test account — hidden from the commons by
+					// handle, not by anything done to the account itself.
+					notTestAccount(works.creatorId),
 					// 🚨 **Load-bearing here, not belt-and-braces.** Adult work MAY be Public
 					// Access since 2026-08-28, so this listing genuinely holds rows that must
 					// not reach a reader who has not opted in and verified. It was the
@@ -4685,6 +4703,9 @@ const contentRoutes = new Hono()
 			// A suspended account's Projects go dark with everything else it made, before
 			// any LIMIT, the same way the feed drops its posts.
 			conditions.push(notSuspendedAccount(projects.creatorId) as SQL);
+			// The automated-test account's Projects are hidden from the listing too, on
+			// the same query-condition pattern.
+			conditions.push(notTestAccount(projects.creatorId) as SQL);
 		}
 
 		// 🚨 **A project whose released Works are all ones the viewer may not see is absent too.**
@@ -4946,6 +4967,9 @@ const contentRoutes = new Hono()
 					// surface was asked. Viewer-independent, so the owner's own row drops
 					// too; a suspended account cannot sign in to reach it anyway.
 					notSuspendedAccount(projects.creatorId),
+					// The automated-test account's Project page reads as not found the
+					// same way, so it never surfaces from a link that starts at a listing.
+					notTestAccount(projects.creatorId),
 				),
 			)
 			.limit(1);
