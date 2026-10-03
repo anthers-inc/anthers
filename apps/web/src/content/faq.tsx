@@ -67,7 +67,7 @@ export const FAQ_ITEMS = {
 	"card-required": {
 		category: "Getting Started",
 		question: "Do I need a card to sign up?",
-		answer: `No. Signing up takes a handle and an email address: pick a name and we issue you one, or bring the Bluesky account you already have. What is free stays free forever — downloads of anything free or anything you buy, with no allowance to run out of and no limit on how many devices you use, and ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month. A card is asked for at the moment you choose something that needs one: backing a creator, buying a Work, or supporting Anthers. Signing up is not one of those moments, and there is no trial to forget to cancel.`,
+		answer: `No. Signing up is free: pick a name and we issue you an identity, or bring the Bluesky account you already have. What is free stays free forever — downloads of anything free or anything you buy, with no allowance to run out of and no limit on how many devices you use, and ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month. A card is asked for at the moment you choose something that needs one: backing a creator, buying a Work, or supporting Anthers. Signing up is not one of those moments, and there is no trial to forget to cancel.`,
 	},
 	"whats-free": {
 		category: "Getting Started",

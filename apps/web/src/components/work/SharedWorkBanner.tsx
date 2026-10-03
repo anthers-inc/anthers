@@ -7,8 +7,9 @@
  * 2026-09-13). Every account is an ATProto identity, so an account needs a handle chosen or a
  * Bluesky identity proved before it can exist, and a second copy of that ceremony under a video
  * would be a second place that mints accounts. `/signup` asks for nothing more than that —
- * the support ladder on it is an offer, not a step — and `next` brings the person straight back
- * to this Work once they have finished, signed in and watching on their own allowance.
+ * the support ladder on it is an offer, not a cost, and signing up costs nothing — and `next`
+ * brings the person straight back to this Work once they have finished, signed in and watching
+ * on their own allowance.
  *
  * ⚠️ **It sits below the deliverable, not above it**, because somebody watching something they
  * like should not be interrupted by an invitation. The share link keeps working while they
