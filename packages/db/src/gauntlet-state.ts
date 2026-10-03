@@ -7,8 +7,10 @@
  * (`POST /subscriptions/account`) is a Stripe charge with webhook-driven sync — it 503s
  * without Stripe configured and needs a running `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
- * hops the *billing* facts here, at the same three columns the webhooks would have written:
- * `accounts.anthersSupport`, `accounts.creatorSupportTotal`, and a completed `purchases` row.
+ * hops the *billing* facts here, at the same rows the webhooks would have written:
+ * the viewer's `billing_accounts` row and a completed `purchases` row. Under the Badge
+ * model the **amounts are `user_badges` holdings**, which is what the `--give` hop
+ * writes; the two amount columns the old `accounts` table carried are gone.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
  *
  * Usage (flags compose; each is applied only when passed):
@@ -35,7 +37,11 @@ import {
 	gauntletHandle,
 } from "./gauntlet.js";
 import {
-	accounts,
+	applyAnthersSupport,
+	applySupportBudget,
+} from "./gauntlet-support.js";
+import {
+	billingAccounts,
 	attentionEvents,
 	badges,
 	db,
@@ -145,22 +151,17 @@ async function main(): Promise<void> {
 	 */
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
 
-	// Account row: the two billing facts the subscription/seed-buy webhooks would write.
+	// Billing rows: the facts the subscription webhooks would write. `--anthers-support`
+	// gives the user the Anthers Badge at that amount (a holding on the org's ladder —
+	// see `applyAnthersSupport` in `gauntlet-support.ts` for the Phase B dependency it
+	// carries), and `--support-budget` places the directed balance the Badge picker draws
+	// against (see `applySupportBudget`).
 	if (anthersSupport !== undefined || supportBudget !== undefined) {
-		const patch = {
-			...(anthersSupport !== undefined ? { anthersSupport: anthersSupport.toFixed(2) } : {}),
-			...(supportBudget !== undefined ? { creatorSupportTotal: supportBudget.toFixed(2) } : {}),
-			updatedAt: new Date(),
-		};
-		const [existing] = await db
-			.select({ id: accounts.id })
-			.from(accounts)
-			.where(eq(accounts.userId, viewerId))
-			.limit(1);
-		if (existing) {
-			await db.update(accounts).set(patch).where(eq(accounts.userId, viewerId));
-		} else {
-			await db.insert(accounts).values({ userId: viewerId, ...patch });
+		if (anthersSupport !== undefined) {
+			await applyAnthersSupport(viewerId, anthersSupport.toFixed(2));
+		}
+		if (supportBudget !== undefined) {
+			await applySupportBudget(viewerId, supportBudget.toFixed(2));
 		}
 	}
 
@@ -286,8 +287,6 @@ async function main(): Promise<void> {
 				type: "digital",
 				amount: DOWNLOAD_PRICE,
 				processingFee: "0.00",
-				deliveryFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: DOWNLOAD_PRICE,
 				stripePaymentIntentId: syntheticPi,
 				status: "completed",
@@ -295,14 +294,28 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Report the state actually in the database — the number the caller should trust.
+	// Report the state actually in the database — the numbers the caller should trust.
+	// The Anthers side reads the held Badge's threshold summed over the org's ladder —
+	// the same derivation Phase B's `heldAnthersBadgeAmount` will take, and the reason
+	// the report does not echo the flag it was handed; the budget side reads the
+	// `billing_accounts` balance the budget hop writes. The org is the Free rung's
+	// owner, exactly as `gauntlet-support.ts` finds it for the write.
+	const [anthersHeld] = await db
+		.select({ amount: sql<string>`COALESCE(SUM(${badges.threshold}), 0)` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+		.where(
+			and(
+				eq(userBadges.userId, viewerId),
+				eq(userBadges.billingCycle, currentBillingCycle()),
+				sql`${badges.creatorId} = (SELECT creator_id FROM badges WHERE threshold = '0.00' ORDER BY id LIMIT 1)`,
+			),
+		)
+		.limit(1);
 	const [acct] = await db
-		.select({
-			anthersSupport: accounts.anthersSupport,
-			creatorSupportTotal: accounts.creatorSupportTotal,
-		})
-		.from(accounts)
-		.where(eq(accounts.userId, viewerId))
+		.select({ directedBudget: billingAccounts.directedBudget })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, viewerId))
 		.limit(1);
 	// The viewer's holdings on the gauntlet creator this cycle, summed through the
 	// badge thresholds — the number the old allocation row's `amount` used to carry.
@@ -318,7 +331,7 @@ async function main(): Promise<void> {
 			),
 		)
 		.limit(1);
-	const support = supportAmount(acct?.anthersSupport);
+	const support = supportAmount(anthersHeld?.amount ?? "0.00");
 	// Report the meter from the same derivation the app uses, not from the flag we were
 	// handed — a hop that prints its own input tells you nothing about whether it landed.
 	const [watched] = await db
@@ -329,7 +342,7 @@ async function main(): Promise<void> {
 	console.log(
 		`${TAG} ${viewerUsername}: $${support.toFixed(2)}/mo to Anthers (${badgeLabel(
 			heldBadgeName(support),
-		)}) · budget $${Number(acct?.creatorSupportTotal ?? 0).toFixed(2)} · given $${Number(
+		)}) · budget $${Number(acct?.directedBudget ?? 0).toFixed(2)} · given $${Number(
 			alloc?.amount ?? 0,
 		).toFixed(2)} to ${GAUNTLET_CREATOR_USERNAME} · Public Access watched ${(
 			watchedSeconds / 3600
