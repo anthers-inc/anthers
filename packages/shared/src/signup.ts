@@ -8,30 +8,26 @@
  * about to be committed. A second copy of the shape in any of the three would be a second
  * thing to keep in step, and the one that drifted would do so silently — a pick the page
  * shows and the charge does not is exactly the class of defect `supportTotal` exists for.
- *
- * ⚠️ **`seed` keeps its name, and the name is retired copy.** "Seed" is no longer a
- * user-facing noun (the wiki's *How Anthers Talks About Itself*), but identifiers were deliberately left alone — `seed_allocations`
- * and `works.seed_access` still exist and still mean what they say. Renaming this one field
- * would put a third spelling of the same concept in the codebase to fix a word no reader
- * ever sees.
  */
 
 /** What a visitor chose on `/signup`, before any of it was committed. */
 export interface SignupPicks {
 	/**
-	 * Monthly dollars given to Anthers: `0` for Free, a rung's threshold otherwise.
+	 * The Anthers Badge the visitor picked, by name — `"root"`, …, `"blossom"`.
 	 *
-	 * Not nullable. Free is a real answer rather than the absence of one, so there is no
-	 * "hasn't said" state left for this to carry.
+	 * Null or absent means **Free**, which is a real Badge at $0 in the seeded ladder
+	 * rather than the absence of an answer. A badge name that is not in Anthers' set is
+	 * read as Free by `normalizePicks`, exactly like any other shape it does not
+	 * recognize.
 	 */
-	anthers: number;
+	badge: string | null;
 	/** Creator handles to follow. Following costs nothing and is applied first. */
 	follow: string[];
-	/** Creator handles to support directly, at the Public Access price each. */
-	seed: string[];
+	/** Creator handles to support directly, at the Badge each creator's ladder names. */
+	badges: string[];
 }
 
-export const EMPTY_PICKS: SignupPicks = { anthers: 0, follow: [], seed: [] };
+export const EMPTY_PICKS: SignupPicks = { badge: null, follow: [], badges: [] };
 
 /**
  * How many creators one signup may carry.
@@ -49,11 +45,11 @@ export const MAX_SIGNUP_AMOUNT = 10_000;
  * Read picks from somewhere that may hold anything — session storage, or a jsonb column
  * written by an older version of this shape.
  *
- * 🚨 **`anthers` is coerced rather than spread through.** Until 2026-08-25 it could be
- * `null` for "hasn't said", a value the ladder can no longer display; spreading that back
- * leaves the matrix with nothing lit and the breakdown describing a rung nobody chose.
- * Anything that is not a finite number reads as Free, which is what an account with no
- * support for Anthers actually is.
+ * 🚨 **`badge` is coerced rather than spread through.** Until 2026-10-02 this field was
+ * `anthers: number`, and a raw dollar amount in stored picks is not a Badge name;
+ * spreading it through would leave the ceremony charging for a rung the page cannot
+ * display. Anything that is not a non-empty string reads as Free (null), which is what
+ * a badge-less signup actually is.
  */
 export function normalizePicks(value: unknown): SignupPicks {
 	const raw = (value ?? {}) as Partial<Record<keyof SignupPicks, unknown>>;
@@ -62,18 +58,15 @@ export function normalizePicks(value: unknown): SignupPicks {
 			? list.filter((name): name is string => typeof name === "string" && name.length > 0)
 			: [];
 	return {
-		anthers:
-			typeof raw.anthers === "number" && Number.isFinite(raw.anthers) && raw.anthers >= 0
-				? raw.anthers
-				: 0,
+		badge: typeof raw.badge === "string" && raw.badge.length > 0 ? raw.badge : null,
 		follow: names(raw.follow),
-		seed: names(raw.seed),
+		badges: names(raw.badges),
 	};
 }
 
 /** Whether anything at all was chosen. An empty answer is a complete answer, not an error. */
 export function picksAreEmpty(picks: SignupPicks): boolean {
-	return picks.anthers === 0 && picks.follow.length === 0 && picks.seed.length === 0;
+	return picks.badge === null && picks.follow.length === 0 && picks.badges.length === 0;
 }
 
 /**
@@ -87,10 +80,10 @@ export function picksAreEmpty(picks: SignupPicks): boolean {
  * **quoted $3 for a $9 charge** and then subscribed the user at **$1 a month** — under the
  * $3 that lifts the Public Access limit they had just agreed to pay for.
  *
- * ⚠️ **The Anthers side is now an AMOUNT rather than a flag**, which removed the last
- * place this function could invent a number: it used to substitute `PUBLIC_ACCESS_PRICE`
- * for `true`, so a page offering Sprout would have quoted Root. There is nothing left to
- * assume — every dollar in the total was chosen somewhere in the UI.
+ * ⚠️ **The Anthers side is a Badge pick now, and its dollars are the Badge's
+ * threshold** — the caller resolves the picked name against the ladder (e.g. via
+ * `thresholdForBadge`) before handing it here, so the total still contains no number
+ * this function could invent: every dollar in it was chosen somewhere in the UI.
  *
  * ⚠️ **It moved here from `pages/SignupPage.tsx` on 2026-08-26**, when the page that
  * finishes a signup began quoting the same total. Two pages importing it from one of
@@ -98,8 +91,8 @@ export function picksAreEmpty(picks: SignupPicks): boolean {
  * already live here, so it belongs beside them.
  *
  * `null` is still accepted, deliberately: the signature is the boundary with the ceremony
- * rather than with any one page's state, and the defect it exists for was a nullish amount
- * becoming a count.
+ * rather than with any one page's state, and Free (a picked Badge at $0) and "hasn't
+ * said" both arrive as zero dollars here.
  */
 export function supportTotal(anthers: number | null, directed: { amount: number }[]): number {
 	return directed.reduce((sum, d) => sum + d.amount, anthers ?? 0);

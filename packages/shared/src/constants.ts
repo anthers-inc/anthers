@@ -98,6 +98,23 @@ export const ANTHERS_BADGES: readonly BadgeDef[] = [
 	{ name: "blossom", threshold: 12 },
 ] as const;
 
+/**
+ * **Free** — a real Badge at $0, the rung every account holds by default.
+ *
+ * ⭐ **Part of the ladder data rather than a special case at the call sites.** It used to
+ * be the string `"free"` returned wherever a holder met no threshold, which meant the
+ * state had two spellings: one from the data and one from a branch. Under the seeded-ladder
+ * model Free is a row in `badges` like any other, so this definition is the one place
+ * that says so in code until Phase B's seeding reads it.
+ */
+export const FREE_BADGE: BadgeDef = { name: "free", threshold: 0 };
+
+/**
+ * Anthers' full ladder, Free included — the lookup `heldBadgeName` and friends read, so
+ * "free" comes from ladder data rather than a special-cased string.
+ */
+const ANTHERS_LADDER: readonly BadgeDef[] = [FREE_BADGE, ...ANTHERS_BADGES];
+
 /** The names in Anthers' set, for the places that still need a closed union. */
 export type Badge = "root" | "sprout" | "petal" | "blossom";
 
@@ -258,12 +275,10 @@ export function badgeFor(
 }
 
 /**
- * A display key covering "no Badge held" alongside the real ones.
+ * A display key covering the Free state alongside the paid Badges.
  *
- * Giving nothing is the *absence* of a Badge, not a Badge named "free" — but the UI still
- * needs something to key its art and labels on for that state, and `Record<Badge, …>`
- * maps predate the distinction. This is the seam: the model says four Badges, the
- * display says five states.
+ * Free is a real Badge at $0 in the ladder (`FREE_BADGE`), but the UI's `Record<Badge, …>`
+ * maps still need one key for it, and `Badge` is the closed union of the four paid names.
  */
 export type BadgeKey = Badge | "free";
 
@@ -284,14 +299,17 @@ export const BADGE_ORDER: readonly BadgeKey[] = [
 
 /**
  * Monthly dollars required for a named Badge — its **threshold**, and 0 for "free", which
- * is the absence of a Badge rather than a Badge sitting at zero.
+ * sits in the ladder at $0 like any other rung.
  */
 export function thresholdForBadge(badge: BadgeKey): number {
-	return badge === "free" ? 0 : (thresholdOf(badge) ?? 0);
+	return thresholdOf(badge) ?? 0;
 }
 
 /**
  * The Badge name held at `anthersDollars`, or "free" below the lowest threshold.
+ *
+ * Read from the full ladder (Free included), so "free" at $0 comes from the data rather
+ * than from a special case here.
  *
  * Note this **collapses** an amount onto a Badge and so throws away the remainder —
  * someone giving $3 to a set with Badges at $2 and $4 answers "the $2 Badge". That is
@@ -300,7 +318,7 @@ export function thresholdForBadge(badge: BadgeKey): number {
  * to a Badge first is how a viewer gets denied a gate they actually clear.
  */
 export function heldBadgeName(anthersDollars: number): BadgeKey {
-	return (badgeFor(anthersDollars).badge?.name as Badge) ?? "free";
+	return (badgeFor(anthersDollars, ANTHERS_LADDER).badge?.name as Badge) ?? "free";
 }
 
 /** Title-case a Badge name for display ("root" → "Root"). */
@@ -323,7 +341,7 @@ export function heldBadgeLabel(
 }
 
 /** Monthly dollars required for a named Badge in a set, or null if the set has no such Badge. */
-export function thresholdOf(name: string, badges: readonly BadgeDef[] = ANTHERS_BADGES) {
+export function thresholdOf(name: string, badges: readonly BadgeDef[] = ANTHERS_LADDER) {
 	return badges.find((b) => b.name === name)?.threshold ?? null;
 }
 
