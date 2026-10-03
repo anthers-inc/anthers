@@ -19,10 +19,10 @@ const SOURCES: Record<Variant, Record<"light" | "dark", string>> = {
 /**
  * The Anthers logo — the orchid spray and bee beside or above the "Anthers" wordmark.
  * Shared by the consumer site and the Studio. Three cuts:
- *   • "full"    — horizontal, with the "Our Creative Garden" tagline; the footer.
+ *   • "full"    — horizontal, with the "Our Creative Garden" tagline; roomy horizontal surfaces.
  *   • "oneline" — horizontal wordmark with no tagline; the compact navbar cut.
- *   • "stacked" — the orchids arched over the wordmark and tagline; roomy single-purpose
- *                 surfaces such as a sign-in or onboarding page.
+ *   • "stacked" — the orchids arched over the wordmark and tagline; the footer, and roomy
+ *                 single-purpose surfaces such as a sign-in or onboarding page.
  *
  * useTheme() tracks the live `data-theme` on <html>, so flipping the topbar toggle swaps
  * the light/dark artwork instantly (no reload, no flash).
