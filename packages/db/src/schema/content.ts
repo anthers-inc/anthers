@@ -4,7 +4,7 @@
  * Most of this file is node: a creator's own content records, media, and the
  * join tables that organize them. The exceptions are the polymorphic moderation
  * state columns (org-imposed) and the cross-account tables (library, bookmarks)
- * which are a *viewer's* records, not the creator's.
+ * which are a *user's* records, not the creator's.
  */
 
 import { sql } from "drizzle-orm";
