@@ -50,7 +50,10 @@ describe("the changelog versions and orders itself", () => {
 
 	it("gives every release an ISO date, and orders releases newest first", () => {
 		// Newest first is the page's reading order and the export's stacking order; a
-		// release landed mid-list breaks both while still rendering fine.
+		// release landed mid-list breaks both while still rendering fine. The whole calver
+		// tuple orders, not just year.month: a `.1` hotfix in the same month as its `.0`
+		// is the normal shape (the page groups by month), so a strictly-decreasing
+		// year.month rule would forbid every hotfix the page is built to fold.
 		for (let i = 0; i < CHANGELOG.length; i++) {
 			expect(`${CHANGELOG[i].version}: ${/^\d{4}-\d{2}-\d{2}$/.test(CHANGELOG[i].date)}`).toBe(
 				`${CHANGELOG[i].version}: true`,
@@ -61,9 +64,15 @@ describe("the changelog versions and orders itself", () => {
 			);
 			const current = CHANGELOG[i].version;
 			const previous = CHANGELOG[i - 1].version;
-			const [cy, cm] = current.split(".").map(Number);
-			const [py, pm] = previous.split(".").map(Number);
-			const orderedCorrectly = cy < py || (cy === py && cm < pm);
+			const [cy, cm, cp] = current.split(".").map(Number);
+			const [py, pm, pp] = previous.split(".").map(Number);
+			// Duplicates are a separate test's subject below; the tuple rule here governs
+			// ordering only, so the fully-equal case is allowed by shape and caught there.
+			const orderedCorrectly =
+				cy < py ||
+				(cy === py && cm < pm) ||
+				(cy === py && cm === pm && cp < pp) ||
+				(cy === py && cm === pm && cp === pp);
 			expect(`${current} must sort before ${previous}`).toBe(
 				`${orderedCorrectly ? current : previous} must sort before ${orderedCorrectly ? previous : current}`,
 			);
