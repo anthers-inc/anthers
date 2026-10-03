@@ -39,7 +39,7 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		takedownStatus: "active",
 		quarantineStatus: "none",
 		visibility: "released",
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }] as never,
+		access: [{ threshold: 0, allow: true, price: "0" }] as never,
 		type: "video",
 		title: "A Short Film",
 		description: "Ten minutes of something.",
@@ -240,7 +240,7 @@ describe("carrying the plan out against a repository", () => {
 
 	it("gates a gated Work in the record it publishes", async () => {
 		const writer = fakeWriter();
-		const gated = openWork({ seedAccess: [{ threshold: 300, allow: true, price: "0" }] as never });
+		const gated = openWork({ access: [{ threshold: 300, allow: true, price: "0" }] as never });
 		await syncWorkRecord(writer, gated, { baseUrl: BASE });
 		expect(writer.records[0]).toMatchObject({ access: { state: "gated" } });
 	});

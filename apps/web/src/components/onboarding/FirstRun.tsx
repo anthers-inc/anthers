@@ -57,18 +57,24 @@ export type Arrival =
  * storage disabled, a new tab, or the classic signup page. That is the right default: it
  * assumes nothing about what the person has already been asked, which is the only safe
  * assumption when we cannot tell.
+ *
+ * ⚠️ The picks are Badge-shaped, and the Anthers answer is a rung NAME rather than a
+ * number: Free is the rung at $0, and it is a complete answer rather than the absence of
+ * one — the person was asked and chose it, so they meet `free` the same way a payer
+ * meets `supporting`. Any other non-empty name is a rung they picked and were charged
+ * for, whatever it says on the tin.
  */
 export function readArrival(): Arrival {
 	try {
 		const raw = sessionStorage.getItem(PICKS_KEY);
 		if (!raw) return { kind: "cold" };
 		const picks = JSON.parse(raw) as {
-			anthers?: boolean | null;
+			badge?: string | null;
 			follow?: string[];
-			seed?: string[];
+			badges?: string[];
 		};
-		const creators = picks.seed?.length ?? 0;
-		const anthers = picks.anthers === true;
+		const creators = picks.badges?.length ?? 0;
+		const anthers = typeof picks.badge === "string" && picks.badge !== "" && picks.badge !== "free";
 		if (anthers || creators > 0) return { kind: "supporting", anthers, creators };
 		return { kind: "free", follows: picks.follow?.length ?? 0 };
 	} catch {
@@ -111,10 +117,10 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				</h1>
 				<p className="mt-3 text-base leading-relaxed text-base-content/70">
 					{backing && arrival.anthers
-						? `You're backing ${backing} directly, and your support for Anthers keeps Public Access open — with no monthly limit for you.`
+						? `You're backing ${backing} directly, and the Badge you hold for Anthers keeps Public Access open — with no monthly limit for you.`
 						: backing
 							? `You're backing ${backing} directly. Every dollar of it reaches them with no platform cut.`
-							: "Your support for Anthers keeps Public Access open to everyone — and there's no monthly limit on what you watch."}{" "}
+							: "The Badge you hold for Anthers keeps Public Access open to everyone — and there's no monthly limit on what you watch."}{" "}
 					From here, the time you spend with a creator's work is what pays them.
 				</p>
 				{/* Deliberately no ask. They have just given; the next useful thing is to
@@ -122,7 +128,7 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				    with — which is the thing that decides where their money actually goes. */}
 				<Actions
 					primary={["Find more creators", "/discover"]}
-					secondary={["See your support", "/subscription"]}
+					secondary={["See your Badges", "/subscription"]}
 				/>
 			</div>
 		);

@@ -42,8 +42,8 @@
  */
 
 import { db } from "@anthers/db/client";
-import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
-import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
+import type { AccessRow } from "@anthers/db/schema";
+import { accounts, badges, purchases, userBadges } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
@@ -52,7 +52,7 @@ import {
 	type ParentalPolicy,
 	parentalRefusal,
 } from "@anthers/shared/parental-controls";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { adultAccessFor } from "./content-preferences.js";
 import { parentalPolicyFor } from "./parental-controls.js";
 
@@ -68,7 +68,7 @@ export interface AccessibleWork {
 	creatorId: number | null;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
-	seedAccess: SeedAccessRow[] | null;
+	access: AccessRow[] | null;
 	/**
 	 * The Work's DMCA takedown state — `active` or `taken_down`. A taken-down Work
 	 * stops delivery to EVERYONE, including the creator and buyers, because
@@ -328,18 +328,21 @@ export interface AccessResult {
 export const currentBillingCycle = currentCycleKey;
 
 /**
- * Monthly dollars a user currently gives Anthers.
+ * Monthly dollars the Anthers Badge this user holds is worth — what they give Anthers.
  *
  * ⚠️ **This decides access to no Work, and must never be made to.** What money given to
  * Anthers governs is the account-level Public Access limit and the size of the user's
  * Time Pool — neither of which is a property of a Work. Kept because both of those read
  * it, and because it is the Badge.
  *
- * A raw amount, not a Badge name: a Badge is the highest threshold you meet, so collapsing
- * to it first rounds someone giving $9 down to a $6 Badge. Name the Badge only for
- * display.
+ * ⚠️ **Still read from `accounts.anthers_support`, pending the identity task.** The
+ * Badge model's destination for this figure is the threshold of the viewer's held Badge
+ * owned by the `@anthers.org` identity, in `user_badges` — but whether the org account
+ * owns badge rows as an ordinary `users` row is exactly what the identity decision
+ * (*Decide what an identity is*) holds open, so the legacy column stays the read and this
+ * docblock says so. Rename it away when that task un-parks the billing half.
  */
-export async function heldAnthersSupport(userId: number): Promise<number> {
+export async function heldAnthersBadgeAmount(userId: number): Promise<number> {
 	const [row] = await db
 		.select({ anthersSupport: accounts.anthersSupport })
 		.from(accounts)
@@ -418,12 +421,15 @@ export function unlockRoute(
  *   they qualify for, the CHEAPEST price wins.** Zero means free; above zero means a
  *   one-time purchase unlocking the Work's enabled delivery. No qualifying allowed row is
  *   a hard gate. **Each table is cumulative** — a row allowed at $3 is visible at $3 and above.
- * - 🚨 **Resolution reads the AMOUNT GIVEN, never the Badge it names.** Collapsing to the
- *   held Badge first would round somebody giving $9 down to a $6 Badge and deny them a
- *   gate they clear.
+ * - 🚨 **Resolution reads the THRESHOLD of the viewer's held Badge, never the Badge's
+ *   name or list position.** Under discrete picks the two are the same number — a
+ *   holding's dollars are its Badge's threshold by construction — which is what retired
+ *   the old hazard of collapsing a raw amount onto the nearest named rung. The
+ *   comparison stays on the threshold so a creator gating at a level no Badge is named
+ *   for still resolves.
  * - **`offersFor` is one function serving both tables**, differing only in which amount is
  *   passed in — Anthers' Badges and a creator's are the same comparison.
- * - 🚨 **`anthersSupport` is deliberately NOT in `AccessContext`.** A Badge is *structurally*
+ * - 🚨 **`heldAnthersBadgeAmount` is deliberately NOT in `AccessContext`.** A Badge is *structurally*
  *   unable to affect access rather than merely asserted not to, which is the same property
  *   `following` has always had. Do not add it "for convenience".
  * - ⚠️ **Older documents describe combinable AND/OR gate logic. It was never built**, and
@@ -511,7 +517,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	}
 
 	const given = work.creatorId == null ? 0 : (ctx.supportByCreator.get(work.creatorId) ?? 0);
-	const offers = offersFor(work.seedAccess ?? [], given);
+	const offers = offersFor(work.access ?? [], given);
 
 	// No qualifying allowed row → hard gate. Report what would open it, from here.
 	if (offers.length === 0) {
@@ -524,7 +530,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 				// No Badge set: a creator's Badges are their own rows, not carried on the Work
 				// (thresholds are levels, not Badge identities — migration 0007). The creator's
 				// name is the identity the UI shows here, so it needs no Badge.
-				creator: unlockRoute(work.seedAccess ?? [], given, []),
+				creator: unlockRoute(work.access ?? [], given, []),
 			},
 		};
 	}
@@ -636,11 +642,25 @@ export async function buildAccessContext(
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
 
-	const [seedRows, purchaseRows, adult, parental] = await Promise.all([
+	// What this viewer gives each creator this cycle: the threshold of the single Badge
+	// they hold from that creator. A holding is a discrete pick of a named Badge (one row
+	// per user, badge and cycle), and the model holds at most one badge per issuer per
+	// cycle — so "what this viewer gives this creator" is one threshold, 0/absent when
+	// nothing is held, rather than a sum of rows. The MAX is belt-and-braces: it enforces
+	// that shape in the query itself, so two holdings from one issuer in one cycle (which
+	// the unique index permits, being keyed on the badge) can never double-count — the
+	// higher threshold wins, which is the conservative reading for gating and can only
+	// under-grant rather than over-grant.
+	const [badgeRows, purchaseRows, adult, parental] = await Promise.all([
 		db
-			.select({ creatorId: seedAllocations.creatorId, amount: seedAllocations.amount })
-			.from(seedAllocations)
-			.where(and(eq(seedAllocations.userId, userId), eq(seedAllocations.billingCycle, cycle))),
+			.select({
+				creatorId: badges.creatorId,
+				given: sql<string>`MAX(${badges.threshold})`,
+			})
+			.from(userBadges)
+			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+			.where(and(eq(userBadges.userId, userId), eq(userBadges.billingCycle, cycle)))
+			.groupBy(badges.creatorId),
 		db
 			.select({ workId: purchases.workId })
 			.from(purchases)
@@ -655,18 +675,16 @@ export async function buildAccessContext(
 		parentalPolicyFor(userId),
 	]);
 
-	// `seed_allocations.amount` is MONEY and stays money — it is the payment ledger, not a
-	// gate. Gates are denominated in money too now, so nothing is converted here; the map
-	// carries the ledger's own dollars straight through to every threshold comparison.
+	// The held Badge's threshold is **GROSS** — what the user chose to give, before any
+	// card fee — and is what gating reads (see the warning on `user_badges.badge_id`'s
+	// docblock in the schema). Paying the processor must never cost a supporter the
+	// Badge they paid for, so the map carries the threshold straight through to every
+	// threshold comparison with no conversion anywhere. The net counterpart — what the
+	// pool actually pays out — lives on `pool_distributions.badge_amount` and is never
+	// read here.
 	const supportByCreator = new Map<number, number>();
-	for (const s of seedRows) {
-		// 🚨 Dollars straight off the ledger, with NO conversion. This read
-		// `seedsFromDollars(s.amount)` until 2026-08-16 — dividing a recorded payment by
-		// the CURRENT Seed price — so moving that price silently reinterpreted every
-		// in-flight allocation, retroactively changing which gates a supporter cleared for
-		// money they had already paid. Retiring the unit removed the conversion and the
-		// hazard together; do not reintroduce one.
-		supportByCreator.set(s.creatorId, supportAmount(s.amount));
+	for (const b of badgeRows) {
+		supportByCreator.set(b.creatorId, supportAmount(b.given));
 	}
 
 	return {
@@ -707,6 +725,6 @@ export async function resolveAccess(
  * "free but fully locked". The creator opts access in, and adds ladder rungs above it.
  *
  */
-export function defaultSeedAccess(): SeedAccessRow[] {
+export function defaultSeedAccess(): AccessRow[] {
 	return [{ threshold: 0, allow: false, price: "0" }];
 }

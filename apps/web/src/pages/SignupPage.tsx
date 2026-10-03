@@ -202,16 +202,28 @@ const serif = { fontFamily: FONTS.fraunces };
  * signup, and the page that finishes the job reads it back. Three boundaries, one shape —
  * the alias below is kept only so the rest of this file still reads in its own vocabulary.
  *
- * 🚨 **`anthers` is dollars, not a flag, and not nullable.** It was `boolean | null` until
- * 2026-08-24, when the section became a ladder: a boolean could only ever express the
- * Public Access price, so every rung above Root was unreachable from this page. It stopped
- * being nullable on 2026-08-25, when Free became the default (Parker) — `null` meant
- * "hasn't said", a distinction worth keeping while the section opened with nothing selected
- * and meaningless once it opens on Free.
+ * 🚨 **`badge` is a rung NAME, not dollars.** It was `anthers: number` until 2026-10-02,
+ * when the pick became a Badge rather than an amount — a subscription is the holding of a
+ * named Badge, and the ladder above is what names them. Null means Free, which is a real
+ * rung at $0 rather than the absence of an answer, so the ladder lights it from the first
+ * paint.
  */
 type Picks = SignupPicks;
 
 const money = amountLabel;
+
+/**
+ * The dollars a picked Anthers Badge costs, or 0 — the pick is a string that crossed
+ * three boundaries (session storage, a jsonb column, the network), so it is resolved
+ * against the ladder rather than trusted: a name outside the set reads as Free, exactly
+ * as `normalizePicks` reads it.
+ */
+export function anthersDollarsOf(badge: string | null): number {
+	if (badge === null) return 0;
+	return (BADGE_ORDER as readonly string[]).includes(badge)
+		? thresholdForBadge(badge as BadgeKey)
+		: 0;
+}
 
 function initialsOf(name: string): string {
 	return (
@@ -293,7 +305,7 @@ const SEGMENT_BG: Record<Segment["tone"], string> = {
  * The two destinations are the same picture with different segments, which is what makes
  * the contrast legible without inventing a second visual language for it.
  */
-function SeedBreakdown({
+function SupportBreakdown({
 	segments,
 	note,
 	total: totalOverride,
@@ -714,9 +726,9 @@ function useMatrixFits(): boolean {
 }
 
 interface LadderProps {
-	/** The chosen rung's amount. Always one of `RUNG_AMOUNTS` — see `Picks.anthers`. */
-	value: number;
-	onChange: (value: number) => void;
+	/** The chosen rung's name — `null` is Free. See `Picks.badge`. */
+	value: BadgeKey | null;
+	onChange: (value: BadgeKey | null) => void;
 	/** A radio group is keyed by `name`, so two on one page must not share it. */
 	idPrefix: string;
 }
@@ -755,6 +767,22 @@ interface LadderProps {
  * today, and all of it is meant to be built before the page is public. The ledger of what
  * exists is `constants.ts` and the generated perk ladder, not a badge on a marketing table.
  */
+/**
+ * The picked rung as a ladder name — `null` and any unrecognized name both light Free.
+ *
+ * 🚨 **`null` lights Free rather than nothing** (Parker, 2026-08-25, carried across the
+ * badge-name migration of 2026-10-02): Free is lit from the first paint, because it is
+ * what an account with no Badge for Anthers already is — a complete answer rather than the
+ * absence of one. When the pick was a dollar amount this fell out of `0` being the Free
+ * column's threshold; now `null` is Free's own representation, so the mapping says so
+ * instead of relying on the coincidence.
+ */
+function pickedRung(badge: string | null): BadgeKey | null {
+	return badge !== null && (BADGE_ORDER as readonly string[]).includes(badge)
+		? (badge as BadgeKey)
+		: "free";
+}
+
 function BadgeLadder(props: LadderProps) {
 	const fits = useMatrixFits();
 	return (
@@ -821,11 +849,12 @@ const RAISED = "drop-shadow-[0_5px_16px_rgba(0,0,0,0.15)]";
 
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
 function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
-	// ⚠️ The chosen rung as a COLUMN INDEX rather than an amount, because the grid rules are
+	// ⚠️ The chosen rung as a COLUMN INDEX rather than a name, because the grid rules are
 	// drawn by neighbor: a cell needs to know it sits immediately left of the lit column.
-	// An amount off the ladder gives `-1`, which no `column` and no `column - 1` can equal,
-	// so an unrecognized value lights nothing rather than lighting the wrong thing.
-	const litColumn = RUNG_AMOUNTS.indexOf(value);
+	// The name's index in `BADGE_ORDER` is the column, so a name off the ladder gives `-1`,
+	// which no `column` and no `column - 1` can equal — an unrecognized value lights
+	// nothing rather than lighting the wrong thing.
+	const litColumn = value === null ? -1 : BADGE_ORDER.indexOf(value);
 	return (
 		// ⚠️ `overflow-x-auto` is a backstop rather than the plan — `MATRIX_QUERY` is what
 		// keeps this layout to windows it fits in. It stays because "fits" is computed from a
@@ -854,7 +883,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 						</th>
 						{BADGE_ORDER.map((key) => {
 							const amount = thresholdForBadge(key);
-							const lit = value === amount;
+							const lit = value === key;
 							return (
 								<th
 									key={key}
@@ -880,7 +909,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 											name={`${idPrefix}-anthers-badge`}
 											className="sr-only"
 											checked={lit}
-											onChange={() => onChange(amount)}
+											onChange={() => onChange(key)}
 										/>
 										{key !== "free" && <BadgeMark badge={key} lit={lit} size="mb-1 h-14 w-14" />}
 										<span style={serif} className="block text-base font-medium">
@@ -976,7 +1005,7 @@ function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
 				const amount = thresholdForBadge(key);
 				const previousKey = index === 0 ? null : BADGE_ORDER[index - 1];
 				const previous = index === 0 ? null : RUNG_AMOUNTS[index - 1];
-				const lit = value === amount;
+				const lit = value === key;
 				const rows = marginalRows(amount, previous);
 				return (
 					<div
@@ -991,7 +1020,7 @@ function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
 								name={`${idPrefix}-anthers-badge`}
 								className="sr-only"
 								checked={lit}
-								onChange={() => onChange(amount)}
+								onChange={() => onChange(key)}
 							/>
 							{key !== "free" && <BadgeMark badge={key} lit={lit} size="h-12 w-12" />}
 							<span className="min-w-0">
@@ -1072,7 +1101,7 @@ function CreatorFinder({
 	creators: PublicUser[];
 	loading: boolean;
 	picks: Picks;
-	onToggle: (handle: string, kind: "follow" | "seed") => void;
+	onToggle: (handle: string, kind: "follow" | "badge") => void;
 }) {
 	const [query, setQuery] = useState("");
 	const [medium, setMedium] = useState<string | null>(null);
@@ -1165,12 +1194,12 @@ function CreatorFinder({
 				) : (
 					shown.map((creator) => {
 						const followed = picks.follow.includes(creator.handle);
-						const seeded = picks.seed.includes(creator.handle);
+						const backed = picks.badges.includes(creator.handle);
 						return (
 							<div
 								key={creator.id}
 								className={`rounded-xl border p-3.5 transition-colors ${
-									followed || seeded
+									followed || backed
 										? "border-primary/40 bg-primary/5"
 										: "border-base-content/10 bg-base-100"
 								}`}
@@ -1213,11 +1242,11 @@ function CreatorFinder({
 									</button>
 									<button
 										type="button"
-										className={`btn btn-xs rounded-full ${seeded ? "btn-primary" : "btn-outline"}`}
-										aria-pressed={seeded}
-										onClick={() => onToggle(creator.handle, "seed")}
+										className={`btn btn-xs rounded-full ${backed ? "btn-primary" : "btn-outline"}`}
+										aria-pressed={backed}
+										onClick={() => onToggle(creator.handle, "badge")}
 									>
-										{seeded ? "✓ Supporting" : "Support"}
+										{backed ? "✓ Backing" : "Back"}
 									</button>
 								</div>
 							</div>
@@ -1230,8 +1259,8 @@ function CreatorFinder({
 			    pick adds a real priced line. The page still asks *whether* rather than *how
 			    much*, so name the starting amount and say where it is changed. */}
 			<p className="mt-4 text-center text-xs text-base-content/45">
-				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each. You can change the
-				amount, or add and drop creators, whenever you like once your account exists.
+				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each — their lowest Badge,
+				which you can change for a higher one whenever you like once your account exists.
 			</p>
 		</div>
 	);
@@ -1260,7 +1289,7 @@ function anthersLineFor(amount: number): PickLine {
 		key: "anthers",
 		// The Badge is what somebody chose, so name it rather than the act — `heldBadgeLabel`
 		// also carries the "+" rule if the amount ever stops landing exactly on a rung.
-		label: `${heldBadgeLabel(amount)} — support for Anthers`,
+		label: `${heldBadgeLabel(amount)} — your Badge for Anthers`,
 		sub: "Thanks for helping to grow an internet worth loving again",
 		amount,
 	};
@@ -2111,7 +2140,7 @@ function Summary({
 					<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
 				</div>
 				{/* ⚠️ Held in place at $0 rather than dropped, so the rung above cannot resize this
-				    card by sixteen pixels — but held *silently*. `SeedBreakdown` prints the same
+				    card by sixteen pixels — but held *silently*. `SupportBreakdown` prints the same
 				    line at $0 and is right to, because it is describing where a charge goes; a
 				    panel whose total reads $0 must not print a charge-shaped sentence under it. */}
 				<p
@@ -2300,38 +2329,38 @@ export default function SignupPage() {
 		};
 	}, []);
 
-	const toggleCreator = useCallback((handle: string, kind: "follow" | "seed") => {
+	const toggleCreator = useCallback((handle: string, kind: "follow" | "badge") => {
 		setPicks((prev) => {
 			const follow = new Set(prev.follow);
-			const seed = new Set(prev.seed);
-			if (kind === "seed") {
-				if (seed.has(handle)) {
-					seed.delete(handle);
+			const badges = new Set(prev.badges);
+			if (kind === "badge") {
+				if (badges.has(handle)) {
+					badges.delete(handle);
 				} else {
-					seed.add(handle);
-					// Directing support to someone follows them too; the reverse isn't implied.
+					badges.add(handle);
+					// Backing someone follows them too; the reverse isn't implied.
 					follow.add(handle);
 				}
 			} else if (follow.has(handle)) {
 				follow.delete(handle);
-				seed.delete(handle);
+				badges.delete(handle);
 			} else {
 				follow.add(handle);
 			}
-			return { ...prev, follow: [...follow], seed: [...seed] };
+			return { ...prev, follow: [...follow], badges: [...badges] };
 		});
 	}, []);
 
 	const dropPick = useCallback((key: string) => {
 		setPicks((prev) =>
 			key === "anthers"
-				? // Back to Free, not to "unanswered" — dropping support for Anthers IS choosing
+				? // Back to Free, not to "unanswered" — dropping the Anthers Badge IS choosing
 					// Free, and it is the only one of the two the ladder can show.
-					{ ...prev, anthers: 0 }
+					{ ...prev, badge: null }
 				: {
 						...prev,
 						follow: prev.follow.filter((u) => u !== key),
-						seed: prev.seed.filter((u) => u !== key),
+						badges: prev.badges.filter((u) => u !== key),
 					},
 		);
 	}, []);
@@ -2357,40 +2386,37 @@ export default function SignupPage() {
 	 *
 	 * There is ONE list and ONE total now. `directed` also carries the creator ids the
 	 * charge needs, which closes a second, quieter divergence: the display used to count
-	 * `picks.seed` while the charge dropped any handle missing from `byHandle`, so a
+	 * `picks.badges` while the charge dropped any handle missing from `byHandle`, so a
 	 * pick made before the creator list loaded was quotable and unbillable.
 	 */
 	const directed = useMemo(
 		() =>
-			picks.seed
+			picks.badges
 				.map((handle) => byHandle.get(handle))
 				.filter((creator): creator is PublicUser => !!creator)
 				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE })),
-		[picks.seed, byHandle],
+		[picks.badges, byHandle],
 	);
 
-	const total = supportTotal(picks.anthers, directed);
+	/**
+	 * What the picked Anthers Badge costs, in dollars — the rung's threshold, resolved
+	 * here rather than inside `supportTotal` so the total still contains no number this
+	 * page could invent: every dollar in it was chosen somewhere in the UI.
+	 */
+	const anthersAmount = anthersDollarsOf(picks.badge);
+
+	const total = supportTotal(anthersAmount, directed);
 
 	/**
-	 * What the Anthers ladder currently reads as, in dollars.
-	 *
-	 * ⚠️ **This was `picks.anthers ?? PUBLIC_ACCESS_PRICE` until 2026-08-25**, so that the
-	 * panels had a rung to describe while nobody had chosen one — a preview that was
-	 * carefully kept out of `supportTotal`, since billing it would have charged people who
-	 * never pressed anything. Free being the default retires the whole arrangement: there is
-	 * no unanswered state left to preview, so the panels describe the real answer and this
-	 * is the same number the total is built from.
+	 * The breakdown the chosen rung reads as — see `anthersReading` for the other one.
 	 */
-	const anthersAmount = picks.anthers;
-
-	/** The breakdown the chosen rung reads as — see `anthersReading` for the other one. */
 	const anthersBreakdown = anthersReading(anthersAmount);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
 	const anthersLines: PickLine[] = useMemo(
-		() => (picks.anthers ? [anthersLineFor(picks.anthers)] : []),
-		[picks.anthers],
+		() => (anthersAmount > 0 ? [anthersLineFor(anthersAmount)] : []),
+		[anthersAmount],
 	);
 
 	/** Step 2's answers — one line per creator, whether followed or backed. */
@@ -2401,11 +2427,11 @@ export default function SignupPage() {
 				return {
 					key: handle,
 					label: creator ? nameOf(creator) : handle,
-					sub: picks.seed.includes(handle) ? "following · supporting" : "following",
-					amount: picks.seed.includes(handle) ? PUBLIC_ACCESS_PRICE : 0,
+					sub: picks.badges.includes(handle) ? "following · backing" : "following",
+					amount: picks.badges.includes(handle) ? PUBLIC_ACCESS_PRICE : 0,
 				};
 			}),
-		[picks.follow, picks.seed, byHandle],
+		[picks.follow, picks.badges, byHandle],
 	);
 
 	/**
@@ -2419,8 +2445,8 @@ export default function SignupPage() {
 	 * reader re-derive which line came from which choice.
 	 */
 	const summaryLines: PickLine[] = useMemo(
-		() => [accountLineFor(picks.anthers), ...creatorLines],
-		[picks.anthers, creatorLines],
+		() => [accountLineFor(anthersAmount), ...creatorLines],
+		[anthersAmount, creatorLines],
 	);
 
 	/**
@@ -2472,16 +2498,14 @@ export default function SignupPage() {
 				await client.api.accounts.users[":handle"].follow.$post({ param: { handle } });
 			}
 
-			// 🚨 `directed` and `total` come from the component, NOT from a second
-			// computation here — see their definition. This function used to rebuild both,
-			// which is what let the displayed and charged amounts drift apart while both
+			// 🚨 `directed`, `anthersAmount` and `total` come from the component, NOT from a
+			// second computation here — see their definition. This function used to rebuild
+			// both, which is what let the displayed and charged amounts drift apart while both
 			// still went through `supportTotal`.
 			//
 			// The Public Access price each, to the creators picked, on the SAME charge as
-			// the Anthers one. The chosen rung is billed as chosen: this read
-			// `picks.anthers === true ? PUBLIC_ACCESS_PRICE : 0` while the section was a
-			// yes/no, which would have billed Root for a chosen Blossom.
-			const anthers = picks.anthers ?? 0;
+			// the Anthers one — the lowest rung is what the server applies to a signup pick,
+			// and this is the amount it bills.
 
 			if (total === 0) {
 				// A signed-in account owes no handle, so there is no onboarding to pass
@@ -2508,7 +2532,7 @@ export default function SignupPage() {
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setPending({
-				anthersSupport: anthers,
+				anthersSupport: anthersAmount,
 				directed,
 				// The honest label is the amount: a commit needn't land on a Badge, and
 				// naming one would describe only the Anthers half of this charge.
@@ -2520,7 +2544,7 @@ export default function SignupPage() {
 		} finally {
 			setBusy(false);
 		}
-	}, [directed, total, leave, next, picks, byHandle]);
+	}, [directed, total, anthersAmount, leave, next, picks, byHandle]);
 
 	/**
 	 * Ask for the account — the pending one — and hand the visitor to the page that
@@ -2764,8 +2788,8 @@ export default function SignupPage() {
 						    page look like it asked three things when it asks two.
 						    ⚠️ The old copy said "a monthly amount, from $3". There is no floor of $3 —
 						    that is what unlimited Public Access costs, and a creator sets their own
-						    levels to any amount at all. Naming a floor describes a mechanism the Seed
-						    retirement removed.
+						    levels to whatever rungs they like. Naming a floor describes a mechanism
+						    the unit retirement removed.
 						    ⭐ Each card is now a door into the section that asks for it, rather than a
 						    description a reader has to hold in their head while scrolling past two more
 						    screens to find the control it described. */}
@@ -2784,7 +2808,7 @@ export default function SignupPage() {
 									If you have any creators you want to go ahead and subscribe to, you can do that
 									now.
 								</GoFurtherCard>
-								<GoFurtherCard icon={SparklesIcon} title="Support Anthers" target="anthers-badges">
+								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
 									Just {money(PUBLIC_ACCESS_PRICE)}/month takes the monthly limit off Public Access
 									usage, and it lifts your automatic support for creators from{" "}
 									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(PUBLIC_ACCESS_PRICE))}/month.
@@ -2806,11 +2830,11 @@ export default function SignupPage() {
 						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
 					>
 						<StepHeading n={1} title="Creator Badges">
-							Creators each have monthly subscription tiers called Badges that unlock special
-							content, behind-the-scenes access, and more. And when you support a creator with a
-							subscription or purchase, Anthers takes no cut, no exceptions.
+							Creators each name their own monthly Badges, which unlock special content,
+							behind-the-scenes access, and more. And when you back a creator with a Badge or a
+							purchase, Anthers takes no cut, no exceptions.
 						</StepHeading>
-						<SeedBreakdown
+						<SupportBreakdown
 							segments={[
 								{
 									tone: "pool",
@@ -2870,8 +2894,8 @@ export default function SignupPage() {
 						    where an account with no support for Anthers already sits. */}
 						<BadgeLadder
 							idPrefix="anthers-ladder"
-							value={picks.anthers}
-							onChange={(v) => setPicks((prev) => ({ ...prev, anthers: v }))}
+							value={pickedRung(picks.badge)}
+							onChange={(v) => setPicks((prev) => ({ ...prev, badge: v }))}
 						/>
 						{/* 🚨 **Always rendered, including for Free** (Parker, 2026-08-24). It used to
 						    be hidden at $0, which made choosing Free shrink the page — and the
@@ -2879,7 +2903,7 @@ export default function SignupPage() {
 						    jumped. A control whose job is comparison must not resize the thing it
 						    sits in when you use it. Both readings are in `anthersReading`; `total` is
 						    overridden to the $0 Free is actually charged. */}
-						<SeedBreakdown
+						<SupportBreakdown
 							total={anthersAmount > 0 ? undefined : 0}
 							segments={anthersBreakdown.segments}
 							note={anthersBreakdown.note}

@@ -89,14 +89,14 @@ describe("The automated-test account — hidden from listings, nothing else", ()
 			type: "game",
 			title: "Hidden fixture Work",
 			slug: `hta-hidden-${RUN}`,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		const otherWork = await insertWork({
 			creatorId: otherId,
 			type: "game",
 			title: "Visible fixture Work",
 			slug: `hta-other-${RUN}`,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		workIds = [hiddenWork.id, otherWork.id];
 

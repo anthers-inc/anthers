@@ -31,7 +31,7 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		takedownStatus: "active",
 		quarantineStatus: "none",
 		visibility: "released",
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }] as never,
+		access: [{ threshold: 0, allow: true, price: "0" }] as never,
 		type: "video",
 		title: "A Short Film",
 		description: "Ten minutes of something.",
@@ -153,7 +153,7 @@ describe("access is what a stranger would find", () => {
 
 	it("marks a Work behind a creator's Badge gated", () => {
 		const work = openWork({
-			seedAccess: [
+			access: [
 				{ threshold: 0, allow: false, price: "0" },
 				{ threshold: 9, allow: true, price: "0" },
 			] as never,
@@ -163,7 +163,7 @@ describe("access is what a stranger would find", () => {
 
 	it("marks a purchasable Work gated", () => {
 		const work = openWork({
-			seedAccess: [{ threshold: 0, allow: true, price: "12.00" }] as never,
+			access: [{ threshold: 0, allow: true, price: "12.00" }] as never,
 		});
 		expect(workToRecord(work, { baseUrl: BASE })?.access).toEqual({ state: "gated" });
 	});

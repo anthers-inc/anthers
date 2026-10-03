@@ -56,7 +56,7 @@ const creatorName = `deliv_${id}`;
 const viewerName = `deliv_viewer_${id}`;
 
 /** Locked to everyone but the owner: present rows, none allowed. */
-const LOCKED = { seedAccess: [{ threshold: 0, allow: false, price: "0" }] };
+const LOCKED = { access: [{ threshold: 0, allow: false, price: "0" }] };
 
 describe("Delivery-layer access", () => {
 	let creatorCookie: string;
@@ -121,7 +121,7 @@ describe("Delivery-layer access", () => {
 			creatorId,
 			type: "audio",
 			title: "Open Track",
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		freeAudioId = freeAudio.id;
 		await db.insert(transcodingJobs).values({
@@ -136,7 +136,7 @@ describe("Delivery-layer access", () => {
 			type: "game",
 			title: "Open Game",
 			downloadEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		freeWorkId = game.id;
 		const [gameAsset] = await db
@@ -244,7 +244,7 @@ describe("Delivery-layer access", () => {
 			type: "music",
 			title: "Open Track",
 			lyrics: "the open words",
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: viewerCookie } });
 		expect(res.status).toBe(200);
@@ -272,7 +272,7 @@ describe("Delivery-layer access", () => {
 			type: "video",
 			title: "Still Editing",
 			visibility: "private",
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		const denied = await req(`/api/content/works/${staging.id}`, {
 			headers: { Cookie: viewerCookie },

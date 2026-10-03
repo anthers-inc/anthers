@@ -35,7 +35,7 @@ class MemoryStorage {
 	clear(): void {
 		this.data.clear();
 	}
-	seed(key: string, value: string): void {
+	put(key: string, value: string): void {
 		this.data.set(key, value);
 	}
 	readRaw(key: string): string | null {
@@ -72,7 +72,7 @@ describe("readPosition", () => {
 	});
 
 	test("an entry older than the TTL reads as absent", () => {
-		store.seed(KEY, JSON.stringify({ 1: { t: 600, at: NOW - LISTEN_POSITION_TTL_MS - 1 } }));
+		store.put(KEY, JSON.stringify({ 1: { t: 600, at: NOW - LISTEN_POSITION_TTL_MS - 1 } }));
 		expect(readPosition(1, NOW)).toBeNull();
 	});
 
@@ -82,7 +82,7 @@ describe("readPosition", () => {
 	});
 
 	test("corrupt JSON reads as absent rather than throwing", () => {
-		store.seed(KEY, "not json at all {");
+		store.put(KEY, "not json at all {");
 		expect(readPosition(1, NOW)).toBeNull();
 	});
 
@@ -123,7 +123,7 @@ describe("writePosition throttling", () => {
 
 describe("the TTL and eviction on write", () => {
 	test("writing evicts every expired entry, not just the one being written", () => {
-		store.seed(
+		store.put(
 			KEY,
 			JSON.stringify({
 				1: { t: 300, at: NOW - LISTEN_POSITION_TTL_MS - 1 },

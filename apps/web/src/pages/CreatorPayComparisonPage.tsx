@@ -129,7 +129,7 @@ const REF_HR_PAY = money(timePoolFor(thresholdForBadge("sprout")) / REF_HOURS);
  * The monthly-support scenario, and the basis every rival row is scaled to.
  *
  * Two Public Access prices is the editorial choice, written as that rather than a bare 6
- * so it moves if the price does. ⚠️ /for-creators had the same constant and the Seed
+ * so it moves if the price does. ⚠️ /for-creators had the same constant and the unit
  * retirement broke it there — the multiplication was dropped and the count left behind,
  * so that page computed $2 while its own note still promised the reader $6.
  */

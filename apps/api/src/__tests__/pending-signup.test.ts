@@ -78,7 +78,7 @@ async function begin(body: Record<string, unknown>): Promise<{ res: Response; to
 		// `SIGNUP_POW_DIFFICULTY=0`, so `solvePow` returns instantly.
 		body: JSON.stringify({
 			pow: await solvePow(),
-			picks: { anthers: 0, follow: [], seed: [] },
+			picks: { badge: null, follow: [], badges: [] },
 			...body,
 		}),
 	});
@@ -122,7 +122,7 @@ describe("asking for an account writes it down", () => {
 	it("keeps the picks, so the page that finishes the job knows what it is finishing", async () => {
 		const { res, token } = await begin({
 			email: addr("picks"),
-			picks: { anthers: 9, follow: ["alice", "bob"], seed: ["alice"] },
+			picks: { badge: "petal", follow: ["alice", "bob"], badges: ["alice"] },
 		});
 		expect(res.status).toBe(200);
 
@@ -130,10 +130,13 @@ describe("asking for an account writes it down", () => {
 			headers: { Cookie: `signup_pending=${token}` },
 		});
 		const body = (await read.json()) as {
-			pending: { email: string; picks: { anthers: number; follow: string[]; seed: string[] } };
+			pending: {
+				email: string;
+				picks: { badge: string | null; follow: string[]; badges: string[] };
+			};
 		};
 		expect(body.pending.email).toBe(addr("picks"));
-		expect(body.pending.picks.anthers).toBe(9);
+		expect(body.pending.picks.badge).toBe("petal");
 		expect(body.pending.picks.follow).toEqual(["alice", "bob"]);
 	});
 
@@ -153,7 +156,7 @@ describe("asking for an account writes it down", () => {
 			body: JSON.stringify({
 				pow: await solvePow(),
 				email: addr("twice2"),
-				picks: { anthers: 0, follow: [], seed: [] },
+				picks: { badge: null, follow: [], badges: [] },
 			}),
 		});
 		expect(second.status).toBe(200);
@@ -188,7 +191,7 @@ describe("finishing it in the same browser", () => {
 	it("mints the account, spends the row, and hands the picks back", async () => {
 		const { token } = await begin({
 			email: addr("finish"),
-			picks: { anthers: 3, follow: ["carol"], seed: [] },
+			picks: { badge: "root", follow: ["carol"], badges: [] },
 			next: "/works/x-1",
 		});
 		await bindIdentityToPending(token, identity("finish"));
@@ -202,7 +205,7 @@ describe("finishing it in the same browser", () => {
 		const body = (await res.json()) as {
 			created: boolean;
 			needsOnboarding: boolean;
-			picks: { anthers: number; follow: string[] } | null;
+			picks: { badge: string | null; follow: string[] } | null;
 			next: string | null;
 		};
 		expect(body.created).toBe(true);
@@ -210,7 +213,7 @@ describe("finishing it in the same browser", () => {
 		// that makes an account `needsOnboarding` and routes it to `/welcome`, which is the
 		// only place the 13+ assertion is ever presented.
 		expect(body.needsOnboarding).toBe(true);
-		expect(body.picks?.anthers, "the choices survive the detour").toBe(3);
+		expect(body.picks?.badge, "the choices survive the detour").toBe("root");
 		expect(body.next).toBe("/works/x-1");
 
 		const [user] = await db
@@ -263,7 +266,7 @@ describe("resuming it in another browser", () => {
 	});
 
 	it("hands the signup to this browser and creates absolutely nothing", async () => {
-		await begin({ email: addr("carry"), picks: { anthers: 6, follow: ["dee"], seed: [] } });
+		await begin({ email: addr("carry"), picks: { badge: "sprout", follow: ["dee"], badges: [] } });
 
 		const res = await spendCode("/api/auth/signin/verify", addr("carry"), "");
 		expect(res.status).toBe(200);
@@ -283,7 +286,7 @@ describe("resuming it in another browser", () => {
 		expect(rebound).toBeTruthy();
 		const row = await readPendingSignup(rebound);
 		expect(row?.emailProvedAt).not.toBeNull();
-		expect(row?.picks).toMatchObject({ anthers: 6 });
+		expect(row?.picks).toMatchObject({ badge: "sprout" });
 	});
 
 	it("finishes from the proved stamp without asking for a second code", async () => {
@@ -365,7 +368,7 @@ describe("holding an address is not the same as having mailed it", () => {
 	 */
 
 	it("learns an address from the PDS without claiming to have posted to it", async () => {
-		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		const { token } = await begin({ picks: { badge: null, follow: [], badges: [] } });
 		await bindIdentityToPending(
 			token,
 			{ did: did("prefill"), handle: "someone.bsky.social", pdsUrl: "https://pds" },
@@ -388,7 +391,7 @@ describe("holding an address is not the same as having mailed it", () => {
 		// ⭐ **The Bluesky door's whole payoff.** Asking for `transition:email` is worth doing
 		// only if it saves the step — so the callback sends the code rather than landing the
 		// person on a filled-in field and a button, which is most of the step given back.
-		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		const { token } = await begin({ picks: { badge: null, follow: [], badges: [] } });
 		await bindIdentityToPending(
 			token,
 			{ did: did("posts"), handle: "someone.bsky.social", pdsUrl: "https://pds" },
@@ -404,7 +407,7 @@ describe("holding an address is not the same as having mailed it", () => {
 	it("sends nothing when the PDS gave us no address to send to", async () => {
 		// The scope-refused path. There is nothing to mail, so the finishing page asks for an
 		// address the ordinary way — and must not claim to have sent anything.
-		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		const { token } = await begin({ picks: { badge: null, follow: [], badges: [] } });
 		await bindIdentityToPending(token, {
 			did: did("noaddr"),
 			handle: "someone.bsky.social",
@@ -418,7 +421,7 @@ describe("holding an address is not the same as having mailed it", () => {
 	});
 
 	it("says a code went out once one actually has", async () => {
-		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		const { token } = await begin({ picks: { badge: null, follow: [], badges: [] } });
 		await bindIdentityToPending(
 			token,
 			{ did: did("sent"), handle: "someone.bsky.social", pdsUrl: "https://pds" },
@@ -535,7 +538,7 @@ describe("what an address-resumed signup carries across, and what it proves agai
 		await startPendingSignup({
 			email: addr("named"),
 			hostedHandle: name,
-			picks: { anthers: 4, follow: ["erin"], seed: [] },
+			picks: { badge: "root", follow: ["erin"], badges: [] },
 		});
 
 		const signin = await spendCode("/api/auth/signin/verify", addr("named"), "");
@@ -543,7 +546,7 @@ describe("what an address-resumed signup carries across, and what it proves agai
 
 		const row = await readPendingSignup(rebound);
 		expect(row?.hostedHandle).toBe(name);
-		expect(row?.picks).toMatchObject({ anthers: 4, follow: ["erin"] });
+		expect(row?.picks).toMatchObject({ badge: "root", follow: ["erin"] });
 		expect(row?.emailProvedAt).not.toBeNull();
 
 		const read = await app.request("/api/auth/signup/pending", {

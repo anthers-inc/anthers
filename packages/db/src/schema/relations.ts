@@ -29,9 +29,9 @@ import {
 	accountCycles,
 	accounts,
 	attentionEvents,
-	creatorGates,
+	badges,
 	poolDistributions,
-	seedAllocations,
+	userBadges,
 } from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -71,11 +71,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	accountCycles: many(accountCycles),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
 	attentionEventsAsCreator: many(attentionEvents, { relationName: "attentionCreator" }),
-	seedAllocationsAsUser: many(seedAllocations, { relationName: "seedUser" }),
-	seedAllocationsAsCreator: many(seedAllocations, { relationName: "seedCreator" }),
+	userBadges: many(userBadges, { relationName: "badgeHolder" }),
+	badges: many(badges), // the Badges this user issues as a creator
 	poolDistributionsAsSubscriber: many(poolDistributions, { relationName: "poolSubscriber" }),
 	poolDistributionsAsCreator: many(poolDistributions, { relationName: "poolCreator" }),
-	creatorGates: many(creatorGates),
 
 	// Integrations
 }));
@@ -250,17 +249,13 @@ export const attentionEventsRelations = relations(attentionEvents, ({ one }) => 
 	work: one(works, { fields: [attentionEvents.workId], references: [works.id] }),
 }));
 
-export const seedAllocationsRelations = relations(seedAllocations, ({ one }) => ({
+export const userBadgesRelations = relations(userBadges, ({ one }) => ({
 	user: one(users, {
-		fields: [seedAllocations.userId],
+		fields: [userBadges.userId],
 		references: [users.id],
-		relationName: "seedUser",
+		relationName: "badgeHolder",
 	}),
-	creator: one(users, {
-		fields: [seedAllocations.creatorId],
-		references: [users.id],
-		relationName: "seedCreator",
-	}),
+	badge: one(badges, { fields: [userBadges.badgeId], references: [badges.id] }),
 }));
 
 export const poolDistributionsRelations = relations(poolDistributions, ({ one }) => ({
@@ -276,6 +271,7 @@ export const poolDistributionsRelations = relations(poolDistributions, ({ one })
 	}),
 }));
 
-export const creatorGatesRelations = relations(creatorGates, ({ one }) => ({
-	creator: one(users, { fields: [creatorGates.creatorId], references: [users.id] }),
+export const badgesRelations = relations(badges, ({ one, many }) => ({
+	owner: one(users, { fields: [badges.creatorId], references: [users.id] }),
+	heldBy: many(userBadges),
 }));

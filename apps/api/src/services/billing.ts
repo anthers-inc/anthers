@@ -22,18 +22,12 @@
  * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import {
-	accountCycles,
-	accounts,
-	creatorGates,
-	invoices,
-	seedAllocations,
-} from "@anthers/db/schema";
+import { accountCycles, accounts, badges, invoices, userBadges } from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
 	createCustomer,
@@ -294,12 +288,12 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
  * there is a kind to read.
  */
 export async function creatorProductTaxCode(creatorId: number): Promise<string> {
-	const [gate] = await db
-		.select({ id: creatorGates.id })
-		.from(creatorGates)
-		.where(eq(creatorGates.creatorId, creatorId))
+	const [badge] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(eq(badges.creatorId, creatorId))
 		.limit(1);
-	return gate ? STREAMED_SUBSCRIPTION_TAX_CODE : DONATION_TAX_CODE;
+	return badge ? STREAMED_SUBSCRIPTION_TAX_CODE : DONATION_TAX_CODE;
 }
 
 /**
@@ -602,9 +596,9 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 }
 
 /**
- * Take away the creator gates this month cleared, unless the month was paid for.
+ * Take away the creator Badges this month's holdings cleared, unless the month was paid for.
  *
- * ⚠️ **The allocations are written before the renewal is collected.** The subscription moves to
+ * ⚠️ **The holdings are written before the renewal is collected.** The subscription moves to
  * the new month on the 1st, still active, a moment before its charge is attempted, so a renewal
  * that then fails has already cleared that month's gates. When the benefits lapse those have to
  * go. A month with a paid invoice keeps them: somebody who cancels partway through a month they
@@ -625,12 +619,12 @@ async function lapseUnpaidMonth(userId: number): Promise<void> {
 		.limit(1);
 	if (paid) return;
 	await db
-		.delete(seedAllocations)
-		.where(and(eq(seedAllocations.userId, userId), eq(seedAllocations.billingCycle, cycle)));
+		.delete(userBadges)
+		.where(and(eq(userBadges.userId, userId), eq(userBadges.billingCycle, cycle)));
 }
 
 /**
- * Write the per-creator allocations the user is paying for this cycle.
+ * Write the Badge holdings the user is paying for this cycle.
  *
  * 🚨 **Read from the subscription's ITEMS, not from metadata** (2026-08-16). The picks used
  * to travel as a JSON blob on `sub.metadata.directed`, applied on activation and then
@@ -643,8 +637,15 @@ async function lapseUnpaidMonth(userId: number): Promise<void> {
  * The property that mattered survives untouched: nothing is written until the subscription
  * is **active**, so a card that declines cannot leave support directed that nobody paid for.
  *
+ * ⭐ **Under the Badge model a pick names a Badge, not an amount.** An item's amount is the
+ * threshold of the Badge its destination holds, so each pick is resolved to the issuer's
+ * badge row at that threshold and the holding is written on that row. The resolution is
+ * find-or-create: a creator may rename or re-price their ladder after the subscription was
+ * taken out, and the supporter paid for a rung that exists at that dollar level — a missing
+ * row at the threshold would silently drop a paid-for holding on a replayed webhook.
+ *
  * Idempotent: the webhook can deliver the same event more than once, so each row is an
- * upsert keyed on (user, creator, cycle).
+ * upsert keyed on (user, badge, cycle).
  */
 async function applyDirectedSupportFromSub(
 	userId: number,
@@ -655,15 +656,37 @@ async function applyDirectedSupportFromSub(
 
 	const cycle = currentCycleKey();
 	for (const pick of picks) {
-		const amount = new Decimal(pick.amount).toFixed(2);
+		// The threshold as stored on every money column: a two-decimal string, so the
+		// lookup below matches the `numeric` column exactly rather than by float.
+		const threshold = new Decimal(pick.amount).toFixed(2);
+		// The issuer's Badge at this threshold — the rung the subscriber is paying for.
+		// Find-or-create rather than find-only, for the reason above: the item carries
+		// what was paid, and the holding must name a row that exists at that level.
+		let [badge] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, pick.creatorId), eq(badges.threshold, threshold)))
+			.limit(1);
+		if (!badge) {
+			[badge] = await db
+				.insert(badges)
+				.values({
+					creatorId: pick.creatorId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A rung created by billing at a threshold a subscription pays for.",
+				})
+				.returning({ id: badges.id });
+		}
 		await db
-			.insert(seedAllocations)
-			.values({ userId, creatorId: pick.creatorId, amount, billingCycle: cycle })
+			.insert(userBadges)
+			.values({ userId, badgeId: badge.id, billingCycle: cycle })
 			.onConflictDoUpdate({
-				target: [seedAllocations.userId, seedAllocations.creatorId, seedAllocations.billingCycle],
-				// Allocation is add-only within a cycle (20.03), so an existing larger
-				// direction is never walked back by a replayed webhook.
-				set: { amount: sql`GREATEST(${seedAllocations.amount}, ${amount}::numeric)` },
+				target: [userBadges.userId, userBadges.badgeId, userBadges.billingCycle],
+				// A holding is add-only within a cycle (20.03), so a replayed webhook never
+				// walks back what the subscriber is paying for — the unique key already
+				// makes the re-delivery a no-op, and the stamp exists to bump `updated_at`.
+				set: { updatedAt: new Date() },
 			});
 	}
 }

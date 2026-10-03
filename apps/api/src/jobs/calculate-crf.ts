@@ -44,11 +44,11 @@ import { and, count, eq, sql, sum } from "drizzle-orm";
 const getCycleDate = currentCycleKey;
 
 async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise<Decimal> {
-	// Pool + Seed distributions
+	// Pool + Badge distributions
 	const [poolResult] = await db
 		.select({
 			poolTotal: sum(poolDistributions.poolAmount),
-			seedTotal: sum(poolDistributions.seedAmount),
+			badgeTotal: sum(poolDistributions.badgeAmount),
 		})
 		.from(poolDistributions)
 		.where(
@@ -59,7 +59,7 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 		);
 
 	const poolAmount = new Decimal(poolResult?.poolTotal ?? "0");
-	const seedAmount = new Decimal(poolResult?.seedTotal ?? "0");
+	const badgeAmount = new Decimal(poolResult?.badgeTotal ?? "0");
 
 	// Marketplace earnings this month
 	// cycleDate is "YYYY-MM-01"; derive month boundaries for timestamp comparison
@@ -86,7 +86,7 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 
 	const salesEarnings = new Decimal(salesResult?.total ?? "0");
 
-	return poolAmount.plus(seedAmount).plus(salesEarnings);
+	return poolAmount.plus(badgeAmount).plus(salesEarnings);
 }
 
 export async function calculateCrfSubsidies() {

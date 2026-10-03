@@ -16,7 +16,7 @@
 
 import { afterAll } from "bun:test";
 import { db } from "@anthers/db/client";
-import type { SeedAccessRow, WorkCredit } from "@anthers/db/schema";
+import type { AccessRow, WorkCredit } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
 import { needsChosenThumbnail } from "@anthers/shared/content";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
@@ -115,7 +115,7 @@ export interface WorkFixture {
 	visibility?: "private" | "released";
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	seedAccess?: SeedAccessRow[];
+	access?: AccessRow[];
 	/**
 	 * The credits table. Defaults to one `created` row naming the fixture, because a fixture
 	 * Work stands for one that can be released and release is refused while no credit names a
@@ -167,7 +167,7 @@ export async function insertWork(fixture: WorkFixture) {
 			releasedAt: visibility === "released" ? new Date() : null,
 			streamEnabled: fixture.streamEnabled ?? true,
 			downloadEnabled: fixture.downloadEnabled ?? false,
-			seedAccess: fixture.seedAccess ?? [],
+			access: fixture.access ?? [],
 			credits: fixture.credits ?? CREATED_CREDIT,
 			originallyReleased: fixture.originallyReleased ?? null,
 			metadata: fixture.metadata ?? {},

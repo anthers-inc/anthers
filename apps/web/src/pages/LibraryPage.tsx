@@ -33,7 +33,7 @@ import {
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { Work } from "@anthers/web-shared/types";
+import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
@@ -107,7 +107,8 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 
 	// A shelf entry the viewer cannot currently open — saved free and later gated, or
 	// refunded. Stated rather than hidden: it is still theirs to see, just not to open.
-	const locked = item.kind === "work" && work?.access?.canAccess === false;
+	const locked =
+		item.kind === "work" && isAccessResult(work?.access) && work.access.canAccess === false;
 
 	// A cover is covered here the same way a card covers it — the rung the reader blurs,
 	// and each kind of content they asked to cover. The shelf is not exempt: a reader who

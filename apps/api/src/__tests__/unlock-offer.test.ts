@@ -50,7 +50,7 @@ function gatedAt(threshold: number, price = "0"): AccessibleWork {
 		creatorId: CREATOR,
 		streamEnabled: true,
 		downloadEnabled: false,
-		seedAccess: [
+		access: [
 			{ threshold: 0, allow: false, price: "0" },
 			{ threshold, allow: true, price },
 		],
@@ -172,7 +172,7 @@ describe("unlock offer — routes that would not actually open the Work", () => 
 			streamEnabled: true,
 			downloadEnabled: false,
 			maturity: "general",
-			seedAccess: [
+			access: [
 				{ threshold: 0, allow: false, price: "0" },
 				{ threshold: 5, allow: true, price: "0" },
 				{ threshold: 2, allow: true, price: "0" },
@@ -194,7 +194,7 @@ describe("unlock offer — when it is absent", () => {
 			streamEnabled: true,
 			downloadEnabled: false,
 			maturity: "general",
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
 			type: "text",
@@ -226,7 +226,7 @@ describe("unlock offer — when it is absent", () => {
 			streamEnabled: false,
 			downloadEnabled: true,
 			maturity: "general",
-			seedAccess: [{ threshold: 0, allow: true, price: "9.99" }],
+			access: [{ threshold: 0, allow: true, price: "9.99" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
 			type: "text",

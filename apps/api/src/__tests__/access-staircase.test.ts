@@ -46,7 +46,7 @@ function accessible(key: string): AccessibleWork {
 		creatorId: CREATOR_ID,
 		streamEnabled: spec.streamEnabled,
 		downloadEnabled: spec.downloadEnabled,
-		seedAccess: spec.seedAccess,
+		access: spec.access,
 		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",

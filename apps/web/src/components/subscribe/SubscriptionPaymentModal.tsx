@@ -24,8 +24,8 @@ export interface SubscriptionPreview {
 interface Props {
 	/**
 	 * ⚠️ **Dollars a month, not a count.** It is `number` either way, so a caller passing a
-	 * count typechecks and bills the wrong amount — which `/signup` did between the Seed
-	 * retirement and 2026-08-16, subscribing people at $1.
+	 * count typechecks and bills the wrong amount — a defect this guard exists for because
+	 * it shipped once, silently.
 	 */
 	anthersSupport: number;
 	/**

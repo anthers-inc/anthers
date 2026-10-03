@@ -25,7 +25,7 @@
  */
 
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
-import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
+import { amountLabel, badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
 import { assertDevCheckout } from "./dev-only.js";
 import {
@@ -37,9 +37,10 @@ import {
 import {
 	accounts,
 	attentionEvents,
+	badges,
 	db,
 	purchases,
-	seedAllocations,
+	userBadges,
 	users,
 	works,
 } from "./index.js";
@@ -207,37 +208,54 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Allocation to the gauntlet creator (the fact the giving stepper writes).
+	// A Badge holding on the gauntlet creator — the fact the Badge picker writes.
 	// The UI walk normally covers this; the hop exists for placing a state directly.
+	//
+	// Under the Badge model the holding names a Badge rather than an amount: the
+	// creator's ladder lives in `badges`, and `--give` is DOLLARS, like every threshold
+	// in the model. So the hop resolves the rung whose THRESHOLD is the given amount
+	// and creates it if the fixture ladder has no row there yet — the gauntlet is a
+	// dev-only fixture and may not depend on the Phase B seeding having run.
+	//
+	// 🚨 **The hop REPLACES the viewer's holding on this creator, it does not add one.**
+	// The walk the e2e drives is cumulative — $3, then the gap states, then $6, upward —
+	// and a viewer holds ONE Badge per issuer per cycle, the highest they have reached.
+	// A hop that inserted beside the existing holding would stack rungs ($3 + $4.50 +
+	// $6 …) against the cycle's budget until the picker's affordability check refused
+	// the next step — a fixture drifting away from what the model can produce, which is
+	// exactly what a hop must never do. Deleting the creator-scoped holdings first and
+	// writing the one named rung is the state the picker itself would leave behind.
 	if (give !== undefined) {
 		const cycle = currentBillingCycle();
-		const [existing] = await db
-			.select({ id: seedAllocations.id })
-			.from(seedAllocations)
-			.where(
-				and(
-					eq(seedAllocations.userId, viewerId),
-					eq(seedAllocations.creatorId, creatorId),
-					eq(seedAllocations.billingCycle, cycle),
-				),
-			)
+		const threshold = give.toFixed(2);
+		let [badge] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, creatorId), eq(badges.threshold, threshold)))
 			.limit(1);
-		// `--give` is DOLLARS, like every threshold in the model; the ledger stores money, so
-		// the value goes in as it was given rather than through a conversion.
-		const amount = give.toFixed(2);
-		if (existing) {
-			await db
-				.update(seedAllocations)
-				.set({ amount, updatedAt: new Date() })
-				.where(eq(seedAllocations.id, existing.id));
-		} else {
-			await db.insert(seedAllocations).values({
-				userId: viewerId,
-				creatorId,
-				amount,
-				billingCycle: cycle,
-			});
+		if (!badge) {
+			[badge] = await db
+				.insert(badges)
+				.values({
+					creatorId,
+					threshold,
+					label: amountLabel(give),
+					description: `Fixture rung created by a --give hop at ${amountLabel(give)}.`,
+				})
+				.returning({ id: badges.id });
 		}
+		// Scoped through the ladder's badge ids for the same reason `resetViewer` does it:
+		// the holding carries the badge, and the issuer is reachable through it.
+		await db
+			.delete(userBadges)
+			.where(
+				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+			);
+		await db.insert(userBadges).values({
+			userId: viewerId,
+			badgeId: badge.id,
+			billingCycle: cycle,
+		});
 	}
 
 	// A completed purchase — the fact the payment webhook would write. The synthetic
@@ -286,14 +304,17 @@ async function main(): Promise<void> {
 		.from(accounts)
 		.where(eq(accounts.userId, viewerId))
 		.limit(1);
+	// The viewer's holdings on the gauntlet creator this cycle, summed through the
+	// badge thresholds — the number the old allocation row's `amount` used to carry.
 	const [alloc] = await db
-		.select({ amount: seedAllocations.amount })
-		.from(seedAllocations)
+		.select({ amount: sql<string>`COALESCE(SUM(${badges.threshold}), 0)` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 		.where(
 			and(
-				eq(seedAllocations.userId, viewerId),
-				eq(seedAllocations.creatorId, creatorId),
-				eq(seedAllocations.billingCycle, currentBillingCycle()),
+				eq(userBadges.userId, viewerId),
+				eq(badges.creatorId, creatorId),
+				eq(userBadges.billingCycle, currentBillingCycle()),
 			),
 		)
 		.limit(1);

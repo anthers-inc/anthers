@@ -38,25 +38,27 @@
  * > silently absorbed ~$0.39 on every Seed from a pure-direct user — an account with
  * > no remainder for it to come out of. Parker's call: `fees.ts` is correct in full,
  * > processing comes out of the creator's side, and a single-Seed card transaction is
- * > the worst case. **`poolDistributions.seedAmount` is a payout figure, so it holds
- * > NET.** The gross a user chose to give is still on `seed_allocations.amount`,
- * > which is the record of the gift rather than of the payment, and is untouched.
+ * > the worst case. **`poolDistributions.badgeAmount` is a payout figure, so it holds
+ * > NET.** The gross a user chose to give is the held Badge's threshold in
+ * > `user_badges`, which is the record of the gift rather than of the payment, and is
+ * > untouched.
  */
 
 import { db } from "@anthers/db";
 import {
 	accounts,
 	attentionEvents,
+	badges,
 	poolDistributions,
-	seedAllocations,
 	stickers,
+	userBadges,
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleEnd, cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
 import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { creditedSecondsByCreator } from "../services/attention-ranges.js";
 
 export interface DistributePoolData {
@@ -93,7 +95,7 @@ export const billingCycleDate = cycleKeyFor;
 
 export interface Dist {
 	poolAmount: Decimal;
-	seedAmount: Decimal;
+	badgeAmount: Decimal;
 	/** What this viewer directed at this creator by hand, out of their own Time Pool. */
 	stickerAmount: Decimal;
 	attentionSeconds: number;
@@ -216,7 +218,7 @@ export async function computeMonth(input: {
 		let grossDirected = new Decimal(0);
 		for (const [creatorId, gross] of charge.directed) {
 			if (gross.lte(0)) continue;
-			onCharge.set(creatorId, { ...newDist(), seedAmount: gross });
+			onCharge.set(creatorId, { ...newDist(), badgeAmount: gross });
 			grossDirected = grossDirected.plus(gross);
 		}
 
@@ -232,23 +234,23 @@ export async function computeMonth(input: {
 			if (creatorFee.gt(0)) {
 				for (const d of onCharge.values()) {
 					// Each creator bears the fee in proportion to what was directed at them.
-					const share = CENTS(creatorFee.mul(d.seedAmount).div(grossDirected));
-					d.seedAmount = Decimal.max(0, d.seedAmount.minus(share));
+					const share = CENTS(creatorFee.mul(d.badgeAmount).div(grossDirected));
+					d.badgeAmount = Decimal.max(0, d.badgeAmount.minus(share));
 				}
 				// Conserve exactly: rounding must not leave Anthers over- or under-paying.
 				correctDrift(
 					onCharge,
 					grossDirected.minus(creatorFee),
-					(d) => d.seedAmount,
+					(d) => d.badgeAmount,
 					(d, v) => {
-						d.seedAmount = v;
+						d.badgeAmount = v;
 					},
 				);
 			}
 		}
 
 		for (const [creatorId, d] of onCharge) {
-			ensure(creatorId).seedAmount = ensure(creatorId).seedAmount.plus(d.seedAmount);
+			ensure(creatorId).badgeAmount = ensure(creatorId).badgeAmount.plus(d.badgeAmount);
 		}
 	}
 
@@ -369,7 +371,7 @@ export async function computeMonth(input: {
 function newDist(): Dist {
 	return {
 		poolAmount: new Decimal(0),
-		seedAmount: new Decimal(0),
+		badgeAmount: new Decimal(0),
 		stickerAmount: new Decimal(0),
 		attentionSeconds: 0,
 	};
@@ -385,12 +387,21 @@ async function distributeForAccount(acct: {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
+	// The directed half of the month: the viewer's badge holdings this cycle, summed by
+	// creator through the held Badge's threshold. A viewer holds at most one badge per
+	// issuer per cycle, so the sum is one threshold per creator in practice — `MAX` per
+	// (creator, threshold) keeps the shape honest in the query the same way
+	// `buildAccessContext` does, and grouping by creator is what feeds the charge's
+	// `directed` map.
 	const directed = await db
-		.select()
-		.from(seedAllocations)
-		.where(
-			and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycleDate)),
-		);
+		.select({
+			creatorId: badges.creatorId,
+			gross: sql<string>`MAX(${badges.threshold})`,
+		})
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+		.where(and(eq(userBadges.userId, acct.userId), eq(userBadges.billingCycle, cycleDate)))
+		.groupBy(badges.creatorId);
 
 	const { distributions } = await computeMonth({
 		userId: acct.userId,
@@ -402,7 +413,7 @@ async function distributeForAccount(acct: {
 		charges: [
 			{
 				anthers: new Decimal(supportAmount(acct.anthersSupport)),
-				directed: new Map(directed.map((seed) => [seed.creatorId, new Decimal(seed.amount)])),
+				directed: new Map(directed.map((d) => [d.creatorId, new Decimal(d.gross)])),
 			},
 		],
 		includeStickers: true,
@@ -412,7 +423,7 @@ async function distributeForAccount(acct: {
 	for (const [creatorId, data] of distributions) {
 		// A creator the viewer never watched but did hand a Sticker to still needs a row —
 		// without `stickerAmount` in this guard their payment would be computed and dropped.
-		if (data.poolAmount.lte(0) && data.seedAmount.lte(0) && data.stickerAmount.lte(0)) continue;
+		if (data.poolAmount.lte(0) && data.badgeAmount.lte(0) && data.stickerAmount.lte(0)) continue;
 		await db
 			.insert(poolDistributions)
 			.values({
@@ -420,7 +431,7 @@ async function distributeForAccount(acct: {
 				creatorId,
 				billingCycle: cycleDate,
 				poolAmount: data.poolAmount.toString(),
-				seedAmount: data.seedAmount.toString(),
+				badgeAmount: data.badgeAmount.toString(),
 				stickerAmount: data.stickerAmount.toString(),
 				attentionSeconds: data.attentionSeconds,
 			})
@@ -432,7 +443,7 @@ async function distributeForAccount(acct: {
 				],
 				set: {
 					poolAmount: data.poolAmount.toString(),
-					seedAmount: data.seedAmount.toString(),
+					badgeAmount: data.badgeAmount.toString(),
 					stickerAmount: data.stickerAmount.toString(),
 					attentionSeconds: data.attentionSeconds,
 				},

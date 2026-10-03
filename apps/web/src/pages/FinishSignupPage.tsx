@@ -37,7 +37,13 @@
  */
 
 import anthersMark from "@anthers/brand/logo/web/mark-60.png";
-import { amountLabel, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import {
+	amountLabel,
+	BADGE_ORDER,
+	type BadgeKey,
+	PUBLIC_ACCESS_PRICE,
+	thresholdForBadge,
+} from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { EMPTY_PICKS, type SignupPicks, supportTotal } from "@anthers/shared/signup";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -62,6 +68,26 @@ import SubscriptionPaymentModal, {
 import { useHandleAvailability } from "../lib/hosted-handle";
 
 const serif = { fontFamily: FONTS.fraunces };
+
+/**
+ * The dollars a picked Anthers Badge costs, or 0 — the pick is a string that crossed
+ * three boundaries (session storage, a jsonb column, the network), so it is resolved
+ * against the ladder rather than trusted: a name outside the set reads as Free, exactly
+ * as `normalizePicks` reads it.
+ */
+function anthersDollarsOf(badge: string | null): number {
+	if (badge === null) return 0;
+	return (BADGE_ORDER as readonly string[]).includes(badge)
+		? thresholdForBadge(badge as BadgeKey)
+		: 0;
+}
+
+/** The picked rung as a ladder name, or null — an unrecognized name reads as Free. */
+function pickedRung(badge: string | null): BadgeKey | null {
+	return badge !== null && (BADGE_ORDER as readonly string[]).includes(badge)
+		? (badge as BadgeKey)
+		: null;
+}
 
 /** What `GET /api/auth/signup/pending` says about the signup this browser is finishing. */
 interface Pending {
@@ -253,11 +279,14 @@ export default function FinishSignupPage() {
 	 * $9 while charging $1. This page shows a total too, so it inherits the rule rather than
 	 * the defect.
 	 */
-	const directed = picks.seed
+	const directed = picks.badges
 		.map((handle) => byHandle.get(handle))
 		.filter((creator): creator is PublicUser => !!creator)
 		.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
-	const total = supportTotal(picks.anthers, directed);
+	// The picked Anthers Badge resolves to its threshold here, so the total contains no
+	// number this page could invent: every dollar in it was chosen on /signup.
+	const anthersAmount = anthersDollarsOf(picks.badge);
+	const total = supportTotal(anthersAmount, directed);
 
 	/**
 	 * Tell the auth context, then go.
@@ -289,11 +318,12 @@ export default function FinishSignupPage() {
 			const landing = sanitizeNextPath(result.next ?? undefined) ?? next;
 			destination.current = landing;
 
-			const chosenDirected = chosen.seed
+			const chosenDirected = chosen.badges
 				.map((handle) => byHandle.get(handle))
 				.filter((creator): creator is PublicUser => !!creator)
 				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
-			const chosenTotal = supportTotal(chosen.anthers, chosenDirected);
+			const chosenAnthers = anthersDollarsOf(chosen.badge);
+			const chosenTotal = supportTotal(chosenAnthers, chosenDirected);
 
 			for (const handle of chosen.follow) {
 				const creator = byHandle.get(handle);
@@ -319,7 +349,7 @@ export default function FinishSignupPage() {
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setCharge({
-				anthersSupport: chosen.anthers,
+				anthersSupport: chosenAnthers,
 				directed: chosenDirected,
 				// The honest label is the amount: a commit needn't land on a Badge, and naming
 				// one would describe only the Anthers half of this charge.
@@ -762,7 +792,7 @@ function ChosenSummary({
 	byHandle: Map<string | null, PublicUser>;
 	total: number;
 }) {
-	const nothing = picks.anthers === 0 && picks.follow.length === 0;
+	const nothing = pickedRung(picks.badge) === null && picks.follow.length === 0;
 	if (nothing) {
 		return (
 			<p className="mt-8 border-t border-base-content/10 pt-6 text-sm leading-relaxed text-base-content/50">
@@ -782,24 +812,26 @@ function ChosenSummary({
 					<span className="min-w-0">
 						Your Anthers account
 						<span className="block text-xs text-base-content/45">
-							{picks.anthers > 0
+							{pickedRung(picks.badge) !== null
 								? "unlimited Public Access, and support for free access"
 								: `${amountLabel(0)} — ten hours of Public Access a month`}
 						</span>
 					</span>
 					<strong className="ml-auto shrink-0 tabular-nums">
-						{picks.anthers > 0 ? amountLabel(picks.anthers) : "Free"}
+						{pickedRung(picks.badge) !== null
+							? amountLabel(thresholdForBadge(pickedRung(picks.badge) as BadgeKey))
+							: "Free"}
 					</strong>
 				</li>
 				{picks.follow.map((handle) => {
 					const creator = byHandle.get(handle);
-					const backing = picks.seed.includes(handle);
+					const backing = picks.badges.includes(handle);
 					return (
 						<li key={handle} className="flex items-baseline gap-3">
 							<span className="min-w-0">
 								{creator?.displayName || creator?.handle || handle}
 								<span className="block text-xs text-base-content/45">
-									{backing ? "following · supporting" : "following"}
+									{backing ? "following · backing" : "following"}
 								</span>
 							</span>
 							<strong className="ml-auto shrink-0 tabular-nums">

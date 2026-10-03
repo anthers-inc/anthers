@@ -23,6 +23,7 @@
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
+import { isAccessResult } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useRef, useState } from "react";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
@@ -89,7 +90,11 @@ export default function EmbedWorkPage() {
 		workId: work?.id ?? null,
 		contentType: work?.type ?? "",
 		active:
-			!!work && presence && isTimePoolEligible(work.type) && (work.access?.canAccess ?? false),
+			!!work &&
+			presence &&
+			isTimePoolEligible(work.type) &&
+			isAccessResult(work.access) &&
+			work.access.canAccess,
 		elementRef: presence ? deliverableRef : undefined,
 	});
 
@@ -122,7 +127,7 @@ export default function EmbedWorkPage() {
 		);
 	}
 
-	const canAccess = work.access?.canAccess ?? false;
+	const canAccess = isAccessResult(work.access) && work.access.canAccess;
 	const jobStatus = work.transcoding?.status;
 	const encoding = jobStatus != null && jobStatus !== "completed" && jobStatus !== "failed";
 

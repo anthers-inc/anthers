@@ -862,7 +862,7 @@ type Combo = { scenario: string; rows: Deal[]; note?: string; breakdown: Line[] 
 
 const ACTIONS = [
 	{ key: "purchase", label: "Purchases your work" },
-	{ key: "seed", label: "Backs you monthly" },
+	{ key: "badge", label: "Backs you monthly" },
 	{ key: "stream", label: "Streams your work" },
 ] as const;
 type ActionKey = (typeof ACTIONS)[number]["key"];
@@ -879,7 +879,7 @@ type MediaKey = (typeof MEDIA)[number]["key"];
 // Header intro for the per-combo Anthers mini-receipt (below the comparison).
 const RECEIPT_INTRO: Record<ActionKey, string> = {
 	purchase: "the price plus delivery",
-	seed: "what a fan gives you each month",
+	badge: "what a fan gives you each month",
 	stream: "an hour a fan spends with your public work",
 };
 
@@ -924,24 +924,24 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
  * as a bare 6 — the figure moves if the price does.
  */
 const SUPPORT_SPEND = PUBLIC_ACCESS_PRICE * 2;
-const SEED_SPEND = SUPPORT_SPEND;
-const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
+const BADGE_SPEND = SUPPORT_SPEND;
+const BADGE_SPEND_STR = `$${BADGE_SPEND.toFixed(2)}`;
 /** The at-cost card fee if this were the fan's ENTIRE monthly charge — the worst case,
  * and what a creator should plan against. A fan who also backs others spreads the fixed
  * $0.30 further and pays you more. */
-const SEED_CARD = cardFeeDisplay(SEED_SPEND);
-const SEED_CARD_STR = `$${SEED_CARD.toFixed(2)}`;
-const SEED_NET_STR = `$${(SEED_SPEND - SEED_CARD).toFixed(2)}`;
+const BADGE_CARD = cardFeeDisplay(BADGE_SPEND);
+const BADGE_CARD_STR = `$${BADGE_CARD.toFixed(2)}`;
+const BADGE_NET_STR = `$${(BADGE_SPEND - BADGE_CARD).toFixed(2)}`;
 /** Rival all-in take-home on the same monthly support: list × (1 − cutRate),
  * minus the at-cost card fee unless the rival absorbs processing (as YouTube
  * Memberships and Twitch do). Competitor rates are rough public estimates. */
-const rivalSeedAllIn = (cutRate: number, absorbsProcessing = false) => {
-	const afterCut = SEED_SPEND * (1 - cutRate);
-	return `$${(absorbsProcessing ? afterCut : afterCut - SEED_CARD).toFixed(2)}`;
+const rivalBadgeAllIn = (cutRate: number, absorbsProcessing = false) => {
+	const afterCut = BADGE_SPEND * (1 - cutRate);
+	return `$${(absorbsProcessing ? afterCut : afterCut - BADGE_CARD).toFixed(2)}`;
 };
-const rivalTakes = (cutRate: number) => `$${(SEED_SPEND * cutRate).toFixed(2)}`;
-const SEED_SCENARIO = `A fan gives you ${SEED_SPEND_STR} a month`;
-const SEED_NOTE = `Monthly support recurs until the fan changes it, and Anthers takes no cut of it — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: this as their entire charge. Rival figures are all-in take-home at the same ${SEED_SPEND_STR} — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
+const rivalTakes = (cutRate: number) => `$${(BADGE_SPEND * cutRate).toFixed(2)}`;
+const BADGE_SCENARIO = `A fan gives you ${BADGE_SPEND_STR} a month`;
+const BADGE_NOTE = `A Badge recurs until the fan changes it, and Anthers takes no cut of it — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: this as their entire charge. Rival figures are all-in take-home at the same ${BADGE_SPEND_STR} — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
 
 /** Rival all-in take-home on a sale: list × (1 − cutRate), minus the at-cost card
  * fee unless the rival absorbs processing (as Steam and Apple do — they fold the
@@ -1007,9 +1007,9 @@ const merchReceipt: Line[] = [
 	},
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
-const seedReceipt: Line[] = [
-	{ label: "To you — their support, less the at-cost card share", amount: SEED_NET_STR },
-	{ label: "Card processing — one fee on the fan's whole monthly charge", amount: SEED_CARD_STR },
+const badgeReceipt: Line[] = [
+	{ label: "To you — what the Badge pays, less the at-cost card share", amount: BADGE_NET_STR },
+	{ label: "Card processing — one fee on the fan's whole monthly charge", amount: BADGE_CARD_STR },
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 
@@ -1165,64 +1165,64 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 			breakdown: merchReceipt,
 		},
 	},
-	seed: {
+	badge: {
 		video: {
-			scenario: SEED_SCENARIO,
+			scenario: BADGE_SCENARIO,
 			rows: [
-				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
+				anthers(BADGE_NET_STR, "$0.00", PASSTHROUGH),
 				{
 					name: "YouTube Memberships",
-					creator: rivalSeedAllIn(0.3, true),
+					creator: rivalBadgeAllIn(0.3, true),
 					platform: rivalTakes(0.3),
 				},
-				{ name: "Twitch (sub)", creator: rivalSeedAllIn(0.5, true), platform: rivalTakes(0.5) },
+				{ name: "Twitch (sub)", creator: rivalBadgeAllIn(0.5, true), platform: rivalTakes(0.5) },
 			],
-			note: SEED_NOTE,
-			breakdown: seedReceipt,
+			note: BADGE_NOTE,
+			breakdown: badgeReceipt,
 		},
 		games: {
-			scenario: SEED_SCENARIO,
+			scenario: BADGE_SCENARIO,
 			rows: [
-				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
-				{ name: "Ko-fi", creator: rivalSeedAllIn(0.05), platform: rivalTakes(0.05) },
+				anthers(BADGE_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalBadgeAllIn(0.1), platform: rivalTakes(0.1) },
+				{ name: "Ko-fi", creator: rivalBadgeAllIn(0.05), platform: rivalTakes(0.05) },
 			],
-			note: SEED_NOTE,
-			breakdown: seedReceipt,
+			note: BADGE_NOTE,
+			breakdown: badgeReceipt,
 		},
 		music: {
-			scenario: SEED_SCENARIO,
+			scenario: BADGE_SCENARIO,
 			rows: [
-				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
+				anthers(BADGE_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalBadgeAllIn(0.1), platform: rivalTakes(0.1) },
 				{
 					name: "Bandcamp (subscription)",
-					creator: rivalSeedAllIn(0.15),
+					creator: rivalBadgeAllIn(0.15),
 					platform: rivalTakes(0.15),
 				},
 			],
-			note: SEED_NOTE,
-			breakdown: seedReceipt,
+			note: BADGE_NOTE,
+			breakdown: badgeReceipt,
 		},
 		writing: {
-			scenario: SEED_SCENARIO,
+			scenario: BADGE_SCENARIO,
 			rows: [
-				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
-				{ name: "Substack", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
-				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
+				anthers(BADGE_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Substack", creator: rivalBadgeAllIn(0.1), platform: rivalTakes(0.1) },
+				{ name: "Patreon", creator: rivalBadgeAllIn(0.1), platform: rivalTakes(0.1) },
 			],
-			note: SEED_NOTE,
-			breakdown: seedReceipt,
+			note: BADGE_NOTE,
+			breakdown: badgeReceipt,
 		},
 		merch: {
-			scenario: SEED_SCENARIO,
+			scenario: BADGE_SCENARIO,
 			rows: [
-				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
-				{ name: "Buy Me a Coffee", creator: rivalSeedAllIn(0.05), platform: rivalTakes(0.05) },
+				anthers(BADGE_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalBadgeAllIn(0.1), platform: rivalTakes(0.1) },
+				{ name: "Buy Me a Coffee", creator: rivalBadgeAllIn(0.05), platform: rivalTakes(0.05) },
 			],
-			note: `${SEED_NOTE} Monthly support backs you, not one thing you made — whatever you turn out next is already covered.`,
-			breakdown: seedReceipt,
+			note: `${BADGE_NOTE} Monthly support backs you, not one thing you made — whatever you turn out next is already covered.`,
+			breakdown: badgeReceipt,
 		},
 	},
 };

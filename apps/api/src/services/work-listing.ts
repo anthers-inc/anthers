@@ -91,7 +91,7 @@ export async function syncWorkListing(
 			maturity: works.maturity,
 			streamEnabled: works.streamEnabled,
 			downloadEnabled: works.downloadEnabled,
-			seedAccess: works.seedAccess,
+			access: works.access,
 			credits: works.credits,
 			atprotoUri: works.atprotoUri,
 		})

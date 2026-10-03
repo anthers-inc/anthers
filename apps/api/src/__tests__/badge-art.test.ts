@@ -20,7 +20,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { creatorGates, mediaQuarantine, users } from "@anthers/db/schema";
+import { badges, mediaQuarantine, users } from "@anthers/db/schema";
 import { BADGE_ART_PX } from "@anthers/shared/constants";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
@@ -48,10 +48,10 @@ async function signUp(username: string): Promise<string> {
 	return (await createAccount(username)).cookie;
 }
 
-function upload(gateId: number, cookie: string, file: File) {
+function upload(badgeId: number, cookie: string, file: File) {
 	const body = new FormData();
 	body.append("file", file);
-	return req(`/api/subscriptions/gates/${gateId}/art`, {
+	return req(`/api/subscriptions/badges/${badgeId}/art`, {
 		method: "POST",
 		headers: { Origin: ORIGIN, Cookie: cookie },
 		body,
@@ -61,16 +61,16 @@ function upload(gateId: number, cookie: string, file: File) {
 let creatorCookie: string;
 let otherCookie: string;
 let creatorId = 0;
-let gateId = 0;
+let badgeId = 0;
 
-async function makeGate(cookie: string, label: string): Promise<number> {
-	const res = await req("/api/subscriptions/gates", {
+async function makeBadge(cookie: string, label: string): Promise<number> {
+	const res = await req("/api/subscriptions/badges", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 		body: JSON.stringify({ threshold: "5.00", label }),
 	});
 	expect(res.status).toBe(201);
-	return ((await res.json()) as { gate: { id: number } }).gate.id;
+	return ((await res.json()) as { badge: { id: number } }).badge.id;
 }
 
 describe("Creator Badge art", () => {
@@ -82,7 +82,7 @@ describe("Creator Badge art", () => {
 			.from(users)
 			.where(eq(users.email, `${creatorName}@example.com`));
 		creatorId = row.id;
-		gateId = await makeGate(creatorCookie, `Rung ${RUN}`);
+		badgeId = await makeBadge(creatorCookie, `Rung ${RUN}`);
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
@@ -106,32 +106,32 @@ describe("Creator Badge art", () => {
 	});
 
 	it("🚨 never puts the storage key in a response, only whether art exists", async () => {
-		// The easiest regression available: a `select()` on the gates table now returns the
-		// new column, and every gate response would carry it.
+		// The easiest regression available: a `select()` on the badges table now returns the
+		// new column, and every badge response would carry it.
 		const stub = stubShield("no-known-match");
 		try {
-			expect((await upload(gateId, creatorCookie, await artwork())).status).toBe(201);
+			expect((await upload(badgeId, creatorCookie, await artwork())).status).toBe(201);
 		} finally {
 			stub.restore();
 		}
 
-		const res = await req("/api/subscriptions/gates", { headers: { Cookie: creatorCookie } });
+		const res = await req("/api/subscriptions/badges", { headers: { Cookie: creatorCookie } });
 		const text = await res.text();
 		expect(text).not.toContain("artKey");
 		expect(text).not.toContain("art_key");
 		// And the object's own path must not appear either, under any key name.
 		expect(text).not.toContain("/badges/");
-		expect(JSON.parse(text).gates[0].hasArt).toBe(true);
+		expect(JSON.parse(text).badges[0].hasArt).toBe(true);
 	});
 
 	it("⭐ normalizes a wide image into the square the shared frame needs", async () => {
 		// Anthers' own Badges and a creator's share one round frame, and a frame cannot fit
 		// whatever aspect ratio a phone produced.
-		const [gate] = await db
-			.select({ artKey: creatorGates.artKey })
-			.from(creatorGates)
-			.where(eq(creatorGates.id, gateId));
-		const bytes = await storage.read(gate.artKey!);
+		const [badge] = await db
+			.select({ artKey: badges.artKey })
+			.from(badges)
+			.where(eq(badges.id, badgeId));
+		const bytes = await storage.read(badge.artKey!);
 		const meta = await sharp(bytes!).metadata();
 		expect(meta.width).toBe(BADGE_ART_PX);
 		expect(meta.height).toBe(BADGE_ART_PX);
@@ -139,13 +139,13 @@ describe("Creator Badge art", () => {
 	});
 
 	it("serves the art it stored, and 404s once it is cleared", async () => {
-		const served = await req(`/api/subscriptions/gates/${gateId}/art`);
+		const served = await req(`/api/subscriptions/badges/${badgeId}/art`);
 		expect(served.status).toBe(200);
 		expect(served.headers.get("Content-Type")).toBe("image/png");
 
 		expect(
 			(
-				await req(`/api/subscriptions/gates/${gateId}/art`, {
+				await req(`/api/subscriptions/badges/${badgeId}/art`, {
 					method: "DELETE",
 					headers: { Origin: ORIGIN, Cookie: creatorCookie },
 				})
@@ -155,7 +155,7 @@ describe("Creator Badge art", () => {
 		// ⚠️ 404 rather than a placeholder: the default is the client's to draw, from the
 		// brand package's recolor-ready SVG. A raster default served from here would go
 		// stale the moment the palette moved.
-		expect((await req(`/api/subscriptions/gates/${gateId}/art`)).status).toBe(404);
+		expect((await req(`/api/subscriptions/badges/${badgeId}/art`)).status).toBe(404);
 	});
 
 	it("🚨 refuses art that matches known material, and preserves the object", async () => {
@@ -163,24 +163,24 @@ describe("Creator Badge art", () => {
 		// queued scan could catch up, so a match has to stop the upload itself.
 		const stub = stubShield("csam");
 		try {
-			const res = await upload(gateId, creatorCookie, await artwork(21));
+			const res = await upload(badgeId, creatorCookie, await artwork(21));
 			expect(res.status).toBe(422);
 			expect((await res.json()).code).toBe("refused");
 		} finally {
 			stub.restore();
 		}
 
-		const [gate] = await db
-			.select({ artKey: creatorGates.artKey })
-			.from(creatorGates)
-			.where(eq(creatorGates.id, gateId));
-		expect(gate.artKey, "a refused upload must leave the rung with no art").toBeNull();
+		const [badge] = await db
+			.select({ artKey: badges.artKey })
+			.from(badges)
+			.where(eq(badges.id, badgeId));
+		expect(badge.artKey, "a refused upload must leave the rung with no art").toBeNull();
 
 		// 🚨 **Refused is not destroyed, and the route used to destroy it.** A match is
 		// actual knowledge under § 2258A, and the object is the one thing a CyberTipline
 		// report has to cite — so it is parked under the quarantine prefix with a
 		// preservation hold, exactly as a Work's match is. Asserting the bytes survive is
-		// what separates this from the old behavior, which left an identical gate row.
+		// what separates this from the old behavior, which left an identical badge row.
 		const [finding] = await db
 			.select({ originalKey: mediaQuarantine.originalKey, objectKind: mediaQuarantine.objectKind })
 			.from(mediaQuarantine)
@@ -200,7 +200,7 @@ describe("Creator Badge art", () => {
 			"badge.svg",
 			{ type: "image/svg+xml" },
 		);
-		const res = await upload(gateId, creatorCookie, svg);
+		const res = await upload(badgeId, creatorCookie, svg);
 		expect(res.status).toBe(400);
 		expect((await res.json()).code).toBe("not_an_image");
 	});
@@ -209,16 +209,16 @@ describe("Creator Badge art", () => {
 		// The middle layer, and the reason it exists: shape, color and emblem are three
 		// choices, so a creator who never opens a file picker still gets a badge that is
 		// recognizably theirs.
-		const res = await req(`/api/subscriptions/gates/${gateId}`, {
+		const res = await req(`/api/subscriptions/badges/${badgeId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({ artShape: "hexagon", artColor: "amber", artEmblem: "bee" }),
 		});
 		expect(res.status).toBe(200);
-		const { gate } = (await res.json()) as {
-			gate: { artShape: string; artColor: string; artEmblem: string };
+		const { badge } = (await res.json()) as {
+			badge: { artShape: string; artColor: string; artEmblem: string };
 		};
-		expect(gate).toMatchObject({ artShape: "hexagon", artColor: "amber", artEmblem: "bee" });
+		expect(badge).toMatchObject({ artShape: "hexagon", artColor: "amber", artEmblem: "bee" });
 	});
 
 	it("🚨 refuses a shape, color or emblem the library does not carry", async () => {
@@ -231,7 +231,7 @@ describe("Creator Badge art", () => {
 			{ artEmblem: "corner-leafy" },
 			{ artShape: "../etc/passwd" },
 		]) {
-			const res = await req(`/api/subscriptions/gates/${gateId}`, {
+			const res = await req(`/api/subscriptions/badges/${badgeId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 				body: JSON.stringify(patch),
@@ -241,17 +241,17 @@ describe("Creator Badge art", () => {
 	});
 
 	it("lets a creator go back to the default by clearing a choice", async () => {
-		const res = await req(`/api/subscriptions/gates/${gateId}`, {
+		const res = await req(`/api/subscriptions/badges/${badgeId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({ artShape: null, artColor: null, artEmblem: null }),
 		});
 		expect(res.status).toBe(200);
-		expect((await res.json()).gate.artShape).toBeNull();
+		expect((await res.json()).badge.artShape).toBeNull();
 	});
 
 	it("refuses to art a rung somebody else owns, without saying it exists", async () => {
-		const res = await upload(gateId, otherCookie, await artwork());
+		const res = await upload(badgeId, otherCookie, await artwork());
 		expect(res.status).toBe(404);
 	});
 
@@ -260,17 +260,17 @@ describe("Creator Badge art", () => {
 		// on every version they discarded.
 		const stub = stubShield("no-known-match");
 		try {
-			expect((await upload(gateId, creatorCookie, await artwork())).status).toBe(201);
+			expect((await upload(badgeId, creatorCookie, await artwork())).status).toBe(201);
 			const [first] = await db
-				.select({ artKey: creatorGates.artKey })
-				.from(creatorGates)
-				.where(eq(creatorGates.id, gateId));
+				.select({ artKey: badges.artKey })
+				.from(badges)
+				.where(eq(badges.id, badgeId));
 
-			expect((await upload(gateId, creatorCookie, await artwork(99))).status).toBe(201);
+			expect((await upload(badgeId, creatorCookie, await artwork(99))).status).toBe(201);
 			const [second] = await db
-				.select({ artKey: creatorGates.artKey })
-				.from(creatorGates)
-				.where(eq(creatorGates.id, gateId));
+				.select({ artKey: badges.artKey })
+				.from(badges)
+				.where(eq(badges.id, badgeId));
 
 			expect(second.artKey).not.toBe(first.artKey);
 			expect(await storage.read(first.artKey!), "the replaced object should be gone").toBeNull();

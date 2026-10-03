@@ -177,7 +177,7 @@ async function makeWork(title: string): Promise<number> {
 		title,
 		streamEnabled: false,
 		downloadEnabled: true,
-		seedAccess: FOR_SALE,
+		access: FOR_SALE,
 	});
 	await db.insert(assets).values({
 		workId: work.id,

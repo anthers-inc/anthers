@@ -2,7 +2,8 @@
 /**
  * Settings card: the creator's **Badge ladder** — the rungs that populate every Work's
  * access table. Each rung is a Badge (label + monthly amount + description).
- * Wired to the subscriptions gates API (own seed-type gates only).
+ * Wired to the subscriptions badges API — the creator's own ladder, which is the
+ * only kind of rung there is.
  *
  * 🚨 **Thresholds are DOLLARS, and any amount is expressible** (migration `0041`). They
  * were whole Seeds — an indivisible $3 unit — so a rung between two of them could not be
@@ -22,7 +23,7 @@ import {
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, client } from "../../lib/rpc";
-import type { CreatorGate } from "../../lib/types";
+import type { CreatorBadge } from "../../lib/types";
 import { BrandGlyph } from "../decor/BrandGlyph";
 import { CreatorBadgeMark } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
@@ -36,7 +37,7 @@ function rungAmount(v: string): string {
 	return (n > 0 ? n : 1).toFixed(2);
 }
 
-/** "$6/mo" — the amount IS the gate now, so nothing has to be derived from it. */
+/** "$6/mo" — the amount IS the rung now, so nothing has to be derived from it. */
 function rungLabel(threshold: string | number): string {
 	return `${amountLabel(threshold)}/mo`;
 }
@@ -54,12 +55,12 @@ function rungLabel(threshold: string | number): string {
  * refusal later and make it look like a bug.
  */
 function BadgeArtControl({
-	gate,
+	badge,
 	index,
 	onChanged,
 	onError,
 }: {
-	gate: CreatorGate;
+	badge: CreatorBadge;
 	index: number;
 	onChanged: () => void;
 	onError: (message: string | null) => void;
@@ -78,7 +79,7 @@ function BadgeArtControl({
 		try {
 			const body = new FormData();
 			body.append("file", file);
-			const res = await apiFetch(`/api/subscriptions/gates/${gate.id}/art`, {
+			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}/art`, {
 				method: "POST",
 				body,
 			});
@@ -102,7 +103,7 @@ function BadgeArtControl({
 		setBusy(true);
 		onError(null);
 		try {
-			const res = await apiFetch(`/api/subscriptions/gates/${gate.id}/art`, { method: "DELETE" });
+			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}/art`, { method: "DELETE" });
 			if (!res.ok) onError("Couldn't remove that art.");
 			else onChanged();
 		} finally {
@@ -115,7 +116,7 @@ function BadgeArtControl({
 		setBusy(true);
 		onError(null);
 		try {
-			const res = await apiFetch(`/api/subscriptions/gates/${gate.id}`, {
+			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(patch),
@@ -138,7 +139,12 @@ function BadgeArtControl({
 				disabled={busy}
 				title="Change this badge"
 			>
-				<CreatorBadgeMark gateId={gate.id} index={index} label={`${gate.label} badge`} art={gate} />
+				<CreatorBadgeMark
+					badgeId={badge.id}
+					index={index}
+					label={`${badge.label} badge`}
+					art={badge}
+				/>
 			</button>
 			<input
 				ref={input}
@@ -162,8 +168,8 @@ function BadgeArtControl({
 								key={s.id}
 								type="button"
 								aria-label={s.label}
-								aria-pressed={gate.artShape === s.id}
-								className={`btn btn-xs btn-square ${gate.artShape === s.id ? "btn-primary" : "btn-ghost"}`}
+								aria-pressed={badge.artShape === s.id}
+								className={`btn btn-xs btn-square ${badge.artShape === s.id ? "btn-primary" : "btn-ghost"}`}
 								onClick={() => choose({ artShape: s.id })}
 								disabled={busy}
 							>
@@ -181,8 +187,8 @@ function BadgeArtControl({
 								key={col.id}
 								type="button"
 								aria-label={col.label}
-								aria-pressed={gate.artColor === col.id}
-								className={`h-5 w-5 rounded-full border ${gate.artColor === col.id ? "border-primary" : "border-base-300"}`}
+								aria-pressed={badge.artColor === col.id}
+								className={`h-5 w-5 rounded-full border ${badge.artColor === col.id ? "border-primary" : "border-base-300"}`}
 								style={{ backgroundColor: col.fill }}
 								onClick={() => choose({ artColor: col.id })}
 								disabled={busy}
@@ -196,10 +202,10 @@ function BadgeArtControl({
 								key={name}
 								type="button"
 								aria-label={name}
-								aria-pressed={gate.artEmblem === name}
-								className={`btn btn-xs btn-square ${gate.artEmblem === name ? "btn-primary" : "btn-ghost"}`}
+								aria-pressed={badge.artEmblem === name}
+								className={`btn btn-xs btn-square ${badge.artEmblem === name ? "btn-primary" : "btn-ghost"}`}
 								onClick={() => choose({ artEmblem: name })}
-								disabled={busy || gate.hasArt}
+								disabled={busy || badge.hasArt}
 							>
 								<BrandGlyph name={name as BrandIconName} className="h-4 w-4" />
 							</button>
@@ -213,9 +219,9 @@ function BadgeArtControl({
 							onClick={() => input.current?.click()}
 							disabled={busy}
 						>
-							{gate.hasArt ? "Replace art" : "Use my own art"}
+							{badge.hasArt ? "Replace art" : "Use my own art"}
 						</button>
-						{gate.hasArt && (
+						{badge.hasArt && (
 							<button
 								type="button"
 								className="btn btn-ghost btn-xs text-base-content/50"
@@ -247,7 +253,7 @@ function PickerRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 export default function BadgeLadderEditor() {
-	const [gates, setGates] = useState<CreatorGate[]>([]);
+	const [badges, setBadges] = useState<CreatorBadge[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -271,24 +277,26 @@ export default function BadgeLadderEditor() {
 	 * three reopenings, for a component whose entire point is mixing and matching. Found in
 	 * the browser; nothing in the API tests could have shown it.
 	 */
-	const fetchGates = () => {
-		setLoading((wasLoading) => wasLoading || gates.length === 0);
-		client.api.subscriptions.gates
+	const fetchBadges = () => {
+		setLoading((wasLoading) => wasLoading || badges.length === 0);
+		client.api.subscriptions.badges
 			.$get()
 			.then(async (res) => {
 				if (!res.ok) {
-					setGates([]);
+					setBadges([]);
 					return;
 				}
-				const data = (await res.json()) as { gates: CreatorGate[] };
-				setGates((data.gates ?? []).filter((g) => g.gateType === "seed"));
+				const data = (await res.json()) as { badges: CreatorBadge[] };
+				// Every rung the ladder holds is the creator's own Badge — there is no
+				// `gateType` to filter on, and no cross-issuer rung to exclude.
+				setBadges(data.badges ?? []);
 			})
-			.catch(() => setGates([]))
+			.catch(() => setBadges([]))
 			.finally(() => setLoading(false));
 	};
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the first load only. A save refetches by calling `fetchGates` directly, and depending on `gates.length` would refetch every time a rung is added.
-	useEffect(fetchGates, []);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the first load only. A save refetches by calling `fetchBadges` directly, and depending on `badges.length` would refetch every time a rung is added.
+	useEffect(fetchBadges, []);
 
 	const handleAdd = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -296,19 +304,18 @@ export default function BadgeLadderEditor() {
 		setSaving(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.gates.$post({
+			const res = await client.api.subscriptions.badges.$post({
 				json: {
 					threshold: rungAmount(newThreshold),
 					label: newLabel.trim(),
 					description: newDescription.trim(),
-					gateType: "seed",
 				},
 			});
 			if (!res.ok) throw new Error("Failed to add rung.");
 			setNewLabel("");
 			setNewThreshold("");
 			setNewDescription("");
-			fetchGates();
+			fetchBadges();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to add rung.");
 		} finally {
@@ -316,18 +323,18 @@ export default function BadgeLadderEditor() {
 		}
 	};
 
-	const startEdit = (gate: CreatorGate) => {
-		setEditingId(gate.id);
-		setEditLabel(gate.label);
-		setEditThreshold(gate.threshold);
-		setEditDescription(gate.description ?? "");
+	const startEdit = (badge: CreatorBadge) => {
+		setEditingId(badge.id);
+		setEditLabel(badge.label);
+		setEditThreshold(badge.threshold);
+		setEditDescription(badge.description ?? "");
 	};
 
 	const handleSaveEdit = async (id: number) => {
 		setSaving(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.gates[":id"].$patch({
+			const res = await client.api.subscriptions.badges[":id"].$patch({
 				param: { id: String(id) },
 				json: {
 					threshold: rungAmount(editThreshold),
@@ -337,7 +344,7 @@ export default function BadgeLadderEditor() {
 			});
 			if (!res.ok) throw new Error("Failed to save rung.");
 			setEditingId(null);
-			fetchGates();
+			fetchBadges();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to save rung.");
 		} finally {
@@ -349,11 +356,11 @@ export default function BadgeLadderEditor() {
 		setSaving(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.gates[":id"].$delete({
+			const res = await client.api.subscriptions.badges[":id"].$delete({
 				param: { id: String(id) },
 			});
 			if (!res.ok) throw new Error("Failed to delete rung.");
-			fetchGates();
+			fetchBadges();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to delete rung.");
 		} finally {
@@ -380,12 +387,10 @@ export default function BadgeLadderEditor() {
 					<p className="text-sm text-base-content/50">Loading...</p>
 				) : (
 					<div className="flex flex-col gap-2">
-						{gates.length === 0 && (
-							<p className="text-sm text-base-content/50">No seed rungs yet.</p>
-						)}
-						{gates.map((gate) =>
-							editingId === gate.id ? (
-								<div key={gate.id} className="flex flex-col gap-2 p-3 bg-base-100 rounded-lg">
+						{badges.length === 0 && <p className="text-sm text-base-content/50">No rungs yet.</p>}
+						{badges.map((badge) =>
+							editingId === badge.id ? (
+								<div key={badge.id} className="flex flex-col gap-2 p-3 bg-base-100 rounded-lg">
 									<div className="flex flex-wrap gap-2">
 										<input
 											type="text"
@@ -416,7 +421,7 @@ export default function BadgeLadderEditor() {
 										<button
 											type="button"
 											className="btn btn-primary btn-xs"
-											onClick={() => handleSaveEdit(gate.id)}
+											onClick={() => handleSaveEdit(badge.id)}
 											disabled={saving || !editLabel.trim() || !editThreshold.trim()}
 										>
 											Save
@@ -431,26 +436,26 @@ export default function BadgeLadderEditor() {
 									</div>
 								</div>
 							) : (
-								<div key={gate.id} className="flex items-center gap-2 p-3 bg-base-100 rounded-lg">
+								<div key={badge.id} className="flex items-center gap-2 p-3 bg-base-100 rounded-lg">
 									<BadgeArtControl
-										gate={gate}
-										index={gates.indexOf(gate)}
-										onChanged={fetchGates}
+										badge={badge}
+										index={badges.indexOf(badge)}
+										onChanged={fetchBadges}
 										onError={setError}
 									/>
 									<div className="flex-1">
 										<div className="flex items-center gap-2">
-											<span className="font-medium text-sm">{gate.label}</span>
-											<span className="badge badge-sm">{rungLabel(gate.threshold)}</span>
+											<span className="font-medium text-sm">{badge.label}</span>
+											<span className="badge badge-sm">{rungLabel(badge.threshold)}</span>
 										</div>
-										{gate.description && (
-											<p className="text-xs text-base-content/50">{gate.description}</p>
+										{badge.description && (
+											<p className="text-xs text-base-content/50">{badge.description}</p>
 										)}
 									</div>
 									<button
 										type="button"
 										className="btn btn-ghost btn-xs btn-square"
-										onClick={() => startEdit(gate)}
+										onClick={() => startEdit(badge)}
 										title="Edit rung"
 									>
 										<PencilIcon className="w-4 h-4" />
@@ -458,7 +463,7 @@ export default function BadgeLadderEditor() {
 									<button
 										type="button"
 										className="btn btn-ghost btn-xs btn-square text-error"
-										onClick={() => handleDelete(gate.id)}
+										onClick={() => handleDelete(badge.id)}
 										disabled={saving}
 										title="Delete rung"
 									>

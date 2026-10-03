@@ -147,7 +147,7 @@ beforeAll(async () => {
 		body: JSON.stringify({
 			visibility: "released",
 			credits: CREATED_CREDIT,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		}),
 	});
 	expect(release.status).toBe(200);
@@ -374,7 +374,7 @@ describe("a block is a boundary, not a moderation action", () => {
 					body: JSON.stringify({
 						visibility: "released",
 						credits: CREATED_CREDIT,
-						seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+						access: [{ threshold: 0, allow: true, price: "0" }],
 					}),
 				})
 			).status,

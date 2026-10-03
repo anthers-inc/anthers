@@ -640,7 +640,7 @@ export async function quarantineObject(
  * has ended* are different decisions taken by different people against different clocks.
  *
  * ⚠️ **Restoring the object does not restore whatever referenced it.** A badge upload is
- * refused before `creator_gates.art_key` is written, so there is nothing pointing at the
+ * refused before `badges.art_key` is written, so there is nothing pointing at the
  * key to repair; an avatar refused the same way never reached the profile row either. The
  * object comes back where it was and the uploader re-uploads. Anything that would need a
  * row repaired belongs to a Work, and a Work goes through `clearQuarantine`.

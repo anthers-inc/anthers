@@ -63,7 +63,7 @@ function releasedWork(overrides: Partial<PublishableWork> = {}): PublishableWork
 		takedownStatus: "active",
 		quarantineStatus: "none",
 		visibility: "released",
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }] as never,
+		access: [{ threshold: 0, allow: true, price: "0" }] as never,
 		type: "game",
 		title: "The Weight of Small Hours",
 		description: "A short game.",

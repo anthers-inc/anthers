@@ -6,17 +6,16 @@
  * The user gives Anthers a monthly amount, which names their Badge (free/root/
  * sprout/petal/blossom at $0/$3/$6/$9/$12). This page surfaces:
  *   1. That Badge, and where the amount goes (Time Pool + Supports Anthers).
- *   2. The budget for creators + per-creator allocations (directed, any amount).
- *   3. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
+ *   2. The budget for creators + the Badges held from them (GET /my-badges).
+ *   3. Pool distributions (poolAmount + badgeAmount) and, for creators, earnings.
  *
  * The amount to Anthers is changed on /signup; here it is directed at creators.
  * There is no bandwidth line — streaming and downloads are unlimited and free.
  */
 
-import { PUBLIC_ACCESS_PRICE, supportAmount, timePoolFor } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { EarningsBasis } from "@anthers/web-shared/economics/EarningsBasis";
-import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
@@ -25,11 +24,12 @@ import type {
 	AccountResponse,
 	AttentionSummary,
 	Badge,
+	BadgeHoldingsResponse,
 	BadgeView,
+	CreatorBadge,
+	CreatorBadgeListResponse,
 	CreatorEarnings,
-	CreatorGate,
 	PoolDistribution,
-	SeedListResponse,
 } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -244,13 +244,14 @@ interface CreatorRow {
 	avatar: string | null;
 	timeSeconds: number;
 	poolAmount: number;
-	/** Settled support for this creator this cycle (from the distribution row). */
-	settledSeed: number;
-	/** Committed (saved) allocation to this creator, in dollars. */
-	committedSeed: number;
-	/** Effective allocation including local pending edits. */
-	pendingSeed: number;
-	gates: CreatorGate[];
+	/** Settled Badge share for this creator this cycle (from the distribution row). */
+	settledBadge: number;
+	/** The threshold of the Badge held from this creator this cycle, or 0. */
+	committedBadge: number;
+	/** The rung held or picked, including local pending edits. */
+	pendingBadge: CreatorBadge | null;
+	/** The creator's ladder, for the pick UI and the rung chips. */
+	rungs: CreatorBadge[];
 }
 
 function initials(row: CreatorRow): string {
@@ -278,8 +279,8 @@ export default function SubscriptionPage() {
 	// Per-cycle data
 	const [attention, setAttention] = useState<AttentionSummary | null>(null);
 	const [distributions, setDistributions] = useState<PoolDistribution[]>([]);
-	const [seedList, setSeedList] = useState<SeedListResponse | null>(null);
-	const [creatorGatesMap, setCreatorGatesMap] = useState<Map<string, CreatorGate[]>>(new Map());
+	const [holdings, setHoldings] = useState<BadgeHoldingsResponse | null>(null);
+	const [laddersMap, setLaddersMap] = useState<Map<string, CreatorBadge[]>>(new Map());
 
 	// UI state
 	const [loading, setLoading] = useState(true);
@@ -288,8 +289,8 @@ export default function SubscriptionPage() {
 	const [success, setSuccess] = useState<string | null>(null);
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
 
-	// Pending support edits (creatorId → dollars, cents included — no unit to be whole of)
-	const [pendingSeeds, setPendingSeeds] = useState<Map<number, number>>(new Map());
+	// Pending Badge picks (creatorId → the rung picked), applied on *Give*.
+	const [pendingPicks, setPendingPicks] = useState<Map<number, number>>(new Map());
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
@@ -319,35 +320,35 @@ export default function SubscriptionPage() {
 	}, []);
 
 	const fetchCycleData = useCallback(async (cycle: string) => {
-		const [att, dist, seeds] = await Promise.allSettled([
+		const [att, dist, held] = await Promise.allSettled([
 			getJson<AttentionSummary>(`attention/summary?cycle=${cycle}`),
 			getJson<{ distributions: PoolDistribution[] }>(`distributions?cycle=${cycle}`),
-			getJson<SeedListResponse>(`seeds?cycle=${cycle}`),
+			getJson<BadgeHoldingsResponse>(`my-badges?cycle=${cycle}`),
 		]);
 
 		if (att.status === "fulfilled") setAttention(att.value);
-		if (seeds.status === "fulfilled") setSeedList(seeds.value);
+		if (held.status === "fulfilled") setHoldings(held.value);
 
 		if (dist.status === "fulfilled") {
 			const rows = dist.value.distributions;
 			setDistributions(rows);
 
-			// Fetch each creator's gates for the gate hints.
+			// Fetch each creator's ladder for the rung chips and the pick UI.
 			const handles = rows.map((d) => d.creator?.handle).filter(Boolean) as string[];
-			const gatesMap = new Map<string, CreatorGate[]>();
-			const gateResults = await Promise.allSettled(
+			const ladders = new Map<string, CreatorBadge[]>();
+			const ladderResults = await Promise.allSettled(
 				handles.map(async (u) => ({
 					handle: u,
-					gates: (await getJson<{ gates: CreatorGate[] }>(`gates?creator=${u}`)).gates,
+					badges: (await getJson<CreatorBadgeListResponse>(`badges?creator=${u}`)).badges,
 				})),
 			);
-			for (const r of gateResults) {
-				if (r.status === "fulfilled") gatesMap.set(r.value.handle, r.value.gates);
+			for (const r of ladderResults) {
+				if (r.status === "fulfilled") ladders.set(r.value.handle, r.value.badges);
 			}
-			setCreatorGatesMap(gatesMap);
+			setLaddersMap(ladders);
 		}
 
-		setPendingSeeds(new Map());
+		setPendingPicks(new Map());
 	}, []);
 
 	useEffect(() => {
@@ -367,12 +368,6 @@ export default function SubscriptionPage() {
 
 	// ── Derived rows ──
 
-	const committedSeedMap = useMemo(() => {
-		const map = new Map<number, number>();
-		for (const s of seedList?.seeds ?? []) map.set(s.creatorId, Math.round(Number(s.amount)));
-		return map;
-	}, [seedList]);
-
 	const rows: CreatorRow[] = useMemo(() => {
 		const map = new Map<number, CreatorRow>();
 		for (const d of distributions) {
@@ -389,89 +384,107 @@ export default function SubscriptionPage() {
 				avatar: d.creator?.avatar ?? null,
 				timeSeconds: d.attentionSeconds ?? 0,
 				poolAmount: Number(d.poolAmount),
-				settledSeed: Number(d.seedAmount),
-				committedSeed: 0,
-				pendingSeed: 0,
-				gates: [],
+				settledBadge: Number(d.badgeAmount),
+				committedBadge: 0,
+				pendingBadge: null,
+				rungs: [],
 			});
 		}
-		for (const s of seedList?.seeds ?? []) {
-			const committed = Math.round(Number(s.amount));
-			const existing = map.get(s.creatorId);
+		// A holding's dollars are its Badge's threshold by construction, so the holding
+		// row carries no amount — the rung it names is the amount. The API keys a
+		// holding by its Badge id only, so rows merge on HANDLE: a distribution or a
+		// holding may arrive without the other, and both name the same creator.
+		for (const h of holdings?.badges ?? []) {
+			const existing = [...map.values()].find((row) => row.handle === h.creator.handle);
+			const committed = Math.round(Number(h.threshold));
+			const heldRung: CreatorBadge = {
+				id: h.id,
+				creatorId: existing?.creatorId ?? 0,
+				threshold: h.threshold,
+				label: h.label,
+				description: h.description,
+				hasArt: h.hasArt,
+				artShape: h.artShape,
+				artColor: h.artColor,
+				artEmblem: h.artEmblem,
+				sortOrder: 0,
+				createdAt: h.createdAt,
+				updatedAt: h.createdAt,
+			};
 			if (existing) {
-				existing.committedSeed = committed;
+				existing.committedBadge = committed;
+				existing.pendingBadge = heldRung;
 			} else {
-				map.set(s.creatorId, {
-					creatorId: s.creatorId,
-					handle: s.creator?.handle ?? "",
-					displayName: s.creator?.displayName ?? null,
+				map.set(-h.id, {
+					creatorId: -h.id,
+					handle: h.creator.handle,
+					displayName: h.creator.displayName ?? null,
 					avatar: null,
 					timeSeconds: 0,
 					poolAmount: 0,
-					settledSeed: 0,
-					committedSeed: committed,
-					pendingSeed: 0,
-					gates: [],
+					settledBadge: 0,
+					committedBadge: committed,
+					pendingBadge: heldRung,
+					rungs: [],
 				});
 			}
 		}
 		for (const row of map.values()) {
-			row.pendingSeed = pendingSeeds.get(row.creatorId) ?? row.committedSeed;
-			row.gates = creatorGatesMap.get(row.handle) ?? [];
+			const rungs = laddersMap.get(row.handle) ?? [];
+			const picked = pendingPicks.get(row.creatorId);
+			row.pendingBadge =
+				picked === undefined
+					? row.pendingBadge
+					: (rungs.find((r) => Number(r.threshold) === picked) ?? null);
+			row.rungs = rungs;
 		}
 		return Array.from(map.values()).sort(
-			(a, b) => b.poolAmount + b.pendingSeed - (a.poolAmount + a.pendingSeed),
+			(a, b) => b.poolAmount + b.committedBadge - (a.poolAmount + a.committedBadge),
 		);
-	}, [distributions, seedList, pendingSeeds, creatorGatesMap]);
+	}, [distributions, holdings, pendingPicks, laddersMap]);
 
 	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
 	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
 
-	const seedBudget = Number(seedList?.budget ?? 0);
-	const allocatedSeed = rows.reduce((s, r) => s + r.pendingSeed, 0);
-	const remainingSeed = Math.max(0, seedBudget - allocatedSeed);
+	const badgeBudget = Number(holdings?.budget ?? 0);
+	const allocatedBadges = rows.reduce(
+		(s, r) => s + (r.pendingBadge ? Number(r.pendingBadge.threshold) : 0),
+		0,
+	);
+	const remainingBudget = Math.max(0, badgeBudget - allocatedBadges);
 
-	const hasPendingSeeds = useMemo(() => {
-		for (const [cid, val] of pendingSeeds) {
-			if (val !== (committedSeedMap.get(cid) ?? 0)) return true;
-		}
-		return false;
-	}, [pendingSeeds, committedSeedMap]);
+	const hasPendingPicks = useMemo(() => pendingPicks.size > 0, [pendingPicks]);
 
 	const isPaid = badge !== "free";
 	const isCanceling = account ? !!account.canceledAt : false;
 
-	// ── Support allocation handlers ──
-	// The `seed*` identifiers below name `seed_allocations`, which kept its name in the
-	// 2026-08-16 retirement and still means what it says. The copy does not.
+	// ── Badge pick handlers ──
+	// A pick is a RUNG, never a typed amount: holding a creator's Badge is what a
+	// subscription is, and the ladder's thresholds are the whole of what can be held.
 
-	const handleSeedChange = (creatorId: number, newVal: number) => {
-		const committed = committedSeedMap.get(creatorId) ?? 0;
-		const floor = viewMode === "current" ? committed : 0;
-		const otherAllocated = rows
-			.filter((r) => r.creatorId !== creatorId)
-			.reduce((s, r) => s + r.pendingSeed, 0);
-		const maxForThis = Math.max(floor, seedBudget - otherAllocated);
-		const clamped = Math.max(floor, Math.min(supportAmount(newVal), maxForThis));
-		setPendingSeeds((prev) => {
+	/** Record a pending rung pick for one creator. The committed rung clears the pick. */
+	const handleBadgeChange = (creatorId: number, threshold: number) => {
+		const committed = rows.find((r) => r.creatorId === creatorId)?.committedBadge ?? 0;
+		setPendingPicks((prev) => {
 			const next = new Map(prev);
-			if (clamped === committed) next.delete(creatorId);
-			else next.set(creatorId, clamped);
+			if (threshold === committed) next.delete(creatorId);
+			else next.set(creatorId, threshold);
 			return next;
 		});
 	};
 
-	const handleSaveSeeds = async () => {
-		setActionLoading("seeds");
+	const handleSaveBadges = async () => {
+		setActionLoading("badges");
 		setError(null);
 		try {
-			for (const row of rows) {
-				if (row.pendingSeed === row.committedSeed) continue;
-				const res = await client.api.subscriptions.seeds.$post({
+			for (const [creatorId, threshold] of pendingPicks) {
+				const row = rows.find((r) => r.creatorId === creatorId);
+				const rung = row?.rungs.find((r) => Number(r.threshold) === threshold);
+				if (!rung) continue;
+				const res = await client.api.subscriptions["my-badges"].$post({
 					json: {
-						creatorId: row.creatorId,
-						amount: row.pendingSeed.toFixed(2),
-						cycle: selectedCycle,
+						badgeId: rung.id,
+						...(selectedCycle !== getCurrentCycle() ? { cycle: selectedCycle } : {}),
 					},
 				});
 				if (!res.ok) {
@@ -480,8 +493,8 @@ export default function SubscriptionPage() {
 					break;
 				}
 			}
-			setSuccess("Your support is saved.");
-			setPendingSeeds(new Map());
+			setSuccess("Your Badges are saved.");
+			setPendingPicks(new Map());
 			await fetchCycleData(selectedCycle);
 		} catch {
 			setError("Failed to save.");
@@ -687,11 +700,11 @@ export default function SubscriptionPage() {
 				</div>
 			</div>
 
-			{/* ── Time Pool + directed support ── */}
+			{/* ── Time Pool + the Badges you hold ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
-					Creators You Support
-					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your time — video, audio, reading, and gameplay all count equally) and support you direct to specific creators, at any amount, with no platform cut — only the at-cost card processing comes out)." />
+					Creators You Back
+					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your time — video, audio, reading, and gameplay all count equally) and the Badges you hold from specific creators, at the rung each one names, with no platform cut — only the at-cost card processing comes out)." />
 				</div>
 				{attention && (
 					<p className="text-xs text-base-content/40 text-center mb-3">
@@ -746,37 +759,47 @@ export default function SubscriptionPage() {
 							{/* Budget summary */}
 							<div className="mb-3">
 								<div className="flex items-center justify-between text-xs text-base-content/60 mb-1">
-									<span>{fmt(seedBudget)} total</span>
+									<span>{fmt(badgeBudget)} total</span>
 									<span>
-										{fmt(allocatedSeed)} given · {fmt(remainingSeed)} left
+										{fmt(allocatedBadges)} held · {fmt(remainingBudget)} left
 									</span>
 								</div>
 								<div className="relative h-2 bg-base-300 rounded-full overflow-hidden">
 									<div
 										className="absolute inset-y-0 left-0 bg-success/80 rounded-full"
 										style={{
-											width: `${seedBudget > 0 ? Math.min(100, (allocatedSeed / seedBudget) * 100) : 0}%`,
+											width: `${badgeBudget > 0 ? Math.min(100, (allocatedBadges / badgeBudget) * 100) : 0}%`,
 										}}
 									/>
 								</div>
 							</div>
 
-							{seedBudget <= 0 ? (
+							{badgeBudget <= 0 ? (
 								<div className="text-sm text-base-content/50 text-center py-4">
-									<p>You've given nothing to creators this cycle.</p>
+									<p>You hold no Badges from creators this cycle.</p>
 									<Link to="/signup" className="link link-primary text-sm">
-										Upgrade to support creators
+										Upgrade to back creators
 									</Link>
 								</div>
 							) : (
 								<div className="space-y-2">
 									{rows.map((row, i) => {
-										const committed = row.committedSeed;
+										const committed = row.committedBadge;
+										// The ratchet: within the current cycle a holding never goes
+										// down, so a lower rung is not offered. Next month's is free to
+										// pick, and affordability is what the rung chips below say.
 										const floor = viewMode === "current" ? committed : 0;
-										const otherAllocated = allocatedSeed - row.pendingSeed;
-										const maxForThis = Math.max(floor, seedBudget - otherAllocated);
-										const changed = row.pendingSeed !== committed;
-										const seedGates = row.gates.filter((g) => g.gateType === "seed");
+										const othersHeld =
+											allocatedBadges - (row.pendingBadge ? Number(row.pendingBadge.threshold) : 0);
+										const pickOptions = row.rungs.filter(
+											(r) =>
+												Number(r.threshold) >= floor &&
+												Number(r.threshold) <= othersHeld + remainingBudget,
+										);
+										const pickedThreshold = row.pendingBadge
+											? Number(row.pendingBadge.threshold)
+											: null;
+										const changed = pickedThreshold !== null && pickedThreshold !== committed;
 										return (
 											<div key={row.creatorId} className="rounded-lg p-2 bg-base-100/40">
 												<div className="flex items-center gap-2">
@@ -800,32 +823,46 @@ export default function SubscriptionPage() {
 													>
 														{row.displayName || row.handle}
 													</Link>
-													{canEdit ? (
-														<SupportStepper
-															value={row.pendingSeed}
-															min={floor}
-															max={maxForThis}
-															onChange={(v) => handleSeedChange(row.creatorId, v)}
+													{canEdit && pickOptions.length > 0 ? (
+														<select
+															className="select select-bordered select-xs"
+															value={pickedThreshold ?? ""}
+															aria-label={`Badge held from ${row.displayName || row.handle}`}
+															onChange={(e) =>
+																handleBadgeChange(row.creatorId, Number(e.target.value))
+															}
 															disabled={!!actionLoading}
-														/>
+														>
+															{/* A held rung can never be un-picked within the cycle
+															    (the API refuses a decrease), so the placeholder is
+															    disabled once there is a holding to keep. */}
+															<option value="" disabled={committed > 0}>
+																{committed > 0 ? fmt(committed) : "Choose a Badge"}
+															</option>
+															{pickOptions.map((rung) => (
+																<option key={rung.id} value={Number(rung.threshold)}>
+																	{rung.label} · {fmt(rung.threshold)}/mo
+																</option>
+															))}
+														</select>
 													) : (
 														<span className="text-sm text-success tabular-nums">
-															{fmt(row.settledSeed || committed)}
+															{fmt(row.settledBadge || committed)}
 														</span>
 													)}
 													{changed && <span className="text-[9px] text-primary">(pending)</span>}
 												</div>
-												{seedGates.length > 0 && (
+												{row.rungs.length > 0 && (
 													<div className="mt-1 pl-7 flex flex-wrap gap-1">
-														{seedGates.map((gate) => {
-															const unlocked = row.pendingSeed >= Number(gate.threshold);
+														{row.rungs.map((rung) => {
+															const held = row.pendingBadge?.id === rung.id;
 															return (
 																<span
-																	key={gate.id}
-																	className={`badge badge-xs ${unlocked ? "badge-success" : "badge-ghost"}`}
-																	title={gate.description ?? undefined}
+																	key={rung.id}
+																	className={`badge badge-xs ${held ? "badge-success" : "badge-ghost"}`}
+																	title={rung.description ?? undefined}
 																>
-																	{unlocked ? "✓" : "○"} {gate.label} (${gate.threshold})
+																	{held ? "✓" : "○"} {rung.label} (${rung.threshold})
 																</span>
 															);
 														})}
@@ -839,17 +876,17 @@ export default function SubscriptionPage() {
 										<div className="flex gap-2 pt-1">
 											<button
 												type="button"
-												className={`btn btn-primary btn-sm ${actionLoading === "seeds" ? "btn-disabled" : ""}`}
-												onClick={handleSaveSeeds}
-												disabled={!hasPendingSeeds || !!actionLoading}
+												className={`btn btn-primary btn-sm ${actionLoading === "badges" ? "btn-disabled" : ""}`}
+												onClick={handleSaveBadges}
+												disabled={!hasPendingPicks || !!actionLoading}
 											>
-												{actionLoading === "seeds" ? "Giving…" : "Give"}
+												{actionLoading === "badges" ? "Holding…" : "Hold"}
 											</button>
 											<button
 												type="button"
 												className="btn btn-ghost btn-sm"
-												onClick={() => setPendingSeeds(new Map())}
-												disabled={!hasPendingSeeds}
+												onClick={() => setPendingPicks(new Map())}
+												disabled={!hasPendingPicks}
 											>
 												Discard
 											</button>
@@ -882,8 +919,8 @@ export default function SubscriptionPage() {
 							<div className="text-xl font-bold text-success">{fmt(earnings.poolTotal)}</div>
 						</div>
 						<div>
-							<div className="text-xs text-base-content/50 uppercase">Support income</div>
-							<div className="text-xl font-bold text-success">{fmt(earnings.seedTotal)}</div>
+							<div className="text-xs text-base-content/50 uppercase">Badge income</div>
+							<div className="text-xl font-bold text-success">{fmt(earnings.badgeTotal)}</div>
 						</div>
 						<div>
 							<div className="text-xs text-base-content/50 uppercase">Total</div>

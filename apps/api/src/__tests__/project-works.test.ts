@@ -81,7 +81,7 @@ async function makeWork(title: string, access: unknown): Promise<number> {
 	const patched = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: auth,
-		body: JSON.stringify({ seedAccess: access, streamEnabled: true, visibility: "released" }),
+		body: JSON.stringify({ access: access, streamEnabled: true, visibility: "released" }),
 	});
 	expect(patched.status).toBe(200);
 	return workId;

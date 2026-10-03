@@ -59,9 +59,6 @@ export interface AccessRow {
 	price: string;
 }
 
-/** A row in a Work's access table — `threshold` is monthly dollars given to the creator. */
-export type SeedAccessRow = AccessRow;
-
 /** What a credit asserts about its role: a human made it, a source licensed it, or a machine did. */
 export type WorkCreditType = "created" | "licensed" | "ai";
 
@@ -213,7 +210,7 @@ export const works = pgTable(
 		// Default = "free but fully locked": the baseline row alone, allow=false, price "0".
 		// The `anthers_access` column that sat beside this was folded in and dropped by
 		// migration 0029 — see the AccessRow doc comment.
-		seedAccess: jsonb("seed_access").$type<SeedAccessRow[]>().default([]),
+		access: jsonb("access").$type<AccessRow[]>().default([]),
 
 		// ── Credits (public liner notes; see WorkCredit above) ──
 		credits: jsonb("credits").$type<WorkCredit[]>().default([]),

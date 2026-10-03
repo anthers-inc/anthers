@@ -15,7 +15,7 @@ import {
 } from "@anthers/web-shared/post/unlock";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
-import type { Work } from "@anthers/web-shared/types";
+import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import { MicrophoneIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
@@ -53,13 +53,18 @@ function dateLabel(work: WorkCardItem): string {
 export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	const date = dateLabel(post);
 
+	// The viewer-facing serialization is the only shape a card renders; the owner's
+	// (whose `access` is the editable rows) never reaches a card. `isAccessResult` is the
+	// honest way to take the verdict out of the one-type union.
+	const access = isAccessResult(post.access) ? post.access : null;
+
 	// Locked to the viewer → the card is a gated preview (blurred cover, visible title).
 	// Clicking still navigates into the post, where the unlock options live.
 	//
 	// ⚠️ Not `!canAccess`. A signed-out visitor is refused the bytes of free work too, and
 	// rendering that as a padlock would label the whole commons "members only" for the one
 	// person the public page is for — see `presentsAsLocked`.
-	const locked = presentsAsLocked(post.access);
+	const locked = presentsAsLocked(access);
 
 	// What this reader asked to meet at this rung, and for each kind of content in it. **A veil is
 	// not a lock**: a veiled Work is listed, reachable and earning, and the reader can uncover it
@@ -76,7 +81,7 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 				<LockedCover
 					thumbnail={post.thumbnail}
 					className="aspect-video"
-					lockedBy={post.access ? lockedByBadge(post.access, cardCreatorName(post)) : null}
+					lockedBy={access ? lockedByBadge(access, cardCreatorName(post)) : null}
 				/>
 			) : cover ? (
 				<MaturityVeil
@@ -153,21 +158,21 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 				{/* Title */}
 				{post.title && <h3 className="font-semibold line-clamp-2">{post.title}</h3>}
 
-				{locked && post.access ? (
+				{locked && access ? (
 					<>
 						<p className="text-xs text-base-content/40 italic line-clamp-2">
 							Members-only work from this creator.
 						</p>
 						{/* Visual affordance only — the whole card opens the unlock modal. */}
 						<span className="btn btn-sm btn-outline btn-block mt-1 pointer-events-none">
-							{unlockLabel(post.access, cardCreatorName(post))}
+							{unlockLabel(access, cardCreatorName(post))}
 						</span>
 					</>
 				) : (
 					/* Badges row */
 					<div className="flex items-center gap-2 mt-auto pt-1">
 						<ContentTypeBadge contentType={post.type} />
-						<PricingBadge access={post.access} />
+						<PricingBadge access={access} />
 						{post.estimatedReadMinutes && post.type === "text" && (
 							<span className="text-xs text-base-content/40">
 								{post.estimatedReadMinutes} min read

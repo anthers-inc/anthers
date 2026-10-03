@@ -106,7 +106,7 @@ beforeAll(async () => {
 			creatorId: creator.id,
 			type: "video",
 			title: "Range Fixture",
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		})
 	).id;
 }, DB_SETUP_TIMEOUT);

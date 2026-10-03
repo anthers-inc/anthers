@@ -532,7 +532,7 @@ describe("the proved identity on a pending signup", () => {
 			headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
 			body: JSON.stringify({
 				pow: await solvePow(),
-				picks: { anthers: 6, follow: ["alice"], seed: ["alice"] },
+				picks: { badge: "sprout", follow: ["alice"], badges: ["alice"] },
 			}),
 		});
 		const started = pendingCookie(begin.headers.get("set-cookie") ?? "") as string;
@@ -549,7 +549,7 @@ describe("the proved identity on a pending signup", () => {
 
 		const row = await readPendingSignup(started);
 		expect(row?.atprotoDid, "the same row, not a new one").toBe(did("carries"));
-		expect(picksOf(row as NonNullable<typeof row>).anthers).toBe(6);
+		expect(picksOf(row as NonNullable<typeof row>).badge).toBe("sprout");
 	});
 });
 

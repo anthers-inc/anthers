@@ -68,7 +68,7 @@ export interface AccessRow {
 	price: string; // money string; "0" = free when allowed
 }
 
-export type SeedAccessRow = AccessRow;
+/** One row of a Work's access table — the only name; see the column's own note. */
 
 /** What a credit asserts about its role: a human made it, a source licensed it, or a machine did. */
 export type WorkCreditType = "created" | "licensed" | "ai";
@@ -174,6 +174,29 @@ export interface AccessResult {
 	downloadEnabled: boolean;
 	/** Present only when `reason` is "gated" — see UnlockOffer. */
 	unlock?: UnlockOffer;
+}
+
+/**
+ * Which serialization a `Work["access"]` holds: the viewer's verdict, or the creator's
+ * editable rows.
+ *
+ * `Work` is the ONE type for both serializations the server sends, so its `access` is a
+ * union and this is the honest way to tell the halves apart — an array is the creator's
+ * table (the owner shape, which the Studio edits) and an object is the resolver's verdict
+ * (the viewer shape, which every reading surface consumes). Inline `Array.isArray` checks
+ * blur the two again; reading through these keeps each call site saying which page it is.
+ */
+export function isAccessResult(
+	access: AccessResult | AccessRow[] | null | undefined,
+): access is AccessResult {
+	return !!access && !Array.isArray(access);
+}
+
+/** The creator's editable access rows, or null when this serialization is a viewer's. */
+export function accessRowsOf(
+	access: AccessResult | AccessRow[] | null | undefined,
+): AccessRow[] | null {
+	return Array.isArray(access) ? access : null;
 }
 
 // ─── Content Types ───
@@ -320,11 +343,13 @@ export interface Work {
 	 */
 	credits?: WorkCredit[] | null;
 
-	// Delivery & access (creator-facing tables; viewers get the resolved `access`).
+	// Delivery & access. ONE field name, two shapes, matching what the server sends on
+	// each serialization: the OWNER's shape carries the editable access table, and the
+	// VIEWER's carries the resolver's verdict. `accessOf` (below) tells them apart — never
+	// test the value's shape inline, or the two serializations blur together again.
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	seedAccess?: SeedAccessRow[] | null;
-	access?: AccessResult;
+	access?: AccessRow[] | null | AccessResult;
 	/**
 	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
 	 * access table, never stored and never a creator-set flag: a Work with nothing on it
@@ -398,7 +423,7 @@ export interface WorkInput {
 	credits?: WorkCredit[];
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	seedAccess?: SeedAccessRow[];
+	access?: AccessRow[];
 	isPinned?: boolean;
 	tags?: string[];
 	websiteUrl?: string;
@@ -773,7 +798,7 @@ export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "blossom";
 /** A user's Badge (= the monthly amount they give Anthers), held point-in-time. */
 export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
 
-/** A Badge rung (GET /subscriptions/badges) — its monthly amount + decomposition. */
+/** A Badge rung (GET /subscriptions/anthers-badges) — its monthly amount + decomposition. */
 export interface BadgeView {
 	id: Badge;
 	name: string;
@@ -839,7 +864,7 @@ export interface PoolDistribution {
 	creatorId: number | null;
 	billingCycle: string;
 	poolAmount: string;
-	seedAmount: string;
+	badgeAmount: string;
 	attentionSeconds: number | null;
 	createdAt: string;
 	updatedAt: string;
@@ -848,7 +873,7 @@ export interface PoolDistribution {
 
 export interface CreatorEarnings {
 	poolTotal: string;
-	seedTotal: string;
+	badgeTotal: string;
 	total: string;
 	subscriberCount: number;
 	cycle: string;
@@ -872,24 +897,33 @@ export interface CreatorEarnings {
 	nettingOpenTotal: string;
 }
 
-export interface SeedAllocation {
+/**
+ * One Badge this viewer holds, this cycle — a discrete pick of a creator's rung.
+ *
+ * The holding names the Badge; its dollars are the Badge's threshold by construction,
+ * which is why there is no amount field. `art*` are ids into `@anthers/shared/badge-art`
+ * (null means the default); `hasArt` says whether the creator's own art should be drawn.
+ */
+export interface BadgeHolding {
 	id: number;
-	userId: number;
-	creatorId: number;
-	amount: string;
+	threshold: string;
+	label: string;
+	description: string | null;
+	artShape: string | null;
+	artColor: string | null;
+	artEmblem: string | null;
+	hasArt: boolean;
 	billingCycle: string;
-	isLocked: boolean | null;
-	atprotoUri: string | null;
 	createdAt: string;
-	updatedAt: string;
-	creator?: {
+	creator: {
 		handle: string;
 		displayName: string | null;
 	};
 }
 
-export interface SeedListResponse {
-	seeds: SeedAllocation[];
+/** Response of GET /subscriptions/my-badges — the viewer's holdings plus the budget they ride in. */
+export interface BadgeHoldingsResponse {
+	badges: BadgeHolding[];
 	budget: string;
 	allocated: string;
 	remaining: string;
@@ -907,10 +941,14 @@ export interface ContentAccessResponse {
 	downloadEnabled: boolean;
 }
 
-export interface CreatorGate {
+/**
+ * One rung of a creator's Badge ladder (GET /subscriptions/badges?creator=…). There is no
+ * `gateType`: every rung a creator defines is their own Badge, so the enum the
+ * cross-issuer case used to live in has nothing left to distinguish.
+ */
+export interface CreatorBadge {
 	id: number;
 	creatorId: number;
-	gateType: "seed";
 	threshold: string;
 	label: string;
 	description: string | null;
@@ -931,11 +969,16 @@ export interface CreatorGate {
 	updatedAt: string;
 }
 
+/** Response of GET /subscriptions/badges — a creator's ladder. */
+export interface CreatorBadgeListResponse {
+	badges: CreatorBadge[];
+}
+
 export interface CreatorStatus {
 	badge: Badge;
-	seedAmount: string;
-	gates: CreatorGate[];
-	unlockedGates: number[];
+	badgeAmount: string;
+	badges: CreatorBadge[];
+	unlockedBadges: number[];
 }
 
 export interface Bookmark {

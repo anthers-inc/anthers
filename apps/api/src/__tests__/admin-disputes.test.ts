@@ -152,7 +152,7 @@ beforeAll(async () => {
 		title: `Admin disputes work ${run}`,
 		streamEnabled: false,
 		downloadEnabled: true,
-		seedAccess: [],
+		access: [],
 	});
 	workId = work.id;
 

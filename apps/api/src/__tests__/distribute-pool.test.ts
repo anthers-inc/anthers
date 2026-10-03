@@ -3,16 +3,16 @@
  * The pool distribution job — the thing that decides what a creator is actually paid.
  *
  * It had no coverage at all until 2026-08-08, which is how it drifted away from the
- * economic model without anyone noticing: it credited the GROSS directed-Seed amount
+ * economic model without anyone noticing: it credited the GROSS directed amount
  * while `fees.ts` said creators are paid NET of the card fee, so Anthers silently
- * absorbed ~$0.39 on every Seed from a pure-direct user. These tests exist so the
+ * absorbed ~$0.39 on every directed dollar from a pure-direct user. These tests exist so the
  * ledger and the model can never disagree again, and they assert against
  * `supportBreakdown()` rather than against literals wherever the model defines the
  * answer — a copied literal would drift the same way the code did.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, poolDistributions, seedAllocations, stickers } from "@anthers/db/schema";
+import { accounts, badges, poolDistributions, stickers, userBadges } from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -38,7 +38,14 @@ async function makeUser(tag: string): Promise<number> {
 	return (await createAccount(name, { email: `${name}@example.com` })).userId;
 }
 
-/** A viewer giving Anthers `anthersSupport`, with `directed` dollars at each creator. */
+/**
+ * A viewer giving Anthers `anthersSupport`, holding each creator's Badge at `amount`.
+ *
+ * Under the discrete-picks model a fixture that "gives $N" creates the issuer's badge at
+ * that threshold (unless the creator already has one) and writes the holding — exactly
+ * the shape the billing path produces, so the job reads what production would have
+ * written rather than a row shape nothing creates any more.
+ */
 async function seedCycle(
 	anthersSupport: number,
 	directed: { creatorId: number; amount: string }[],
@@ -55,9 +62,28 @@ async function seedCycle(
 		})
 		.returning({ id: accounts.id });
 	for (const d of directed) {
+		const [existing] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, d.creatorId), eq(badges.threshold, d.amount)))
+			.limit(1);
+		const badge =
+			existing ??
+			(
+				await db
+					.insert(badges)
+					.values({
+						creatorId: d.creatorId,
+						threshold: d.amount,
+						label: `$${d.amount}`,
+						description: "A fixture rung the distribution suite holds.",
+					})
+					.returning({ id: badges.id })
+			)[0];
 		await db
-			.insert(seedAllocations)
-			.values({ userId, creatorId: d.creatorId, amount: d.amount, billingCycle: CYCLE });
+			.insert(userBadges)
+			.values({ userId, badgeId: badge.id, billingCycle: CYCLE })
+			.onConflictDoNothing();
 	}
 	return { userId, accountId: acct.id };
 }
@@ -109,7 +135,7 @@ async function ledger(userId: number) {
 
 async function payouts(userId: number) {
 	const rows = await ledger(userId);
-	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.seedAmount)]));
+	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.badgeAmount)]));
 }
 
 async function poolPaid(userId: number) {
@@ -117,12 +143,12 @@ async function poolPaid(userId: number) {
 	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.poolAmount)]));
 }
 
-describe("distributePool — directed Seeds are paid NET of the card fee", () => {
+describe("distributePool — directed Badge thresholds are paid NET of the card fee", () => {
 	beforeAll(async () => {
 		await db.execute("SELECT 1");
 	}, DB_SETUP_TIMEOUT);
 
-	it("pays the model's figure exactly for the worst case: one Seed, alone", async () => {
+	it("pays the model's figure exactly for the worst case: one Badge, alone", async () => {
 		const creatorId = await makeUser("creator");
 		const { userId, accountId } = await seedCycle(0, [
 			{ creatorId, amount: PUBLIC_ACCESS_PRICE.toFixed(2) },
@@ -136,7 +162,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		expect((await payouts(userId)).get(creatorId)?.toFixed(2)).toBe(expected.toFixed(2));
 	});
 
-	it("pays MORE per Seed when the charge is batched — the fixed $0.30 amortizes", async () => {
+	it("pays MORE per Badge when the charge is batched — the fixed $0.30 amortizes", async () => {
 		const soloCreator = await makeUser("creator");
 		const batchedCreator = await makeUser("creator");
 
@@ -190,17 +216,20 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		expect((await payouts(userId)).get(creatorId)!.lessThan(3)).toBe(true);
 	});
 
-	it("leaves the gift record on seed_allocations untouched — that is gross, by design", async () => {
+	it("leaves the holding's Badge threshold untouched — that is gross, by design", async () => {
 		const creatorId = await makeUser("creator");
 		const { userId, accountId } = await seedCycle(0, [{ creatorId, amount: "3.00" }]);
 		await distributePool({ accountId });
 
-		const [alloc] = await db
-			.select()
-			.from(seedAllocations)
-			.where(and(eq(seedAllocations.userId, userId), eq(seedAllocations.billingCycle, CYCLE)));
-		// What the user chose to give is a different fact from what the creator was paid.
-		expect(new Decimal(alloc.amount).toFixed(2)).toBe("3.00");
+		// What the user chose to give is a different fact from what the creator was paid:
+		// the gift is the held Badge's threshold, and the payout is net of the card fee.
+		const [holding] = await db
+			.select({ threshold: badges.threshold })
+			.from(userBadges)
+			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+			.where(and(eq(userBadges.userId, userId), eq(userBadges.billingCycle, CYCLE)))
+			.limit(1);
+		expect(new Decimal(holding.threshold).toFixed(2)).toBe("3.00");
 		expect((await payouts(userId)).get(creatorId)!.toFixed(2)).toBe("2.61");
 	});
 
@@ -213,7 +242,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		await distributePool({ accountId });
 		const second = (await payouts(userId)).get(creatorId)!.toFixed(2);
 
-		// The job upserts, and it recomputes from seed_allocations rather than from the
+		// The job upserts, and it recomputes from the badge holdings rather than from the
 		// row it wrote last time — so a second run must land on the same number.
 		expect(second).toBe(first);
 		expect(second).toBe("2.61");
@@ -305,7 +334,7 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 		const row = (await ledger(userId)).get(creatorId);
 		// Directed support is the other half of distributor-pays and is untouched by this:
 		// the viewer paid this creator on purpose, and gets no pool draw on top of it.
-		expect(new Decimal(row?.seedAmount ?? 0).toFixed(2)).toBe("2.61");
+		expect(new Decimal(row?.badgeAmount ?? 0).toFixed(2)).toBe("2.61");
 		expect(new Decimal(row?.poolAmount ?? 0).toFixed(2)).toBe("0.00");
 		expect(row?.attentionSeconds).toBe(0);
 	});

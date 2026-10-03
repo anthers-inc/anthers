@@ -3,12 +3,14 @@
  * Account & economics routes — the support model.
  *
  * A user's account holds a monthly **amount** given to Anthers (`anthersSupport`) — that
- * amount **is** their Badge, and is their Anthers subscription (one Stripe item per
- * destination, each carrying its own amount). What they direct at creators is tracked in
- * `seed_allocations`; `creatorSupportTotal` is the balance they direct from.
+ * amount is what their held Anthers Badge is worth, and is their Anthers subscription (one
+ * Stripe item per destination, each carrying its own amount). What they direct at creators
+ * is a set of **Badge holdings** in `user_badges` — one discrete pick per issuer per
+ * cycle, each row naming the Badge whose threshold is the amount; `creatorSupportTotal` is
+ * the balance they direct from.
  *
  * There is no delivery line — delivery is free at any volume. This file also
- * serves time (attention) tracking, pool distributions, creator gates, and access.
+ * serves time (attention) tracking, pool distributions, creator Badges, and access.
  */
 
 import { db } from "@anthers/db/client";
@@ -16,17 +18,17 @@ import {
 	accountCycles,
 	accounts,
 	attentionEvents,
+	badges,
 	comments,
 	creatorCredits,
-	creatorGates,
 	creatorNettingApplications,
 	creatorNettings,
 	creatorTransferCredits,
 	creatorTransfers,
 	poolDistributions,
 	posts,
-	seedAllocations,
 	stickers,
+	userBadges,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -84,7 +86,7 @@ import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/a
 import {
 	type AccessibleWork,
 	buildAccessContext,
-	heldAnthersSupport,
+	heldAnthersBadgeAmount,
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
@@ -319,7 +321,7 @@ function badgeViewFor(anthersSupport: number) {
 }
 
 /**
- * A gate as a client may see it.
+ * A Badge as a client may see it.
  *
  * 🚨 **`artKey` never leaves the server.** The object is private and served through an
  * access-checked route, and a client holding the key is one URL away from fetching badge
@@ -327,9 +329,9 @@ function badgeViewFor(anthersSupport: number) {
  * to hold. The client needs to know only *whether* to draw the creator's art or the
  * default, so that is the whole of what it gets.
  */
-type GateRow = typeof creatorGates.$inferSelect;
-function publicGate({ artKey, ...gate }: GateRow) {
-	return { ...gate, hasArt: Boolean(artKey) };
+type BadgeRow = typeof badges.$inferSelect;
+function publicBadge({ artKey, ...badge }: BadgeRow) {
+	return { ...badge, hasArt: Boolean(artKey) };
 }
 
 // ⭐ `artShape`, `artColor` and `artEmblem` DO reach the client, and only `artKey` does not.
@@ -524,8 +526,12 @@ function shareLinkBudgetAsMeter(b: ShareLinkBudget): PublicAccessBudget {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const subscriptionRoutes = new Hono()
-	// ── Badge ladder ────────────────────────────────────────────────────────────
-	.get("/badges", (c) => c.json({ badges: BADGE_VIEWS }))
+	// ── Anthers' Badge ladder (the display views of the seeded set) ────────────
+	// The creator-ladder CRUD took `/badges` below, so the account page's Anthers-ladder
+	// views — the decomposed rungs, shared with the signup page via `badgeViews()` — moved
+	// here. ⚠️ Phase C should note the path change: `/subscriptions/badges` →
+	// `/subscriptions/anthers-badges`.
+	.get("/anthers-badges", (c) => c.json({ badges: BADGE_VIEWS }))
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	// ── Public Access meter ──────────────────────────────────────────────────
@@ -1360,7 +1366,7 @@ const subscriptionRoutes = new Hono()
 			)
 			.orderBy(
 				desc(
-					sql`CAST(${poolDistributions.poolAmount} AS numeric) + CAST(${poolDistributions.seedAmount} AS numeric)`,
+					sql`CAST(${poolDistributions.poolAmount} AS numeric) + CAST(${poolDistributions.badgeAmount} AS numeric)`,
 				),
 			);
 
@@ -1384,7 +1390,7 @@ const subscriptionRoutes = new Hono()
 		const [earnings] = await db
 			.select({
 				poolTotal: sql<string>`COALESCE(SUM(CAST(pool_amount AS numeric)), 0)`,
-				seedTotal: sql<string>`COALESCE(SUM(CAST(seed_amount AS numeric)), 0)`,
+				badgeTotal: sql<string>`COALESCE(SUM(CAST(badge_amount AS numeric)), 0)`,
 				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)::int`,
 				estimateRows: sql<number>`COUNT(*) FILTER (WHERE settled_at IS NULL)::int`,
 			})
@@ -1393,7 +1399,7 @@ const subscriptionRoutes = new Hono()
 				and(eq(poolDistributions.creatorId, user.id), eq(poolDistributions.billingCycle, cycle)),
 			);
 
-		const total = (Number(earnings.poolTotal) + Number(earnings.seedTotal)).toFixed(2);
+		const total = (Number(earnings.poolTotal) + Number(earnings.badgeTotal)).toFixed(2);
 
 		// The transfer split, beside the month's figures: what settlement has credited
 		// that is still held (no coverage row names it) and what has already moved into
@@ -1440,7 +1446,7 @@ const subscriptionRoutes = new Hono()
 
 		return c.json({
 			poolTotal: earnings.poolTotal,
-			seedTotal: earnings.seedTotal,
+			badgeTotal: earnings.badgeTotal,
 			total,
 			subscriberCount: Number(earnings.subscriberCount),
 			cycle,
@@ -1478,40 +1484,46 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Directed allocations ─────────────────────────────────────────────────
-	// The budget is the balance the user holds this cycle to direct at creators, and
-	// Anthers takes no cut of it. Directing an amount at a creator clears that creator's
-	// Badges. (What actually reaches the creator is net of that amount's pro-rata share
-	// of the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
-	//
-	// **Amounts are dollars, at any level, to the cent.** The API does not reject
-	// non-multiples of anything, because there is no unit left to be a multiple of.
-	//
-	// ⚠️ **A sweep that rewrites the end of a sentence and not its beginning leaves prose
-	// that reads as considered and asserts two models at once**, which is what stood here
-	// for three days: an old premise, a new conclusion, and a final clause with no
-	// predicate left in it at all. Re-read a whole paragraph when a rule under it moves.
-	.get("/seeds", requireAuth, async (c) => {
+	// ── The viewer's own Badge holdings ────────────────────────────────────────
+	// What this viewer holds this cycle: one discrete Badge per creator. The budget is
+	// the balance the user holds this cycle to direct at creators (the legacy
+	// `accounts.creator_support_total`, still the subscription's directed total), and
+	// Anthers takes no cut of it. Holding a creator's Badge clears that creator's gates
+	// at the Badge's threshold and below. (What actually reaches the creator is net of
+	// the threshold's pro-rata share of the at-cost card fee — see the discrepancy note
+	// in `distribute-pool.ts`.)
+	.get("/my-badges", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
 		const result = await db
 			.select({
-				seed: seedAllocations,
+				badge: badges,
 				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
+				holding: userBadges,
 			})
-			.from(seedAllocations)
-			.innerJoin(users, eq(seedAllocations.creatorId, users.id))
-			.where(and(eq(seedAllocations.userId, user.id), eq(seedAllocations.billingCycle, cycle)));
+			.from(userBadges)
+			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+			.innerJoin(users, eq(users.id, badges.creatorId))
+			.where(and(eq(userBadges.userId, user.id), eq(userBadges.billingCycle, cycle)));
 
 		const acct = await getAccount(user.id);
 		const budget = Number(acct?.creatorSupportTotal ?? 0);
-		const allocated = result.reduce((sum, r) => sum + Number(r.seed.amount), 0);
+		const allocated = result.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
 
 		return c.json({
-			seeds: result.map((r) => ({
-				...r.seed,
+			badges: result.map((r) => ({
+				id: r.badge.id,
+				threshold: r.badge.threshold,
+				label: r.badge.label,
+				description: r.badge.description,
+				artShape: r.badge.artShape,
+				artColor: r.badge.artColor,
+				artEmblem: r.badge.artEmblem,
+				hasArt: Boolean(r.badge.artKey),
+				billingCycle: r.holding.billingCycle,
+				createdAt: r.holding.createdAt,
 				creator: {
 					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
@@ -1524,21 +1536,14 @@ const subscriptionRoutes = new Hono()
 	})
 
 	.post(
-		"/seeds",
+		"/my-badges",
 		requireAuth,
 		requireVerified,
 		zValidator(
 			"json",
 			z.object({
-				creatorId: z.number().int(),
-				amount: z
-					.string()
-					.regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format")
-					// 🚨 A `% SEED_PRICE === 0` refinement stood here until 2026-08-16, forcing
-					// every allocation onto a $3 step. It went with the unit: a creator sets
-					// their own Badge levels to any amount, so refusing $2.50 here would make
-					// their own ladder unreachable through this route.
-					.refine((v) => Number(v) > 0, { message: "Amount must be more than zero" }),
+				/** The Badge to hold — a discrete pick, not an amount. */
+				badgeId: z.number().int().positive(),
 				cycle: z
 					.string()
 					.regex(/^\d{4}-\d{2}-01$/)
@@ -1547,8 +1552,7 @@ const subscriptionRoutes = new Hono()
 		),
 		async (c) => {
 			const user = c.get("user");
-			const { creatorId, amount, cycle: requestedCycle } = c.req.valid("json");
-			const amountNum = Number(amount);
+			const { badgeId, cycle: requestedCycle } = c.req.valid("json");
 			const currentCycle = currentCycleKey();
 			const cycle = requestedCycle ?? currentCycle;
 
@@ -1556,10 +1560,7 @@ const subscriptionRoutes = new Hono()
 			const nextCycle = nextCycleKey(currentCycle);
 
 			if (cycle !== currentCycle && cycle !== nextCycle) {
-				return c.json(
-					{ error: "Can only direct support for the current or next billing cycle" },
-					400,
-				);
+				return c.json({ error: "Can only pick Badges for the current or next billing cycle" }, 400);
 			}
 
 			const acct = await getAccount(user.id);
@@ -1569,21 +1570,31 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "You have nothing to give this cycle" }, 400);
 			}
 
-			// Current month: allocation locks — can only increase a creator, not decrease.
+			// The Badge itself: its threshold is the amount this pick directs, and the
+			// route never takes a number from the request — the pick names the rung.
+			const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
+			if (!badge) return c.json({ error: "No such Badge" }, 404);
+			if (badge.creatorId === user.id) {
+				return c.json({ error: "You cannot hold your own Badge" }, 400);
+			}
+			const amountNum = Number(badge.threshold);
+
+			// Current month: a holding locks — a viewer may move up this cycle, never down.
 			if (cycle === currentCycle) {
 				const [existing] = await db
-					.select({ amount: seedAllocations.amount })
-					.from(seedAllocations)
+					.select({ threshold: badges.threshold })
+					.from(userBadges)
+					.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 					.where(
 						and(
-							eq(seedAllocations.userId, user.id),
-							eq(seedAllocations.creatorId, creatorId),
-							eq(seedAllocations.billingCycle, cycle),
+							eq(userBadges.userId, user.id),
+							eq(badges.creatorId, badge.creatorId),
+							eq(userBadges.billingCycle, cycle),
 						),
 					)
 					.limit(1);
 
-				if (existing && amountNum < Number(existing.amount)) {
+				if (existing && amountNum < Number(existing.threshold)) {
 					return c.json(
 						{ error: "Cannot reduce what you have already given in this billing cycle" },
 						400,
@@ -1591,17 +1602,18 @@ const subscriptionRoutes = new Hono()
 				}
 			}
 
-			// Check total allocated (excluding the creator being updated) against the budget.
+			// Check total allocated (excluding this creator's holding) against the budget.
 			const [currentAllocated] = await db
 				.select({
-					total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)`,
+					total: sql<string>`COALESCE(SUM(${badges.threshold}), 0)`,
 				})
-				.from(seedAllocations)
+				.from(userBadges)
+				.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 				.where(
 					and(
-						eq(seedAllocations.userId, user.id),
-						eq(seedAllocations.billingCycle, cycle),
-						sql`${seedAllocations.creatorId} != ${creatorId}`,
+						eq(userBadges.userId, user.id),
+						eq(userBadges.billingCycle, cycle),
+						sql`${badges.creatorId} != ${badge.creatorId}`,
 					),
 				);
 
@@ -1610,57 +1622,60 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "Exceeds what you are giving this cycle" }, 400);
 			}
 
-			if (amountNum === 0) {
-				// Remove allocation (only allowed for next month)
-				if (cycle === currentCycle) {
-					return c.json({ error: "Cannot remove a creator in the current billing cycle" }, 400);
-				}
-				await db
-					.delete(seedAllocations)
-					.where(
-						and(
-							eq(seedAllocations.userId, user.id),
-							eq(seedAllocations.creatorId, creatorId),
-							eq(seedAllocations.billingCycle, cycle),
-						),
-					);
-				return c.json({ success: true, removed: true });
-			}
-
-			// Upsert allocation
+			// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
+			// rungs rather than sitting beside them.** The "cannot reduce" check above
+			// already assumes the shape (a viewer raising $3 → $6 has ONE holding, at $6),
+			// and the access/distribution reads enforce it defensively with MAX(threshold).
+			// An insert that left the old rung beside the new one would overstate the
+			// allocation against the cycle's budget — the e2e walk hit exactly that, ending
+			// a $3 → $21 climb holding $39 of rungs — while reading right only because
+			// every reader takes the max. Delete the issuer's other holdings for this
+			// cycle, then upsert the picked one.
 			await db
-				.insert(seedAllocations)
+				.delete(userBadges)
+				.where(
+					and(
+						eq(userBadges.userId, user.id),
+						eq(userBadges.billingCycle, cycle),
+						ne(userBadges.badgeId, badgeId),
+						sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${badge.creatorId})`,
+					),
+				);
+
+			// Upsert the holding. The unique key is (user, badge, cycle), so a repeated pick
+			// of the same rung is a no-op.
+			await db
+				.insert(userBadges)
 				.values({
 					userId: user.id,
-					creatorId,
-					amount,
+					badgeId,
 					billingCycle: cycle,
 				})
 				.onConflictDoUpdate({
-					target: [seedAllocations.userId, seedAllocations.creatorId, seedAllocations.billingCycle],
-					set: { amount, updatedAt: new Date() },
+					target: [userBadges.userId, userBadges.badgeId, userBadges.billingCycle],
+					set: { updatedAt: new Date() },
 				});
 
 			return c.json({ success: true });
 		},
 	)
 
-	// ── Creator Gates ────────────────────────────────────────────────────────
-	.get("/gates", async (c) => {
+	// ── Creator Badges — the ladder a creator defines ─────────────────────────
+	.get("/badges", async (c) => {
 		const creatorHandle = c.req.query("creator");
 
 		if (!creatorHandle) {
-			// If no creator specified, require auth and return own gates
+			// If no creator specified, require auth and return own ladder
 			const userId = await getOptionalUserId(c);
 			if (!userId) return c.json({ error: "Unauthorized" }, 401);
 
-			const gates = await db
+			const rows = await db
 				.select()
-				.from(creatorGates)
-				.where(eq(creatorGates.creatorId, userId))
-				.orderBy(creatorGates.sortOrder, creatorGates.threshold);
+				.from(badges)
+				.where(eq(badges.creatorId, userId))
+				.orderBy(badges.sortOrder, badges.threshold);
 
-			return c.json({ gates: gates.map(publicGate) });
+			return c.json({ badges: rows.map(publicBadge) });
 		}
 
 		const [creator] = await db
@@ -1670,23 +1685,22 @@ const subscriptionRoutes = new Hono()
 			.limit(1);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
-		const gates = await db
+		const rows = await db
 			.select()
-			.from(creatorGates)
-			.where(eq(creatorGates.creatorId, creator.id))
-			.orderBy(creatorGates.gateType, creatorGates.threshold);
+			.from(badges)
+			.where(eq(badges.creatorId, creator.id))
+			.orderBy(badges.sortOrder, badges.threshold);
 
-		return c.json({ gates: gates.map(publicGate) });
+		return c.json({ badges: rows.map(publicBadge) });
 	})
 
 	.post(
-		"/gates",
+		"/badges",
 		requireAuth,
 		zValidator(
 			"json",
 			z.object({
-				// 🚨 Monthly DOLLARS, both gate types (migration `0041`) — what is given to this
-				// creator for `seed`, what is given to Anthers for `anthers_badge`. It was
+				// 🚨 Monthly DOLLARS (migration `0041`) — what is given to this creator. It was
 				// `/^\d+$/` (digits only) until 2026-08-16 on the reasoning that a fractional
 				// gate was one no viewer could exactly meet, since Seeds were indivisible. The
 				// unit went and so did the reasoning: refusing "9.50" now rejects the levels a
@@ -1702,7 +1716,6 @@ const subscriptionRoutes = new Hono()
 					.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE }),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
-				gateType: z.enum(["seed", "anthers_badge"]).optional().default("seed"),
 			}),
 		),
 		async (c) => {
@@ -1711,20 +1724,20 @@ const subscriptionRoutes = new Hono()
 
 			const [maxRow] = await db
 				.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
-				.from(creatorGates)
-				.where(eq(creatorGates.creatorId, user.id));
+				.from(badges)
+				.where(eq(badges.creatorId, user.id));
 
-			const [gate] = await db
-				.insert(creatorGates)
+			const [badge] = await db
+				.insert(badges)
 				.values({ creatorId: user.id, ...data, sortOrder: Number(maxRow.max) + 1 })
 				.returning();
 
-			return c.json({ gate: publicGate(gate) }, 201);
+			return c.json({ badge: publicBadge(badge) }, 201);
 		},
 	)
 
 	.patch(
-		"/gates/:id",
+		"/badges/:id",
 		requireAuth,
 		zValidator(
 			"json",
@@ -1752,26 +1765,26 @@ const subscriptionRoutes = new Hono()
 			const data = c.req.valid("json");
 
 			const [updated] = await db
-				.update(creatorGates)
+				.update(badges)
 				.set({ ...data, updatedAt: new Date() })
-				.where(and(eq(creatorGates.id, Number(id)), eq(creatorGates.creatorId, user.id)))
+				.where(and(eq(badges.id, Number(id)), eq(badges.creatorId, user.id)))
 				.returning();
 
-			if (!updated) return c.json({ error: "Gate not found" }, 404);
-			return c.json({ gate: publicGate(updated) });
+			if (!updated) return c.json({ error: "Badge not found" }, 404);
+			return c.json({ badge: publicBadge(updated) });
 		},
 	)
 
-	.delete("/gates/:id", requireAuth, async (c) => {
+	.delete("/badges/:id", requireAuth, async (c) => {
 		const user = c.get("user");
 		const { id } = c.req.param();
 
 		const deleted = await db
-			.delete(creatorGates)
-			.where(and(eq(creatorGates.id, Number(id)), eq(creatorGates.creatorId, user.id)))
-			.returning({ id: creatorGates.id, artKey: creatorGates.artKey });
+			.delete(badges)
+			.where(and(eq(badges.id, Number(id)), eq(badges.creatorId, user.id)))
+			.returning({ id: badges.id, artKey: badges.artKey });
 
-		if (deleted.length === 0) return c.json({ error: "Gate not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Badge not found" }, 404);
 		// The rung is gone, so its art has nothing left to belong to. Swept after the row
 		// rather than before: an object stranded by a crash is findable, while a row
 		// pointing at an object we already destroyed renders a broken badge forever.
@@ -1793,16 +1806,16 @@ const subscriptionRoutes = new Hono()
 	// fingerprinted at all. Accepting one means building a sanitizer AND a rasterize-then-
 	// hash step before a single badge is safe to display. Anthers' own defaults are SVG
 	// through `@anthers/brand`, and the two never mix.
-	.post("/gates/:id/art", requireAuth, async (c) => {
+	.post("/badges/:id/art", requireAuth, async (c) => {
 		const user = c.get("user");
-		const gateId = Number(c.req.param("id"));
+		const badgeId = Number(c.req.param("id"));
 
-		const [gate] = await db
+		const [badge] = await db
 			.select()
-			.from(creatorGates)
-			.where(and(eq(creatorGates.id, gateId), eq(creatorGates.creatorId, user.id)))
+			.from(badges)
+			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
 			.limit(1);
-		if (!gate) return c.json({ error: "Gate not found" }, 404);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
 
 		const form = await c.req.formData();
 		const file = form.get("file");
@@ -1831,7 +1844,7 @@ const subscriptionRoutes = new Hono()
 			);
 		}
 
-		const key = `creators/${user.id}/badges/${gateId}/${crypto.randomUUID().replace(/-/g, "")}.png`;
+		const key = `creators/${user.id}/badges/${badgeId}/${crypto.randomUUID().replace(/-/g, "")}.png`;
 		await storage.upload(key, normalized, "image/png", "private");
 
 		// 🚨 Scanned INLINE, before the key is ever written to the row. Badge art is
@@ -1850,27 +1863,27 @@ const subscriptionRoutes = new Hono()
 			return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
 		}
 
-		const previous = gate.artKey;
+		const previous = badge.artKey;
 		await db
-			.update(creatorGates)
+			.update(badges)
 			.set({ artKey: key, updatedAt: new Date() })
-			.where(eq(creatorGates.id, gateId));
+			.where(eq(badges.id, badgeId));
 		// Only after the row points somewhere else, so a failure here strands an object
 		// rather than blanking a badge.
 		if (previous) await storage.delete(previous).catch(() => {});
 
-		return c.json({ artPath: `/api/subscriptions/gates/${gateId}/art` }, 201);
+		return c.json({ artPath: `/api/subscriptions/badges/${badgeId}/art` }, 201);
 	})
 
-	.delete("/gates/:id/art", requireAuth, async (c) => {
+	.delete("/badges/:id/art", requireAuth, async (c) => {
 		const user = c.get("user");
-		const gateId = Number(c.req.param("id"));
+		const badgeId = Number(c.req.param("id"));
 		const [updated] = await db
-			.update(creatorGates)
+			.update(badges)
 			.set({ artKey: null, updatedAt: new Date() })
-			.where(and(eq(creatorGates.id, gateId), eq(creatorGates.creatorId, user.id)))
-			.returning({ artKey: creatorGates.artKey });
-		if (!updated) return c.json({ error: "Gate not found" }, 404);
+			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+			.returning({ artKey: badges.artKey });
+		if (!updated) return c.json({ error: "Badge not found" }, 404);
 		return c.body(null, 204);
 	})
 
@@ -1882,15 +1895,15 @@ const subscriptionRoutes = new Hono()
 	 * package renders as recolor-ready SVG, and it would go stale the moment the palette
 	 * moved. The client falls back; this route only ever answers with a creator's own file.
 	 */
-	.get("/gates/:id/art", async (c) => {
-		const [gate] = await db
-			.select({ artKey: creatorGates.artKey })
-			.from(creatorGates)
-			.where(eq(creatorGates.id, Number(c.req.param("id"))))
+	.get("/badges/:id/art", async (c) => {
+		const [badge] = await db
+			.select({ artKey: badges.artKey })
+			.from(badges)
+			.where(eq(badges.id, Number(c.req.param("id"))))
 			.limit(1);
-		if (!gate?.artKey) return c.json({ error: "No art" }, 404);
+		if (!badge?.artKey) return c.json({ error: "No art" }, 404);
 
-		const bytes = await storage.read(gate.artKey);
+		const bytes = await storage.read(badge.artKey);
 		// The row names an object storage does not have. 404 so the client draws the
 		// default, rather than 500 for a badge nobody can do anything about.
 		if (!bytes) return c.json({ error: "No art" }, 404);
@@ -2135,7 +2148,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Creator Status (for the creator page's Badge + directed-support display) ──
+	// ── Creator Status (for the creator page's Badge + holdings display) ──
 	.get("/creator-status/:handle", async (c) => {
 		const handle = c.req.param("handle");
 		const currentUserId = await getOptionalUserId(c);
@@ -2150,56 +2163,55 @@ const subscriptionRoutes = new Hono()
 				: undefined);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
-		// Get the creator's gates
-		const gates = await db
+		// Get the creator's Badge ladder
+		const ladder = await db
 			.select()
-			.from(creatorGates)
-			.where(eq(creatorGates.creatorId, creator.id))
-			.orderBy(creatorGates.gateType, creatorGates.threshold);
+			.from(badges)
+			.where(eq(badges.creatorId, creator.id))
+			.orderBy(badges.sortOrder, badges.threshold);
 
 		if (!currentUserId) {
 			return c.json({
 				badge: "free",
-				seedAmount: "0.00",
-				gates: gates.map(publicGate),
-				unlockedGates: [],
+				badgeAmount: "0.00",
+				badges: ladder.map(publicBadge),
+				unlockedBadges: [],
 			});
 		}
 
-		// What the viewer gives Anthers (point-in-time) and what they direct at this creator.
-		const anthersSupport = await heldAnthersSupport(currentUserId);
+		// What the viewer gives Anthers (point-in-time) and what they hold from this creator.
+		const anthersSupport = await heldAnthersBadgeAmount(currentUserId);
 		const badge = heldBadgeName(anthersSupport);
 		const cycle = currentCycleKey();
-		const [seed] = await db
-			.select({ amount: seedAllocations.amount })
-			.from(seedAllocations)
+		const [holding] = await db
+			.select({ threshold: badges.threshold })
+			.from(userBadges)
+			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 			.where(
 				and(
-					eq(seedAllocations.userId, currentUserId),
-					eq(seedAllocations.creatorId, creator.id),
-					eq(seedAllocations.billingCycle, cycle),
+					eq(userBadges.userId, currentUserId),
+					eq(badges.creatorId, creator.id),
+					eq(userBadges.billingCycle, cycle),
 				),
 			)
 			.limit(1);
 
-		const seedAmount = seed?.amount ?? "0.00";
+		const badgeAmount = holding?.threshold ?? "0.00";
 
-		// Both gate types are a dollar threshold — one reads what is given to Anthers, the
-		// other what is given to this creator. Same comparison, two amounts, and no
-		// conversion between them any more: the ledger, the threshold and the comparison are
-		// all in the same unit, which is what removed the reinterpretation hazard.
-		const given = supportAmount(seedAmount);
-		const unlockedGates = gates
-			.filter((g) =>
-				amountMeets(g.gateType === "anthers_badge" ? anthersSupport : given, Number(g.threshold)),
-			)
-			.map((g) => g.id);
+		// Every Badge is a dollar threshold against what the viewer gives its issuer this
+		// cycle — same comparison, and no conversion between units anywhere: the holding's
+		// dollars are the Badge's threshold by construction, which is what removed the
+		// reinterpretation hazard the retired `gate_type` enum used to encode.
+		const given = supportAmount(badgeAmount);
+		const unlockedBadges = ladder
+			.filter((b) => amountMeets(given, Number(b.threshold)))
+			.map((b) => b.id);
 
 		return c.json({
 			badge,
-			seedAmount,
-			gates: gates.map(publicGate),
-			unlockedGates,
+			badgeAmount,
+			badges: ladder.map(publicBadge),
+			unlockedBadges,
 		});
 	});
 

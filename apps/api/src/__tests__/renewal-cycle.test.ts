@@ -14,7 +14,14 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, invoices, seedAllocations, supportReductions, users } from "@anthers/db/schema";
+import {
+	accounts,
+	badges,
+	invoices,
+	supportReductions,
+	userBadges,
+	users,
+} from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -557,9 +564,31 @@ describe("a renewal that fails", () => {
 				isActive: true,
 			})
 			.where(eq(accounts.userId, supporterId));
+		// The supporter's holding on the creator: a $5 Badge, held this cycle. Under the
+		// discrete-picks model the holding names the rung rather than carrying an amount,
+		// so the fixture creates the issuer's badge at that threshold first — the same
+		// find-or-create the billing path applies.
+		const [existing] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, creatorId), eq(badges.threshold, "5.00")))
+			.limit(1);
+		const badge =
+			existing ??
+			(
+				await db
+					.insert(badges)
+					.values({
+						creatorId,
+						threshold: "5.00",
+						label: "$5.00",
+						description: "A fixture rung the renewal suite subscribes at.",
+					})
+					.returning({ id: badges.id })
+			)[0];
 		await db
-			.insert(seedAllocations)
-			.values({ userId: supporterId, creatorId, amount: "5.00", billingCycle: currentCycleKey() })
+			.insert(userBadges)
+			.values({ userId: supporterId, badgeId: badge.id, billingCycle: currentCycleKey() })
 			.onConflictDoNothing();
 		await db.delete(invoices).where(eq(invoices.userId, supporterId));
 	});
@@ -568,15 +597,12 @@ describe("a renewal that fails", () => {
 		delete fake.responses["subscriptions.retrieve"];
 	});
 
-	const gatesThisMonth = () =>
+	const holdingsThisMonth = () =>
 		db
 			.select()
-			.from(seedAllocations)
+			.from(userBadges)
 			.where(
-				and(
-					eq(seedAllocations.userId, supporterId),
-					eq(seedAllocations.billingCycle, currentCycleKey()),
-				),
+				and(eq(userBadges.userId, supporterId), eq(userBadges.billingCycle, currentCycleKey())),
 			);
 
 	it("🚨 refuses a change while the last payment failed, rather than opening a second subscription", async () => {
@@ -595,7 +621,7 @@ describe("a renewal that fails", () => {
 
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
 		expect(Number(acct.anthersSupport)).toBe(12);
-		expect(await gatesThisMonth()).toHaveLength(1);
+		expect(await holdingsThisMonth()).toHaveLength(1);
 	});
 
 	it("🚨 takes the Badge and this month's gates away once Stripe marks it unpaid", async () => {
@@ -604,7 +630,7 @@ describe("a renewal that fails", () => {
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
 		expect(Number(acct.anthersSupport)).toBe(0);
 		expect(Number(acct.creatorSupportTotal)).toBe(0);
-		expect(await gatesThisMonth()).toHaveLength(0);
+		expect(await holdingsThisMonth()).toHaveLength(0);
 		// Kept, so that paying what is owed makes the same subscription active again.
 		expect(acct.stripeSubscriptionId).toBe(SUB_ID);
 	});
@@ -620,7 +646,7 @@ describe("a renewal that fails", () => {
 
 		await syncSubscriptionToAccount(thisMonth("canceled"));
 
-		expect(await gatesThisMonth()).toHaveLength(1);
+		expect(await holdingsThisMonth()).toHaveLength(1);
 	});
 });
 

@@ -260,7 +260,7 @@ describe("content ratings", () => {
 			// ⭐ Free and open to everyone, which is now allowed: an Adult Work may be
 			// Public Access, and what keeps it away from minors is the verification gate
 			// rather than a price.
-			const workId = await makeWork({ seedAccess: [{ threshold: 0, allow: true, price: "0" }] });
+			const workId = await makeWork({ access: [{ threshold: 0, allow: true, price: "0" }] });
 			const res = await patch(workId, { ...rated("adult"), visibility: "released" });
 			expect(res.status).toBe(200);
 			const row = await reload(workId);
@@ -365,7 +365,7 @@ describe("content ratings", () => {
 			// like anything else, so a correction that re-priced somebody's work would make
 			// the rating a penalty, which it is not.
 			const open = [{ threshold: 0, allow: true, price: "0" }];
-			const workId = await makeWork({ ...rated("general"), seedAccess: open });
+			const workId = await makeWork({ ...rated("general"), access: open });
 			const res = await correct(workId, "adult");
 			expect(res.status).toBe(200);
 
@@ -374,7 +374,7 @@ describe("content ratings", () => {
 			expect(row.maturitySource).toBe("operator");
 			// Untouched. This is the assertion that would catch a well-meaning future
 			// re-introduction of the paywall.
-			expect(row.seedAccess).toEqual(open);
+			expect(row.access).toEqual(open);
 		});
 
 		it("tells the creator, because a correction they never hear about cannot be appealed", async () => {

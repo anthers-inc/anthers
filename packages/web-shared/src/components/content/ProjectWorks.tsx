@@ -168,7 +168,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 									{/*
 									 * Visibility only — deliberately NOT the Catalog's `AccessBadge`.
 									 *
-									 * 🚨 That badge reads `seedAccess`, and this list comes from the
+									 * 🚨 That badge reads `access`, and this list comes from the
 									 * *viewer-facing* serializer, which withholds the creator's access table
 									 * on purpose. Using it here reported **"Nobody can open"** for three
 									 * Works that were plainly Public Access — a confident, entirely wrong

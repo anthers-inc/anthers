@@ -202,7 +202,7 @@ beforeAll(async () => {
 		title: `Dispute work ${run}`,
 		streamEnabled: false,
 		downloadEnabled: true,
-		seedAccess: FOR_SALE,
+		access: FOR_SALE,
 	});
 	workId = work.id;
 

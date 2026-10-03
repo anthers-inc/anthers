@@ -27,7 +27,7 @@ function work(over: Partial<Work> = {}): Work {
 		maturityRows: rowsRatedAs("general"),
 		streamEnabled: true,
 		downloadEnabled: false,
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+		access: [{ threshold: 0, allow: true, price: "0" }],
 		assets: [],
 		transcoding: null,
 		...over,
@@ -64,7 +64,7 @@ describe("buildWorklist", () => {
 	it("leads with a released Work nobody can open", () => {
 		// The server's own `defaultSeedAccess()` produces exactly this, so it is one click
 		// away, and a creator can always open their own work — nothing else would tell them.
-		const locked = work({ seedAccess: [{ threshold: 0, allow: false, price: "0" }] });
+		const locked = work({ access: [{ threshold: 0, allow: false, price: "0" }] });
 		const items = build([locked], false);
 		expect(items[0].kind).toBe("locked");
 		// Above payout setup deliberately: this one is already wrong in public.
@@ -74,7 +74,7 @@ describe("buildWorklist", () => {
 
 	it("names the Work when there is one and counts them when there are several", () => {
 		const locked = (id: number, title: string) =>
-			work({ id, publicId: id, title, seedAccess: [{ threshold: 0, allow: false, price: "0" }] });
+			work({ id, publicId: id, title, access: [{ threshold: 0, allow: false, price: "0" }] });
 
 		expect(build([locked(1, "Tide")])[0].message).toContain("“Tide”");
 		const many = build([locked(1, "Tide"), locked(2, "Ebb")]);
@@ -152,7 +152,7 @@ describe("buildWorklist", () => {
 
 	it("orders the whole list worst first", () => {
 		const all = [
-			work({ id: 1, publicId: 1, seedAccess: [{ threshold: 0, allow: false, price: "0" }] }),
+			work({ id: 1, publicId: 1, access: [{ threshold: 0, allow: false, price: "0" }] }),
 			work({ id: 2, publicId: 2, transcoding: { status: "failed" } as Work["transcoding"] }),
 			work({ id: 5, publicId: 5, visibility: "private", sourceKey: "" }),
 			work({ id: 3, publicId: 3, visibility: "private", maturity: "unrated", maturityRows: {} }),

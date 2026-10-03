@@ -16,7 +16,7 @@
  * platform-side second table to render, and adding one would stratify the commons.
  */
 import { amountLabel } from "@anthers/shared/constants";
-import type { CreatorGate, SeedAccessRow } from "../../lib/types";
+import type { AccessRow, CreatorBadge } from "../../lib/types";
 import { TakeHome } from "../economics/TakeHome";
 
 // ─── Row drafts ───
@@ -34,8 +34,6 @@ export interface AccessRowDraft {
 	price: string;
 }
 
-export type SeedRowDraft = AccessRowDraft;
-
 /** Coerce a user-entered price to a valid money string ("0" when blank/invalid). */
 export function normalizeMoney(v: string): string {
 	const t = v.trim();
@@ -45,25 +43,24 @@ export function normalizeMoney(v: string): string {
 	return (Math.round(n * 100) / 100).toString();
 }
 
-/** Creator rows = fixed $0 baseline + one row per creator gate (sorted by threshold). */
-export function buildSeedRows(
-	gates: CreatorGate[],
-	existing?: SeedAccessRow[] | null,
-): SeedRowDraft[] {
-	const byThreshold = new Map<number, SeedAccessRow>();
+/** Creator rows = fixed $0 baseline + one row per Badge rung (sorted by threshold). */
+export function buildAccessRows(
+	rungs: CreatorBadge[],
+	existing?: AccessRow[] | null,
+): AccessRowDraft[] {
+	const byThreshold = new Map<number, AccessRow>();
 	for (const r of existing ?? []) byThreshold.set(r.threshold, r);
 
 	const base = byThreshold.get(0);
-	const rows: SeedRowDraft[] = [
+	const rows: AccessRowDraft[] = [
 		{ threshold: 0, label: "Everyone", allow: base?.allow ?? false, price: base?.price ?? "0" },
 	];
 
-	const rungs = gates
-		.filter((g) => g.gateType === "seed")
-		.map((g) => ({ threshold: Number(g.threshold), label: g.label }))
+	const sorted = rungs
+		.map((r) => ({ threshold: Number(r.threshold), label: r.label }))
 		.sort((a, b) => a.threshold - b.threshold);
 
-	for (const rung of rungs) {
+	for (const rung of sorted) {
 		const ex = byThreshold.get(rung.threshold);
 		rows.push({
 			threshold: rung.threshold,
@@ -84,20 +81,20 @@ function serializeRows(rows: AccessRowDraft[]): AccessRowDraft[] {
 	})) as AccessRowDraft[];
 }
 
-export function serializeSeedRows(rows: SeedRowDraft[]): SeedAccessRow[] {
+export function serializeAccessRows(rows: AccessRowDraft[]): AccessRow[] {
 	return serializeRows(rows).map(({ threshold, allow, price }) => ({ threshold, allow, price }));
 }
 
 // ─── Component ───
 
 interface AccessTablesProps {
-	seedRows: SeedRowDraft[];
-	onSeedChange: (rows: SeedRowDraft[]) => void;
+	rows: AccessRowDraft[];
+	onRowsChange: (rows: AccessRowDraft[]) => void;
 }
 
-export default function AccessTables({ seedRows, onSeedChange }: AccessTablesProps) {
-	const patchSeed = (index: number, changes: Partial<SeedRowDraft>) =>
-		onSeedChange(seedRows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
+export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) {
+	const patchRow = (index: number, changes: Partial<AccessRowDraft>) =>
+		onRowsChange(rows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
 
 	return (
 		<div className="flex flex-col gap-6">
@@ -121,7 +118,7 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 							</tr>
 						</thead>
 						<tbody>
-							{seedRows.map((row, i) => (
+							{rows.map((row, i) => (
 								<tr key={row.threshold}>
 									<td>
 										<span className="font-medium">{row.label}</span>
@@ -140,7 +137,7 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 											type="checkbox"
 											className="checkbox checkbox-sm checkbox-primary"
 											checked={row.allow}
-											onChange={(e) => patchSeed(i, { allow: e.target.checked })}
+											onChange={(e) => patchRow(i, { allow: e.target.checked })}
 										/>
 									</td>
 									<td>
@@ -156,7 +153,7 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 											value={row.price}
 											min="0"
 											step="0.01"
-											onChange={(e) => patchSeed(i, { price: e.target.value })}
+											onChange={(e) => patchRow(i, { price: e.target.value })}
 										/>
 									</td>
 									<td>
@@ -172,7 +169,7 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 						</tbody>
 					</table>
 				</div>
-				{seedRows.length === 1 && (
+				{rows.length === 1 && (
 					<p className="text-xs text-base-content/50 mt-1">
 						Add rungs in Settings → Badge Ladder to gate by monthly support.
 					</p>

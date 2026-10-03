@@ -16,34 +16,32 @@ const row = (threshold: number, allow: boolean, price = "0") => ({ threshold, al
 
 describe("accessState", () => {
 	it("is private until released, whatever the access table says", () => {
-		expect(accessState({ visibility: "private", seedAccess: [row(0, true)] })).toBe("private");
+		expect(accessState({ visibility: "private", access: [row(0, true)] })).toBe("private");
 		// Including the case that would otherwise be the loudest — a Work with no way in
 		// is not something to warn about while it is still staging.
-		expect(accessState({ visibility: "private", seedAccess: [row(0, false)] })).toBe("private");
+		expect(accessState({ visibility: "private", access: [row(0, false)] })).toBe("private");
 	});
 
 	it("names the locked state a released Work falls into by default", () => {
 		// `defaultSeedAccess()` on the server is exactly this row, so a creator who releases
 		// without opening the Access section lands here.
 		expect(
-			accessState({ visibility: "released", seedAccess: [row(0, false)], streamEnabled: true }),
+			accessState({ visibility: "released", access: [row(0, false)], streamEnabled: true }),
 		).toBe("locked");
-		expect(accessState({ visibility: "released", seedAccess: [], streamEnabled: true })).toBe(
-			"locked",
-		);
-		expect(accessState({ visibility: "released", seedAccess: null, streamEnabled: true })).toBe(
+		expect(accessState({ visibility: "released", access: [], streamEnabled: true })).toBe("locked");
+		expect(accessState({ visibility: "released", access: null, streamEnabled: true })).toBe(
 			"locked",
 		);
 	});
 
 	it("is Public Access only when it also streams", () => {
 		expect(
-			accessState({ visibility: "released", seedAccess: [row(0, true)], streamEnabled: true }),
+			accessState({ visibility: "released", access: [row(0, true)], streamEnabled: true }),
 		).toBe("public-access");
 		// Free, and genuinely not the commons: Public Access is ungated *streaming*, and a
 		// download earns nothing from the Time Pool.
 		expect(
-			accessState({ visibility: "released", seedAccess: [row(0, true)], streamEnabled: false }),
+			accessState({ visibility: "released", access: [row(0, true)], streamEnabled: false }),
 		).toBe("free");
 	});
 
@@ -51,14 +49,14 @@ describe("accessState", () => {
 		expect(
 			accessState({
 				visibility: "released",
-				seedAccess: [row(0, true, "5.00")],
+				access: [row(0, true, "5.00")],
 				streamEnabled: true,
 			}),
 		).toBe("sale");
 		expect(
 			accessState({
 				visibility: "released",
-				seedAccess: [row(0, false), row(2, true)],
+				access: [row(0, false), row(2, true)],
 				streamEnabled: true,
 			}),
 		).toBe("gated");
@@ -71,7 +69,7 @@ describe("accessState", () => {
 		expect(
 			accessState({
 				visibility: "released",
-				seedAccess: [row(0, false), row(1, true, "0")],
+				access: [row(0, false), row(1, true, "0")],
 				streamEnabled: true,
 			}),
 		).toBe("gated");

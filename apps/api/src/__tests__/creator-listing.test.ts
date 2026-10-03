@@ -82,7 +82,7 @@ beforeAll(async () => {
 		creatorId: makerId,
 		title: "fixture",
 		streamEnabled: true,
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+		access: [{ threshold: 0, allow: true, price: "0" }],
 	};
 	// `public_id` is unique, so it has to vary per run or the second run dies on the
 	// insert rather than on an assertion — which is the failure that hides a real one.

@@ -84,7 +84,7 @@ describe("a shared video, signed out", () => {
 			type: "video",
 			title: "Shared video",
 			streamEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		workId = work.id;
 		await db.insert(transcodingJobs).values({

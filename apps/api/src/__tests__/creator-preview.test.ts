@@ -78,7 +78,7 @@ async function makeWork(title: string, access: unknown): Promise<number> {
 	const patched = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: creatorAuth,
-		body: JSON.stringify({ seedAccess: access, streamEnabled: true, visibility: "released" }),
+		body: JSON.stringify({ access: access, streamEnabled: true, visibility: "released" }),
 	});
 	expect(patched.status).toBe(200);
 	return workId;
@@ -97,8 +97,13 @@ async function view(workId: number, cookie: string, query = "") {
 	const res = await req(`/api/content/works/${workId}${query}`, { headers: { Cookie: cookie } });
 	expect(res.status).toBe(200);
 	return (await res.json()).work as {
+		/**
+		 * The viewer shape carries the resolved verdict here. The owner shape carries the
+		 * editable access table under the same key — one key, two shapes, and a preview is
+		 * what moves a creator across (see the one owner-shape assertion below, which reads
+		 * it through a cast for exactly that reason).
+		 */
 		access?: { canAccess: boolean; reason: string; requiresPurchase: boolean };
-		seedAccess?: unknown;
 		sourceKey: string;
 	};
 }
@@ -140,9 +145,10 @@ describe("creator preview", () => {
 		const work = await view(gatedId, creatorCookie);
 		// No verdict at all — an owner is not a viewer, and this is the shape the Studio
 		// edits against. If a preview ever started leaking into the default response, this
-		// is the assertion that would notice.
-		expect(work.access).toBeUndefined();
-		expect(work.seedAccess).toBeDefined();
+		// is the assertion that would notice: the owner shape's `access` is the editable
+		// table (an array), never a resolved verdict.
+		const table = (work as { access?: unknown }).access;
+		expect(Array.isArray(table)).toBe(true);
 	});
 
 	it("previewing signed-out shows the gate as a stranger meets it", async () => {
@@ -192,8 +198,10 @@ describe("creator preview", () => {
 		for (const q of ["?previewAs=", "?previewAs=lots", "?previewAs=-3", "?previewAs=abc"]) {
 			const work = await view(gatedId, creatorCookie, q);
 			// Back to the owner shape — the truth — rather than a preview at some guessed
-			// level. Note this also means the owner short-circuit is intact for these.
-			expect(work.access, `for ${q}`).toBeUndefined();
+			// level. Under the merged key that means `access` is the editable table (an
+			// array), never a resolved verdict: the owner short-circuit is intact for these.
+			const table = (work as { access?: unknown }).access;
+			expect(Array.isArray(table), `for ${q}`).toBe(true);
 			expect(work.sourceKey, `for ${q}`).toBeDefined();
 		}
 	});

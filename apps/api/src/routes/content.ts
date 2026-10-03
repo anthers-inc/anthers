@@ -768,8 +768,6 @@ const accessRowSchema = z.object({
 		.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE }),
 });
 
-const seedAccessRowSchema = accessRowSchema;
-
 /**
  * One credit row — creator-asserted provenance (`WorkCredit` in the schema).
  *
@@ -868,7 +866,7 @@ const workBaseSchema = z
 		downloadEnabled: z.boolean().optional(),
 
 		// Access table (default "free but fully locked" applied server-side when omitted)
-		seedAccess: z.array(seedAccessRowSchema).optional(),
+		access: z.array(accessRowSchema).optional(),
 
 		// Credits — the work's liner notes (see workCreditsSchema for the rules).
 		credits: workCreditsSchema,
@@ -1162,7 +1160,7 @@ async function serializeWork(
 		originallyReleased: item.originallyReleased,
 		streamEnabled: item.streamEnabled,
 		downloadEnabled: item.downloadEnabled,
-		seedAccess: item.seedAccess,
+		access: item.access,
 		// Owner-facing overlay: everything the creator wrote, with the credits that name an
 		// unconfirmed on-network identity flagged as awaiting that person's confirmation.
 		credits: await creditsForOwner(item),
@@ -3578,7 +3576,7 @@ const contentRoutes = new Hono()
 				originallyReleased: data.originallyReleased ? new Date(data.originallyReleased) : null,
 				streamEnabled: data.streamEnabled ?? true,
 				downloadEnabled: data.downloadEnabled ?? false,
-				seedAccess: data.seedAccess ?? defaultSeedAccess(),
+				access: data.access ?? defaultSeedAccess(),
 				credits: data.credits ?? [],
 				isPinned: data.isPinned ?? false,
 				tags: data.tags ?? [],
@@ -3902,7 +3900,7 @@ const contentRoutes = new Hono()
 				visibility: works.visibility,
 				maturity: works.maturity,
 				streamEnabled: works.streamEnabled,
-				seedAccess: works.seedAccess,
+				access: works.access,
 				takedownStatus: works.takedownStatus,
 				quarantineStatus: works.quarantineStatus,
 				creatorId: works.creatorId,
@@ -3974,7 +3972,7 @@ const contentRoutes = new Hono()
 				and(
 					eq(works.visibility, "released"),
 					eq(works.streamEnabled, true),
-					openToEveryone(works.seedAccess),
+					openToEveryone(works.access),
 					notBlockedBy(viewerId, works.creatorId),
 					// Suspended accounts are out of the commons entirely, beside the block
 					// filter a reader already sees here.
@@ -4312,7 +4310,7 @@ const contentRoutes = new Hono()
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
 		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
-		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
+		if (data.access !== undefined) updates.access = data.access;
 		if (data.credits !== undefined) updates.credits = data.credits;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
@@ -4682,14 +4680,14 @@ const contentRoutes = new Hono()
 
 		/** Any allowed row on the Work's access table — there is exactly one such table. */
 		const anyAccessRow = (predicate: SQL) => sql`EXISTS (
-			SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+			SELECT 1 FROM jsonb_array_elements(COALESCE(w.access, '[]'::jsonb)) r
 			WHERE (r->>'allow')::boolean AND (${predicate})
 		)`;
 
 		/** The cheapest allowed offer on a Work, for the price-range filter. */
 		const cheapestPrice = sql`(
 			SELECT MIN((r->>'price')::numeric)
-			FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+			FROM jsonb_array_elements(COALESCE(w.access, '[]'::jsonb)) r
 			WHERE (r->>'allow')::boolean
 		)`;
 
@@ -4797,7 +4795,7 @@ const contentRoutes = new Hono()
 						${viewerId} = w.creator_id
 						OR w.id = ANY(${sql.raw(`ARRAY[${purchased.length ? purchased.join(",") : ""}]::int[]`)})
 						OR EXISTS (
-							SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+							SELECT 1 FROM jsonb_array_elements(COALESCE(w.access, '[]'::jsonb)) r
 							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0
 								-- 🚨 ::numeric on BOTH sides. Every one of these casts was ::int
 								-- until 2026-08-16, which was correct while a threshold counted

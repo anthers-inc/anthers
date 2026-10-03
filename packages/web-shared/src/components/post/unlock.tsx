@@ -67,7 +67,7 @@ function cheapestRoute(
 }
 
 /** "$6.00 more" — always the MARGINAL ask, never the threshold. */
-function seedsToGo(moreNeeded: number): string {
+function amountToGo(moreNeeded: number): string {
 	// ⚠️ **A MONEY amount, never a count.** Rendering it as a count
 	// would be wrong in two directions at once now: there is no unit to count, and a
 	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
@@ -84,7 +84,7 @@ export function unlockLabel(access: AccessResult, creatorName = "this creator"):
 	if (access.reason === "payment_required" && access.price) return `Unlock for $${access.price}`;
 	const cheapest = cheapestRoute(access, creatorName);
 	if (!cheapest) return "Join to unlock";
-	return `Unlock with ${seedsToGo(cheapest.route.moreNeeded)} to ${cheapest.target}`;
+	return `Unlock with ${amountToGo(cheapest.route.moreNeeded)} to ${cheapest.target}`;
 }
 
 /**
