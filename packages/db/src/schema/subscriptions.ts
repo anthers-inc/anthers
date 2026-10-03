@@ -29,27 +29,43 @@ import { users } from "./auth.js";
 import { works } from "./content.js";
 
 /**
- * A user's standing account (one per user). `anthersSupport` is the monthly amount in
- * dollars given to Anthers — it sets the Badge and drives billing directly, with no
- * count in between. `creatorSupportTotal` is the $ directed at creators this cycle
- * (denormalised sum of `user_badges`). `bandwidthUsedGiB` is a **dead column**:
- * it held the running stream consumption drawn against an allowance until 2026-08-12.
- * Delivery is free at any volume, nothing writes it, and it stays only because dropping
- * it is a migration of its own.
+ * The Stripe machinery behind one user's subscription — one row per user, lazily created
+ * on first billing.
+ *
+ * 🚨 **This is not what the user gives, and nothing here is an amount.** The dollars live
+ * in `user_badges` now — a holding's Badge carries its own threshold, Anthers' own set
+ * included. What remains on this row is exactly what Stripe needs to charge and
+ * reconcile: the customer, the products a supporter is invoiced through, and the
+ * subscription's period state. This is the accounts split (Parker, 2026-10-03 — see the
+ * schema evaluation's *Split accounts*): one lazily-created grab-bag used to carry
+ * billing machinery and per-user settings together, and two writers stopped needing each
+ * other's facts the day the settings moved to `user_preferences`.
  */
-// org — a user's support account carries the billing relationship (Stripe customer,
-// subscription, period), and money stays with the org by the treasury rule. The
-// `isSelfHosting` flag is a creator-side claim but the org prices it.
-export const accounts = pgTable("accounts", {
+// org — a user's billing relationship (Stripe customer, subscription, period) stays with
+// the org by the treasury rule. The `isSelfHosting` flag is a creator-side claim but the
+// org prices it.
+export const billingAccounts = pgTable("billing_accounts", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
 		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
-	anthersSupport: numeric("anthers_support").notNull().default("0.00"), // $/mo to Anthers → Badge + billing
-	creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $/mo directed to creators this cycle
-	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage charge
+	/**
+	 * The directed balance this cycle — the dollars the user's subscription directs at
+	 * creators, which the Badge picker draws down against (`/my-badges`' `budget`).
+	 *
+	 * ⚠️ **A Phase B read target written by the fixture, not yet by the webhook.** The
+	 * balance used to live on `accounts.creator_support_total`, which the split deleted;
+	 * the Badge-model home for it is this row (it is subscription state — what the
+	 * subscription's directed items add to — so it rides beside the period columns).
+	 * Phase B re-points `routes/subscriptions.ts`' budget check at this column and makes
+	 * the subscription webhook write it; until then only the gauntlet's
+	 * `--support-budget` hop writes it (`gauntlet-support.ts` carries that note). If
+	 * Phase B derives the budget from Stripe items at read time instead, this column is
+	 * dropped again — either way the fixture's shape is the settled one.
+	 */
+	directedBudget: numeric("directed_budget").notNull().default("0.00"),
 	stripeCustomerId: text("stripe_customer_id").default(""),
 	/**
 	 * This creator's Stripe Product, for the line on a supporter's invoice.
@@ -61,13 +77,64 @@ export const accounts = pgTable("accounts", {
 	stripeProductId: text("stripe_product_id").default(""),
 	/**
 	 * The tax code that Product was last stamped with. A subscription item has no
-	 * `tax_code` param — the code rides on the Product — so when a creator's gates appear
+	 * `tax_code` param — the code rides on the Product — so when a creator's Badges appear
 	 * or disappear, what their support buys changes and the Product has to follow. This
 	 * column is what lets `ensureCreatorProduct` know a re-stamp is owed without a
 	 * Stripe round-trip to read the Product back.
 	 */
 	stripeProductTaxCode: text("stripe_product_tax_code").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active support subscription
+
+	isActive: boolean("is_active").default(true),
+	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+	canceledAt: timestamp("canceled_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * One user's own settings — one row per user, eagerly creatable.
+ *
+ * 🚨 **One writer**: `services/content-preferences.ts` (the display and Adult states) and
+ * the adulthood-verification flow that stamps `adultVerifiedAt`/`adultVerifiedMethod` on
+ * the API side — a later phase of this split. Nothing else writes here, so a reader of
+ * any column knows exactly which doors could have set it.
+ *
+ * ⚠️ **Rows are creatable eagerly, which is the change the split buys.** The old
+ * `accounts` row appeared on first payment, so every preference writer had to upsert
+ * "because signing up creates no row" and a plain UPDATE silently affected nothing for a
+ * user who had never paid. A row in this table means what it says about somebody who has
+ * never paid, and that trap dies with the table it lived in.
+ *
+ * `themePreference` and `notifyActivityEmail` moved here from `users` (2026-10-03): the
+ * `studioPreferences` precedent — org-served behavior and org-only UI state do not sit on
+ * a `node`-tagged identity row.
+ */
+// org — a user's settings are opinions about org-served behavior (which rungs to meet,
+// whether to appear on the supporters page, light or dark), which is org-side in the
+// current topology: the same reasoning as `parentalControls`.
+export const userPreferences = pgTable("user_preferences", {
+	// The PK, because this row has no other key and there is no second row per user.
+	userId: integer("user_id")
+		.primaryKey()
+		.references(() => users.id, { onDelete: "cascade" }),
+	/**
+	 * Whether this person appears on the public supporters page.
+	 *
+	 * ⭐ **Listed by default, and told so at the moment they start** (Parker, 2026-09-04).
+	 * The wiki promises "a place on the supporters page, if you want one", and the way that
+	 * promise is kept is the heads-up in the support flow rather than an unchecked box — the
+	 * standard shape for this kind of page, and the one that gets a decision out of somebody
+	 * while they are thinking about it instead of never.
+	 *
+	 * 🚨 **A default of `true` only honors the promise for people who SAW the notice.**
+	 * Anybody who supported before it shipped has not been asked, and turning the page on
+	 * would list them without their knowing. The page filters on this column, so switching
+	 * those rows to `false` — or asking them — is a launch step and not an implementation
+	 * detail.
+	 */
+	listedAsSupporter: boolean("listed_as_supporter").notNull().default(true),
 
 	// ── Adult access (the wiki's *Content Standards* § The funding type is the age signal) ──
 	// Three columns and no fourth, and the shortness is the design rather than a first
@@ -87,25 +154,9 @@ export const accounts = pgTable("accounts", {
 	// private right of action. Facial age estimation is out on those grounds and not on
 	// preference.
 	//
-	// The reader's own choice — "do you ever want to be shown Adult work, anywhere?".
+	// The user's own choice — "do you ever want to be shown Adult work, anywhere?".
 	// Separate from the verification because they answer different questions and either
 	// can be true without the other: somebody may verify and later turn the setting off.
-	/**
-	 * Whether this person appears on the public supporters page.
-	 *
-	 * ⭐ **Listed by default, and told so at the moment they start** (Parker, 2026-09-04).
-	 * The wiki promises "a place on the supporters page, if you want one", and the way that
-	 * promise is kept is the heads-up in the support flow rather than an unchecked box — the
-	 * standard shape for this kind of page, and the one that gets a decision out of somebody
-	 * while they are thinking about it instead of never.
-	 *
-	 * 🚨 **A default of `true` only honors the promise for people who SAW the notice.**
-	 * Anybody who supported before it shipped has not been asked, and turning the page on
-	 * would list them without their knowing. The page filters on this column, so switching
-	 * those rows to `false` — or asking them — is a launch step and not an implementation
-	 * detail.
-	 */
-	listedAsSupporter: boolean("listed_as_supporter").notNull().default(true),
 	adultOptIn: boolean("adult_opt_in").notNull().default(false),
 	// When adulthood was verified, or null if it never has been. A timestamp rather than
 	// a boolean so a method that later needs re-verifying has something to measure from.
@@ -115,9 +166,9 @@ export const accounts = pgTable("accounts", {
 	// existing rows ambiguous about what was actually checked.
 	adultVerifiedMethod: text("adult_verified_method"),
 
-	// ── What the reader has asked to meet, per rung ──
+	// ── What the user has asked to meet, per rung ──
 	// `hide` | `blur` | `show`, and two columns rather than one because the two rungs get
-	// SEPARATE controls. A reader who wants difficult work unblurred has said nothing about
+	// SEPARATE controls. A user who wants difficult work unblurred has said nothing about
 	// whether they want explicit work at all, and one setting covering both would make them
 	// say it (the wiki's *Content Standards*).
 	//
@@ -130,14 +181,38 @@ export const accounts = pgTable("accounts", {
 	adultDisplay: text("adult_display"),
 	// ── And per kind of content, whatever the rating ──
 	// A map from a row of the rating matrix (`violence`, `horror`, …) to `hide` | `blur` | `show`,
-	// holding only the rows the reader has answered; the default for the rest lives in
+	// holding only the rows the user has answered; the default for the rest lives in
 	// `@anthers/shared/content-rating` for the same reason as the two columns above.
+	//
+	// 🚨 **Qualified-table reads only.** This column is read through
+	// `sql.identifier("user_preferences")` inside an ON CONFLICT DO UPDATE, where a bare
+	// column could as well be `excluded`'s — see `services/content-preferences.ts`.
 	noteDisplay: jsonb("note_display").$type<Record<string, string>>(),
 
-	isActive: boolean("is_active").default(true),
-	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
-	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-	canceledAt: timestamp("canceled_at", { withTimezone: true }),
+	/**
+	 * UI light/dark preference ("light" | "dark"); null = no account-level choice, so
+	 * the client falls back to the device (localStorage) setting / default.
+	 *
+	 * Moved here from `users` (2026-10-03) — the `studioPreferences` precedent: which way
+	 * the org's own UI paints is not part of a person's portable identity, it means nothing
+	 * on another PDS and travels with no repository, so it does not sit on a `node`-tagged
+	 * identity row.
+	 */
+	themePreference: text("theme_preference"),
+
+	/**
+	 * Whether ACTIVITY email is wanted. Defaults on; the user may turn it off.
+	 *
+	 * There is deliberately no equivalent for the `essential` category — deadlines,
+	 * money and legal changes are not things anyone gets to be un-told, and offering a
+	 * switch that quietly doesn't apply to half the messages would be worse than not
+	 * offering one. The split is enforced in `services/notifications.ts`.
+	 *
+	 * Moved here from `users` (2026-10-03) for the same reason as `themePreference`: the
+	 * person's preference for org-served behavior, not an identity fact.
+	 */
+	notifyActivityEmail: boolean("notify_activity_email").default(true),
+
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -185,7 +260,6 @@ export const accountCycles = pgTable(
 		 */
 		timePoolUndistributed: numeric("time_pool_undistributed").notNull().default("0.00"),
 		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle, incl. any undistributed pool
-		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -891,15 +965,15 @@ export const badges = pgTable(
  * one. A row's absence is the default: no pin, no controls.
  *
  * ⚠️ **Nothing here is a fact about content, and the shapes are chosen to keep it that way.**
- * The lists hold creator ids and Work types — the viewer's opinions about them — and no rating,
+ * The lists hold creator ids and Work types — the user's opinions about them — and no rating,
  * note or access row is touched. A guardian's settings must never leak into anybody else's
  * catalog, which they cannot do from here.
  *
  * See `@anthers/shared/parental-controls` for the policy the rows are read against; this table
  * stores it and decides nothing.
  */
-// org — a viewer-side setting, and viewers are org accounts in the current topology (there
-// is no viewer node). The same reasoning as `libraryItems`: this is one household's opinion
+// org — a user-side setting, and users are org accounts in the current topology (there
+// is no user node). The same reasoning as `libraryItems`: this is one household's opinion
 // about node content, never a fact about the content, so no creator node has any business
 // holding it — least of all the creator whose work a guardian has excluded.
 export const parentalControls = pgTable("parental_controls", {

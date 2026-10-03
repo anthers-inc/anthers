@@ -48,9 +48,6 @@ export const users = pgTable("users", {
 	websiteUrl: text("website_url").default(""),
 	location: text("location").default(""),
 	emailVerified: boolean("email_verified").default(false),
-	// UI light/dark preference ("light" | "dark"); null = no account-level choice, so
-	// the client falls back to the device (localStorage) setting / default.
-	themePreference: text("theme_preference"),
 	/**
 	 * The ATProto identity this account is. **Every account holds one**, either an identity
 	 * the person already had (a Bluesky account, say) or one Anthers issued and hosts for
@@ -146,15 +143,6 @@ export const users = pgTable("users", {
 	 * itself the answer a dispute would ask for.
 	 */
 	termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
-	/**
-	 * Whether ACTIVITY email is wanted. Defaults on; the user may turn it off.
-	 *
-	 * There is deliberately no equivalent for the `essential` category — deadlines,
-	 * money and legal changes are not things anyone gets to be un-told, and offering a
-	 * switch that quietly doesn't apply to half the messages would be worse than not
-	 * offering one. The split is enforced in `services/notifications.ts`.
-	 */
-	notifyActivityEmail: boolean("notify_activity_email").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -247,7 +235,7 @@ export const notifications = pgTable(
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		/** `essential` | `activity` — see `notifyActivityEmail`. */
+		/** `essential` | `activity` — see `userPreferences.notifyActivityEmail` in `subscriptions.ts`. */
 		category: text("category").notNull(),
 		/** What happened, as a stable machine value. Copy lives in the service. */
 		kind: text("kind").notNull(),
