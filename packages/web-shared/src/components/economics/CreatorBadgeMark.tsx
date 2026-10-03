@@ -36,14 +36,14 @@ export interface BadgeArtChoice {
 }
 
 export function CreatorBadgeMark({
-	gateId,
+	badgeId,
 	index,
 	label,
 	art,
 	dim = false,
 	size = "h-12 w-12",
 }: {
-	gateId: number;
+	badgeId: number;
 	/** The rung's position on this creator's ladder, for the default emblem. */
 	index: number;
 	label: string;
@@ -67,9 +67,9 @@ export function CreatorBadgeMark({
 			// shell, and the e2e preview all separate them — and a root-relative src asks the
 			// page's own host, gets HTML or a 404, and silently falls back to the emblem.
 			// Found in the browser; nothing else could have.
-			imageSrc={showUpload ? `${apiBaseUrl()}/api/subscriptions/gates/${gateId}/art` : null}
+			imageSrc={showUpload ? `${apiBaseUrl()}/api/subscriptions/badges/${badgeId}/art` : null}
 			onImageError={() => setFailed(true)}
-			clipId={`badge-gate-${gateId}`}
+			clipId={`badge-mark-${badgeId}`}
 			dim={dim}
 			size={size}
 		/>

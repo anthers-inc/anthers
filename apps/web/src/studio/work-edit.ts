@@ -16,9 +16,9 @@ import type { WorkInput } from "@anthers/web-shared/types";
 
 /** A string that is equal for two saves exactly when they would change nothing different. */
 export function unsavedKey(payload: WorkInput): string {
-	const rows = payload.seedAccess ?? [];
+	const rows = payload.access ?? [];
 	return JSON.stringify({
 		...payload,
-		seedAccess: rows.filter((row) => row.allow || Number(row.price) !== 0),
+		access: rows.filter((row) => row.allow || Number(row.price) !== 0),
 	});
 }

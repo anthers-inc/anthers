@@ -882,7 +882,7 @@ export default function SubscriptionPage() {
 							<div className="text-xl font-bold text-success">{fmt(earnings.poolTotal)}</div>
 						</div>
 						<div>
-							<div className="text-xs text-base-content/50 uppercase">Support income</div>
+							<div className="text-xs text-base-content/50 uppercase">Badge income</div>
 							<div className="text-xl font-bold text-success">{fmt(earnings.seedTotal)}</div>
 						</div>
 						<div>

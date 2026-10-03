@@ -13,7 +13,7 @@ const base: WorkInput = {
 	visibility: "private",
 	streamEnabled: true,
 	downloadEnabled: false,
-	seedAccess: [{ threshold: 0, allow: true, price: "0.00" }],
+	access: [{ threshold: 0, allow: true, price: "0.00" }],
 	originallyReleased: null,
 };
 
@@ -21,7 +21,7 @@ describe("unsavedKey", () => {
 	it("is unchanged when the creator's rungs arrive with no rows ticked", () => {
 		const withRungs: WorkInput = {
 			...base,
-			seedAccess: [
+			access: [
 				{ threshold: 0, allow: true, price: "0.00" },
 				{ threshold: 3, allow: false, price: "0.00" },
 				{ threshold: 6, allow: false, price: "0.00" },
@@ -33,11 +33,11 @@ describe("unsavedKey", () => {
 	it("changes when a rung is ticked or priced", () => {
 		const ticked: WorkInput = {
 			...base,
-			seedAccess: [...(base.seedAccess ?? []), { threshold: 3, allow: true, price: "0.00" }],
+			access: [...(base.access ?? []), { threshold: 3, allow: true, price: "0.00" }],
 		};
 		const priced: WorkInput = {
 			...base,
-			seedAccess: [...(base.seedAccess ?? []), { threshold: 3, allow: false, price: "2.00" }],
+			access: [...(base.access ?? []), { threshold: 3, allow: false, price: "2.00" }],
 		};
 		expect(unsavedKey(ticked)).not.toBe(unsavedKey(base));
 		expect(unsavedKey(priced)).not.toBe(unsavedKey(base));
@@ -46,7 +46,7 @@ describe("unsavedKey", () => {
 	it("changes when the baseline row stops letting everyone in", () => {
 		const closed: WorkInput = {
 			...base,
-			seedAccess: [{ threshold: 0, allow: false, price: "0.00" }],
+			access: [{ threshold: 0, allow: false, price: "0.00" }],
 		};
 		expect(unsavedKey(closed)).not.toBe(unsavedKey(base));
 	});

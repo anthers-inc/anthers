@@ -113,7 +113,7 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 						<>
 							<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
 								<Stat label="Pool Income" value={`$${data.earnings.poolTotal}`} />
-								<Stat label="Support Income" value={`$${data.earnings.seedTotal}`} />
+								<Stat label="Badge Income" value={`$${data.earnings.badgeTotal}`} />
 								<Stat label="Total" value={`$${data.earnings.total}`} />
 								<Stat label="Supporters" value={data.earnings.subscriberCount} />
 							</div>

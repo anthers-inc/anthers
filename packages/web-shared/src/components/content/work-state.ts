@@ -8,7 +8,7 @@
  * behind pure modules. A drifted access rule renders a perfectly plausible badge, which
  * is the kind of defect that cannot be caught by looking at the screen.
  */
-import type { SeedAccessRow, Work } from "../../lib/types";
+import type { AccessResult, AccessRow, Work } from "../../lib/types";
 
 // ─── Access ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ import type { SeedAccessRow, Work } from "../../lib/types";
  * Derived, never stored — the same property `publicAccess` has on the viewer-facing
  * serializer, and deliberately the same rule (`isFree && streamEnabled && released`) so
  * the creator's badge and the reader's experience cannot disagree. The creator's Catalog
- * response carries `seedAccess` in full, so nothing here needs the resolver: with nothing
+ * response carries `access` in full, so nothing here needs the resolver: with nothing
  * given, a viewer qualifies for the baseline row alone.
  *
  * 🚨 That last sentence is the load-bearing assumption, and it is a claim about code in
@@ -32,17 +32,28 @@ import type { SeedAccessRow, Work } from "../../lib/types";
  */
 export type AccessState = "private" | "locked" | "public-access" | "free" | "sale" | "gated";
 
-/** The access rows plus the two switches that decide the state — a Work, or a live form. */
+/**
+ * The access rows plus the two switches that decide the state — a Work, or a live form.
+ *
+ * `access` takes the union because a `Work` carries whichever serialization it arrived
+ * on; only the OWNER's shape holds rows here, and that is the only shape this function
+ * is ever called on — the viewer's carries the resolver's `AccessResult`, which has no
+ * rows to read.
+ */
 export interface AccessShape {
 	visibility?: Work["visibility"];
-	seedAccess?: SeedAccessRow[] | null;
+	access?: AccessRow[] | null | AccessResult;
 	streamEnabled?: boolean;
+}
+
+function accessRowsOf(item: AccessShape): AccessRow[] {
+	return Array.isArray(item.access) ? item.access : [];
 }
 
 export function accessState(item: AccessShape): AccessState {
 	if (item.visibility !== "released") return "private";
 
-	const rows: SeedAccessRow[] = item.seedAccess ?? [];
+	const rows = accessRowsOf(item);
 	if (!rows.some((r) => r.allow)) return "locked";
 
 	const baseline = rows.find((r) => r.threshold === 0);

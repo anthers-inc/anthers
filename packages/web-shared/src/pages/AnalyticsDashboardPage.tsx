@@ -307,8 +307,8 @@ function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 						<div className="text-lg font-bold text-success">${earnings.poolTotal}</div>
 					</div>
 					<div>
-						<div className="text-xs text-base-content/50">Support Income</div>
-						<div className="text-lg font-bold text-success">${earnings.seedTotal}</div>
+						<div className="text-xs text-base-content/50">Badge Income</div>
+						<div className="text-lg font-bold text-success">${earnings.badgeTotal}</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Total</div>

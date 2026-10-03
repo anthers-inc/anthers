@@ -79,9 +79,9 @@ import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
-	buildSeedRows,
-	type SeedRowDraft,
-	serializeSeedRows,
+	buildAccessRows,
+	type AccessRowDraft,
+	serializeAccessRows,
 } from "@anthers/web-shared/post/AccessTables";
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
 import { workUrl } from "@anthers/web-shared/postUrl";
@@ -94,7 +94,7 @@ import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import type {
-	CreatorGate,
+	CreatorBadge,
 	UploadableWorkType,
 	Work,
 	WorkCredit,
@@ -293,10 +293,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const maturityLocked = current.maturityLocked ?? false;
 
 	// Access. The creator's Badge ladder is fetched below because rungs live on the creator,
-	// not on the Work — `buildSeedRows` merges the Work's stored rows onto whatever rungs
+	// not on the Work — `buildAccessRows` merges the Work's stored rows onto whatever rungs
 	// exist, so the rows are the only state worth holding.
-	const [seedRows, setSeedRows] = useState<SeedRowDraft[]>(() =>
-		buildSeedRows([], editing.seedAccess),
+	const [accessRows, setAccessRows] = useState<AccessRowDraft[]>(() =>
+		buildAccessRows([], editing.access),
 	);
 
 	// The credits — the Work's liner notes, who or what made which part. Rows are drafts of the
@@ -389,19 +389,19 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	// The creator's own Badge rungs. Best-effort: without them the table still renders its
 	// baseline row, which is the row that decides Public Access and the only one most
-	// creators will ever touch.
+	// creators will ever touch. Every rung the ladder holds is the creator's own Badge —
+	// there is no `gateType` to filter on, and no cross-issuer rung to exclude.
 	useEffect(() => {
 		let live = true;
-		client.api.subscriptions.gates
+		client.api.subscriptions.badges
 			.$get()
 			.then(async (res) => {
 				if (!res.ok) return;
-				const data = (await res.json()) as { gates: CreatorGate[] };
+				const data = (await res.json()) as { badges: CreatorBadge[] };
 				if (!live) return;
-				const seedGates = (data.gates ?? []).filter((g) => g.gateType === "seed");
 				// Rebuild THROUGH the current rows so a rung arriving after the creator has
 				// already ticked something doesn't discard the tick.
-				setSeedRows((prev) => buildSeedRows(seedGates, serializeSeedRows(prev)));
+				setAccessRows((prev) => buildAccessRows(data.badges ?? [], serializeAccessRows(prev)));
 			})
 			.catch(() => {});
 		return () => {
@@ -475,7 +475,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				: {}),
 			streamEnabled,
 			downloadEnabled,
-			seedAccess: serializeSeedRows(seedRows),
+			access: serializeAccessRows(accessRows),
 			// Sent unconditionally as the whole table: editing a credit list is editing a list,
 			// and an omitted field cannot express "removed them all".
 			credits: creditRows
@@ -610,8 +610,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// Mirrors the server's own definition of the commons (`isFree && streamEnabled &&
 	// released`) against the rows as they stand on the page, so the notes answer for what is
 	// about to be saved rather than for what was loaded.
-	const anyoneAllowed = seedRows.some((r) => r.allow);
-	const baselineRow = seedRows.find((r) => r.threshold === 0);
+	const anyoneAllowed = accessRows.some((r) => r.allow);
+	const baselineRow = accessRows.find((r) => r.threshold === 0);
 	const publicAccessNow = !!baselineRow?.allow && Number(baselineRow.price) === 0 && streamEnabled;
 	// The server refuses to release a file-kind Work with no file (`media_missing`); don't offer
 	// the click that earns it. An upload in flight from this tab is the same state, sooner.
@@ -1050,8 +1050,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 				<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Access</h2>
-					<AccessTables seedRows={seedRows} onSeedChange={setSeedRows} />
-					{seedRows.length === 1 && (
+					<AccessTables rows={accessRows} onRowsChange={setAccessRows} />
+					{accessRows.length === 1 && (
 						<p className="text-xs text-base-content/50">
 							Want to gate this by monthly support?{" "}
 							<Link to={studioUrl("/settings")} className="link">

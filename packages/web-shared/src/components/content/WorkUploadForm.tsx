@@ -30,7 +30,7 @@ import { useState } from "react";
 import { client } from "../../lib/rpc";
 import type { ContentType, Work, WorkInput } from "../../lib/types";
 import { workUploads } from "../../lib/work-uploads";
-import { serializeSeedRows } from "../post/AccessTables";
+import { serializeAccessRows } from "../post/AccessTables";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
 import { fileRules, isFileWorkType } from "./work-media";
@@ -75,7 +75,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 		const input: WorkInput & { type: ContentType } = {
 			type,
 			title: title.trim() || (file ? titleFromFileName(file.name) : ""),
-			seedAccess: serializeSeedRows([{ threshold: 0, label: "Everyone", allow: true, price: "0" }]),
+			access: serializeAccessRows([{ threshold: 0, label: "Everyone", allow: true, price: "0" }]),
 		};
 		try {
 			const res = await client.api.content.works.$post({ json: input });

@@ -28,7 +28,7 @@ import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon, UserPlusIcon } from "@heroicons/react/24/solid";
 
 /** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
-function seedsToGo(moreNeeded: number): string {
+function amountToGo(moreNeeded: number): string {
 	// ⚠️ **A MONEY amount, never a count.** Rendering it as a count
 	// would be wrong in two directions at once now: there is no unit to count, and a
 	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
@@ -143,7 +143,7 @@ export default function InlineUnlock({
 		>
 			{creatorRoute && creatorHandle ? (
 				<Link to={`${profileUrl(creatorHandle)}?tab=badges`} className="btn btn-primary btn-wide">
-					{`Unlock with ${seedsToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
+					{`Unlock with ${amountToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
 				</Link>
 			) : null}
 
