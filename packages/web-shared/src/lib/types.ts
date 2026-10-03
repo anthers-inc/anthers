@@ -862,6 +862,14 @@ export interface CreatorEarnings {
 	heldTotal: string;
 	/** Money already transferred into the connected account (the transfer rows' total). */
 	transferredTotal: string;
+	/**
+	 * What was recovered from this creator's earnings for sales that came back — a refund
+	 * or chargeback after the money had reached them. Never a bill: recovery only ever
+	 * came from earnings that were still held.
+	 */
+	nettedTotal: string;
+	/** The not-yet-recovered remainder of returned money, still open against future earnings. */
+	nettingOpenTotal: string;
 }
 
 export interface SeedAllocation {

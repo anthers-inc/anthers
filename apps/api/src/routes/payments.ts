@@ -28,6 +28,7 @@ import { db } from "@anthers/db/client";
 import {
 	crfLedger,
 	crfSubsidies,
+	disputes,
 	purchases,
 	stripeAccounts,
 	users,
@@ -57,6 +58,7 @@ import { syncSubscriptionToAccount } from "../services/billing.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
+import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
@@ -1084,6 +1086,11 @@ const paymentRoutes = new Hono()
 						reason: "Refunded at Stripe",
 						stripeRefundId:
 							typeof charge.refunds?.data?.[0]?.id === "string" ? charge.refunds.data[0].id : null,
+						// Whether the dashboard refund reversed the creator's transfer — read
+						// off the event's own refund objects, the same fact `refundPurchase` reads
+						// off the Refund object it made. Absent, the creator's share did not come
+						// back and the netting ledger takes the recovery (`services/netting.ts`).
+						transferReversed: charge.refunds?.data?.[0]?.source_transfer_reversal != null,
 					});
 			}
 		} else if (event.type === "charge.dispute.created") {
@@ -1097,6 +1104,14 @@ const paymentRoutes = new Hono()
 			 * the buyer's access being revoked, since `resolveAccess` counts only `completed`
 			 * purchases. The invoice half stays here, because monthly support has no access
 			 * to revoke and the money-record flip already lived in `markInvoiceMoneyReturned`.
+			 *
+			 * The netting half is `services/netting.ts`'s (the one writer of the netting
+			 * ledger): on the PURCHASE path a dispute debits the platform balance and
+			 * reverses nothing on the creator's transfer, so the creator's share is
+			 * unrecovered the moment the dispute lands — a netting row records it for
+			 * recovery from future earnings. The invoice path nets nothing here: support
+			 * money that came back is the reversal half's (`markInvoiceMoneyReturned` plus
+			 * the transfer job's negative-sum handling).
 			 */
 			const dispute = event.data.object as Stripe.Dispute;
 			const intentId =
@@ -1105,6 +1120,25 @@ const paymentRoutes = new Hono()
 					: (dispute.payment_intent?.id ?? null);
 			if (intentId) await markInvoiceMoneyReturned(intentId, "disputed");
 			await recordDisputeCreated(dispute);
+
+			// The netting row, on the purchase path only. The dispute row was just written,
+			// so it is read back by Stripe id — the purchase it names was already flipped to
+			// `disputed`, and the netting amount is read off the row the receipt kept.
+			if (dispute.id) {
+				const [disputeRow] = await db
+					.select()
+					.from(disputes)
+					.where(eq(disputes.stripeDisputeId, dispute.id))
+					.limit(1);
+				if (disputeRow?.purchaseId != null) {
+					const [purchaseRow] = await db
+						.select()
+						.from(purchases)
+						.where(eq(purchases.id, disputeRow.purchaseId))
+						.limit(1);
+					await recordNettingForDispute(disputeRow, purchaseRow ?? null, new Date());
+				}
+			}
 		} else if (event.type === "charge.dispute.closed") {
 			/**
 			 * The dispute's outcome. Stripe sends `charge.dispute.closed` with
@@ -1114,12 +1148,26 @@ const paymentRoutes = new Hono()
 			 * revoked: Anthers never contested, the buyer has their money back and not the
 			 * Work).
 			 *
+			 * On a win the CREATOR's netting is reversed too, by the same rule: the money
+			 * came back to Anthers, so whatever of the creator's share was recovered goes
+			 * back to them (`reverseNettingForWonDispute` — the none-applied case cancels the
+			 * row, the some-applied case also writes the compensating credit).
+			 *
 			 * `charge.dispute.updated` is deliberately NOT handled: it carries the same dispute
 			 * object but fires for every status transition, and the transitions that matter to
 			 * Anthers are the landing (`created`) and the closing (`closed`) — the middle of a
 			 * contest Anthers does not participate in is noise.
 			 */
 			await recordDisputeClosed(event.data.object as Stripe.Dispute);
+			const closed = event.data.object as Stripe.Dispute;
+			if (closed.status === "won" && closed.id) {
+				const [disputeRow] = await db
+					.select()
+					.from(disputes)
+					.where(eq(disputes.stripeDisputeId, closed.id))
+					.limit(1);
+				if (disputeRow) await reverseNettingForWonDispute(disputeRow.id, new Date());
+			}
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db

@@ -53,6 +53,7 @@ import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/const
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { issueRefund, paymentsConfigured } from "../lib/processor.js";
+import { recordNettingForRefund } from "./netting.js";
 
 type Purchase = typeof purchases.$inferSelect;
 
@@ -227,6 +228,7 @@ export async function refundPurchase(
 			: undefined;
 
 	let refundId: string;
+	let transferReversed = false;
 	try {
 		const refund = await issueRefund(
 			{
@@ -256,6 +258,14 @@ export async function refundPurchase(
 		);
 		refundId = refund?.id ?? "";
 		if (!refundId) throw new Error("The refund could not be processed.");
+		// Did Stripe actually reverse the creator's transfer? The reversal is present
+		// exactly when the connected account's balance funded it — the "before the
+		// creator paid out" case, where the share came back at Stripe and netting is
+		// owed nothing. Absent, the share did not come back (a paid-out creator, on whom
+		// Stripe does not carry negative balances for destination charges — the Tax and
+		// Compliance Plan's recorded finding), and the after-transfer recovery belongs
+		// to the netting ledger instead.
+		transferReversed = refund?.source_transfer_reversal != null;
 	} catch (err) {
 		return {
 			ok: false,
@@ -284,6 +294,7 @@ export async function refundPurchase(
 		initiator: opts.initiator,
 		reason: opts.reason,
 		stripeRefundId: refundId,
+		transferReversed,
 		now,
 	});
 }
@@ -294,6 +305,23 @@ export async function refundPurchase(
  * this half — a refund issued from the Stripe dashboard reaches us as a
  * `charge.refunded` event with no route call behind it, and the books have to
  * close the same way whichever door the refund came through.
+ *
+ * ⭐ **The netting write lives here, on the after-transfer case only** (Parker,
+ * 2026-09-14, "Money That Came Back"). A purchase is a destination charge, so the
+ * creator's share already reached them; whether Anthers clawed it back is exactly one
+ * observable fact — did the refund's transfer reversal happen? `refundPurchase` reads it
+ * off the Refund object it made and passes `transferReversed`; the webhook reads it off
+ * the event's refund objects. **Reversed: no netting row** — the share came back at
+ * Stripe, the before-transfer mechanism did its job. **Not reversed: a netting row**
+ * (`recordNettingForRefund`) — the creator had already paid the money out, nothing came
+ * back, and recovery moves to the creator's later earnings instead. `refunds.ts`'s
+ * module invariant holds either way: the creator is reversed to exactly their earnings
+ * and never below zero, because the netting amount is the row's own earnings and the
+ * netting ledger itself never bills.
+ *
+ * The netting is written only when the flip succeeds (not on `alreadyRefunded`), so the
+ * row's own status predicate is the netting's latch against a double webhook delivery —
+ * the same reason the shortfall books inside the same conditional.
  */
 export async function settleRefundedPurchase(
 	purchase: Purchase,
@@ -301,13 +329,15 @@ export async function settleRefundedPurchase(
 		initiator: RefundInitiator;
 		reason?: string;
 		stripeRefundId?: string | null;
+		/** Whether the refund's transfer reversal actually recovered the creator's share at Stripe. */
+		transferReversed?: boolean;
 		now?: Date;
 	},
 ): Promise<RefundResult> {
 	const now = opts.now ?? new Date();
 
 	// Conditional on `completed`, so this is the idempotency latch: our own route
-	// and the webhook Stripe fires for the refund it just made both run it, and
+	// and the webhook Stripe fires for the refund that route just made both run it, and
 	// only the first one writes.
 	const [updated] = await db
 		.update(purchases)
@@ -323,6 +353,13 @@ export async function settleRefundedPurchase(
 		.returning();
 
 	if (!updated) return { ok: true, purchase, shortfall: new Decimal(0), alreadyRefunded: true };
+
+	// The creator's share did not come back at Stripe — recover it from later earnings
+	// instead. The refund id is the netting row's own identity, so a replayed or
+	// redelivered anything finds the row and changes nothing.
+	if (!opts.transferReversed) {
+		await recordNettingForRefund(updated, opts.stripeRefundId ?? updated.stripeRefundId, now);
+	}
 
 	// The remainder absorbs what could not be recovered. Negative, because this is
 	// money leaving the pool that funds free access — the honest reason the Terms

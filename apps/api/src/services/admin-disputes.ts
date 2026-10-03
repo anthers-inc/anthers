@@ -31,7 +31,7 @@
  * at an attribution it cannot make.
  */
 import { db } from "@anthers/db/client";
-import { disputes, invoices, purchases, users } from "@anthers/db/schema";
+import { adminAccounts, disputes, invoices, purchases, users } from "@anthers/db/schema";
 import {
 	cents,
 	DISPUTE_LARGE_AMOUNT,
@@ -73,6 +73,10 @@ export interface DisputeRow {
 	workExists: boolean;
 	creator: { id: number; handle: string; displayName: string } | null;
 	buyer: { id: number; handle: string; displayName: string } | null;
+	/** The admin account that contested this dispute, when a person did. */
+	contestedBy: { id: number; displayName: string } | null;
+	/** When that person submitted evidence to Stripe; null when never contested. */
+	contestedAt: string | null;
 	/**
 	 * Which attention lines this dispute crossed, computed at read time — the whole
 	 * flag mechanism, and empty for an ordinary dispute.
@@ -142,6 +146,7 @@ export async function loadDisputes(now: Date = new Date()): Promise<DisputeRow[]
 
 	const creator = alias(users, "creator");
 	const buyer = alias(users, "buyer");
+	const contestedByAdmin = alias(adminAccounts, "contested_by_admin");
 
 	const rows = await db
 		.select({
@@ -158,12 +163,15 @@ export async function loadDisputes(now: Date = new Date()): Promise<DisputeRow[]
 			buyerId: buyer.id,
 			buyerHandle: buyer.atprotoHandle,
 			buyerDisplayName: buyer.displayName,
+			contestedByAdminId: contestedByAdmin.id,
+			contestedByAdminName: contestedByAdmin.displayName,
 		})
 		.from(disputes)
 		.leftJoin(purchases, eq(disputes.purchaseId, purchases.id))
 		.leftJoin(invoices, eq(disputes.invoiceId, invoices.id))
 		.leftJoin(creator, eq(purchases.creatorId, creator.id))
 		.leftJoin(buyer, eq(disputes.userId, buyer.id))
+		.leftJoin(contestedByAdmin, eq(disputes.contestedByAdminId, contestedByAdmin.id))
 		.orderBy(sql`${disputes.createdAt} DESC`);
 
 	// The repeat flag's second read: purchase disputes per creator in the window. One
@@ -234,6 +242,11 @@ export async function loadDisputes(now: Date = new Date()): Promise<DisputeRow[]
 							displayName: r.buyerDisplayName ?? "",
 						}
 					: null,
+			contestedBy:
+				r.contestedByAdminId != null
+					? { id: r.contestedByAdminId, displayName: r.contestedByAdminName ?? "" }
+					: null,
+			contestedAt: r.dispute.contestedAt?.toISOString() ?? null,
 			flags,
 		};
 	});
@@ -241,6 +254,23 @@ export async function loadDisputes(now: Date = new Date()): Promise<DisputeRow[]
 	// Flagged rows first, then newest — the order a person triages in, and the whole
 	// extent of what a flag does: a sort position and an emphasis, never a state change.
 	return mapped.sort((a, b) => b.flags.length - a.flags.length);
+}
+
+/**
+ * One dispute, in the list's own shape — the contest route's read-back.
+ *
+ * The route could return the service's raw row, but the admin app would then meet the
+ * same dispute in two shapes on one screen: the list's `DisputeRow` and whatever this
+ * returned. Reading back through the list's own join (contested-by and all) keeps one
+ * shape, and the call happens after the submission so the row already carries the act.
+ *
+ * The repeat flag needs the window's other rows to compute, so a single dispute's read is
+ * the same two queries the list runs, scoped to one row — the honest cost of not forking
+ * the mapping, which is where a second serialization shape would drift from the first.
+ */
+export async function loadDispute(id: number, now: Date = new Date()): Promise<DisputeRow | null> {
+	const rows = await loadDisputes(now);
+	return rows.find((r) => r.id === id) ?? null;
 }
 
 /**

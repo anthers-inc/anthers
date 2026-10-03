@@ -19,6 +19,8 @@ import {
 	comments,
 	creatorCredits,
 	creatorGates,
+	creatorNettingApplications,
+	creatorNettings,
 	creatorTransferCredits,
 	creatorTransfers,
 	poolDistributions,
@@ -1414,6 +1416,28 @@ const subscriptionRoutes = new Hono()
 			.from(creatorTransfers)
 			.where(eq(creatorTransfers.creatorId, user.id));
 
+		// The netting figures (Parker, 2026-09-14, "Money That Came Back"): what of this
+		// creator's share of returned money has been recovered from their earnings
+		// (`nettedTotal`), and what is still open (`nettingOpenTotal`) — the two figures
+		// that make the held number honest, because a held credit a netting has consumed
+		// will transfer nothing even though it still reads as held. Both lifetime totals,
+		// like the held and transferred figures beside them. The open figure is the
+		// REMAINING (amount minus what was applied), not the rows' amounts — an exhausted
+		// netting is not open, the same derivation `openNettingFor` applies.
+		const [netted] = await db
+			.select({
+				nettedTotal: sql<string>`COALESCE(SUM(${creatorNettingApplications.amount}) FILTER (
+					WHERE ${creatorNettingApplications.reversedAt} IS NULL
+				), 0)`,
+				openedTotal: sql<string>`COALESCE(SUM(${creatorNettings.amount}), 0)`,
+			})
+			.from(creatorNettings)
+			.leftJoin(
+				creatorNettingApplications,
+				eq(creatorNettingApplications.nettingId, creatorNettings.id),
+			)
+			.where(and(eq(creatorNettings.creatorId, user.id), isNull(creatorNettings.reversedAt)));
+
 		return c.json({
 			poolTotal: earnings.poolTotal,
 			seedTotal: earnings.seedTotal,
@@ -1435,6 +1459,22 @@ const subscriptionRoutes = new Hono()
 			heldTotal: new Decimal(split.heldTotal).toFixed(2),
 			/** Money already transferred into the connected account, read from the coverage rows. */
 			transferredTotal: new Decimal(moved.transferredTotal).toFixed(2),
+			/**
+			 * What was recovered from this creator's earnings for sales that came back — a
+			 * refund or chargeback after the money had reached them. Never a bill: recovery
+			 * only ever came from earnings that were still held, and a won dispute's
+			 * reversal hands back what was recovered.
+			 */
+			nettedTotal: new Decimal(netted.nettedTotal).toFixed(2),
+			/**
+			 * The not-yet-recovered remainder of returned money — still open against future
+			 * earnings. Shown beside the netted figure so a creator can see the whole
+			 * record, not only the part that has landed.
+			 */
+			nettingOpenTotal: Decimal.max(
+				0,
+				new Decimal(netted.openedTotal).minus(new Decimal(netted.nettedTotal)),
+			).toFixed(2),
 		});
 	})
 

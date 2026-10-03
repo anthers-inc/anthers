@@ -28,12 +28,13 @@ import { RESOURCE_THRESHOLDS } from "@anthers/shared/resource-thresholds";
 import { zValidator } from "@hono/zod-validator";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
 import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
-import { disputeStanding, loadDisputes } from "../services/admin-disputes.js";
+import { disputeStanding, loadDispute, loadDisputes } from "../services/admin-disputes.js";
 import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
 import { closePackage } from "../services/close-package.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
@@ -44,6 +45,11 @@ import {
 	sortDeadlines,
 } from "../services/deadlines.js";
 import { deliveryForReport } from "../services/delivery-events.js";
+import {
+	DisputeContestError,
+	type DisputeContestRefusal,
+	submitDisputeEvidence,
+} from "../services/disputes.js";
 import {
 	counterNoticeRestoreWindow,
 	dmcaSummary,
@@ -487,15 +493,66 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// ── Disputes ─────────────────────────────────────────────────────────────
 	// The operator's dispute list and the platform's dispute standing — the read half of
-	// the never-contest posture (Parker, 2026-09-14/15): a person evaluates a chargeback
-	// here and perhaps contests an exceptional one, and nothing on this surface submits
-	// anything. The flags (repeat / large / self-pay) are computed at read time in the
-	// service, never stored; `services/disputes.ts` stays the one writer of the rows.
+	// the never-contest-by-default posture (Parker, 2026-09-14/15): a person evaluates a
+	// chargeback here and perhaps contests an exceptional one, and nothing on this surface
+	// submits anything. The flags (repeat / large / self-pay) are computed at read time in
+	// the service, never stored; `services/disputes.ts` stays the one writer of the rows.
 	.get("/disputes", async (c) => {
 		const now = new Date();
 		const [items, standing] = await Promise.all([loadDisputes(now), disputeStanding(now)]);
 		return c.json({ items, standing });
 	})
+
+	// The one contest door. Contested is a person's explicit choice, never the default,
+	// and this route is the only caller of `submitDisputeEvidence` — nothing automatic
+	// can reach it. The logic (window check, the once-rule, the recording) is the
+	// service's; each refusal reason answers with its own words so the operator sees
+	// *why*, not just "refused".
+	.post(
+		"/disputes/:id/contest",
+		zValidator(
+			"json",
+			z.object({
+				product_description: z.string().trim().min(1).max(20_000),
+				customer_email_address: z.string().trim().email().max(500).optional(),
+				service_date: z.string().trim().max(200).optional(),
+				uncategorized_text: z.string().trim().max(20_000).optional(),
+			}),
+			invalidBody,
+		),
+		async (c) => {
+			const id = Number(c.req.param("id"));
+			if (!Number.isInteger(id)) return c.json({ error: "No dispute with that id" }, 404);
+			try {
+				await submitDisputeEvidence({
+					disputeId: id,
+					adminId: c.get("admin").id,
+					evidence: c.req.valid("json"),
+				});
+			} catch (err) {
+				if (!(err instanceof DisputeContestError)) throw err;
+				const words: Record<DisputeContestRefusal, [string, number]> = {
+					not_found: ["No dispute with that id", 404],
+					closed: ["The dispute is closed — the bank has already ruled.", 409],
+					past_deadline: ["The evidence window has closed.", 409],
+					already_contested: [
+						"This dispute has already been contested — Visa's CE3.0 rule allows one submission.",
+						409,
+					],
+					unconfigured: ["Payments are not configured.", 503],
+				};
+				const [error, status] = words[err.reason];
+				// The tuple's number half is a union of literal status codes; the widening
+				// here is for Hono's ContentfulStatusCode type, which a plain number isn't.
+				return c.json({ error, code: err.reason }, status as ContentfulStatusCode);
+			}
+			// The read-back is the list's own shape, so the admin app meets this dispute
+			// in one form everywhere it appears — the row now carries the act itself.
+			const dispute = await loadDispute(id);
+			if (!dispute) return c.json({ error: "No dispute with that id" }, 404);
+			return c.json({ dispute });
+		},
+	)
 
 	// ── Data-rights requests ────────────────────────────────────────────────
 	// The operator's side of the Privacy Policy's 30-day promise. This exists because a deadline

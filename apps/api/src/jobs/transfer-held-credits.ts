@@ -54,9 +54,23 @@
  * transfer id carries a `tr_local_zerosum_` prefix, so it can never collide with a real
  * Stripe id and a reader (or a future reversal build) can tell them apart on sight.
  * Marking the set covered is what keeps the next run from re-reading it. A sum that is
- * negative is a data defect — a correction outweighing the credits it was summed with —
- * and is left uncovered with a log line, because money that came back is the reversal
- * build's to move, not this job's to guess at.
+ * negative is the monthly-support reversal half's input — a credit the reversal build
+ * (`markInvoiceMoneyReturned` and the correction credits) has already written — and is
+ * left uncovered with a log line, because that money is that build's to move, not this
+ * job's to guess at.
+ *
+ * ⭐ **Netting runs here — this is the recovery moment (Parker, 2026-09-14, "Money That
+ * Came Back").** Before a creator's held sum moves, the netting module first reduces it
+ * by that creator's open netting — their share of returned money (a dispute or an
+ * after-transfer refund), recorded in `creator_nettings` and applied through
+ * `services/netting.ts`, the one writer of that ledger. The order is: negative pre-netting
+ * sum skips untouched (reversal build's input), otherwise netting applies, and the
+ * post-netting sum is what transfers — floored at zero, so netting that exceeds held
+ * credits transfers nothing and the netting stays open. **The crash-window latch is
+ * unchanged by netting**: the idempotency key names the sorted coverage SET, netting
+ * changes the amount but never the set, so a retry replays the same key and Stripe
+ * returns the original transfer — see `applyNettingsToHeldCredits` for the full
+ * crash-window reasoning and the one residual edge it accepts.
  *
  * 🚨 **Not while suspended.** `payoutStanding().ready` does not know about suspensions;
  * a suspended creator's money is held behind a review
@@ -79,6 +93,7 @@ import {
 import Decimal from "decimal.js";
 import { and, eq, lt, notInArray } from "drizzle-orm";
 import { createTransfer, paymentsConfigured } from "../lib/processor.js";
+import { applyNettingPlan, nettingPlanFor } from "../services/netting.js";
 import { payoutStanding } from "../services/payouts.js";
 
 export interface TransferHeldCreditsData {
@@ -201,19 +216,41 @@ async function transferOneCreator(
 		.limit(1);
 	if (row?.suspendedAt != null) return false;
 
-	// The sum, in Decimal — money is never floated.
-	const sum = CENTS(credits.reduce((total, c) => total.plus(c.amount), new Decimal(0)));
+	// The sum, in Decimal — money is never floated. This is the PRE-NETTING sum: the credits
+	// as settlement credited them, before any returned money is recovered from them.
+	const rawSum = CENTS(credits.reduce((total, c) => total.plus(c.amount), new Decimal(0)));
 	const ids = credits.map((c) => c.id);
 	const key = idempotencyKeyFor(creatorId, ids);
 
-	// A zero sum closes the set with a local row and no Stripe call — the set is
-	// settled-up, and marking it covered is what keeps the next run from re-reading it.
 	// A negative sum must never transfer (the platform does not pull money from a
-	// creator's connected account here); it is left uncovered and screamed about,
-	// because money that came back is the reversal build's to move, and a correction
-	// that outweighs its set is a defect a human should hear about.
+	// creator's connected account here); it is left uncovered and screamed about, because
+	// money that came back is the monthly-support reversal half's to move, and a
+	// correction that outweighs its set is a defect a human should hear about. Netting is
+	// deliberately NOT applied to a negative set: these credits are the reversal build's
+	// subject, and consuming them here would spend its input.
+	if (rawSum.isNegative()) {
+		console.error(
+			`transfer: creator ${creatorId}'s held set sums to ${rawSum.toFixed(2)} — a correction outweighs the credits it was summed with. Leaving it uncovered for the reversal build.`,
+		);
+		return false;
+	}
+
+	// ⭐ The netting step (Parker, 2026-09-14, "Money That Came Back"): before this
+	// creator's held sum moves, open netting — their share of returned money — is recovered
+	// from it first. The plan is computed read-only here, and its application rows land in
+	// the SAME transaction as the transfer row below (or the zero-sum close), because the
+	// recovery and the movement are one decision — see `nettingPlanFor` for the full
+	// crash-window reasoning and why the idempotency key (the coverage SET, which netting
+	// never changes) is untouched by this.
+	const plan = await nettingPlanFor(creatorId, credits);
+	const sum = plan.sum;
+
+	// The netting consumed everything: nothing moves, and the set still closes as a
+	// zero-sum set — the "netting exceeds held" case. The netting's own remainder stays
+	// open for the next run; a creator is never sent a bill for it.
 	if (sum.isZero()) {
 		await db.transaction(async (tx) => {
+			await applyNettingPlan(tx, plan.applications);
 			const [transfer] = await tx
 				.insert(creatorTransfers)
 				.values({
@@ -233,15 +270,10 @@ async function transferOneCreator(
 		});
 		return true;
 	}
-	if (sum.isNegative()) {
-		console.error(
-			`transfer: creator ${creatorId}'s held set sums to ${sum.toFixed(2)} — a correction outweighs the credits it was summed with. Leaving it uncovered for the reversal build.`,
-		);
-		return false;
-	}
 
 	// Payments unconfigured is a 503-shaped refusal everywhere else; here it is a
-	// non-fatal skip — the credits accumulate and the next run moves them.
+	// non-fatal skip — the credits accumulate and the next run moves them. The netting
+	// plan is not applied: nothing moved, so nothing was recovered.
 	if (!paymentsConfigured()) return false;
 
 	// The connected account the money goes to. `payoutStanding().ready` says Stripe will
@@ -267,8 +299,8 @@ async function transferOneCreator(
 	);
 	if (!transfer) return false;
 
-	// The Stripe id and the coverage rows land in one transaction, because they describe
-	// one decision — see the module docblock.
+	// The Stripe id, the coverage rows, and the netting recovery land in one transaction,
+	// because they describe one decision — see the module docblock.
 	await db.transaction(async (tx) => {
 		const [written] = await tx
 			.insert(creatorTransfers)
@@ -287,6 +319,7 @@ async function transferOneCreator(
 			.insert(creatorTransferCredits)
 			.values(ids.map((creditId) => ({ transferId: written.id, creditId })))
 			.onConflictDoNothing();
+		await applyNettingPlan(tx, plan.applications);
 	});
 
 	return true;

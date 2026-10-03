@@ -122,10 +122,14 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 							<div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
 								<Stat label="Held" value={`$${data.earnings.heldTotal}`} />
 								<Stat label="Transferred" value={`$${data.earnings.transferredTotal}`} />
+								<Stat label="Recovered" value={`$${data.earnings.nettedTotal}`} />
+								<Stat label="Still Recovering" value={`$${data.earnings.nettingOpenTotal}`} />
 							</div>
 							<p className="mt-2 text-xs text-base-content/50">
 								Held is settled money waiting out its 14-day hold; transferred is what has moved
-								into your Stripe balance.{" "}
+								into your Stripe balance. Recovered is what was taken from held earnings for sales
+								that came back â a refund or chargeback after the money had reached you â and never
+								a bill; still recovering is the remainder waiting on future earnings.{" "}
 								{data.earnings.cycle &&
 									`Cycle: ${new Date(data.earnings.cycle).toLocaleDateString("en-US", {
 										month: "long",

@@ -905,6 +905,14 @@ export default function SubscriptionPage() {
 							<div className="text-xs text-base-content/50 uppercase">Transferred</div>
 							<div className="text-xl font-bold">{fmt(earnings.transferredTotal)}</div>
 						</div>
+						<div>
+							<div className="text-xs text-base-content/50 uppercase">Recovered</div>
+							<div className="text-xl font-bold">{fmt(earnings.nettedTotal)}</div>
+						</div>
+						<div>
+							<div className="text-xs text-base-content/50 uppercase">Still Recovering</div>
+							<div className="text-xl font-bold">{fmt(earnings.nettingOpenTotal)}</div>
+						</div>
 					</div>
 					{earnings.cycle && (
 						<p className="text-xs text-base-content/50 mt-2">
