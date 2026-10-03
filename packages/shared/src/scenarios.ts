@@ -46,7 +46,6 @@ import {
 	modelAt,
 	NO_STAFFING,
 	PAY_DECAY,
-	PHASE_ACCOUNTS,
 	payingBadgeMix,
 	remainderPerPayingAccount,
 	staffingForPhase,
@@ -575,18 +574,6 @@ export function takeHomeComparison(): TakeHomeRow[] {
  */
 export const MODELLED_PAYING_SHARE = 0.3;
 
-export interface LadderRung {
-	phase: number;
-	accounts: number;
-	creators: number;
-	staff: number;
-	/** Admin as a share of charitable revenue at this rung's ceiling, e.g. "17%". */
-	adminPct: string;
-	/** Whether Admin clears the 30% board policy here. */
-	adminHealthy: boolean;
-	solvent: boolean;
-}
-
 /**
  * Each rung's ceiling, and what the books look like standing on it.
  *
@@ -598,22 +585,6 @@ export interface LadderRung {
  * it explicitly — a model that hid it by sizing the plan to the ceiling would only ever
  * confirm itself.
  */
-export function growthLadder(): LadderRung[] {
-	return PHASE_ACCOUNTS.map((accounts, i) => {
-		const staffing = staffingForPhase(i + 1);
-		const m = modelAt({ accounts, payingShare: MODELLED_PAYING_SHARE, staffing });
-		return {
-			phase: i + 1,
-			accounts,
-			creators: Math.round(m.creators),
-			staff: staffing.staff,
-			adminPct: Number.isFinite(m.adminRatio) ? `${(m.adminRatio * 100).toFixed(0)}%` : "—",
-			adminHealthy: m.adminHealthy,
-			solvent: m.solvent,
-		};
-	});
-}
-
 export interface Landmark {
 	label: string;
 	accounts: number | null;

@@ -92,7 +92,6 @@ import {
 	directedSupportWorstCase,
 	edBandSensitivity,
 	freePotSensitivity,
-	growthLadder,
 	MODELLED_PAYING_SHARE,
 	membershipComparison,
 	PAYING_BADGE_MIX,
@@ -810,26 +809,6 @@ function renderLandmarksMarkdown(): string {
 	].join("\n");
 }
 
-function renderLadderVerdictMarkdown(): string {
-	return [
-		`What the books say when standing on each ceiling, carrying that rung's own planned staffing. **The ceilings are policy and are not derived** — this is only the verdict beside them.`,
-		"",
-		table(
-			["Phs", "Accounts", "Creators", "Staff/mo", "Admin", "Charity-healthy"],
-			["--:", "--:", "--:", "--:", "--:", ":-:"],
-			growthLadder().map((r) => [
-				String(r.phase),
-				r.accounts.toLocaleString("en-US"),
-				r.creators.toLocaleString("en-US"),
-				r.staff === 0 ? "—" : `$${r.staff.toLocaleString("en-US")}`,
-				r.adminPct,
-				r.adminHealthy ? "✅" : r.solvent ? "⚠️ solvent only" : "🚫 underwater",
-			]),
-		),
-		"",
-		`**Rungs 1–3 come back underwater on purpose.** That is Parker's own subsidy, and a model that hid it — by sizing each rung's plan to what that rung can afford — could only ever confirm itself. Admin's share then *declines* with scale, which is the design target the wiki's *How the Programs Are Funded* states.`,
-	].join("\n");
-}
 
 function renderPayingShareMarkdown(): string {
 	const rows = payingShareSensitivity();
@@ -1049,7 +1028,7 @@ interface Block {
 	allowRetired?: string;
 }
 
-const LADDER = "20-29 Strategy & Design/24 - Growth Phases and Join Quotas.md";
+const LADDER = "20-29 Strategy & Design/20 - Organizational Structure.md"; // the self-sufficiency blocks moved here 2026-10-02 when the quota doc was retired
 
 /**
  * Generated regions in markdown that lives in **this repository**.
@@ -1166,7 +1145,6 @@ const BLOCKS: Block[] = [
 	// The growth ladder. 61.01 is canonical for the RUNGS, which are policy and stay
 	// hand-written; everything derived from them is generated here.
 	{ file: LADDER, key: "growth-landmarks", render: renderLandmarksMarkdown },
-	{ file: LADDER, key: "growth-ladder", render: renderLadderVerdictMarkdown },
 	{ file: LADDER, key: "growth-paying-share", render: renderPayingShareMarkdown },
 	{ file: LADDER, key: "growth-seed-mix", render: renderSeedMixMarkdown },
 	{ file: LADDER, key: "growth-ed-band", render: renderEdBandMarkdown },
