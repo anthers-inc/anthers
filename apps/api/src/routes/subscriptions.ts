@@ -92,6 +92,7 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { orgOwnerUserId } from "../services/anthers-badges.js";
 import { creditedSeconds } from "../services/attention-ranges.js";
 import {
 	ensureAnthersProduct,
@@ -1545,6 +1546,10 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
+		// The org identity, so its rungs can be excluded from the directed budget's
+		// arithmetic — see `allocated` below for why.
+		const org = await orgOwnerUserId();
+
 		const result = await db
 			.select({
 				badge: badges,
@@ -1558,7 +1563,17 @@ const subscriptionRoutes = new Hono()
 			.where(and(eq(userBadges.userId, user.id), eq(userBadges.billingCycle, cycle)));
 
 		const budget = await directedBudgetFor(user.id);
-		const allocated = result.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
+		// 🚨 **The budget is CREATOR-DIRECTED dollars, so the org's rungs are not
+		// "allocated" against it.** `directedBudget` is written from the charge's
+		// creator-destination items (`directedSupportFromSub` filters to
+		// `creatorId !== null` — the Anthers line is the null destination), so the money
+		// the viewer holds on the org's ladder draws from the subscription's Anthers
+		// side and never from this budget. Summing it here would double-count the same
+		// charge and quietly shrink the picker until a mid-ladder walk ran out of
+		// "budget" the viewer had paid for.
+		const allocated = result
+			.filter((r) => r.badge.creatorId !== org)
+			.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
 
 		return c.json({
 			badges: result.map((r) => ({
@@ -1617,12 +1632,27 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "You have nothing to give this cycle" }, 400);
 			}
 
+			// The org identity, for the allocation check's exclusion — see the comment
+			// beside `currentAllocated` below.
+			const org = await orgOwnerUserId();
+
 			// The Badge itself: its threshold is the amount this pick directs, and the
 			// route never takes a number from the request — the pick names the rung.
 			const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
 			if (!badge) return c.json({ error: "No such Badge" }, 404);
 			if (badge.creatorId === user.id) {
 				return c.json({ error: "You cannot hold your own Badge" }, 400);
+			}
+			// 🚨 **Anthers' own Badges are not a directed pick.** Money on the org's ladder
+			// is the subscription's Anthers line, changed where the Anthers amount is
+			// changed (signup and the dashboard's Anthers side) — routing it through the
+			// directed picker would draw it from the creator budget, which is the same
+			// conflation the allocation check excludes the org from.
+			if (badge.creatorId === org) {
+				return c.json(
+					{ error: "Anthers' own Badges are chosen with your Anthers amount, not a creator pick" },
+					400,
+				);
 			}
 			const amountNum = Number(badge.threshold);
 
@@ -1650,6 +1680,11 @@ const subscriptionRoutes = new Hono()
 			}
 
 			// Check total allocated (excluding this creator's holding) against the budget.
+			// 🚨 **The org's rungs are not "allocated" against the directed budget** — the
+			// same exclusion `/my-badges` GET applies, for the same reason: the budget is
+			// the charge's creator-destination items, and money held on the org's ladder
+			// draws from the subscription's Anthers side. Counting it here would let an
+			// Anthers Badge shrink a budget the viewer paid separately for.
 			const [currentAllocated] = await db
 				.select({
 					total: sql<string>`COALESCE(SUM(${badges.threshold}), 0)`,
@@ -1661,6 +1696,7 @@ const subscriptionRoutes = new Hono()
 						eq(userBadges.userId, user.id),
 						eq(userBadges.billingCycle, cycle),
 						sql`${badges.creatorId} != ${badge.creatorId}`,
+						sql`${badges.creatorId} != ${org}`,
 					),
 				);
 
