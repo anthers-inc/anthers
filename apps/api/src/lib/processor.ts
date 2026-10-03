@@ -253,3 +253,38 @@ export async function retrieveTransfer(transferId: string): Promise<Stripe.Trans
 			.catch(() => null)) ?? null
 	);
 }
+
+/**
+ * Mirrors `stripe.disputes.update` — submitting evidence to a dispute. The contest path
+ * (`services/disputes.ts`, the admin route's only door to this) is the sole caller, and it
+ * sends `submit: true` so the evidence goes to the bank rather than staging in the
+ * Dashboard: a person chose to contest, and a staged submission nothing finished would
+ * read as contested when it was not.
+ *
+ * The params type carries Visa Compelling Evidence 3.0's enhanced shape too
+ * (`evidence.enhanced_evidence.visa_compelling_evidence_3`), which the SDK exposes. The
+ * confirmed 2026-10-02 finding is that Stripe **autofills** the CE3.0 half —
+ * `customer_purchase_ip`, `customer_email_address`, and the two prior undisputed
+ * transactions — from the transaction history it holds as the processor, so a contest
+ * submits the plain evidence fields (what the Work was, when, to whom) and lets Stripe
+ * assemble the program evidence itself.
+ */
+export async function updateDisputeEvidence(
+	disputeId: string,
+	params: Stripe.DisputeUpdateParams,
+): Promise<Stripe.Dispute | null> {
+	return (await getStripe()?.disputes.update(disputeId, params)) ?? null;
+}
+
+/**
+ * Mirrors `stripe.disputes.retrieve` — a dispute by id, or null when unknown. The contest
+ * path uses this to read the dispute back after submitting evidence, so the record shows
+ * the state Stripe reports rather than the state we assumed.
+ */
+export async function retrieveDispute(disputeId: string): Promise<Stripe.Dispute | null> {
+	return (
+		(await getStripe()
+			?.disputes.retrieve(disputeId)
+			.catch(() => null)) ?? null
+	);
+}

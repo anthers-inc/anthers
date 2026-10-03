@@ -9,6 +9,7 @@ import {
 	boolean,
 	index,
 	integer,
+	jsonb,
 	numeric,
 	pgTable,
 	serial,
@@ -16,6 +17,7 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { adminAccounts } from "./admin.js";
 import { users } from "./auth.js";
 import { works } from "./content.js";
 import { creatorCredits, invoices } from "./subscriptions.js";
@@ -232,6 +234,30 @@ export const disputes = pgTable(
 		 * the money coming back (the purchase is restored), a `lost` one is it gone for good.
 		 */
 		outcome: text("outcome"),
+		/**
+		 * The admin account that chose to contest this dispute — set once, by the contest
+		 * submission, never after. Contested is a person's explicit act (Parker, 2026-09-15:
+		 * the deliberate exception for egregious/suspicious/large disputes; never the
+		 * default), so the row names who made it the same way every operator action does.
+		 * `set null`, because the dispute record outlives the admin account.
+		 */
+		contestedByAdminId: integer("contested_by_admin_id").references(() => adminAccounts.id, {
+			onDelete: "set null",
+		}),
+		/**
+		 * When that person submitted evidence to Stripe. Visa's CE3.0 rule is one attempt
+		 * only, so this column is also the once-guard: a second submission finds it set and
+		 * is refused before anything reaches Stripe.
+		 */
+		contestedAt: timestamp("contested_at", { withTimezone: true }),
+		/**
+		 * The evidence exactly as it was sent — the honest record of what Anthers told the
+		 * bank, the same way `admin_account_events.detail` records an operator action.
+		 * jsonb rather than one column per field, because Stripe's evidence object is
+		 * Stripe's vocabulary and gains fields without our schema noticing; what we sent
+		 * is history, not state something reads.
+		 */
+		contestedEvidence: jsonb("contested_evidence"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

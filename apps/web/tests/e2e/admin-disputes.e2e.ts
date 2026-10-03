@@ -131,6 +131,24 @@ test("the dispute surfaces render", async ({ page }) => {
 	await expect(page.getByText("large", { exact: true }).first()).toBeVisible();
 	await expect(page.getByText("the buyer's access is revoked while it is open")).toBeVisible();
 
+	// The contest action: an open, in-window dispute offers it, and the form names the
+	// stakes (one submission only, the fee returned only on a win) before anything is
+	// sent. The submission itself is the API suites' subject — a browser run's Stripe
+	// client is whatever the environment configured, so asserting an outcome here would
+	// pass in CI and fail on any machine with a key in `.env` (the PR #142 trap).
+	await page.getByRole("button", { name: "Contest…" }).click();
+	await expect(page.getByRole("button", { name: "Submit Evidence to Contest" })).toBeVisible();
+	await expect(page.getByText(/Visa allows one submission per dispute/).first()).toBeVisible();
+	await expect(page.getByLabel("What was sold", { exact: false }).first()).toBeVisible();
+	await page.getByRole("button", { name: "Close", exact: true }).click();
+	// The toggle returns to its closed label — the form is gone, the offer is not.
+	await expect(page.getByRole("button", { name: "Close", exact: true })).not.toBeVisible();
+	await expect(page.getByRole("button", { name: "Contest…" })).toBeVisible();
+
+	// The footer states the standing policy, not "decision-support only" — contesting is
+	// now a real action on this page, the deliberate exception rather than the default.
+	await expect(page.getByText(/never contests a dispute by default/i).first()).toBeVisible();
+
 	// Home: the standing panel now carries the count, and the deadline card appears.
 	await page.getByRole("link", { name: "Home", exact: true }).click();
 	await expect(page.getByText("Dispute Standing").first()).toBeVisible();
