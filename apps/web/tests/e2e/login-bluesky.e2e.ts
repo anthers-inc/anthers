@@ -53,6 +53,41 @@ test.describe("logging in with Bluesky", () => {
 		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/signup");
 	});
 
+	// ⭐ **One Bluesky door, two handles on it** — typing a handle into the main field runs
+	// the same ceremony the button's modal does, and this is the pin. `signInWithBluesky`
+	// could regress to the modal-only path with nothing failing, because the button keeps
+	// working; only the field would silently stop routing, and nothing else in the suite
+	// exercises the field with a handle.
+	test("typing a handle takes the same door, without opening the modal", async ({ page }) => {
+		await page.goto("/login");
+
+		let payload: unknown = null;
+		await page.route("**/api/atproto/auth", async (route) => {
+			payload = route.request().postDataJSON();
+			// A same-origin URL, so the browser goes somewhere harmless instead of to a real
+			// consent screen. Nothing after the handoff is this spec's subject — the
+			// unresolvable-handle refusal and the no-minting rule are pinned by the tests
+			// around this one, server-side in `atproto-login.test.ts`.
+			await route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({ authorization_url: "/login?handed-off=1" }),
+			});
+		});
+
+		// Typed WITH the leading `@`, because that is how people write a handle and it is
+		// not part of one — stripping it is a real behavior the flow downstream depends on.
+		await page.locator('input[autocomplete="username"]').fill("@alice.bsky.social");
+		await page.getByRole("button", { name: /^continue$/i }).click();
+
+		await expect.poll(() => payload).not.toBeNull();
+		expect(payload).toMatchObject({ handle: "alice.bsky.social", intent: "login" });
+
+		// The modal never opened: the field is the second handle on the door, not a
+		// redirect into the first one.
+		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
+	});
+
 	test("a handle that resolves to nothing is refused in place", async ({ page }) => {
 		await page.goto("/login");
 		await page.getByRole("button", { name: /log in with bluesky/i }).click();
@@ -60,8 +95,16 @@ test.describe("logging in with Bluesky", () => {
 		// Well-formed and unresolvable. `.invalid` is reserved by RFC 2606 so it can never
 		// resolve — which makes this deterministic whether or not the runner has a network,
 		// since both an answered lookup and an unreachable one end in a refusal.
+		//
+		// 🚨 Scoped to the modal because the card's own submit is ALSO "Continue" — the
+		// field behind the backdrop takes a handle now, so the modal's button lost the
+		// name it used to own alone. An unscoped role selector here would press whichever
+		// rendered first, which is the card's, and hand a blank field to the flow.
 		await page.getByLabel("Bluesky handle").fill("nobody.example.invalid");
-		await page.getByRole("button", { name: /^continue$/i }).click();
+		await page
+			.locator(".modal-box")
+			.getByRole("button", { name: /^continue$/i })
+			.click();
 
 		// 🚨 Scoped to the modal, and this is not tidiness. A bare `.text-error` also matches
 		// the red asterisk on the required field behind the backdrop — so the assertion
@@ -90,12 +133,12 @@ test.describe("logging in with Bluesky", () => {
 
 	test("canceling leaves the sign-in form exactly as it was", async ({ page }) => {
 		await page.goto("/login");
-		await page.locator('input[autocomplete="email"]').fill("alice@example.com");
+		await page.locator('input[autocomplete="username"]').fill("alice@example.com");
 
 		await page.getByRole("button", { name: /log in with bluesky/i }).click();
 		await page.getByRole("button", { name: /^cancel$/i }).click();
 
 		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
-		await expect(page.locator('input[autocomplete="email"]')).toHaveValue("alice@example.com");
+		await expect(page.locator('input[autocomplete="username"]')).toHaveValue("alice@example.com");
 	});
 });

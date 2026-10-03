@@ -39,7 +39,7 @@ interface Quote {
  * an "estimated" figure here would be the flat-rate charge this flow exists to retire,
  * one screen earlier.
  */
-function receiptFromQuote(q: Quote, sessionBuyerTotal: string | null, sessionTax: string | null) {
+function receiptFromQuote(q: Quote, sessionBuyerTotal: number | null, sessionTax: number | null) {
 	const n = (s: string) => Number(s);
 	const lines: { label: string; amount: number; note?: string; added?: boolean }[] = [];
 	// Everything except tax comes OUT of the listed price. The retired fee fields
@@ -50,14 +50,16 @@ function receiptFromQuote(q: Quote, sessionBuyerTotal: string | null, sessionTax
 	if (sessionTax !== null) {
 		lines.push({
 			label: "Sales tax",
-			amount: n(sessionTax),
+			// `sessionTax` is already a number of dollars (sessionTotals converts cents).
+			amount: sessionTax,
 			note: "from your address",
 			added: true,
 		});
 	}
 	return {
 		price: n(q.amount),
-		buyerTotal: sessionBuyerTotal !== null ? n(sessionBuyerTotal) : n(q.amount),
+		// `sessionBuyerTotal` is already a number of dollars (sessionTotals converts cents).
+		buyerTotal: sessionBuyerTotal !== null ? sessionBuyerTotal : n(q.amount),
 		lines,
 		creatorReceives: n(q.amount) - n(q.processingFee),
 	};
@@ -243,7 +245,7 @@ function CheckoutForm({
 					? "Processing..."
 					: receipt
 						? totals?.buyerTotal
-							? `Buy for $${Number(totals.buyerTotal).toFixed(2)}`
+							? `Buy for $${totals.buyerTotal.toFixed(2)}`
 							: `Buy for $${receipt.buyerTotal.toFixed(2)} + tax`
 						: "Loading price…"}
 			</button>

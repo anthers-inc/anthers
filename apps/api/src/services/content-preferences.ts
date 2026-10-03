@@ -446,11 +446,12 @@ export async function beginAdultVerification(
 
 	try {
 		const customerId = await ensureStripeCustomer(userId, email);
+		// No `payment_method_types` — the live API version removed the parameter (the
+		// Dashboard's payment-method settings govern what a SetupIntent offers, same as
+		// Checkout Sessions — verified by probe at the 2026-10-03 live cutover: the
+		// parameter is rejected, its absence works).
 		const intent = await createSetupIntent({
 			customer: customerId,
-			payment_method_types: ["card"],
-			// Reusable later, so somebody who verifies and then supports a creator is not
-			// asked for the same card twice.
 			usage: "off_session",
 			metadata: { purpose: "adult_verification", userId: String(userId) },
 		});

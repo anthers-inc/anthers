@@ -16,10 +16,22 @@ import EmailCodeModal from "../components/auth/EmailCodeModal";
  *
  * Deliberately not a validating regex: the server's `z.string().email()` is the ruling
  * check and this only has to answer *"is the person trying to give us an email at all?"*,
- * because the two branches below need different things from them. Anything that gets past
- * this and fails at the API comes back as an ordinary refusal.
+ * because the email and handle branches below need different things from them. Anything
+ * that gets past this and fails at the API comes back as an ordinary refusal.
  */
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Whether what was typed reads as a handle rather than an address.
+ *
+ * The same loose philosophy as `LOOKS_LIKE_EMAIL`: this is a routing question — *which
+ * door does the typed thing belong to?* — not a validation one. A bare word is neither an
+ * address nor a handle and gets the field's own sentence below, so the only thing this
+ * has to recognize is a domain-shaped string (`alice.bsky.social`, `example.com`) or the
+ * way people write one (`@alice`). A handle that doesn't resolve is refused by the
+ * ATProto flow itself, in its own words.
+ */
+const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
 
 /**
  * Signing in to an account that already exists (route: `/login`). Nothing else.
@@ -40,22 +52,31 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * 🚨 **Sign-in is the emailed code and nothing else (Parker, 2026-09-13).** No account
  * holds a password, so there is no password field on this page and no route it could post
  * to: the one form here asks for an email address, mails it a six-character code, and opens
- * the same code field `/signup` uses.
+ * the same code field `/signup` uses. A handle typed into that same form is not a fourth
+ * way in — it is the Bluesky flow below, met where the person already typed.
  * - It posts to **`/auth/signin/*`, never `/auth/signup/*`.** The difference is the whole
  *   point: the signup pair *creates an account* for an address it doesn't know, which
  *   would make a mistyped address at the login page mint an account that never saw the
  *   terms. The signin pair refuses.
- * - It needs an **email address**, and this page asks for nothing else. The code is keyed
- *   on the address (`signup_codes.email`), and resolving a public handle to a private
- *   mailbox would let anyone mail anyone by guessing handles.
+ * - It needs an **email address**, and the mailed-code half of this page asks for nothing
+ *   else. The code is keyed on the address (`signup_codes.email`), and resolving a public
+ *   handle to a private mailbox would let anyone mail anyone by guessing handles. ⚠️ **A
+ *   handle typed into the same field routes to the Bluesky flow below, not to the mail**
+ *   — for the same reason: it is the identity's own server that proves a handle, never
+ *   Anthers' postbox.
  *
  * 🚨 **Bluesky is a third way IN and is not a third way to sign up either** (2026-08-22).
  * It signs in an account whose identity is a Bluesky one, resumes an unfinished signup started
  * with that identity, and answers `signup_disabled` for a handle no account holds rather than
  * minting anything. That refusal is the whole reason the affordance can live on this page at
- * all, and it is why the button is disclosed rather than given equal billing with the form: the
- * only people it works for are people who signed up with Bluesky. Offering it as a way to
- * *join* would be the second signup door this page spent a deletion getting rid of.
+ * all: the only people it works for are people who signed up with Bluesky. Offering it as a way
+ * to *join* would be the second signup door this page spent a deletion getting rid of.
+ *
+ * ⚠️ **The same flow is reachable two ways, and both are the one door.** Typing a handle
+ * into the main field and pressing "Log in with Bluesky" run the identical ceremony
+ * (`signInWithBluesky`), so there is one Bluesky door with two handles on it — a person
+ * who thinks of this page as "where I type my identifier" and a person who scans for a
+ * button both find it, and neither learns a different rule from the other.
  *
  * 🚨 **The card's height is decoration, and it is load-bearing decoration.** The botanical
  * flourishes are positioned against the card box and each spray reaches roughly seven rems
@@ -111,32 +132,55 @@ export default function LoginPage() {
 	}, []);
 
 	/**
-	 * Ask for the code — the whole of what this form does. A wrong-looking address is
-	 * refused here, loosely; anything that gets past the shape check and fails at the
-	 * API comes back as an ordinary refusal.
+	 * Ask for the code, or hand the browser to Bluesky — one field, two ways in.
+	 *
+	 * The typed thing decides which: an address gets the emailed code, and a handle is
+	 * handed to the Bluesky flow the button below runs, so both doors into that ceremony
+	 * stay one door (same `signInWithBluesky`, same refusals). Anything shaped like
+	 * neither is asked for here, in the page's own words rather than the browser's — the
+	 * same reason the input is `type="text"`.
 	 */
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setErrors({});
-		const address = email.trim();
+		const typed = email.trim();
 
-		if (!LOOKS_LIKE_EMAIL.test(address)) {
-			setErrors({
-				general: "Sign-in is by emailed code, so it needs your email address.",
-			});
+		if (LOOKS_LIKE_EMAIL.test(typed)) {
+			setLoading(true);
+			try {
+				await sendCode(typed);
+				setCodeEmail(typed);
+			} catch (err) {
+				setErrors({
+					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
+				});
+			} finally {
+				setLoading(false);
+			}
 			return;
 		}
-		setLoading(true);
-		try {
-			await sendCode(address);
-			setCodeEmail(address);
-		} catch (err) {
-			setErrors({
-				general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
-			});
-		} finally {
-			setLoading(false);
+
+		// A handle, however it was written. The leading `@` is how people write one, not
+		// part of it, and `signInWithBluesky` throws its message into the field below —
+		// never resolving in any useful sense, since it sets `window.location` and the
+		// page is already leaving when it succeeds.
+		if (LOOKS_LIKE_HANDLE.test(typed)) {
+			const handle = typed.replace(/^@/, "");
+			setLoading(true);
+			try {
+				await signInWithBluesky(handle, redirectTo);
+			} catch (err) {
+				setErrors({
+					general: err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.",
+				});
+				setLoading(false);
+			}
+			return;
 		}
+
+		setErrors({
+			general: "Sign in with the email address or the handle on your account.",
+		});
 	};
 
 	/**
@@ -298,8 +342,8 @@ export default function LoginPage() {
 								)}
 								<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
 									<FormField
-										label="Email"
-										hint="We'll email you a six-character sign-in code — that's how signing in works."
+										label="Email or handle"
+										hint="An email address gets a six-character sign-in code by mail — that's how signing in works. A handle signs you in through Bluesky."
 									>
 										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
@@ -310,18 +354,14 @@ export default function LoginPage() {
 											type="text"
 											inputMode="email"
 											className="input input-bordered w-full"
-											autoComplete="email"
+											autoComplete="username"
 											value={email}
 											onChange={(e) => setEmail(e.target.value)}
 											required
 										/>
 									</FormField>
 									<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
-										{loading ? (
-											<span className="loading loading-spinner loading-sm" />
-										) : (
-											"Email me a sign-in code"
-										)}
+										{loading ? <span className="loading loading-spinner loading-sm" /> : "Continue"}
 									</button>
 								</form>
 
@@ -331,7 +371,9 @@ export default function LoginPage() {
 						    prominent button that refuses most of the people who press it is
 						    worse than a quiet one. The divider says "or", not "or sign up
 						    with", deliberately. The handle itself is asked for in a modal;
-						    see `BlueskyHandleModal` for why it cannot be inline. */}
+						    see `BlueskyHandleModal` for why it cannot be inline — typing a
+						    handle into the field above takes the same door without opening
+						    this one. */}
 								<div className="divider my-1 text-xs text-base-content/50">or</div>
 								<button
 									type="button"

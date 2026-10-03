@@ -253,7 +253,14 @@ function purchaseSession(params: {
 		// A Customer is created for every buyer, so the address and email survive the
 		// session and are readable at completion.
 		customer_creation: "always",
-		payment_method_types: ["card"],
+		// 🚨 NO `payment_method_types` here, and that is a live-API-version constraint
+		// rather than a choice: newer API versions removed the parameter entirely (the
+		// live account rejects the session with "payment_method_types is no longer
+		// supported… Payment methods are now managed from your Dashboard settings").
+		// The methods a session offers come from the Dashboard's payment-method settings,
+		// so the card-only posture is enforced there, not here. Found at the live cutover
+		// (2026-10-03), where every checkout failed while the sandbox — an older API
+		// version — accepted the same parameter happily.
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {
