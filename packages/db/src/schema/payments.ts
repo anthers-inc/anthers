@@ -4,9 +4,11 @@
  * are `org` by the treasury rule: payments, pools, payouts and KYC stay with the org, because a
  * treasury cannot be spread across machines other people run. No exceptions.
  */
+import { sql } from "drizzle-orm";
 import {
 	bigint,
 	boolean,
+	check,
 	index,
 	integer,
 	jsonb,
@@ -375,5 +377,172 @@ export const creatorTransferCredits = pgTable(
 		uniqueIndex("uq_creator_transfer_credits_pair").on(table.transferId, table.creditId),
 		// The held read's other half: which credits are covered, in one index.
 		index("idx_creator_transfer_credits_credit").on(table.creditId),
+	],
+);
+
+/**
+ * org — the netting ledger: a record that a creator's share of returned money is to be
+ * recovered from their later earnings (Parker, 2026-09-14, the collect-and-pay-out
+ * decision's "Money That Comes Back").
+ *
+ * A purchase is a destination charge, so its creator's share reached them the moment the
+ * charge cleared — the money is "after the transfer" by construction. When the buyer's
+ * money later comes back (a refund or a chargeback), Anthers' own attempt to claw the
+ * creator's share back is `refunds.ts`'s `reverse_transfer`, and that attempt works only
+ * while the money still sits in the connected account's balance. Once the creator has
+ * paid it out, Stripe does not carry creators' negative balances on destination charges
+ * (the Tax and Compliance Plan's recorded finding, and Stripe's own docs — see
+ * `services/netting.ts` for the sources), so the share is unrecovered at Stripe and
+ * becomes this row: **the creator's earnings on the sale that came back, to be recovered
+ * from what they earn next.**
+ *
+ * ⭐ **Why netting exists at all is a fraud route it closes.** Absorbing every chargeback
+ * would let a creator buy their own Work with stolen cards, get paid, and leave the
+ * chargebacks to Anthers — so Anthers absorbs its own share and anything it cannot
+ * recover, but the creator's share is recovered from future earnings.
+ *
+ * 🚨 **Netting never sends a creator a bill** — the decision's own words, and the
+ * invariant this table and its applications exist to hold. Recovery only ever comes from
+ * future earnings (`creator_credits` the transfer step has not yet moved): if the open
+ * netting exceeds what is held, the held sum transfers nothing and the netting stays
+ * open. There is no account debit, no negative transfer, no state below zero.
+ *
+ * ⭐ **Append-only, no status column — remaining is derived.** A row is written once when
+ * the money comes back, and how much of it is still open is always re-derivable:
+ * `amount` minus the sum of its application rows (`creator_netting_applications` below),
+ * exactly the way `creator_transfers`/`creator_transfer_credits` derive "held" from
+ * coverage. A netting whose applications equal its amount is exhausted; one that never
+ * gets there sits open indefinitely — **absorption is a bookkeeping fact on Anthers'
+ * side, not a state change here**, because "the creator will never earn again" is not a
+ * fact this system can know. (The books entry that records an absorbed remainder is the
+ * Books milestone's to build; these rows are what it will read.)
+ *
+ * One row per (source event, creator). The source is at most one of: a purchase dispute
+ * (`disputeId` — the `disputes` row's `purchaseId` names the sale) or a refunded purchase
+ * (`purchaseId` + `stripeRefundId`, the (refund, purchase) pair — a basket refunds as a
+ * basket, so one refund settles several siblings and each sibling's earnings are their
+ * own netting under it). The check constraint
+ * holds "at most one" rather than "exactly one" because both links are `set null` — the
+ * row must survive its source's deletion, which is the money-record rule every table
+ * here follows.
+ */
+// org — the platform's record of a creator's share of returned money, to be recovered
+// from their later earnings. Money; org-only by the treasury rule, doubly so: the row is
+// the platform's own receivable, which no creator node has any business holding.
+export const creatorNettings = pgTable(
+	"creator_nettings",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * Whose share came back. Set null on delete, like `creator_credits`: the money record
+		 * outlives the account, and an open netting against a deleted account is a fact about
+		 * Anthers' books, not about the person.
+		 */
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** The dispute whose chargeback returned the money — the dispute source's link. */
+		disputeId: integer("dispute_id").references(() => disputes.id, { onDelete: "set null" }),
+		/** The refunded purchase — the refund source's link to the sale. */
+		purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
+		/**
+		 * The Stripe `re_...` id of the refund that returned the money, on the refund source —
+		 * the refund's own identity, which is what separates "a refund of this sale" from "a
+		 * dispute on this sale" when both rows name the same purchase. Null on the dispute
+		 * source, where the Stripe dispute id (on the `disputes` row) is the identity.
+		 */
+		stripeRefundId: text("stripe_refund_id"),
+		/**
+		 * 🚨 The creator's share that came back — the row's own `creator_earnings`, the earnings
+		 * the creator received for a sale that has now been undone. NOT the buyer's full charge
+		 * and NOT including the tax (money Anthers collected and owes onward, never the
+		 * creator's) or the platform's share (Anthers' own to absorb, per the decision). Read
+		 * off the purchase row at the moment the netting is written, because a receipt records
+		 * the transaction as it happened.
+		 */
+		amount: numeric("amount").notNull(),
+		/**
+		 * When the money came back and this row was opened — the refund's or the dispute's
+		 * landing, which is the moment recovery becomes owed. Kept distinct from
+		 * `createdAt` only in principle; they are the same moment, and the column exists so
+		 * a future source that opens a netting retroactively can say so honestly.
+		 */
+		openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+		/**
+		 * When a won dispute reversed this netting — the money came back to Anthers, so
+		 * whatever of it had been recovered goes back to the creator. Null until then, and
+		 * written once (the predicate is its own latch), so a redelivered close event
+		 * changes nothing.
+		 *
+		 * A reversal is a *compensation*, not a deletion: the applications that consumed held
+		 * credits already happened and stay on the record (reversed, so they no longer count
+		 * as recovery), and a compensating credit — a positive `creator_credits` row of kind
+		 * `netting_reversal` — hands the creator back exactly what had been applied. Nothing
+		 * was applied and the row is simply dead: its `reversedAt` says so, it derives as
+		 * closed, and no application row will ever name it.
+		 */
+		reversedAt: timestamp("reversed_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The netting read the transfer step and the earnings endpoint share: one creator's
+		// open rows, in one index.
+		index("idx_creator_nettings_creator").on(table.creatorId),
+		index("idx_creator_nettings_dispute").on(table.disputeId),
+		index("idx_creator_nettings_purchase").on(table.purchaseId),
+		// One row per source event. The refund source's identity is the (refund, purchase)
+		// pair — NOT the refund id alone, because a basket refunds as a basket: one
+		// refund settles several sibling purchases, and each sibling's earnings are its
+		// own netting under the same refund. The dispute source's identity is the dispute
+		// row, which is itself unique on the Stripe dispute id.
+		uniqueIndex("uq_creator_nettings_refund").on(table.stripeRefundId, table.purchaseId),
+		uniqueIndex("uq_creator_nettings_dispute").on(table.disputeId),
+		// At most one source. Not "exactly one": the `set null` on both links is what lets
+		// the row outlive the purchase or dispute it names — the money-record rule — and a
+		// row surviving its source's deletion has zero links left, which is a fact about
+		// Anthers' books rather than an impossible state. The uniques below keep a row that
+		// still HAS a source to one per source event.
+		check(
+			"ck_creator_nettings_one_source",
+			sql`(CASE WHEN ${table.disputeId} IS NOT NULL THEN 1 ELSE 0 END) +
+				(CASE WHEN ${table.purchaseId} IS NOT NULL THEN 1 ELSE 0 END) <= 1`,
+		),
+	],
+);
+
+/**
+ * org — which credits one netting consumed, and for how much. One row per (netting,
+ * credit), never rewritten: the pair is unique so a netting can never consume the same
+ * credit twice, and the rows are the append-only record of what was recovered from
+ * what, exactly the shape of `creator_transfer_credits` — with an amount, because a
+ * netting can consume *part* of a credit and the remainder of that credit still moves.
+ *
+ * `reversedAt` is the won-dispute half: an application that was reversed no longer
+ * counts as recovery (its amount is excluded from the applied sum), and the compensating
+ * credit on `creator_credits` is what hands the creator their money back. The rows stay
+ * on the record either way — a reversal is a fact that happened, not one that unhappened.
+ */
+// org — the application link between a netting and the credits it consumed. Money; org-only.
+export const creatorNettingApplications = pgTable(
+	"creator_netting_applications",
+	{
+		id: serial("id").primaryKey(),
+		nettingId: integer("netting_id")
+			.notNull()
+			.references(() => creatorNettings.id, { onDelete: "cascade" }),
+		creditId: integer("credit_id")
+			.notNull()
+			.references(() => creatorCredits.id, { onDelete: "cascade" }),
+		/** How much of that credit this netting consumed, in dollars. */
+		amount: numeric("amount").notNull(),
+		/**
+		 * When a won dispute reversed this application — null while it counts as recovery.
+		 * The compensating credit carries the money back; this row stays as the record.
+		 */
+		reversedAt: timestamp("reversed_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_creator_netting_applications_pair").on(table.nettingId, table.creditId),
+		// The transfer step's read: which credits any open netting has already consumed.
+		index("idx_creator_netting_applications_credit").on(table.creditId),
 	],
 );
