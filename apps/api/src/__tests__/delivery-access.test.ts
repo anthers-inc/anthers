@@ -435,8 +435,6 @@ describe("Delivery-layer access", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
-				deliveryFee: "0.10",
-				crfFee: "0.00",
 				salesTax: "0.00",
 				creatorEarnings: "4.45",
 				stripePaymentIntentId: `pi_${crypto.randomUUID().slice(0, 12)}`,

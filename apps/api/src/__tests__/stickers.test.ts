@@ -14,17 +14,28 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, comments, posts, stickers, stripeAccounts, users } from "@anthers/db/schema";
+import {
+	badges,
+	billingAccounts,
+	comments,
+	posts,
+	stickers,
+	stripeAccounts,
+	userBadges,
+	users,
+} from "@anthers/db/schema";
 import { stickerBudgetFor } from "@anthers/shared/constants";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { userIdByName } from "./handles.js";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
 
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
@@ -36,6 +47,58 @@ const SUPPORT = 12; // Blossom — an allowance of $2.00.
 
 async function signUp(username: string) {
 	return (await createAccount(username)).cookie;
+}
+
+/**
+ * Point a billing row's period at `cycle`, and give the user the org's Badge at
+ * `dollars` in it — find-or-create the rung (the org is the Free rung's owner), then
+ * write the holding. The Sticker allowance reads the Badge's threshold, which is the
+ * shape the amount the old fixture wrote has taken.
+ */
+async function atSupport(userId: number, dollars: number, cycle: string): Promise<void> {
+	await db
+		.insert(billingAccounts)
+		.values({
+			userId,
+			currentPeriodStart: new Date(`${cycle}T00:00:00Z`),
+			currentPeriodEnd: new Date("2031-07-01T00:00:00Z"),
+			isActive: true,
+		})
+		.onConflictDoNothing();
+	if (dollars <= 0) return;
+	const orgId = await ensureOrgLadder();
+	const threshold = dollars.toFixed(2);
+	const [rung] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		rung ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId: orgId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the sticker suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	await db
+		.delete(userBadges)
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, cycle),
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+			),
+		);
+	await db
+		.insert(userBadges)
+		.values({ userId, badgeId: badge.id, billingCycle: cycle })
+		.onConflictDoNothing();
 }
 
 function give(cookie: string, body: Record<string, unknown>) {
@@ -68,16 +131,7 @@ describe("giving a Sticker", () => {
 		await enablePayoutsFor(creatorId);
 
 		// The giver is at Blossom, so they have $2.00 of their Time Pool to direct.
-		await db
-			.insert(accounts)
-			.values({
-				userId: giverId,
-				anthersSupport: SUPPORT.toFixed(2),
-				currentPeriodStart: new Date("2031-06-01T00:00:00Z"),
-				currentPeriodEnd: new Date("2031-07-01T00:00:00Z"),
-				isActive: true,
-			})
-			.onConflictDoNothing();
+		await atSupport(giverId, SUPPORT, "2031-06-01");
 
 		workId = (await insertWork({ creatorId, type: "text", title: `Sticker work ${RUN}` })).id;
 		const made = await db
@@ -332,16 +386,7 @@ describe("a free account", () => {
 			.select({ id: users.id })
 			.from(users)
 			.where(eq(users.email, `stk_free_${RUN}@example.com`));
-		await db
-			.insert(accounts)
-			.values({
-				userId: user.id,
-				anthersSupport: "0.00",
-				currentPeriodStart: new Date("2031-06-01T00:00:00Z"),
-				currentPeriodEnd: new Date("2031-07-01T00:00:00Z"),
-				isActive: true,
-			})
-			.onConflictDoNothing();
+		await atSupport(user.id, 0, "2031-06-01");
 
 		// Somebody else's Work, so the refusal can only be about the allowance. Stickering
 		// their own would be refused too, for a different reason, and the test could not tell
@@ -387,16 +432,7 @@ describe("the Stickers on a page", () => {
 		giverId = await userIdByName(`stk_show_${RUN}`);
 		creatorId = await userIdByName(`stk_showcreator_${RUN}`);
 		await enablePayoutsFor(creatorId);
-		await db
-			.insert(accounts)
-			.values({
-				userId: giverId,
-				anthersSupport: SUPPORT.toFixed(2),
-				currentPeriodStart: new Date("2031-06-01T00:00:00Z"),
-				currentPeriodEnd: new Date("2031-07-01T00:00:00Z"),
-				isActive: true,
-			})
-			.onConflictDoNothing();
+		await atSupport(giverId, SUPPORT, "2031-06-01");
 	}, DB_SETUP_TIMEOUT);
 
 	async function listOn(

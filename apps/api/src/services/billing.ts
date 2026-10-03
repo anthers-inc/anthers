@@ -22,12 +22,12 @@
  * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, badges, invoices, userBadges } from "@anthers/db/schema";
+import { accountCycles, badges, billingAccounts, invoices, userBadges } from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
 	createCustomer,
@@ -37,6 +37,7 @@ import {
 	paymentsConfigured,
 	updateProduct,
 } from "../lib/processor.js";
+import { orgOwnerUserId } from "./anthers-badges.js";
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
@@ -157,11 +158,12 @@ export function totalSupportFromSub(sub: Stripe.Subscription): number {
 }
 
 /**
- * The monthly dollars pointed at **Anthers** — the Badge, and what sets the Time Pool.
+ * The monthly dollars pointed at **Anthers** — the Anthers line, which is the Badge's worth
+ * and what sets the Time Pool.
  *
- * `accounts.anthersSupport` is the Badge *and* it sets the Time Pool, so reading the whole
- * charge here would make a user who gives Anthers $3 and two creators $7 and $2 look like a
- * $12 Blossom funding $6 of Time Pool off a $3 gift — with no error anywhere.
+ * Reading the whole charge here would make a user who gives Anthers $3 and two creators
+ * $7 and $2 look like a $12 Blossom funding $6 of Time Pool off a $3 gift — with no error
+ * anywhere.
  *
  * The creators' amounts are deliberately unequal and deliberately not $3: a creator sets
  * their own Badge levels to any amount, and $3 is only ever the price of Public Access.
@@ -240,16 +242,20 @@ export function periodStartFromSub(sub: Stripe.Subscription): number | null {
  */
 export async function ensureCreatorProduct(creatorId: number, handle: string): Promise<string> {
 	if (!paymentsConfigured()) throw new Error("Stripe not configured");
-	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, creatorId)).limit(1);
+	const [acct] = await db
+		.select()
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, creatorId))
+		.limit(1);
 	const taxCode = await creatorProductTaxCode(creatorId);
 	if (acct?.stripeProductId) {
 		// The gate state may have moved since the Product was made; the code follows it.
 		if (acct.stripeProductTaxCode !== taxCode) {
 			await updateProduct(acct.stripeProductId, { tax_code: taxCode }).catch(() => null);
 			await db
-				.update(accounts)
+				.update(billingAccounts)
 				.set({ stripeProductTaxCode: taxCode, updatedAt: new Date() })
-				.where(eq(accounts.userId, creatorId));
+				.where(eq(billingAccounts.userId, creatorId));
 		}
 		return acct.stripeProductId;
 	}
@@ -261,9 +267,9 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
 	});
 	if (!product) throw new Error("Stripe not configured");
 	await db
-		.update(accounts)
+		.update(billingAccounts)
 		.set({ stripeProductId: product.id, stripeProductTaxCode: taxCode, updatedAt: new Date() })
-		.where(eq(accounts.userId, creatorId));
+		.where(eq(billingAccounts.userId, creatorId));
 	return product.id;
 }
 
@@ -444,23 +450,27 @@ export function planItemChange(
 /** Create (once) and persist the user's Stripe customer id. */
 export async function ensureStripeCustomer(userId: number, email: string): Promise<string> {
 	if (!paymentsConfigured()) throw new Error("Stripe not configured");
-	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, userId)).limit(1);
+	const [acct] = await db
+		.select()
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
 	if (acct?.stripeCustomerId) return acct.stripeCustomerId;
 	const customer = await createCustomer({
 		email: email || undefined,
 		metadata: { userId: String(userId) },
 	});
 	if (!customer) throw new Error("Stripe not configured");
-	// ⚠️ Upserts rather than updates. **Signing up does not create an `accounts` row** — one
-	// appears on first payment — so a plain UPDATE affected nothing for a user who had never
-	// paid, and this returned a customer id it had not persisted. Every existing caller
-	// reaches here through a flow that already made the row, which is why it never showed;
-	// adulthood verification is the first caller for whom "never paid" is the normal case.
+	// ⚠️ Upserts rather than updates. **A billing row is lazily created** — one appears on
+	// the first billing write, whichever door that is — so a plain UPDATE affected nothing
+	// for a user no billing door had touched yet, and this returned a customer id it had
+	// not persisted. Adulthood verification is the caller for whom "never billed" is the
+	// normal case.
 	await db
-		.insert(accounts)
+		.insert(billingAccounts)
 		.values({ userId, stripeCustomerId: customer.id })
 		.onConflictDoUpdate({
-			target: accounts.userId,
+			target: billingAccounts.userId,
 			set: { stripeCustomerId: customer.id, updatedAt: new Date() },
 		});
 	return customer.id;
@@ -485,16 +495,26 @@ export async function savedCardFor(
 // is about data that exists rather than a path that runs.
 
 /**
- * Reconcile the account row to a subscription's current state — called from the
+ * Reconcile the billing row to a subscription's current state — called from the
  * webhook on customer.subscription.created/updated/deleted. A canceled or expired
- * subscription reverts the account to $0 (Free).
+ * subscription reverts the user to Free (no holdings this cycle that weren't paid for).
+ *
+ * 🚨 **Writes no amount anywhere.** The old accounts row carried two amount columns this
+ * update used to rewrite; under the Badge model the amounts are `user_badges` holdings —
+ * what the subscription's directed items buy is written by `applyDirectedSupportFromSub`
+ * below, and what the Anthers line buys is resolved by reading the org-ladder holding at
+ * whatever the ledger needs it for. What this function still owns is the Stripe machinery:
+ * the subscription id, the period pair, activity and cancellation, plus the directed
+ * balance the Badge picker draws against (`billing_accounts.directed_budget` — the
+ * subscription's directed items ARE that balance, so the webhook is the writer that
+ * knows it).
  */
 export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promise<void> {
 	const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
 	const [acct] = await db
 		.select()
-		.from(accounts)
-		.where(eq(accounts.stripeCustomerId, customerId))
+		.from(billingAccounts)
+		.where(eq(billingAccounts.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return;
 
@@ -503,38 +523,35 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		// Ignore a stale subscription that isn't the account's current one.
 		if (acct.stripeSubscriptionId && acct.stripeSubscriptionId !== sub.id) return;
 		await db
-			.update(accounts)
+			.update(billingAccounts)
 			.set({
-				anthersSupport: "0.00",
-				creatorSupportTotal: "0.00",
 				stripeSubscriptionId: "",
 				isActive: true,
 				canceledAt: null,
 				updatedAt: new Date(),
 			})
-			.where(eq(accounts.id, acct.id));
+			.where(eq(billingAccounts.id, acct.id));
 		await lapseUnpaidMonth(acct.userId);
 		return;
 	}
 
 	/**
 	 * 🚨 **Retries exhausted: the benefits lapse** (Parker, 2026-09-14). A renewal that fails keeps
-	 * the account's Badge and cleared gates through Stripe's retry window — `past_due` changes
+	 * the user's Badge and cleared gates through Stripe's retry window — `past_due` changes
 	 * nothing here — and they end when Stripe gives up and marks the subscription unpaid. The
-	 * subscription itself is kept, so paying what is owed makes it active again and the amounts
-	 * are read back off its items.
+	 * subscription itself is kept, so paying what is owed makes it active again and the holdings
+	 * are applied again from its items on the activation webhook.
 	 */
 	if (sub.status === "unpaid") {
 		if (acct.stripeSubscriptionId && acct.stripeSubscriptionId !== sub.id) return;
 		await db
-			.update(accounts)
+			.update(billingAccounts)
 			.set({
-				anthersSupport: "0.00",
-				creatorSupportTotal: "0.00",
 				isActive: false,
+				directedBudget: "0.00",
 				updatedAt: new Date(),
 			})
-			.where(eq(accounts.id, acct.id));
+			.where(eq(billingAccounts.id, acct.id));
 		await lapseUnpaidMonth(acct.userId);
 		return;
 	}
@@ -556,8 +573,19 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	 * So within a cycle the higher of the two wins, and the new value is taken outright once
 	 * the cycle turns. A raise is unaffected, since a raise is charged in full today and is
 	 * therefore genuinely in force today. ⭐ **This is the rule `applyDirectedSupportFromSub`
-	 * already applies per creator with its `GREATEST` upsert** — allocation is add-only within
-	 * a cycle — rather than a new idea; what was missing was the account-level half.
+	 * already applies per creator with its add-only-upsert** — allocation is add-only within
+	 * a cycle — rather than a new idea; what this column adds is the account-level half for
+	 * the *budget*, which is the number the picker draws down against.
+	 */
+	/**
+	 * 🚨 **The held-over Anthers amount is read off the HOLDING, not the items.** The
+	 * in-force rule on a mid-cycle decrease lives on the badge holding now: the holding
+	 * IS the account-level amount, so when the stored period says this decrease is still
+	 * inside the cycle it was paid in, the existing holding is the "stored" figure —
+	 * `applyAnthersBadgeHolding` takes the GREATER of the item price and the held rung,
+	 * which keeps a Blossom somebody paid $12 for through the month the items already
+	 * say $3. Once the period turns, the items are the whole truth and the holding is
+	 * re-stamped outright.
 	 */
 	const heldOver =
 		acct.currentPeriodStart != null &&
@@ -566,20 +594,24 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	const inForce = (fromSub: number, stored: string) =>
 		heldOver ? Decimal.max(fromSub, stored) : new Decimal(fromSub);
 
-	const anthersSupport = inForce(anthersSupportFromSub(sub), acct.anthersSupport);
-	// The paid-for directed balance is the rest of the same charge, held over the same way —
-	// a supporter who drops a creator on the 10th has already paid that creator for the month.
-	const directedTotal = inForce(directedSupportFromSub(sub), acct.creatorSupportTotal);
+	// The held Anthers badge's threshold — the "stored" half of the in-force comparison,
+	// read from the org-ladder holding rather than from a dead amount column.
+	const heldAnthers = await heldAnthersBadgeAmountForSync(acct.userId);
+	// The paid-for directed balance is what the subscription's directed items add up to,
+	// held over the same way — a supporter who drops a creator on the 10th has already
+	// paid that creator for the month. The stored figure participates only while the
+	// period has not turned; past that the items are the whole truth.
+	const directedTotal = inForce(
+		directedSupportFromSub(sub),
+		// A stored read participates in the held-over guard only, same as the amount
+		// columns this replaced; the budget rides the billing row, which is where the
+		// picker reads it back.
+		acct.directedBudget,
+	);
 
 	await db
-		.update(accounts)
+		.update(billingAccounts)
 		.set({
-			...(active
-				? {
-						anthersSupport: anthersSupport.toFixed(2),
-						creatorSupportTotal: directedTotal.toFixed(2),
-					}
-				: {}),
 			stripeSubscriptionId: sub.id,
 			isActive: active,
 			...(periodStartUnix ? { currentPeriodStart: new Date(periodStartUnix * 1000) } : {}),
@@ -587,12 +619,122 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 			canceledAt: sub.cancel_at_period_end ? new Date() : null,
 			updatedAt: new Date(),
 		})
-		.where(eq(accounts.id, acct.id));
+		.where(eq(billingAccounts.id, acct.id));
 
 	if (active) {
+		// ⚠️ The budget's held-over write needs `currentPeriodStart` to have been read BEFORE
+		// the update above stamped the new period — ordering that matters, so the in-force
+		// total goes through one more update that carries it.
+		await db
+			.update(billingAccounts)
+			.set({ directedBudget: directedTotal.toFixed(2), updatedAt: new Date() })
+			.where(eq(billingAccounts.id, acct.id));
+		// The in-force Anthers figure — possibly the higher, held-over one — is what the
+		// holding gets stamped with, and what the snapshot records for the cycle.
+		const anthersInForce = inForce(anthersSupportFromSub(sub), heldAnthers.toFixed(2)).toNumber();
+		await applyAnthersBadgeHolding(acct.userId, anthersInForce);
 		await applyDirectedSupportFromSub(acct.userId, sub);
-		await snapshotCycle(acct.userId, anthersSupport.toNumber(), directedTotal.toNumber());
+		// The cycle snapshot keeps its history columns — pass the numbers this run
+		// computed; the columns are the record, never a read source for live state.
+		await snapshotCycle(acct.userId, anthersInForce, directedTotal.toNumber());
 	}
+}
+
+/**
+ * The held org rung's threshold, for the sync's own in-force comparison.
+ *
+ * A read, not a re-export: this returns 0 (rather than throwing) when no ladder is
+ * seeded, because a sync against an unseeded database must proceed with amounts of zero
+ * rather than fail the billing webhook — the loud failure belongs to the org read at
+ * resolve time, and seeding is a deployment step that this sync cannot perform.
+ */
+async function heldAnthersBadgeAmountForSync(userId: number): Promise<number> {
+	const [row] = await db
+		.select({ id: badges.creatorId })
+		.from(badges)
+		.where(eq(badges.threshold, "0.00"))
+		.orderBy(badges.id)
+		.limit(1);
+	if (!row) return 0;
+	const cycle = currentCycleKey();
+	const [held] = await db
+		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, cycle),
+				sql`${badges.creatorId} = ${row.id}`,
+			),
+		);
+	return Number(held?.held ?? 0);
+}
+
+/**
+ * Write (or clear) the user's holding on the org's ladder for what the Anthers line costs.
+ *
+ * ⭐ **The Anthers line is a Badge holding like any directed one.** Its threshold IS the
+ * amount the old `accounts.anthers_support` column carried, so under the Badge model the
+ * webhook's write is what makes the held Badge exist at all — every Anthers-side reader
+ * (`heldAnthersBadgeAmount`, the Public Access meter, the Time Pool, the sticker
+ * allowance) reads this holding.
+ *
+ * 🚨 **Replace, never stack, and $0 clears rather than seeds.** The picker's
+ * one-holding-per-issuer-per-cycle rule applies to the org's ladder with special force: a
+ * viewer moving $12 → $3 mid-cycle must read $3, and a cancel (the items carry no Anthers
+ * line at all) must leave NO holding, because "free" under the Badge model is the absence
+ * of a held rung, not a $0 row beside a paid one. The holding is find-or-create on the
+ * org's ladder exactly as `applyDirectedSupportFromSub` resolves a creator's, so a ladder
+ * re-seed cannot drop what was paid for. A $0 line (Free — nothing to hold) clears the
+ * org's rungs and writes nothing.
+ */
+export async function applyAnthersBadgeHolding(
+	userId: number,
+	anthersDollars: number,
+): Promise<void> {
+	const org = await orgOwnerUserId();
+	const cycle = currentCycleKey();
+	// The org's other rungs go first — replace-not-stack, and it clears the held rung on
+	// a cancel, which is the whole of "reverts to Free".
+	await db
+		.delete(userBadges)
+		.where(
+			sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+		);
+	if (anthersDollars <= 0) return;
+	const threshold = new Decimal(anthersDollars).toFixed(2);
+	let [badge] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, org), eq(badges.threshold, threshold)))
+		.limit(1);
+	if (!badge) {
+		// Find-or-create, exactly as the directed path resolves a creator's rung: the
+		// Anthers line is normally priced from the seeded ladder, but a subscription
+		// predating a re-price can name a level the current seed doesn't carry, and a
+		// missing row would silently drop a paid-for holding on a replayed webhook. The
+		// row is created at the level the subscriber actually pays — the rung's label is
+		// its amount, the same shape billing creates creator rungs with.
+		[badge] = await db
+			.insert(badges)
+			.values({
+				creatorId: org,
+				threshold,
+				label: `$${threshold}`,
+				description: "A rung created by billing at a threshold a subscription pays for.",
+			})
+			.returning({ id: badges.id });
+	}
+	await db
+		.insert(userBadges)
+		.values({ userId, badgeId: badge.id, billingCycle: cycle })
+		.onConflictDoUpdate({
+			target: [userBadges.userId, userBadges.badgeId, userBadges.billingCycle],
+			// Add-only within a cycle, same as the directed holdings: a replayed webhook
+			// rewrites the same row rather than stacking a second one.
+			set: { updatedAt: new Date() },
+		});
 }
 
 /**

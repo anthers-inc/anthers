@@ -4,7 +4,7 @@
  * Most of this file is node: a creator's own content records, media, and the
  * join tables that organize them. The exceptions are the polymorphic moderation
  * state columns (org-imposed) and the cross-account tables (library, bookmarks)
- * which are a *viewer's* records, not the creator's.
+ * which are a *user's* records, not the creator's.
  */
 
 import { sql } from "drizzle-orm";
@@ -784,11 +784,11 @@ export const comments = pgTable(
  * albums, not four loose tracks**: a Project is how an album exists here, so saving one has
  * to save the record rather than scatter it.
  */
-// org — the Library is a *viewer's* shelf, not the creator's content. A viewer's
-// account is org-side in the current topology (there is no viewer node; viewers are
+// org — the Library is a *user's* shelf, not the creator's content. A user's
+// account is org-side in the current topology (there is no user node; users are
 // org accounts), so their saved items are org records. Content records belong to the
-// creator's node, but a library item is not a content record — it is a viewer's pointer
-// to one, and the viewer has no node.
+// creator's node, but a library item is not a content record — it is a user's pointer
+// to one, and the user has no node.
 export const libraryItems = pgTable(
 	"library_items",
 	{
@@ -823,20 +823,19 @@ export const libraryItems = pgTable(
 );
 
 /**
- * Bookmarks — **posts only**, in practice, since 2026-08-13.
+ * Bookmarks — **posts only**, since 2026-08-13, and now posts only **in the schema too**.
  *
- * The four target columns remain because the rows do, but the product line is now one verb
- * per object: a Work or a Project is **saved** (to the Library), a creator is **followed**,
- * and a post is **bookmarked**. Two controls that sound like the same thing on one object
- * is what made both feel like half a feature.
+ * The product line is one verb per object: a Work or a Project is **saved** (to the
+ * Library), a creator is **followed**, and a post is **bookmarked**. Two controls that
+ * sound like the same thing on one object is what made both feel like half a feature.
  *
- * Migration `0035` moved every Work and Project bookmark into `library_items` and removed
- * the originals — a move, not a deletion, and the reason the columns are not dropped is
- * that dropping them is a separate migration with nothing to gain from being rushed.
+ * Migration `0035` moved every Work and Project bookmark into `library_items`, and the
+ * accounts split's pass (2026-10-03) dropped the `work_id`/`project_id`/`creator_id`
+ * columns it had deferred — the table carries only what a post bookmark names.
  */
-// org — bookmarks are a viewer's records (same reasoning as `libraryItems`: the
-// viewer has no node in the current topology). The four target columns span content
-// the viewer does not own, which is what makes this an org-side table about node
+// org — bookmarks are a user's records (same reasoning as `libraryItems`: the
+// user has no node in the current topology). A post is content the bookmarking
+// user does not own, which is what makes this an org-side table about node
 // content rather than a node table.
 export const bookmarks = pgTable(
 	"bookmarks",
@@ -846,20 +845,12 @@ export const bookmarks = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
-		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
-		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
-		creatorId: integer("creator_id").references(() => users.id, { onDelete: "cascade" }),
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// Four nullable targets, every one a cascade parent: deleting a post, Work, project or
-	// creator has to sweep the bookmarks pointing at it, and only `userId` was indexed.
 	(table) => [
 		index("idx_bookmarks_user").on(table.userId, table.sortOrder),
 		index("idx_bookmarks_post").on(table.postId),
-		index("idx_bookmarks_work").on(table.workId),
-		index("idx_bookmarks_project").on(table.projectId),
-		index("idx_bookmarks_creator").on(table.creatorId),
 	],
 );
 
@@ -872,12 +863,12 @@ export const bookmarks = pgTable(
  * is the conflict reviews exist to avoid". Both sentences are about works. Giving reviews a
  * subject type would invite a shape the model has no meaning for.
  *
- * `workId` is nullable only to carry migration `0012`'s orphans: reviews that were left on
- * body-only posts, which had no Work to move to. Nothing reads them and no new write can
- * produce one — they are kept rather than deleted because destroying a user's words to fit
- * a schema change is the thing this codebase refuses to do elsewhere.
+ * `workId` was nullable only to carry migration `0012`'s orphans: reviews that were left on
+ * body-only posts, which had no Work to move to. Pre-launch those rows do not exist, so the
+ * accounts-split pass (2026-10-03) made the column `notNull` — the "kept rather than
+ * deleted" reasoning described rows that were never there.
  */
-// both — a review is a viewer's verdict on a Work. The viewer is org-side (no viewer
+// both — a review is a user's verdict on a Work. The user is org-side (no user
 // node); the Work is node-owned. The `moderation_status` is org-imposed. Same
 // three-roles-on-one-row shape as `comments`: the author owns it, the subject's
 // creator hosts it, the org moderates it.
@@ -891,7 +882,9 @@ export const reviews = pgTable(
 		// Work's recommended share moves when a reviewer leaves. Nullable only because rows
 		// from before this rule were anonymized rather than removed.
 		userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
-		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
 		// `recommended` or `not-recommended`, validated at the application layer against
 		// `REVIEW_VERDICTS`.
 		//
@@ -923,8 +916,8 @@ export const reviews = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// One review per person per Work. NULL workIds are the migration orphans above;
-		// Postgres treats NULLs as distinct, so they don't collide with each other.
+		// One review per person per Work. Postgres treats NULLs as distinct, which mattered
+		// while `work_id` was nullable; with it `notNull` the plain unique index is exact.
 		uniqueIndex("uq_reviews_user_work").on(table.userId, table.workId),
 		index("idx_reviews_work_visible").on(table.workId, table.moderationStatus),
 	],

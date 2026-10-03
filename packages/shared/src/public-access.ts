@@ -176,29 +176,30 @@ export function shareLinkBudget(usedSeconds: number): ShareLinkBudget {
 /**
  * Resolve a viewer's Public Access standing from the two facts it depends on.
  *
- * `anthersSupport` is the **monthly amount in dollars** the viewer currently gives Anthers
- * — point-in-time, like everything else in the model. Reaching the Public Access price is
- * the only threshold that matters, and nothing above it buys more.
+ * `anthersDollars` is the **monthly amount in dollars** the viewer currently gives Anthers
+ * — point-in-time, like everything else in the model, resolved by the caller from the
+ * held Anthers Badge (its threshold IS the amount). Reaching the Public Access
+ * price is the only threshold that matters, and nothing above it buys more.
  *
  * 🚨 **Dollars, and the unit changed under this function once without a single test
  * noticing.** The caller — `services/public-access.ts` — began passing
  * `supportAmount(...)`, i.e. dollars — and left this contract behind, so **$1 a month
  * bought unlimited access priced at $3**, for anything above a dollar and below three.
  *
- * The unit tests could not see it: they still called this in Seeds (`publicAccessBudget(1,
- * …)`), which is exactly what a passing suite looks like when a *contract* moves rather
- * than an implementation. Comparing against the price rather than a bare `1` is what makes
- * the units legible at the call site, and is why the constant is read here instead of a
- * literal.
+ * The unit tests could not see it: they still called this in the old units
+ * (`publicAccessBudget(1, …)`), which is exactly what a passing suite looks like when a
+ * *contract* moves rather than an implementation. Comparing against the price rather than
+ * a bare `1` is what makes the units legible at the call site, and is why the constant is
+ * read here instead of a literal.
  */
 export function publicAccessBudget(
-	anthersSupport: number,
+	anthersDollars: number,
 	usedSeconds: number,
 ): PublicAccessBudget {
 	const used = Math.max(0, Math.floor(usedSeconds));
 	// Cents, because both sides are floats off a `numeric` column and dollars-as-floats is
 	// the comparison the Badge model already learned not to trust.
-	if (Math.round(anthersSupport * 100) >= Math.round(PUBLIC_ACCESS_PRICE * 100)) {
+	if (Math.round(anthersDollars * 100) >= Math.round(PUBLIC_ACCESS_PRICE * 100)) {
 		return {
 			unlimited: true,
 			usedSeconds: used,

@@ -215,8 +215,6 @@ async function workWithBuyer(title: string) {
 			type: "digital",
 			amount: PRICE,
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2),
-			crfFee: "0.00",
 			salesTax: fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
 			stripePaymentIntentId: `pi_${uid()}`,

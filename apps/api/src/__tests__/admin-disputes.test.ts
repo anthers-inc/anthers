@@ -196,8 +196,6 @@ async function purchase(opts: { buyer?: number; creator?: number; amount?: strin
 			type: "digital",
 			amount: opts.amount ?? "5.00",
 			processingFee: "0.45",
-			deliveryFee: "0.00",
-			crfFee: "0.00",
 			salesTax: "0.00",
 			creatorEarnings: "4.55",
 			stripePaymentIntentId: `pi_adsp_${uid()}`,

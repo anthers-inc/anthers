@@ -45,3 +45,35 @@ if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 		});
 	}
 }
+
+// The org's Badge ladder is platform state, and every test session needs it: any suite
+// that reads "what does this account hold on Anthers' ladder" throws loudly when the
+// ladder is absent (the guard in `anthers-badges.ts`), and relying on whichever suite
+// happens to seed it first made the pass green locally and red on CI, where file order
+// put `project-works` ahead of the fixture-owning suites. Seeded here — after the
+// session exists (the CI container path above included, since this runs either way) and
+// before the first test file loads — the ladder is a property of the session rather than
+// a side-effect of suite order. `ensureOrgLadder` in the fixtures still runs: re-checking
+// is one indexed SELECT, and a suite's `purgeAccountsCreatedHere` can take the owner away
+// (the ladder cascades with it), which is the re-check's documented reason to exist.
+{
+	const { db } = await import("@anthers/db/client");
+	const { users } = await import("@anthers/db/schema");
+	const { ensureAnthersBadges } = await import("../apps/api/src/services/anthers-badges.js");
+	const { createAccount } = await import("../apps/api/src/__tests__/account-fixture.js");
+	const ORG_EMAIL = "seed_org_ladder@example.com";
+	const [existing] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where((await import("drizzle-orm")).eq(users.email, ORG_EMAIL))
+		.limit(1);
+	if (existing) {
+		await ensureAnthersBadges(existing.id);
+	} else {
+		const account = await createAccount("seed_org_ladder", {
+			email: ORG_EMAIL,
+			emailVerified: true,
+		});
+		await ensureAnthersBadges(account.userId);
+	}
+}

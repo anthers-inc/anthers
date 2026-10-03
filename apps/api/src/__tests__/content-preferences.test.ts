@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, users } from "@anthers/db/schema";
+import { billingAccounts, userPreferences, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
@@ -95,30 +95,35 @@ function disable() {
 }
 
 /**
- * Put the account back to "never verified, opted out", so each test starts from the door.
+ * Put the user back to "never verified, opted out", so each test starts from the door.
  *
- * ⚠️ Inserts the row if it is missing, because **signing up does not create one** — an
- * `accounts` row appears on first payment. That is also why `no_card` is the honest answer
- * for somebody who has never paid: no account row means no Stripe customer means no card to
- * read, and the three states collapse to the same true sentence.
+ * Two writes, because the split gave the two states two homes: the verification and the
+ * opt-in are `user_preferences` columns, while the Stripe customer the card check reads
+ * is billing machinery. A user with no customer is exactly the `no_card` case — the
+ * honest answer for somebody who has never paid, whatever their preferences row holds.
  */
 async function reset(opts: { customerId: string }) {
-	const set = {
+	const prefSet = {
 		adultOptIn: false,
 		adultVerifiedAt: null,
 		adultVerifiedMethod: null,
-		stripeCustomerId: opts.customerId,
 	};
-	const updated = await db
-		.update(accounts)
-		.set(set)
-		.where(eq(accounts.userId, userId))
-		.returning({ id: accounts.id });
-	if (updated.length === 0) await db.insert(accounts).values({ userId, ...set });
+	await db
+		.insert(userPreferences)
+		.values({ userId, ...prefSet })
+		.onConflictDoUpdate({ target: userPreferences.userId, set: prefSet });
+	await db
+		.insert(billingAccounts)
+		.values({ userId, stripeCustomerId: opts.customerId })
+		.onConflictDoUpdate({
+			target: billingAccounts.userId,
+			set: { stripeCustomerId: opts.customerId },
+		});
 }
 
+/** The preferences row as the enable flow left it. */
 async function accountRow() {
-	const [row] = await db.select().from(accounts).where(eq(accounts.userId, userId));
+	const [row] = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId));
 	return row;
 }
 

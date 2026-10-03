@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
-import { users } from "@anthers/db/schema";
+import { userPreferences, users } from "@anthers/db/schema";
 // `BADGE_ORDER` is the display list of Anthers' ladder — Free plus each paid Badge — which
 // is exactly the set a signup's `badge` pick may name. Read from it rather than restating
 // the names, so a rung added to the ladder is pickable the moment it exists.
@@ -202,8 +202,19 @@ const desktopExchangeSchema = z.object({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Standard user shape returned from auth endpoints */
-function serializeUser(user: typeof users.$inferSelect) {
+/**
+ * Standard user shape returned from auth endpoints.
+ *
+ * ⚠️ **Async, and takes the session user's id with the row.** The theme preference moved
+ * to `user_preferences` (the accounts split) — an identity row no longer carries it, so
+ * the payload reads it from its own table, `null` when the user has set nothing.
+ */
+async function serializeUser(user: typeof users.$inferSelect) {
+	const [prefs] = await db
+		.select({ themePreference: userPreferences.themePreference })
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, user.id))
+		.limit(1);
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
@@ -216,7 +227,7 @@ function serializeUser(user: typeof users.$inferSelect) {
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
-		themePreference: user.themePreference,
+		themePreference: (prefs?.themePreference as "light" | "dark" | null) ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Null until the first run accepts the terms on `/welcome` — the signal every
@@ -333,7 +344,7 @@ async function mintFromProvedAddress(c: Context, email: string, pendingToken: st
 		return {
 			status: 200 as const,
 			body: {
-				user: serializeUser(existing),
+				user: await serializeUser(existing),
 				created: false,
 				picks: spent?.picks ?? null,
 				next: spent?.next || null,
@@ -373,7 +384,7 @@ async function mintFromProvedAddress(c: Context, email: string, pendingToken: st
 	return {
 		status: 201 as const,
 		body: {
-			user: serializeUser(user),
+			user: await serializeUser(user),
 			created: true,
 			// What the signup was carrying, so the finishing page commits the choices somebody
 			// made minutes ago rather than asking for them again.
@@ -702,7 +713,7 @@ const authRoutes = new Hono()
 				.set({ termsAcceptedAt: new Date() })
 				.where(eq(users.id, sessionUser.id))
 				.returning();
-			return c.json({ user: serializeUser(user) });
+			return c.json({ user: await serializeUser(user) });
 		},
 	)
 
@@ -826,7 +837,7 @@ const authRoutes = new Hono()
 		// RPC client a union type that every caller then has to narrow by hand. `needsOnboarding`
 		// is the terms gate: a signed-in account that never accepted them is sent to `/welcome`.
 		return c.json({
-			user: serializeUser(user),
+			user: await serializeUser(user),
 			resume: false,
 			needsOnboarding: user.termsAcceptedAt === null,
 		});
@@ -867,7 +878,7 @@ const authRoutes = new Hono()
 			return c.json({ user: null });
 		}
 
-		return c.json({ user: serializeUser(result.user) });
+		return c.json({ user: await serializeUser(result.user) });
 	})
 
 	// ── Email Verification ───────────────────────────────────────────────────
@@ -981,7 +992,7 @@ const authRoutes = new Hono()
 
 		// The one place a session token is returned in a body rather than a Set-Cookie:
 		// the caller is not a browser and has no cookie jar to put it in.
-		return c.json({ token, user: serializeUser(result.user) });
+		return c.json({ token, user: await serializeUser(result.user) });
 	});
 
 export { authRoutes };

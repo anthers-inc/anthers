@@ -50,7 +50,7 @@ import {
 	disputes,
 	purchases,
 } from "@anthers/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import StripeSdk from "stripe";
 import app from "../index";
@@ -174,8 +174,6 @@ async function completedPurchase(
 			type: "digital",
 			amount: "5.00",
 			processingFee: "0.45",
-			deliveryFee: "0.00",
-			crfFee: "0.00",
 			salesTax: "0.00",
 			creatorEarnings: earnings,
 			stripePaymentIntentId: `pi_${uid()}`,
@@ -265,6 +263,14 @@ afterAll(async () => {
 	setStripeClient(realClient);
 	if (previousWebhookSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
 	else process.env.STRIPE_WEBHOOK_SECRET = previousWebhookSecret;
+
+	// This suite's dispute rows are swept with the accounts — `disputes.user_id` is
+	// `set null`, so purging the accounts would orphan them, and an orphaned dispute lands
+	// in the admin panel's trailing window where it breaks the standing suite's
+	// `before + 1` count (a leak this suite shipped and the suite scheduling hid until
+	// the billing pass shifted the timing). Every insert here uses a `dp_`-prefixed
+	// synthetic id, so the sweep is keyed on the prefix rather than a high-water mark.
+	await db.delete(disputes).where(sql`${disputes.stripeDisputeId} LIKE 'dp\_%'`);
 
 	// The netting rows outlive their accounts by design (set-null creator), so they are
 	// swept by creator before the accounts — the same shape the transfer suite's teardown
@@ -398,7 +404,6 @@ describe("writing netting rows", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "5.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -484,7 +489,6 @@ describe("applying netting at the transfer step", () => {
 				type: "digital",
 				amount: "10.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "10.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -542,7 +546,6 @@ describe("applying netting at the transfer step", () => {
 				type: "digital",
 				amount: "10.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "10.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -592,7 +595,6 @@ describe("applying netting at the transfer step", () => {
 				type: "digital",
 				amount: "4.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "4.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -651,7 +653,6 @@ describe("applying netting at the transfer step", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "5.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -726,7 +727,6 @@ describe("a won dispute reverses the netting", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "5.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -776,7 +776,6 @@ describe("a won dispute reverses the netting", () => {
 				type: "digital",
 				amount: "4.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "4.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",
@@ -835,7 +834,6 @@ describe("the creator's earnings surface", () => {
 				type: "digital",
 				amount: "4.00",
 				processingFee: "0.00",
-				crfFee: "0.00",
 				creatorEarnings: "4.00",
 				stripePaymentIntentId: `pi_${uid()}`,
 				status: "disputed",

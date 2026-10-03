@@ -43,9 +43,9 @@
 import { db } from "@anthers/db/client";
 import {
 	accountCycles,
-	accounts,
 	attentionEvents,
 	badges,
+	billingAccounts,
 	bookmarks,
 	comments,
 	crfSubsidies,
@@ -60,6 +60,7 @@ import {
 	stripeAccounts,
 	userBadges,
 	userBlocks,
+	userPreferences,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -101,7 +102,8 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		workRows,
 		projectRows,
 		purchaseRows,
-		accountRow,
+		billingRow,
+		preferenceRows,
 		cycleRows,
 		attentionRows,
 		badgeRows,
@@ -122,7 +124,8 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(works).where(eq(works.creatorId, userId)),
 		db.select().from(projects).where(eq(projects.creatorId, userId)),
 		db.select().from(purchases).where(eq(purchases.buyerId, userId)),
-		db.select().from(accounts).where(eq(accounts.userId, userId)),
+		db.select().from(billingAccounts).where(eq(billingAccounts.userId, userId)),
+		db.select().from(userPreferences).where(eq(userPreferences.userId, userId)),
 		db.select().from(accountCycles).where(eq(accountCycles.userId, userId)),
 		db.select().from(attentionEvents).where(eq(attentionEvents.userId, userId)),
 		db.select().from(userBadges).where(eq(userBadges.userId, userId)),
@@ -158,7 +161,6 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			location: user.location,
 			isCreator: user.isCreator,
 			emailVerified: user.emailVerified,
-			themePreference: user.themePreference,
 			createdAt: user.createdAt,
 			// The DID and handle are public identifiers the user chose to link. The tokens
 			// behind them are not here — see the note above.
@@ -166,6 +168,11 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			atprotoHandle: user.atprotoHandle,
 			atprotoPdsUrl: user.atprotoPdsUrl,
 		},
+
+		// Their own settings, whichever they set: the theme and activity-email preference
+		// live here since the accounts split, beside the display and Adult states. It is
+		// the user's own data and it exports; the row carries nothing about anybody else.
+		preferences: preferenceRows[0] ?? null,
 
 		// Metadata only, matching what Settings → Devices already shows. The `token`
 		// column is the credential and never leaves the database.
@@ -198,7 +205,10 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 
 		money: {
 			purchases: purchaseRows,
-			account: accountRow[0] ?? null,
+			// The Stripe machinery row — what it carries is billing state, and it exports
+			// because it is about this person's money. See the sections note for what the
+			// split moved off it.
+			billingAccount: billingRow[0] ?? null,
 			cycles: cycleRows,
 			userBadges: badgeRows,
 			poolDistributions: distributionRows,

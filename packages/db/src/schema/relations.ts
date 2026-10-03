@@ -27,11 +27,12 @@ import {
 import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
 import {
 	accountCycles,
-	accounts,
 	attentionEvents,
 	badges,
+	billingAccounts,
 	poolDistributions,
 	userBadges,
+	userPreferences,
 } from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -58,8 +59,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	inlineImages: many(inlineImages),
 	comments: many(comments),
 	reviews: many(reviews),
-	bookmarks: many(bookmarks, { relationName: "bookmarkOwner" }),
-	bookmarkedBy: many(bookmarks, { relationName: "bookmarkCreator" }),
+	bookmarks: many(bookmarks),
 
 	// Payments
 	stripeAccount: one(stripeAccounts),
@@ -67,7 +67,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	crfSubsidies: many(crfSubsidies),
 
 	// Accounts & economics
-	account: one(accounts),
+	billingAccount: one(billingAccounts),
+	userPreferences: one(userPreferences),
 	accountCycles: many(accountCycles),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
 	attentionEventsAsCreator: many(attentionEvents, { relationName: "attentionCreator" }),
@@ -189,20 +190,14 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
 	work: one(works, { fields: [reviews.workId], references: [works.id] }),
 }));
 
+// Posts only — the Work/Project/creator targets moved to `library_items` in `0035`,
+// and the schema carries only what a post bookmark names now.
 export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
 	user: one(users, {
 		fields: [bookmarks.userId],
 		references: [users.id],
-		relationName: "bookmarkOwner",
 	}),
 	post: one(posts, { fields: [bookmarks.postId], references: [posts.id] }),
-	work: one(works, { fields: [bookmarks.workId], references: [works.id] }),
-	project: one(projects, { fields: [bookmarks.projectId], references: [projects.id] }),
-	creator: one(users, {
-		fields: [bookmarks.creatorId],
-		references: [users.id],
-		relationName: "bookmarkCreator",
-	}),
 }));
 
 // ─── Payments ────────────────────────────────────────────────────────────────
@@ -227,8 +222,12 @@ export const crfSubsidiesRelations = relations(crfSubsidies, ({ one }) => ({
 
 // ─── Subscriptions ───────────────────────────────────────────────────────────
 
-export const accountsRelations = relations(accounts, ({ one }) => ({
-	user: one(users, { fields: [accounts.userId], references: [users.id] }),
+export const billingAccountsRelations = relations(billingAccounts, ({ one }) => ({
+	user: one(users, { fields: [billingAccounts.userId], references: [users.id] }),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+	user: one(users, { fields: [userPreferences.userId], references: [users.id] }),
 }));
 
 export const accountCyclesRelations = relations(accountCycles, ({ one }) => ({

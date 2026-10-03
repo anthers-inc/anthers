@@ -157,8 +157,6 @@ describe("the Library", () => {
 			type: "digital",
 			amount: "5.00",
 			processingFee: "0.45",
-			deliveryFee: "0.00",
-			crfFee: "0.00",
 			salesTax: "0.00",
 			creatorEarnings: "4.55",
 			stripePaymentIntentId: `pi_lib_${id}`,

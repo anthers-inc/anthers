@@ -169,8 +169,6 @@ async function completedPurchase(status = "completed") {
 			type: "digital",
 			amount: PRICE,
 			processingFee: "0.45",
-			deliveryFee: "0.00",
-			crfFee: "0.00",
 			creatorEarnings: "4.55",
 			stripePaymentIntentId: `pi_${uid()}`,
 			status,

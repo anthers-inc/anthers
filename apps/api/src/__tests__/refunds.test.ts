@@ -202,13 +202,6 @@ async function completedPurchase(
 		type?: string;
 		workId?: number | null;
 		/**
-		 * A pre-2026-08-12 purchase, which really did carry the first download's
-		 * delivery at $0.01/GiB. New sales record "0.00" — delivery is free — but the
-		 * refund path still reads this column off the ROW, because those rows exist and
-		 * their books have to close the same way they were opened.
-		 */
-		deliveryFee?: string;
-		/**
 		 * The tax Stripe Tax actually collected, as completion stamps it. Left off, the
 		 * fixture is a pre-tax row (the figure `calculateFees` used to invent); set, it
 		 * is a purchase completed under automatic tax, and the refund has to return this
@@ -230,8 +223,6 @@ async function completedPurchase(
 			type: opts.type ?? "digital",
 			amount: PRICE,
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: opts.deliveryFee ?? fees.deliveryFee.toFixed(2),
-			crfFee: "0.00",
 			// The stamped figure when given — what Stripe Tax actually collected — and
 			// `calculateFees`'s (now zero) otherwise, which is the pre-tax row's shape.
 			salesTax: opts.salesTax ?? fees.salesTax.toFixed(2),
@@ -355,8 +346,6 @@ describe("A basket refunds one item at a time", () => {
 					type: "digital",
 					amount: unit.toFixed(2),
 					processingFee: share(whole.processingFee).toFixed(2),
-					deliveryFee: "0.00",
-					crfFee: "0.00",
 					salesTax: share(whole.salesTax).toFixed(2),
 					creatorEarnings: unit.minus(share(whole.processingFee)).toFixed(2),
 					stripePaymentIntentId: intent,
@@ -497,21 +486,19 @@ describe("What the remainder absorbs", () => {
 	 * Recomputing from today's model would silently under-book every legacy refund by
 	 * the delivery it actually paid for.
 	 */
-	it("still books a LEGACY delivery fee, when the row carries one and the bytes went out", async () => {
-		const legacy = await completedPurchase({ downloadedAt: new Date(), deliveryFee: "0.02" });
-		await refundAs(buyerCookie, legacy.id);
+	it("books exactly the card fee on a downloaded purchase", async () => {
+		const purchase = await completedPurchase({ downloadedAt: new Date() });
+		await refundAs(buyerCookie, purchase.id);
 
-		const rows = await ledgerFor(legacy.id);
-		expect(new Decimal(rows[0].amount).toFixed(2)).toBe(
-			fees.processingFee.plus("0.02").negated().toFixed(2),
-		);
+		const rows = await ledgerFor(purchase.id);
+		expect(new Decimal(rows[0].amount).toFixed(2)).toBe(fees.processingFee.negated().toFixed(2));
 	});
 
-	it("returns a LEGACY delivery fee untouched when nothing was ever downloaded", async () => {
-		const legacy = await completedPurchase({ downloadedAt: null, deliveryFee: "0.02" });
-		await refundAs(buyerCookie, legacy.id);
+	it("books exactly the card fee when nothing was ever downloaded", async () => {
+		const purchase = await completedPurchase({ downloadedAt: null });
+		await refundAs(buyerCookie, purchase.id);
 
-		const rows = await ledgerFor(legacy.id);
+		const rows = await ledgerFor(purchase.id);
 		expect(new Decimal(rows[0].amount).toFixed(2)).toBe(fees.processingFee.negated().toFixed(2));
 	});
 
@@ -538,19 +525,13 @@ describe("What the remainder absorbs", () => {
 		const buyerTotal = new Decimal(purchase.amount).plus(purchase.salesTax);
 		const creatorReversed = new Decimal(purchase.creatorEarnings);
 		const taxReturned = new Decimal(purchase.salesTax);
-		// Bytes never sent are money never spent, so that delivery goes back to the
-		// buyer with the rest; bytes already sent are gone and land in `absorbed`.
-		const deliveryReturned = downloadedAt ? new Decimal(0) : new Decimal(purchase.deliveryFee);
+		// The delivery term is gone with the column (the shortfall is the card fee alone —
+		// see `refundShortfall` — so this balances without it).
 		const absorbed = new Decimal((await ledgerFor(purchase.id))[0].amount).negated();
 
-		expect(
-			buyerTotal
-				.minus(creatorReversed)
-				.minus(taxReturned)
-				.minus(deliveryReturned)
-				.minus(absorbed)
-				.toFixed(2),
-		).toBe("0.00");
+		expect(buyerTotal.minus(creatorReversed).minus(taxReturned).minus(absorbed).toFixed(2)).toBe(
+			"0.00",
+		);
 
 		// And the creator is never charged beyond what they were paid — the reversal
 		// is their earnings exactly, which is what stops a refund becoming a cut.
