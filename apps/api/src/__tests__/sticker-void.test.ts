@@ -17,14 +17,23 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, monthSettlements, poolDistributions, stickers } from "@anthers/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import {
+	badges,
+	billingAccounts,
+	monthSettlements,
+	poolDistributions,
+	stickers,
+	userBadges,
+} from "@anthers/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "../services/sticker-void";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const RUN = crypto.randomUUID().slice(0, 8);
@@ -40,6 +49,45 @@ async function signUp(username: string) {
 	return (await createAccount(username)).userId;
 }
 
+/**
+ * Give a user the org's Badge at `threshold` in `cycle` — find-or-create the rung (the
+ * org is the Free rung's owner), then write the holding. The void suite's stand-in for
+ * the amount write the webhooks made.
+ */
+async function holdOrgRung(userId: number, threshold: string, cycle: string): Promise<void> {
+	const orgId = await ensureOrgLadder();
+	const [rung] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		rung ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId: orgId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the void suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	await db
+		.delete(userBadges)
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, cycle),
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+			),
+		);
+	if (Number(threshold) > 0) {
+		await db.insert(userBadges).values({ userId, badgeId: badge.id, billingCycle: cycle });
+	}
+}
+
 describe("reverting a Sticker when Anthers removes what it sits on", () => {
 	let giverId: number;
 	let creatorId: number;
@@ -49,9 +97,12 @@ describe("reverting a Sticker when Anthers removes what it sits on", () => {
 		giverId = await signUp(`vd_giver_${RUN}`);
 		creatorId = await signUp(`vd_creator_${RUN}`);
 		await db
-			.insert(accounts)
-			.values({ userId: giverId, anthersSupport: "12.00", isActive: true })
+			.insert(billingAccounts)
+			.values({ userId: giverId, isActive: true })
 			.onConflictDoNothing();
+		// The giver at $12: the org rung held this void cycle — the Badge shape the
+		// allowance reads, replacing the amount the old fixture wrote.
+		await holdOrgRung(giverId, "12.00", CYCLE);
 		workId = (await insertWork({ creatorId, type: "text", title: `Void ${RUN}` })).id;
 	}, DB_SETUP_TIMEOUT);
 

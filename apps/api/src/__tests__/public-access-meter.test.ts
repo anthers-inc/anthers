@@ -24,7 +24,6 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accounts,
 	assets,
 	attentionEvents,
 	badges,
@@ -40,10 +39,12 @@ import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -186,14 +187,55 @@ function playlist(workId: number, cookie?: string) {
  * this suite stayed green while `publicAccessBudget` compared dollars against `>= 1` and
  * $1 a month bought unlimited access priced at $3.
  */
+/**
+ * Give `userId` the org's Badge at this month's Anthers dollars.
+ *
+ * ⚠️ This helper once wrote the accounts table's amount column, and the helper once took
+ * a different unit from the function it drove — which is how this suite stayed green while
+ * `publicAccessBudget` compared dollars against `>= 1` and $1 a month bought unlimited
+ * access priced at $3. The amount is a Badge holding now: the rung is resolved (or
+ * created) on the org's ladder and the holding written, exactly like the billing path —
+ * and only the org's ladder, since Anthers' set is the one whose price lifts this meter.
+ */
 async function setSupport(userId: number, anthersSupport: number) {
+	const orgId = await ensureOrgLadder();
+	const threshold = anthersSupport.toFixed(2);
+	const [rung] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		rung ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId: orgId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the meter suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	// Replace rather than stack — one holding per issuer per cycle, the same rule the
+	// picker and the gauntlet hops follow, so hopping between amounts reads honestly.
 	await db
-		.insert(accounts)
-		.values({ userId, anthersSupport: anthersSupport.toFixed(2), isActive: true })
-		.onConflictDoUpdate({
-			target: accounts.userId,
-			set: { anthersSupport: anthersSupport.toFixed(2) },
+		.delete(userBadges)
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+			),
+		);
+	if (anthersSupport > 0) {
+		await db.insert(userBadges).values({
+			userId,
+			badgeId: badge.id,
+			billingCycle: sql`to_char(now(), 'YYYY-MM-01')`,
 		});
+	}
 }
 
 beforeAll(async () => {
@@ -354,7 +396,6 @@ describe("what the meter must NOT charge for", () => {
 			type: "digital",
 			amount: "5.00",
 			processingFee: "0.45",
-			crfFee: "0.00",
 			salesTax: "0.33",
 			creatorEarnings: "4.55",
 			stripePaymentIntentId: `pi_pam_${run}`,

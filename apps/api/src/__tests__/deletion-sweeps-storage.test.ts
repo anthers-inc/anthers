@@ -162,7 +162,6 @@ describe("account deletion sweeps object storage", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
-				crfFee: "0.00",
 				creatorEarnings: "4.55",
 				stripePaymentIntentId: `pi_test_${SUFFIX}`,
 				status: "completed",

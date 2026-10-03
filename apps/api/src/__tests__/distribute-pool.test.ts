@@ -12,7 +12,13 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, badges, poolDistributions, stickers, userBadges } from "@anthers/db/schema";
+import {
+	badges,
+	billingAccounts,
+	poolDistributions,
+	stickers,
+	userBadges,
+} from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -21,9 +27,11 @@ import { distributePool } from "../jobs/distribute-pool";
 import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 /** A cycle far enough out that it can't collide with fixture or dev data. */
@@ -51,16 +59,46 @@ async function seedCycle(
 	directed: { creatorId: number; amount: string }[],
 ) {
 	const userId = await makeUser("viewer");
+	// The billing row carries the period the estimate keys from; the Anthers amount is
+	// the org rung held below (the badge-holdings shape, since the amount columns are
+	// the old table's).
 	const [acct] = await db
-		.insert(accounts)
+		.insert(billingAccounts)
 		.values({
 			userId,
-			anthersSupport: anthersSupport.toFixed(2),
 			currentPeriodStart: PERIOD_START,
 			currentPeriodEnd: PERIOD_END,
 			isActive: true,
 		})
-		.returning({ id: accounts.id });
+		.returning({ id: billingAccounts.id });
+	{
+		const orgId = await ensureOrgLadder();
+		const threshold = anthersSupport.toFixed(2);
+		const [rung] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+			.limit(1);
+		const badge =
+			rung ??
+			(
+				await db
+					.insert(badges)
+					.values({
+						creatorId: orgId,
+						threshold,
+						label: `$${threshold}`,
+						description: "A fixture rung the distribution suite holds.",
+					})
+					.returning({ id: badges.id })
+			)[0];
+		if (anthersSupport > 0) {
+			await db
+				.insert(userBadges)
+				.values({ userId, badgeId: badge.id, billingCycle: CYCLE })
+				.onConflictDoNothing();
+		}
+	}
 	for (const d of directed) {
 		const [existing] = await db
 			.select({ id: badges.id })

@@ -89,7 +89,7 @@ describe("the self-hosting flag cannot be set by request", () => {
 			body: JSON.stringify({ enabled: true }),
 		});
 		const rows = await db.execute(
-			sql`SELECT a.is_self_hosting FROM accounts a
+			sql`SELECT a.is_self_hosting FROM billing_accounts a
 			    JOIN users u ON u.id = a.user_id WHERE u.email = ${`${name}@example.com`}`,
 		);
 		// Either no account row was created, or it exists and the flag is still false.

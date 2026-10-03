@@ -21,7 +21,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { notifications, purchases, users } from "@anthers/db/schema";
+import { notifications, purchases, userPreferences, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { eraseAccount } from "../services/account-deletion.js";
@@ -90,7 +90,6 @@ beforeAll(async () => {
 			amount: "9.00",
 			salesTax: "0.00",
 			processingFee: "0.56",
-			crfFee: "0.00",
 			creatorEarnings: "8.44",
 			stripePaymentIntentId: `pi_ntf_${id}`,
 			status: "completed",
@@ -138,7 +137,13 @@ describe("one fact, one notification", () => {
 
 describe("the opt-out line", () => {
 	it("keeps the in-app record when activity email is switched off", async () => {
-		await db.update(users).set({ notifyActivityEmail: false }).where(eq(users.id, recipientId));
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notifyActivityEmail: false })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notifyActivityEmail: false },
+			});
 
 		const result = await notify({
 			userId: recipientId,
@@ -168,9 +173,9 @@ describe("the opt-out line", () => {
 		// applied here would mean someone believing they had opted into being told about
 		// their money, and not being.
 		const [before] = await db
-			.select({ pref: users.notifyActivityEmail })
-			.from(users)
-			.where(eq(users.id, recipientId));
+			.select({ pref: userPreferences.notifyActivityEmail })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, recipientId));
 		expect(before.pref).toBe(false);
 
 		const result = await notify({
@@ -194,7 +199,13 @@ describe("the opt-out line", () => {
 			.where(eq(notifications.dedupeKey, `test-essential-optout:${id}`));
 		expect(row.category).toBe("essential");
 
-		await db.update(users).set({ notifyActivityEmail: true }).where(eq(users.id, recipientId));
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notifyActivityEmail: true })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notifyActivityEmail: true },
+			});
 	});
 });
 

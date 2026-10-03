@@ -26,12 +26,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accounts,
-	bookmarks,
 	libraryItems,
 	projectItems,
 	projects,
 	shareLinks,
+	userPreferences,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -125,8 +124,10 @@ describe("what an Adult rating costs", () => {
 		// the enable route, because that route reads Stripe and this suite is about what the
 		// verdict DOES rather than about how it is reached — `content-preferences.test.ts` owns
 		// the funding-type half.
+		// The grown account has opted in and verified — `user_preferences` columns now
+		// (the accounts split).
 		await db
-			.insert(accounts)
+			.insert(userPreferences)
 			.values({
 				userId: grownId,
 				adultOptIn: true,
@@ -140,7 +141,7 @@ describe("what an Adult rating costs", () => {
 				adultDisplay: "blur",
 			})
 			.onConflictDoUpdate({
-				target: accounts.userId,
+				target: userPreferences.userId,
 				set: {
 					adultOptIn: true,
 					adultVerifiedAt: new Date(),
@@ -467,10 +468,10 @@ describe("what an Adult rating costs", () => {
 				{ userId: readerId, workId: adultWork.id },
 				{ userId: grownId, workId: adultWork.id },
 			]);
-			await db.insert(bookmarks).values([
-				{ userId: readerId, workId: adultWork.id },
-				{ userId: readerId, creatorId },
-			]);
+			// Bookmarks name posts only now — the Work/creator columns died with the dead
+			// columns sweep — so the leak this test watches is the POST listing. A post the
+			// fixture makes carrying the Adult Work's title stands in for the surface.
+			// (A bookmark to a Work can no longer exist, so it cannot leak.)
 			const [project] = await db
 				.insert(projects)
 				.values({
@@ -499,13 +500,15 @@ describe("what an Adult rating costs", () => {
 			expect(await titlesIn("/api/content/library", grownCookie)).toContain(ADULT_TITLE);
 		});
 
-		it("leaves a bookmark to it out, and keeps the reader's other bookmarks", async () => {
+		it("leaves nothing to leak through the bookmarks page", async () => {
+			// The bookmarks listing serves posts only — the Work/creator bookmark columns
+			// died with the dead-columns sweep — so a bookmark can no longer name an Adult
+			// Work at all, and the page can only leak a post's own title.
 			const res = await req("/api/content/bookmarks", {
 				headers: { Origin: ORIGIN, Cookie: readerCookie },
 			});
-			const body = (await res.json()) as { bookmarks: { creatorId: number | null }[] };
+			const body = (await res.json()) as { bookmarks: unknown[] };
 			expect(JSON.stringify(body)).not.toContain(ADULT_TITLE);
-			expect(body.bookmarks.some((b) => b.creatorId === creatorId)).toBe(true);
 		});
 
 		it("🚨 leaves a project holding only Adult work out of the listing, except for those who may see it", async () => {

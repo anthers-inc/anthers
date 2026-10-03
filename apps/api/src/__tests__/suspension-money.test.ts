@@ -20,7 +20,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accounts,
+	billingAccounts,
 	creatorCredits,
 	crfLedger,
 	invoiceLines,
@@ -138,14 +138,13 @@ describe("a suspended supporter's renewal", () => {
 		const creatorId = await makeUser("creator");
 		const supporterId = await makeUser("supporter");
 
-		// The account row `recordPaidInvoice` resolves the renewal against. Stripe is not
+		// The billing row `recordPaidInvoice` resolves the renewal against. Stripe is not
 		// configured in the suite, so `paymentOf`/`processingFeeFor` return their zero
 		// fallbacks — which is fine, because what is under test is the row's status and
 		// cycle, not the fee.
-		await db.insert(accounts).values({
+		await db.insert(billingAccounts).values({
 			userId: supporterId,
 			stripeCustomerId: `cus_${tag}_paused`,
-			anthersSupport: "6.00",
 			isActive: true,
 		});
 
@@ -188,10 +187,9 @@ describe("a suspended supporter's renewal", () => {
 
 	it("reductions owed against a paused renewal are settled without minting a coupon", async () => {
 		const supporterId = await makeUser("supporter");
-		await db.insert(accounts).values({
+		await db.insert(billingAccounts).values({
 			userId: supporterId,
 			stripeCustomerId: `cus_${tag}_reduction`,
-			anthersSupport: "6.00",
 			isActive: true,
 		});
 		await db.insert(supportReductions).values({

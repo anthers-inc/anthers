@@ -18,7 +18,8 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accounts,
+	badges,
+	billingAccounts,
 	creatorCredits,
 	crfLedger,
 	invoiceLines,
@@ -26,19 +27,22 @@ import {
 	monthSettlements,
 	poolDistributions,
 	stickers,
+	userBadges,
 } from "@anthers/db/schema";
 import { FREE_TIME_POOL, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
 import { distributePool } from "../jobs/distribute-pool";
 import { settleCycle } from "../jobs/settle-cycle";
 import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 /** A month far enough out that it cannot collide with fixture or dev data. */
@@ -79,22 +83,63 @@ async function makeUserWithCookie(kind: string) {
 }
 
 /**
- * A supporter whose account reads `today` — deliberately NOT what the month paid, so that a
- * settlement reading the account rather than the invoice is caught.
+ * A supporter whose holdings read `today` — deliberately NOT what the month paid, so that a
+ * settlement reading the holdings instead of the invoice is caught. The "amount today" is
+ * the org rung held this cycle under the Badge model; the fixture writes it the way the
+ * billing write would.
  */
 async function makeSupporter(today = 12) {
 	const userId = await makeUser("supporter");
 	const [acct] = await db
-		.insert(accounts)
+		.insert(billingAccounts)
 		.values({
 			userId,
-			anthersSupport: today.toFixed(2),
 			currentPeriodStart: new Date(`${MONTH}T00:00:00Z`),
 			currentPeriodEnd: new Date("2031-06-01T00:00:00Z"),
 			isActive: true,
 		})
-		.returning({ id: accounts.id });
+		.returning({ id: billingAccounts.id });
+	await holdOrgRung(userId, today.toFixed(2), MONTH);
 	return { userId, accountId: acct.id };
+}
+
+/**
+ * Give a user the org's Badge at `threshold` in `cycle` — find-or-create the rung (the
+ * org is the Free rung's owner), then write the holding, replacing the org's other rungs
+ * that cycle. The settlement suite's stand-in for the amount write the webhooks made.
+ */
+async function holdOrgRung(userId: number, threshold: string, cycle: string): Promise<void> {
+	const orgId = await ensureOrgLadder();
+	const [rung] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		rung ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId: orgId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the settlement suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	await db
+		.delete(userBadges)
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, cycle),
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+			),
+		);
+	if (Number(threshold) > 0) {
+		await db.insert(userBadges).values({ userId, badgeId: badge.id, billingCycle: cycle });
+	}
 }
 
 /** A paid invoice for the month, with its lines, as the webhook would have recorded it. */

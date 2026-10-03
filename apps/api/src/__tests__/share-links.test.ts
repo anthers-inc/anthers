@@ -30,18 +30,28 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { attentionEvents, shareLinks, transcodingJobs, users } from "@anthers/db/schema";
+import {
+	attentionEvents,
+	badges,
+	shareLinks,
+	transcodingJobs,
+	userBadges,
+	users,
+} from "@anthers/db/schema";
 import { SHARED_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
+// The org ladder seeds first, so its owner sits below the purge's high-water mark.
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -79,6 +89,44 @@ async function forceLink(sharerId: number, workId: number): Promise<string> {
 	const token = `f${crypto.randomUUID().replace(/-/g, "")}`.slice(0, 32);
 	await db.insert(shareLinks).values({ token, workId, sharerId });
 	return token;
+}
+
+/**
+ * Give a user the org's Badge at `threshold` this cycle — find-or-create the rung (the
+ * org is the Free rung's owner), then write the holding, replacing the org's other rungs.
+ * The share-link suite's stand-in for the amount write the webhooks made.
+ */
+async function holdOrgRung(userId: number, threshold: string): Promise<void> {
+	const orgId = await ensureOrgLadder();
+	const cycle = sql`to_char(now(), 'YYYY-MM-01')`;
+	const [rung] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		rung ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId: orgId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the share-link suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	await db
+		.delete(userBadges)
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, cycle),
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+			),
+		);
+	await db.insert(userBadges).values({ userId, badgeId: badge.id, billingCycle: cycle });
 }
 
 describe("Share links", () => {
@@ -455,7 +503,9 @@ describe("Share links", () => {
 		// no relay for strangers. Deriving the relay budget from the sharer's own allowance
 		// would make an unlimited account's relay unlimited — anonymous unmetered streaming,
 		// for $3 a month and one link.
-		await db.execute(sql`UPDATE accounts SET anthers_support = '12' WHERE user_id = ${otherId}`);
+		// The Anthers amount is a badge holding now (the accounts split dropped the column
+		// this used to UPDATE) — hold the $12 rung on the org ladder this cycle.
+		await holdOrgRung(otherId, "12.00");
 		const spender = await insertWork({
 			creatorId,
 			type: "text",

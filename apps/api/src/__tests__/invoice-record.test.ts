@@ -11,7 +11,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, invoiceLines, invoices, users } from "@anthers/db/schema";
+import { billingAccounts, invoiceLines, invoices, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe, setStripeClient } from "../lib/stripe";
@@ -164,9 +164,12 @@ beforeAll(async () => {
 	void supporter;
 	void creator;
 	await db
-		.insert(accounts)
+		.insert(billingAccounts)
 		.values({ userId: supporterId, stripeCustomerId: CUSTOMER })
-		.onConflictDoUpdate({ target: accounts.userId, set: { stripeCustomerId: CUSTOMER } });
+		.onConflictDoUpdate({
+			target: billingAccounts.userId,
+			set: { stripeCustomerId: CUSTOMER },
+		});
 	setStripeClient(fakeStripe());
 }, DB_SETUP_TIMEOUT);
 

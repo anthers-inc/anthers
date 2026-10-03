@@ -25,7 +25,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accounts,
+	billingAccounts,
 	creatorCredits,
 	crfLedger,
 	invoiceLines,
@@ -142,9 +142,12 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 			invoice_settings: { default_payment_method: card.id },
 		});
 		await db
-			.insert(accounts)
+			.insert(billingAccounts)
 			.values({ userId: supporter.userId, stripeCustomerId: customer.id })
-			.onConflictDoUpdate({ target: accounts.userId, set: { stripeCustomerId: customer.id } });
+			.onConflictDoUpdate({
+				target: billingAccounts.userId,
+				set: { stripeCustomerId: customer.id },
+			});
 
 		// ── The first month, started mid-month through the real route ──
 		const res = await app.fetch(
@@ -162,7 +165,10 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 			}),
 		);
 		expect(res.status).toBe(200);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporter.userId));
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, supporter.userId));
 		const subId = acct.stripeSubscriptionId as string;
 		let sub = await stripe.subscriptions.retrieve(subId);
 		const firstId =
