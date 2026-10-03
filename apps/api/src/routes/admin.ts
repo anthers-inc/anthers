@@ -33,6 +33,7 @@ import { QUEUES } from "../jobs/queue.js";
 import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware/admin.js";
 import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
+import { disputeStanding, loadDisputes } from "../services/admin-disputes.js";
 import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
 import { closePackage } from "../services/close-package.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
@@ -482,6 +483,18 @@ const adminRoutes = new Hono<AdminEnv>()
 			})),
 			deferred: DEFERRED_DEADLINE_SOURCES,
 		});
+	})
+
+	// ── Disputes ─────────────────────────────────────────────────────────────
+	// The operator's dispute list and the platform's dispute standing — the read half of
+	// the never-contest posture (Parker, 2026-09-14/15): a person evaluates a chargeback
+	// here and perhaps contests an exceptional one, and nothing on this surface submits
+	// anything. The flags (repeat / large / self-pay) are computed at read time in the
+	// service, never stored; `services/disputes.ts` stays the one writer of the rows.
+	.get("/disputes", async (c) => {
+		const now = new Date();
+		const [items, standing] = await Promise.all([loadDisputes(now), disputeStanding(now)]);
+		return c.json({ items, standing });
 	})
 
 	// ── Data-rights requests ────────────────────────────────────────────────
