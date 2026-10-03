@@ -1622,10 +1622,28 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "Exceeds what you are giving this cycle" }, 400);
 			}
 
+			// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
+			// rungs rather than sitting beside them.** The "cannot reduce" check above
+			// already assumes the shape (a viewer raising $3 → $6 has ONE holding, at $6),
+			// and the access/distribution reads enforce it defensively with MAX(threshold).
+			// An insert that left the old rung beside the new one would overstate the
+			// allocation against the cycle's budget — the e2e walk hit exactly that, ending
+			// a $3 → $21 climb holding $39 of rungs — while reading right only because
+			// every reader takes the max. Delete the issuer's other holdings for this
+			// cycle, then upsert the picked one.
+			await db
+				.delete(userBadges)
+				.where(
+					and(
+						eq(userBadges.userId, user.id),
+						eq(userBadges.billingCycle, cycle),
+						ne(userBadges.badgeId, badgeId),
+						sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${badge.creatorId})`,
+					),
+				);
+
 			// Upsert the holding. The unique key is (user, badge, cycle), so a repeated pick
-			// of the same rung is a no-op and a pick of a different rung from the same issuer
-			// holds the new one beside the old — the billing path reconciles from the
-			// subscription's items, which name one line per destination.
+			// of the same rung is a no-op.
 			await db
 				.insert(userBadges)
 				.values({
