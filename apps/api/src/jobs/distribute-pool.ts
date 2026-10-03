@@ -46,9 +46,9 @@
 
 import { db } from "@anthers/db";
 import {
-	accounts,
 	attentionEvents,
 	badges,
+	billingAccounts,
 	poolDistributions,
 	stickers,
 	userBadges,
@@ -380,19 +380,30 @@ function newDist(): Dist {
 async function distributeForAccount(acct: {
 	id: number;
 	userId: number;
-	anthersSupport: string;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
-	// The directed half of the month: the viewer's badge holdings this cycle, summed by
-	// creator through the held Badge's threshold. A viewer holds at most one badge per
-	// issuer per cycle, so the sum is one threshold per creator in practice — `MAX` per
-	// (creator, threshold) keeps the shape honest in the query the same way
-	// `buildAccessContext` does, and grouping by creator is what feeds the charge's
-	// `directed` map.
+	// What the viewer gives Anthers this cycle — the held Badge's threshold on the org's
+	// ladder, read the same way every other Anthers-side reader takes it: MAX through the
+	// holding join, the org identified as the Free rung's owner (the same subquery the
+	// gauntlet-state report uses, so the two cannot disagree). The old
+	// `accounts.anthers_support` column died with the split; the Badge IS the amount, and
+	// a viewer holds at most one org rung per cycle.
+	const anthersHeld = await db
+		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+		.where(
+			and(
+				eq(userBadges.userId, acct.userId),
+				eq(userBadges.billingCycle, cycleDate),
+				sql`${badges.creatorId} = (SELECT creator_id FROM badges WHERE threshold = '0.00' ORDER BY id LIMIT 1)`,
+			),
+		);
+
 	const directed = await db
 		.select({
 			creatorId: badges.creatorId,
@@ -400,7 +411,20 @@ async function distributeForAccount(acct: {
 		})
 		.from(userBadges)
 		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-		.where(and(eq(userBadges.userId, acct.userId), eq(userBadges.billingCycle, cycleDate)))
+		.where(
+			and(
+				eq(userBadges.userId, acct.userId),
+				eq(userBadges.billingCycle, cycleDate),
+				// 🚨 The org's own rung is NOT directed support — it is the Anthers line, read
+				// above. Without this predicate the org holding enters the directed map as if
+				// the org were a creator, and the Anthers money would be paid out as directed
+				// support (or double-count the pool's funding) — quietly, with every total
+				// adding up. The org is the Free rung's owner, the same subquery the
+				// Anthers-side read above uses, so the two halves cannot disagree about who
+				// the org is.
+				sql`${badges.creatorId} != (SELECT creator_id FROM badges WHERE threshold = '0.00' ORDER BY id LIMIT 1)`,
+			),
+		)
 		.groupBy(badges.creatorId);
 
 	const { distributions } = await computeMonth({
@@ -408,11 +432,11 @@ async function distributeForAccount(acct: {
 		cycle: cycleDate,
 		start,
 		end,
-		anthersDollars: supportAmount(acct.anthersSupport),
+		anthersDollars: supportAmount(anthersHeld[0]?.held ?? "0.00"),
 		// The estimate reads the month as one renewal on the 1st at today's amounts.
 		charges: [
 			{
-				anthers: new Decimal(supportAmount(acct.anthersSupport)),
+				anthers: new Decimal(supportAmount(anthersHeld[0]?.held ?? "0.00")),
 				directed: new Map(directed.map((d) => [d.creatorId, new Decimal(d.gross)])),
 			},
 		],
@@ -478,9 +502,9 @@ export async function distributePool(data: DistributePoolData) {
 	const accts = data.accountId
 		? await db
 				.select()
-				.from(accounts)
-				.where(and(eq(accounts.id, data.accountId), eq(accounts.isActive, true)))
-		: await db.select().from(accounts).where(eq(accounts.isActive, true));
+				.from(billingAccounts)
+				.where(and(eq(billingAccounts.id, data.accountId), eq(billingAccounts.isActive, true)))
+		: await db.select().from(billingAccounts).where(eq(billingAccounts.isActive, true));
 
 	let processed = 0;
 	for (const acct of accts) {

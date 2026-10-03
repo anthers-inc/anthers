@@ -189,7 +189,6 @@ async function insertPurchase(opts: {
 			type: "digital",
 			amount: opts.amount,
 			processingFee: opts.processingFee,
-			crfFee: "0.00",
 			salesTax: opts.tax,
 			creatorEarnings: opts.creatorEarnings,
 			stripePaymentIntentId: pi,

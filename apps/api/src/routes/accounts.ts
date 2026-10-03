@@ -40,6 +40,7 @@ import {
 	posts,
 	rightsRequests,
 	studioPreferences,
+	userPreferences,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -128,7 +129,18 @@ function serializePublicUser(
 }
 
 /** Private user profile shape (for /me) */
-function serializePrivateUser(user: typeof users.$inferSelect) {
+async function serializePrivateUser(user: typeof users.$inferSelect) {
+	// The theme and activity-email preferences ride `user_preferences` (the accounts
+	// split moved them off `users`); a user with no row has set nothing, and `null` is
+	// what "no choice" means on both.
+	const [prefs] = await db
+		.select({
+			themePreference: userPreferences.themePreference,
+			notifyActivityEmail: userPreferences.notifyActivityEmail,
+		})
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, user.id))
+		.limit(1);
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
@@ -141,7 +153,7 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
-		themePreference: user.themePreference,
+		themePreference: prefs?.themePreference ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Surfaced on /me because the cancel path runs through signing back in: someone
@@ -149,7 +161,7 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		// return, or the "oops" window is one they can only use if they remember it
 		// unaided.
 		deletionRequestedAt: user.deletionRequestedAt,
-		notifyActivityEmail: user.notifyActivityEmail,
+		notifyActivityEmail: prefs?.notifyActivityEmail !== false,
 	};
 }
 
@@ -278,7 +290,7 @@ const accountRoutes = new Hono()
 
 		if (!user) return c.json({ error: "User not found" }, 404);
 
-		return c.json({ user: serializePrivateUser(user) });
+		return c.json({ user: await serializePrivateUser(user) });
 	})
 
 	.patch("/me", requireAuth, zValidator("json", updateProfileSchema), async (c) => {
@@ -321,7 +333,38 @@ const accountRoutes = new Hono()
 			}
 		}
 
-		// Filter out undefined values
+		// The theme and activity-email preferences are `user_preferences` writes now (the
+		// accounts split moved them off the identity row). Insert-or-update: the row is
+		// eagerly creatable, so a user setting their first preference writes the row rather
+		// than requiring a separate creation step — and the identity fields below stay on
+		// `users`, which is why the two writes are separate statements rather than one
+		// table's `set`.
+		const prefUpdates: Record<string, unknown> = { updatedAt: new Date() };
+		if (data.themePreference !== undefined) prefUpdates.themePreference = data.themePreference;
+		// `essential` mail has no switch by design — see services/notifications.ts.
+		if (data.notifyActivityEmail !== undefined)
+			prefUpdates.notifyActivityEmail = data.notifyActivityEmail;
+		if (Object.keys(prefUpdates).length > 1) {
+			// The key exists only so the `> 1` test means "something was set"; the row's own
+			// `user_id` is what the insert carries.
+			delete (prefUpdates as { updatedAt?: unknown }).updatedAt;
+			const prefs = {
+				...(data.themePreference !== undefined ? { themePreference: data.themePreference } : {}),
+				...(data.notifyActivityEmail !== undefined
+					? { notifyActivityEmail: data.notifyActivityEmail }
+					: {}),
+			};
+			await db
+				.insert(userPreferences)
+				.values({ userId: sessionUser.id, ...prefs })
+				.onConflictDoUpdate({
+					target: userPreferences.userId,
+					set: { ...prefs, updatedAt: new Date() },
+				});
+		}
+
+		// Filter out undefined values — the preferences included, since they are this other
+		// table's columns and the `users` update below carries only identity fields.
 		const updates: Partial<typeof users.$inferInsert> = {};
 		if (data.displayName !== undefined) updates.displayName = data.displayName;
 		if (data.bio !== undefined) updates.bio = data.bio;
@@ -330,13 +373,14 @@ const accountRoutes = new Hono()
 		if (data.headerImage !== undefined) updates.headerImage = data.headerImage;
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.location !== undefined) updates.location = data.location;
-		if (data.themePreference !== undefined) updates.themePreference = data.themePreference;
-		// `essential` mail has no switch by design — see services/notifications.ts.
-		if (data.notifyActivityEmail !== undefined)
-			updates.notifyActivityEmail = data.notifyActivityEmail;
 
 		if (Object.keys(updates).length === 0) {
-			return c.json({ error: "No fields to update" }, 400);
+			if (Object.keys(prefUpdates).length === 0) {
+				return c.json({ error: "No fields to update" }, 400);
+			}
+			// Preferences-only change: re-read the row so the response is the new state.
+			const [user] = await db.select().from(users).where(eq(users.id, sessionUser.id)).limit(1);
+			return c.json({ user: await serializePrivateUser(user!) });
 		}
 
 		const [updated] = await db
@@ -345,7 +389,7 @@ const accountRoutes = new Hono()
 			.where(eq(users.id, sessionUser.id))
 			.returning();
 
-		return c.json({ user: serializePrivateUser(updated) });
+		return c.json({ user: await serializePrivateUser(updated) });
 	})
 
 	// ── Following List ───────────────────────────────────────────────────────

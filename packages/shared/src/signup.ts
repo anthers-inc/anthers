@@ -74,7 +74,7 @@ export function picksAreEmpty(picks: SignupPicks): boolean {
  *
  * 🚨 **This was a COUNT until 2026-08-16, and both of its consumers take an amount.**
  * `anthers` was `1` for "ticked" and the total was `1 + directed.length`, which the page
- * then handed to `preview/:amount` and to the signup body's `anthersSupport`. That was
+ * then handed to `preview/:amount` and to the signup body's Anthers amount. That was
  * correct while amounts were multiples of one price the server multiplied by; the
  * retirement made the server take dollars and multiply by nothing, so the ceremony
  * **quoted $3 for a $9 charge** and then subscribed the user at **$1 a month** — under the

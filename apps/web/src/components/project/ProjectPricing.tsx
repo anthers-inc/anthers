@@ -33,8 +33,6 @@ interface ProjectPricingProps {
 interface Quote {
 	amount: string;
 	processingFee: string;
-	deliveryFee: string;
-	crfFee: string;
 	/** Null — the tax is resolved by Stripe Tax at the session, from the buyer's address. */
 	salesTax: string | null;
 	buyerTotal: string | null;

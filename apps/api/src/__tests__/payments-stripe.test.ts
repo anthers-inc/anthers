@@ -21,7 +21,16 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, assets, crfLedger, purchases, stripeAccounts, users } from "@anthers/db/schema";
+import {
+	assets,
+	badges,
+	billingAccounts,
+	crfLedger,
+	purchases,
+	stripeAccounts,
+	userBadges,
+	users,
+} from "@anthers/db/schema";
 import { calculateFees, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
@@ -30,10 +39,12 @@ import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -454,16 +465,38 @@ describe("Payments not configured — every guarded route refuses", () => {
 	 * test; the other half is that the database did not move.
 	 */
 	it("refuses to cancel — and leaves the account untouched", async () => {
+		// A subscription and the held Badge beside it — what a supporter looks like. The
+		// cancel check reads the holding (the amount column died), so the fixture holds
+		// one or the route's "nothing to cancel" refusal fires instead of Stripe's.
+		const orgId = await ensureOrgLadder();
+		const [rung] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, "6.00")))
+			.limit(1);
 		await db
-			.insert(accounts)
+			.delete(userBadges)
+			.where(
+				and(
+					eq(userBadges.userId, subscriberId),
+					eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
+					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				),
+			);
+		await db.insert(userBadges).values({
+			userId: subscriberId,
+			badgeId: rung.id,
+			billingCycle: sql`to_char(now(), 'YYYY-MM-01')`,
+		});
+		await db
+			.insert(billingAccounts)
 			.values({
 				userId: subscriberId,
-				anthersSupport: "6.00",
 				stripeSubscriptionId: `sub_${uid()}`,
 			})
 			.onConflictDoUpdate({
-				target: accounts.userId,
-				set: { anthersSupport: "6.00", canceledAt: null },
+				target: billingAccounts.userId,
+				set: { canceledAt: null },
 			});
 
 		await withoutStripe(async () => {
@@ -474,14 +507,32 @@ describe("Payments not configured — every guarded route refuses", () => {
 			expect(res.status).toBe(503);
 		});
 
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, subscriberId));
 		expect(acct.canceledAt).toBeNull();
-		expect(acct.anthersSupport).toBe("6.00");
+		// And the holding still stands — the database did not move.
+		const [stillHeld] = await db
+			.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
+			.from(userBadges)
+			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+			.where(
+				and(
+					eq(userBadges.userId, subscriberId),
+					eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
+					eq(badges.creatorId, orgId),
+				),
+			);
+		expect(Number(stillHeld.held)).toBe(6);
 	});
 
 	it("refuses to resume — and leaves the cancellation in place", async () => {
 		const canceledAt = new Date();
-		await db.update(accounts).set({ canceledAt }).where(eq(accounts.userId, subscriberId));
+		await db
+			.update(billingAccounts)
+			.set({ canceledAt })
+			.where(eq(billingAccounts.userId, subscriberId));
 
 		await withoutStripe(async () => {
 			const res = await req("/api/subscriptions/resume", {
@@ -491,7 +542,10 @@ describe("Payments not configured — every guarded route refuses", () => {
 			expect(res.status).toBe(503);
 		});
 
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, subscriberId));
 		expect(acct.canceledAt).not.toBeNull();
 	});
 });
@@ -645,7 +699,7 @@ function fakeSessionFor(intentId: string, opts: { country?: string; taxCents?: n
 }
 
 describe("Webhook: payment_intent.succeeded", () => {
-	it("completes a pending post purchase and books the ledger row once", async () => {
+	it("completes a pending post purchase and writes no purchase-fee ledger row", async () => {
 		const piId = `pi_${uid()}`;
 		const [pending] = await db
 			.insert(purchases)
@@ -655,8 +709,6 @@ describe("Webhook: payment_intent.succeeded", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
-				deliveryFee: "0.02",
-				crfFee: "0.01",
 				creatorEarnings: "5.00",
 				stripePaymentIntentId: piId,
 				status: "pending",
@@ -669,16 +721,18 @@ describe("Webhook: payment_intent.succeeded", () => {
 		const [row] = await db.select().from(purchases).where(eq(purchases.id, pending.id));
 		expect(row.status).toBe("completed");
 
+		// The always-zero purchase-fee ledger row is gone with its column (the accounts
+		// split) — a completed Work purchase books nothing by itself. The row that remains
+		// meaningful is the refund shortfall, which `refunds.test.ts` owns.
 		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
-		expect(ledger).toHaveLength(1);
-		expect(new Decimal(ledger[0].amount).toFixed(2)).toBe("0.01");
+		expect(ledger).toHaveLength(0);
 
-		// Redelivery — Stripe retries, and it must not book the fee a second time. The
-		// idempotency is structural (`WHERE status = 'pending'`), which is easy to lose in
-		// a refactor and impossible to notice without this assertion.
+		// Redelivery — Stripe retries, and it must not double-complete. The idempotency is
+		// structural (`WHERE status = 'pending'`), which is easy to lose in a refactor and
+		// impossible to notice without this assertion.
 		expect((await sendWebhook(event)).status).toBe(200);
-		const after = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
-		expect(after).toHaveLength(1);
+		const [still] = await db.select().from(purchases).where(eq(purchases.id, pending.id));
+		expect(still.status).toBe("completed");
 	});
 
 	it("ignores a PaymentIntent it has no purchase row for", async () => {
@@ -702,7 +756,6 @@ describe("Webhook: payment_intent.succeeded", () => {
 			type: "digital",
 			amount: "5.00",
 			processingFee: "0.45",
-			crfFee: "0.00",
 			creatorEarnings: "4.55",
 			stripePaymentIntentId: sessionId,
 			status: "pending",
@@ -744,7 +797,6 @@ describe("Webhook: payment_intent.succeeded", () => {
 			type: "digital",
 			amount: "5.00",
 			processingFee: "0.45",
-			crfFee: "0.00",
 			creatorEarnings: "4.55",
 			stripePaymentIntentId: sessionId,
 			status: "pending",
@@ -780,7 +832,6 @@ describe("Webhook: payment_intent.succeeded", () => {
 				type: "digital",
 				amount,
 				processingFee: "0.40",
-				crfFee: "0.00",
 				creatorEarnings: amount,
 				stripePaymentIntentId: sessionId,
 				status: "pending",
@@ -814,7 +865,6 @@ describe("Webhook: payment_intent.payment_failed", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
-				crfFee: "0.01",
 				creatorEarnings: "5.00",
 				stripePaymentIntentId: piId,
 				status: "pending",
@@ -840,7 +890,6 @@ describe("Webhook: payment_intent.payment_failed", () => {
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
-				crfFee: "0.01",
 				creatorEarnings: "5.00",
 				stripePaymentIntentId: piId,
 				status: "completed",
@@ -909,13 +958,30 @@ describe("Webhook: customer.subscription.*", () => {
 	beforeAll(async () => {
 		subId = `sub_${uid()}`;
 		await db
-			.insert(accounts)
-			.values({ userId: subscriberId, stripeCustomerId: customerId, anthersSupport: "0.00" })
+			.insert(billingAccounts)
+			.values({ userId: subscriberId, stripeCustomerId: customerId })
 			.onConflictDoUpdate({
-				target: accounts.userId,
-				set: { stripeCustomerId: customerId, anthersSupport: "0.00", stripeSubscriptionId: "" },
+				target: billingAccounts.userId,
+				set: { stripeCustomerId: customerId, stripeSubscriptionId: "" },
 			});
 	}, DB_SETUP_TIMEOUT);
+
+	/** What the org's ladder says this subscriber holds, in dollars. */
+	async function heldOnOrgLadder(userId: number): Promise<number> {
+		const orgId = await ensureOrgLadder();
+		const [held] = await db
+			.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
+			.from(userBadges)
+			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+			.where(
+				and(
+					eq(userBadges.userId, userId),
+					eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
+					eq(badges.creatorId, orgId),
+				),
+			);
+		return Number(held?.held ?? 0);
+	}
 
 	it("takes the Anthers amount from the item stamped for Anthers", async () => {
 		const periodEnd = 1_900_000_000;
@@ -926,8 +992,14 @@ describe("Webhook: customer.subscription.*", () => {
 			),
 		);
 
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(acct.anthersSupport).toBe("9.00");
+		// The Anthers amount is the holding the webhook writes on the org's ladder — the
+		// Badge at the Anthers line's threshold — not an amount column, which died with
+		// the split.
+		expect(await heldOnOrgLadder(subscriberId)).toBe(9);
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, subscriberId));
 		expect(acct.isActive).toBe(true);
 		expect(acct.stripeSubscriptionId).toBe(subId);
 		// The period end reads off the ITEM, not the subscription — the 2026-02 API move.
@@ -941,8 +1013,7 @@ describe("Webhook: customer.subscription.*", () => {
 				subscription({ id: subId, customer: customerId, anthers: 3 }),
 			),
 		);
-		const [down] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(down.anthersSupport).toBe("3.00");
+		expect(await heldOnOrgLadder(subscriberId)).toBe(3);
 	});
 
 	it("records a pending cancellation without dropping the support", async () => {
@@ -953,9 +1024,12 @@ describe("Webhook: customer.subscription.*", () => {
 				subscription({ id: subId, customer: customerId, anthers: 3, cancelAtPeriodEnd: true }),
 			),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, subscriberId));
 		expect(acct.canceledAt).not.toBeNull();
-		expect(acct.anthersSupport).toBe("3.00");
+		expect(await heldOnOrgLadder(subscriberId)).toBe(3);
 	});
 
 	it("ignores a canceled subscription that isn't the account's current one", async () => {
@@ -967,8 +1041,11 @@ describe("Webhook: customer.subscription.*", () => {
 				subscription({ id: `sub_${uid()}`, customer: customerId, status: "canceled" }),
 			),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(acct.anthersSupport).toBe("3.00");
+		expect(await heldOnOrgLadder(subscriberId)).toBe(3);
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, subscriberId));
 		expect(acct.stripeSubscriptionId).toBe(subId);
 	});
 
@@ -979,8 +1056,13 @@ describe("Webhook: customer.subscription.*", () => {
 				subscription({ id: subId, customer: customerId, status: "canceled", anthers: 3 }),
 			),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(acct.anthersSupport).toBe("0.00");
+		// The holding goes — the cycle's unpaid holdings lapse — and the billing row
+		// drops the subscription id.
+		expect(await heldOnOrgLadder(subscriberId)).toBe(0);
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, subscriberId));
 		expect(acct.stripeSubscriptionId).toBe("");
 		expect(acct.canceledAt).toBeNull();
 	});
@@ -1203,12 +1285,14 @@ describe("Checkout — session construction under automatic tax", () => {
 		expect(res.status).toBe(200);
 
 		// The list price is what the buyer was shown; the creator receives it less the
-		// at-cost card processing. Anthers retains none of it.
+		// at-cost card processing. Anthers retains none of it. The retired fee fields
+		// (`crfFee`, `deliveryFee`) left the quote when their columns left the purchase
+		// row — asserting their absence is the regression test for that.
 		expect(body.amount).toBe(PRICE);
-		expect(body.crfFee).toBe("0.00");
+		expect(body.crfFee).toBeUndefined();
+		expect(body.deliveryFee).toBeUndefined();
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 		expect(new Decimal(body.creatorEarnings).lessThan(new Decimal(PRICE))).toBe(true);
-		expect(body.deliveryFee).toBe(expected.deliveryFee.toFixed(2));
 		expect(body.processingFee).toBe(expected.processingFee.toFixed(2));
 		// No tax figure, on purpose: the rate is resolved by Stripe Tax from the buyer's
 		// billing address at the session, so the quote presents nothing rather than an
@@ -1344,9 +1428,9 @@ describe("Checkout — session construction under automatic tax", () => {
 		expect(row.workId).toBe(paidWorkId);
 		expect(new Decimal(row.amount).toFixed(2)).toBe(PRICE);
 		expect(new Decimal(row.creatorEarnings).toFixed(2)).toBe(expected.creatorEarnings.toFixed(2));
-		// The purchase fee was removed 2026-08-03; the NOT NULL column stays and
-		// is always zero, so a row that ever carries a non-zero value is a regression.
-		expect(new Decimal(row.crfFee).toFixed(2)).toBe("0.00");
+		// The purchase fee was removed 2026-08-03 and its column with the accounts split —
+		// the ledger row it fed always carried zero and is not written any more (see the
+		// webhook's completion), so the absence here IS the assertion's successor.
 		// Sales tax is zero at checkout — Stripe Tax resolves the real figure from the
 		// buyer's address at completion and the webhook stamps it. A non-zero here would
 		// mean a charge path reintroduced a flat rate Anthers cannot know in advance.

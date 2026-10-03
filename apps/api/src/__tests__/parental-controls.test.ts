@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, attentionEvents } from "@anthers/db/schema";
+import { attentionEvents, userPreferences } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -127,9 +127,9 @@ describe("Parental controls", () => {
 			languageFilter: false,
 		});
 		await db.delete(attentionEvents).where(eq(attentionEvents.userId, childId));
-		// The support account too, because the Adult tests below seed one and every column
+		// The preferences row too, because the Adult tests below seed one and every column
 		// that decides whether the rung is reachable lives on it.
-		await db.delete(accounts).where(eq(accounts.userId, childId));
+		await db.delete(userPreferences).where(eq(userPreferences.userId, childId));
 	}
 
 	/**
@@ -155,9 +155,9 @@ describe("Parental controls", () => {
 			adultDisplay: display,
 		};
 		await db
-			.insert(accounts)
+			.insert(userPreferences)
 			.values({ userId: childId, ...seeded })
-			.onConflictDoUpdate({ target: accounts.userId, set: seeded });
+			.onConflictDoUpdate({ target: userPreferences.userId, set: seeded });
 	}
 
 	/** Turn the maturity lock on, with the pin, leaving everything else alone. */
@@ -317,7 +317,10 @@ describe("Parental controls", () => {
 		// answer to it.
 		await reset();
 		await alreadyVerified("blur");
-		await db.update(accounts).set({ adultOptIn: true }).where(eq(accounts.userId, childId));
+		await db
+			.update(userPreferences)
+			.set({ adultOptIn: true })
+			.where(eq(userPreferences.userId, childId));
 		await lock(true);
 
 		const res = await send("/api/accounts/me/adult-access", "DELETE", child, {});

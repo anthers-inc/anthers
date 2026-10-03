@@ -94,7 +94,6 @@ import {
 	eq,
 	inArray,
 	isNotNull,
-	isNull,
 	like,
 	ne,
 	or,
@@ -5535,74 +5534,33 @@ const contentRoutes = new Hono()
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════
-	// BOOKMARKS — a user-ordered list of posts, Projects, and creators
+	// BOOKMARKS — a user-ordered list of posts
 	// ══════════════════════════════════════════════════════════════════════════
 
+	// Posts carry no rating and no gate of their own — that is what makes an announcement
+	// an announcement — so the listing is the plain shelf read. The rung conditions bind
+	// Work listings, and bookmarks stopped naming Works when the pre-`0035` targets died
+	// at the column level (the accounts split's dead-column sweep).
 	.get("/bookmarks", requireAuth, async (c) => {
 		const user = c.get("user");
-		// A bookmark to a Work the reader may not see is left out rather than rendered with its
-		// title. Bookmarks to posts, projects and creators carry no rating and are unaffected,
-		// which is why the condition only binds rows that name a Work.
-		const [{ hidden: adultHidden }, { hidden: parentalHidden }] = await Promise.all([
-			adultVisibility(user.id),
-			parentalVisibility(user.id),
-		]);
 
 		const result = await db
 			.select({
 				bookmark: bookmarks,
-				projectTitle: projects.title,
-				projectSlug: projects.slug,
-				projectCoverImage: projects.coverImage,
 				postTitle: posts.title,
 				postSlug: posts.slug,
 				postPublicId: posts.publicId,
-				workTitle: works.title,
-				workSlug: works.slug,
-				workPublicId: works.publicId,
-				workType: works.type,
-				workThumbnail: works.thumbnail,
-				creatorHandle: users.atprotoHandle,
-				creatorDisplayName: users.displayName,
-				creatorAvatar: users.avatar,
 			})
 			.from(bookmarks)
-			.leftJoin(projects, eq(bookmarks.projectId, projects.id))
 			.leftJoin(posts, eq(bookmarks.postId, posts.id))
-			.leftJoin(works, eq(bookmarks.workId, works.id))
-			.leftJoin(users, eq(bookmarks.creatorId, users.id))
-			.where(
-				and(
-					eq(bookmarks.userId, user.id),
-					or(isNull(bookmarks.workId), and(adultHidden, parentalHidden) ?? sql`true`),
-				),
-			)
+			.where(eq(bookmarks.userId, user.id))
 			.orderBy(asc(bookmarks.sortOrder));
 
 		return c.json({
 			bookmarks: result.map((r) => ({
 				...r.bookmark,
-				project: r.bookmark.projectId
-					? { title: r.projectTitle, slug: r.projectSlug, coverImage: r.projectCoverImage }
-					: null,
 				post: r.bookmark.postId
 					? { title: r.postTitle, slug: r.postSlug, publicId: r.postPublicId }
-					: null,
-				work: r.bookmark.workId
-					? {
-							title: r.workTitle,
-							slug: r.workSlug,
-							publicId: r.workPublicId,
-							type: r.workType,
-							thumbnail: r.workThumbnail,
-						}
-					: null,
-				creator: r.bookmark.creatorId
-					? {
-							handle: r.creatorHandle,
-							displayName: r.creatorDisplayName,
-							avatar: r.creatorAvatar,
-						}
 					: null,
 			})),
 		});
@@ -5615,13 +5573,11 @@ const contentRoutes = new Hono()
 			"json",
 			z
 				.object({
-					projectId: z.number().int().optional(),
 					postId: z.number().int().optional(),
-					creatorId: z.number().int().optional(),
 				})
 				.refine(
-					(d) => [d.projectId, d.postId, d.creatorId].filter((v) => v !== undefined).length === 1,
-					"Exactly one of projectId, postId, or creatorId must be provided",
+					(d) => [d.postId].filter((v) => v !== undefined).length === 1,
+					"Exactly one of postId must be provided",
 				),
 		),
 		async (c) => {
@@ -5637,9 +5593,7 @@ const contentRoutes = new Hono()
 				.insert(bookmarks)
 				.values({
 					userId: user.id,
-					projectId: data.projectId ?? null,
 					postId: data.postId ?? null,
-					creatorId: data.creatorId ?? null,
 					sortOrder: Number(maxSort.max) + 1,
 				})
 				.returning();

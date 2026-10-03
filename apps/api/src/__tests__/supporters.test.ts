@@ -13,8 +13,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { accountCycles, userPreferences } from "@anthers/db/schema";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -42,10 +41,15 @@ async function supporter(tag: string, perCycle: number, cycles: number, listed =
 	const account = await signUp(`sup_${tag}_${RUN}`);
 	const { cookie, handle } = account;
 	const userId = account.userId;
+	// The listing preference is a user_preferences write now — the supporters page reads
+	// it there, and a supporter with no preferences row counts as listed (the default).
 	await db
-		.insert(accounts)
-		.values({ userId, anthersSupport: "0.00", isActive: true, listedAsSupporter: listed })
-		.onConflictDoNothing();
+		.insert(userPreferences)
+		.values({ userId, listedAsSupporter: listed })
+		.onConflictDoUpdate({
+			target: userPreferences.userId,
+			set: { listedAsSupporter: listed },
+		});
 	for (let i = 0; i < cycles; i++) {
 		await db.insert(accountCycles).values({
 			userId,
@@ -74,7 +78,8 @@ describe("the supporters page", () => {
 		await supporter("a", 12, 6);
 		await supporter("b", 12, 6);
 		await supporter("c", 12, 6);
-		// Gave for three months in the past and stopped: `accounts.anthersSupport` is 0.
+		// Gave for three months in the past and stopped: the held badge (if a fixture ever
+		// wrote one) is gone, and the cycles are the record.
 		stopped = await supporter("stopped", 6, 3);
 		optedOut = await supporter("out", 12, 6, false);
 	}, DB_SETUP_TIMEOUT);
@@ -91,13 +96,9 @@ describe("the supporters page", () => {
 	});
 
 	it("⭐ keeps somebody who supported in the past and has since stopped", async () => {
-		// Their live standing is $0. Reading `accounts.anthers_support` instead of the cycle
-		// record would drop them, which is the failure this page exists not to have.
-		const [acct] = await db
-			.select({ now: accounts.anthersSupport })
-			.from(accounts)
-			.where(eq(accounts.userId, stopped.userId));
-		expect(Number(acct.now)).toBe(0);
+		// Their live standing is zero holdings this cycle — Free. Reading live standing
+		// instead of the cycle record would drop them, which is the failure this page
+		// exists not to have.
 		expect(flatNames((await page()).groups)).toContain(stopped.handle);
 	});
 
@@ -107,11 +108,6 @@ describe("the supporters page", () => {
 
 	it("leaves out an account that has never given anything", async () => {
 		const account = await signUp(`sup_never_${RUN}`);
-		const userId = account.userId;
-		await db
-			.insert(accounts)
-			.values({ userId, anthersSupport: "0.00", isActive: true })
-			.onConflictDoNothing();
 		expect(flatNames((await page()).groups)).not.toContain(account.handle);
 	});
 

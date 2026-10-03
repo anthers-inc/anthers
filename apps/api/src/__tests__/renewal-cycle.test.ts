@@ -15,15 +15,15 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accounts,
 	badges,
+	billingAccounts,
 	invoices,
 	supportReductions,
 	userBadges,
 	users,
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor, nextCycleKey } from "@anthers/shared/billing-cycle";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
@@ -31,8 +31,10 @@ import { planItemChange, syncSubscriptionToAccount } from "../services/billing";
 import { applyReductionsToInvoice } from "../services/support-reductions";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
+await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
@@ -179,22 +181,87 @@ beforeEach(async () => {
 	await db.delete(supportReductions).where(eq(supportReductions.userId, supporterId));
 });
 
-/** Point the account at a subscription so `POST /account` takes the change path. */
+/** Point the billing row at a subscription so `POST /account` takes the change path. */
 async function withSubscription(customerId = "cus_under_test") {
 	await db
-		.insert(accounts)
+		.insert(billingAccounts)
 		.values({ userId: supporterId, stripeCustomerId: customerId, stripeSubscriptionId: SUB_ID })
 		.onConflictDoUpdate({
-			target: accounts.userId,
+			target: billingAccounts.userId,
 			set: { stripeCustomerId: customerId, stripeSubscriptionId: SUB_ID },
 		});
 }
 
 async function clearSubscription() {
 	await db
-		.update(accounts)
+		.update(billingAccounts)
 		.set({ stripeSubscriptionId: "", currentPeriodStart: null })
-		.where(eq(accounts.userId, supporterId));
+		.where(eq(billingAccounts.userId, supporterId));
+}
+
+/**
+ * Give the supporter the org's Badge at `threshold` this cycle — find-or-create the rung
+ * on the ladder (the org is the Free rung's owner), then write the holding, replacing the
+ * org's other rungs the way every real write does.
+ */
+async function holdOrgRung(userId: number, threshold: string): Promise<void> {
+	const orgId = await ensureOrgLadder();
+	const [rung] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		rung ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId: orgId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the renewal suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	await db
+		.delete(userBadges)
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, currentCycleKey()),
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+			),
+		);
+	await db
+		.insert(userBadges)
+		.values({ userId, badgeId: badge.id, billingCycle: currentCycleKey() });
+}
+
+/** What the org's ladder says this user holds, in dollars — the read the assertions make. */
+async function heldOnOrgLadder(userId: number): Promise<number> {
+	const orgId = await ensureOrgLadder();
+	const [held] = await db
+		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, currentCycleKey()),
+				sql`${badges.creatorId} = ${orgId}`,
+			),
+		);
+	return Number(held?.held ?? 0);
+}
+
+/** The picker's budget as the billing row carries it. */
+async function budgetOf(userId: number): Promise<string> {
+	const [acct] = await db
+		.select({ directedBudget: billingAccounts.directedBudget })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId));
+	return acct?.directedBudget ?? "0.00";
 }
 
 function setSupport(body: object) {
@@ -480,14 +547,19 @@ describe("what is in force does not drop until the cycle turns", () => {
 
 	beforeEach(async () => {
 		await db
-			.update(accounts)
+			.update(billingAccounts)
 			.set({
 				stripeCustomerId: "cus_under_test",
-				anthersSupport: "12.00",
-				creatorSupportTotal: "5.00",
 				currentPeriodStart: new Date(SEPT * 1000),
+				// The stored budget participates in the held-over guard, same as the old
+				// amounts columns did; $12 is the September charge.
+				directedBudget: "12.00",
 			})
-			.where(eq(accounts.userId, supporterId));
+			.where(eq(billingAccounts.userId, supporterId));
+		// The in-force Badge fixture: a $12 org rung held this cycle. What the webhooks
+		// find "in force" is this holding — read by `heldOnOrgLadder` below — beside the
+		// stored budget.
+		await holdOrgRung(supporterId, "12.00");
 	});
 
 	it("keeps the Badge somebody already paid for when they lower it mid-month", async () => {
@@ -497,8 +569,10 @@ describe("what is in force does not drop until the cycle turns", () => {
 		await syncSubscriptionToAccount(
 			subscription({ anthers: 3, periodStart: SEPT, periodEnd: OCT }),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
-		expect(Number(acct.anthersSupport)).toBe(12);
+		// Held over: the $3 holding is NOT applied on top of the $12 within the cycle, and
+		// the budget's stored figure participates the same way.
+		expect(await heldOnOrgLadder(supporterId)).toBe(12);
+		expect(await budgetOf(supporterId)).toBe("12.00");
 	});
 
 	it("takes the lower amount once the period has moved on", async () => {
@@ -509,16 +583,18 @@ describe("what is in force does not drop until the cycle turns", () => {
 				periodEnd: Math.floor(Date.UTC(2026, 10, 1) / 1000),
 			}),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
-		expect(Number(acct.anthersSupport)).toBe(3);
+		// The period turned, so the items ($3) are the whole truth: the webhook re-stamps
+		// the holding at $3, and the budget — which carries only the DIRECTED side, and
+		// these items carry none — zeroes with it.
+		expect(await heldOnOrgLadder(supporterId)).toBe(3);
+		expect(await budgetOf(supporterId)).toBe("0.00");
 	});
 
 	it("applies a raise immediately, because a raise is charged in full today", async () => {
 		await syncSubscriptionToAccount(
 			subscription({ anthers: 24, periodStart: SEPT, periodEnd: OCT }),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
-		expect(Number(acct.anthersSupport)).toBe(24);
+		expect(await heldOnOrgLadder(supporterId)).toBe(24);
 	});
 
 	it("writes the period START, which nothing wrote before", async () => {
@@ -532,7 +608,10 @@ describe("what is in force does not drop until the cycle turns", () => {
 				periodEnd: Math.floor(Date.UTC(2026, 10, 1) / 1000),
 			}),
 		);
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
+		const [acct] = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, supporterId));
 		expect(cycleKeyFor(acct.currentPeriodStart as Date)).toBe("2026-10-01");
 	});
 });
@@ -556,18 +635,18 @@ describe("a renewal that fails", () => {
 	beforeEach(async () => {
 		await withSubscription();
 		await db
-			.update(accounts)
+			.update(billingAccounts)
 			.set({
-				anthersSupport: "12.00",
-				creatorSupportTotal: "5.00",
 				currentPeriodStart: new Date(monthStart * 1000),
 				isActive: true,
+				directedBudget: "5.00",
 			})
-			.where(eq(accounts.userId, supporterId));
+			.where(eq(billingAccounts.userId, supporterId));
 		// The supporter's holding on the creator: a $5 Badge, held this cycle. Under the
 		// discrete-picks model the holding names the rung rather than carrying an amount,
 		// so the fixture creates the issuer's badge at that threshold first — the same
-		// find-or-create the billing path applies.
+		// find-or-create the billing path applies. The Anthers-side amount, which the
+		// "in force" assertions read, is the org rung this fixture also holds.
 		const [existing] = await db
 			.select({ id: badges.id })
 			.from(badges)
@@ -590,6 +669,7 @@ describe("a renewal that fails", () => {
 			.insert(userBadges)
 			.values({ userId: supporterId, badgeId: badge.id, billingCycle: currentCycleKey() })
 			.onConflictDoNothing();
+		await holdOrgRung(supporterId, "12.00");
 		await db.delete(invoices).where(eq(invoices.userId, supporterId));
 	});
 
@@ -597,12 +677,19 @@ describe("a renewal that fails", () => {
 		delete fake.responses["subscriptions.retrieve"];
 	});
 
+	// The CREATOR-side holdings — what this month's gates ride. Scoped through the issuer
+	// (the route's own replace query is the shape), since the org's rungs are holdings
+	// now too and would otherwise double the count.
 	const holdingsThisMonth = () =>
 		db
 			.select()
 			.from(userBadges)
 			.where(
-				and(eq(userBadges.userId, supporterId), eq(userBadges.billingCycle, currentCycleKey())),
+				and(
+					eq(userBadges.userId, supporterId),
+					eq(userBadges.billingCycle, currentCycleKey()),
+					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+				),
 			);
 
 	it("🚨 refuses a change while the last payment failed, rather than opening a second subscription", async () => {
@@ -619,20 +706,28 @@ describe("a renewal that fails", () => {
 	it("keeps the Badge and this month's gates through Stripe's retries", async () => {
 		await syncSubscriptionToAccount(thisMonth("past_due"));
 
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
-		expect(Number(acct.anthersSupport)).toBe(12);
+		// `past_due` changes nothing: the org rung stays held, the budget stays written.
+		expect(await heldOnOrgLadder(supporterId)).toBe(12);
 		expect(await holdingsThisMonth()).toHaveLength(1);
 	});
 
 	it("🚨 takes the Badge and this month's gates away once Stripe marks it unpaid", async () => {
 		await syncSubscriptionToAccount(thisMonth("unpaid"));
 
-		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
-		expect(Number(acct.anthersSupport)).toBe(0);
-		expect(Number(acct.creatorSupportTotal)).toBe(0);
+		// The benefits lapse: the holdings go, and the budget zeroes with them — the two
+		// lives the old amounts columns lived, now on the shapes that carry them.
+		expect(await heldOnOrgLadder(supporterId)).toBe(0);
 		expect(await holdingsThisMonth()).toHaveLength(0);
+		const [acct] = await db
+			.select({
+				budget: billingAccounts.directedBudget,
+				subId: billingAccounts.stripeSubscriptionId,
+			})
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, supporterId));
+		expect(acct.budget).toBe("0.00");
 		// Kept, so that paying what is owed makes the same subscription active again.
-		expect(acct.stripeSubscriptionId).toBe(SUB_ID);
+		expect(acct.subId).toBe(SUB_ID);
 	});
 
 	it("keeps the gates of a month that was paid for when the subscription is canceled", async () => {

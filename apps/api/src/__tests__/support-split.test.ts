@@ -3,8 +3,8 @@
  * One charge, several destinations — and the split that must survive it.
  *
  * A subscription carries **everything** a user gives: $3 to Anthers and $5 and $2.50 to two
- * creators is one $10.50 charge. So the whole charge is the *total*, and
- * `accounts.anthersSupport` — the Badge, and what sets the Time Pool — is only part of it.
+ * creators is one $10.50 charge. So the whole charge is the *total*, and the Anthers line —
+ * the Badge, and what sets the Time Pool — is only part of it.
  *
  * 🚨 **This file guards the lesson PR #223 paid for, which has MOVED rather than gone.**
  * Then, the hazard was reading a subscription's `quantity` as the Anthers count: it cost

@@ -38,6 +38,22 @@ export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
 export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
 
 /**
+ * The session's stand-in for the org identity, which owns the seeded Anthers Badge ladder.
+ *
+ * 🚨 **Neither the creator nor the viewer can own it.** The creator's own ladder gates the
+ * staircase's Works, and access resolution reads "what the viewer holds" grouped by the
+ * badge's issuer — an org ladder owned by the creator fuses the two identities and makes
+ * every Anthers Badge count as creator support. The viewer is the walk's actor: every
+ * holding the walk parks on the viewer is summed into the directed budget's `allocated`,
+ * so an org ladder owned by the viewer turns an Anthers Badge into spendable budget. A
+ * third account, holding nothing and gating nothing, is the honest dev shape — the
+ * identity decision (2026-10-03) settled that the org is an ordinary `users` row, and
+ * this is that row until production seeds the real `@anthers.org` account.
+ */
+export const GAUNTLET_ORG_USERNAME = `${GAUNTLET_PREFIX}org`;
+export const GAUNTLET_ORG_EMAIL = `${GAUNTLET_PREFIX}org@example.test`;
+
+/**
  * The handle a fixture account actually holds, for a harness that cannot import the API's
  * seed script. The username concept is gone: accounts created by `seed-gauntlet.ts` are
  * addressed by the handle the server issued for their name — the handle-safe spelling

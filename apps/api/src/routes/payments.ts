@@ -505,8 +505,6 @@ const paymentRoutes = new Hono()
 		return c.json({
 			amount: amount.toFixed(2),
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2),
-			crfFee: fees.crfFee.toFixed(2),
 			// Real tax is resolved by Stripe Tax from the buyer's billing address at the
 			// Checkout Session — Anthers' arithmetic cannot know the buyer's location, so
 			// the quote presents no tax figure at all rather than an illustrative one
@@ -599,8 +597,6 @@ const paymentRoutes = new Hono()
 			type: "digital",
 			amount: amount.toFixed(2),
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2),
-			crfFee: fees.crfFee.toFixed(2),
 			// Zero until the webhook stamps what Stripe Tax actually collected — see the
 			// schema note on the buyer_* columns.
 			salesTax: "0.00",
@@ -612,8 +608,6 @@ const paymentRoutes = new Hono()
 		return c.json({
 			amount: amount.toFixed(2), // the all-in list price the buyer was shown
 			processingFee: fees.processingFee.toFixed(2), // out of the price, to Stripe
-			deliveryFee: fees.deliveryFee.toFixed(2), // always "0.00" — delivery is free
-			crfFee: fees.crfFee.toFixed(2), // always "0.00" — Anthers takes no cut
 			// No figure: the tax is resolved at the session, from the buyer's address.
 			salesTax: null,
 			creatorEarnings: fees.creatorEarnings.toFixed(2), // price − processing
@@ -764,8 +758,6 @@ const paymentRoutes = new Hono()
 				type: "digital" as const,
 				amount: amount.toFixed(2),
 				processingFee: processing.toFixed(2),
-				deliveryFee: "0.00",
-				crfFee: "0.00",
 				salesTax: tax.toFixed(2),
 				creatorEarnings: amount.minus(processing).toFixed(2),
 				// The session id, as on the single-purchase path — the PaymentIntent is
@@ -1029,19 +1021,15 @@ const paymentRoutes = new Hono()
 				// an entitlement.
 				await saveOnPurchase(completed);
 
-				// Record the (now always zero) purchase fee to the ledger.
-				//
-				// ⚠️ A `type === "seeds"` branch sat here and credited the one-off support
-				// top-up. Nothing creates a row of that type since the top-up retired on
-				// 2026-09-15 — support is the subscription and only the subscription — so a
-				// completed purchase is always a Work purchase now. Rows of the old type can
-				// still be read, which is why `services/refunds.ts` and `services/dmca.ts`
+				// ⚠️ The ledger row this block used to write (the retired purchase fee,
+				// always $0, read off `purchases.crf_fee`) is gone with the column — the
+				// accounts-split pass dropped it, and a ledger row whose amount is always
+				// zero is noise in the books rather than a record. A `type === "seeds"`
+				// branch also sat here and credited the one-off support top-up; nothing
+				// creates a row of that type since the top-up retired on 2026-09-15, so
+				// a completed purchase is always a Work purchase now. Rows of the old
+				// type can still be read — `services/refunds.ts` and `services/dmca.ts`
 				// still know the value; nothing can still be written.
-				await db.insert(crfLedger).values({
-					amount: completed.crfFee,
-					purchaseId: completed.id,
-					description: `Purchase fee (retired, always $0) — purchase #${completed.id}`,
-				});
 			}
 		} else if (event.type === "payment_intent.payment_failed") {
 			const pi = event.data.object as Stripe.PaymentIntent;

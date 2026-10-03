@@ -124,8 +124,6 @@ async function seedSoldWork(title: string) {
 		type: "digital",
 		amount: "5.00",
 		processingFee: "0.45",
-		deliveryFee: "0.00",
-		crfFee: "0.00",
 		salesTax: "0.00",
 		creatorEarnings: "4.55",
 		stripePaymentIntentId: `pi_quar_${crypto.randomUUID().slice(0, 12)}`,

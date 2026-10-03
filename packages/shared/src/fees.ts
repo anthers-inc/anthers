@@ -248,8 +248,11 @@ export type PurchaseType = "digital" | "physical" | "service";
  * device.** There is no first-download-versus-redownload distinction any more.
  *
  * `deliveryFee` and `crfFee` keep their legacy key names and are **always zero** —
- * the purchase fee went 2026-08-03, the delivery charge 2026-08-12. Both columns
- * are `NOT NULL`, so they stay; dropping them is a separate migration.
+ * the purchase fee went 2026-08-03, the delivery charge 2026-08-12. The schema columns
+ * behind them were dropped with the accounts split's pass (2026-10-03); these keys stay
+ * because callers destructure them and the keys document the fee's shape, not a column.
+ * 🚨 **None of them may ever be charged again** — the guard on reintroduction is
+ * `scripts/illustrative-tax-guard.test.ts` for tax and this file's constants for the fees.
  *
  * 🚨 `salesTax` is **also always zero**, since real tax calculation moved to Stripe Tax.
  * A PaymentIntent cannot carry a product tax code, so purchases are charged through a

@@ -14,7 +14,7 @@
  * that exist.
  */
 import { db } from "@anthers/db/client";
-import { accounts, invoiceLines, invoices, users } from "@anthers/db/schema";
+import { billingAccounts, invoiceLines, invoices, users } from "@anthers/db/schema";
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
@@ -47,9 +47,9 @@ export async function recordPaidInvoice(invoice: Stripe.Invoice): Promise<number
 	if (!customerId) return null;
 
 	const [acct] = await db
-		.select({ userId: accounts.userId })
-		.from(accounts)
-		.where(eq(accounts.stripeCustomerId, customerId))
+		.select({ userId: billingAccounts.userId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return null;
 

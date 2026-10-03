@@ -55,7 +55,6 @@ interface PurchaseScheduleRow {
 	amount: string;
 	salesTax: string;
 	processingFee: string;
-	deliveryFee: string;
 	creatorEarnings: string;
 	status: string;
 	createdAt: string;
@@ -86,7 +85,6 @@ interface ClosePackage {
 				amount: string;
 				salesTax: string;
 				processingFee: string;
-				deliveryFee: string;
 				creatorEarnings: string;
 			};
 		};
@@ -460,7 +458,6 @@ export default function ClosePackage() {
 												<td className="text-right tabular-nums">${row.amount}</td>
 												<td className="text-right tabular-nums">${row.salesTax}</td>
 												<td className="text-right tabular-nums">${row.processingFee}</td>
-												<td className="text-right tabular-nums">${row.deliveryFee}</td>
 												<td className="text-right tabular-nums">${row.creatorEarnings}</td>
 												<td />
 											</tr>
@@ -477,9 +474,6 @@ export default function ClosePackage() {
 											</td>
 											<td className="text-right tabular-nums">
 												${data.schedules.purchases.totals.processingFee}
-											</td>
-											<td className="text-right tabular-nums">
-												${data.schedules.purchases.totals.deliveryFee}
 											</td>
 											<td className="text-right tabular-nums">
 												${data.schedules.purchases.totals.creatorEarnings}

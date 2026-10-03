@@ -30,7 +30,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-	accounts,
 	assets,
 	attentionEvents,
 	badges,
@@ -52,6 +51,8 @@ import {
 	GAUNTLET_BADGES,
 	GAUNTLET_CREATOR_EMAIL,
 	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_ORG_EMAIL,
+	GAUNTLET_ORG_USERNAME,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_VIEWER_EMAIL,
@@ -60,6 +61,7 @@ import {
 } from "@anthers/db/gauntlet";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
+import { ensureAnthersBadges, orgLadderMissing } from "../services/anthers-badges.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
@@ -123,6 +125,36 @@ async function ensureViewer(): Promise<void> {
 		},
 	});
 	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
+}
+
+/**
+ * The session's org stand-in — the `users` row that owns the seeded Anthers Badge ladder.
+ *
+ * See `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
+ * viewer. This account gates nothing and holds nothing; its only job is to be the issuer
+ * of the org's rungs so org-ladder reads and creator-ladder reads never collide.
+ */
+async function ensureOrg(): Promise<number> {
+	const [existing] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_ORG_USERNAME)))
+		.limit(1);
+	if (existing) return existing.id;
+
+	const created = await createLocalAccount({
+		email: GAUNTLET_ORG_EMAIL,
+		handleName: GAUNTLET_ORG_USERNAME,
+		emailVerified: true,
+		fields: {
+			displayName: "Anthers (fixture)",
+			bio: "The session's stand-in for the org identity; owns the seeded Anthers Badge ladder.",
+			isCreator: false,
+			termsAcceptedAt: new Date(),
+		},
+	});
+	console.log(`${TAG} created org stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
+	return created.id;
 }
 
 /** Create the fixture creator if absent; return its id either way. */
@@ -334,23 +366,13 @@ async function resetGates(creatorId: number): Promise<void> {
  * viewer's own account, content and other relationships are left alone.
  */
 async function resetViewer(viewerId: number, creatorId: number, postIds: number[]): Promise<void> {
-	// Badge back to Free and support back to zero. Upsert: the account row may not exist yet
-	// if this login has never visited /signup.
-	const [account] = await db
-		.select({ id: accounts.id })
-		.from(accounts)
-		.where(eq(accounts.userId, viewerId))
-		.limit(1);
-	if (account) {
-		await db
-			.update(accounts)
-			.set({ anthersSupport: "0.00", creatorSupportTotal: "0.00", updatedAt: new Date() })
-			.where(eq(accounts.userId, viewerId));
-	} else {
-		await db
-			.insert(accounts)
-			.values({ userId: viewerId, anthersSupport: "0.00", creatorSupportTotal: "0.00" });
-	}
+	// The floor is no holding at all: Free is the absence of org-ladder and creator-ladder
+	// rows this cycle, and the viewer's Anthers-side reads answer 0 for a user with no
+	// holdings — which is what "Badge back to Free" means under the Badge model. The org's
+	// rungs go too, since a prior hop may have parked one on the staircase. There is no
+	// billing row to touch: the amounts the old reset zeroed are `user_badges` holdings
+	// now, and the billing table carries no amount to reset.
+	await db.delete(userBadges).where(eq(userBadges.userId, viewerId));
 
 	await db
 		.delete(follows)
@@ -467,6 +489,21 @@ async function main(): Promise<void> {
 	}
 	await resetGates(creatorId);
 	await resetViewer(viewer.id, creatorId, postIds);
+
+	// The org ladder is platform state, not dev-account state: every reader of "what the
+	// viewer holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws
+	// loudly when no ladder exists, and an e2e session runs this script rather than
+	// `db:seed` — so the ladder is ensured here, owned by the fixture's org stand-in
+	// (see `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
+	// viewer). `ensure-dev-account` (the dev door) seeds the same rows owned by the dev
+	// account; whichever runs first wins and both are idempotent.
+	// 🚨 **This must run AFTER `resetGates`** — that rebuild deletes every badge the
+	// fixture creator owns, and the org rows would be rebuilt by nobody if seeded first.
+	if (await orgLadderMissing()) {
+		const orgId = await ensureOrg();
+		await ensureAnthersBadges(orgId);
+		console.log(`${TAG} seeded the Anthers Badge ladder (owned by ${GAUNTLET_ORG_USERNAME})`);
+	}
 
 	console.log("");
 	console.log(`${TAG} Ready. The gauntlet starts here:`);

@@ -99,8 +99,6 @@ test("the dispute surfaces render", async ({ page }) => {
 			type: "digital",
 			amount: "75.00",
 			processingFee: "0.45",
-			deliveryFee: "0.00",
-			crfFee: "0.00",
 			salesTax: "0.00",
 			creatorEarnings: "70.00",
 			stripePaymentIntentId: `pi_e2e_dp_${RUN}`,

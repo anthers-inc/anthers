@@ -128,7 +128,6 @@ export interface PurchaseScheduleRow {
 	amount: string;
 	salesTax: string;
 	processingFee: string;
-	deliveryFee: string;
 	creatorEarnings: string;
 	status: string;
 	createdAt: string;
@@ -181,7 +180,6 @@ export interface ClosePackage {
 				amount: string;
 				salesTax: string;
 				processingFee: string;
-				deliveryFee: string;
 				creatorEarnings: string;
 			};
 		};
@@ -360,14 +358,13 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		amount: string;
 		sales_tax: string;
 		processing_fee: string;
-		delivery_fee: string;
 		creator_earnings: string;
 		status: string;
 		created_at: string;
 	}>(
 		await db.execute(sql`
 			SELECT
-				id, type, amount, sales_tax, processing_fee, delivery_fee,
+				id, type, amount, sales_tax, processing_fee,
 				creator_earnings, status, created_at
 			FROM purchases
 			WHERE status IN ('completed', 'refunded')
@@ -381,12 +378,11 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		id: number;
 		sales_tax: string;
 		processing_fee: string;
-		delivery_fee: string;
 		downloaded_at: string | null;
 		refunded_at: string | null;
 	}>(
 		await db.execute(sql`
-			SELECT id, sales_tax, processing_fee, delivery_fee, downloaded_at, refunded_at
+			SELECT id, sales_tax, processing_fee, downloaded_at, refunded_at
 			FROM purchases
 			WHERE status = 'refunded'
 				AND refunded_at >= ${start}::timestamptz
@@ -482,10 +478,8 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	const [purchaseImplied] = rowsOf<{ implied: string }>(
 		await db.execute(sql`
 			SELECT COALESCE(sum(CASE
-				WHEN status = 'completed' THEN sales_tax + processing_fee + delivery_fee
-				WHEN status = 'refunded' THEN
-					(sales_tax + processing_fee + delivery_fee)
-					- (sales_tax + processing_fee + CASE WHEN downloaded_at IS NOT NULL THEN delivery_fee ELSE 0 END)
+				WHEN status = 'completed' THEN sales_tax + processing_fee
+				WHEN status = 'refunded' THEN 0
 				ELSE 0
 			END), 0)::numeric(14, 2)::text AS implied
 			FROM purchases
@@ -648,14 +642,11 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	// 4. A Work is purchased — Anthers' share only; the destination charge sent the
 	//    creator's share straight to the creator's own balance, so no liability arises.
 	const purClearing = purchaseRows.reduce(
-		(s, r) => s.plus(D(r.sales_tax)).plus(D(r.processing_fee)).plus(D(r.delivery_fee)),
+		(s, r) => s.plus(D(r.sales_tax)).plus(D(r.processing_fee)),
 		ZERO,
 	);
 	const purTax = purchaseRows.reduce((s, r) => s.plus(D(r.sales_tax)), ZERO);
-	const purFee = purchaseRows.reduce(
-		(s, r) => s.plus(D(r.processing_fee)).plus(D(r.delivery_fee)),
-		ZERO,
-	);
+	const purFee = purchaseRows.reduce((s, r) => s.plus(D(r.processing_fee)), ZERO);
 	push(
 		"A Work is purchased",
 		"Stripe clearing",
@@ -681,10 +672,9 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	// 5. Purchase refunds in the month — the buyer's charge returns and the creator's
 	//    transfer is clawed back in their own balance, which the books never held.
 	const refPurTax = refundedPurchases.reduce((s, r) => s.plus(D(r.sales_tax)), ZERO);
-	const refPurShortfall = refundedPurchases.reduce(
-		(s, r) => s.plus(D(r.processing_fee)).plus(r.downloaded_at ? D(r.delivery_fee) : ZERO),
-		ZERO,
-	);
+	// The shortfall is the sunk processing fee — the delivery column died with the split,
+	// so there is no download-conditional term to add any more (see `refundShortfall`).
+	const refPurShortfall = refundedPurchases.reduce((s, r) => s.plus(D(r.processing_fee)), ZERO);
 	push(
 		"A refund or chargeback",
 		"Sales tax payable",
@@ -853,7 +843,6 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 						amount: money(D(r.amount)),
 						salesTax: money(D(r.sales_tax)),
 						processingFee: money(D(r.processing_fee)),
-						deliveryFee: money(D(r.delivery_fee)),
 						creatorEarnings: money(D(r.creator_earnings)),
 						status: r.status,
 						createdAt: new Date(r.created_at).toISOString(),
@@ -866,7 +855,6 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 						amount: money(purchaseRows.reduce((s, r) => s.plus(D(r.amount)), ZERO)),
 						salesTax: money(purTax),
 						processingFee: money(purchaseRows.reduce((s, r) => s.plus(D(r.processing_fee)), ZERO)),
-						deliveryFee: money(purchaseRows.reduce((s, r) => s.plus(D(r.delivery_fee)), ZERO)),
 						creatorEarnings: money(
 							purchaseRows.reduce((s, r) => s.plus(D(r.creator_earnings)), ZERO),
 						),

@@ -127,7 +127,6 @@ beforeAll(async () => {
 			amount: "12.00",
 			salesTax: "0.99",
 			processingFee: "0.65",
-			crfFee: "0.00",
 			stripePaymentIntentId: `pi_test_${id}`,
 			creatorEarnings: "11.35",
 			status: "completed",
@@ -369,7 +368,8 @@ describe("what 'deleted' means, table by table", () => {
 			["follows", "follower_id"],
 			["bookmarks", "user_id"],
 			["attention_events", "user_id"],
-			["accounts", "user_id"],
+			["billing_accounts", "user_id"],
+			["user_preferences", "user_id"],
 		] as const) {
 			const rows = await db.execute(
 				sql`SELECT count(*)::int AS n FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${leaverId}`,
