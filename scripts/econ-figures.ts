@@ -809,7 +809,6 @@ function renderLandmarksMarkdown(): string {
 	].join("\n");
 }
 
-
 function renderPayingShareMarkdown(): string {
 	const rows = payingShareSensitivity();
 	const floor = selfSufficiency().breakEvenPct;

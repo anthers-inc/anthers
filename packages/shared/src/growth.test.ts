@@ -18,14 +18,12 @@ import {
 	ADMIN_CEILING,
 	affordable,
 	averageSupport,
-	creatorCap,
 	crossover,
 	decayForAverage,
 	floorPayingShare,
 	modelAt,
 	NO_STAFFING,
 	PA_INCENTIVE_CEILING,
-	PHASE_OVERHEAD,
 	payingBadgeMix,
 	staffingForPhase,
 } from "./growth.js";
@@ -340,4 +338,3 @@ describe("monotonicity — the model responds in the right direction", () => {
 		expect(late.adminRatio).toBeLessThan(ADMIN_CEILING / 3);
 	});
 });
-
