@@ -33,25 +33,25 @@ import {
 	accounts,
 	assets,
 	attentionEvents,
+	badges,
 	comments,
-	creatorGates,
 	db,
 	follows,
 	poolDistributions,
 	posts,
 	postWorkRefs,
 	purchases,
-	seedAllocations,
 	stripeAccounts,
+	userBadges,
 	users,
 	works,
 } from "@anthers/db";
 import { localContentRoot } from "@anthers/db/content-root";
 import { assertDevCheckout } from "@anthers/db/dev-only";
 import {
+	GAUNTLET_BADGES,
 	GAUNTLET_CREATOR_EMAIL,
 	GAUNTLET_CREATOR_USERNAME,
-	GAUNTLET_GATES,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_VIEWER_EMAIL,
@@ -59,7 +59,7 @@ import {
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
@@ -258,7 +258,7 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			bodyHtml: `<p>${spec.body}</p>`,
 			streamEnabled: spec.streamEnabled,
 			downloadEnabled: spec.downloadEnabled,
-			seedAccess: spec.seedAccess,
+			access: spec.access,
 			visibility: "released",
 			// Seeded Works stand for properly released ones, and release is gated on a
 			// declared rating with every row of its matrix answered AND on a credit naming a
@@ -323,10 +323,10 @@ async function writeDownloadObject(fileKey: string): Promise<void> {
 	await Bun.write(target, eocd);
 }
 
-/** Rebuild the creator's advertised gate ladder from scratch. */
+/** Rebuild the creator's advertised Badge ladder from scratch. */
 async function resetGates(creatorId: number): Promise<void> {
-	await db.delete(creatorGates).where(eq(creatorGates.creatorId, creatorId));
-	await db.insert(creatorGates).values(GAUNTLET_GATES.map((g) => ({ ...g, creatorId })));
+	await db.delete(badges).where(eq(badges.creatorId, creatorId));
+	await db.insert(badges).values(GAUNTLET_BADGES.map((b) => ({ ...b, creatorId })));
 }
 
 /**
@@ -356,12 +356,15 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 		.delete(follows)
 		.where(and(eq(follows.followerId, viewerId), eq(follows.creatorId, creatorId)));
 
-	// Seed allocations ratchet within a cycle (add-only), so a re-run inside the same month
-	// CANNOT walk back down through the UI. Clearing them here is what makes the gate rung
-	// repeatable at all.
-	await db
-		.delete(seedAllocations)
-		.where(and(eq(seedAllocations.userId, viewerId), eq(seedAllocations.creatorId, creatorId)));
+	// Badge holdings ratchet within a cycle (add-only), so a re-run inside the same month
+	// CANNOT walk back down through the UI. Clearing the viewer's holdings on this creator
+	// is what makes the gate rung repeatable at all. Scoped through the ladder's badges
+	// rather than by a creator id on the holding: `user_badges` carries the badge, and the
+	// issuer is reachable through it — which is the shape every reader of "who holds this
+	// creator's Badges" now takes.
+	await db.delete(userBadges).where(
+		sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+	);
 
 	await db
 		.delete(poolDistributions)

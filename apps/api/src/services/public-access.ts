@@ -85,6 +85,11 @@ export async function publicAccessSecondsThisMonth(
  * Pool cannot pay a creator for time it cannot attribute to anybody. So the generous answer
  * was not merely wrong about policy, it was the thing that let anonymous Public Access
  * streaming run unmetered while the creator earned nothing for it.
+ *
+ * ⚠️ **The Badge amount still comes from `accounts.anthers_support`, pending the identity
+ * task** — the same legacy-column note `heldAnthersBadgeAmount` in `services/access.ts`
+ * carries. The model's destination is the threshold of the viewer's held Badge owned by
+ * the `@anthers.org` identity, which waits on the identity decision.
  */
 export async function loadPublicAccessBudget(
 	userId: number | null,
@@ -92,6 +97,8 @@ export async function loadPublicAccessBudget(
 ): Promise<PublicAccessBudget> {
 	if (userId == null) return NO_PUBLIC_ACCESS_ALLOWANCE;
 
+	// The held Anthers Badge's worth in dollars — see the note above on where it is read
+	// from while the identity task holds the billing half open.
 	const [[acct], used] = await Promise.all([
 		db
 			.select({ anthersSupport: accounts.anthersSupport })

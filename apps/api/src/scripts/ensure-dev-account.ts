@@ -34,6 +34,7 @@ import { devCheckoutRoot } from "@anthers/db/dev-only";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { createAdminAccount, findAdminAccountByEmail } from "../services/admin-accounts.js";
+import { ensureAnthersBadges } from "../services/anthers-badges.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
@@ -80,6 +81,10 @@ async function main() {
 		.limit(1);
 	if (existing) {
 		console.log(`${TAG} "${username}" already exists in this session.`);
+		// The ladder is idempotent, and an account that predates the seeded ladder is
+		// exactly the case a re-run has to repair: the rows would otherwise be missing
+		// from a session whose dev account was created before this change existed.
+		await ensureAnthersBadges(existing.id);
 		return;
 	}
 
@@ -92,6 +97,13 @@ async function main() {
 	console.log(
 		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${isCreator}.`,
 	);
+
+	// Anthers' own Badge ladder, seeded as real rows this session. No `@anthers.org`-style
+	// org account exists locally, so the dev account owns the ladder for now — the
+	// identity decision (*Decide what an identity is*) decides the real owner and the
+	// seeding follows it. See `services/anthers-badges.ts` for the full note.
+	await ensureAnthersBadges(user.id);
+	console.log(`${TAG} seeded Anthers' Badge ladder as rows owned by "${username}".`);
 }
 
 try {

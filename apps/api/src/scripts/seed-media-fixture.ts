@@ -306,7 +306,7 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 			.set({
 				creatorId: creator,
 				title: spec.title,
-				seedAccess: access,
+				access: access,
 				lyrics: spec.lyrics ?? "",
 			})
 			.where(eq(works.id, existing.id));
@@ -335,7 +335,7 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 			releasedAt: new Date(),
 			streamEnabled: true,
 			downloadEnabled: false,
-			seedAccess: access,
+			access: access,
 		})
 		.returning({ id: works.id });
 	return created.id;

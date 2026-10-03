@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
-import { MAX_PICKED_CREATORS, MAX_SIGNUP_AMOUNT } from "@anthers/shared/signup";
+// `BADGE_ORDER` is the display list of Anthers' ladder — Free plus each paid Badge — which
+// is exactly the set a signup's `badge` pick may name. Read from it rather than restating
+// the names, so a rung added to the ladder is pickable the moment it exists.
+import { BADGE_ORDER } from "@anthers/shared/constants";
+import { MAX_PICKED_CREATORS } from "@anthers/shared/signup";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -70,6 +74,10 @@ const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
 });
 
+// The names a signup's `badge` pick may carry: Anthers' own ladder, Free included.
+const isAnthersBadgeName = (name: string): boolean =>
+	(BADGE_ORDER as readonly string[]).includes(name);
+
 /**
  * The choices `/signup` is holding when somebody presses *Create My Account*.
  *
@@ -77,11 +85,25 @@ const emailCodeStartSchema = z.object({
  * as jsonb on a row nobody has yet proved anything about, so the ceiling is here rather
  * than in the shape's own definition — `@anthers/shared/signup` describes what the picks
  * *are*, and this describes what a stranger may send.
+ *
+ * ⭐ **The picks are Badge-shaped.** `badge` names a rung of Anthers' own ladder (or null
+ * for Free, which is a real Badge at $0 rather than the absence of one); `badges` holds
+ * **creator handles**, like `follow` — the finishing page resolves each handle to a pick
+ * of that creator's Badge. **Convention (Phase B's minimum): a handle in `badges` resolves
+ * to that creator's LOWEST-threshold badge** — signup carries no per-creator rung choice,
+ * and the lowest rung is the one every ladder has that a supporter cannot be over-charged
+ * for. `follow` and `badges` stay parallel arrays of handles on purpose: the page that
+ * collects them treats a creator the same either way.
  */
 const signupPicksSchema = z.object({
-	anthers: z.number().min(0).max(MAX_SIGNUP_AMOUNT),
+	badge: z
+		.string()
+		.min(1)
+		.max(150)
+		.refine(isAnthersBadgeName, { message: "Not a Badge in Anthers' set" })
+		.nullable(),
 	follow: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
-	seed: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
+	badges: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
 });
 
 /**

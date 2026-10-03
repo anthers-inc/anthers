@@ -84,7 +84,7 @@ export function isShareable(work: {
 	visibility: string;
 	maturity: string;
 	streamEnabled: boolean;
-	seedAccess: { threshold: number; allow: boolean; price: string }[] | null;
+	access: { threshold: number; allow: boolean; price: string }[] | null;
 	takedownStatus: string;
 	quarantineStatus: string;
 }): boolean {
@@ -95,7 +95,7 @@ export function isShareable(work: {
 	// Universally free: the baseline row allowed at $0. The same shape `resolveAccessSync`
 	// calls `isFree`, checked here against the rows the Work carries rather than by building a
 	// context, because there is no viewer yet to build one for.
-	const baseline = (work.seedAccess ?? []).find((r) => Number(r.threshold) === 0);
+	const baseline = (work.access ?? []).find((r) => Number(r.threshold) === 0);
 	return baseline?.allow === true && Number(baseline.price) <= 0;
 }
 

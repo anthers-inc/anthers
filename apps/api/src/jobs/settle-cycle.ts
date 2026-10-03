@@ -264,7 +264,7 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 	const entitled: Entitlement = new Map();
 	for (const [creatorId, d] of month$.distributions) {
 		for (const [kind, amount] of [
-			["support", d.seedAmount],
+			["support", d.badgeAmount],
 			["time_pool", d.poolAmount],
 			["sticker", d.stickerAmount],
 		] as const) {
@@ -384,7 +384,7 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 			.update(poolDistributions)
 			.set({
 				poolAmount: "0.00",
-				seedAmount: "0.00",
+				badgeAmount: "0.00",
 				stickerAmount: "0.00",
 				settledAt: now,
 				updatedAt: now,
@@ -407,10 +407,10 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 			if (!earnable.get(creatorId)) continue;
 			// Seconds that earned nothing — gated time, a pool that reached zero — make no row, as
 			// in the estimate; the reset above already zeroed any row the estimate had made.
-			if (d.poolAmount.isZero() && d.seedAmount.isZero() && d.stickerAmount.isZero()) continue;
+			if (d.poolAmount.isZero() && d.badgeAmount.isZero() && d.stickerAmount.isZero()) continue;
 			const values = {
 				poolAmount: d.poolAmount.toFixed(2),
-				seedAmount: d.seedAmount.toFixed(2),
+				badgeAmount: d.badgeAmount.toFixed(2),
 				stickerAmount: d.stickerAmount.toFixed(2),
 				attentionSeconds: d.attentionSeconds,
 				settledAt: now,
