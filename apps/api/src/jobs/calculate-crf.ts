@@ -19,8 +19,8 @@
 
 import { db } from "@anthers/db";
 import {
-	accounts,
 	assets,
+	billingAccounts,
 	crfLedger,
 	crfSubsidies,
 	poolDistributions,
@@ -106,11 +106,11 @@ export async function calculateCrfSubsidies() {
 		.selectDistinct({
 			id: users.id,
 			handle: users.atprotoHandle,
-			isSelfHosting: accounts.isSelfHosting,
+			isSelfHosting: billingAccounts.isSelfHosting,
 		})
 		.from(users)
 		.innerJoin(posts, eq(posts.creatorId, users.id))
-		.leftJoin(accounts, eq(accounts.userId, users.id))
+		.leftJoin(billingAccounts, eq(billingAccounts.userId, users.id))
 		.where(and(eq(users.isCreator, true), eq(posts.isPublished, true)));
 
 	let subsidized = 0;

@@ -21,7 +21,7 @@
  * spend it, which is `support_reductions`.
  */
 import { db } from "@anthers/db/client";
-import { accounts, supportReductions, users } from "@anthers/db/schema";
+import { billingAccounts, supportReductions, users } from "@anthers/db/schema";
 import { cycleKeyFor, nextCycleKey, reductionFor } from "@anthers/shared/billing-cycle";
 import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
@@ -118,9 +118,9 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 	if (!customerId) return 0;
 
 	const [acct] = await db
-		.select({ userId: accounts.userId })
-		.from(accounts)
-		.where(eq(accounts.stripeCustomerId, customerId))
+		.select({ userId: billingAccounts.userId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return 0;
 
