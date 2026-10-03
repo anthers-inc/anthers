@@ -156,9 +156,11 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 
 	// The mark becomes an <img> pointed at the access-checked route — which is the whole
 	// visible difference, and the only way to see that the upload round-tripped.
-	await expect(control.locator(`img[src$="/api/subscriptions/badges/${badgeId}/art"]`)).toBeVisible({
-		timeout: 15_000,
-	});
+	await expect(control.locator(`img[src$="/api/subscriptions/badges/${badgeId}/art"]`)).toBeVisible(
+		{
+			timeout: 15_000,
+		},
+	);
 
 	await ladder.screenshot({ path: `.screenshots/badge-ladder-art-${RUN}.png` });
 

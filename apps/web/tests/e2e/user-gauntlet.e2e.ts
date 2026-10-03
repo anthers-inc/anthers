@@ -527,7 +527,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 			// The picker offers the creator's named rungs; the label carries the
 			// threshold, whole dollars without the ".00".
 			const shown = Number.isInteger(seeds) ? String(seeds) : seeds.toFixed(2);
-			await page.getByRole("button", { name: new RegExp(`.*\$${shown}/mo`) }).click();
+			await page.getByRole("button", { name: new RegExp(`.*$${shown}/mo`) }).click();
 			// Confirm the pick, then wait for the confirm control to leave — the pick
 			// has settled when there is nothing left to confirm.
 			await page.getByRole("button", { name: /^Hold / }).click();
@@ -552,7 +552,7 @@ test("rung 5 — the ratchet: a lower rung is not offered once it is held", asyn
 	// The full ladder is committed; within the cycle a holding never goes down, so
 	// every offered rung sits at or above the one held.
 	const held = BADGE_RUNGS[BADGE_RUNGS.length - 1];
-	await expect(page.getByRole("button", { name: new RegExp(`.*\$${held}/mo`) })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: new RegExp(`.*$${held}/mo`) })).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
 

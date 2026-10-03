@@ -14,7 +14,14 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, badges, invoices, supportReductions, userBadges, users } from "@anthers/db/schema";
+import {
+	accounts,
+	badges,
+	invoices,
+	supportReductions,
+	userBadges,
+	users,
+} from "@anthers/db/schema";
 import { currentCycleKey, cycleKeyFor, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -595,10 +602,7 @@ describe("a renewal that fails", () => {
 			.select()
 			.from(userBadges)
 			.where(
-				and(
-					eq(userBadges.userId, supporterId),
-					eq(userBadges.billingCycle, currentCycleKey()),
-				),
+				and(eq(userBadges.userId, supporterId), eq(userBadges.billingCycle, currentCycleKey())),
 			);
 
 	it("🚨 refuses a change while the last payment failed, rather than opening a second subscription", async () => {

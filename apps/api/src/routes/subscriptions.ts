@@ -1560,10 +1560,7 @@ const subscriptionRoutes = new Hono()
 			const nextCycle = nextCycleKey(currentCycle);
 
 			if (cycle !== currentCycle && cycle !== nextCycle) {
-				return c.json(
-					{ error: "Can only pick Badges for the current or next billing cycle" },
-					400,
-				);
+				return c.json({ error: "Can only pick Badges for the current or next billing cycle" }, 400);
 			}
 
 			const acct = await getAccount(user.id);
@@ -1575,11 +1572,7 @@ const subscriptionRoutes = new Hono()
 
 			// The Badge itself: its threshold is the amount this pick directs, and the
 			// route never takes a number from the request — the pick names the rung.
-			const [badge] = await db
-				.select()
-				.from(badges)
-				.where(eq(badges.id, badgeId))
-				.limit(1);
+			const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
 			if (!badge) return c.json({ error: "No such Badge" }, 404);
 			if (badge.creatorId === user.id) {
 				return c.json({ error: "You cannot hold your own Badge" }, 400);

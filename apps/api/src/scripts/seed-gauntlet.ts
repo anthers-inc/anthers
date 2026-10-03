@@ -362,9 +362,11 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 	// rather than by a creator id on the holding: `user_badges` carries the badge, and the
 	// issuer is reachable through it — which is the shape every reader of "who holds this
 	// creator's Badges" now takes.
-	await db.delete(userBadges).where(
-		sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
-	);
+	await db
+		.delete(userBadges)
+		.where(
+			sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+		);
 
 	await db
 		.delete(poolDistributions)

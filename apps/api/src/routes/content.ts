@@ -768,8 +768,6 @@ const accessRowSchema = z.object({
 		.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE }),
 });
 
-
-
 /**
  * One credit row — creator-asserted provenance (`WorkCredit` in the schema).
  *
@@ -4312,7 +4310,7 @@ const contentRoutes = new Hono()
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
 		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
-		if (data.access !== undefined) updates.access = data.access
+		if (data.access !== undefined) updates.access = data.access;
 		if (data.credits !== undefined) updates.credits = data.credits;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;

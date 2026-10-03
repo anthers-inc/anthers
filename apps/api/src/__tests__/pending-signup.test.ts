@@ -130,7 +130,10 @@ describe("asking for an account writes it down", () => {
 			headers: { Cookie: `signup_pending=${token}` },
 		});
 		const body = (await read.json()) as {
-			pending: { email: string; picks: { badge: string | null; follow: string[]; badges: string[] } };
+			pending: {
+				email: string;
+				picks: { badge: string | null; follow: string[]; badges: string[] };
+			};
 		};
 		expect(body.pending.email).toBe(addr("picks"));
 		expect(body.pending.picks.badge).toBe("petal");
