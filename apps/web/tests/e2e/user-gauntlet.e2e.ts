@@ -524,10 +524,12 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 
 		if (onRung) {
 			await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
-			// The picker offers the creator's named rungs; the label carries the
-			// threshold, whole dollars without the ".00".
+			// The picker offers the creator's named rungs; each button's accessible name
+			// is the rung's label and price together ("$3 · $3/mo" — the gauntlet's
+			// fixture labels rungs with their own threshold), so match on the price
+			// half rather than the whole name.
 			const shown = Number.isInteger(seeds) ? String(seeds) : seeds.toFixed(2);
-			await page.getByRole("button", { name: new RegExp(`.*$${shown}/mo`) }).click();
+			await page.getByRole("button", { name: new RegExp(`^.*\\$${shown}/mo$`) }).click();
 			// Confirm the pick, then wait for the confirm control to leave — the pick
 			// has settled when there is nothing left to confirm.
 			await page.getByRole("button", { name: /^Hold / }).click();

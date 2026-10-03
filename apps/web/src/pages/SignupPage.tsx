@@ -767,11 +767,20 @@ interface LadderProps {
  * today, and all of it is meant to be built before the page is public. The ledger of what
  * exists is `constants.ts` and the generated perk ladder, not a badge on a marketing table.
  */
-/** The picked rung as a ladder name, or null — an unrecognized name lights Free. */
+/**
+ * The picked rung as a ladder name — `null` and any unrecognized name both light Free.
+ *
+ * 🚨 **`null` lights Free rather than nothing** (Parker, 2026-08-25, carried across the
+ * badge-name migration of 2026-10-02): Free is lit from the first paint, because it is
+ * what an account with no Badge for Anthers already is — a complete answer rather than the
+ * absence of one. When the pick was a dollar amount this fell out of `0` being the Free
+ * column's threshold; now `null` is Free's own representation, so the mapping says so
+ * instead of relying on the coincidence.
+ */
 function pickedRung(badge: string | null): BadgeKey | null {
 	return badge !== null && (BADGE_ORDER as readonly string[]).includes(badge)
 		? (badge as BadgeKey)
-		: null;
+		: "free";
 }
 
 function BadgeLadder(props: LadderProps) {

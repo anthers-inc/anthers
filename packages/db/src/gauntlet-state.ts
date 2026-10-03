@@ -208,7 +208,7 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// A Badge holding on the gauntlet creator (the fact the giving stepper writes).
+	// A Badge holding on the gauntlet creator — the fact the Badge picker writes.
 	// The UI walk normally covers this; the hop exists for placing a state directly.
 	//
 	// Under the Badge model the holding names a Badge rather than an amount: the
@@ -216,6 +216,15 @@ async function main(): Promise<void> {
 	// in the model. So the hop resolves the rung whose THRESHOLD is the given amount
 	// and creates it if the fixture ladder has no row there yet — the gauntlet is a
 	// dev-only fixture and may not depend on the Phase B seeding having run.
+	//
+	// 🚨 **The hop REPLACES the viewer's holding on this creator, it does not add one.**
+	// The walk the e2e drives is cumulative — $3, then the gap states, then $6, upward —
+	// and a viewer holds ONE Badge per issuer per cycle, the highest they have reached.
+	// A hop that inserted beside the existing holding would stack rungs ($3 + $4.50 +
+	// $6 …) against the cycle's budget until the picker's affordability check refused
+	// the next step — a fixture drifting away from what the model can produce, which is
+	// exactly what a hop must never do. Deleting the creator-scoped holdings first and
+	// writing the one named rung is the state the picker itself would leave behind.
 	if (give !== undefined) {
 		const cycle = currentBillingCycle();
 		const threshold = give.toFixed(2);
@@ -235,29 +244,18 @@ async function main(): Promise<void> {
 				})
 				.returning({ id: badges.id });
 		}
-		const [existing] = await db
-			.select({ id: userBadges.id })
-			.from(userBadges)
+		// Scoped through the ladder's badge ids for the same reason `resetViewer` does it:
+		// the holding carries the badge, and the issuer is reachable through it.
+		await db
+			.delete(userBadges)
 			.where(
-				and(
-					eq(userBadges.userId, viewerId),
-					eq(userBadges.badgeId, badge.id),
-					eq(userBadges.billingCycle, cycle),
-				),
-			)
-			.limit(1);
-		if (existing) {
-			await db
-				.update(userBadges)
-				.set({ updatedAt: new Date() })
-				.where(eq(userBadges.id, existing.id));
-		} else {
-			await db.insert(userBadges).values({
-				userId: viewerId,
-				badgeId: badge.id,
-				billingCycle: cycle,
-			});
-		}
+				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+			);
+		await db.insert(userBadges).values({
+			userId: viewerId,
+			badgeId: badge.id,
+			billingCycle: cycle,
+		});
 	}
 
 	// A completed purchase — the fact the payment webhook would write. The synthetic
