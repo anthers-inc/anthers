@@ -22,14 +22,14 @@
  *     To check that it stayed out, grep the built bundle for **`toFraction`** — 0 on a
  *     clean build, and the only one of these that still means anything.
  *
- *     Two obvious checks are WRONG, both because another dependency ships the string:
+ *     One obvious check is WRONG, because another dependency ships the string:
  *     `toDecimalPlaces` is decimal.js-light's own method, which recharts pulls in (it
- *     fooled me on 2026-08-08), and `cbrt` is a Stan built-in sitting in the keyword
- *     list `react-syntax-highlighter` ships — it reads `…,"cauchy_rng","cbrt","ceil",…`
- *     in the highlighter chunk. Each returns 1 on a bundle with no leak in it.
+ *     fooled me on 2026-08-08). It returns 1 on a bundle with no leak in it.
  *
  *     This block recommended `cbrt` until 2026-08-19, by which point it had been a
- *     false positive for a week. **A leak check is only as good as its last run**: if
+ *     false positive for a week — a false positive the in-browser syntax highlighter
+ *     shipped the keyword for; the highlighter is gone now, so a `cbrt` hit is real
+ *     signal rather than noise. **A leak check is only as good as its last run**: if
  *     one of these ever returns a hit, confirm what the hit IS before believing it.
  *
  *  2. The money section of this repo's own `README.md`, written between HTML-comment

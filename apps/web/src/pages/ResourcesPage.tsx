@@ -8,9 +8,8 @@
 // Two axes, kept deliberately separate — the section says what *format* a resource
 // is, the card's tag says what *subject* it covers. Don't tag a card with its own
 // section name; that collapses the axes and is what made this page read as a pile
-// of posts. A Documentation section lands here once the wiki has content behind it
-// (/wiki is currently a shell — no /api/wiki route, no markdown), which is why the
-// closing band points at the FAQ instead.
+// of posts. A Documentation section lands here once the vault exporter exists, which is
+// why the closing band points at the FAQ instead.
 //
 // ⚠️ **An Explainers section stood first here until 2026-08-30**, holding the three
 // `/demo-*` pages. All four demos were deleted rather than rebuilt: each modeled the
