@@ -400,9 +400,7 @@ async function distributeForAccount(acct: {
 		})
 		.from(userBadges)
 		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-		.where(
-			and(eq(userBadges.userId, acct.userId), eq(userBadges.billingCycle, cycleDate)),
-		)
+		.where(and(eq(userBadges.userId, acct.userId), eq(userBadges.billingCycle, cycleDate)))
 		.groupBy(badges.creatorId);
 
 	const { distributions } = await computeMonth({
