@@ -328,6 +328,17 @@ function LoggedInLayoutInner() {
 											Subscription
 										</Link>
 									</nav>
+									{/* Roadmap and Changelog in their own column, matching the logged-out
+									    footer's Development column (Parker, 2026-10-03). */}
+									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+										<h6 className="footer-title text-xs">Development</h6>
+										<Link to="/roadmap" className="link link-hover">
+											Roadmap
+										</Link>
+										<Link to="/changelog" className="link link-hover">
+											Changelog
+										</Link>
+									</nav>
 									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 										<h6 className="footer-title text-xs">About</h6>
 										<Link to="/about" className="link link-hover">
@@ -335,12 +346,6 @@ function LoggedInLayoutInner() {
 										</Link>
 										<Link to="/faq" className="link link-hover">
 											FAQ
-										</Link>
-										<Link to="/roadmap" className="link link-hover">
-											Roadmap
-										</Link>
-										<Link to="/changelog" className="link link-hover">
-											Changelog
 										</Link>
 										<Link to="/supporters" className="link link-hover">
 											Supporters

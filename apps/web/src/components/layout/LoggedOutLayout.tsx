@@ -59,11 +59,19 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		],
 	},
 	{
+		// Roadmap and Changelog live here rather than under About (Parker, 2026-10-03):
+		// they are the record of the thing being built, not what the organization is —
+		// and a reader looking for "what's next" is looking for development, not "About Us".
+		title: "Development",
+		links: [
+			["Roadmap", "/roadmap"],
+			["Changelog", "/changelog"],
+		],
+	},
+	{
 		title: "About",
 		links: [
 			["About Us", "/about"],
-			["Roadmap", "/roadmap"],
-			["Changelog", "/changelog"],
 			// A thank-you nobody can find is not much of a thank-you, and the only other
 			// routes to it are inside the support flow and account settings.
 			["Supporters", "/supporters"],
@@ -270,16 +278,16 @@ export default function LoggedOutLayout() {
 			<footer
 				className={`relative z-10 border-t border-base-content/10 px-6 pt-9 pb-2 text-sm ${currentTrack ? "mb-16" : ""}`}
 			>
-				<div className="mx-auto max-w-6xl">
+				<div className="mx-auto max-w-7xl">
 					<div className="mb-8 flex flex-col items-center text-center">
 						{/* The vertical (stacked) cut — the footer is the one surface with the room
 						    its taller shape needs, where the navbar's horizontal cut stays compact
 						    (Parker, 2026-10-02). */}
 						<Logo variant="stacked" className="h-32" />
 					</div>
-					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-6">
+					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
 						{FOOTER_NAV.map((col) => (
-							<nav key={col.title} className="flex flex-col items-start gap-2">
+							<nav key={col.title} className="flex flex-col items-center gap-2">
 								<h6
 									style={serif}
 									className="text-xs font-semibold uppercase tracking-wider text-base-content/50"
