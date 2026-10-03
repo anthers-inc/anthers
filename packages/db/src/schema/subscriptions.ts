@@ -866,7 +866,18 @@ export const badges = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_badges_creator").on(table.creatorId, table.sortOrder)],
+	(table) => [
+		index("idx_badges_creator").on(table.creatorId, table.sortOrder),
+		// 🚨 **One rung per threshold per issuer, and this is what makes the whole
+		// discrete-picks model honest.** A Badge IS its threshold to the machinery —
+		// billing resolves a subscription item to "the issuer's badge at this price"
+		// (`applyDirectedSupportFromSub` find-or-creates on this key), the seed upsert
+		// (`ensureAnthersBadges`) is idempotent on it, and a viewer holding two of an
+		// issuer's badges at one price would be two spellings of the same purchase. A
+		// duplicate would make all three of those reads ambiguous rather than merely
+		// redundant.
+		uniqueIndex("uq_badges_creator_threshold").on(table.creatorId, table.threshold),
+	],
 );
 
 /**
