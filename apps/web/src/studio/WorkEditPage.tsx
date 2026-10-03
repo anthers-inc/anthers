@@ -79,8 +79,8 @@ import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
-	buildAccessRows,
 	type AccessRowDraft,
+	buildAccessRows,
 	serializeAccessRows,
 } from "@anthers/web-shared/post/AccessTables";
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
@@ -93,13 +93,14 @@ import {
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
-import type {
-	CreatorBadge,
-	UploadableWorkType,
-	Work,
-	WorkCredit,
-	WorkCreditType,
-	WorkInput,
+import {
+	accessRowsOf,
+	type CreatorBadge,
+	type UploadableWorkType,
+	type Work,
+	type WorkCredit,
+	type WorkCreditType,
+	type WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import FormField from "@anthers/web-shared/ui/FormField";
@@ -296,7 +297,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// not on the Work — `buildAccessRows` merges the Work's stored rows onto whatever rungs
 	// exist, so the rows are the only state worth holding.
 	const [accessRows, setAccessRows] = useState<AccessRowDraft[]>(() =>
-		buildAccessRows([], editing.access),
+		buildAccessRows([], accessRowsOf(editing.access)),
 	);
 
 	// The credits — the Work's liner notes, who or what made which part. Rows are drafts of the

@@ -478,34 +478,34 @@ test("rung 4 — Blossom unlocks nothing; a Badge is standing, not access", asyn
 	// must name the creator, never Anthers.
 	await page.goto(`/works/${gauntletPost("G2").slug}`);
 	await expect(page.getByRole("link", { name: /^Unlock with \$3\.00 more to / })).toBeVisible();
-	await expect(page.getByRole("button", { name: /Seed to Anthers/ })).toBeHidden();
+	// And no surface offers an Anthers Badge as a route into a creator's gate.
+	await expect(page.getByRole("button", { name: /Badge for Anthers/ })).toBeHidden();
 
 	if (mediaSeeded) await expectMediaWithheld(page, "G3");
 	expect(errors).toEqual([]);
 });
 
-// ── The Badge ladder, through the real giving stepper ────────────────────────
-test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
+// ── The Badge ladder, through the real Badge picker ──────────────────────────
+test("rung 5 — the directed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	// Enough budget for the whole ladder. Holding budget is not giving it — the staircase
-	// must still read exactly as it did before.
+	// Enough budget for the whole ladder. Holding budget is not holding a Badge — the
+	// staircase must still read exactly as it did before.
 	hop("--support-budget", String(BADGE_RUNGS[BADGE_RUNGS.length - 1]));
 	await expectStaircase(page, "Blossom, nothing given");
 	expect(errors).toEqual([]);
 });
 
 /**
- * The walk TYPES each amount rather than clicking to it.
+ * The walk holds each rung through the real Badge picker, and hops the between-rung
+ * states through the fixture script.
  *
- * 🚨 **Never make this click to an amount.** The stepper's arrows are a $1 convenience and
- * the ladder's `$9.50` rung **cannot be reached by clicking at all**, so a click-driven
- * walk would silently stop covering the one rung that guards the float comparison. Filling
- * the field is also closer to what a supporter choosing an amount actually does.
- *
- * ⭐ **The ladder is sparse, so some states land BETWEEN rungs and must unlock nothing.**
- * That is the point of walking every state rather than only the rungs: a surface comparing
- * a viewer's position in the ladder to the rung's position would open a post in a
- * between-state, and only a between-state can catch it.
+ * ⭐ **The Badge model made the pick discrete**: a holding names a rung, and a
+ * between-rung amount is no longer expressible in the UI — the stepper the walk used
+ * to fill is gone with it. So the rungs are UI-walked (pressing the rung the model
+ * offers), while the BETWEEN states — which exist to prove the resolver does not
+ * over-grant from a list position — are hopped through `--give`, which is the same
+ * write the picker's POST would produce at the rung and the one way a between state
+ * can exist at all now.
  */
 for (const [i, seeds] of BADGE_WALK.entries()) {
 	const rungIndex = BADGE_RUNGS.indexOf(seeds as (typeof BADGE_RUNGS)[number]);
@@ -515,18 +515,29 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	// of the ladder, where there is nothing left to stay locked.
 	const nextIndex = BADGE_RUNGS.findIndex((t) => t > seeds);
 	const stillLocked = nextIndex >= 0 ? `G${2 + nextIndex}` : null;
-	const added = seeds - (BADGE_WALK[i - 1] ?? 0);
+	const onRung = rungIndex >= 0;
 
 	test(`rung 5 — at $${seeds} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
 		page,
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
-		await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
-		await page.getByLabel("Monthly amount").fill(String(seeds));
-		await page.getByRole("button", { name: `Give $${added.toFixed(2)}` }).click();
-		// The give settles when the button returns to its resting label.
-		await expect(page.getByRole("button", { name: "Give", exact: true })).toBeVisible();
+		if (onRung) {
+			await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
+			// The picker offers the creator's named rungs; the label carries the
+			// threshold, whole dollars without the ".00".
+			const shown = Number.isInteger(seeds) ? String(seeds) : seeds.toFixed(2);
+			await page.getByRole("button", { name: new RegExp(`.*\$${shown}/mo`) }).click();
+			// Confirm the pick, then wait for the confirm control to leave — the pick
+			// has settled when there is nothing left to confirm.
+			await page.getByRole("button", { name: /^Hold / }).click();
+			await expect(page.getByRole("button", { name: /^Hold / })).toHaveCount(0);
+		} else {
+			// A between-rung state: unrepresentable as a pick, and reachable only as a
+			// holding the model no longer writes — so the hop stands in for the retired
+			// stepper, writing the same row shape with the fixture script.
+			hop("--give", String(seeds));
+		}
 
 		if (unlocked) await expectPostUnlocked(page, unlocked);
 		if (stillLocked) await expectPostLocked(page, stillLocked);
@@ -535,11 +546,13 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	});
 }
 
-test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page }) => {
+test("rung 5 — the ratchet: a lower rung is not offered once it is held", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
-	// The full ladder is committed; within the cycle the control's floor IS that amount.
-	await expect(page.getByRole("button", { name: "Give less" })).toBeDisabled();
+	// The full ladder is committed; within the cycle a holding never goes down, so
+	// every offered rung sits at or above the one held.
+	const held = BADGE_RUNGS[BADGE_RUNGS.length - 1];
+	await expect(page.getByRole("button", { name: new RegExp(`.*\$${held}/mo`) })).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
 

@@ -68,7 +68,7 @@ async function release(title: string, rows: Record<string, string>): Promise<voi
 			bodyHtml: "<p>A walk.</p>",
 			maturityRows: rows,
 			streamEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 			// Release refuses a Work whose credits name no human (`credits_creator_required`).
 			credits: CREATED_CREDIT,
 		}),

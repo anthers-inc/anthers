@@ -3,7 +3,6 @@
 import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/constants";
 import { isListened } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
-import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
 import {
 	INTERACTION_PERMISSION_HINT,
@@ -13,7 +12,7 @@ import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
 	Badge,
-	CreatorGate,
+	CreatorBadge,
 	CreatorStatus,
 	PostListItem,
 	Project,
@@ -57,48 +56,41 @@ function badgeNameFor(id: string): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * Support this creator — the entry point where the intent actually forms.
+ * Back this creator — the entry point where the intent actually forms.
  *
  * The subscription dashboard can only list creators it already knows about (settled pool
- * distributions unioned with existing allocations), so a creator you just followed can't be
- * reached from there at all. This is the door for that case.
+ * distributions unioned with holdings), so a creator you just followed can't be reached
+ * from there at all. This is the door for that case.
  *
- * Two API rules shape the control rather than being discovered as errors:
- *   - allocations RATCHET within a cycle (a decrease is rejected), so the committed amount
- *     is the stepper's floor;
- *   - the total across all creators can't exceed what you give, so the
- *     ceiling is what you've already given this creator plus what's still unallocated.
- *
- * `amount` is the creator's new TOTAL, not a delta — the endpoint upserts it.
+ * Under the Badge model the pick is a RUNG, never a typed amount: holding a creator's
+ * Badge is what a subscription is, and the ladder below this card is the whole of what
+ * can be held. One API rule shapes the control rather than being discovered as an error:
+ * holdings RATCHET within a cycle (a lower rung is rejected), so a rung at or below what
+ * you already hold this cycle is not offered.
  */
-function GiveSeedsCard({
-	creatorId,
+function GiveBadgeCard({
 	creatorName,
-	given,
+	rungs,
+	heldThreshold,
 	onGiven,
 }: {
-	creatorId: number;
 	creatorName: string;
-	/** Dollars already given to this creator this cycle (the ratchet floor). */
-	given: string;
+	/** The creator's ladder, threshold-ascending. */
+	rungs: CreatorBadge[];
+	/** The threshold currently held this cycle, as a money string ("0.00" = nothing). */
+	heldThreshold: string;
 	onGiven: () => void | Promise<void>;
 }) {
-	// 🚨 `Math.round(Number(given))` until 2026-08-16, which rounded a DOLLAR amount to
-	// whole dollars. It was invisible while every amount was a $3 multiple — rounding a
-	// multiple of three to the nearest integer changes nothing — and silently turned $4.50
-	// into $5.00 the moment amounts were free. Found by the gauntlet walk, which reported
-	// "$5.00 given" while the budget line beside it said $4.50 had been spent: two readings
-	// of the same fact, disagreeing, which is the shape this whole change is about.
-	const committed = supportAmount(given);
+	const held = supportAmount(heldThreshold);
 	const [budget, setBudget] = useState<number | null>(null);
 	const [remaining, setRemaining] = useState(0);
-	const [pending, setPending] = useState(committed);
+	const [pending, setPending] = useState<number | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	/** The viewer's support budget and what's still unallocated across all creators. */
+	/** The viewer's directed budget and what's still unallocated across all creators. */
 	const loadBudget = useCallback(async () => {
-		const res = await client.api.subscriptions.seeds.$get();
+		const res = await client.api.subscriptions["my-badges"].$get();
 		if (!res.ok) return;
 		const data = await res.json();
 		setBudget(Number(data.budget));
@@ -109,32 +101,36 @@ function GiveSeedsCard({
 		loadBudget();
 	}, [loadBudget]);
 
-	// Re-sync when the committed amount changes underneath us (after a successful give).
-	useEffect(() => setPending(committed), [committed]);
-
 	// Only Free has nothing to direct, and the tab's upgrade prompt already makes that
 	// case — rendering our own "give" CTA here would just duplicate it.
 	if (budget === null || budget <= 0) return null;
 
-	// Not floored, for the same reason: $2.50 of remaining budget is $2.50 of headroom.
-	const max = supportAmount(committed + remaining);
-	const dirty = pending !== committed;
+	// A rung can be held when it is affordable with what's left, and must clear the
+	// ratchet: the cycle's holding never goes down.
+	const reachable = rungs.filter(
+		(r) => Number(r.threshold) > held && Number(r.threshold) <= held + remaining,
+	);
+	const pick = pending;
+	const chosen = rungs.find((r) => Number(r.threshold) === pick) ?? null;
 
 	const give = async () => {
+		if (chosen === null) return;
 		setSaving(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.seeds.$post({
-				json: { creatorId, amount: pending.toFixed(2) },
+			const res = await client.api.subscriptions["my-badges"].$post({
+				json: { badgeId: chosen.id },
 			});
 			if (!res.ok) {
 				const body = (await res.json()) as { error?: string };
 				throw new Error(body.error ?? "Could not update your support.");
 			}
-			// Both halves have to move: `onGiven` re-reads the gate ladder (so a tier flips to
-			// Unlocked), and `loadBudget` re-reads what's left to give. Refreshing only the
-			// ladder leaves the budget line stating a total the viewer has already spent.
+			// Both halves have to move: `onGiven` re-reads the ladder and the holding
+			// (so a tier flips to Unlocked), and `loadBudget` re-reads what's left to give.
+			// Refreshing only the ladder leaves the budget line stating a total the viewer
+			// has already spent.
 			await Promise.all([onGiven(), loadBudget()]);
+			setPending(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not update your support.");
 		} finally {
@@ -142,30 +138,39 @@ function GiveSeedsCard({
 		}
 	};
 
+	if (reachable.length === 0) {
+		return null;
+	}
+
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body py-4 px-5 gap-3">
-				<div className="flex items-center justify-between gap-4 flex-wrap">
-					<div>
-						<h4 className="font-medium">Support {creatorName}</h4>
-						<p className="text-xs text-base-content/50 mt-0.5">
-							Any amount, no platform cut — only the at-cost card processing comes out. You have $
-							{remaining.toFixed(2)} of ${budget.toFixed(2)} left to give this month.
-						</p>
-					</div>
-					<SupportStepper
-						value={pending}
-						min={committed}
-						max={max}
-						onChange={setPending}
-						disabled={saving}
-					/>
+				<div>
+					<h4 className="font-medium">Hold one of {creatorName}&rsquo;s Badges</h4>
+					<p className="text-xs text-base-content/50 mt-0.5">
+						Badges are the monthly subscription — a discrete rung, not an amount. You have $
+						{remaining.toFixed(2)} of ${budget.toFixed(2)} left to direct this month.
+					</p>
 				</div>
 
-				{committed > 0 && (
+				<div className="flex flex-wrap gap-2">
+					{reachable.map((rung) => (
+						<button
+							type="button"
+							key={rung.id}
+							aria-pressed={pending === Number(rung.threshold)}
+							className={`btn btn-xs rounded-full ${pending === Number(rung.threshold) ? "btn-primary" : "btn-outline"}`}
+							onClick={() => setPending(Number(rung.threshold))}
+						>
+							{rung.label} · {amountLabel(rung.threshold)}/mo
+						</button>
+					))}
+				</div>
+
+				{held > 0 && (
 					<p className="text-xs text-base-content/50">
-						You've given {creatorName} ${committed.toFixed(2)} this month. It can be raised
-						mid-month but not taken back — next month's is yours to redirect.
+						You hold {amountLabel(heldThreshold)} of {creatorName}&rsquo;s Badges this month. A rung
+						can be raised mid-month but not taken back — next month&rsquo;s is yours to redirect.
 					</p>
 				)}
 
@@ -174,10 +179,10 @@ function GiveSeedsCard({
 				<button
 					type="button"
 					className="btn btn-primary btn-sm w-fit"
-					disabled={!dirty || saving}
+					disabled={chosen === null || saving}
 					onClick={give}
 				>
-					{saving ? "Giving…" : dirty ? `Give $${(pending - committed).toFixed(2)}` : "Give"}
+					{saving ? "Holding…" : chosen ? `Hold ${chosen.label}` : "Hold"}
 				</button>
 			</div>
 		</div>
@@ -207,29 +212,28 @@ function _anthersBadgeForRank(rank: number): Badge | null {
 /* ------------------------------------------------------------------ */
 
 function BadgesTab({
-	gates,
-	unlockedGates,
+	rungs,
+	unlockedBadges,
 	heldBadge,
-	userSeed,
+	heldAmount,
 	creatorName,
-	creatorId,
-	canGiveSeeds,
+	canBack,
 	onGiven,
 }: {
-	gates: CreatorGate[];
-	unlockedGates: number[];
+	rungs: CreatorBadge[];
+	unlockedBadges: number[];
 	heldBadge: string;
-	userSeed: string;
+	heldAmount: string;
 	creatorName: string;
-	creatorId: number;
-	/** Signed in, and not looking at your own profile — you can't give to yourself. */
-	canGiveSeeds: boolean;
+	/** Signed in, and not looking at your own profile — you can't back yourself. */
+	canBack: boolean;
 	onGiven: () => void | Promise<void>;
 }) {
-	const seedGates = gates.filter((g) => g.gateType === "seed");
-	const unlockedSet = new Set(unlockedGates);
+	// Every rung the ladder holds is this creator's own Badge — there is no `gateType` to
+	// filter on, and no cross-issuer rung to exclude.
+	const unlockedSet = new Set(unlockedBadges);
 
-	if (gates.length === 0) {
+	if (rungs.length === 0) {
 		return (
 			<EmptyState
 				title="No Badges configured"
@@ -248,9 +252,9 @@ function BadgesTab({
 							<span className="text-base-content/60">Your status with {creatorName}</span>
 							<div className="flex items-center gap-2">
 								<span className="badge badge-sm badge-outline">{badgeNameFor(heldBadge)}</span>
-								{parseFloat(userSeed) > 0 && (
+								{parseFloat(heldAmount) > 0 && (
 									<span className="badge badge-sm badge-primary badge-outline">
-										{amountLabel(userSeed)}/mo
+										{amountLabel(heldAmount)}/mo
 									</span>
 								)}
 							</div>
@@ -260,31 +264,31 @@ function BadgesTab({
 			)}
 
 			{/* The creator's Badge ladder */}
-			{seedGates.length > 0 && (
+			{rungs.length > 0 && (
 				<div>
 					<h3 className="text-lg font-bold mb-1">Badges</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Badges set by {creatorName}. Support them monthly to unlock.
+						Badges set by {creatorName}. Hold one to unlock what sits behind it.
 					</p>
-					{canGiveSeeds && (
+					{canBack && (
 						<div className="mb-3">
-							<GiveSeedsCard
-								creatorId={creatorId}
+							<GiveBadgeCard
 								creatorName={creatorName}
-								given={userSeed}
+								rungs={rungs}
+								heldThreshold={heldAmount}
 								onGiven={onGiven}
 							/>
 						</div>
 					)}
 					<div className="space-y-2">
-						{seedGates.map((gate) => {
-							const unlocked = unlockedSet.has(gate.id);
-							const currentSeed = parseFloat(userSeed);
-							const threshold = parseFloat(gate.threshold);
-							const remaining = Math.max(0, threshold - currentSeed);
+						{rungs.map((rung) => {
+							const unlocked = unlockedSet.has(rung.id);
+							const held = supportAmount(heldAmount);
+							const threshold = Number(rung.threshold);
+							const remaining = Math.max(0, threshold - held);
 							return (
 								<div
-									key={gate.id}
+									key={rung.id}
 									className={`card border ${unlocked ? "border-success/40 bg-success/5" : "border-base-content/10 bg-base-200"}`}
 								>
 									<div className="card-body p-4">
@@ -296,9 +300,9 @@ function BadgesTab({
 													<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
 												)}
 												<div>
-													<span className="font-medium">{gate.label}</span>
+													<span className="font-medium">{rung.label}</span>
 													<span className="text-base-content/40 ml-2 text-sm">
-														{amountLabel(gate.threshold)}/mo
+														{amountLabel(rung.threshold)}/mo
 													</span>
 												</div>
 											</div>
@@ -312,8 +316,8 @@ function BadgesTab({
 												)
 											)}
 										</div>
-										{gate.description && (
-											<p className="text-sm text-base-content/60 mt-1 ml-7">{gate.description}</p>
+										{rung.description && (
+											<p className="text-sm text-base-content/60 mt-1 ml-7">{rung.description}</p>
 										)}
 									</div>
 								</div>
@@ -328,8 +332,7 @@ function BadgesTab({
 				<div className="card bg-base-200">
 					<div className="card-body text-center">
 						<p className="text-sm text-base-content/60 mb-2">
-							Support Anthers monthly to start unlocking Badges, and {creatorName} to back them
-							directly.
+							Back {creatorName} with one of their Badges to unlock what sits behind them.
 						</p>
 						<Link to="/signup" className="btn btn-primary btn-sm mx-auto">
 							Get Started
@@ -393,9 +396,9 @@ export default function CreatorProfilePage() {
 	useReportVisit({ creatorId: creator?.id ?? null });
 
 	/**
-	 * Re-read the viewer's standing with this creator. Giving changes which gates are
-	 * unlocked, and the whole point of the control is watching a tier flip to Unlocked — so
-	 * the ladder has to reflect it without a reload.
+	 * Re-read the viewer's standing with this creator. Holding a Badge changes which rungs
+	 * are unlocked, and the whole point of the control is watching a tier flip to Unlocked —
+	 * so the ladder has to reflect it without a reload.
 	 */
 	const refreshCreatorStatus = useCallback(async () => {
 		if (!handle) return;
@@ -894,15 +897,15 @@ export default function CreatorProfilePage() {
 										</ul>
 									</div>
 								</div>
-								{/* Badge/seed badges */}
+								{/* The viewer's Anthers Badge, and the rung held here */}
 								{creatorStatus && creatorStatus.badge !== "free" && (
 									<div className="flex items-center gap-2 text-xs">
 										<span className="badge badge-sm badge-outline">
 											{badgeNameFor(creatorStatus.badge)}
 										</span>
-										{parseFloat(creatorStatus.seedAmount) > 0 && (
+										{parseFloat(creatorStatus.badgeAmount) > 0 && (
 											<span className="badge badge-sm badge-primary badge-outline">
-												{amountLabel(creatorStatus.seedAmount)}/mo
+												{amountLabel(creatorStatus.badgeAmount)}/mo
 											</span>
 										)}
 									</div>
@@ -1016,13 +1019,12 @@ export default function CreatorProfilePage() {
 
 					{tab === "badges" && (
 						<BadgesTab
-							gates={creatorStatus?.gates ?? []}
-							unlockedGates={creatorStatus?.unlockedGates ?? []}
+							rungs={creatorStatus?.badges ?? []}
+							unlockedBadges={creatorStatus?.unlockedBadges ?? []}
 							heldBadge={creatorStatus?.badge ?? "free"}
-							userSeed={creatorStatus?.seedAmount ?? "0.00"}
+							heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.handle}
-							creatorId={creator.id}
-							canGiveSeeds={isAuthenticated && !isOwnProfile}
+							canBack={isAuthenticated && !isOwnProfile}
 							onGiven={refreshCreatorStatus}
 						/>
 					)}

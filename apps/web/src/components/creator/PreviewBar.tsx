@@ -163,7 +163,7 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 						{/* The named rungs, as JUMP TARGETS rather than as the dial itself, so a rung
 						    the dial cannot land on is still reachable. They were plain text until
 						    2026-08-16, beside a comment claiming they made such a rung reachable —
-						    true while every threshold was a whole Seed and `step={1}` hit them all,
+						    true while every threshold was a whole unit and `step={1}` hit them all,
 						    and false the moment thresholds became dollars: $9.50 is on no whole-dollar
 						    step, so a creator could not preview their own gate. */}
 						{badges.length > 0 && (

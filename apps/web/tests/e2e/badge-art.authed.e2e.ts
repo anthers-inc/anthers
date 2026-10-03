@@ -13,13 +13,13 @@
  */
 import { deflateSync } from "node:zlib";
 import { db } from "@anthers/db/client";
-import { creatorGates } from "@anthers/db/schema";
+import { badges } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { API_URL, expect, signInAsCreator, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 const RUN = Date.now().toString(36);
 const LABEL = `E2E rung ${RUN}`;
-let gateId = 0;
+let badgeId = 0;
 let token = "";
 
 /**
@@ -87,7 +87,7 @@ function artwork(): Buffer {
 }
 
 test.afterAll(async () => {
-	if (gateId) await db.delete(creatorGates).where(eq(creatorGates.id, gateId));
+	if (badgeId) await db.delete(badges).where(eq(badges.id, badgeId));
 });
 
 test("a creator gives a rung its own art, and a rung without one still shows a badge", async ({
@@ -99,7 +99,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 
 	// A rung of our own, so the walk never depends on what the gauntlet fixture happens
 	// to have and never edits a rung another spec is asserting on.
-	const created = await fetch(`${API_URL}/api/subscriptions/gates`, {
+	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -109,7 +109,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 		body: JSON.stringify({ threshold: "5.00", label: LABEL }),
 	});
 	expect(created.status, "could not create the fixture rung").toBe(201);
-	gateId = ((await created.json()) as { gate: { id: number } }).gate.id;
+	badgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
 
 	await page.goto(`${WEB_ORIGIN}/studio/settings`);
 
@@ -156,7 +156,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 
 	// The mark becomes an <img> pointed at the access-checked route — which is the whole
 	// visible difference, and the only way to see that the upload round-tripped.
-	await expect(control.locator(`img[src$="/api/subscriptions/gates/${gateId}/art"]`)).toBeVisible({
+	await expect(control.locator(`img[src$="/api/subscriptions/badges/${badgeId}/art"]`)).toBeVisible({
 		timeout: 15_000,
 	});
 

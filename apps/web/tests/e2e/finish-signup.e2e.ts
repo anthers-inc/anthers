@@ -172,7 +172,7 @@ test.describe("an address the PDS handed us", () => {
 		atprotoHandle: "someone.bsky.social",
 		blueskyHint: null,
 		hostedHandle: null,
-		picks: { anthers: 0, follow: [], seed: [] },
+		picks: { badge: null, follow: [], badges: [] },
 		next: "",
 		expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
 	};
@@ -246,7 +246,7 @@ test.describe("choosing or confirming the identity", () => {
 		atprotoHandle: null,
 		blueskyHint: "someone.bsky.social",
 		hostedHandle: null,
-		picks: { anthers: 0, follow: [], seed: [] },
+		picks: { badge: null, follow: [], badges: [] },
 		next: "",
 		expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
 	};

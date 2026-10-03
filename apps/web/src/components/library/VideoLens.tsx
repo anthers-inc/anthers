@@ -21,6 +21,7 @@
  */
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
+import { isAccessResult } from "@anthers/web-shared/types";
 import { PlayIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
 import type { LensItem } from "./MusicLens";
 
@@ -70,7 +71,7 @@ export default function VideoLens({ items }: { items: LensItem[] }) {
 					const to =
 						work.publicId != null ? workUrl({ slug: work.slug, publicId: work.publicId }) : null;
 					const duration = formatDuration(work.durationSeconds);
-					const locked = work.access?.canAccess === false;
+					const locked = isAccessResult(work.access) && work.access.canAccess === false;
 					return (
 						<li key={item.id}>
 							<div className="group card bg-base-100 shadow-sm transition-shadow hover:shadow-md">

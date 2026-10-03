@@ -17,19 +17,47 @@
 //
 // Neither typechecks as an error: both fields are `number`, and a count is a number.
 //
-// ⚠️ **The Anthers side became an amount on 2026-08-24**, when that section grew a Badge
-// ladder. It was `boolean | null`, which could only ever express the Public Access price —
-// so the function substituted `PUBLIC_ACCESS_PRICE` for `true`, and a page offering Sprout
-// would have quoted Root while the ladder said otherwise. The substitution is gone: every
-// dollar in the total was chosen somewhere in the UI, and the tests below are about the
-// arithmetic staying a sum of exactly those choices.
+// ⚠️ **The Anthers side is a Badge pick now** (2026-10-02), and its dollars are the rung's
+// threshold — resolved by `anthersDollarsOf` BEFORE `supportTotal` is called, so the total
+// still contains no number this function could invent: every dollar in it was chosen
+// somewhere in the UI. The tests below cover both halves of that: the name resolving to
+// the threshold it names, and the arithmetic staying a sum of exactly those choices.
 
 import { describe, expect, test } from "bun:test";
-import { ANTHERS_BADGES, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import {
+	ANTHERS_BADGES,
+	BADGE_ORDER,
+	PUBLIC_ACCESS_PRICE,
+	thresholdForBadge,
+} from "@anthers/shared/constants";
 import { supportTotal } from "@anthers/shared/signup";
-import { marginalRows, RUNG_AMOUNTS } from "./SignupPage";
+import { anthersDollarsOf, marginalRows, RUNG_AMOUNTS } from "./SignupPage";
 
 const creator = (amount: number) => ({ amount });
+
+describe("what the picked Badge resolves to", () => {
+	test("each rung's name costs exactly its own threshold", () => {
+		for (const key of BADGE_ORDER) {
+			expect(anthersDollarsOf(key)).toBe(thresholdForBadge(key));
+		}
+	});
+
+	test("Free is $0, whether it arrives as the name or as nothing at all", () => {
+		expect(anthersDollarsOf("free")).toBe(0);
+		expect(anthersDollarsOf(null)).toBe(0);
+	});
+
+	/**
+	 * 🚨 **The pick is a string that crossed three boundaries**, so the ladder — not the
+	 * string — is the authority on what it costs. A name the ladder does not carry reads
+	 * as Free rather than as a number the page invented, which is the same coercion
+	 * `normalizePicks` applies at the storage boundary.
+	 */
+	test("a name outside the ladder reads as Free rather than costing something", () => {
+		expect(anthersDollarsOf("mystery")).toBe(0);
+		expect(anthersDollarsOf("")).toBe(0);
+	});
+});
 
 describe("what the ceremony quotes", () => {
 	test("is dollars, not a count of destinations", () => {

@@ -8,7 +8,8 @@
  * behind pure modules. A drifted access rule renders a perfectly plausible badge, which
  * is the kind of defect that cannot be caught by looking at the screen.
  */
-import type { AccessResult, AccessRow, Work } from "../../lib/types";
+import type { AccessRow, Work } from "../../lib/types";
+import { accessRowsOf } from "../../lib/types";
 
 // ─── Access ─────────────────────────────────────────────────────────────────
 
@@ -42,18 +43,14 @@ export type AccessState = "private" | "locked" | "public-access" | "free" | "sal
  */
 export interface AccessShape {
 	visibility?: Work["visibility"];
-	access?: AccessRow[] | null | AccessResult;
+	access?: AccessRow[] | null | Work["access"];
 	streamEnabled?: boolean;
-}
-
-function accessRowsOf(item: AccessShape): AccessRow[] {
-	return Array.isArray(item.access) ? item.access : [];
 }
 
 export function accessState(item: AccessShape): AccessState {
 	if (item.visibility !== "released") return "private";
 
-	const rows = accessRowsOf(item);
+	const rows = accessRowsOf(item.access) ?? [];
 	if (!rows.some((r) => r.allow)) return "locked";
 
 	const baseline = rows.find((r) => r.threshold === 0);

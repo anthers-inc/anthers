@@ -63,7 +63,7 @@ test("a creator releasing rated work into Public Access is told who will see it"
 			bodyHtml: "<p>A walk.</p>",
 			maturityRows: rowsRatedAs("mature"),
 			streamEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 			// The Edit page release below needs a human in the credits (`credits_creator_required`).
 			credits: CREATED_CREDIT,
 		}),

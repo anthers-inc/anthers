@@ -28,9 +28,7 @@ describe("accessState", () => {
 		expect(
 			accessState({ visibility: "released", access: [row(0, false)], streamEnabled: true }),
 		).toBe("locked");
-		expect(accessState({ visibility: "released", access: [], streamEnabled: true })).toBe(
-			"locked",
-		);
+		expect(accessState({ visibility: "released", access: [], streamEnabled: true })).toBe("locked");
 		expect(accessState({ visibility: "released", access: null, streamEnabled: true })).toBe(
 			"locked",
 		);

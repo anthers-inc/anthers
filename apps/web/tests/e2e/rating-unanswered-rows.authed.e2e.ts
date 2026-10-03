@@ -65,7 +65,7 @@ test("a Work rated before the matrix is released only once every row is answered
 			title: TITLE,
 			bodyHtml: "<p>Rated before there was a matrix to rate it with.</p>",
 			streamEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 			// The gate under test is the rating's, not the credits one — stage the human credit.
 			credits: CREATED_CREDIT,
 		}),

@@ -176,6 +176,29 @@ export interface AccessResult {
 	unlock?: UnlockOffer;
 }
 
+/**
+ * Which serialization a `Work["access"]` holds: the viewer's verdict, or the creator's
+ * editable rows.
+ *
+ * `Work` is the ONE type for both serializations the server sends, so its `access` is a
+ * union and this is the honest way to tell the halves apart — an array is the creator's
+ * table (the owner shape, which the Studio edits) and an object is the resolver's verdict
+ * (the viewer shape, which every reading surface consumes). Inline `Array.isArray` checks
+ * blur the two again; reading through these keeps each call site saying which page it is.
+ */
+export function isAccessResult(
+	access: AccessResult | AccessRow[] | null | undefined,
+): access is AccessResult {
+	return !!access && !Array.isArray(access);
+}
+
+/** The creator's editable access rows, or null when this serialization is a viewer's. */
+export function accessRowsOf(
+	access: AccessResult | AccessRow[] | null | undefined,
+): AccessRow[] | null {
+	return Array.isArray(access) ? access : null;
+}
+
 // ─── Content Types ───
 
 /** Downloadable file (build, track, PDF, installer, …) attached to a content element. */
@@ -322,8 +345,8 @@ export interface Work {
 
 	// Delivery & access. ONE field name, two shapes, matching what the server sends on
 	// each serialization: the OWNER's shape carries the editable access table, and the
-	// VIEWER's carries the resolver's verdict. 🚨 The union is honest but blind — tell the
-	// two apart by what the page is for, never by testing the value's shape.
+	// VIEWER's carries the resolver's verdict. `accessOf` (below) tells them apart — never
+	// test the value's shape inline, or the two serializations blur together again.
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
 	access?: AccessRow[] | null | AccessResult;

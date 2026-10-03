@@ -139,7 +139,12 @@ function BadgeArtControl({
 				disabled={busy}
 				title="Change this badge"
 			>
-				<CreatorBadgeMark badgeId={badge.id} index={index} label={`${badge.label} badge`} art={badge} />
+				<CreatorBadgeMark
+					badgeId={badge.id}
+					index={index}
+					label={`${badge.label} badge`}
+					art={badge}
+				/>
 			</button>
 			<input
 				ref={input}
@@ -382,9 +387,7 @@ export default function BadgeLadderEditor() {
 					<p className="text-sm text-base-content/50">Loading...</p>
 				) : (
 					<div className="flex flex-col gap-2">
-						{badges.length === 0 && (
-							<p className="text-sm text-base-content/50">No rungs yet.</p>
-						)}
+						{badges.length === 0 && <p className="text-sm text-base-content/50">No rungs yet.</p>}
 						{badges.map((badge) =>
 							editingId === badge.id ? (
 								<div key={badge.id} className="flex flex-col gap-2 p-3 bg-base-100 rounded-lg">

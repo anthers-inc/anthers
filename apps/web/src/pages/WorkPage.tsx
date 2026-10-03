@@ -22,7 +22,7 @@ import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioEditWorkUrl } from "@anthers/web-shared/studio";
-import type { TranscodingJob } from "@anthers/web-shared/types";
+import { isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -189,7 +189,11 @@ export default function WorkPage() {
 		workId: work?.id ?? null,
 		contentType: work?.type ?? "",
 		active:
-			!!work && presence && isTimePoolEligible(work.type) && (work.access?.canAccess ?? false),
+			!!work &&
+			presence &&
+			isTimePoolEligible(work.type) &&
+			isAccessResult(work.access) &&
+			work.access.canAccess,
 		elementRef: presence ? deliverableRef : undefined,
 	});
 
@@ -203,7 +207,10 @@ export default function WorkPage() {
 		);
 	}
 
-	const access = work.access;
+	// The viewer's verdict. `Work` types both serializations' `access`, and this page is a
+	// reader's — the owner's own shape carries the editable rows instead, which read as no
+	// verdict at all here (`null`), the same absence the comment below already describes.
+	const access = isAccessResult(work.access) ? work.access : null;
 	const isOwner = isAuthenticated && user?.id === work.creatorId;
 	/**
 	 * Whether this viewer may open the Work.
