@@ -17,8 +17,8 @@ import StudioRedirect from "./components/ui/StudioRedirect";
  * The Studio — the creator authoring surface, merged in from `apps/studio-web` on
  * 2026-08-11 and now a SECTION of this app rather than a separate origin.
  *
- * LAZY, and that is the whole reason this is tolerable: these eight pages drag in the
- * authoring stack (TipTap, recharts) which a reader browsing the site must never
+ * LAZY, and that is the whole reason this is tolerable: these pages drag in the
+ * authoring stack (TipTap) which a reader browsing the site must never
  * download. `React.lazy` keeps them in their own chunks, fetched on first navigation
  * into /studio. (ffmpeg.wasm was the heaviest of them until 2026-08-17, when the
  * browser encoder was removed — see work-media.tsx.)
@@ -62,11 +62,11 @@ function StudioLayout() {
  * Every route page is LAZY. Only the homepage is not, and it is reached through
  * `RootRedirect`, which imports `ForUsersPage` statically because it IS the first paint.
  *
- * Measured before this change: a cold visitor landing on `/` downloaded 3306 KB, of which
- * ~1.4 MB belonged to two pages they were not looking at — `WikiPage` dragging in the MDX
- * pipeline (refractor 433 KB, acorn 230 KB, parse5 125 KB, katex 265 KB) and the operator
- * console dragging in recharts (257 KB). A static import in this file is the whole reason: it puts
- * the module in the entry graph no matter which route renders.
+ * Measured before lazy: a cold visitor landing on `/` downloaded 3306 KB, of which
+ * ~1.4 MB belonged to pages they were not looking at — the old in-browser MDX wiki
+ * and the pages that shared its dependency graph. A static import in this file is
+ * the whole reason: it puts the module in the entry graph no matter which route
+ * renders.
  *
  * 🚨 So DON'T add a static page import here — that is the mistake this comment exists to
  * prevent, and it is invisible until someone measures. The cost of getting it wrong is
@@ -108,7 +108,6 @@ const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
-const WikiPage = lazy(() => import("./pages/WikiPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
 const EmbedWorkPage = lazy(() => import("./pages/EmbedWorkPage"));
@@ -186,7 +185,6 @@ export default function App() {
 						<Route path="/about" element={<AboutPage />} />
 						<Route path="/supporters" element={<SupportersPage />} />
 					</Route>
-					<Route path="/wiki/*" element={<WikiPage />} />
 					{/* Logging in to an account that already exists. Signing UP is /signup —
 					    one door, one ceremony (email → code → /welcome to land). The four-field Create Account card was deleted 2026-08-17; see
 					    pages/LoginPage.tsx. /subscribe is kept as a redirect because the old URL is
