@@ -43,16 +43,6 @@ import {
 } from "./constants.js";
 import { anthersSupportBreakdown, paymentsSplit } from "./fees.js";
 
-// ── The ladder (policy — canonical in 61.01, mirrored here) ──────────────────
-/**
- * Each rung's **account ceiling**. Chosen, not derived — which is what makes them safe to
- * quote — under the rule 61.01 recovered: *a rung's ceiling is where the NEXT rung's
- * staffing becomes affordable.* You may not open a phase until you can pay for it.
- */
-export const PHASE_ACCOUNTS: readonly number[] = [
-	100, 250, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 35_000, 80_000, 200_000, 400_000, 2_000_000,
-];
-
 export interface Staffing {
 	/** Salaries and stipends. */
 	staff: number;

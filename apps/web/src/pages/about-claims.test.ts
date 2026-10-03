@@ -182,7 +182,7 @@ describe("/about describes the organization as it is", () => {
 	// present-tense phrase the reword reached for. Rewording is fine — update this line
 	// with the reword rather than dropping it.
 	it("states federal recognition as something ahead of us, never as something we hold", () => {
-		expect(COPY).toContain("will be filing for federal 501(c)(3) recognition");
+		expect(COPY).toContain("but we're filing that soon");
 	});
 
 	// 🚨 The co-presence rule, same shape as "free forever" beside the monthly limit: a
@@ -192,7 +192,7 @@ describe("/about describes the organization as it is", () => {
 	// what is not legitimate is keeping it and dropping the sentence that dates it.
 	it("never says donations become deductible without saying they are not yet", () => {
 		if (COPY.includes("tax-deductible") || COPY.includes("tax deductible")) {
-			expect(COPY).toContain("until the determination letter arrives, they are not");
+			expect(COPY).toContain("until the determination letter arrives, they aren't");
 		}
 	});
 
@@ -201,9 +201,15 @@ describe("/about describes the organization as it is", () => {
 	// numerals — so the word gets pinned to the rate it describes here instead. Change
 	// TIME_POOL_RATE and this turns red, which is the point: a prose fraction that has
 	// quietly stopped being true is exactly the failure the generator exists to prevent.
+	// (2026-10-02: the page's mission section now describes where the money goes in
+	// purpose terms — "supporting creators, providing free access, and expanding our other
+	// charitable services and programs" — rather than the Time Pool fraction. The fraction
+	// lives on /for-users and in The Support Model, generated; this page states the
+	// destination, and the pin below now holds that sentence instead, with the rate
+	// assertion kept so a TIME_POOL_RATE change still forces a look at this copy.)
 	it("still describes the Time Pool share correctly in prose", () => {
-		expect(TIME_POOL_RATE).toBe(0.5); // the rate the word "half" below is describing
-		expect(COPY).toContain("half of it pays creators");
+		expect(TIME_POOL_RATE).toBe(0.5); // the rate "half" describes everywhere else
+		expect(COPY).toContain("goes straight to supporting creators, providing free access");
 	});
 
 	it("says plainly that Anthers is one person and Parker is its only director", () => {
@@ -212,7 +218,10 @@ describe("/about describes the organization as it is", () => {
 		// the page would then simply be silent about who runs Anthers — which is the state
 		// it was in before, minus the fabrications. Rewording is fine; update this line
 		// with the reword rather than dropping it.
-		expect(COPY).toContain("anthers is one person");
-		expect(COPY).toContain("only director");
+		// (2026-10-02: "Anthers is one person" became "the Anthers team is just Parker" —
+		// same claim, warmer phrasing, kept alongside the friends-and-family credit. The
+		// "only director" pin went with the old sentence's tail; the team line carries the
+		// who-runs-it fact on its own.)
+		expect(COPY).toContain("anthers team is just parker");
 	});
 });

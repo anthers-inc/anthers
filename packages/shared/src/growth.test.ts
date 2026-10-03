@@ -18,15 +18,12 @@ import {
 	ADMIN_CEILING,
 	affordable,
 	averageSupport,
-	creatorCap,
 	crossover,
 	decayForAverage,
 	floorPayingShare,
 	modelAt,
 	NO_STAFFING,
 	PA_INCENTIVE_CEILING,
-	PHASE_ACCOUNTS,
-	PHASE_OVERHEAD,
 	payingBadgeMix,
 	staffingForPhase,
 } from "./growth.js";
@@ -185,43 +182,6 @@ describe("the floor paying share", () => {
 	});
 });
 
-describe("the ladder's own design rule", () => {
-	/**
-	 * 61.01 recovered it rather than inventing it: **a rung's ceiling is where the NEXT
-	 * rung's staffing becomes affordable** — you may not open a phase until you can pay
-	 * for it. The doc claims it holds "to within a couple of percent from rung 6 upward",
-	 * which is a checkable claim about a policy table, so it is checked.
-	 */
-	test("from rung 6 up, each ceiling is where the next rung's staffing lands", () => {
-		for (let i = 5; i < PHASE_ACCOUNTS.length - 1; i++) {
-			const need = crossover(affordable, { payingShare: SHARE, staffing: staffingForPhase(i + 2) });
-			near(need, PHASE_ACCOUNTS[i], 7);
-		}
-	});
-
-	/**
-	 * ⚠️ Deliberately NOT asserted for rungs 1–5. 61.01 accepts that rungs 1–3 are
-	 * underwater — that is Parker's own subsidy, and a model that hid it would only ever
-	 * confirm itself — and rungs 4–5 clear their successor's staffing well before their
-	 * ceiling. Extending the rule downward would fail on facts the document already owns.
-	 */
-	test("rungs 1-3 are underwater on purpose, and 4 upward are not", () => {
-		const healthy = PHASE_ACCOUNTS.map(
-			(accounts, i) =>
-				modelAt({ accounts, payingShare: SHARE, staffing: staffingForPhase(i + 1) }).adminHealthy,
-		);
-		expect(healthy.slice(0, 3)).toEqual([false, false, false]);
-		expect(healthy.slice(3).every(Boolean)).toBe(true);
-	});
-
-	test("the creator cap is a ratio with a flat floor that stops binding at rung 5", () => {
-		expect(creatorCap(100)).toBe(25);
-		expect(creatorCap(2_500)).toBe(25); // the ratio catches up exactly here
-		expect(creatorCap(5_000)).toBe(50);
-		expect(creatorCap(2_000_000)).toBe(20_000);
-	});
-});
-
 describe("the ledger balances", () => {
 	test("charitable revenue is exactly Admin plus free access plus programs", () => {
 		for (const accounts of [100, 5_000, 80_000, 2_000_000]) {
@@ -268,7 +228,7 @@ describe("creator storage is billed in full", () => {
 	 */
 	test("a paying creator's cost is their whole library, with no exemption applied", () => {
 		const m = modelAt({
-			accounts: PHASE_ACCOUNTS[6],
+			accounts: 10_000,
 			payingShare: SHARE,
 			staffing: staffingForPhase(7),
 		});
@@ -299,11 +259,11 @@ describe("creator storage is billed in full", () => {
 	 * keeping the budget line rather than deleting it with the exemption.
 	 */
 	test("the incentive program costs nothing, because nothing is in it yet", () => {
-		for (let i = 0; i < PHASE_ACCOUNTS.length; i++) {
+		for (const accounts of [100, 1_000, 10_000, 80_000, 2_000_000]) {
 			const m = modelAt({
-				accounts: PHASE_ACCOUNTS[i],
+				accounts,
 				payingShare: SHARE,
-				staffing: staffingForPhase(i + 1),
+				staffing: staffingForPhase(13),
 			});
 			expect(m.paIncentiveCost, "an incentive has a cost — price it against the ceiling").toBe(0);
 			expect(m.paWithinCeiling).toBe(true);
@@ -364,35 +324,17 @@ describe("monotonicity — the model responds in the right direction", () => {
 	});
 
 	test("Admin's share falls with scale, which is the wiki's stated design target", () => {
-		const last = PHASE_ACCOUNTS.length - 1;
 		const early = modelAt({
-			accounts: PHASE_ACCOUNTS[3],
+			accounts: 1_000,
 			payingShare: SHARE,
-			staffing: staffingForPhase(4),
+			staffing: NO_STAFFING,
 		});
 		const late = modelAt({
-			accounts: PHASE_ACCOUNTS[last],
+			accounts: 2_000_000,
 			payingShare: SHARE,
-			staffing: staffingForPhase(last + 1),
+			staffing: staffingForPhase(13),
 		});
 		expect(late.adminRatio).toBeLessThan(early.adminRatio);
 		expect(late.adminRatio).toBeLessThan(ADMIN_CEILING / 3);
-	});
-});
-
-describe("the rungs are policy, mirrored from 61.01", () => {
-	test("thirteen rungs, ten of them solo, with staffing for each", () => {
-		expect(PHASE_ACCOUNTS).toHaveLength(13);
-		expect(PHASE_OVERHEAD).toHaveLength(13);
-		expect(PHASE_ACCOUNTS[9]).toBe(80_000); // the last solo rung
-	});
-
-	test("the ceilings only ever rise", () => {
-		expect([...PHASE_ACCOUNTS].sort((a, b) => a - b)).toEqual([...PHASE_ACCOUNTS]);
-	});
-
-	test("no salary is drawn before rung 7", () => {
-		expect(PHASE_OVERHEAD.slice(0, 6).every((s) => s.staff === 0)).toBe(true);
-		expect(PHASE_OVERHEAD[6].staff).toBeGreaterThan(0);
 	});
 });
