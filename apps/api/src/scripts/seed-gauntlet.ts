@@ -30,7 +30,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-	accounts,
 	assets,
 	attentionEvents,
 	badges,
@@ -334,23 +333,13 @@ async function resetGates(creatorId: number): Promise<void> {
  * viewer's own account, content and other relationships are left alone.
  */
 async function resetViewer(viewerId: number, creatorId: number, postIds: number[]): Promise<void> {
-	// Badge back to Free and support back to zero. Upsert: the account row may not exist yet
-	// if this login has never visited /signup.
-	const [account] = await db
-		.select({ id: accounts.id })
-		.from(accounts)
-		.where(eq(accounts.userId, viewerId))
-		.limit(1);
-	if (account) {
-		await db
-			.update(accounts)
-			.set({ anthersSupport: "0.00", creatorSupportTotal: "0.00", updatedAt: new Date() })
-			.where(eq(accounts.userId, viewerId));
-	} else {
-		await db
-			.insert(accounts)
-			.values({ userId: viewerId, anthersSupport: "0.00", creatorSupportTotal: "0.00" });
-	}
+	// The floor is no holding at all: Free is the absence of org-ladder and creator-ladder
+	// rows this cycle, and the viewer's Anthers-side reads answer 0 for a user with no
+	// holdings — which is what "Badge back to Free" means under the Badge model. The org's
+	// rungs go too, since a prior hop may have parked one on the staircase. There is no
+	// billing row to touch: the amounts the old reset zeroed are `user_badges` holdings
+	// now, and the billing table carries no amount to reset.
+	await db.delete(userBadges).where(eq(userBadges.userId, viewerId));
 
 	await db
 		.delete(follows)

@@ -106,23 +106,18 @@ export async function refundsAfterDownloadInWindow(
 }
 
 /**
- * What Anthers cannot recover on this refund: Stripe's sunk processing fee, plus
- * the delivery it already paid for if the buyer actually took the bytes.
+ * What Anthers cannot recover on this refund: Stripe's sunk processing fee.
  *
- * ⚠️ **`delivery_fee` is "0.00" on every sale since 2026-08-12**, so on a current
- * purchase this is the processing fee alone. The term stays because it is read off
- * the ROW rather than recomputed, and **pre-2026-08-12 purchases carry a real one** —
- * recomputing from today's model would under-book every legacy refund by exactly the
- * delivery it actually paid for.
- *
- * Delivery is conditional on `downloaded_at` on purpose — the fee was collected to
- * cover a download, and if none happened the bytes were never sent, so booking it as
- * a loss would overstate what the remainder absorbed.
+ * ⚠️ **The delivery-fee term is gone, and the reason is the column.** `purchases.
+ * delivery_fee` was always "0.00" on every sale since the R2 move (2026-08-12), and the
+ * accounts-split pass dropped the column outright — pre-launch there are no historical
+ * rows carrying a real one, so the "read it off the row" reasoning had nothing left to
+ * read. The refund cap reasoning still turns on **whether the bytes went out**
+ * (`downloaded_at`), which is the distinction that was ever load-bearing; only the
+ * arithmetic that priced the delivery is.
  */
 export function refundShortfall(purchase: Purchase): Decimal {
-	const processing = new Decimal(purchase.processingFee);
-	const delivery = purchase.downloadedAt ? new Decimal(purchase.deliveryFee) : new Decimal(0);
-	return processing.plus(delivery);
+	return new Decimal(purchase.processingFee);
 }
 
 /**
@@ -363,15 +358,16 @@ export async function settleRefundedPurchase(
 
 	// The remainder absorbs what could not be recovered. Negative, because this is
 	// money leaving the pool that funds free access — the honest reason the Terms
-	// give for the cap, and it can only stay honest if the ledger records it.
+	// give for the cap, and it can only stay honest if the ledger records it. The
+	// shortfall is the sunk processing fee alone since the delivery column died —
+	// see `refundShortfall` — so the "and delivered bytes" clause has nothing to
+	// name any more.
 	const shortfall = refundShortfall(updated);
 	if (shortfall.greaterThan(0)) {
 		await db.insert(crfLedger).values({
 			amount: shortfall.negated().toFixed(2),
 			purchaseId: updated.id,
-			description:
-				`Refund shortfall (${opts.initiator}-initiated) — sunk card processing` +
-				`${updated.downloadedAt ? " and delivered bytes" : ""} on purchase #${updated.id}`,
+			description: `Refund shortfall (${opts.initiator}-initiated) — sunk card processing on purchase #${updated.id}`,
 		});
 	}
 

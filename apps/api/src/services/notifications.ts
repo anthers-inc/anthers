@@ -44,7 +44,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { notifications, users } from "@anthers/db/schema";
+import { notifications, userPreferences, users } from "@anthers/db/schema";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { sendEmail } from "./email.js";
 
@@ -116,7 +116,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	if (!row) return { created: false, notificationId: null, emailIntended: false, emailed: false };
 
 	const [user] = await db
-		.select({ email: users.email, notifyActivityEmail: users.notifyActivityEmail })
+		.select({ email: users.email })
 		.from(users)
 		.where(eq(users.id, input.userId))
 		.limit(1);
@@ -126,7 +126,16 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	// that we tried.
 	if (!user) return { created: true, notificationId: row.id, emailIntended: false, emailed: false };
 
-	const wantsEmail = input.category === "essential" || user.notifyActivityEmail !== false;
+	// The activity-email preference rides `user_preferences` (the accounts split moved it
+	// off `users`) — a second read rather than a join, because a missing preferences row is
+	// a valid state for a user who has set nothing, and `null` reads as "never said no".
+	const [prefs] = await db
+		.select({ notifyActivityEmail: userPreferences.notifyActivityEmail })
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, input.userId))
+		.limit(1);
+
+	const wantsEmail = input.category === "essential" || prefs?.notifyActivityEmail !== false;
 	if (!wantsEmail)
 		return { created: true, notificationId: row.id, emailIntended: false, emailed: false };
 

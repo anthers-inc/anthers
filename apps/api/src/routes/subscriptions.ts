@@ -2,12 +2,12 @@
 /**
  * Account & economics routes — the support model.
  *
- * A user's account holds a monthly **amount** given to Anthers (`anthersSupport`) — that
- * amount is what their held Anthers Badge is worth, and is their Anthers subscription (one
- * Stripe item per destination, each carrying its own amount). What they direct at creators
- * is a set of **Badge holdings** in `user_badges` — one discrete pick per issuer per
- * cycle, each row naming the Badge whose threshold is the amount; `creatorSupportTotal` is
- * the balance they direct from.
+ * What a user gives Anthers is their held **Badge** on the org's ladder — one discrete
+ * pick in `user_badges`, whose threshold IS the amount, read wherever it is needed
+ * through `heldAnthersBadgeAmount`. What they direct at creators is a set of **Badge
+ * holdings** in `user_badges` — one discrete pick per issuer per cycle, each row naming
+ * the Badge whose threshold is the amount; the balance they direct from is
+ * `billing_accounts.directed_budget`, written by the subscription webhook.
  *
  * There is no delivery line — delivery is free at any volume. This file also
  * serves time (attention) tracking, pool distributions, creator Badges, and access.
@@ -16,9 +16,9 @@
 import { db } from "@anthers/db/client";
 import {
 	accountCycles,
-	accounts,
 	attentionEvents,
 	badges,
+	billingAccounts,
 	comments,
 	creatorCredits,
 	creatorNettingApplications,
@@ -29,6 +29,7 @@ import {
 	posts,
 	stickers,
 	userBadges,
+	userPreferences,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -87,6 +88,7 @@ import {
 	type AccessibleWork,
 	buildAccessContext,
 	heldAnthersBadgeAmount,
+	heldAnthersBadgeAmountInCycle,
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
@@ -174,10 +176,13 @@ const giveStickerSchema = z.object({
 async function stickerCycleFor(
 	userId: number,
 ): Promise<{ billingCycle: string; allowance: number } | null> {
+	// The Anthers side reads the held Badge on the org's ladder; the period rides the
+	// billing row. A viewer with no billing row has no period to key from and no holdings
+	// to draw against — null, as the callers already treat it.
 	const [acct] = await db
-		.select({ support: accounts.anthersSupport, periodStart: accounts.currentPeriodStart })
-		.from(accounts)
-		.where(eq(accounts.userId, userId))
+		.select({ periodStart: billingAccounts.currentPeriodStart })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
 		.limit(1);
 	if (!acct) return null;
 	const start = acct.periodStart ?? new Date();
@@ -191,7 +196,10 @@ async function stickerCycleFor(
 	// then be recorded against a cycle the pool job never pays — money a supporter aimed at
 	// a creator, reaching nobody. Never build this key by hand.
 	const billingCycle = cycleKeyFor(start);
-	return { billingCycle, allowance: round2(stickerBudgetFor(supportAmount(acct.support))) };
+	// The allowance is what THIS cycle's held Badge funds — a Sticker is directed out of the
+	// same cycle's pool, so the read is cycle-anchored, not point-in-time.
+	const support = await heldAnthersBadgeAmountInCycle(userId, billingCycle);
+	return { billingCycle, allowance: round2(stickerBudgetFor(support)) };
 }
 
 /** What this user has already directed in the cycle — removed Stickers included. */
@@ -350,20 +358,43 @@ function currentPeriod() {
 }
 
 async function getAccount(userId: number) {
-	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, userId)).limit(1);
+	const [acct] = await db
+		.select()
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
 	return acct ?? null;
 }
 
-/** Ensure an account row exists; returns it. */
+/** Ensure a billing row exists; returns it. */
 async function ensureAccount(userId: number) {
 	const existing = await getAccount(userId);
 	if (existing) return existing;
 	const { start, end } = currentPeriod();
 	const [created] = await db
-		.insert(accounts)
+		.insert(billingAccounts)
 		.values({ userId, currentPeriodStart: start, currentPeriodEnd: end })
 		.returning();
 	return created;
+}
+
+/**
+ * The directed dollars this user has this cycle — what the Badge picker draws against.
+ *
+ * 🚨 **Read off `billing_accounts.directed_budget`, never recomputed here.** The
+ * subscription webhook is the writer (`syncSubscriptionToAccount`): what the subscription's
+ * directed items add up to is Stripe-side truth about what was *paid for*, and a number
+ * derived at read time from a subscription fetch would answer a request Stripe has not
+ * validated and cost a round trip on every pick. The held-over rule on decreases lives in
+ * that write, so every reader of this figure shares one answer.
+ */
+async function directedBudgetFor(userId: number): Promise<number> {
+	const [acct] = await db
+		.select({ directedBudget: billingAccounts.directedBudget })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	return Number(acct?.directedBudget ?? 0);
 }
 
 // 🚨 A private, cookie-only `getOptionalUserId` lived here until 2026-08-28, having outlived
@@ -547,33 +578,38 @@ const subscriptionRoutes = new Hono()
 	.get("/me", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
+		// What the user gives Anthers — their held Badge on the org ladder's ladder — is a
+		// `user_badges` read now, wherever the billing row stands. The response shapes below
+		// keep the field names the subscription page reads; the amount columns they used to
+		// mirror died with the accounts split.
+		const anthersSupport = await heldAnthersBadgeAmount(user.id);
+		const badge = heldBadgeName(anthersSupport);
+		const badgeView = badgeViewFor(anthersSupport);
 
 		if (!acct) {
 			return c.json({
 				account: {
-					anthersSupport: "0.00",
-					creatorSupportTotal: "0.00",
-					bandwidthUsedGiB: "0",
 					isSelfHosting: false,
 					isActive: true,
 					currentPeriodStart: null,
 					currentPeriodEnd: null,
 					canceledAt: null,
+					directedBudget: "0.00",
 				},
-				anthersSupport: 0,
+				anthersSupport,
 				// Derived rather than typed as the literal "free": inside `c.json` a string
 				// literal widens to `string`, and the RPC client then cannot see it is a
 				// BadgeKey at all.
-				badge: heldBadgeName(0),
-				badgeView: BADGE_VIEWS[0],
+				badge,
+				badgeView,
 			});
 		}
 
 		return c.json({
 			account: acct,
-			anthersSupport: supportAmount(acct.anthersSupport),
-			badge: heldBadgeName(supportAmount(acct.anthersSupport)),
-			badgeView: badgeViewFor(supportAmount(acct.anthersSupport)),
+			anthersSupport,
+			badge,
+			badgeView,
 		});
 	})
 
@@ -590,17 +626,22 @@ const subscriptionRoutes = new Hono()
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		const acct = await ensureAccount(user.id);
+		// The held Anthers Badge — what "cancel" would revert and what "current support"
+		// shows — reads the org ladder now, not the billing row. A row with a subscription
+		// but no ladder holding yet still cancels correctly: the amount check is against
+		// the holding, the subscription id against the row.
+		const currentSupport = await heldAnthersBadgeAmount(user.id);
 
 		// Cancel preview (→ 0 / Free): what you keep, and until when.
 		if (target === 0) {
-			if (!acct.stripeSubscriptionId || supportAmount(acct.anthersSupport) === 0) {
+			if (!acct.stripeSubscriptionId || currentSupport === 0) {
 				return c.json({ error: "Nothing given to Anthers to cancel" }, 400);
 			}
 			const sub = await retrieveSubscription(acct.stripeSubscriptionId);
 			return c.json({
 				isCancel: true,
 				anthersSupport: 0,
-				currentSupport: supportAmount(acct.anthersSupport),
+				currentSupport,
 				nextBillingUnix: sub ? periodEndFromSub(sub) : null,
 			});
 		}
@@ -730,9 +771,9 @@ const subscriptionRoutes = new Hono()
 						cancel_at_period_end: true,
 					});
 					await db
-						.update(accounts)
+						.update(billingAccounts)
 						.set({ canceledAt: new Date(), updatedAt: new Date() })
-						.where(eq(accounts.id, acct.id));
+						.where(eq(billingAccounts.id, acct.id));
 				}
 				return c.json({ pending: false, account: await getAccount(user.id) });
 			}
@@ -925,9 +966,9 @@ const subscriptionRoutes = new Hono()
 			});
 			if (!sub) return c.json({ error: "Payments are not configured." }, 503);
 			await db
-				.update(accounts)
+				.update(billingAccounts)
 				.set({ stripeSubscriptionId: sub.id, updatedAt: new Date() })
-				.where(eq(accounts.id, acct.id));
+				.where(eq(billingAccounts.id, acct.id));
 
 			// Every line on a new subscription started today, so every one of them is owed the
 			// days of the month before it. Recorded now rather than on activation: the charge
@@ -953,8 +994,8 @@ const subscriptionRoutes = new Hono()
 	/**
 	 * 🚨 **Closed with a 503, deliberately, until an origin can back the claim.**
 	 *
-	 * This set `accounts.is_self_hosting` to whatever an authenticated caller asked for,
-	 * asserting nothing about whether they host anything — a creator-facing money input
+	 * This set `billing_accounts.is_self_hosting` to whatever an authenticated caller asked
+	 * for, asserting nothing about whether they host anything — a creator-facing money input
 	 * whose precondition was *claimed rather than observed*. What makes closing it the
 	 * right move rather than a deferral is that the flag currently prices **nothing**: no
 	 * code path bills a creator for storage at all, `SELF_HOST_FEE` has been `0` since
@@ -988,11 +1029,13 @@ const subscriptionRoutes = new Hono()
 			),
 	)
 
-	// ── Cancel (revert to 0 / Free at period end) ────────────────────────────
+	// ── Cancel (revert to Free at period end) ────────────────────────────
 	.post("/cancel", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		if (!acct || supportAmount(acct.anthersSupport) === 0) {
+		// What they give Anthers is the held Badge on the org ladder; the amount columns
+		// this check used to read died with the accounts split.
+		if (!acct || (await heldAnthersBadgeAmount(user.id)) === 0) {
 			return c.json(
 				{ error: "You are not supporting Anthers, so there is nothing to cancel" },
 				400,
@@ -1007,12 +1050,15 @@ const subscriptionRoutes = new Hono()
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Cancel at period end — the support keeps working until the cycle ends, then the
-		// subscription.deleted webhook reverts to 0. An account with no Stripe subscription
+		// subscription.deleted webhook reverts to Free. An account with no Stripe subscription
 		// (nothing to cancel remotely) still cancels locally: the flag is its whole state.
 		if (acct.stripeSubscriptionId) {
 			await updateSubscription(acct.stripeSubscriptionId, { cancel_at_period_end: true });
 		}
-		await db.update(accounts).set({ canceledAt: new Date() }).where(eq(accounts.id, acct.id));
+		await db
+			.update(billingAccounts)
+			.set({ canceledAt: new Date() })
+			.where(eq(billingAccounts.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });
 	})
@@ -1030,7 +1076,10 @@ const subscriptionRoutes = new Hono()
 		if (acct.stripeSubscriptionId) {
 			await updateSubscription(acct.stripeSubscriptionId, { cancel_at_period_end: false });
 		}
-		await db.update(accounts).set({ canceledAt: null }).where(eq(accounts.id, acct.id));
+		await db
+			.update(billingAccounts)
+			.set({ canceledAt: null })
+			.where(eq(billingAccounts.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });
 	})
@@ -1484,14 +1533,14 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── The viewer's own Badge holdings ────────────────────────────────────────
-	// What this viewer holds this cycle: one discrete Badge per creator. The budget is
-	// the balance the user holds this cycle to direct at creators (the legacy
-	// `accounts.creator_support_total`, still the subscription's directed total), and
-	// Anthers takes no cut of it. Holding a creator's Badge clears that creator's gates
-	// at the Badge's threshold and below. (What actually reaches the creator is net of
-	// the threshold's pro-rata share of the at-cost card fee — see the discrepancy note
-	// in `distribute-pool.ts`.)
+	// ── The user's own Badge holdings ────────────────────────────────────────
+	// What this user holds this cycle: one discrete Badge per creator. The budget is
+	// the balance the user holds this cycle to direct at creators — what the
+	// subscription's directed items add up to, which is the webhook-synced
+	// `billing_accounts.directed_budget` — and Anthers takes no cut of it. Holding a
+	// creator's Badge clears that creator's gates at the Badge's threshold and below.
+	// (What actually reaches the creator is net of the threshold's pro-rata share of
+	// the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
 	.get("/my-badges", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
@@ -1508,8 +1557,7 @@ const subscriptionRoutes = new Hono()
 			.innerJoin(users, eq(users.id, badges.creatorId))
 			.where(and(eq(userBadges.userId, user.id), eq(userBadges.billingCycle, cycle)));
 
-		const acct = await getAccount(user.id);
-		const budget = Number(acct?.creatorSupportTotal ?? 0);
+		const budget = await directedBudgetFor(user.id);
 		const allocated = result.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
 
 		return c.json({
@@ -1563,8 +1611,7 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "Can only pick Badges for the current or next billing cycle" }, 400);
 			}
 
-			const acct = await getAccount(user.id);
-			const budget = Number(acct?.creatorSupportTotal ?? 0);
+			const budget = await directedBudgetFor(user.id);
 
 			if (budget <= 0) {
 				return c.json({ error: "You have nothing to give this cycle" }, 400);
@@ -1923,8 +1970,8 @@ const subscriptionRoutes = new Hono()
 	 *
 	 * 🚨 **Reads the per-cycle record, never live standing.** Eligibility is having *ever*
 	 * supported, so somebody who gave for three months and stopped keeps their place — a
-	 * query over `accounts.anthers_support` would quietly drop them the month they stopped,
-	 * which is the opposite of what the page is for.
+	 * query over the held Badge (or live anything) would quietly drop them the month they
+	 * stopped, which is the opposite of what the page is for.
 	 *
 	 * ⚠️ **The lifetime total leaves this function and never leaves the server.**
 	 * `groupSupporters` is what strips it; the response carries names and an order.
@@ -1938,8 +1985,13 @@ const subscriptionRoutes = new Hono()
 			})
 			.from(accountCycles)
 			.innerJoin(users, eq(users.id, accountCycles.userId))
-			.innerJoin(accounts, eq(accounts.userId, accountCycles.userId))
-			.where(eq(accounts.listedAsSupporter, true))
+			// INNER, and the join is what makes "ever supported AND opted in" one condition:
+			// a user with cycles but no preferences row has answered nothing, and the column
+			// default (listed) is theirs — an INNER join would drop them. LEFT JOIN plus
+			// `COALESCE(listed, true)` reads the default for the row that is absent, which is
+			// exactly what the eager-creatable table's default means.
+			.leftJoin(userPreferences, eq(userPreferences.userId, accountCycles.userId))
+			.where(sql`COALESCE(${userPreferences.listedAsSupporter}, true)`)
 			.groupBy(users.id, users.atprotoHandle, users.displayName)
 			.having(sql`COALESCE(SUM(${accountCycles.anthersSupport}), 0) > 0`);
 
@@ -1965,12 +2017,14 @@ const subscriptionRoutes = new Hono()
 	 */
 	.get("/supporters/listing", requireAuth, async (c) => {
 		const user = c.get("user");
-		const [acct] = await db
-			.select({ listed: accounts.listedAsSupporter })
-			.from(accounts)
-			.where(eq(accounts.userId, user.id))
+		const [prefs] = await db
+			.select({ listed: userPreferences.listedAsSupporter })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, user.id))
 			.limit(1);
-		return c.json({ listed: acct?.listed ?? true });
+		// No row yet means the user has set nothing — the column's default (listed) is the
+		// answer, which is what the eager-creatable table makes an absent row mean.
+		return c.json({ listed: prefs?.listed ?? true });
 	})
 
 	.patch(
@@ -1980,14 +2034,18 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { listed } = c.req.valid("json");
+			// Insert-or-update rather than an update behind a lookup: the preferences row is
+			// eagerly creatable now, so a user who has never written a preference can still
+			// take themselves off the page — and the old 404 ("no account") dies with the
+			// row-per-user lifecycle the split gave this table.
 			const [row] = await db
-				.update(accounts)
-				.set({ listedAsSupporter: listed })
-				.where(eq(accounts.userId, user.id))
-				.returning({ listed: accounts.listedAsSupporter });
-			// No account row yet means nothing has been given, so there is nothing to list —
-			// and the preference will take its default when one is created.
-			if (!row) return c.json({ error: "No account" }, 404);
+				.insert(userPreferences)
+				.values({ userId: user.id, listedAsSupporter: listed })
+				.onConflictDoUpdate({
+					target: userPreferences.userId,
+					set: { listedAsSupporter: listed, updatedAt: new Date() },
+				})
+				.returning({ listed: userPreferences.listedAsSupporter });
 			return c.json({ listed: row.listed });
 		},
 	)

@@ -56,7 +56,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { accounts, works } from "@anthers/db/schema";
+import { billingAccounts, userPreferences, works } from "@anthers/db/schema";
 import {
 	type ContentNote,
 	DEFAULT_MATURITY_DISPLAY,
@@ -108,15 +108,15 @@ export async function contentPreferencesFor(userId: number | null): Promise<Cont
 
 	const [row] = await db
 		.select({
-			optIn: accounts.adultOptIn,
-			verifiedAt: accounts.adultVerifiedAt,
-			method: accounts.adultVerifiedMethod,
-			mature: accounts.matureDisplay,
-			adult: accounts.adultDisplay,
-			notes: accounts.noteDisplay,
+			optIn: userPreferences.adultOptIn,
+			verifiedAt: userPreferences.adultVerifiedAt,
+			method: userPreferences.adultVerifiedMethod,
+			mature: userPreferences.matureDisplay,
+			adult: userPreferences.adultDisplay,
+			notes: userPreferences.noteDisplay,
 		})
-		.from(accounts)
-		.where(eq(accounts.userId, userId))
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, userId))
 		.limit(1);
 	if (!row) return fallback;
 
@@ -161,23 +161,24 @@ export async function setMaturityDisplay(
 	// as the reader set them.
 	if (input.notes) {
 		// Qualified, because a bare column inside ON CONFLICT DO UPDATE could as well be `excluded`'s.
-		const stored = sql`${sql.identifier("accounts")}.${sql.identifier("note_display")}`;
+		const stored = sql`${sql.identifier("user_preferences")}.${sql.identifier("note_display")}`;
 		updates.noteDisplay = sql`coalesce(${stored}, '{}'::jsonb) || ${JSON.stringify(input.notes)}::jsonb`;
 	}
 
-	// ⚠️ Upserts rather than updates, because **signing up does not create an `accounts`
-	// row** — one appears on first payment. A plain UPDATE would silently affect nothing and
-	// report success, so a free account's preference would never save and nothing would say
-	// so. This is the same trap the verification fixture hit.
+	// Insert-or-update keyed on the row's primary key. The row is eagerly creatable — that
+	// is the lifecycle its own table gives it — so the upsert is about idempotence between
+	// concurrent writes, not about a missing row hiding behind a lazily created billing
+	// table, which is the reasoning the old `accounts` writer carried and the reason it
+	// needed every call site careful.
 	await db
-		.insert(accounts)
+		.insert(userPreferences)
 		.values({
 			userId,
 			matureDisplay: input.mature ?? null,
 			adultDisplay: input.adult ?? null,
 			noteDisplay: input.notes ?? null,
 		})
-		.onConflictDoUpdate({ target: accounts.userId, set: updates });
+		.onConflictDoUpdate({ target: userPreferences.userId, set: updates });
 
 	return contentPreferencesFor(userId);
 }
@@ -214,12 +215,12 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
 
 	const [row] = await db
 		.select({
-			optIn: accounts.adultOptIn,
-			verifiedAt: accounts.adultVerifiedAt,
-			method: accounts.adultVerifiedMethod,
+			optIn: userPreferences.adultOptIn,
+			verifiedAt: userPreferences.adultVerifiedAt,
+			method: userPreferences.adultVerifiedMethod,
 		})
-		.from(accounts)
-		.where(eq(accounts.userId, userId))
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, userId))
 		.limit(1);
 	if (!row) return NO_ADULT_ACCESS;
 
@@ -485,21 +486,38 @@ export async function enableAdultAccess(
 ): Promise<AdultAccess | AdultEnableRefusal> {
 	if (await maturityLocked(userId)) return "parental_locked";
 
-	const [row] = await db
+	// 🚨 **Two reads, not a join** — the reason is that both rows are independently
+	// creatable and neither is a precondition of the other: a card check can run before
+	// any preference exists (verification and opt-in write together at the end), and a
+	// preference row can exist with no billing row (the eager-lifecycle table, populated
+	// for users who have never paid). A join keyed on one row's existence would report
+	// `no_card` for the second — a user whose verification date is on file but who has no
+	// Stripe customer — which is the wrong answer and the wrong remedy.
+	const [prefRow] = await db
 		.select({
-			customerId: accounts.stripeCustomerId,
-			verifiedAt: accounts.adultVerifiedAt,
-			method: accounts.adultVerifiedMethod,
+			verifiedAt: userPreferences.adultVerifiedAt,
+			method: userPreferences.adultVerifiedMethod,
+			adultDisplay: userPreferences.adultDisplay,
 		})
-		.from(accounts)
-		.where(eq(accounts.userId, userId))
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, userId))
 		.limit(1);
-	if (!row) return "no_card";
+	const [billingRow] = await db
+		.select({ customerId: billingAccounts.stripeCustomerId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	const customerId = billingRow?.customerId ?? null;
+	// No verification anywhere and no customer to verify a card on: the honest answer for
+	// "never paid" is still no card, which is the case that reads `no_card` from a fresh
+	// account — and, unlike the old read, it can't mask a verification that a
+	// preferences-only user actually holds.
+	if (!prefRow && !customerId) return "no_card";
 
-	let verifiedAt = row.verifiedAt;
-	let method = row.method;
+	let verifiedAt = prefRow?.verifiedAt ?? null;
+	let method = prefRow?.method ?? null;
 	if (verifiedAt == null) {
-		const result = await verifyAdulthoodByCardFunding(row.customerId || null, now);
+		const result = await verifyAdulthoodByCardFunding(customerId, now);
 		if (typeof result === "string") return result;
 		verifiedAt = result.verifiedAt;
 		method = result.method;
@@ -515,22 +533,32 @@ export async function enableAdultAccess(
 	// rule whatever this column says. The preference becomes operative at exactly this
 	// moment, and at this moment the person has just said they want it. `blur` rather than
 	// `show`, matching Mature — cautious, and one click from either.
-	const [existing] = await db
-		.select({ display: accounts.adultDisplay })
-		.from(accounts)
-		.where(eq(accounts.userId, userId))
-		.limit(1);
+	const display = prefRow?.adultDisplay ?? "blur";
 
+	// ⭐ **An insert-or-update, not an update behind a lookup** — the preferences row is
+	// eagerly creatable now, so enabling Adult access on a user who has never set any
+	// preference writes the row rather than silently affecting nothing. That was the old
+	// `accounts` table's trap, and the split is what removed it.
 	await db
-		.update(accounts)
-		.set({
+		.insert(userPreferences)
+		.values({
+			userId,
 			adultOptIn: true,
 			adultVerifiedAt: verifiedAt,
 			adultVerifiedMethod: method,
-			adultDisplay: existing?.display ?? "blur",
+			adultDisplay: display,
 			updatedAt: now,
 		})
-		.where(eq(accounts.userId, userId));
+		.onConflictDoUpdate({
+			target: userPreferences.userId,
+			set: {
+				adultOptIn: true,
+				adultVerifiedAt: verifiedAt,
+				adultVerifiedMethod: method,
+				adultDisplay: display,
+				updatedAt: now,
+			},
+		});
 
 	return { optIn: true, verifiedAt, method, canReach: true };
 }
@@ -555,9 +583,9 @@ export async function disableAdultAccess(
 	now: Date = new Date(),
 ): Promise<AdultAccess> {
 	await db
-		.update(accounts)
+		.update(userPreferences)
 		.set({ adultOptIn: false, updatedAt: now })
-		.where(eq(accounts.userId, userId));
+		.where(eq(userPreferences.userId, userId));
 	const state = await adultAccessFor(userId);
 	return state;
 }
