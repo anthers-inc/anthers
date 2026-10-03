@@ -26,7 +26,6 @@ import { isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
-import AddToBasket from "../components/basket/AddToBasket";
 import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
@@ -289,25 +288,18 @@ export default function WorkPage() {
 						)}
 						{access &&
 							(access.requiresPurchase ? (
-								<>
-									<ProjectPricing
-										slug={work.slug ?? ""}
-										access={access}
-										creatorHasStripe={work.creatorHasStripe ?? false}
-										onPurchaseComplete={refetch}
-									/>
-									{/* Only where there is actually a charge to share. */}
-									{work.creatorHasStripe && access.price && work.creator?.handle && (
-										<AddToBasket
-											workId={work.id}
-											slug={work.slug ?? ""}
-											title={work.title ?? "Untitled"}
-											price={access.price}
-											creatorHandle={work.creator.handle}
-											thumbnail={work.thumbnail}
-										/>
-									)}
-								</>
+								/* Every purchase goes through the basket (Parker, 2026-10-03): the
+								   pricing card offers the two doors into it and nothing about a
+								   card lives on this page. */
+								<ProjectPricing
+									workId={work.id}
+									slug={work.slug ?? ""}
+									access={access}
+									title={work.title ?? "Untitled"}
+									creatorHandle={work.creator?.handle ?? ""}
+									thumbnail={work.thumbnail}
+									creatorHasStripe={work.creatorHasStripe ?? false}
+								/>
 							) : (
 								<InlineUnlock post={work} access={access} />
 							))}
