@@ -55,7 +55,7 @@ async function signUp(username: string) {
 }
 
 /** Public Access: the baseline row allowed at $0, on a streaming Work. */
-const PUBLIC_ACCESS = { seedAccess: [{ threshold: 0, allow: true, price: "0" }] };
+const PUBLIC_ACCESS = { access: [{ threshold: 0, allow: true, price: "0" }] };
 
 const TEXT_BODY = "<p>prose-that-requires-an-account</p>";
 
@@ -278,7 +278,7 @@ describe("Consuming a Work requires an account", () => {
 			title: "For sale",
 			bodyHtml: TEXT_BODY,
 			streamEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: "5.00" }],
+			access: [{ threshold: 0, allow: true, price: "5.00" }],
 		});
 		const res = await req(`/api/content/works/${forSale.id}`);
 		const { work } = await res.json();

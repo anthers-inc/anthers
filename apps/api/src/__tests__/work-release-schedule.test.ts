@@ -208,7 +208,7 @@ describe("scheduling a release", () => {
 
 	it("is cleared by releasing now", async () => {
 		const workId = await stage(creator.id, {
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		await db
 			.update(works)

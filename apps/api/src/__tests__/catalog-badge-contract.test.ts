@@ -4,7 +4,7 @@
  *
  * The creator's Catalog grid tells them what each Work is — Public Access, gated, for
  * sale, or *nobody can open this* — and it decides that in the browser, from the Work's
- * own `seedAccess` rows, because it must also answer for rows the creator is editing and
+ * own `access` rows, because it must also answer for rows the creator is editing and
  * has not saved. `resolveAccessSync` cannot do that: it resolves a stored Work.
  *
  * So there are two derivations of one idea, which is the shape this repo has been bitten
@@ -28,7 +28,7 @@
  * until the entitled-vs-free case at the bottom was written for it. See the note there.
  */
 import { describe, expect, it } from "bun:test";
-import type { SeedAccessRow } from "@anthers/db/schema";
+import type { AccessRow } from "@anthers/db/schema";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	type AccessContext,
@@ -50,13 +50,13 @@ const stranger: AccessContext = {
 	parental: NO_PARENTAL_CONTROLS,
 };
 
-function work(seedAccess: SeedAccessRow[], streamEnabled = true): AccessibleWork {
+function work(access: AccessRow[], streamEnabled = true): AccessibleWork {
 	return {
 		id: 1,
 		creatorId: CREATOR_ID,
 		streamEnabled,
 		downloadEnabled: !streamEnabled,
-		seedAccess,
+		access,
 		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
@@ -64,7 +64,7 @@ function work(seedAccess: SeedAccessRow[], streamEnabled = true): AccessibleWork
 	};
 }
 
-const row = (threshold: number, allow: boolean, price = "0"): SeedAccessRow => ({
+const row = (threshold: number, allow: boolean, price = "0"): AccessRow => ({
 	threshold,
 	allow,
 	price,
@@ -75,7 +75,7 @@ const row = (threshold: number, allow: boolean, price = "0"): SeedAccessRow => (
  * calling its code — `works.tsx` lives in `@anthers/web-shared`, which the API does not
  * depend on, and importing it would only prove the two files agree with each other.
  */
-const baselineIsOpenToAll = (rows: SeedAccessRow[]) => {
+const baselineIsOpenToAll = (rows: AccessRow[]) => {
 	const baseline = rows.find((r) => r.threshold === 0);
 	return !!baseline?.allow && Number(baseline.price) === 0;
 };
@@ -95,7 +95,7 @@ const baselineIsOpenToAll = (rows: SeedAccessRow[]) => {
  */
 const TABLES: {
 	name: string;
-	rows: SeedAccessRow[];
+	rows: AccessRow[];
 	canAccess: boolean;
 	reason: AccessReason;
 	free: boolean;

@@ -88,7 +88,7 @@ async function makeWork(title: string, access: unknown, released = true): Promis
 		method: "PATCH",
 		headers: creatorAuth,
 		body: JSON.stringify({
-			seedAccess: access,
+			access: access,
 			streamEnabled: true,
 			...(released ? { visibility: "released" } : {}),
 		}),
@@ -321,7 +321,7 @@ describe("the Library", () => {
 		expect((await save({ workId: laterGated })).status).toBe(201);
 		expect(await canOpen(laterGated)).toBe(true);
 
-		await db.update(works).set({ seedAccess: GATED }).where(eq(works.id, laterGated));
+		await db.update(works).set({ access: GATED }).where(eq(works.id, laterGated));
 
 		expect(await canOpen(laterGated)).toBe(false);
 		const entry = (await shelf()).find((i) => i.work?.id === laterGated);

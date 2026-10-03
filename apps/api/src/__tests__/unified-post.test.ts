@@ -143,7 +143,7 @@ describe("Catalog vertical slice", () => {
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
 				visibility: "released",
-				seedAccess: [{ threshold: 0, allow: true, price: "5.00" }],
+				access: [{ threshold: 0, allow: true, price: "5.00" }],
 			}),
 		});
 		expect(res.status).toBe(200);
@@ -173,7 +173,7 @@ describe("Catalog vertical slice", () => {
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
 				visibility: "released",
-				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+				access: [{ threshold: 0, allow: true, price: "0" }],
 			}),
 		});
 		expect(release.status).toBe(200);

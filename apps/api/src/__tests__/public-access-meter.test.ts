@@ -27,8 +27,10 @@ import {
 	accounts,
 	assets,
 	attentionEvents,
+	badges,
 	purchases,
 	transcodingJobs,
+	userBadges,
 	users,
 } from "@anthers/db/schema";
 import { cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
@@ -80,6 +82,41 @@ let seededCookie: string;
 let paWorkId: number;
 let gatedWorkId: number;
 let boughtWorkId: number;
+
+/**
+ * Have `userId` hold the creator's Badge at `threshold` this cycle — the discrete-pick
+ * shape the giving stepper writes, and the only way a fixture "gives $N" under this
+ * model. The badge row is created at that threshold when the creator's ladder lacks one,
+ * exactly as the billing path does.
+ */
+async function holdBadge(userId: number, threshold: string): Promise<void> {
+	const [existing] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(and(eq(badges.creatorId, creatorId), eq(badges.threshold, threshold)))
+		.limit(1);
+	const badge =
+		existing ??
+		(
+			await db
+				.insert(badges)
+				.values({
+					creatorId,
+					threshold,
+					label: `$${threshold}`,
+					description: "A fixture rung the meter suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0];
+	await db
+		.insert(userBadges)
+		.values({
+			userId,
+			badgeId: badge.id,
+			billingCycle: sql`to_char(now(), 'YYYY-MM-01')`,
+		})
+		.onConflictDoNothing();
+}
 let textWorkId: number;
 let gameWorkId: number;
 let gatedTextWorkId: number;
@@ -172,7 +209,7 @@ beforeAll(async () => {
 		type: "video",
 		title: "Public Access video",
 		streamEnabled: true,
-		seedAccess: PUBLIC_ACCESS,
+		access: PUBLIC_ACCESS,
 	});
 	paWorkId = pa.id;
 
@@ -181,7 +218,7 @@ beforeAll(async () => {
 		type: "video",
 		title: "Seed-gated video",
 		streamEnabled: true,
-		seedAccess: SEED_GATED,
+		access: SEED_GATED,
 	});
 	gatedWorkId = gated.id;
 
@@ -190,7 +227,7 @@ beforeAll(async () => {
 		type: "video",
 		title: "Purchased video",
 		streamEnabled: true,
-		seedAccess: FOR_SALE,
+		access: FOR_SALE,
 	});
 	boughtWorkId = bought.id;
 
@@ -203,7 +240,7 @@ beforeAll(async () => {
 		title: "Public Access essay",
 		streamEnabled: true,
 		bodyHtml: TEXT_BODY,
-		seedAccess: PUBLIC_ACCESS,
+		access: PUBLIC_ACCESS,
 	});
 	textWorkId = text.id;
 
@@ -213,7 +250,7 @@ beforeAll(async () => {
 		title: "Public Access game",
 		streamEnabled: true,
 		embedUrl: GAME_EMBED,
-		seedAccess: PUBLIC_ACCESS,
+		access: PUBLIC_ACCESS,
 	});
 	gameWorkId = game.id;
 
@@ -223,7 +260,7 @@ beforeAll(async () => {
 		title: "Seed-gated essay",
 		streamEnabled: true,
 		bodyHtml: TEXT_BODY,
-		seedAccess: SEED_GATED,
+		access: SEED_GATED,
 	});
 	gatedTextWorkId = gatedText.id;
 
@@ -234,7 +271,7 @@ beforeAll(async () => {
 		title: "Public Access with a download",
 		streamEnabled: true,
 		downloadEnabled: true,
-		seedAccess: PUBLIC_ACCESS,
+		access: PUBLIC_ACCESS,
 	});
 	downloadableWorkId = withFile.id;
 	await db.insert(assets).values({
@@ -293,16 +330,18 @@ describe("the meter withholds bytes, not just numbers", () => {
 
 describe("what the meter must NOT charge for", () => {
 	it("gated work the viewer cleared draws no allowance", async () => {
-		// Over the limit AND having given this creator money: the gate opens, and the
+		// Over the limit AND holding this creator's Badge: the gate opens, and the
 		// meter must not close it. Billing a supporter's free allowance for work they paid
 		// a creator to reach charges them twice for one thing.
 		await setSupport(viewerId, 0);
-		await db.execute(sql`
-			INSERT INTO seed_allocations (user_id, creator_id, amount, billing_cycle)
-			VALUES (${viewerId}, ${creatorId}, '3.00', to_char(now(), 'YYYY-MM-01'))
-			ON CONFLICT DO NOTHING
-		`);
-		expect((await playlist(gatedWorkId, viewerCookie)).status).not.toBe(402);
+		await holdBadge(viewerId, "3.00");
+		const res = await playlist(gatedWorkId, viewerCookie);
+		// Not 402: the meter has no claim on work the viewer paid to reach. And not 403 —
+		// the assertion that actually pins the Badge path, which a sabotage pass showed
+		// the old bare `not.toBe(402)` did not: without the holding, delivery is refused
+		// as gated (403) and a 402-only check sails past it.
+		expect(res.status).not.toBe(402);
+		expect(res.status).not.toBe(403);
 	});
 
 	it("purchased work draws no allowance", async () => {
@@ -406,12 +445,8 @@ describe("the stamp is taken at write time", () => {
 	it("records gated work the viewer CLEARED without stamping it Public Access", async () => {
 		const { cookie, id } = await signUp(`pam_cleared_${run}`);
 		await setSupport(id, 0);
-		// Money given to this creator this cycle: the gate opens for this viewer.
-		await db.execute(sql`
-			INSERT INTO seed_allocations (user_id, creator_id, amount, billing_cycle)
-			VALUES (${id}, ${creatorId}, '3.00', to_char(now(), 'YYYY-MM-01'))
-			ON CONFLICT DO NOTHING
-		`);
+		// Holding this creator's Badge this cycle: the gate opens for this viewer.
+		await holdBadge(id, "3.00");
 
 		const now = Date.now();
 		const res = await req("/api/subscriptions/attention", {

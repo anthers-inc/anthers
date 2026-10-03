@@ -51,21 +51,21 @@ async function setPrice(price: string): Promise<number> {
 	const res = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: auth,
-		body: JSON.stringify({ seedAccess: [{ threshold: 0, allow: true, price }] }),
+		body: JSON.stringify({ access: [{ threshold: 0, allow: true, price }] }),
 	});
 	return res.status;
 }
 
-/** Try to write this gate threshold. Returns the status. */
+/** Try to write this Badge threshold. Returns the status. */
 async function setBadge(threshold: string): Promise<number> {
-	const res = await req("/api/subscriptions/gates", {
+	const res = await req("/api/subscriptions/badges", {
 		method: "POST",
 		headers: auth,
 		body: JSON.stringify({ threshold, label: `Level ${threshold}` }),
 	});
 	if (res.status === 201) {
-		const { gate } = (await res.json()) as { gate: { id: number } };
-		await req(`/api/subscriptions/gates/${gate.id}`, { method: "DELETE", headers: auth });
+		const { badge } = (await res.json()) as { badge: { id: number } };
+		await req(`/api/subscriptions/badges/${badge.id}`, { method: "DELETE", headers: auth });
 	}
 	return res.status;
 }
@@ -136,18 +136,9 @@ describe("Stripe's minimum charge floors what a creator can set", () => {
 
 	// ── What must stay unfloored ──────────────────────────────────────────────
 
-	it("⭐ leaves the directed-support allocation alone, because it charges nothing", async () => {
-		// `POST /seeds` allocates a balance already paid for, so no Stripe charge is created
-		// and the floor has nothing to say about it. A blanket sweep over "every amount a
-		// user types" would have floored this one wrongly — and zero, which is how somebody
-		// stops directing support at a creator, would have been the first casualty.
-		const res = await req("/api/subscriptions/seeds", {
-			method: "POST",
-			headers: auth,
-			body: JSON.stringify({ creatorId: 0, amount: "0" }),
-		});
-		// Whatever it answers about the unknown creator, it must not be a validation
-		// rejection of the amount itself.
-		expect(res.status).not.toBe(400);
-	});
+	// ⭐ The directed-support allocation test that lived here is retired by the
+	// discrete-picks decision: `POST /my-badges` takes a Badge id rather than an amount,
+	// so there is no amount on the route for a floor to wrongly reject. The property it
+	// guarded (allocating an already-paid balance charges nothing, so no Stripe minimum
+	// applies) has no amount left to test.
 });

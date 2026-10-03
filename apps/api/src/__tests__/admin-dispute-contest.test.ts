@@ -162,7 +162,7 @@ beforeAll(async () => {
 		title: `Dispute contest work ${run}`,
 		streamEnabled: false,
 		downloadEnabled: true,
-		seedAccess: [],
+		access: [],
 	});
 	workId = work.id;
 

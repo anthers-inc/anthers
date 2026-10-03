@@ -95,7 +95,7 @@ async function stage(creatorId: number): Promise<number> {
 		creatorId,
 		type: "game",
 		visibility: "private",
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+		access: [{ threshold: 0, allow: true, price: "0" }],
 	});
 	workIds.push(row.id);
 	return row.id;

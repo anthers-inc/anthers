@@ -69,7 +69,7 @@ async function solvedChallenge(): Promise<{ id: number; nonce: number; challenge
 }
 
 /** A body the begin route accepts, for the tests that get past the gate. */
-const picks = { anthers: 0, follow: [], seed: [] };
+const picks = { badge: null, follow: [], badges: [] };
 
 describe("the difficulty knob", () => {
 	it("defaults to 4 when the environment is silent — the protected direction", () => {

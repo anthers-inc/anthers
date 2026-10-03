@@ -56,16 +56,16 @@ async function signUp(username: string) {
 }
 
 /** Public Access: the baseline row allowed at $0, on a streaming Work. */
-const OPEN = { seedAccess: [{ threshold: 0, allow: true, price: "0" }] };
+const OPEN = { access: [{ threshold: 0, allow: true, price: "0" }] };
 /** A creator gate: the baseline denied, a rung above it. */
 const GATED = {
-	seedAccess: [
+	access: [
 		{ threshold: 0, allow: false, price: "0" },
 		{ threshold: 3, allow: true, price: "0" },
 	],
 };
 /** Free to everyone, for a price. */
-const PRICED = { seedAccess: [{ threshold: 0, allow: true, price: "5.00" }] };
+const PRICED = { access: [{ threshold: 0, allow: true, price: "5.00" }] };
 
 const TEXT_BODY = "<p>shared-prose</p>";
 

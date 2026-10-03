@@ -115,7 +115,7 @@ describe("/works/:id/panels", () => {
 				maturity: "general",
 				maturityRows: rowsRatedAs("general"),
 				maturitySource: "creator",
-				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+				access: [{ threshold: 0, allow: true, price: "0" }],
 				credits: [{ role: "Made by", contributor: "The Fixture Creator", types: ["created"] }],
 				releasedAt: new Date(),
 				streamEnabled: true,

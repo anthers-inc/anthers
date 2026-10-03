@@ -65,7 +65,7 @@ async function makeReleasedWork(cookie: string, title: string, type = "game"): P
 	const res = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ visibility: "released", seedAccess: FREE }),
+		body: JSON.stringify({ visibility: "released", access: FREE }),
 	});
 	expect(res.status).toBe(200);
 	return workId;
@@ -178,7 +178,7 @@ describe("Edit history", () => {
 				body: "First",
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: FREE,
+				access: FREE,
 				contents: [{ kind: "text", bodyHtml: "<p>First</p>" }],
 				isPublished: true,
 			}),
@@ -323,7 +323,7 @@ describe("Unpublish + permalink visibility", () => {
 				body: "hi",
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: FREE,
+				access: FREE,
 				contents: [{ kind: "text", bodyHtml: "<p>hi</p>" }],
 				isPublished: true,
 			}),
@@ -358,7 +358,7 @@ describe("Scheduled-publish sweep", () => {
 				body: "soon",
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: FREE,
+				access: FREE,
 				contents: [{ kind: "text", bodyHtml: "<p>soon</p>" }],
 				isPublished: false,
 				scheduledFor: past,
@@ -530,7 +530,7 @@ describe("Gaps the suite looked like it covered", () => {
 				title,
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: FREE,
+				access: FREE,
 				contents: [{ kind: "text", bodyHtml: "<p>x</p>" }],
 				isPublished: true,
 			}),

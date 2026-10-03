@@ -279,7 +279,7 @@ describe("the one record Privacy Policy says survives deletion, survives it", ()
 				creatorId,
 				billingCycle: "2026-08",
 				poolAmount: "1.50",
-				seedAmount: "0.00",
+				badgeAmount: "0.00",
 				attentionSeconds: 3600,
 			})
 			.returning({ id: poolDistributions.id });

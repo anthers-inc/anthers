@@ -79,7 +79,7 @@ async function begin(
 		// makes `solvePow` instant here.
 		body: JSON.stringify({
 			pow: await solvePow(),
-			picks: { anthers: 0, follow: [], seed: [] },
+			picks: { badge: null, follow: [], badges: [] },
 			...body,
 		}),
 	});

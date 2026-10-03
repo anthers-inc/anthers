@@ -100,7 +100,7 @@ describe("project browse filters", () => {
 			await giveWorkAFile(workId);
 
 			const patch: Record<string, unknown> = {
-				seedAccess: c.access,
+				access: c.access,
 				streamEnabled: c.type !== "text",
 				downloadEnabled: true,
 			};

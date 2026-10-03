@@ -349,7 +349,7 @@ async function makePaidPost(title: string): Promise<{ slug: string; id: number }
 		title,
 		streamEnabled: false,
 		downloadEnabled: true,
-		seedAccess: FOR_SALE,
+		access: FOR_SALE,
 	});
 	await db.insert(assets).values({
 		workId: work.id,
@@ -1046,7 +1046,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 				title: `Basket item ${i} ${run}`,
 				streamEnabled: false,
 				downloadEnabled: true,
-				seedAccess: ODD,
+				access: ODD,
 			});
 			items.push({ id: w.id, slug: w.slug });
 		}
@@ -1060,7 +1060,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 				title: `Other creator ${run}`,
 				streamEnabled: false,
 				downloadEnabled: true,
-				seedAccess: ODD,
+				access: ODD,
 			})
 		).id;
 	}, DB_SETUP_TIMEOUT);
@@ -1390,7 +1390,7 @@ describe("Checkout — what isn't for sale", () => {
 			title: `Locked ${run}`,
 			streamEnabled: false,
 			downloadEnabled: true,
-			seedAccess: LOCKED,
+			access: LOCKED,
 		});
 
 		const res = await req(`/api/payments/checkout/${work.slug}`, {
@@ -1416,7 +1416,7 @@ describe("Checkout — what isn't for sale", () => {
 				title: `Unfulfillable ${type} ${run}`,
 				streamEnabled: false,
 				downloadEnabled: true,
-				seedAccess: FOR_SALE,
+				access: FOR_SALE,
 			});
 
 			const res = await req(`/api/payments/checkout/${work.slug}`, {

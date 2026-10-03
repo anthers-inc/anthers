@@ -111,7 +111,7 @@ describe("a bad address already in the database", () => {
 	let goodId: number;
 
 	beforeAll(async () => {
-		const base = { creatorId: creator.userId, type: "game", seedAccess: PUBLIC_ACCESS };
+		const base = { creatorId: creator.userId, type: "game", access: PUBLIC_ACCESS };
 		badId = (await insertWork({ ...base, embedUrl: SCRIPT })).id;
 		goodId = (await insertWork({ ...base, embedUrl: GOOD })).id;
 	}, DB_SETUP_TIMEOUT);

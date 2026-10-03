@@ -88,7 +88,7 @@ let operatorId: number;
 let operatorCookie: string;
 
 /** Locked and priced: the only way in is a purchase, which is the viewer under test. */
-const SOLD = { seedAccess: [{ threshold: 0, allow: true, price: "5.00" }] };
+const SOLD = { access: [{ threshold: 0, allow: true, price: "5.00" }] };
 
 /**
  * A downloadable Work with one real asset object on disk, plus a completed purchase.

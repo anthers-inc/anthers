@@ -201,7 +201,7 @@ async function workWithBuyer(title: string) {
 		title,
 		streamEnabled: false,
 		downloadEnabled: true,
-		seedAccess: [{ threshold: 0, allow: true, price: PRICE }],
+		access: [{ threshold: 0, allow: true, price: PRICE }],
 	});
 	const [purchase] = await db
 		.insert(purchases)

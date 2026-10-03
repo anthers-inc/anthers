@@ -154,14 +154,14 @@ describe("what an Adult rating costs", () => {
 			type: "text",
 			title: ADULT_TITLE,
 			maturity: "adult",
-			seedAccess: BEHIND_A_BADGE,
+			access: BEHIND_A_BADGE,
 		});
 		matureWork = await makeWork({
 			creatorId,
 			type: "text",
 			title: MATURE_TITLE,
 			maturity: "mature",
-			seedAccess: OPEN_TO_EVERYONE,
+			access: OPEN_TO_EVERYONE,
 		});
 	}, DB_SETUP_TIMEOUT);
 
@@ -179,7 +179,7 @@ describe("what an Adult rating costs", () => {
 			creatorId: 99,
 			streamEnabled: true,
 			downloadEnabled: false,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
 			type: "text",
@@ -258,11 +258,11 @@ describe("what an Adult rating costs", () => {
 			const res = await req(`/api/content/works/${adultWork.id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-				body: JSON.stringify({ seedAccess: OPEN_TO_EVERYONE }),
+				body: JSON.stringify({ access: OPEN_TO_EVERYONE }),
 			});
 			expect(res.status).toBe(200);
 			const [row] = await db.select().from(works).where(eq(works.id, adultWork.id));
-			expect(row.seedAccess).toEqual(OPEN_TO_EVERYONE);
+			expect(row.access).toEqual(OPEN_TO_EVERYONE);
 		});
 
 		it("lets a creator rate a free Work Adult without re-pricing it", async () => {
@@ -272,7 +272,7 @@ describe("what an Adult rating costs", () => {
 				title: `Free draft ${run}`,
 				maturity: "general",
 				visibility: "private",
-				seedAccess: OPEN_TO_EVERYONE,
+				access: OPEN_TO_EVERYONE,
 			});
 			const res = await req(`/api/content/works/${freeDraft.id}`, {
 				method: "PATCH",
@@ -281,7 +281,7 @@ describe("what an Adult rating costs", () => {
 			});
 			expect(res.status).toBe(200);
 			const [row] = await db.select().from(works).where(eq(works.id, freeDraft.id));
-			expect(row.seedAccess).toEqual(OPEN_TO_EVERYONE);
+			expect(row.access).toEqual(OPEN_TO_EVERYONE);
 		});
 
 		it("creates one free and Adult in a single request", async () => {
@@ -292,7 +292,7 @@ describe("what an Adult rating costs", () => {
 					type: "text",
 					title: `Born free and adult ${run}`,
 					maturityRows: rowsRatedAs("adult"),
-					seedAccess: OPEN_TO_EVERYONE,
+					access: OPEN_TO_EVERYONE,
 				}),
 			});
 			expect(res.status).toBe(201);
@@ -311,7 +311,7 @@ describe("what an Adult rating costs", () => {
 				creatorId: 99,
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: OPEN_TO_EVERYONE,
+				access: OPEN_TO_EVERYONE,
 				takedownStatus: "active",
 				quarantineStatus: "none",
 				type: "text",
@@ -647,7 +647,7 @@ describe("what an Adult rating costs", () => {
 				creatorId: 99,
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: table,
+				access: table,
 				takedownStatus: "active",
 				quarantineStatus: "none",
 				type: "text",
@@ -674,7 +674,7 @@ describe("what an Adult rating costs", () => {
 				creatorId: 99,
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: OPEN_TO_EVERYONE,
+				access: OPEN_TO_EVERYONE,
 				takedownStatus: "active",
 				quarantineStatus: "none",
 				type: "text",
@@ -701,7 +701,7 @@ describe("what an Adult rating costs", () => {
 				creatorId: 99,
 				streamEnabled: true,
 				downloadEnabled: false,
-				seedAccess: OPEN_TO_EVERYONE,
+				access: OPEN_TO_EVERYONE,
 				takedownStatus: "active",
 				quarantineStatus: "none",
 				type: "text",
