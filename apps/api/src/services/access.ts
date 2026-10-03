@@ -43,7 +43,7 @@
 
 import { db } from "@anthers/db/client";
 import type { AccessRow } from "@anthers/db/schema";
-import { accounts, badges, purchases, userBadges } from "@anthers/db/schema";
+import { badges, purchases, userBadges } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
@@ -53,8 +53,13 @@ import {
 	parentalRefusal,
 } from "@anthers/shared/parental-controls";
 import { and, eq, inArray, sql } from "drizzle-orm";
+// The org-ladder read lives with the badge seed it reads (`orgOwnerUserId`);
+// re-exported so this module's callers keep the name they have always imported.
+import { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle } from "./anthers-badges.js";
 import { adultAccessFor } from "./content-preferences.js";
 import { parentalPolicyFor } from "./parental-controls.js";
+
+export { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle };
 
 /** The Work fields access resolution depends on (structurally satisfied by a full work row). */
 export interface AccessibleWork {
@@ -326,32 +331,6 @@ export interface AccessResult {
  * is that implementation and carries the reasoning, including why it is pinned to UTC.
  */
 export const currentBillingCycle = currentCycleKey;
-
-/**
- * Monthly dollars the Anthers Badge this user holds is worth — what they give Anthers.
- *
- * ⚠️ **This decides access to no Work, and must never be made to.** What money given to
- * Anthers governs is the account-level Public Access limit and the size of the user's
- * Time Pool — neither of which is a property of a Work. Kept because both of those read
- * it, and because it is the Badge.
- *
- * ⚠️ **Still read from `accounts.anthers_support`, pending the identity task.** The
- * Badge model's destination for this figure is the threshold of the viewer's held Badge
- * owned by the `@anthers.org` identity, in `user_badges` — but whether the org account
- * owns badge rows as an ordinary `users` row is exactly what the identity decision
- * (*Decide what an identity is*) holds open, so the legacy column stays the read and this
- * docblock says so. Rename it away when that task un-parks the billing half.
- */
-export async function heldAnthersBadgeAmount(userId: number): Promise<number> {
-	const [row] = await db
-		.select({ anthersSupport: accounts.anthersSupport })
-		.from(accounts)
-		.where(eq(accounts.userId, userId))
-		.limit(1);
-	// ⚠️ **NOT floored**, and flooring it would be a silent money bug rather than a
-	// rounding nicety: $2.50 would become $2 and stop clearing its own $2.50 gate.
-	return supportAmount(row?.anthersSupport);
-}
 
 function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);

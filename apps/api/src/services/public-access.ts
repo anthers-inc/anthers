@@ -25,10 +25,8 @@
  * happened.
  */
 
-import { db } from "@anthers/db/client";
-import { accounts, attentionEvents } from "@anthers/db/schema";
+import { attentionEvents } from "@anthers/db/schema";
 import { cycleEnd, cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
-import { supportAmount } from "@anthers/shared/constants";
 import {
 	NO_PUBLIC_ACCESS_ALLOWANCE,
 	type PublicAccessBudget,
@@ -37,6 +35,7 @@ import {
 	shareLinkBudget,
 } from "@anthers/shared/public-access";
 import { eq } from "drizzle-orm";
+import { heldAnthersBadgeAmount } from "./anthers-badges";
 import { creditedSeconds } from "./attention-ranges";
 
 /**
@@ -86,10 +85,10 @@ export async function publicAccessSecondsThisMonth(
  * was not merely wrong about policy, it was the thing that let anonymous Public Access
  * streaming run unmetered while the creator earned nothing for it.
  *
- * ⚠️ **The Badge amount still comes from `accounts.anthers_support`, pending the identity
- * task** — the same legacy-column note `heldAnthersBadgeAmount` in `services/access.ts`
- * carries. The model's destination is the threshold of the viewer's held Badge owned by
- * the `@anthers.org` identity, which waits on the identity decision.
+ * ⭐ **The Badge amount reads the holder's org-ladder holding** — `heldAnthersBadgeAmount`
+ * in `services/anthers-badges.ts`, which resolves the ladder as the Free rung's owner and
+ * takes the held rung's threshold, MAX per issuer this cycle. The old
+ * `accounts.anthers_support` column died with the accounts split (2026-10-03).
  */
 export async function loadPublicAccessBudget(
 	userId: number | null,
@@ -98,17 +97,13 @@ export async function loadPublicAccessBudget(
 	if (userId == null) return NO_PUBLIC_ACCESS_ALLOWANCE;
 
 	// The held Anthers Badge's worth in dollars — see the note above on where it is read
-	// from while the identity task holds the billing half open.
-	const [[acct], used] = await Promise.all([
-		db
-			.select({ anthersSupport: accounts.anthersSupport })
-			.from(accounts)
-			.where(eq(accounts.userId, userId))
-			.limit(1),
+	// from.
+	const [held, used] = await Promise.all([
+		heldAnthersBadgeAmount(userId),
 		publicAccessSecondsThisMonth(userId, now),
 	]);
 
-	return publicAccessBudget(supportAmount(acct?.anthersSupport), used);
+	return publicAccessBudget(held, used);
 }
 
 /**
