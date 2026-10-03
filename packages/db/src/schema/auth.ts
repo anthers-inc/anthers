@@ -235,7 +235,7 @@ export const notifications = pgTable(
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		/** `essential` | `activity` — see `userPreferences.notifyActivityEmail` in `subscriptions.ts`. */
+		/** `essential` | `activity` — see `userPreferences`' activity-email preference in `subscriptions.ts`. */
 		category: text("category").notNull(),
 		/** What happened, as a stable machine value. Copy lives in the service. */
 		kind: text("kind").notNull(),

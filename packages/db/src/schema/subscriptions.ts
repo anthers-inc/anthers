@@ -56,14 +56,14 @@ export const billingAccounts = pgTable("billing_accounts", {
 	 * creators, which the Badge picker draws down against (`/my-badges`' `budget`).
 	 *
 	 * ⚠️ **A Phase B read target written by the fixture, not yet by the webhook.** The
-	 * balance used to live on `accounts.creator_support_total`, which the split deleted;
-	 * the Badge-model home for it is this row (it is subscription state — what the
-	 * subscription's directed items add to — so it rides beside the period columns).
-	 * Phase B re-points `routes/subscriptions.ts`' budget check at this column and makes
-	 * the subscription webhook write it; until then only the gauntlet's
-	 * `--support-budget` hop writes it (`gauntlet-support.ts` carries that note). If
-	 * Phase B derives the budget from Stripe items at read time instead, this column is
-	 * dropped again — either way the fixture's shape is the settled one.
+	 * balance used to live on the old accounts table's directed-support column, which
+	 * the split deleted; the Badge-model home for it is this row (it is subscription
+	 * state — what the subscription's directed items add to — so it rides beside the
+	 * period columns). Phase B re-points `routes/subscriptions.ts`' budget check at this
+	 * column and makes the subscription webhook write it; until then only the gauntlet's
+	 * budget hop writes it (`gauntlet-support.ts` carries that note). If Phase B derives
+	 * the budget from Stripe items at read time instead, this column is dropped again —
+	 * either way the fixture's shape is the settled one.
 	 */
 	directedBudget: numeric("directed_budget").notNull().default("0.00"),
 	stripeCustomerId: text("stripe_customer_id").default(""),
@@ -107,9 +107,9 @@ export const billingAccounts = pgTable("billing_accounts", {
  * user who had never paid. A row in this table means what it says about somebody who has
  * never paid, and that trap dies with the table it lived in.
  *
- * `themePreference` and `notifyActivityEmail` moved here from `users` (2026-10-03): the
- * `studioPreferences` precedent — org-served behavior and org-only UI state do not sit on
- * a `node`-tagged identity row.
+ * The user's theme and activity-email preferences moved here from `users`
+ * (2026-10-03) — the `studioPreferences` precedent: org-served behavior and org-only
+ * UI state do not sit on a `node`-tagged identity row.
  */
 // org — a user's settings are opinions about org-served behavior (which rungs to meet,
 // whether to appear on the supporters page, light or dark), which is org-side in the
@@ -208,8 +208,8 @@ export const userPreferences = pgTable("user_preferences", {
 	 * switch that quietly doesn't apply to half the messages would be worse than not
 	 * offering one. The split is enforced in `services/notifications.ts`.
 	 *
-	 * Moved here from `users` (2026-10-03) for the same reason as `themePreference`: the
-	 * person's preference for org-served behavior, not an identity fact.
+	 * Moved here from `users` (2026-10-03) for the same reason as the theme preference:
+	 * the person's preference for org-served behavior, not an identity fact.
 	 */
 	notifyActivityEmail: boolean("notify_activity_email").default(true),
 
@@ -232,11 +232,19 @@ export const accountCycles = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(), // YYYY-MM-01
-		// 🚨 **ONE column, not two.** A count sat beside its own dollar value here once —
+		// 🚨 **ONE column, not two.** A count must not sit beside its own dollar value —
 		// two descriptions of one fact, which is exactly what drifts. The dollars are the
 		// record; never add a derived companion to them.
+		//
+		// 🚨 **Per-cycle snapshot history, not the live amounts**, and that is why they stay
+		// after the accounts split (2026-10-03) deleted the live columns upstream. The live
+		// Anthers amount is the user's held Badge — its threshold IS the amount, read from
+		// `user_badges` — and the directed total is the sum of held thresholds. A cycle's
+		// row records what was given THAT cycle, which is not derivable from the holdings
+		// after the fact: a holding is replace-not-stack, so last month's pick has moved on
+		// and the books would go blank without this record.
 		anthersSupport: numeric("anthers_support").notNull().default("0.00"), // $/mo to Anthers this cycle
-		creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $ directed to creators
+		creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $ directed to creators this cycle
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
 		/**
 		 * How much of that budget reached no creator, and therefore fell to the remainder.

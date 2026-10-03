@@ -2,11 +2,11 @@
 /**
  * Where the gauntlet's two money hops write, after the accounts split.
  *
- * The old `accounts` table carried both facts as columns (`anthers_support`,
- * `creator_support_total`); the split (2026-10-03) deleted them — under the Badge model
- * the amounts are `user_badges` holdings. These two helpers are the hops' replacement
- * shapes, and each docblock carries the Phase B dependency it leaves rather than leaving
- * the dependency to be discovered by whoever runs the staircase next.
+ * The old `accounts` table carried both facts as columns — the user's monthly Anthers
+ * amount and the directed support total — and the split (2026-10-03) deleted them; under
+ * the Badge model the amounts are `user_badges` holdings. These two helpers are the
+ * hops' replacement shapes, and each docblock carries the Phase B dependency it leaves
+ * rather than leaving the dependency to be discovered by whoever runs the staircase next.
  *
  * 🚨 Dev-fixture only — both writes are reached through `gauntlet-state.ts`, which asserts
  * a dev checkout, and nothing in production may use either shape.
@@ -24,8 +24,8 @@ function cycleKey(): string {
  * The `--anthers-support` hop: give the user the Anthers Badge at this amount.
  *
  * 🚨 **Writes a `user_badges` holding on the org's ladder — the Badge-side shape, and
- * under the Badge model the only honest place for the amount.** The old hop wrote
- * `accounts.anthers_support`, which fed `heldAnthersBadgeAmount` and
+ * under the Badge model the only honest place for the amount.** The old hop wrote the
+ * accounts table's Anthers-Support column, which fed `heldAnthersBadgeAmount` and
  * `publicAccessBudget`; that column died with the split, and Phase B re-points both
  * readers at exactly this shape — the holder's row on the org-owned ladder, threshold
  * resolved through the badge. **The dependency Phase B's brief must name:** those two
@@ -78,8 +78,8 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
  * subscription-machinery row for exactly this balance, since the balance is
  * subscription state (what the subscription's directed items add to) riding beside the
  * period columns. **The dependency Phase B's brief must name:** the budget check —
- * `routes/subscriptions.ts`, `GET/POST /my-badges` — reads the deleted
- * `accounts.creator_support_total` today; Phase B re-points it at
+ * `routes/subscriptions.ts`, `GET/POST /my-badges` — reads the old accounts table's
+ * directed-support column today, and that column is gone; Phase B re-points it at
  * `billing_accounts.directed_budget` and makes the subscription webhook write it
  * (`syncSubscriptionToAccount` knows the directed total already). If Phase B derives the
  * budget from Stripe items at read time instead, the column is dropped again — the
