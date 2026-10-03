@@ -730,8 +730,6 @@ export interface StripeAccountStatus {
 export interface CheckoutResponse {
 	amount: string; // listed price — what the creator receives (pass-through)
 	processingFee: string;
-	deliveryFee: string; // always "0.00" since 2026-08-12 — delivery is free
-	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
 	creatorEarnings: string;
 	/**
 	 * Null since real tax calculation landed: the rate is resolved by Stripe Tax from the
@@ -761,7 +759,6 @@ export interface Purchase {
 	type: "digital" | "physical" | "service" | "seeds";
 	amount: string;
 	processingFee: string;
-	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
 	creatorEarnings: string;
 	stripePaymentIntentId: string;
 	status: string;

@@ -498,8 +498,6 @@ const paymentRoutes = new Hono()
 		return c.json({
 			amount: amount.toFixed(2),
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2),
-			crfFee: fees.crfFee.toFixed(2),
 			// Real tax is resolved by Stripe Tax from the buyer's billing address at the
 			// Checkout Session — Anthers' arithmetic cannot know the buyer's location, so
 			// the quote presents no tax figure at all rather than an illustrative one
@@ -603,8 +601,6 @@ const paymentRoutes = new Hono()
 		return c.json({
 			amount: amount.toFixed(2), // the all-in list price the buyer was shown
 			processingFee: fees.processingFee.toFixed(2), // out of the price, to Stripe
-			deliveryFee: fees.deliveryFee.toFixed(2), // always "0.00" — delivery is free
-			crfFee: fees.crfFee.toFixed(2), // always "0.00" — Anthers takes no cut
 			// No figure: the tax is resolved at the session, from the buyer's address.
 			salesTax: null,
 			creatorEarnings: fees.creatorEarnings.toFixed(2), // price − processing

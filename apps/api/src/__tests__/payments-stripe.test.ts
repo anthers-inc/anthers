@@ -1285,12 +1285,14 @@ describe("Checkout — session construction under automatic tax", () => {
 		expect(res.status).toBe(200);
 
 		// The list price is what the buyer was shown; the creator receives it less the
-		// at-cost card processing. Anthers retains none of it.
+		// at-cost card processing. Anthers retains none of it. The retired fee fields
+		// (`crfFee`, `deliveryFee`) left the quote when their columns left the purchase
+		// row — asserting their absence is the regression test for that.
 		expect(body.amount).toBe(PRICE);
-		expect(body.crfFee).toBe("0.00");
+		expect(body.crfFee).toBeUndefined();
+		expect(body.deliveryFee).toBeUndefined();
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 		expect(new Decimal(body.creatorEarnings).lessThan(new Decimal(PRICE))).toBe(true);
-		expect(body.deliveryFee).toBe(expected.deliveryFee.toFixed(2));
 		expect(body.processingFee).toBe(expected.processingFee.toFixed(2));
 		// No tax figure, on purpose: the rate is resolved by Stripe Tax from the buyer's
 		// billing address at the session, so the quote presents nothing rather than an

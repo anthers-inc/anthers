@@ -26,8 +26,6 @@ interface ProjectPricingProps {
 interface Quote {
 	amount: string;
 	processingFee: string;
-	deliveryFee: string;
-	crfFee: string;
 	/** Null — the tax is resolved by Stripe Tax at the session, from the buyer's address. */
 	salesTax: string | null;
 	buyerTotal: string | null;
@@ -44,12 +42,10 @@ interface Quote {
 function receiptFromQuote(q: Quote, sessionBuyerTotal: string | null, sessionTax: string | null) {
 	const n = (s: string) => Number(s);
 	const lines: { label: string; amount: number; note?: string; added?: boolean }[] = [];
-	// Everything except tax comes OUT of the listed price. Two of the quote's fields are
-	// structurally zero on any new purchase and neither is rendered: `crfFee` (Anthers
-	// takes no cut of a purchase, 2026-08-03) and `deliveryFee` (delivery is free at any
-	// volume, 2026-08-12). Both stay in the arithmetic below, because a receipt that
-	// ignores a field the server sent would stop reconciling the moment one came back
-	// non-zero.
+	// Everything except tax comes OUT of the listed price. The retired fee fields
+	// (`crfFee`, `deliveryFee`) left the quote when their columns left the purchase row —
+	// both were structurally zero since 2026-08, and a quote that still carried them
+	// would be promising a deduction the server can no longer take.
 	lines.push({ label: "Card processing", amount: n(q.processingFee), note: "at cost" });
 	if (sessionTax !== null) {
 		lines.push({
@@ -63,7 +59,7 @@ function receiptFromQuote(q: Quote, sessionBuyerTotal: string | null, sessionTax
 		price: n(q.amount),
 		buyerTotal: sessionBuyerTotal !== null ? n(sessionBuyerTotal) : n(q.amount),
 		lines,
-		creatorReceives: n(q.amount) - n(q.processingFee) - n(q.deliveryFee),
+		creatorReceives: n(q.amount) - n(q.processingFee),
 	};
 }
 
