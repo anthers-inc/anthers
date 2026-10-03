@@ -69,6 +69,22 @@ export async function ensureAnthersBadges(ownerUserId: number) {
 }
 
 /**
+ * Whether this database has no org ladder at all — the check a seeder uses to decide
+ * whether it owns the first seeding. `ensureAnthersBadges` is idempotent, so a caller
+ * could always call it; the check exists so the *dev-account* seed and the *gauntlet* seed
+ * do not fight over which account owns the rows in a database where only one has run —
+ * whichever runs first wins, and a session that runs both keeps the first owner.
+ */
+export async function orgLadderMissing(): Promise<boolean> {
+	const [row] = await db
+		.select({ id: badges.id })
+		.from(badges)
+		.where(eq(badges.threshold, "0.00"))
+		.limit(1);
+	return row === undefined;
+}
+
+/**
  * The org identity's user id — the owner of the seeded Free-at-$0 rung.
  *
  * ⭐ **The ladder is identified by ownership, not by a type column** (Parker's identity

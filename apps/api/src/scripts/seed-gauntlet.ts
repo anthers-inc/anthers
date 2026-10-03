@@ -59,6 +59,7 @@ import {
 } from "@anthers/db/gauntlet";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
+import { ensureAnthersBadges, orgLadderMissing } from "../services/anthers-badges.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
@@ -456,6 +457,19 @@ async function main(): Promise<void> {
 	}
 	await resetGates(creatorId);
 	await resetViewer(viewer.id, creatorId, postIds);
+
+	// The org ladder is platform state, not dev-account state: every reader of "what the
+	// viewer holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws
+	// loudly when no ladder exists, and an e2e session runs this script rather than
+	// `db:seed` — so the ladder is ensured here, owned by whichever account this session
+	// has as its fixture creator. `ensure-dev-account` (the dev door) seeds the same rows
+	// owned by the dev account; whichever runs first wins and both are idempotent.
+	// 🚨 **This must run AFTER `resetGates`** — that rebuild deletes every badge the
+	// fixture creator owns, and the org rows would be rebuilt by nobody if seeded first.
+	if (await orgLadderMissing()) {
+		await ensureAnthersBadges(creatorId);
+		console.log(`${TAG} seeded the Anthers Badge ladder (owned by ${GAUNTLET_CREATOR_USERNAME})`);
+	}
 
 	console.log("");
 	console.log(`${TAG} Ready. The gauntlet starts here:`);
