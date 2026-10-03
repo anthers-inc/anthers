@@ -104,10 +104,10 @@ export default function ForUsersPage() {
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
-							A handle and an email address are all it takes — no card, no trial, nothing to cancel.
-							Every account downloads freely and streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public
-							Access a month, free forever. You'll only ever be asked to pay when you decide to back
-							a creator.
+							Signing up is free — no card, no trial, nothing to cancel. What's free stays free
+							forever: every account downloads freely and streams {FREE_PUBLIC_ACCESS_HOURS} hours
+							of Public Access a month. You'll only ever be asked to pay when you decide to back a
+							creator.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
@@ -378,10 +378,10 @@ export default function ForUsersPage() {
 						 * spells out the whole check.
 						 */}
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Support the creators you love, on terms you can see and trust. Start with a free
-							account and an email address—that's the whole of it, and you're only ever asked to pay
-							when you decide to back someone. {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
-							month, free forever. No ads, no data brokers, nothing to cancel.
+							Support the creators you love, on terms you can see and trust. A free account is the
+							whole of it, and you're only ever asked to pay when you decide to back someone.{" "}
+							{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever. No ads, no
+							data brokers, nothing to cancel.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							{/* /signup for the same reason as the hero CTA — see the note there. */}
