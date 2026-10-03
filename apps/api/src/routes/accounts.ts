@@ -65,7 +65,11 @@ import {
 	deletionPreview,
 	requestDeletion,
 } from "../services/account-deletion.js";
-import { isSuspendedAccount, notSuspendedAccount } from "../services/account-visibility.js";
+import {
+	isSuspendedAccount,
+	notSuspendedAccount,
+	notTestAccount,
+} from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
@@ -369,7 +373,14 @@ const accountRoutes = new Hono()
 			// The follow does NOT end on a suspension, so this list genuinely holds
 			// suspended accounts until it is filtered — the same "filter anyway" argument
 			// as the block, with nothing severing the relationship upstream.
-			.where(and(notBlockedBy(sessionUser.id, users.id), notSuspendedAccount(users.id)));
+			.where(
+				and(
+					notBlockedBy(sessionUser.id, users.id),
+					notSuspendedAccount(users.id),
+					// The automated-test account never appears in a follow list either.
+					notTestAccount(users.id),
+				),
+			);
 
 		return c.json({
 			// `flatMap` rather than `map`, so an account that has not claimed a handle is
@@ -405,6 +416,8 @@ const accountRoutes = new Hono()
 					// source, for the same reason the block is: every downstream feed
 					// query reads from this id list.
 					notSuspendedAccount(follows.creatorId),
+					// The automated-test account is filtered at the source here too.
+					notTestAccount(follows.creatorId),
 				),
 			);
 
@@ -597,6 +610,9 @@ const accountRoutes = new Hono()
 					eq(users.isCreator, true),
 					notBlockedBy(currentUserId, users.id),
 					notSuspendedAccount(users.id),
+					// The automated-test account stays off Discover — hidden by handle,
+					// while its own profile keeps answering a direct link.
+					notTestAccount(users.id),
 				),
 			);
 
