@@ -126,8 +126,10 @@ test.describe("changelog", () => {
 		for (const release of CHANGELOG) {
 			// The release's divider block carries `id={release.version}` — the same anchor
 			// `/changelog#<version>` on the roadmap's launched cards scrolls to — so its
-			// presence is both the render assertion and the anchor's.
-			await expect(page.locator(`#${release.version}`)).toContainText(release.version);
+			// presence is both the render assertion and the anchor's. The attribute selector
+			// is the form that has to be used: `#<version>` reads as CSS, and a calver id's
+			// dots parse as class selectors, matching nothing.
+			await expect(page.locator(`[id="${release.version}"]`)).toContainText(release.version);
 		}
 
 		await expect(page.getByRole("link", { name: "The Roadmap" })).toHaveAttribute(
