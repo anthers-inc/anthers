@@ -49,8 +49,14 @@ export default function CheckoutBillingAddressBlock({
 					}}
 				>
 					<UsBillingAddressForm value={address} onChange={setAddress} />
+					{/* The label says what the button does — it submits the address to the
+					    session so the tax resolves. It never saves anything (no address is
+					    persisted anywhere; whether one ever is, is the saved-payment-data
+					    task's decision), and a "Save address" label promising persistence
+					    was read as both broken and unintuitive at the live checkout
+					    (2026-10-03). */}
 					<button type="submit" className="btn btn-sm btn-outline btn-primary" disabled={updating}>
-						{updating ? "Calculating tax…" : "Save address"}
+						{updating ? "Calculating tax…" : "Calculate tax & continue"}
 					</button>
 				</form>
 			) : (
