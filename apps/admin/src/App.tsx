@@ -9,6 +9,7 @@ import { Loading } from "./components/ui";
 import { useSession } from "./lib/session";
 import Accounts from "./pages/Accounts";
 import ClosePackage from "./pages/books/ClosePackage";
+import Disputes from "./pages/books/Disputes";
 import SalesTaxWorksheet from "./pages/books/SalesTax";
 import SalesTaxForecast from "./pages/books/SalesTaxForecast";
 import Home from "./pages/Home";
@@ -46,6 +47,7 @@ export default function App() {
 				<Route path="books/sales-tax" element={<SalesTaxWorksheet />} />
 				<Route path="books/sales-tax-forecast" element={<SalesTaxForecast />} />
 				<Route path="books/close-package" element={<ClosePackage />} />
+				<Route path="books/disputes" element={<Disputes />} />
 				<Route
 					path="accounts"
 					element={account.isSuperAdmin ? <Accounts /> : <Navigate to="/" replace />}

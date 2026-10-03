@@ -779,3 +779,56 @@ export const ABUSE_EMAIL = "abuse@anthers.org";
  * comparing them should not have to find them in two files.
  */
 export const PRESERVATION_HOLD_YEARS = 1;
+
+// ── Disputes (chargebacks) ────────────────────────────────────────────────────
+/**
+ * The amount, in dollars, past which a single dispute is worth a person's look on its
+ * own — the "large" flag on the admin dispute list (Parker, 2026-09-14: among the
+ * things the admin app flags are "a single large dispute").
+ *
+ * $50 sits above Anthers' two highest Badge tiers ($9 and $12 a month) and above a
+ * typical Work's list price, so a dispute that size is unusual rather than merely a
+ * real one. This is a line to revisit once real prices and real chargebacks exist —
+ * it is a judgment call recorded as a constant, not a figure with data behind it.
+ *
+ * Compared in whole cents (`cents`), never as a parsed float — the reason `cents`
+ * gives: an amount read off a `numeric` column and a threshold stored as a literal
+ * are the two sides reached differently, which is exactly where a naive `>=` goes
+ * wrong silently.
+ */
+export const DISPUTE_LARGE_AMOUNT = 50;
+
+/**
+ * The dispute ratio at which Visa's VAMP program treats a processor as non-compliant:
+ * 0.5% of successful charges (disputes plus EFWs) in a month. This is the **ratio
+ * half of the admin alert's early-warning line** (Parker, 2026-10-02) — the number
+ * the network's own rule turns on, not a figure Anthers chose, so it moves only if
+ * Visa's does.
+ *
+ * ⚠️ The ratio is an early warning, not an audit. The networks measure calendar
+ * months on their own records; our ratio is Anthers' own tables over a rolling
+ * window (`DISPUTE_WINDOW_DAYS`), which can differ slightly in either direction —
+ * a person who needs Visa's actual figure reads it from Visa.
+ */
+export const DISPUTE_VAMP_RATIO = 0.005;
+
+/**
+ * The **count half** of the same early-warning line: 5 dispute rows in the window.
+ *
+ * 🚨 **Both halves exist because a small account trips the count first.** An account
+ * with 40 charges a month is at the 0.5% line after a single dispute, while one with
+ * 400 is nowhere near it — so a ratio alone understates the small account and the
+ * count alone understates the large one. Every surface that states one states both.
+ */
+export const DISPUTE_VAMP_COUNT = 5;
+
+/**
+ * The rolling window the alert measures over, in days.
+ *
+ * The card networks measure **calendar months**; this is a rolling 30 days instead,
+ * because an early warning's job is to be visible *now* rather than to reconstruct
+ * the month Stripe is actually measuring — a rolling window can never go quiet
+ * mid-month while old disputes still age inside a calendar one. The alert is not an
+ * audit; a person who needs the network's own monthly figure reads it from the network.
+ */
+export const DISPUTE_WINDOW_DAYS = 30;
