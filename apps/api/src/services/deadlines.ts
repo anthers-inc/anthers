@@ -30,7 +30,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { dmcaNotices, legalHolds, rightsRequests } from "@anthers/db/schema";
+import { disputes, dmcaNotices, legalHolds, rightsRequests } from "@anthers/db/schema";
 import { type CalendarDeadline, calendarDeadlines } from "@anthers/shared/compliance-calendar";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
@@ -40,6 +40,7 @@ export type DeadlineSource =
 	| "dmca-counter-notice"
 	| "dmca-restore"
 	| "legal-hold"
+	| "dispute-evidence"
 	| "compliance-calendar";
 
 /** A deadline the operator owes an action on (or a decision about), in the shape every reader uses. */
@@ -89,7 +90,7 @@ export const DEFERRED_DEADLINE_SOURCES: readonly { id: string; note: string }[] 
 	},
 	{
 		id: "collect-and-pay-out",
-		note: "Settlement and transfer runs, failing renewals, balances nearing Stripe's two-year limit, dispute flags, and a contested dispute's evidence deadline. These join once their mechanisms exist.",
+		note: "Settlement and transfer runs, failing renewals, and balances nearing Stripe's two-year limit. These join once their mechanisms exist.",
 	},
 ];
 
@@ -114,7 +115,7 @@ export function longDeadlineDate(date: Date): string {
  * they are near. Sorting and any horizon are the caller's.
  */
 export async function gatherDeadlines(now: Date): Promise<DeadlineItem[]> {
-	const [requests, notices, holds, calendar] = await Promise.all([
+	const [requests, notices, holds, openDisputes, calendar] = await Promise.all([
 		db
 			.select({
 				id: rightsRequests.id,
@@ -164,6 +165,20 @@ export async function gatherDeadlines(now: Date): Promise<DeadlineItem[]> {
 			// left to make. An indefinite hold (`expiresAt` null) is lifted by hand, which is a
 			// decision made when it is made, never a deadline.
 			.where(and(isNull(legalHolds.liftedAt), isNotNull(legalHolds.expiresAt))),
+		db
+			.select({
+				id: disputes.id,
+				stripeDisputeId: disputes.stripeDisputeId,
+				amount: disputes.amount,
+				evidenceDueBy: disputes.evidenceDueBy,
+			})
+			.from(disputes)
+			// Only an OPEN dispute has an evidence deadline: `outcome` null means Stripe has
+			// not ruled yet, and the recordDisputeClosed write nulls `evidenceDueBy` with the
+			// close anyway — the predicate is the belt, the null column the braces. A
+			// `warning_*` row carries no evidence window at all (Stripe sends null there),
+			// and a stale one would tell a person to answer a bank that never asked.
+			.where(and(isNull(disputes.outcome), isNotNull(disputes.evidenceDueBy))),
 		Promise.resolve(calendarDeadlines(now)),
 	]);
 
@@ -253,6 +268,27 @@ export async function gatherDeadlines(now: Date): Promise<DeadlineItem[]> {
 				"When a hold expires, automated destruction of what it names resumes. An expiry approaching means a decision: extend the hold, or let it lapse.",
 			actUrl: "/legal/holds",
 			note: h.reason,
+		});
+	}
+
+	// ── Dispute evidence windows ────────────────────────────────────────────────
+	// While a dispute is being evaluated, its evidence deadline is actionable (the
+	// 2026-09-15 refinement's own words): Anthers never contests by default, but a person
+	// can only decide to contest an exceptional one BEFORE the window closes, so the
+	// window belongs on the same list as every other obligation with a date. The amount
+	// rides along in the title because "large" is one of the things the decision turns on.
+	for (const d of openDisputes) {
+		out.push({
+			source: "dispute-evidence",
+			key: `dispute-evidence:${d.id}`,
+			title: `Dispute ${d.stripeDisputeId} ($${d.amount}): Stripe's evidence window closes`,
+			dueAt: d.evidenceDueBy as Date,
+			windowStart: null,
+			terminal: false,
+			consequence:
+				"When the window closes with no evidence submitted, the dispute is lost by default and the money stays with the cardholder. Anthers never contests by default — a person decides on an exceptional one, and this deadline is when that decision has to be made by.",
+			actUrl: "/books/disputes",
+			note: null,
 		});
 	}
 

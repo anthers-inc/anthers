@@ -18,7 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 import { works } from "./content.js";
-import { creatorCredits } from "./subscriptions.js";
+import { creatorCredits, invoices } from "./subscriptions.js";
 
 // org — a creator's Stripe Connect account. Money; org-only.
 export const stripeAccounts = pgTable("stripe_accounts", {
@@ -127,7 +127,12 @@ export const purchases = pgTable(
 		 * the whole charge.
 		 */
 		stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
-		status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
+		// pending → completed by the webhook; failed when the charge never cleared.
+		// `refunded` by the refund paths, and `disputed` by the dispute webhook — a
+		// chargeback flips the row here to revoke the buyer's access (`resolveAccess`
+		// counts only `completed`, so no code is needed to take the unlock away), and
+		// a won dispute flips it back because the money came back.
+		status: text("status").notNull().default("pending"), // pending | completed | failed | refunded | disputed
 		// ── Delivery & refunds (`0018`) ──────────────────────────────────────────
 		// When this buyer first pulled the actual payload down. Null = never
 		// downloaded, and that distinction is what the refund policy turns on: the
@@ -160,6 +165,79 @@ export const purchases = pgTable(
 		// Replaces the UNIQUE constraint the column carried until `0033`. The lookup is
 		// hot on both webhook branches and on every refund, and it now returns a SET.
 		index("idx_purchases_payment_intent").on(table.stripePaymentIntentId),
+	],
+);
+
+/**
+ * org — a Stripe dispute (a chargeback) on a charge Anthers processed. Money; org-only by
+ * the treasury rule, and the record exists at all because Anthers never contests one
+ * (settled 2026-09-14): the money is treated as gone from the moment the dispute lands, so
+ * the row is the record of money that left, not of a contest whose outcome we await.
+ *
+ * ⭐ **This module is the one writer of dispute rows** (`services/disputes.ts`, the same
+ * writer-module rule `refunds.ts` follows). Routes and the admin app read it; nothing else
+ * writes it.
+ *
+ * 🚨 **A dispute concerns a CHARGE, not a Work.** The row deliberately carries no `work_id`
+ * or `creator_id` of its own: the charge's ties to a purchase (and through it to a Work) or
+ * to an invoice are how everything else is found, so `purchase_id` and `invoice_id` are the
+ * links — both nullable, both `set null`, because the dispute record outlives the purchase
+ * or invoice it landed on the same way every other money record here outlives what it paid
+ * for. At most one of the two is ever set: a charge is either a Work purchase or monthly
+ * support, never both. The dispute-activity ratio the admin alert reads is disputes in a
+ * period ÷ successful payments in that period, and the `disputes` rows here are its numerator
+ * — see `disputeActivityRatio` in `services/disputes.ts` for the denominator's caveats.
+ */
+// org — the record of money the processor clawed back. Money cannot federate.
+export const disputes = pgTable(
+	"disputes",
+	{
+		id: serial("id").primaryKey(),
+		/** The Stripe `dp_...` id. Unique: a redelivered `charge.dispute.created` finds the row and changes nothing. */
+		stripeDisputeId: text("stripe_dispute_id").notNull().unique(),
+		/** The Stripe `ch_...` id of the disputed charge. */
+		stripeChargeId: text("stripe_charge_id").notNull(),
+		/**
+		 * The PaymentIntent the charge belongs to — how the purchase or invoice row is found,
+		 * the same key `markInvoiceMoneyReturned` resolves an invoice by.
+		 */
+		stripePaymentIntentId: text("stripe_payment_intent_id"),
+		/** Disputed amount in dollars, as Stripe reports the cents. */
+		amount: numeric("amount").notNull(),
+		currency: text("currency").notNull().default("usd"),
+		/** Stripe's dispute reason code (`fraudulent`, `product_unacceptable`, …), verbatim. */
+		reason: text("reason").notNull(),
+		/**
+		 * Stripe's own dispute status vocabulary, stored verbatim:
+		 * `needs_response | under_review | won | lost | warning_needs_response |
+		 * warning_under_review | warning_closed | unchallengeable`. Never translated — the
+		 * admin list renders Stripe's word, and `outcome` below is what our own readers key on.
+		 */
+		status: text("status").notNull(),
+		/** The purchase this charge was, when it was one — null on a support charge. */
+		purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
+		/** The invoice this charge paid, when it was a support charge — null on a purchase. */
+		invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+		/** The buyer, from the purchase or invoice row — `set null`, the record outlives the account. */
+		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+		/**
+		 * When evidence is due at Stripe (`evidence_details.due_by`, a Unix timestamp) — what
+		 * the admin deadline list reads. Null once the dispute is closed, and always null on
+		 * the statuses (`warning_*`, `unchallengeable`) that carry no evidence window.
+		 */
+		evidenceDueBy: timestamp("evidence_due_by", { withTimezone: true }),
+		/**
+		 * `won` or `lost` once Stripe closes the dispute, null until then. This is the column
+		 * our own readers key on rather than `status`, because it is ours: a `won` dispute is
+		 * the money coming back (the purchase is restored), a `lost` one is it gone for good.
+		 */
+		outcome: text("outcome"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_disputes_purchase").on(table.purchaseId),
+		index("idx_disputes_invoice").on(table.invoiceId),
 	],
 );
 

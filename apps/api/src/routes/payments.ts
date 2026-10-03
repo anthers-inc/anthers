@@ -54,6 +54,7 @@ import {
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
+import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import {
@@ -1087,8 +1088,15 @@ const paymentRoutes = new Hono()
 			}
 		} else if (event.type === "charge.dispute.created") {
 			/**
-			 * A chargeback on a support charge. Anthers does not contest one, so the money is treated
-			 * as gone from the moment it is disputed rather than when the dispute closes.
+			 * A chargeback. Anthers does not contest one, so the money is treated as gone from
+			 * the moment it is disputed rather than when the dispute closes.
+			 *
+			 * The whole flow lives in `services/disputes.ts` (the one writer of `disputes`
+			 * rows): it records the dispute, links it to the purchase or invoice the charge
+			 * belonged to, and on the purchase path flips the row to `disputed` — which is
+			 * the buyer's access being revoked, since `resolveAccess` counts only `completed`
+			 * purchases. The invoice half stays here, because monthly support has no access
+			 * to revoke and the money-record flip already lived in `markInvoiceMoneyReturned`.
 			 */
 			const dispute = event.data.object as Stripe.Dispute;
 			const intentId =
@@ -1096,6 +1104,22 @@ const paymentRoutes = new Hono()
 					? dispute.payment_intent
 					: (dispute.payment_intent?.id ?? null);
 			if (intentId) await markInvoiceMoneyReturned(intentId, "disputed");
+			await recordDisputeCreated(dispute);
+		} else if (event.type === "charge.dispute.closed") {
+			/**
+			 * The dispute's outcome. Stripe sends `charge.dispute.closed` with
+			 * `status: "won" | "lost"`; the row's `status`/`outcome` columns are updated and,
+			 * on a win, the purchase is restored to `completed` — the money came back, so the
+			 * buyer keeps the Work. On a loss the purchase stays `disputed` (access stays
+			 * revoked: Anthers never contested, the buyer has their money back and not the
+			 * Work).
+			 *
+			 * `charge.dispute.updated` is deliberately NOT handled: it carries the same dispute
+			 * object but fires for every status transition, and the transitions that matter to
+			 * Anthers are the landing (`created`) and the closing (`closed`) — the middle of a
+			 * contest Anthers does not participate in is noise.
+			 */
+			await recordDisputeClosed(event.data.object as Stripe.Dispute);
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db

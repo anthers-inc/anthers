@@ -58,6 +58,7 @@ const SOURCE_LABELS: Record<string, string> = {
 	"dmca-counter-notice": "DMCA Counter-Notice Window",
 	"dmca-restore": "DMCA Restore Window",
 	"legal-hold": "Legal Hold",
+	"dispute-evidence": "Dispute Evidence",
 	"compliance-calendar": "Compliance Calendar",
 };
 
@@ -180,6 +181,15 @@ export default function Home() {
 		summary: { received: number; counterNoticed: number };
 	}>("/api/admin/dmca");
 	const deadlines = useAdminData<DeadlinesResponse>("/api/admin/deadlines");
+	const disputes = useAdminData<{
+		items: unknown[];
+		standing: {
+			count: number;
+			ratio: number | null;
+			openCount: number;
+			state: "quiet" | "approaching" | "early-warning";
+		};
+	}>("/api/admin/disputes");
 
 	const a = activity.data;
 	const dmcaOpen = dmca.data ? dmca.data.summary.received + dmca.data.summary.counterNoticed : null;
@@ -221,6 +231,64 @@ export default function Home() {
 				)}
 			</section>
 
+			{/* The dispute-standing panel — the ratio-threshold alert's app half (Parker,
+			    2026-10-02). The lines are Visa's VAMP rule: non-compliant at a 0.5%
+			    dispute+EFW ratio or a count of 5 in a month, so the alert fires at those
+			    numbers as an early warning and at half of them as "approaching". Count and
+			    ratio are both stated because a small account trips the count first — a ratio
+			    alone would stay quiet through exactly the account most likely to cross it. */}
+			<section className="mb-10">
+				<SectionHeading>Dispute Standing</SectionHeading>
+				{disputes.error && <ErrorAlert>{disputes.error}</ErrorAlert>}
+				{!disputes.data ? (
+					disputes.error ? null : (
+						<Loading />
+					)
+				) : disputes.data.standing.count === 0 && disputes.data.standing.openCount === 0 ? (
+					// Quiet is stated plainly rather than hidden: "no disputes" is the answer,
+					// and an absent panel would be indistinguishable from a broken one.
+					<p className="text-sm text-base-content/60">
+						No disputes — nothing has been charged back, and there is nothing to act on.
+					</p>
+				) : (
+					<div
+						className={`rounded-box border p-4 ${
+							disputes.data.standing.state === "early-warning"
+								? "border-error"
+								: disputes.data.standing.state === "approaching"
+									? "border-warning"
+									: "border-base-300"
+						}`}
+					>
+						<div className="flex flex-wrap items-baseline gap-3">
+							<span className="text-2xl font-semibold tabular-nums">
+								{disputes.data.standing.count}
+							</span>
+							<span className="text-sm text-base-content/60">
+								disputes in the last 30 days
+								{" · "}
+								{disputes.data.standing.ratio === null
+									? "no successful payments to measure a ratio against"
+									: `${(disputes.data.standing.ratio * 100).toFixed(2)}% of successful payments`}
+								{" · "}
+								{disputes.data.standing.openCount} open
+							</span>
+						</div>
+						<p className="mt-1 text-sm text-base-content/70">
+							{disputes.data.standing.state === "early-warning"
+								? "Past the early-warning line — look at the list before anything else."
+								: "Approaching the early-warning line — worth a look."}
+						</p>
+						<p className="mt-2 text-xs text-base-content/50">
+							The lines: early-warning at 0.5% or 5 disputes in the window, approaching at half
+							that. The count is what a small account trips first, which is why both are stated.
+							Measured over a rolling 30 days on Anthers' own records — an early warning, not an
+							audit; the networks measure calendar months on theirs.
+						</p>
+					</div>
+				)}
+			</section>
+
 			<section className="mb-10">
 				<SectionHeading>Needs Attention</SectionHeading>
 				<div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -257,6 +325,19 @@ export default function Home() {
 						to="/moderation/appeals"
 						title="Rating Appeals"
 						count={appeals.data?.appeals.length ?? null}
+					/>
+					<AttentionCard
+						to="/books/disputes"
+						title="Open Disputes"
+						count={disputes.data?.standing.openCount ?? null}
+						urgent={disputes.data?.standing.state === "early-warning"}
+						detail={
+							disputes.data?.standing.state === "early-warning"
+								? "past the early-warning line"
+								: disputes.data?.standing.state === "approaching"
+									? "approaching the early-warning line"
+									: undefined
+						}
 					/>
 				</div>
 			</section>
