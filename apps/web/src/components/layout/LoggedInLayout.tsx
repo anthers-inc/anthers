@@ -118,7 +118,10 @@ function LoggedInLayoutInner() {
 					>
 						<Bars3Icon className="w-5 h-5" />
 					</button>
-					<Link to={studio ? studioUrl("/") : "/feed"} className="btn btn-ghost px-2 gap-2">
+					{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
+					    LoggedOutLayout: the ghost button's hover background draws a rectangle the trimmed
+					    logo artwork doesn't fill. */}
+					<Link to={studio ? studioUrl("/") : "/feed"} className="flex items-center gap-2 px-2">
 						<Logo variant="oneline" className="h-9" />
 						{studio && <span className="text-lg font-bold text-primary">Studio</span>}
 					</Link>

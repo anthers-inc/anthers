@@ -175,8 +175,12 @@ export default function LoggedOutLayout() {
 							</ul>
 						</div>
 
-						{/* Brand — links to the homepage (the For Users link does too, intentionally) */}
-						<Link to="/" className="btn btn-ghost px-2">
+						{/* Brand — links to the homepage (the For Users link does too, intentionally).
+						    A plain flex link rather than a `btn`: the ghost button's hover background
+						    and shadow read fine behind text, but behind this trimmed logo artwork they
+						    draw a rectangle the mark doesn't fill, so the logo gets no hover chrome
+						    of its own (Parker, 2026-10-02). */}
+						<Link to="/" className="flex items-center px-2">
 							<Logo variant="oneline" className="h-8 sm:h-10 lg:h-15" />
 						</Link>
 					</div>
@@ -268,7 +272,10 @@ export default function LoggedOutLayout() {
 			>
 				<div className="mx-auto max-w-6xl">
 					<div className="mb-8 flex flex-col items-center text-center">
-						<Logo className="h-24" />
+						{/* The vertical (stacked) cut — the footer is the one surface with the room
+						    its taller shape needs, where the navbar's horizontal cut stays compact
+						    (Parker, 2026-10-02). */}
+						<Logo variant="stacked" className="h-32" />
 					</div>
 					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-6">
 						{FOOTER_NAV.map((col) => (
