@@ -114,15 +114,20 @@ test.describe("FAQ", () => {
 
 test.describe("changelog", () => {
 	// Presence-of-structure, not copy assertion: the page links back to the roadmap
-	// (the closing button), and every release in the data module has a section on the
-	// page. The version headings are read from `CHANGELOG` rather than hardcoded, so a
-	// new release that fails to render fails here without anyone updating the test.
+	// (the closing button), and every release in the data module renders on the page.
+	// The page groups by month — one `h2` per month — so a release is asserted through
+	// its divider heading (`h3`) rather than its own section, and the version headings
+	// are still read from `CHANGELOG` rather than hardcoded, so a new release that fails
+	// to render fails here without anyone updating the test.
 	test("every release renders, and the page links back to the roadmap", async ({ page }) => {
 		await page.goto("/changelog");
 		await expect(page.locator("h1").first()).toBeVisible();
 
 		for (const release of CHANGELOG) {
-			await expect(page.locator("h2", { hasText: release.version }).first()).toBeVisible();
+			// The release's divider block carries `id={release.version}` — the same anchor
+			// `/changelog#<version>` on the roadmap's launched cards scrolls to — so its
+			// presence is both the render assertion and the anchor's.
+			await expect(page.locator(`#${release.version}`)).toContainText(release.version);
 		}
 
 		await expect(page.getByRole("link", { name: "The Roadmap" })).toHaveAttribute(
