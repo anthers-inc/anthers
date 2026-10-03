@@ -590,7 +590,7 @@ describe("a renewal that fails", () => {
 		delete fake.responses["subscriptions.retrieve"];
 	});
 
-	const gatesThisMonth = () =>
+	const holdingsThisMonth = () =>
 		db
 			.select()
 			.from(userBadges)
@@ -617,7 +617,7 @@ describe("a renewal that fails", () => {
 
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
 		expect(Number(acct.anthersSupport)).toBe(12);
-		expect(await gatesThisMonth()).toHaveLength(1);
+		expect(await holdingsThisMonth()).toHaveLength(1);
 	});
 
 	it("🚨 takes the Badge and this month's gates away once Stripe marks it unpaid", async () => {
@@ -626,7 +626,7 @@ describe("a renewal that fails", () => {
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, supporterId));
 		expect(Number(acct.anthersSupport)).toBe(0);
 		expect(Number(acct.creatorSupportTotal)).toBe(0);
-		expect(await gatesThisMonth()).toHaveLength(0);
+		expect(await holdingsThisMonth()).toHaveLength(0);
 		// Kept, so that paying what is owed makes the same subscription active again.
 		expect(acct.stripeSubscriptionId).toBe(SUB_ID);
 	});
@@ -642,7 +642,7 @@ describe("a renewal that fails", () => {
 
 		await syncSubscriptionToAccount(thisMonth("canceled"));
 
-		expect(await gatesThisMonth()).toHaveLength(1);
+		expect(await holdingsThisMonth()).toHaveLength(1);
 	});
 });
 
