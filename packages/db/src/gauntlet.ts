@@ -19,7 +19,7 @@
  */
 
 import { amountLabel } from "@anthers/shared/constants";
-import type { SeedAccessRow } from "./schema/content.js";
+import type { AccessRow } from "./schema/content.js";
 
 /** The fixture's creator. The `gauntlet_` prefix marks every row this fixture owns. */
 export const GAUNTLET_PREFIX = "gauntlet_";
@@ -114,7 +114,7 @@ export const DOWNLOAD_PRICE = "9.99";
 const PUBLIC_ID_BASE = 900_000_000;
 
 /** The "everyone" baseline denied, then one rung allowed at `threshold` dollars a month. */
-function seedRung(threshold: number): SeedAccessRow[] {
+function badgeRung(threshold: number): AccessRow[] {
 	return [
 		{ threshold: 0, allow: false, price: "0" },
 		{ threshold, allow: true, price: "0" },
@@ -122,7 +122,7 @@ function seedRung(threshold: number): SeedAccessRow[] {
 }
 
 /** The neutral access table — the baseline row present but denied. */
-const SEED_LOCKED: SeedAccessRow[] = [{ threshold: 0, allow: false, price: "0" }];
+const LOCKED: AccessRow[] = [{ threshold: 0, allow: false, price: "0" }];
 
 export interface GauntletPost {
 	/** Stable handle used by the spec's staircase and the tests. */
@@ -136,7 +136,7 @@ export interface GauntletPost {
 	contentType: string;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
-	seedAccess: SeedAccessRow[];
+	access: AccessRow[];
 	/**
 	 * Real playable media to attach, produced by `db:gauntlet:media` — which generates a
 	 * short clip with ffmpeg and runs it through the **actual** transcode job, so the post
@@ -172,7 +172,7 @@ function post(
 		contentType: "text",
 		streamEnabled: true,
 		downloadEnabled: false,
-		seedAccess: SEED_LOCKED,
+		access: LOCKED,
 		...over,
 	};
 }
@@ -193,7 +193,7 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 		"always — free to everyone",
 		"The free post. It streams for every account, at no cost and at no rung, and it is the gauntlet's comment target. With no gate on it and streaming on, this is what Public Access means.",
 		{
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			access: [{ threshold: 0, allow: true, price: "0" }],
 			// Free + real video: the case where the bytes MUST arrive for any account at all.
 			//
 			// ⚠️ This said "for anyone at all", and the copy above said it streams "for
@@ -210,8 +210,8 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 	// keyed to the rung's **dollar amount** (`seed-9.5`), and the amount is the THRESHOLD
 	// rather than the rung's position, which is what keeps a sparse ladder honest.
 	//
-	// ⚠️ The `seed-` prefix stays: it is a data key on rows already seeded, so renaming it
-	// would orphan them. It names the column, not a unit.
+	// ⚠️ The `seed-` slug prefix stays: it is a data key on rows already seeded, so
+	// renaming it would orphan them.
 	...BADGE_RUNGS.map((amount, i) =>
 		post(
 			2 + i,
@@ -223,7 +223,7 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 				? "The first rung — only what is given to this creator this cycle opens it. Nothing about a viewer's Anthers Badge is consulted anywhere on this ladder."
 				: `Rung at ${amountLabel(amount)}. ${amountLabel(BADGE_RUNGS[i - 1])} is not enough; ${amountLabel(amount)} or more opens it.`,
 			{
-				seedAccess: seedRung(amount),
+				access: badgeRung(amount),
 				// Gated + real audio on the SECOND rung: the mirror of G1, where the bytes must
 				// NOT arrive until the viewer climbs. Audio because it exercises the second
 				// delivery endpoint, which nothing else walks.
@@ -242,7 +242,7 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 			contentType: "software",
 			streamEnabled: false,
 			downloadEnabled: true,
-			seedAccess: [{ threshold: 0, allow: true, price: DOWNLOAD_PRICE }],
+			access: [{ threshold: 0, allow: true, price: DOWNLOAD_PRICE }],
 		},
 	),
 ];
@@ -390,20 +390,18 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 ];
 
 /**
- * The creator's advertised gate ladder — the named rungs a visitor sees on the profile.
+ * The creator's advertised Badge ladder — the named rungs a visitor sees on the profile.
  * Distinct from the per-post access table above, which is what actually authorizes.
  * Thresholds are **monthly dollars given to this creator** (migration `0041`).
  *
  * A creator advertises only their own ladder; there is no second, platform-side half.
  */
-export const GAUNTLET_GATES: Array<{
-	gateType: "seed";
+export const GAUNTLET_BADGES: Array<{
 	threshold: string;
 	label: string;
 	description: string;
 	sortOrder: number;
 }> = BADGE_RUNGS.map((seeds, i) => ({
-	gateType: "seed" as const,
 	// The THRESHOLD, never the position in this list — the fixture must not re-introduce
 	// the index/threshold conflation the resolver was freed from, or it would agree with a
 	// bug instead of catching it. With a sparse ladder the two genuinely differ.

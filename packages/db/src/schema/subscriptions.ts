@@ -5,7 +5,7 @@
  * 🚨 This file is where the node/org boundary is *hardest* to draw, and most of it is
  * `org` by the treasury rule: payments, pools, payouts, KYC and charitable accounting stay with
  * the org, because a treasury cannot be spread across machines other people run. A creator's
- * *gates* (what they charge for access) are the exception — those are the creator's own
+ * *Badges* (what they charge for access) are the exception — those are the creator's own
  * pricing, node-owned.
  *
  * `attentionEvents` is the hardest table here to classify: org-role by volume and by being
@@ -32,7 +32,7 @@ import { works } from "./content.js";
  * A user's standing account (one per user). `anthersSupport` is the monthly amount in
  * dollars given to Anthers — it sets the Badge and drives billing directly, with no
  * count in between. `creatorSupportTotal` is the $ directed at creators this cycle
- * (denormalised sum of `seed_allocations`). `bandwidthUsedGiB` is a **dead column**:
+ * (denormalised sum of `user_badges`). `bandwidthUsedGiB` is a **dead column**:
  * it held the running stream consumption drawn against an allowance until 2026-08-12.
  * Delivery is free at any volume, nothing writes it, and it stays only because dropping
  * it is a migration of its own.
@@ -667,38 +667,40 @@ export const attentionDaily = pgTable(
 );
 
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
-// A user's DIRECTED support — the monthly amount, in dollars, they have pointed at a
-// creator, which clears that creator's Badges. The account's `creatorSupportTotal` is the
-// sum of these. (The table name `seed_allocations` stays: it is a schema identifier whose
-// meaning did not change, per the copy-rules-not-schema-rules norm.)
-// org — a user's directed support to a creator, this cycle. The billing contract is
-// org-side. The
-// `atprotoUri` column is for the day `org.anthers.support` exists — the fact that somebody
-// supports a creator is theirs to assert, and belongs in their repository. ⚠️ **The money
-// never follows it.** A treasury cannot be spread across machines other people run, so the
-// amount, the ledger and the billing contract stay here permanently — the record would say
-// that support happened, not what it was worth. Wiki: *Federation → User Records*.
-export const seedAllocations = pgTable(
-	"seed_allocations",
+// A user's Badge holdings — one row per (user, badge, cycle). A holding is a discrete
+// pick of a named Badge: the Badge's threshold IS the amount, and its owner (the
+// creator, or Anthers itself for its own set) is reachable through the badge. The
+// account's `creatorSupportTotal` is the sum of the held creators' Badge thresholds;
+// the gross/net money reasoning lives on `pool_distributions.badge_amount`, which is
+// the figure the pool actually pays out.
+// org — the billing contract a subscription purchases is org-side. The `atprotoUri`
+// column is for the day `org.anthers.support` exists — the fact that somebody
+// supports a creator is theirs to assert, and belongs in their repository. ⚠️ **The
+// money never follows it.** A treasury cannot be spread across machines other people
+// run, so the holding, the ledger and the billing contract stay here permanently —
+// the record would say that support happened, not what it was worth. Wiki:
+// *Federation → User Records*.
+export const userBadges = pgTable(
+	"user_badges",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		creatorId: integer("creator_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		// 🚨 **GROSS — what the user chose to give, before any card fee.** This is the column
-		// **gating** reads, and it has to be gross: paying the processor must never cost a
-		// supporter the Badge they paid for. Its counterpart `pool_distributions.seed_amount`
-		// is **net**, and the two are one word apart in every sentence that mentions them.
+		// 🚨 **GROSS — what the user chose to give, before any card fee.** The holding's
+		// dollars are the Badge's threshold by construction, and gating reads the
+		// threshold: paying the processor must never cost a supporter the Badge they
+		// paid for. The net counterpart is `pool_distributions.badge_amount`, and the
+		// two are one word apart in every sentence that mentions them.
 		//
 		// Getting the pair backwards moves money and throws nothing. The distribution job
 		// credited gross where the fee module and its tests said net, so Anthers silently
-		// absorbed roughly $0.39 on every unbatched support charge — with no test coverage at
-		// all, which is why it ran unnoticed. **`supportBreakdown().creatorNet` is the only
+		// absorbed roughly $0.39 on every unbatched support charge — with no test coverage
+		// at all, which is why it ran unnoticed. **`supportBreakdown().creatorNet` is the only
 		// figure that may be described as a payout; `creatorDirect` is gross.**
-		amount: numeric("amount").notNull(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(),
 		isLocked: boolean("is_locked").default(false),
 		atprotoUri: text("atproto_uri").unique(),
@@ -706,10 +708,14 @@ export const seedAllocations = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		uniqueIndex("uq_seed_user_creator_cycle").on(table.userId, table.creatorId, table.billingCycle),
-		// creatorId sits in the MIDDLE of the unique index, which cannot serve a lookup
-		// by creator alone — the read behind "who gives me support".
-		index("idx_seed_allocations_creator").on(table.creatorId),
+		uniqueIndex("uq_user_badges_user_badge_cycle").on(
+			table.userId,
+			table.badgeId,
+			table.billingCycle,
+		),
+		// A badge's owner is reachable through the badge, but "who holds my Badges" is
+		// the read behind the supporter page — so the badge side gets its own index.
+		index("idx_user_badges_badge").on(table.badgeId),
 	],
 );
 
@@ -738,9 +744,10 @@ export const poolDistributions = pgTable(
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
 		// 🚨 **NET — a payout figure, written after the destination's share of processing is
-		// deducted**, and every earnings reader draws from it. The gross counterpart is
-		// `seed_allocations.amount`; see the warning there for what confusing them costs.
-		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-support share
+		// deducted**, and every earnings reader draws from it. The gross counterpart is the
+		// held Badge's threshold in `user_badges`; see the warning there for what confusing
+		// them costs.
+		badgeAmount: numeric("badge_amount").notNull().default("0.00"), // directed-share of held Badges
 		/**
 		 * What this subscriber directed at this creator as Stickers in the cycle.
 		 *
@@ -750,9 +757,9 @@ export const poolDistributions = pgTable(
 		 * these two together to get "what the Time Pool paid" is correct; treating this as a
 		 * fourth source of creator money on top of the pool would double-count it.
 		 *
-		 * ⚠️ **Gross, unlike `seed_amount`.** A Sticker moves money already given to Anthers
+		 * ⚠️ **Gross, unlike `badge_amount`.** A Sticker moves money already given to Anthers
 		 * and already processed, so there is no card fee left to take out of it — the fee came
-		 * off when the user paid Anthers. `seed_amount` is net because directed support is a
+		 * off when the user paid Anthers. `badge_amount` is net because directed support is a
 		 * separate charge.
 		 */
 		stickerAmount: numeric("sticker_amount").notNull().default("0.00"),
@@ -788,31 +795,35 @@ export const poolDistributions = pgTable(
 );
 
 /**
- * Creator-defined gate ladder — the creator's *named* rungs.
+ * The Badge ladder — the named Badges a subscription can purchase.
  *
- * `threshold` is **monthly dollars**. `seed` rungs read what the viewer directs to this
- * creator this cycle; the direction is the only difference between gate types.
+ * **A Badge is what a user purchases when they subscribe** (Parker, 2026-10-02). A
+ * Badge is owned by its issuer — a creator for their own set, or Anthers itself for
+ * the official ladder (root/sprout/petal/blossom, plus Free at $0), which lives here
+ * as ordinary rows owned by the `@anthers.org` identity rather than as a code constant.
+ *
+ * `threshold` is **monthly dollars**, and it is the Badge's price: a holding in
+ * `user_badges` names the Badge, and the threshold is the amount by construction.
  *
  * 🚨 **Store the amount, never a conversion of it.** This column once held a count
  * derived by dividing by a shared price, to keep that price out of every stored gate — a
  * reason that died when creators began setting their own levels, since there is no shared
  * price left to leak and a stored conversion bakes in a ratio that means nothing.
  *
- * Naming the rungs is this table's job; deciding a Work's access is `works.seed_access`'s,
- * and a Work may gate at a threshold no rung is named for.
+ * Naming the Badges is this table's job; deciding a Work's access is `works.access`'s,
+ * and a Work may gate at a threshold no Badge is named for.
  */
-// node — a creator's own gate ladder is their pricing, node-owned content. The org
+// node — a creator's own Badge ladder is their pricing, node-owned content. The org
 // reads it to resolve access, but the creator defines it. This is the one table in
 // this file where the creator, not the org, owns the row.
-export const creatorGates = pgTable(
-	"creator_gates",
+export const badges = pgTable(
+	"badges",
 	{
 		id: serial("id").primaryKey(),
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		gateType: text("gate_type").notNull().default("seed"), // "seed" | "anthers_badge"
-		threshold: numeric("threshold").notNull(), // monthly $ required, both gate types
+		threshold: numeric("threshold").notNull(), // monthly $ — the Badge's price
 		label: text("label").notNull(),
 		description: text("description").default(""),
 		/**
@@ -855,7 +866,7 @@ export const creatorGates = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_creator_gates_creator").on(table.creatorId, table.sortOrder)],
+	(table) => [index("idx_badges_creator").on(table.creatorId, table.sortOrder)],
 );
 
 /**

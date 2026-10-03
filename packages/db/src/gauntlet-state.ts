@@ -25,7 +25,7 @@
  */
 
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
-import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
+import { amountLabel, badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
 import { assertDevCheckout } from "./dev-only.js";
 import {
@@ -37,9 +37,10 @@ import {
 import {
 	accounts,
 	attentionEvents,
+	badges,
 	db,
 	purchases,
-	seedAllocations,
+	userBadges,
 	users,
 	works,
 } from "./index.js";
@@ -207,34 +208,53 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Allocation to the gauntlet creator (the fact the giving stepper writes).
+	// A Badge holding on the gauntlet creator (the fact the giving stepper writes).
 	// The UI walk normally covers this; the hop exists for placing a state directly.
+	//
+	// Under the Badge model the holding names a Badge rather than an amount: the
+	// creator's ladder lives in `badges`, and `--give` is DOLLARS, like every threshold
+	// in the model. So the hop resolves the rung whose THRESHOLD is the given amount
+	// and creates it if the fixture ladder has no row there yet — the gauntlet is a
+	// dev-only fixture and may not depend on the Phase B seeding having run.
 	if (give !== undefined) {
 		const cycle = currentBillingCycle();
+		const threshold = give.toFixed(2);
+		let [badge] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, creatorId), eq(badges.threshold, threshold)))
+			.limit(1);
+		if (!badge) {
+			[badge] = await db
+				.insert(badges)
+				.values({
+					creatorId,
+					threshold,
+					label: amountLabel(give),
+					description: `Fixture rung created by a --give hop at ${amountLabel(give)}.`,
+				})
+				.returning({ id: badges.id });
+		}
 		const [existing] = await db
-			.select({ id: seedAllocations.id })
-			.from(seedAllocations)
+			.select({ id: userBadges.id })
+			.from(userBadges)
 			.where(
 				and(
-					eq(seedAllocations.userId, viewerId),
-					eq(seedAllocations.creatorId, creatorId),
-					eq(seedAllocations.billingCycle, cycle),
+					eq(userBadges.userId, viewerId),
+					eq(userBadges.badgeId, badge.id),
+					eq(userBadges.billingCycle, cycle),
 				),
 			)
 			.limit(1);
-		// `--give` is DOLLARS, like every threshold in the model; the ledger stores money, so
-		// the value goes in as it was given rather than through a conversion.
-		const amount = give.toFixed(2);
 		if (existing) {
 			await db
-				.update(seedAllocations)
-				.set({ amount, updatedAt: new Date() })
-				.where(eq(seedAllocations.id, existing.id));
+				.update(userBadges)
+				.set({ updatedAt: new Date() })
+				.where(eq(userBadges.id, existing.id));
 		} else {
-			await db.insert(seedAllocations).values({
+			await db.insert(userBadges).values({
 				userId: viewerId,
-				creatorId,
-				amount,
+				badgeId: badge.id,
 				billingCycle: cycle,
 			});
 		}
@@ -286,14 +306,17 @@ async function main(): Promise<void> {
 		.from(accounts)
 		.where(eq(accounts.userId, viewerId))
 		.limit(1);
+	// The viewer's holdings on the gauntlet creator this cycle, summed through the
+	// badge thresholds — the number the old allocation row's `amount` used to carry.
 	const [alloc] = await db
-		.select({ amount: seedAllocations.amount })
-		.from(seedAllocations)
+		.select({ amount: sql<string>`COALESCE(SUM(${badges.threshold}), 0)` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 		.where(
 			and(
-				eq(seedAllocations.userId, viewerId),
-				eq(seedAllocations.creatorId, creatorId),
-				eq(seedAllocations.billingCycle, currentBillingCycle()),
+				eq(userBadges.userId, viewerId),
+				eq(badges.creatorId, creatorId),
+				eq(userBadges.billingCycle, currentBillingCycle()),
 			),
 		)
 		.limit(1);
