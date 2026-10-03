@@ -36,14 +36,11 @@ import {
 	GAUNTLET_SLUG_PREFIX,
 	gauntletHandle,
 } from "./gauntlet.js";
+import { applyAnthersSupport, applySupportBudget } from "./gauntlet-support.js";
 import {
-	applyAnthersSupport,
-	applySupportBudget,
-} from "./gauntlet-support.js";
-import {
-	billingAccounts,
 	attentionEvents,
 	badges,
+	billingAccounts,
 	db,
 	purchases,
 	userBadges,

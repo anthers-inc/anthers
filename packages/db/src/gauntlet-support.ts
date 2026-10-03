@@ -13,7 +13,7 @@
  */
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { and, eq, sql } from "drizzle-orm";
-import { billingAccounts, badges, db, userBadges } from "./index.js";
+import { badges, billingAccounts, db, userBadges } from "./index.js";
 
 /** The app's billing-cycle key — UTC, via the shared helper, never a local-time read. */
 function cycleKey(): string {
