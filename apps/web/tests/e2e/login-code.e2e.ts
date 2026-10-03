@@ -28,7 +28,9 @@ import { API_URL, expect, test } from "./fixtures";
 const addr = () => `e2e-login-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
 test.describe("signing in with an emailed code", () => {
-	test("the card asks for an email address or handle and offers no password field", async ({ page }) => {
+	test("the card asks for an email address or handle and offers no password field", async ({
+		page,
+	}) => {
 		await page.goto("/login");
 
 		// 🚨 The load-bearing absence: a password input on this page is the old door
