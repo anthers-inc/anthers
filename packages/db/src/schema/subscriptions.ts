@@ -752,9 +752,9 @@ export const attentionDaily = pgTable(
 // A user's Badge holdings — one row per (user, badge, cycle). A holding is a discrete
 // pick of a named Badge: the Badge's threshold IS the amount, and its owner (the
 // creator, or Anthers itself for its own set) is reachable through the badge. The
-// account's `creatorSupportTotal` is the sum of the held creators' Badge thresholds;
-// the gross/net money reasoning lives on `pool_distributions.badge_amount`, which is
-// the figure the pool actually pays out.
+// directed balance the picker draws against rides `billing_accounts.directed_budget`
+// now; the gross/net money reasoning lives on `pool_distributions.badge_amount`, which
+// is the figure the pool actually pays out.
 // org — the billing contract a subscription purchases is org-side. The `atprotoUri`
 // column is for the day `org.anthers.support` exists — the fact that somebody
 // supports a creator is theirs to assert, and belongs in their repository. ⚠️ **The
