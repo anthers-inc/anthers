@@ -215,7 +215,7 @@ envs:
   # Read at RUNTIME by `GET /api/payments/stripe/config`; it is not a build-time var.
   - key: STRIPE_PUBLISHABLE_KEY
     scope: RUN_TIME
-    value: pk_test_51T9K9NKtfvGGDfeNjQyhpAn3hwewJpss3lkTUBmQd6d1oXjRGzomk1Rp1MPlTaJF6v9JXeU0RxQwQmeb9WT625xa00AIeV5S1A
+    value: pk_live_51T9K9C3WJAPZ8pU6Ork5QyDxB39FXOuQig2866QiqjFjzC3fC4Qrszw1Sm2gr7Szrz9DopUgmj42bVQmUWcvVGqp002jowXSre
   - key: STRIPE_SECRET_KEY
     scope: RUN_TIME
     type: SECRET
