@@ -117,7 +117,11 @@ import {
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { isSuspendedAccount, notSuspendedAccount, notTestAccount } from "../services/account-visibility.js";
+import {
+	isSuspendedAccount,
+	notSuspendedAccount,
+	notTestAccount,
+} from "../services/account-visibility.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
