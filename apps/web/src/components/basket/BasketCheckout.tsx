@@ -125,7 +125,7 @@ function CheckoutForm({ workIds, buyerTotal, onComplete }: BasketCheckoutProps) 
 				{processing
 					? "Processing…"
 					: totals?.buyerTotal
-						? `Pay $${Number(totals.buyerTotal).toFixed(2)}`
+						? `Pay $${totals.buyerTotal.toFixed(2)}`
 						: `Pay $${buyerTotal} + tax`}
 			</button>
 		</form>

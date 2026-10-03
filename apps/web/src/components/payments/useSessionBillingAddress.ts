@@ -99,21 +99,27 @@ export function useSessionBillingAddress(
  * with. Null before the address resolves: the session has not resolved a rate yet, and a
  * guessed figure is the flat-rate charge this flow exists to retire.
  *
- * `StripeCheckoutAmount` is `{ minorUnitsAmount, amount }` — `amount` is a formatted
- * string in the session's currency, so it is what a receipt renders and a button quotes.
+ * 🚨 **Rendered from `minorUnitsAmount`, NEVER from `amount`.** `StripeCheckoutAmount` is
+ * `{ minorUnitsAmount, amount }` where `amount` is a FORMATTED string in the session's
+ * currency — `"$10.80"` with the symbol in it — and every consumer of these figures does
+ * `Number(...)` on the string. `Number("$10.80")` is `NaN`, which is exactly the "Pay $NaN"
+ * the live checkout shipped on 2026-10-03: the fakes in the test suites return bare
+ * numeric strings, so no suite caught that Stripe's real payload is currency-formatted.
+ * `minorUnitsAmount` is the plain integer of cents — unambiguous, symbol-free — so it is
+ * converted here, once, and the callers receive a number of dollars they can format.
  */
 export function sessionTotals(
 	session: Pick<StripeCheckoutSession, "total" | "taxAmounts"> | null,
-): { buyerTotal: string | null; tax: string | null } {
+): { buyerTotal: number | null; tax: number | null } {
 	if (!session) return { buyerTotal: null, tax: null };
-	const total = session.total?.total?.amount;
-	if (!total) return { buyerTotal: null, tax: null };
+	const totalCents = session.total?.total?.minorUnitsAmount;
+	if (totalCents == null) return { buyerTotal: null, tax: null };
 	// Exclusive tax is what US prices carry (the session builds its line items
 	// `tax_behavior: "exclusive"`), so the tax the buyer adds on top is the exclusive
 	// figure. Inclusive tax is inside the price already and adds nothing.
-	const tax =
-		session.taxAmounts?.find((t) => !t.inclusive)?.amount ??
-		session.taxAmounts?.[0]?.amount ??
+	const taxCents =
+		session.taxAmounts?.find((t) => !t.inclusive)?.minorUnitsAmount ??
+		session.taxAmounts?.[0]?.minorUnitsAmount ??
 		null;
-	return { buyerTotal: total, tax };
+	return { buyerTotal: totalCents / 100, tax: taxCents == null ? null : taxCents / 100 };
 }
