@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { type BrowserContext, expect, expect as fixtureExpect, type Page } from "@playwright/test";
-import { purgeAccountIds } from "../../../api/src/__tests__/cleanup";
+import { purgeAccountIds } from "../../../api/src/__tests__/purge";
 import { API_URL, emailedCode, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));

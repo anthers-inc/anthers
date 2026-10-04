@@ -30,8 +30,8 @@ import { basketItems } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import type { Page } from "@playwright/test";
 import { inArray } from "drizzle-orm";
-import { purgeAccountIds, purgeWorkIds } from "../../../api/src/__tests__/cleanup";
 import { enablePayoutsFor } from "../../../api/src/__tests__/payouts-fixture";
+import { purgeAccountIds, purgeWorkIds } from "../../../api/src/__tests__/purge";
 import { API_URL, emailedCode, expect, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
