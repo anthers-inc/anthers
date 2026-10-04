@@ -205,9 +205,12 @@ test.describe("the basket purchase flow", () => {
 		await expect(page.locator("input[name='cc-name']")).toHaveCount(0);
 		await expect(page.locator("input[name='city']")).toHaveCount(0);
 
-		// The quote's fee breakdown prices the purchase, from the server.
+		// The quote's fee breakdown prices the purchase, from the server. The Work page's
+		// price card still says "calculated at checkout" — it is a price display without
+		// an address form, so nothing resolves there; the basket's receipt is where tax
+		// reads "from your address", and that copy is asserted in the basket tests.
 		await expect(page.getByText("Card processing")).toBeVisible();
-		await expect(page.getByText("calculated from your address")).toBeVisible();
+		await expect(page.getByText("calculated at checkout")).toBeVisible();
 	});
 
 	/** The receipt renders once the quote POST answers; under the shared-Postgres contention
