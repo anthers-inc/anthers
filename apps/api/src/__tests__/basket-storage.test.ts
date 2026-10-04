@@ -42,6 +42,19 @@ function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
+/** The buyer's basket as the server holds it — what the merge and add assertions read. */
+async function serverBasket(): Promise<{ count: number; workIds: number[] }> {
+	const res = await req("/api/payments/basket", authed(buyerCookie));
+	const body = (await res.json()) as { items: { workId: number }[]; count: number };
+	return { count: body.count, workIds: body.items.map((i) => i.workId) };
+}
+
+/** Empty the buyer's basket through the DELETE route, so a test starts from its own state. */
+async function clearBasketDirect(): Promise<void> {
+	const res = await req("/api/payments/basket", authed(buyerCookie, { method: "DELETE" }));
+	expect(res.status, "clearing the basket").toBe(200);
+}
+
 function authed(cookie: string, extra?: RequestInit): RequestInit {
 	return {
 		...extra,
@@ -69,6 +82,8 @@ let buyerId: number;
 let seller: { cookie: string; id: number };
 let workA = 0;
 let workB = 0;
+/** A second creator's Work — the mixed-creator tests' clash on demand. */
+let otherCreatorWorkId = 0;
 
 beforeAll(async () => {
 	const buyer = await createAccount(`bskt_store_buyer_${run}`);
@@ -103,6 +118,21 @@ beforeAll(async () => {
 			creatorId: seller.id,
 			type: "game",
 			title: `Basket storage B ${run}`,
+			streamEnabled: false,
+			downloadEnabled: true,
+			access: FOR_SALE,
+		})
+	).id;
+	// A third Work by a DIFFERENT creator, for the one-creator rule's replace-on-clash.
+	const clashingCreator = await createAccount(`bskt_store_clash_${run}`, {
+		fields: { isCreator: true },
+	});
+	await db.update(users).set({ emailVerified: true }).where(eq(users.id, clashingCreator.userId));
+	otherCreatorWorkId = (
+		await insertWork({
+			creatorId: clashingCreator.userId,
+			type: "game",
+			title: `Basket storage clash ${run}`,
 			streamEnabled: false,
 			downloadEnabled: true,
 			access: FOR_SALE,
@@ -369,6 +399,91 @@ describe("basket storage — the untrusted-storage rules", () => {
 		expect(over.status).toBe(409);
 		// And the quote/checkout path still refuses a table somehow past the cap, via
 		// `resolveBasket` — same constant, enforced twice.
+	});
+});
+
+describe("POST /auth/basket/merge — the scratch basket folds through the add", () => {
+	it("refuses an unauthenticated merge (a scratch belongs to whoever proved a session)", async () => {
+		const res = await req("/api/auth/basket/merge", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN },
+			body: JSON.stringify({ items: [{ workId: workA }] }),
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it("refuses a scratch past the basket's cap with 400, in the schema", async () => {
+		const items = Array.from({ length: MAX_BASKET_ITEMS + 1 }, (_, i) => ({ workId: i + 1 }));
+		const res = await req(
+			"/api/auth/basket/merge",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ items }),
+			}),
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("merges scratch items through the add — an empty account basket takes every live Work", async () => {
+		await clearBasketDirect();
+		const res = await req(
+			"/api/auth/basket/merge",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ items: [{ workId: workA }, { workId: workB }] }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { added: number[] };
+		expect(body.added.sort()).toEqual([workA, workB].sort());
+		// The list resolves live: workB is already OWNED here (the stale-row test's staged
+		// purchase is still in the books), so the read shows only what money can reach —
+		// the merge is by intent, the listing is by purchasability, and neither lies.
+		const basket = await serverBasket();
+		expect(basket.workIds).toEqual([workA]);
+	});
+
+	it("a scratch item that is gone from the catalog is skipped, not refused", async () => {
+		await clearBasketDirect();
+		const res = await req(
+			"/api/auth/basket/merge",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ items: [{ workId: 999999999 }, { workId: workA }] }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		// The merge answers with what MERGED — the client's contract for clearing the
+		// scratch is the 2xx, and what stayed is what the server could honor.
+		const body = (await res.json()) as { added: number[] };
+		expect(body.added).toEqual([workA]);
+	});
+
+	it("a mixed-creator MERGE replaces the account basket — the most recent intent wins", async () => {
+		await clearBasketDirect();
+		// The account's basket ALREADY holds A's creator's work.
+		await req(
+			"/api/payments/basket/items",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ workId: workA }),
+			}),
+		);
+		// The scratch carries the OTHER creator's work: the merge's add REPLACE-clashes,
+		// leaving the scratch's item alone — the client's own replace-on-clash behavior,
+		// kept honest server-side, and now both sides agree.
+		const res = await req(
+			"/api/auth/basket/merge",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ items: [{ workId: otherCreatorWorkId }] }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { replacedCreator: string | null };
+		expect(body.replacedCreator).toBeTruthy();
+		const basket = await serverBasket();
+		expect(basket.workIds).toEqual([otherCreatorWorkId]);
 	});
 });
 
