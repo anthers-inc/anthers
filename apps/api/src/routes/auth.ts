@@ -94,7 +94,8 @@ const isAnthersBadgeName = (name: string): boolean =>
  * ⭐ **The picks are Badge-shaped.** `badge` names a rung of Anthers' own ladder (or null
  * for Free, which is a real Badge at $0 rather than the absence of one); `badges` holds
  * **creator handles**, like `follow` — the finishing page resolves each handle to a pick
- * of that creator's Badge. **Convention (Phase B's minimum): a handle in `badges` resolves
+ * of that creator's Badge. **Convention, live as of the issuer pass:** a handle in
+ * `badges` resolves
  * to that creator's LOWEST-threshold badge** — signup carries no per-creator rung choice,
  * and the lowest rung is the one every ladder has that a supporter cannot be over-charged
  * for. `follow` and `badges` stay parallel arrays of handles on purpose: the page that

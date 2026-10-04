@@ -519,8 +519,9 @@ export async function savedCardFor(
  * 🚨 **Writes no amount anywhere.** The old accounts row carried two amount columns this
  * update used to rewrite; under the Badge model the amounts are `user_badges` holdings —
  * what the subscription's directed items buy is written by `applyDirectedSupportFromSub`
- * below, and what the Anthers line buys is resolved by reading the org-ladder holding at
- * whatever the ledger needs it for. What this function still owns is the Stripe machinery:
+ * below, and what the Anthers line buys is resolved by reading the Anthers-ladder
+ * holding at whatever the ledger needs it for. What this function still owns is the
+ * Stripe machinery:
  * the subscription id, the period pair, activity and cancellation, plus the directed
  * balance the Badge picker draws against (`billing_accounts.directed_budget` — the
  * subscription's directed items ARE that balance, so the webhook is the writer that
@@ -598,16 +599,15 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	 * already applies per creator with its add-only-upsert** — allocation is add-only within
 	 * a cycle — rather than a new idea; what this column adds is the account-level half for
 	 * the *budget*, which is the number the picker draws down against.
-	 */
-	/**
+	 *
 	 * 🚨 **The held-over Anthers amount is read off the HOLDING, not the items.** The
 	 * in-force rule on a mid-cycle decrease lives on the badge holding now: the holding
 	 * IS the account-level amount, so when the stored period says this decrease is still
 	 * inside the cycle it was paid in, the existing holding is the "stored" figure —
-	 * The unified apply takes the GREATER of the item price and the held rung for the Anthers pick,
-	 * which keeps a Blossom somebody paid $12 for through the month the items already
-	 * say $3. Once the period turns, the items are the whole truth and the holding is
-	 * re-stamped outright.
+	 * the unified apply takes the GREATER of the item price and the held rung for the
+	 * Anthers pick, which keeps a Blossom somebody paid $12 for through the month the
+	 * items already say $3. Once the period turns, the items are the whole truth and the
+	 * holding is re-stamped outright.
 	 */
 	const heldOver =
 		acct.currentPeriodStart != null &&

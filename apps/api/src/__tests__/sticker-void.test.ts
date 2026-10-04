@@ -50,9 +50,9 @@ async function signUp(username: string) {
 }
 
 /**
- * Give a user the org's Badge at `threshold` in `cycle` — find-or-create the rung (the
- * org is the Free rung's owner), then write the holding. The void suite's stand-in for
- * the amount write the webhooks made.
+ * Give a user the Anthers Badge at `threshold` in `cycle` — find-or-create the rung (the
+ * Anthers creator account is the Free rung's owner), then write the holding. The void
+ * suite's stand-in for the amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string, cycle: string): Promise<void> {
 	const orgId = await ensureOrgLadder();
@@ -100,7 +100,7 @@ describe("reverting a Sticker when Anthers removes what it sits on", () => {
 			.insert(billingAccounts)
 			.values({ userId: giverId, isActive: true })
 			.onConflictDoNothing();
-		// The giver at $12: the org rung held this void cycle — the Badge shape the
+		// The giver at $12: the Anthers rung held this void cycle — the Badge shape the
 		// allowance reads, replacing the amount the old fixture wrote.
 		await holdOrgRung(giverId, "12.00", CYCLE);
 		workId = (await insertWork({ creatorId, type: "text", title: `Void ${RUN}` })).id;

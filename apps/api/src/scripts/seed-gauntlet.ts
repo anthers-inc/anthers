@@ -225,7 +225,8 @@ async function ensureViewer(inst: Instance): Promise<void> {
  * parallel), both can pass the `existing` check together, and the brought identity's
  * direct PDS creation makes exactly one creation fail — the handle is already taken.
  * The loser re-reads: the winner's account is there by then, and that is success —
- * this function's contract is "the org row exists, return its id", not "I created it".
+ * this function's contract is "the Anthers stand-in row exists, return its id", not
+ * "I created it".
  * Any other failure still throws.
  */
 async function ensureOrg(): Promise<number> {
@@ -501,10 +502,10 @@ async function resetGates(inst: Instance, creatorId: number): Promise<void> {
  * viewer's own account, content and other relationships are left alone.
  */
 async function resetViewer(viewerId: number, creatorId: number, postIds: number[]): Promise<void> {
-	// The floor is no holding at all: Free is the absence of org-ladder and creator-ladder
+	// The floor is no holding at all: Free is the absence of Anthers-ladder and creator-ladder
 	// rows this cycle, and the viewer's Anthers-side reads answer 0 for a user with no
-	// holdings — which is what "Badge back to Free" means under the Badge model. The org's
-	// rungs go too, since a prior hop may have parked one on the staircase. There is no
+	// holdings — which is what "Badge back to Free" means under the Badge model. The Anthers
+	// ladder's rungs go too, since a prior hop may have parked one on the staircase. There is no
 	// billing row to touch: the amounts the old reset zeroed are `user_badges` holdings
 	// now, and the billing table carries no amount to reset.
 	await db.delete(userBadges).where(eq(userBadges.userId, viewerId));

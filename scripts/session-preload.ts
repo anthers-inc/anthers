@@ -46,7 +46,7 @@ if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 	}
 }
 
-// The org's Badge ladder is platform state, and every test session needs it: any suite
+// The Anthers Badge ladder is platform state, and every test session needs it: any suite
 // that reads "what does this account hold on Anthers' ladder" throws loudly when the
 // ladder is absent (the guard in `anthers-badges.ts`), and relying on whichever suite
 // happens to seed it first made the pass green locally and red on CI, where file order

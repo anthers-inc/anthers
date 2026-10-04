@@ -60,7 +60,7 @@ async function seedCycle(
 ) {
 	const userId = await makeUser("viewer");
 	// The billing row carries the period the estimate keys from; the Anthers amount is
-	// the org rung held below (the badge-holdings shape, since the amount columns are
+	// the Anthers rung held below (the badge-holdings shape, since the amount columns are
 	// the old table's).
 	const [acct] = await db
 		.insert(billingAccounts)

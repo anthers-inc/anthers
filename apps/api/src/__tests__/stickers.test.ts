@@ -50,10 +50,10 @@ async function signUp(username: string) {
 }
 
 /**
- * Point a billing row's period at `cycle`, and give the user the org's Badge at
- * `dollars` in it — find-or-create the rung (the org is the Free rung's owner), then
- * write the holding. The Sticker allowance reads the Badge's threshold, which is the
- * shape the amount the old fixture wrote has taken.
+ * Point a billing row's period at `cycle`, and give the user the Anthers Badge at
+ * `dollars` in it — find-or-create the rung (the Anthers creator account is the Free
+ * rung's owner), then write the holding. The Sticker allowance reads the Badge's
+ * threshold, which is the shape the amount the old fixture wrote has taken.
  */
 async function atSupport(userId: number, dollars: number, cycle: string): Promise<void> {
 	await db
