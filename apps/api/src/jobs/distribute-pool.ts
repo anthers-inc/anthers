@@ -59,6 +59,7 @@ import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { anthersUserId } from "../services/anthers-badges.js";
 import { creditedSecondsByCreator } from "../services/attention-ranges.js";
 
 export interface DistributePoolData {
@@ -386,12 +387,14 @@ async function distributeForAccount(acct: {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
-	// What the viewer gives Anthers this cycle — the held Badge's threshold on the org's
-	// ladder, read the same way every other Anthers-side reader takes it: MAX through the
-	// holding join, the org identified as the Free rung's owner (the same subquery the
-	// gauntlet-state report uses, so the two cannot disagree). The old
-	// `accounts.anthers_support` column died with the split; the Badge IS the amount, and
-	// a viewer holds at most one org rung per cycle.
+	// What the viewer gives Anthers this cycle — the held Badge's threshold on the
+	// Anthers ladder, read the same way every other Anthers-side reader takes it: MAX
+	// through the holding join, the Anthers creator account identified by its handle
+	// (`anthersUserId`, 2026-10-04 — the retired shape identified the ladder by a $0
+	// rung that no longer exists). The old `accounts.anthers_support` column died with
+	// the split; the Badge IS the amount, and a viewer holds at most one Anthers rung
+	// per cycle.
+	const anthersId = await anthersUserId();
 	const anthersHeld = await db
 		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
 		.from(userBadges)
@@ -400,7 +403,7 @@ async function distributeForAccount(acct: {
 			and(
 				eq(userBadges.userId, acct.userId),
 				eq(userBadges.billingCycle, cycleDate),
-				sql`${badges.creatorId} = (SELECT creator_id FROM badges WHERE threshold = '0.00' ORDER BY id LIMIT 1)`,
+				sql`${badges.creatorId} = ${anthersId}`,
 			),
 		);
 
@@ -415,14 +418,13 @@ async function distributeForAccount(acct: {
 			and(
 				eq(userBadges.userId, acct.userId),
 				eq(userBadges.billingCycle, cycleDate),
-				// 🚨 The org's own rung is NOT directed support — it is the Anthers line, read
-				// above. Without this predicate the org holding enters the directed map as if
-				// the org were a creator, and the Anthers money would be paid out as directed
-				// support (or double-count the pool's funding) — quietly, with every total
-				// adding up. The org is the Free rung's owner, the same subquery the
-				// Anthers-side read above uses, so the two halves cannot disagree about who
-				// the org is.
-				sql`${badges.creatorId} != (SELECT creator_id FROM badges WHERE threshold = '0.00' ORDER BY id LIMIT 1)`,
+				// 🚨 The Anthers account's own rung is NOT directed support — it is the
+				// Anthers line, read above. Without this predicate the Anthers holding
+				// enters the directed map as if the account were a creator, and the Anthers
+				// money would be paid out as directed support (or double-count the pool's
+				// funding) — quietly, with every total adding up. Same id the Anthers-side
+				// read above resolves, so the two halves cannot disagree about who Anthers is.
+				sql`${badges.creatorId} != ${anthersId}`,
 			),
 		)
 		.groupBy(badges.creatorId);

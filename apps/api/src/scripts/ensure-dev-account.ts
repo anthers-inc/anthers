@@ -81,10 +81,6 @@ async function main() {
 		.limit(1);
 	if (existing) {
 		console.log(`${TAG} "${username}" already exists in this session.`);
-		// The ladder is idempotent, and an account that predates the seeded ladder is
-		// exactly the case a re-run has to repair: the rows would otherwise be missing
-		// from a session whose dev account was created before this change existed.
-		await ensureAnthersBadges(existing.id);
 		return;
 	}
 
@@ -98,12 +94,37 @@ async function main() {
 		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${isCreator}.`,
 	);
 
-	// Anthers' own Badge ladder, seeded as real rows this session. No `@anthers.org`-style
-	// org account exists locally, so the dev account owns the ladder for now — the
-	// identity decision (*Decide what an identity is*) decides the real owner and the
-	// seeding follows it. See `services/anthers-badges.ts` for the full note.
-	await ensureAnthersBadges(user.id);
-	console.log(`${TAG} seeded Anthers' Badge ladder as rows owned by "${username}".`);
+	// Anthers' own Badge ladder, seeded as real rows this session — owned by the session's
+	// Anthers stand-in account, not by the dev account. The ladder's owner is found by
+	// handle (`anthersUserId`), and the dev account's handle is the developer's own name;
+	// seeding onto it would leave every Anthers-side read throwing. The stand-in takes the
+	// reserved "anthers" name on the session's suffix, brought like the production account
+	// it stands in for — the same shape `ensureOrg` (gauntlet) and the session preload
+	// create. Found by email so a re-run repairs rather than duplicates, matching the
+	// dev-account reconciliation above.
+	const LADDER_EMAIL = "seed_org_ladder@example.com";
+	const [ladderOwner] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, LADDER_EMAIL))
+		.limit(1);
+	if (ladderOwner) {
+		await ensureAnthersBadges(ladderOwner.id);
+	} else {
+		const standIn = await createLocalAccount({
+			email: LADDER_EMAIL,
+			identity: "brought",
+			handleName: "anthers",
+			bypassReserved: true,
+			emailVerified: true,
+			fields: {
+				displayName: "Anthers (dev stand-in)",
+				isCreator: false,
+			},
+		});
+		await ensureAnthersBadges(standIn.id);
+	}
+	console.log(`${TAG} seeded Anthers' Badge ladder as rows owned by the Anthers stand-in.`);
 }
 
 try {

@@ -25,7 +25,6 @@ import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
-import VerificationBanner from "./VerificationBanner";
 
 /** The sidebar's nav in user mode. Studio mode has `STUDIO_NAV` in its place. */
 const NAV_LINKS = [
@@ -208,7 +207,6 @@ function LoggedInLayoutInner() {
 				</div>
 			</header>
 
-			<VerificationBanner />
 			<PublishingPermissionBanner />
 			<IdentityServerBanner />
 

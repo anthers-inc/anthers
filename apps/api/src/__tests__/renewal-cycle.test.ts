@@ -28,13 +28,14 @@ import type Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { planItemChange, syncSubscriptionToAccount } from "../services/billing";
+
 import { applyReductionsToInvoice } from "../services/support-reductions";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
-await ensureOrgLadder();
+const ANTHERS_ID = await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
@@ -128,7 +129,7 @@ function subscription(opts: {
 		metadata: { destination },
 	});
 	const data = [
-		...(opts.anthers != null ? [item(opts.anthers, "anthers")] : []),
+		...(opts.anthers != null ? [item(opts.anthers, String(ANTHERS_ID))] : []),
 		...Object.entries(opts.directed ?? {}).map(([id, amt]) => item(amt, id)),
 	];
 	return {
@@ -322,7 +323,9 @@ describe("a new subscription is anchored to the 1st", () => {
 			expect(rows).toHaveLength(0);
 			return;
 		}
-		expect(rows.map((r) => r.destination).sort()).toEqual(["anthers", String(creatorId)].sort());
+		expect(rows.map((r) => r.destination).sort()).toEqual(
+			[String(ANTHERS_ID), String(creatorId)].sort(),
+		);
 		for (const row of rows) {
 			expect(row.billingCycle).toBe(cycle);
 			expect(row.appliedAt).toBeNull();
@@ -385,7 +388,7 @@ describe("a change splits by direction, per destination", () => {
 		// Only the line that moved is sent. Sending the untouched creator line would prorate
 		// a charge that has not changed.
 		expect(params.items).toHaveLength(1);
-		expect(params.items?.[0].metadata).toEqual({ destination: "anthers" });
+		expect(params.items?.[0].metadata).toEqual({ destination: String(ANTHERS_ID) });
 	});
 
 	it("lets a decrease wait for the 1st, with no proration and no credit", async () => {
@@ -427,7 +430,7 @@ describe("a change splits by direction, per destination", () => {
 			.where(
 				and(
 					eq(supportReductions.userId, supporterId),
-					eq(supportReductions.destination, "anthers"),
+					eq(supportReductions.destination, String(ANTHERS_ID)),
 				),
 			);
 
@@ -461,7 +464,7 @@ describe("planItemChange", () => {
 
 	it("deletes a destination that is no longer wanted", () => {
 		const sub = subscription({ anthers: 3, directed: { 42: 5 } });
-		const plan = planItemChange(sub, anthersProduct, 3, []);
+		const plan = planItemChange(sub, anthersProduct, ANTHERS_ID, 3, []);
 		// ⚠️ Stripe does not remove an item you simply omit — the creator would keep being
 		// charged for, silently, and visibly only on the supporter's next invoice.
 		expect(plan.drops).toEqual([{ id: "si_42", deleted: true }]);
@@ -470,7 +473,7 @@ describe("planItemChange", () => {
 
 	it("leaves an unchanged line alone entirely", () => {
 		const sub = subscription({ anthers: 3, directed: { 42: 5 } });
-		const plan = planItemChange(sub, anthersProduct, 3, [
+		const plan = planItemChange(sub, anthersProduct, ANTHERS_ID, 3, [
 			{ creatorId: 42, product: "prod_42", amount: 5 },
 		]);
 		expect(plan.raises).toHaveLength(0);
@@ -480,7 +483,7 @@ describe("planItemChange", () => {
 
 	it("treats a brand-new destination as owed its whole amount", () => {
 		const sub = subscription({ anthers: 3 });
-		const plan = planItemChange(sub, anthersProduct, 3, [
+		const plan = planItemChange(sub, anthersProduct, ANTHERS_ID, 3, [
 			{ creatorId: 42, product: "prod_42", amount: 5 },
 		]);
 		expect(plan.started).toEqual([{ creatorId: 42, amount: 5 }]);
@@ -491,7 +494,7 @@ describe("planItemChange", () => {
 
 	it("stamps every item it builds with its destination", () => {
 		const sub = subscription({ anthers: 3 });
-		const plan = planItemChange(sub, anthersProduct, 9, [
+		const plan = planItemChange(sub, anthersProduct, ANTHERS_ID, 9, [
 			{ creatorId: 42, product: "prod_42", amount: 5 },
 		]);
 		// 🚨 An unstamped item is credited to Anthers by `itemsFromSub`, so a creator's
@@ -812,13 +815,13 @@ describe("the reduction is spent on the draft renewal", () => {
 	});
 
 	it("puts a one-off coupon on each line, for that destination's own reduction", async () => {
-		await owe("anthers", "3.80");
+		await owe(String(ANTHERS_ID), "3.80");
 		await owe(String(creatorId), "2.53");
 
 		const applied = await applyReductionsToInvoice(
 			draftInvoice({
 				lines: [
-					{ destination: "anthers", dollars: 6 },
+					{ destination: String(ANTHERS_ID), dollars: 6 },
 					{ destination: String(creatorId), dollars: 4 },
 				],
 			}),
@@ -841,9 +844,9 @@ describe("the reduction is spent on the draft renewal", () => {
 	});
 
 	it("marks every row applied, and names the invoice it went to", async () => {
-		await owe("anthers", "3.80");
+		await owe(String(ANTHERS_ID), "3.80");
 		await applyReductionsToInvoice(
-			draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }] }),
+			draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }] }),
 		);
 
 		const [row] = await db
@@ -863,9 +866,9 @@ describe("the reduction is spent on the draft renewal", () => {
 	it("never discounts an invoice below the minimum, and carries what is left", async () => {
 		// Owing the whole invoice is the case that forces the floor to bite — somebody who
 		// started on the last day of a month is close to this.
-		await owe("anthers", "6.00");
+		await owe(String(ANTHERS_ID), "6.00");
 		await applyReductionsToInvoice(
-			draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }] }),
+			draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }] }),
 		);
 
 		// $6 invoice against Stripe's $0.50 floor → $5.50 spendable, so $0.50 carries.
@@ -894,7 +897,7 @@ describe("the reduction is spent on the draft renewal", () => {
 	it("spends a reduction whose own line is gone against whatever lines remain", async () => {
 		await owe(String(creatorId), "2.00");
 		const applied = await applyReductionsToInvoice(
-			draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }] }),
+			draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }] }),
 		);
 		expect(applied).toBe(1);
 		const coupon = fake.lastCall("coupons.create")?.args[0] as Stripe.CouponCreateParams;
@@ -908,8 +911,8 @@ describe("the reduction is spent on the draft renewal", () => {
 	 * impossible to notice without this assertion.
 	 */
 	it("is a no-op when the same invoice is delivered again", async () => {
-		await owe("anthers", "3.80");
-		const invoice = draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }] });
+		await owe(String(ANTHERS_ID), "3.80");
+		const invoice = draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }] });
 
 		expect(await applyReductionsToInvoice(invoice)).toBe(1);
 		expect(await applyReductionsToInvoice(invoice)).toBe(0);
@@ -917,9 +920,9 @@ describe("the reduction is spent on the draft renewal", () => {
 	});
 
 	it("leaves an invoice that is no longer a draft alone", async () => {
-		await owe("anthers", "3.80");
+		await owe(String(ANTHERS_ID), "3.80");
 		const applied = await applyReductionsToInvoice(
-			draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }], status: "open" }),
+			draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }], status: "open" }),
 		);
 		expect(applied).toBe(0);
 		expect(fake.callsTo("invoices.updateLines")).toHaveLength(0);
@@ -931,10 +934,10 @@ describe("the reduction is spent on the draft renewal", () => {
 	 * renewal it was meant for at full price.
 	 */
 	it("leaves a mid-month change's own invoice alone", async () => {
-		await owe("anthers", "3.80");
+		await owe(String(ANTHERS_ID), "3.80");
 		const applied = await applyReductionsToInvoice(
 			draftInvoice({
-				lines: [{ destination: "anthers", dollars: 6 }],
+				lines: [{ destination: String(ANTHERS_ID), dollars: 6 }],
 				billingReason: "subscription_update",
 			}),
 		);
@@ -943,7 +946,7 @@ describe("the reduction is spent on the draft renewal", () => {
 
 	it("does nothing when the account is owed nothing, which is nearly every invoice", async () => {
 		const applied = await applyReductionsToInvoice(
-			draftInvoice({ lines: [{ destination: "anthers", dollars: 6 }] }),
+			draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }] }),
 		);
 		expect(applied).toBe(0);
 		expect(fake.callsTo("coupons.create")).toHaveLength(0);
@@ -953,9 +956,9 @@ describe("the reduction is spent on the draft renewal", () => {
 		// A renewal is drafted before its period opens, so today is still the previous month,
 		// and Stripe dates the invoice's own period to the previous month as well. Either would
 		// look for reductions against a month nothing was recorded against.
-		await owe("anthers", "1.25", cycleKeyFor(new Date(Date.UTC(2026, 9, 1))));
+		await owe(String(ANTHERS_ID), "1.25", cycleKeyFor(new Date(Date.UTC(2026, 9, 1))));
 		const invoice = draftInvoice({
-			lines: [{ destination: "anthers", dollars: 6 }],
+			lines: [{ destination: String(ANTHERS_ID), dollars: 6 }],
 			paysFor: Math.floor(Date.UTC(2026, 9, 1) / 1000),
 		});
 		expect(new Date(invoice.period_start * 1000).getUTCMonth()).toBe(8);

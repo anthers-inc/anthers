@@ -4,7 +4,6 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
-import { createEmailVerificationToken } from "../services/auth";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
@@ -106,59 +105,6 @@ describe("Auth System", () => {
 			expect(res.status).toBe(200);
 			const data = await res.json();
 			expect(data.user).toBeNull();
-		});
-	});
-
-	// ── Email Verification ───────────────────────────────────────────────────
-
-	describe("email verification", () => {
-		it("verifies email with valid token", async () => {
-			// Get this user's ID first
-			const [userRow] = await db
-				.select({ id: users.id })
-				.from(users)
-				.where(eq(users.email, email))
-				.limit(1);
-
-			// The token a verification email would carry, minted the way the resend route mints it.
-			const token = await createEmailVerificationToken(userRow.id);
-
-			const res = await jsonPost("/api/auth/verify-email", { token });
-			expect(res.status).toBe(200);
-			const data = await res.json();
-			expect(data.success).toBe(true);
-
-			// Verify user is now marked as verified
-			const meRes = await makeRequest("/api/auth/me", {
-				headers: { Cookie: sessionCookie },
-			});
-			const meData = await meRes.json();
-			expect(meData.user.emailVerified).toBe(true);
-		});
-
-		it("rejects invalid verification token", async () => {
-			const res = await jsonPost("/api/auth/verify-email", { token: "invalidtoken" });
-			expect(res.status).toBe(400);
-		});
-
-		it("resend-verification requires auth", async () => {
-			const res = await jsonPost("/api/auth/resend-verification", {});
-			expect(res.status).toBe(401);
-		});
-
-		it("resend-verification rejects already verified", async () => {
-			const res = await makeRequest("/api/auth/resend-verification", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Origin: "http://localhost:3000",
-					Cookie: sessionCookie,
-				},
-				body: JSON.stringify({}),
-			});
-			expect(res.status).toBe(400);
-			const data = await res.json();
-			expect(data.error).toContain("already verified");
 		});
 	});
 

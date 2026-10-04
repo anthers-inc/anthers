@@ -310,7 +310,7 @@ function generatePassword(): string {
  * 🚨 **`recoveryKey` is deliberately not passed** — see the module note.
  */
 export async function createHostedAccount(
-	input: { handleName: string; email: string },
+	input: { handleName: string; email: string; bypassReserved?: boolean },
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedAccount> {
 	const url = pdsUrl();

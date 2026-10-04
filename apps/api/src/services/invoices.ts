@@ -26,6 +26,7 @@ import {
 	retrievePaymentIntent,
 	retrieveSubscription,
 } from "../lib/processor.js";
+import { anthersUserId } from "./anthers-badges.js";
 import { itemsFromSub } from "./billing.js";
 import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
@@ -150,10 +151,19 @@ async function recordLines(
 		const sub = await retrieveSubscription(subscriptionId);
 		// A retrieve that comes back empty leaves every line unmapped, which credits
 		// each line to Anthers — the same documented fallback as an unstamped item.
+		//
+		// ⭐ The stamp names every destination by user id now, Anthers' own line included
+		// (the issuer pass, 2026-10-04) — but settlement credits *creators*, and
+		// `invoice_lines.creator_id` keeps its documented meaning: null IS the Anthers
+		// line. So the Anthers id maps back to null here, which is the one bend between
+		// the unified stamp and the settlement record, stated here rather than derived
+		// at every reader.
+		const anthersId = await anthersUserId();
 		for (const item of itemsFromSub(
 			sub ?? ({ items: { data: [] } } as unknown as Stripe.Subscription),
+			anthersId,
 		))
-			creatorOfItem.set(item.itemId, item.creatorId);
+			creatorOfItem.set(item.itemId, item.creatorId === anthersId ? null : item.creatorId);
 	}
 
 	const byCreator = new Map<number | null, Decimal>();

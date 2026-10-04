@@ -13,7 +13,7 @@
  */
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { and, eq, sql } from "drizzle-orm";
-import { badges, billingAccounts, db, userBadges } from "./index.js";
+import { badges, billingAccounts, db, userBadges, users } from "./index.js";
 
 /** The app's billing-cycle key — UTC, via the shared helper, never a local-time read. */
 function cycleKey(): string {
@@ -48,7 +48,18 @@ function cycleKey(): string {
  * never as $15.
  */
 export async function applyAnthersSupport(viewerId: number, dollars: string): Promise<void> {
-	const org = await orgOwnerUserId();
+	const org = await anthersUserIdOfSession();
+	// Free is the absence of a holding (the 2026-10-03 reversal), not a rung at $0: the
+	// $0 hop clears the viewer's Anthers holdings and writes nothing, which is the same
+	// shape a canceled subscription leaves.
+	if (Number(dollars) === 0) {
+		await db
+			.delete(userBadges)
+			.where(
+				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+			);
+		return;
+	}
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
@@ -56,7 +67,7 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 		.limit(1);
 	if (!rung) {
 		throw new Error(
-			`The org ladder has no Badge at $${dollars}. Run \`make gauntlet-reset\` first — the hop must place a state the model can produce.`,
+			`The Anthers ladder has no Badge at $${dollars}. Run \`make gauntlet-reset\` first — the hop must place a state the model can produce.`,
 		);
 	}
 	await db
@@ -104,23 +115,22 @@ export async function applySupportBudget(viewerId: number, dollars: string): Pro
 }
 
 /**
- * The org identity's user id, found as the dev database marks it.
- *
- * ⚠️ **Dev stand-in, deliberately simple: the owner of the Free rung.** Only Anthers' own
- * set carries a $0 Badge, since a creator's ladder has nothing to sell at Free. Phase B's
- * config-named org identity supersedes this lookup; the hops' writes do not change shape
- * when it lands.
+ * The Anthers creator account's user id — the same shape as the API's `anthersUserId` in
+ * `services/anthers-badges.ts`, duplicated here because this harness cannot import the
+ * API package. Found by the handle's first label ("anthers"), which the gauntlet's
+ * stand-in account holds on the session's network suffix. Shared with
+ * `gauntlet-state.ts`, which reads state the hops write.
  */
-async function orgOwnerUserId(): Promise<number> {
+export async function anthersUserIdOfSession(): Promise<number> {
 	const [row] = await db
-		.select({ id: badges.creatorId })
-		.from(badges)
-		.where(eq(badges.threshold, "0.00"))
-		.orderBy(badges.id)
+		.select({ id: users.id })
+		.from(users)
+		.where(sql`${users.atprotoHandle} = 'anthers.org' OR ${users.atprotoHandle} LIKE 'anthers.%'`)
+		.orderBy(users.id)
 		.limit(1);
 	if (!row) {
 		throw new Error(
-			"No org ladder in this dev database — run `make gauntlet-reset` first (it seeds Anthers' Badges).",
+			"No Anthers creator account in this dev database — run `make gauntlet-reset` first (it seeds Anthers' Badges).",
 		);
 	}
 	return row.id;

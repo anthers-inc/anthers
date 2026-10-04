@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
-import { desktopAuthRequests, sessions, users, verificationTokens } from "@anthers/db/schema";
+import { desktopAuthRequests, sessions, users } from "@anthers/db/schema";
 import { and, desc, eq, gt, isNull, lt, notInArray } from "drizzle-orm";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** How stale `sessions.last_used_at` may get before a request refreshes it. */
 const LAST_USED_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 /** Enrollment window — long enough to read the authorize page, short enough to matter. */
@@ -289,62 +288,5 @@ export async function deleteExpiredSessions(): Promise<number> {
 				: lt(sessions.expiresAt, new Date()),
 		)
 		.returning({ id: sessions.id });
-	return gone.length;
-}
-
-// ─── Email Verification ──────────────────────────────────────────────────────
-
-/** Create an email verification token. Returns the token string. */
-export async function createEmailVerificationToken(userId: number): Promise<string> {
-	// Delete any existing email verification tokens for this user
-	await db
-		.delete(verificationTokens)
-		.where(and(eq(verificationTokens.userId, userId), eq(verificationTokens.type, "email_verify")));
-
-	const token = generateToken();
-	await db.insert(verificationTokens).values({
-		userId,
-		token,
-		type: "email_verify",
-		expiresAt: new Date(Date.now() + EMAIL_VERIFY_EXPIRY_MS),
-	});
-
-	return token;
-}
-
-/** Verify an email verification token. Returns the userId if valid, null otherwise. */
-export async function verifyEmailToken(token: string): Promise<number | null> {
-	const [result] = await db
-		.select()
-		.from(verificationTokens)
-		.where(
-			and(
-				eq(verificationTokens.token, token),
-				eq(verificationTokens.type, "email_verify"),
-				gt(verificationTokens.expiresAt, new Date()),
-			),
-		)
-		.limit(1);
-
-	if (!result) return null;
-
-	// Mark user as verified and delete the token
-	await db.update(users).set({ emailVerified: true }).where(eq(users.id, result.userId));
-	await db.delete(verificationTokens).where(eq(verificationTokens.id, result.id));
-
-	return result.userId;
-}
-
-/**
- * Delete all expired verification tokens. Returns how many rows went.
- *
- * Same history as {@link deleteExpiredSessions} — exported, never called, and invisible
- * because every consumer already filters on expiry. Scheduled as `QUEUES.PRUNE_CREDENTIALS`.
- */
-export async function deleteExpiredTokens(): Promise<number> {
-	const gone = await db
-		.delete(verificationTokens)
-		.where(lt(verificationTokens.expiresAt, new Date()))
-		.returning({ id: verificationTokens.id });
 	return gone.length;
 }

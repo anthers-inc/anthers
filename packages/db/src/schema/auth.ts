@@ -329,30 +329,14 @@ export const desktopAuthRequests = pgTable(
 	(table) => [index("idx_desktop_auth_requests_user").on(table.userId)],
 );
 
-// node — email verification is node auth. The token authenticates an identity the
-// node owns; the org holds a copy to verify, as with `sessions`.
-export const verificationTokens = pgTable(
-	"verification_tokens",
-	{
-		id: serial("id").primaryKey(),
-		userId: integer("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		token: text("token").notNull().unique(),
-		type: text("type").notNull(), // "email_verify"
-		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [index("idx_verification_tokens_user").on(table.userId)],
-);
-
 /**
  * One live email-verification code, keyed by the address rather than by a user.
  *
  * 🚨 **This table exists because the code has to come BEFORE the account.** Every other
  * credential in this file hangs off a `user_id`; the signup ceremony asks for an address
  * and proves control of it before any row in `users` exists, so there is nothing to hang
- * it off. That inversion is the whole reason `verification_tokens` could not be reused.
+ * it off. And every account is `emailVerified` from its first instant, so the older
+ * way of proving one — a token against a user row, dropped — is gone.
  *
  * The address is the key — **one live code per address, ever**, replaced on re-request
  * rather than appended. That is what makes "Send it again" safe: a second code silently

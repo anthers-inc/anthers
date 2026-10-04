@@ -121,6 +121,12 @@ export async function createAccount(
 		 * columns are the server's to set, so a suite cannot quietly put a placeholder DID back.
 		 */
 		fields?: LocalAccountFields;
+		/**
+		 * Pass the reserved-name exception through to `createLocalAccount` — for the one
+		 * fixture that stands in for the Anthers creator account, whose name ("anthers")
+		 * is reserved precisely because the account is official.
+		 */
+		bypassReserved?: boolean;
 	} = {},
 ): Promise<FixtureAccount> {
 	const email = opts.email ?? `${name}@example.com`;
@@ -129,6 +135,7 @@ export async function createAccount(
 			email,
 			handleName: name,
 			identity: opts.identity,
+			bypassReserved: opts.bypassReserved,
 			emailVerified: opts.emailVerified ?? false,
 			fields: opts.fields,
 		}),

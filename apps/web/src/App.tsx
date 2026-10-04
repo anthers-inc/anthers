@@ -105,7 +105,6 @@ const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
-const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
@@ -306,7 +305,6 @@ export default function App() {
 				mounted when navigating across the whole public surface.
 			*/}
 				<Route element={<PublicShell />}>
-					<Route path="/verify-email" element={<VerifyEmailPage />} />
 					<Route path="/discover/:slug" element={<ProjectRedirect />} />
 					<Route path="/posts/:slug" element={<PostPage />} />
 					{/* A Work stands on its own — reachable whether or not a post ever mentioned it. */}

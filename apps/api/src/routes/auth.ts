@@ -23,7 +23,6 @@ import { invalidBody } from "../middleware/validate.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
-	createEmailVerificationToken,
 	createSession,
 	deleteSession,
 	getPendingDesktopAuth,
@@ -32,14 +31,9 @@ import {
 	revokeUserSession,
 	startDesktopAuth,
 	validateSession,
-	verifyEmailToken,
 } from "../services/auth.js";
 import { addBasketItem } from "../services/basket.js";
-import {
-	sendSignInCodeEmail,
-	sendSignupCodeEmail,
-	sendVerificationEmail,
-} from "../services/email.js";
+import { sendSignInCodeEmail, sendSignupCodeEmail } from "../services/email.js";
 import {
 	checkHandleAvailability,
 	hostedHandleFor,
@@ -169,10 +163,6 @@ const emailCodeVerifySchema = z.object({
 	 * symbols are worth trying. This only rejects a shape that cannot be a code at all.
 	 */
 	code: z.string().trim().length(6),
-});
-
-const verifyEmailSchema = z.object({
-	token: z.string().min(1),
 });
 
 /**
@@ -932,34 +922,6 @@ const authRoutes = new Hono()
 			return c.json({ added, replacedCreator });
 		},
 	)
-
-	// ── Email Verification ───────────────────────────────────────────────────
-	.post("/verify-email", zValidator("json", verifyEmailSchema, invalidBody), async (c) => {
-		const { token } = c.req.valid("json");
-		const userId = await verifyEmailToken(token);
-
-		if (!userId) {
-			return c.json({ error: "Invalid or expired verification token" }, 400);
-		}
-
-		return c.json({ success: true });
-	})
-
-	// ── Resend Verification Email ────────────────────────────────────────────
-	.post("/resend-verification", requireAuth, async (c) => {
-		const user = c.get("user");
-
-		// Check if already verified
-		const [fullUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
-
-		if (fullUser?.emailVerified) {
-			return c.json({ error: "Email already verified" }, 400);
-		}
-
-		const verifyToken = await createEmailVerificationToken(user.id);
-		await sendVerificationEmail(user.email, user.handle, verifyToken);
-		return c.json({ success: true });
-	})
 
 	// ── Devices / Sessions ───────────────────────────────────────────────────
 	// The revocation surface that makes long-lived desktop tokens safe to hand out:

@@ -53,7 +53,7 @@ import {
 	parentalRefusal,
 } from "@anthers/shared/parental-controls";
 import { and, eq, inArray, sql } from "drizzle-orm";
-// The org-ladder read lives with the badge seed it reads (`orgOwnerUserId`);
+// The Anthers-ladder read lives with the badge seed it reads (`anthersUserId`);
 // re-exported so this module's callers keep the name they have always imported.
 import { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle } from "./anthers-badges.js";
 import { adultAccessFor } from "./content-preferences.js";
