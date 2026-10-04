@@ -17,7 +17,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
-const READER = 'section[aria-label^="Reader:"]';
+const READER = 'section[aria-label^="Comic reader:"]';
 
 async function openReader(page: Page) {
 	await page.goto(`/works/${COMIC.slug}-${COMIC.publicId}`);
@@ -29,7 +29,7 @@ async function openReader(page: Page) {
 			() =>
 				page.evaluate(() => {
 					const img = document.querySelector<HTMLImageElement>(
-						'section[aria-label^="Reader:"] img',
+						'section[aria-label^="Comic reader:"] img',
 					);
 					return img?.complete === true && img.naturalWidth > 0;
 				}),
@@ -41,7 +41,7 @@ async function openReader(page: Page) {
 /** Which page numbers the reader is currently showing, read off the images' alt text. */
 async function shownPages(page: Page): Promise<number[]> {
 	return page.evaluate(() =>
-		[...document.querySelectorAll<HTMLImageElement>('section[aria-label^="Reader:"] img')]
+		[...document.querySelectorAll<HTMLImageElement>('section[aria-label^="Comic reader:"] img')]
 			.map((img) => Number(/page (\d+)$/.exec(img.alt)?.[1] ?? 0))
 			.filter((n) => n > 0),
 	);

@@ -11,7 +11,7 @@ import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import { expect, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
-const READER = "[aria-label='Reader: A comic that really turns']";
+const READER = "[aria-label='Comic reader: A comic that really turns']";
 
 test.describe.configure({ mode: "serial" });
 
