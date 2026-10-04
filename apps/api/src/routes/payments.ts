@@ -713,8 +713,13 @@ const paymentRoutes = new Hono()
 
 		const result = await addBasketItem(user.id, workId);
 		if (!result.ok) {
-			const status = result.reason === "not_found" ? 404 : 409;
-			return c.json({ error: "Work not found", code: result.reason }, status);
+			// 404 names the Work (gone before it could be held); 409 names the basket (full).
+			// Both are refusals the buyer can act on at the moment of the click, which is
+			// the whole courtesy — the alternative was discovering both at checkout.
+			if (result.reason === "at_capacity") {
+				return c.json({ error: "Your basket is full.", code: "at_capacity" }, 409);
+			}
+			return c.json({ error: "Work not found", code: result.reason }, 404);
 		}
 		// Answer with the post-add basket so the client's optimistic update can reconcile
 		// against the truth in one round trip — each item resolved exactly as `/basket`
