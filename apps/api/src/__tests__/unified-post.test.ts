@@ -42,7 +42,7 @@ async function signUp(username: string) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `creator_${id}`;
-const otherName = `viewer_${id}`;
+const otherName = `other_${id}`;
 
 let creatorHandle: string;
 

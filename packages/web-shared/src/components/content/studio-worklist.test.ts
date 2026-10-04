@@ -109,7 +109,7 @@ describe("buildWorklist", () => {
 		// of content never meets it, because an unanswered row counts as present.
 		const items = build([work({ visibility: "released", maturityRows: {} })]);
 		expect(items.map((i) => i.kind)).toEqual(["unanswered-rows"]);
-		expect(items[0].message).toContain("readers who hide a kind of content");
+		expect(items[0].message).toContain("users who hide a kind of content");
 		expect(kinds([work({ visibility: "released" })])).toEqual([]);
 	});
 

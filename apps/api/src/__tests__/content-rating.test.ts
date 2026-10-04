@@ -711,7 +711,7 @@ describe("content ratings", () => {
 			expect(same.status).toBe(200);
 		});
 
-		it("gives the creator their matrix back, and a reader the rows their own filter reads", async () => {
+		it("gives the creator their matrix back, and a user the rows their own filter reads", async () => {
 			// A user's filter by kind of content blurs in the browser, so the user's copy carries
 			// the rows. They restate the public notes plus which rows are Not in It, and what stays
 			// behind is who set the rating, asserted above.

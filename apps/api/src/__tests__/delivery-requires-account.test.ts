@@ -203,7 +203,7 @@ describe("Consuming a Work requires an account", () => {
 
 	// ── The media with no route of their own ──────────────────────────────────
 
-	it("🚨 withholds a text Work's prose from a signed-out reader, and keeps its page", async () => {
+	it("🚨 withholds a text Work's prose from a signed-out user, and keeps its page", async () => {
 		// `requireAuth` does nothing for this one: a text Work's deliverable rides inside
 		// `GET /works/:id`. Only the resolver refusing a null user closes it.
 		const res = await req(`/api/content/works/${textId}`);

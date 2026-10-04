@@ -137,14 +137,14 @@ function ConversionEngine() {
 					<div className="space-y-5">
 						<div>
 							<div className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Viewer's Badge</span>
+								<span>User's Badge</span>
 								<span className="font-mono text-sm">
 									{usd0(m.price)}
 									<span className="text-base-content/40">/mo</span>
 								</span>
 							</div>
 							<SegControl
-								ariaLabel="Viewer's Badge"
+								ariaLabel="User's Badge"
 								value={badge}
 								onChange={setBadge}
 								options={BADGE_KEYS.map((b) => ({ value: b, label: badgeLabel(b) }))}

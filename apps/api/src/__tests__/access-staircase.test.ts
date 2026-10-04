@@ -31,7 +31,7 @@ import {
 } from "../services/access";
 
 const CREATOR_ID = 900;
-const VIEWER_ID = 901;
+const USER_ID = 901;
 
 /**
  * The posts under test are the FIXTURE's own definitions, imported rather than restated.
@@ -71,7 +71,7 @@ type PostKey = string;
  */
 function ctx(givenAmount: number, purchased: number[] = []): AccessContext {
 	return {
-		userId: VIEWER_ID,
+		userId: USER_ID,
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR_ID, givenAmount]] : []),
 		purchasedWorkIds: new Set(purchased),
 		adultAccess: true,
@@ -281,7 +281,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 
 	it("Seeds given to one creator don't unlock another's gates", () => {
 		const elsewhere: AccessContext = {
-			userId: VIEWER_ID,
+			userId: USER_ID,
 			supportByCreator: new Map([[CREATOR_ID + 1, 99]]),
 			purchasedWorkIds: new Set(),
 			adultAccess: true,

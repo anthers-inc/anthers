@@ -350,7 +350,7 @@ function SupportBreakdown({
 			    `flexGrow: 0` does not make a slice disappear — its `$0` label still claims
 			    min-content width — so Free's two empty lines rendered as a squashed "$0$0"
 			    jammed against the right edge. The legend still lists them, which is where a
-			    reader learns those lines exist and are zero. */}
+			    user learns those lines exist and are zero. */}
 			<div className="flex h-11 overflow-hidden rounded-xl border border-base-content/10">
 				{segments
 					.filter((s) => s.amount > 0)
@@ -1967,7 +1967,7 @@ function SignupForm({
 			    trademark, so the tab behind it carries the whole selected state. */}
 			{/* The strip's own height, held while it is not yet known whether there is one. Without
 			    this the card grows by a tab's worth the moment the answer lands, which moves the
-			    whole page under a reader — the defect the panel heights are all managed for. */}
+			    whole page under the reader — the defect the panel heights are all managed for. */}
 			{!doorsAnswered && !signedIn && (
 				<div aria-hidden="true" className="h-[3.0625rem] border-b border-base-300 bg-base-300/30" />
 			)}
@@ -2791,7 +2791,7 @@ export default function SignupPage() {
 						    levels to whatever rungs they like. Naming a floor describes a mechanism
 						    the unit retirement removed.
 						    ⭐ Each card is now a door into the section that asks for it, rather than a
-						    description a reader has to hold in their head while scrolling past two more
+						    description a user has to hold in their head while scrolling past two more
 						    screens to find the control it described. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
@@ -2960,7 +2960,7 @@ export default function SignupPage() {
 					    sits on /for-users and /for-creators. Those are pages somebody reads and
 					    then acts on, so their FAQ goes above the closing CTA. This page's
 					    control is at the TOP — a visitor can join from the first screen and
-					    never scroll — so everything below the summary is for the reader who did
+					    never scroll — so everything below the summary is for the user who did
 					    scroll, and is still deciding. Their remaining doubts belong at the end
 					    of that scroll rather than in front of a button they have already passed
 					    twice.

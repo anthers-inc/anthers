@@ -177,7 +177,7 @@ describe("votes", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("🚨 publishes the score and NEVER the raw counts to a reader", async () => {
+	it("🚨 publishes the score and NEVER the raw counts to a user", async () => {
 		// Signed out, and to anybody who did not write the comment. Two numbers is the
 		// pile-on scoreboard the single net exists to withhold.
 		for (const rows of [await thread(), await thread(voterCookies[0])]) {

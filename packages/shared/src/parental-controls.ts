@@ -3,7 +3,7 @@
  * Parental controls — the policy half, pure and with no I/O, the same split as
  * `public-access.ts` and `resolveAccessSync`.
  *
- * 🚨 **A guardian's controls sit on the VIEWER, never on the Work**, and every rule here
+ * 🚨 **A guardian's controls sit on the USER, never on the Work**, and every rule here
  * follows from that. Nothing a guardian sets changes what a Work *is*: a blocked creator is
  * not less rated, a Work past a daily limit is not less free, and a censored word was never
  * part of any classification. What changes is what reaches one account. Encoding any of it as

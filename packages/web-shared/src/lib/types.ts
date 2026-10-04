@@ -345,7 +345,7 @@ export interface Work {
 
 	// Delivery & access. ONE field name, two shapes, matching what the server sends on
 	// each serialization: the OWNER's shape carries the editable access table, and the
-	// VIEWER's carries the resolver's verdict. `accessOf` (below) tells them apart — never
+	// USER's carries the resolver's verdict. `accessOf` (below) tells them apart — never
 	// test the value's shape inline, or the two serializations blur together again.
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;

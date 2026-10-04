@@ -99,7 +99,7 @@ describe("addresses are one key", () => {
 		expect(check.ok).toBe(true);
 	});
 
-	test("the code is accepted in lower case, as a reader would retype it", async () => {
+	test("the code is accepted in lower case, as a user would retype it", async () => {
 		const email = addr("lower");
 		const issued = await issueSignupCode(email);
 		const check = await checkSignupCode(email, (issued.code as string).toLowerCase());

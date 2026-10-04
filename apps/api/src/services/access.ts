@@ -120,7 +120,7 @@ export interface AccessibleWork {
 	type: string;
 }
 
-/** Viewer facts needed to resolve access, loaded once and reused across a batch of Works. */
+/** User facts needed to resolve access, loaded once and reused across a batch of Works. */
 export interface AccessContext {
 	userId: number | null;
 	/** creatorId → monthly dollars the user has directed at that creator this cycle */
@@ -159,7 +159,7 @@ export interface AccessContext {
 	/**
 	 * A guardian's controls on this account — see `@anthers/shared/parental-controls`.
 	 *
-	 * 🚨 **Sits on the VIEWER and never on the Work**, which is what makes it safe to put in a
+	 * 🚨 **Sits on the USER and never on the Work**, which is what makes it safe to put in a
 	 * resolver that a whole Catalog page runs through. A blocked creator is not less rated and
 	 * a limited household's Work is not less free; what changes is what reaches one account, so
 	 * no answer here can leak into anybody else's catalog.
@@ -317,7 +317,7 @@ export interface AccessResult {
 	requiresPurchase: boolean;
 	/** Minimum price to unlock via purchase (money string), or null when free/gated. */
 	price: string | null;
-	/** Viewer qualifies via an allowed access row (a gate), even if a price still applies. */
+	/** User qualifies via an allowed access row (a gate), even if a price still applies. */
 	isEntitled: boolean;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;

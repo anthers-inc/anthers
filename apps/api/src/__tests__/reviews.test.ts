@@ -312,7 +312,7 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		expect(await other.json()).not.toHaveProperty("up");
 	});
 
-	it("refuses a vote on a hidden review, which would be voting on something no reader can see", async () => {
+	it("refuses a vote on a hidden review, which would be voting on something no user can see", async () => {
 		// userA's review was hidden in the editing block above and is still there.
 		const [hidden] = await db
 			.select({ id: reviews.id })

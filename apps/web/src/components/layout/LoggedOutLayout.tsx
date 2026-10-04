@@ -198,7 +198,7 @@ export default function LoggedOutLayout() {
 					    2026-08-17 and came out with this change, not on its own merits: the
 					    corner CTA now points at the same page under a clearer name, and a nav
 					    link and a button side by side going to one destination under two labels
-					    is a question for the reader with no useful answer. */}
+					    is a question for the user with no useful answer. */}
 					<ul className="translate-y-0.5 scale-105 menu menu-horizontal hidden gap-8 lg:flex">
 						<li>
 							<Link to="/">For Users</Link>

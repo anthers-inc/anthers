@@ -24,7 +24,7 @@ export default function NotFoundPage() {
 				<span className="font-mono">/@name</span>.
 			</p>
 			{/* One destination, and it is the one that works signed out. `/discover` is behind
-			    ProtectedRoute, so offering it here would bounce a logged-out reader to `/login`
+			    ProtectedRoute, so offering it here would bounce a logged-out user to `/login`
 			    from the page that just told them their link was wrong. */}
 			<Link to="/" className="btn btn-primary mt-6">
 				Go to Anthers

@@ -202,7 +202,7 @@ export function buildWorklist({
 	if (unanswered.count > 0) {
 		items.push({
 			kind: "unanswered-rows",
-			message: `${subject(unanswered)} ${unanswered.only ? "has" : "have"} unanswered rows in ${unanswered.only ? "its" : "their"} rating, so readers who hide a kind of content won't see ${unanswered.only ? "it" : "them"}.`,
+			message: `${subject(unanswered)} ${unanswered.only ? "has" : "have"} unanswered rows in ${unanswered.only ? "its" : "their"} rating, so users who hide a kind of content won't see ${unanswered.only ? "it" : "them"}.`,
 			action: unanswered.only ? "Rate it" : "Rate them",
 			href: hrefFor(unanswered, editUrl, catalogUrl),
 			severity: "attention",

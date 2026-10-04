@@ -248,7 +248,7 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 			2 + i,
 			`G${2 + i}`,
 			`seed-${amount}`,
-			`For readers who've given ${amountLabel(amount)}`,
+			`For users who've given ${amountLabel(amount)}`,
 			`≥ ${amountLabel(amount)}/month given to this creator`,
 			i === 0
 				? "The first rung — only what is given to this creator this cycle opens it. Nothing about a user's Anthers Badge is consulted anywhere on this ladder."

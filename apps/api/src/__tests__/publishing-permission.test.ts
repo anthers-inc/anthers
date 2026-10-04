@@ -43,7 +43,7 @@ const run = crypto.randomUUID().slice(0, 8);
 const GRANTED = `atproto ${USER_SCOPE_EXPANDED} ${CREATOR_SCOPE_EXPANDED}`;
 
 /** The user tier alone, which is what a user is asked for. */
-const READER_GRANT = `atproto ${USER_SCOPE_EXPANDED}`;
+const USER_GRANT = `atproto ${USER_SCOPE_EXPANDED}`;
 
 interface Creator {
 	id: number;
@@ -303,7 +303,7 @@ describe("a user's comments, reviews, votes and follows", () => {
 
 	beforeAll(async () => {
 		user = await makeUser("user", "brought");
-		hostedUser = await makeUser("hreader", "hosted");
+		hostedUser = await makeUser("hosted", "hosted");
 		// Something to react to: a post by the creator who holds every grant.
 		const res = await call("POST", "/api/content/posts", granted.cookie, {
 			title: `Perm thread ${run}`,
@@ -363,7 +363,7 @@ describe("a user's comments, reviews, votes and follows", () => {
 	});
 
 	it("lets a user take a vote back, which removes a record rather than creating one", async () => {
-		await holdGrant(user.did, user.id, READER_GRANT);
+		await holdGrant(user.did, user.id, USER_GRANT);
 		const cast = await call("PUT", "/api/content/votes", user.cookie, {
 			subjectType: "post",
 			subjectId: postId,
@@ -380,7 +380,7 @@ describe("a user's comments, reviews, votes and follows", () => {
 	});
 
 	it("accepts all of it once the user tier is granted, with no creator tier needed", async () => {
-		await holdGrant(user.did, user.id, READER_GRANT);
+		await holdGrant(user.did, user.id, USER_GRANT);
 		expect(await interactionPermissionRefusal(user.id)).toBeNull();
 		const comment = await call("POST", `/api/content/posts/${postSlug}/comments`, user.cookie, {
 			body: "Lovely",
@@ -402,7 +402,7 @@ describe("a user's comments, reviews, votes and follows", () => {
 	it("reports each tier on its own in the state the banner reads", async () => {
 		const state = await publishingStateFor(user.id);
 		expect(state.interactions).toBe("ungranted");
-		await holdGrant(user.did, user.id, READER_GRANT);
+		await holdGrant(user.did, user.id, USER_GRANT);
 		expect((await publishingStateFor(user.id)).interactions).toBe("granted");
 		expect((await publishingStateFor(granted.id)).interactions).toBe("granted");
 	});

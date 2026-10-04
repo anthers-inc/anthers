@@ -30,11 +30,11 @@ import {
 } from "../services/access";
 
 const CREATOR = 700;
-const VIEWER = 701;
+const USER = 701;
 
 function ctx(givenAmount = 0): AccessContext {
 	return {
-		userId: VIEWER,
+		userId: USER,
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR, givenAmount]] : []),
 		purchasedWorkIds: new Set(),
 		adultAccess: true,

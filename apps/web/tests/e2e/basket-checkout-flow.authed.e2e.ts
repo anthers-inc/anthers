@@ -240,7 +240,7 @@ test.describe("the basket purchase flow", () => {
 	}
 
 	test("Buy Now adds the item and lands on the basket — the one-item flow", async ({ page }) => {
-		// A sibling file (or a prior run of this one) may have left items on the VIEWER's
+		// A sibling file (or a prior run of this one) may have left items on the USER's
 		// server basket — the account's basket is state this file's walk starts from, and
 		// the empty-badge assertion below wants it empty.
 		await clearServerBasket(page);

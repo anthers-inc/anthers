@@ -669,7 +669,7 @@ describe("media with no player of their own", () => {
 		expect(work.publicAccess).toBe(false);
 	});
 
-	it("🚨 an anonymous reader gets the page and never the prose", async () => {
+	it("🚨 an anonymous user gets the page and never the prose", async () => {
 		/*
 		 * The account requirement, at the one choke point text passes through.
 		 *

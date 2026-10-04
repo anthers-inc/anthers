@@ -612,7 +612,7 @@ async function main(): Promise<void> {
 		.limit(1);
 	if (!user) {
 		throw new Error(
-			`Viewer "${walkerUsername}" not found. Run \`make dev\` once (it bootstraps DEV_ACCOUNT_USERNAME), or pass --user with an account that exists.`,
+			`User "${walkerUsername}" not found. Run \`make dev\` once (it bootstraps DEV_ACCOUNT_USERNAME), or pass --user with an account that exists.`,
 		);
 	}
 
@@ -647,7 +647,7 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`  Creator  /${inst.creatorUsername}  (${inst.posts.length} posts)`);
 	console.log(
-		`  Viewer   ${user.handle}  —  Free badge · giving $0 · not following · nothing purchased`,
+		`  User     ${user.handle}  —  Free badge · giving $0 · not following · nothing purchased`,
 	);
 	console.log("");
 	for (const spec of inst.posts) {

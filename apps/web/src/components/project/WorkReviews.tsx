@@ -159,7 +159,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 					</span>
 				)}
 				{/* The Recent share sits beside All Time rather than replacing it, so All Time is
-				    always the constant a reader can compare against. A window holding nothing is
+				    always the constant a user can compare against. A window holding nothing is
 				    stated as such — an absent row would read as a bug. */}
 				{agg.count > 0 && (
 					<span className="text-sm text-base-content/70 inline-flex items-center gap-1">
@@ -347,7 +347,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 												{new Date(review.createdAt).toLocaleDateString()}
 											</span>
 											{/* A review's score is its helpfulness: the same gesture as a
-											    comment's vote, asked of a reader's words rather than a
+											    comment's vote, asked of a user's words rather than a
 											    creator's thing. It orders the list and nothing else. */}
 											<VoteControl
 												subjectType="review"

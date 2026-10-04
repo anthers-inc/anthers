@@ -64,7 +64,7 @@ export default function ForUsersPage() {
 					<Reveal>
 						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
 						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-							For the Players, Listeners, Viewers, Readers, &amp; Fans
+							For the Players, Listeners, Watchers, Readers, &amp; Fans
 						</p>
 						<h1
 							style={serif}

@@ -116,7 +116,7 @@ export default function PostWorkLinks({ works, onChange }: PostWorkLinksProps) {
 
 			<p className="text-xs text-base-content/50">
 				Linking doesn't change who can open a Work — each one keeps its own access. A post can link
-				something its readers can't open yet.
+				something its users can't open yet.
 			</p>
 
 			{picking && <WorkPicker onSelect={add} onClose={() => setPicking(false)} />}

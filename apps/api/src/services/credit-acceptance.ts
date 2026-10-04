@@ -315,7 +315,7 @@ export async function findRejectedCredit(
  * read: an accepted credit resolves to the account's name (display name or handle), and
  * an unaccepted one is withheld from everyone but the two parties above.
  */
-export type ViewerWorkCredit = WorkCredit & {
+export type UserWorkCredit = WorkCredit & {
 	awaitingYourConfirmation?: true;
 	awaitingContributorConfirmation?: true;
 };
@@ -356,7 +356,7 @@ interface OverlayWork {
 export async function creditsForUser(
 	work: OverlayWork,
 	userId: number | null,
-): Promise<ViewerWorkCredit[]> {
+): Promise<UserWorkCredit[]> {
 	const credits = work.credits ?? [];
 	// The one DID-parse is `creditContributorIsDid`; nothing here re-derives it.
 	if (!credits.some((c) => creditContributorIsDid(c.contributor))) return credits;
@@ -398,7 +398,7 @@ export async function creditsForUser(
 	const userDid = userRows[0]?.atprotoDid ?? null;
 	const isCreator = userId != null && userId === work.creatorId;
 
-	const visible: ViewerWorkCredit[] = [];
+	const visible: UserWorkCredit[] = [];
 	for (const credit of credits) {
 		if (!creditContributorIsDid(credit.contributor)) {
 			visible.push(credit);
@@ -437,13 +437,13 @@ export async function creditsForUser(
  * data-destroying save, not a nicer read: the acceptance row keys on the DID, and the
  * stored DID replaced by a display name would stop matching it — the published record
  * would then withhold a credit the person had accepted, and an unrelated title edit
- * would be what destroyed the linkage. Resolution-to-name is the VIEWER overlay's job
+ * would be what destroyed the linkage. Resolution-to-name is the USER overlay's job
  * (`creditsForUser`), because the public Work page only renders.
  *
  * The flags carry the only thing an owner cannot see from the raw rows alone: which
  * identity credits are still awaiting their contributor's word.
  */
-export async function creditsForOwner(work: OverlayWork): Promise<ViewerWorkCredit[]> {
+export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit[]> {
 	const credits = work.credits ?? [];
 	if (!credits.some((c) => creditContributorIsDid(c.contributor))) return credits;
 

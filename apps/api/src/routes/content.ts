@@ -5005,7 +5005,7 @@ const contentRoutes = new Hono()
 					eq(projects.slug, slug),
 					// A suspended creator's Project page reads as not found — the listing's
 					// filter is the route's WHERE so the answer never depends on which
-					// surface was asked. Viewer-independent, so the owner's own row drops
+					// surface was asked. User-independent, so the owner's own row drops
 					// too; a suspended account cannot sign in to reach it anyway.
 					notSuspendedAccount(projects.creatorId),
 					// The automated-test account's Project page reads as not found the
