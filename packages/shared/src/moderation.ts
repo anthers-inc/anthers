@@ -350,6 +350,15 @@ export function isLegalReason(value: string): boolean {
  * edited, like every other entry here. A window that lapses releases the hold without a
  * finding, and the sweep records that as a `payout_review` row with both actor columns
  * null — the same convention as a swept `unsuspend`.
+ *
+ * `listing_corrected` records an operator editing a Work's listing fields (title,
+ * description) through `services/work-edit.ts` — the same fields the creator's own edit
+ * writes, changed by Anthers instead. It is its own value rather than a reuse of `hide` or
+ * `reclassify` because it changes neither reachability nor the rating: what it changes is
+ * what the Work's page and its network record say, and the note carries the corrected
+ * fields' before-and-after so the sequence reads without re-deriving them. The
+ * creator-facing consequence is a `listing_corrected` notification, and the edit goes
+ * through the same service the creator's route does, so the record follows the row.
  */
 export type ModerationActionType =
 	| "hide"
@@ -357,7 +366,8 @@ export type ModerationActionType =
 	| "reclassify"
 	| "suspend"
 	| "unsuspend"
-	| "payout_review";
+	| "payout_review"
+	| "listing_corrected";
 
 /**
  * Who decided. v1 has exactly one operator, but the column exists from day one
