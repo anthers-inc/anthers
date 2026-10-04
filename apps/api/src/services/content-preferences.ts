@@ -279,7 +279,7 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
  */
 export function maturityHiddenFrom(
 	prefs: ContentPreferences,
-	viewerId: number | null,
+	userId: number | null,
 	creatorColumn: SQL | unknown = works.creatorId,
 	maturityColumn: SQL | unknown = works.maturity,
 	rowsColumn: SQL | unknown = works.maturityRows,
@@ -314,21 +314,21 @@ export function maturityHiddenFrom(
 	// 🚨 A creator always sees their own, whatever they have asked to be shown. Somebody who
 	// hid a rung is filtering what they browse, not deleting their own Catalog — and a reader
 	// with no opt-in is not asking to be protected from the thing they made.
-	if (viewerId == null) return sql`(${allowed})`;
-	return sql`((${allowed}) OR ${creatorColumn} = ${viewerId})`;
+	if (userId == null) return sql`(${allowed})`;
+	return sql`((${allowed}) OR ${creatorColumn} = ${userId})`;
 }
 
 /** Load the viewer's preferences and the listing condition that follows, in one step. */
-export async function adultVisibility(viewerId: number | null): Promise<{
+export async function adultVisibility(userId: number | null): Promise<{
 	access: AdultAccess;
 	prefs: ContentPreferences;
 	hidden: SQL | undefined;
 }> {
-	const prefs = await contentPreferencesFor(viewerId);
+	const prefs = await contentPreferencesFor(userId);
 	return {
 		access: prefs.adultAccess,
 		prefs,
-		hidden: maturityHiddenFrom(prefs, viewerId),
+		hidden: maturityHiddenFrom(prefs, userId),
 	};
 }
 

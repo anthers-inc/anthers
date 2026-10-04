@@ -147,7 +147,7 @@ import {
 import {
 	acceptCredit,
 	creditsForOwner,
-	creditsForViewer,
+	creditsForUser,
 	findRejectedCredit,
 	notifyCreditedAccounts,
 	rejectCredit,
@@ -273,16 +273,16 @@ function tooManyVotesFrom(userId: number): boolean {
 async function ownsSubject(
 	subjectType: VoteSubject,
 	subjectId: number,
-	viewerId: number | null,
+	userId: number | null,
 ): Promise<boolean> {
-	if (viewerId === null) return false;
+	if (userId === null) return false;
 	if (subjectType === "comment") {
 		const [row] = await db
 			.select({ userId: comments.userId })
 			.from(comments)
 			.where(eq(comments.id, subjectId))
 			.limit(1);
-		return row?.userId === viewerId;
+		return row?.userId === userId;
 	}
 	if (subjectType === "review") {
 		// The reviewer is the subject's author: they see the raw counts exactly as a
@@ -292,14 +292,14 @@ async function ownsSubject(
 			.from(reviews)
 			.where(eq(reviews.id, subjectId))
 			.limit(1);
-		return row?.userId === viewerId;
+		return row?.userId === userId;
 	}
 	const [row] = await db
 		.select({ creatorId: posts.creatorId })
 		.from(posts)
 		.where(eq(posts.id, subjectId))
 		.limit(1);
-	return row?.creatorId === viewerId;
+	return row?.creatorId === userId;
 }
 
 async function votableExists(subjectType: VoteSubject, subjectId: number): Promise<boolean> {
@@ -404,7 +404,7 @@ const REJECTED_CREDIT_REFUSAL = {
 async function voteTallies(
 	subjectType: VoteSubject,
 	subjectIds: number[],
-	viewerId: number | null,
+	userId: number | null,
 ): Promise<{ tallies: Map<number, VoteTally>; mine: Map<number, VoteDirection> }> {
 	const tallies = new Map<number, VoteTally>();
 	const mine = new Map<number, VoteDirection>();
@@ -425,11 +425,11 @@ async function voteTallies(
 
 	// A signed-out reader has no vote to show, and asking for one costs a query that
 	// can only come back empty.
-	if (viewerId !== null) {
+	if (userId !== null) {
 		const own = await db
 			.select({ subjectId: votes.subjectId, direction: votes.direction })
 			.from(votes)
-			.where(and(scope, eq(votes.userId, viewerId)));
+			.where(and(scope, eq(votes.userId, userId)));
 		for (const r of own) {
 			if (isVoteDirection(r.direction)) mine.set(r.subjectId, r.direction);
 		}
@@ -453,7 +453,7 @@ async function voteTallies(
 async function listComments(
 	subjectType: CommentSubjectType,
 	subjectId: number,
-	viewerId: number | null = null,
+	userId: number | null = null,
 ) {
 	const ids = await threadCommentIds({ subjectType, subjectId });
 	if (ids.length === 0) return [];
@@ -470,7 +470,7 @@ async function listComments(
 			.where(inArray(comments.id, ids)),
 		// A blocked pair does not meet in a thread, in either direction. This is the densest
 		// contact surface in the app; `shapeThread` takes the blocked author's replies with them.
-		blockedUserIds(viewerId),
+		blockedUserIds(userId),
 	]);
 
 	// A suspended author's comments go dark with the rest of their account. They render
@@ -497,7 +497,7 @@ async function listComments(
 				(r.comment.userId == null || !suspendedAuthors.has(r.comment.userId)),
 		)
 		.map((r) => r.comment.id);
-	const { tallies, mine } = await voteTallies("comment", visibleIds, viewerId);
+	const { tallies, mine } = await voteTallies("comment", visibleIds, userId);
 
 	const nodes = rows.map((r) => {
 		const visible =
@@ -562,7 +562,7 @@ async function listComments(
 			 * carry the keys at all — a client cannot render, cache or leak a field that is
 			 * not there.
 			 */
-			...(viewerId !== null && r.comment.userId === viewerId
+			...(userId !== null && r.comment.userId === userId
 				? { up: tally.up, down: tally.down }
 				: {}),
 			/**
@@ -1504,7 +1504,7 @@ function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
  * delivery routes. That rewrite is not a nicety: stored media is private, so a raw
  * CDN URL would 403 even for someone entitled to it.
  */
-function viewerTranscoding(
+function userTranscoding(
 	job: TranscodingJobRow | null,
 	canAccess: boolean,
 	delivery: DeliveryCtx | null,
@@ -1626,13 +1626,13 @@ function previewRequest(c: {
  */
 function contextFor(
 	work: { id: number; creatorId: number | null },
-	viewerId: number | null,
+	userId: number | null,
 	real: AccessContext,
 	preview: { given: number | null; owned: boolean } | null,
 ): AccessContext {
-	if (!preview || viewerId == null || work.creatorId !== viewerId) return real;
+	if (!preview || userId == null || work.creatorId !== userId) return real;
 	return buildPreviewContext({
-		creatorId: viewerId,
+		creatorId: userId,
 		given: preview.given,
 		owned: preview.owned,
 		workIds: [work.id],
@@ -1654,7 +1654,7 @@ function contextFor(
  * still be refused gated and Adult work by the resolver, but they would be drawing the
  * sharer's budget across a catalog the sharer never shared.
  */
-const requireViewerOrShareLink = createMiddleware(async (c, next) => {
+const requireUserOrShareLink = createMiddleware(async (c, next) => {
 	const workId = parseNumericId(c.req.param("id") ?? "");
 	if (workId != null) {
 		const token = c.req.query("share");
@@ -1792,11 +1792,11 @@ async function publicAccessGate(
  * Returns null when delivery may proceed, or the 403 body when the window is spent.
  */
 async function parentalTimeGate(
-	viewerId: number | null,
+	userId: number | null,
 	work: WorkRow,
 ): Promise<{ error: string; code: string; window: LimitWindow } | null> {
-	if (viewerId == null) return null;
-	const policy = await parentalPolicyFor(viewerId);
+	if (userId == null) return null;
+	const policy = await parentalPolicyFor(userId);
 	if (!policy.enabled) return null;
 
 	const subject = { creatorId: work.creatorId, workType: work.type };
@@ -1812,7 +1812,7 @@ async function parentalTimeGate(
 		return null;
 	}
 
-	const window = spentWindow(policy, await consumedSeconds(viewerId, subject), cap);
+	const window = spentWindow(policy, await consumedSeconds(userId, subject), cap);
 	if (!window) return null;
 	return {
 		error:
@@ -1834,7 +1834,7 @@ async function parentalTimeGate(
  * only on access. A denied viewer gets no pointer at the payload at all: not a signed
  * one, not an expired one, none.
  */
-async function serializeWorkForViewer(
+async function serializeWorkForUser(
 	work: WorkRow,
 	workAssets: AssetRow[],
 	job: TranscodingJobRow | null,
@@ -1855,7 +1855,7 @@ async function serializeWorkForViewer(
 	 * Who is asking to see this Work, or null for a signed-out viewer.
 	 *
 	 * 🚨 **Required, not optional, for the same reason as `allowanceSpent`.** The credits
-	 * pass through the viewer overlay (`creditsForViewer`), which withholds an unaccepted
+	 * pass through the viewer overlay (`creditsForUser`), which withholds an unaccepted
 	 * `did`-naming credit from everybody except the person it names and this Work's creator.
 	 * An optional parameter would default to "nobody" — which is the signed-out answer and
 	 * therefore safe for a third-party viewer, but silently WRONG for the two parties who
@@ -1863,7 +1863,7 @@ async function serializeWorkForViewer(
 	 * credit, and the creator's own page would hide what they just saved. Every call site
 	 * has to decide who is asking, and the compiler is what makes them.
 	 */
-	viewerId: number | null,
+	userId: number | null,
 	/**
 	 * How many pages an ebook has, or 0.
 	 *
@@ -1943,9 +1943,9 @@ async function serializeWorkForViewer(
 		originallyReleased: work.originallyReleased,
 		// The creator's provenance table — public liner notes, ungated like the description,
 		// EXCEPT where a credit names an on-network identity that has not accepted: the
-		// overlay (`creditsForViewer`) withholds that from everyone but the named person and
+		// overlay (`creditsForUser`) withholds that from everyone but the named person and
 		// the creator, and resolves an accepted one to a handle rather than a bare DID.
-		credits: await creditsForViewer(work, viewerId),
+		credits: await creditsForUser(work, userId),
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 		isPinned: work.isPinned,
@@ -1990,7 +1990,7 @@ async function serializeWorkForViewer(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
-		transcoding: await viewerTranscoding(job, canAccess, delivery),
+		transcoding: await userTranscoding(job, canAccess, delivery),
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -2032,16 +2032,16 @@ async function serializeWorkForViewer(
  * deliverable by then.
  */
 async function allowanceSpent(
-	viewerId: number | null,
+	userId: number | null,
 	sharedBy: number | null = null,
 ): Promise<boolean> {
 	// A share-link view draws the sharer's separate relay budget, never their ten hours and
 	// never nothing. Same split as `publicAccessGate` and for the same reason — the two
 	// budgets bound different things.
-	if (viewerId == null && sharedBy != null) {
+	if (userId == null && sharedBy != null) {
 		return !(await loadShareLinkBudget(sharedBy)).allowed;
 	}
-	const budget = await loadPublicAccessBudget(viewerId);
+	const budget = await loadPublicAccessBudget(userId);
 	return !budget.allowed;
 }
 
@@ -2053,7 +2053,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	worksById: Map<number, WorkRow>;
 	assetsByWork: Map<number, AssetRow[]>;
 	jobByWork: Map<number, TranscodingJobRow>;
-	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForViewer`. */
+	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForUser`. */
 	pagesByWork: Map<number, number>;
 }> {
 	const worksById = new Map<number, WorkRow>();
@@ -2100,7 +2100,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
  */
 async function loadPostWorks(
 	postId: number,
-	viewerId: number | null,
+	userId: number | null,
 	delivery: DeliveryCtx | null = null,
 ) {
 	const refs = await db
@@ -2113,8 +2113,8 @@ async function loadPostWorks(
 	const workIds = refs.map((r) => r.workId);
 	const { worksById, assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(workIds);
 	const [ctx, spent] = await Promise.all([
-		buildAccessContext(viewerId, { workIds }),
-		allowanceSpent(viewerId),
+		buildAccessContext(userId, { workIds }),
+		allowanceSpent(userId),
 	]);
 
 	const serialized = await Promise.all(
@@ -2136,14 +2136,14 @@ async function loadPostWorks(
 			}
 			return {
 				position: ref.position,
-				work: await serializeWorkForViewer(
+				work: await serializeWorkForUser(
 					work,
 					assetsByWork.get(work.id) ?? [],
 					jobByWork.get(work.id) ?? null,
 					resolveAccessSync(work as AccessibleWork, ctx),
 					delivery,
 					spent,
-					viewerId,
+					userId,
 					pagesByWork.get(work.id) ?? 0,
 				),
 			};
@@ -2513,8 +2513,8 @@ const contentRoutes = new Hono()
 
 		// An unpublished post (draft / scheduled / unpublished) is visible only to its creator —
 		// the permalink 404s for everyone else, matching how drafts are hidden from feeds.
-		const viewerId = await getOptionalUserId(c);
-		if (!post.isPublished && viewerId !== post.creatorId) {
+		const userId = await getOptionalUserId(c);
+		if (!post.isPublished && userId !== post.creatorId) {
 			return c.json({ error: "Post not found" }, 404);
 		}
 
@@ -2523,7 +2523,7 @@ const contentRoutes = new Hono()
 		// 404 is the least informative answer the reader already renders.
 		if (
 			post.creatorId != null &&
-			viewerId !== post.creatorId &&
+			userId !== post.creatorId &&
 			(await isSuspendedAccount(post.creatorId))
 		) {
 			return c.json({ error: "Post not found" }, 404);
@@ -2561,7 +2561,7 @@ const contentRoutes = new Hono()
 		// the audience. Each Work it links resolves on its OWN gates, so this page can show
 		// a readable post alongside a Work the viewer cannot open — which is exactly the
 		// separation the model is for, and why there is no post-level `access` any more.
-		const linkedWorks = await loadPostWorks(post.id, viewerId, deliveryCtx());
+		const linkedWorks = await loadPostWorks(post.id, userId, deliveryCtx());
 
 		// Transparent edit history — every content edit is logged with a timestamp, and it
 		// carries no viewer predicate **on purpose** (settled 2026-08-09).
@@ -2826,11 +2826,11 @@ const contentRoutes = new Hono()
 	 */
 	.get("/votes", zValidator("query", voteQuerySchema), async (c) => {
 		const { subjectType, subjectId } = c.req.valid("query");
-		const viewerId = await getOptionalUserId(c);
-		const { tallies, mine } = await voteTallies(subjectType, [subjectId], viewerId);
+		const userId = await getOptionalUserId(c);
+		const { tallies, mine } = await voteTallies(subjectType, [subjectId], userId);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
 		// The author sees what it is made of; everybody else sees the one number.
-		const owner = await ownsSubject(subjectType, subjectId, viewerId);
+		const owner = await ownsSubject(subjectType, subjectId, userId);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
@@ -3163,7 +3163,7 @@ const contentRoutes = new Hono()
 	 * Assets belong to a Work, and the Work carries the gate. No post is involved: an
 	 * entitled viewer can download from the Catalog whether or not anything was announced.
 	 */
-	.post("/works/:id/assets/:assetId/download", requireViewerOrShareLink, async (c) => {
+	.post("/works/:id/assets/:assetId/download", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3221,7 +3221,7 @@ const contentRoutes = new Hono()
 		const access = await workAccessFor(c, work);
 		return c.json({
 			jobs: await Promise.all(
-				jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+				jobs.map((job) => userTranscoding(job, access.canAccess, deliveryCtx())),
 			),
 		});
 	})
@@ -3231,7 +3231,7 @@ const contentRoutes = new Hono()
 	// so this is the only way to reach it: access is re-checked here on every request,
 	// then we redirect to a short-lived signed CDN URL. A redirect rather than a proxy so
 	// range requests (seeking) go straight to the CDN instead of through the API.
-	.get("/works/:id/audio", requireViewerOrShareLink, async (c) => {
+	.get("/works/:id/audio", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3271,7 +3271,7 @@ const contentRoutes = new Hono()
 	// through a check, rather than as a single file whose URL is the whole book. Same shape
 	// as the audio route above — re-resolve access, meter the commons, redirect to a
 	// short-lived signed URL.
-	.get("/works/:id/pages/:page", requireViewerOrShareLink, async (c) => {
+	.get("/works/:id/pages/:page", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3311,7 +3311,7 @@ const contentRoutes = new Hono()
 	// The panel geometry for a Work, for the reader's panel mode and the Studio's
 	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
 	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
-	.get("/works/:id/panels", requireViewerOrShareLink, async (c) => {
+	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3454,8 +3454,8 @@ const contentRoutes = new Hono()
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
 	// short-lived signed CDN URLs. Segments are always private, so EVERY accessible Work
-	// (free or gated) is pointed here by serializeWorkForViewer; this check is the gate.
-	.get("/works/:id/hls/:file", requireViewerOrShareLink, async (c) => {
+	// (free or gated) is pointed here by serializeWorkForUser; this check is the gate.
+	.get("/works/:id/hls/:file", requireUserOrShareLink, async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.
 		if (!/^[A-Za-z0-9_.-]+\.m3u8$/.test(file)) return c.json({ error: "Not found" }, 404);
@@ -3695,8 +3695,8 @@ const contentRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const viewerId = await getOptionalUserId(c);
-		const isOwner = viewerId != null && viewerId === work.creatorId;
+		const userId = await getOptionalUserId(c);
+		const isOwner = userId != null && userId === work.creatorId;
 		if (work.visibility !== "released" && !isOwner) {
 			// A withdrawn Work is out of public circulation but still owed to the people
 			// who bought it — that is the whole point of the state, so this is the one
@@ -3704,7 +3704,7 @@ const contentRoutes = new Hono()
 			// `private` still 404s for everyone else: it was never anyone's to buy.
 			const stillOwed =
 				work.visibility === "withdrawn" &&
-				viewerId != null &&
+				userId != null &&
 				(
 					await db
 						.select({ id: purchases.id })
@@ -3712,7 +3712,7 @@ const contentRoutes = new Hono()
 						.where(
 							and(
 								eq(purchases.workId, work.id),
-								eq(purchases.buyerId, viewerId),
+								eq(purchases.buyerId, userId),
 								eq(purchases.status, "completed"),
 							),
 						)
@@ -3733,7 +3733,7 @@ const contentRoutes = new Hono()
 		// reaches their own Work whatever their setting says, and this must not become the
 		// reason somebody cannot see a thing they made.
 		if (!isOwner && requiresAdultVerification(work.maturity)) {
-			const { access } = await adultVisibility(viewerId);
+			const { access } = await adultVisibility(userId);
 			if (!access.canReach) return c.json({ error: "Work not found" }, 404);
 		}
 
@@ -3744,7 +3744,7 @@ const contentRoutes = new Hono()
 		if (!isOwner && work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
 			const stillOwned =
 				work.visibility === "withdrawn" ||
-				(viewerId != null &&
+				(userId != null &&
 					(
 						await db
 							.select({ id: purchases.id })
@@ -3752,7 +3752,7 @@ const contentRoutes = new Hono()
 							.where(
 								and(
 									eq(purchases.workId, work.id),
-									eq(purchases.buyerId, viewerId),
+									eq(purchases.buyerId, userId),
 									eq(purchases.status, "completed"),
 								),
 							)
@@ -3803,7 +3803,7 @@ const contentRoutes = new Hono()
 		// recipient actually lands on. `viewerFor` refuses a token that names a different
 		// Work, and a signed-in caller ignores tokens entirely.
 		const { sharedBy } = await viewerFor(c, work.id);
-		const ctx = await buildAccessContext(viewerId, { workIds: [work.id], sharedBy });
+		const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
 		const [creator] = work.creatorId
 			? await db
@@ -3837,22 +3837,22 @@ const contentRoutes = new Hono()
 
 		return c.json({
 			work: {
-				...(await serializeWorkForViewer(
+				...(await serializeWorkForUser(
 					work,
 					workAssets,
 					jobRows[0] ?? null,
 					resolveAccessSync(
 						work as AccessibleWork,
-						contextFor(work, viewerId, ctx, previewRequest(c)),
+						contextFor(work, userId, ctx, previewRequest(c)),
 					),
 					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
-					await allowanceSpent(viewerId, sharedBy),
-					viewerId,
+					await allowanceSpent(userId, sharedBy),
+					userId,
 					pageRow?.count ?? 0,
 					// The one page a reader actually opens a text Work, a game or an image
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
-					(await parentalTimeGate(viewerId, work)) !== null,
+					(await parentalTimeGate(userId, work)) !== null,
 				)),
 				creator,
 				creatorHasStripe,
@@ -3997,7 +3997,7 @@ const contentRoutes = new Hono()
 	 */
 	.get("/open-works", async (c) => {
 		const limit = Math.min(24, Math.max(1, Number(c.req.query("limit") ?? 12)));
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 
 		/** True when this access table has a row opening the Work to everyone, for free. */
 		const openToEveryone = (column: SQL | unknown) => sql`EXISTS (
@@ -4016,7 +4016,7 @@ const contentRoutes = new Hono()
 					eq(works.visibility, "released"),
 					eq(works.streamEnabled, true),
 					openToEveryone(works.access),
-					notBlockedBy(viewerId, works.creatorId),
+					notBlockedBy(userId, works.creatorId),
 					// Suspended accounts are out of the commons entirely, beside the block
 					// filter a reader already sees here.
 					notSuspendedAccount(works.creatorId),
@@ -4029,10 +4029,10 @@ const contentRoutes = new Hono()
 					// redundant half of a two-rule guard until the paywall was retired; it is
 					// now the only rule standing between the commons and an unverified
 					// visitor.
-					(await adultVisibility(viewerId)).hidden,
+					(await adultVisibility(userId)).hidden,
 					// A guardian's blocks hide as well as refuse — a shelf of cards a child
 					// cannot click is an advertisement, not a protection.
-					(await parentalVisibility(viewerId)).hidden,
+					(await parentalVisibility(userId)).hidden,
 				),
 			)
 			.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -4074,11 +4074,11 @@ const contentRoutes = new Hono()
 				? await accountByHandle(resolution.redirectToHandle)
 				: undefined);
 		if (!account) return c.json({ error: "Creator not found" }, 404);
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 		// A suspended creator's Catalog is gone with the rest of their presence — the
 		// same 404 an unknown handle returns, from the route that already treats hidden
 		// as absent.
-		if (viewerId !== account.id && (await isSuspendedAccount(account.id))) {
+		if (userId !== account.id && (await isSuspendedAccount(account.id))) {
 			return c.json({ error: "Creator not found" }, 404);
 		}
 		const creator = {
@@ -4089,15 +4089,15 @@ const contentRoutes = new Hono()
 
 		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
 		// A creator browsing their own Catalog sees drafts too; nobody else does.
-		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
+		if (userId !== creator.id) conditions.push(eq(works.visibility, "released"));
 		if (type) conditions.push(eq(works.type, type));
 		// 🚨 A creator profile is one of the non-feed surfaces the wiki's *Content Standards* left open, and it is
 		// settled: a reader who has not opted in meets nothing at all rather than an
 		// interstitial. The accepted cost is that this Catalog is silently incomplete for
 		// them — the alternative was announcing the existence and usually the title of work
 		// the rung specifically does not give an existence to.
-		const adultHidden = (await adultVisibility(viewerId)).hidden;
-		const parentalHidden = (await parentalVisibility(viewerId)).hidden;
+		const adultHidden = (await adultVisibility(userId)).hidden;
+		const parentalHidden = (await parentalVisibility(userId)).hidden;
 		if (adultHidden) conditions.push(adultHidden);
 		// A guardian's blocks hide as well as refuse — a shelf of cards a child cannot
 		// click is an advertisement, not a protection.
@@ -4120,8 +4120,8 @@ const contentRoutes = new Hono()
 		const ids = rows.map((r) => r.id);
 		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(ids);
 		const [ctx, catalogSpent] = await Promise.all([
-			buildAccessContext(viewerId, { workIds: ids }),
-			allowanceSpent(viewerId),
+			buildAccessContext(userId, { workIds: ids }),
+			allowanceSpent(userId),
 		]);
 		await Promise.all(rows.map(resolveWorkThumbnail));
 
@@ -4129,14 +4129,14 @@ const contentRoutes = new Hono()
 			creator,
 			works: await Promise.all(
 				rows.map((w) =>
-					serializeWorkForViewer(
+					serializeWorkForUser(
 						w,
 						assetsByWork.get(w.id) ?? [],
 						jobByWork.get(w.id) ?? null,
-						resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
+						resolveAccessSync(w as AccessibleWork, contextFor(w, userId, ctx, preview)),
 						deliveryCtx(),
 						catalogSpent,
-						viewerId,
+						userId,
 						pagesByWork.get(w.id) ?? 0,
 					),
 				),
@@ -4754,20 +4754,20 @@ const contentRoutes = new Hono()
 		// it, so a project holding only Adult work would otherwise announce that work's existence
 		// to somebody who has not opted in — the thing the rung withholds. A project with no
 		// released Works at all is still listed, since there is nothing in it to disclose.
-		const listingViewerId = await getOptionalUserId(c);
-		const [{ prefs: viewerPrefs }, { policy: viewerPolicy }] = await Promise.all([
-			adultVisibility(listingViewerId),
-			parentalVisibility(listingViewerId),
+		const listingUserId = await getOptionalUserId(c);
+		const [{ prefs: userPrefs }, { policy: userPolicy }] = await Promise.all([
+			adultVisibility(listingUserId),
+			parentalVisibility(listingUserId),
 		]);
 		const memberVisible = and(
 			maturityHiddenFrom(
-				viewerPrefs,
-				listingViewerId,
+				userPrefs,
+				listingUserId,
 				sql`w.creator_id`,
 				sql`w.maturity`,
 				sql`w.maturity_rows`,
 			),
-			parentalHiddenFrom(viewerPolicy, listingViewerId, sql`w.creator_id`, sql`w.type`),
+			parentalHiddenFrom(userPolicy, listingUserId, sql`w.creator_id`, sql`w.type`),
 		);
 		conditions.push(sql`(
 			NOT EXISTS (
@@ -4822,9 +4822,9 @@ const contentRoutes = new Hono()
 			// filter would empty the list every time and read as a broken page rather than
 			// as a filter doing its job. "Hide what I can't open" only means something
 			// once there is something you can.
-			const viewerId = await getOptionalUserId(c);
-			if (showLocked !== "true" && viewerId != null) {
-				const ctx = await buildAccessContext(viewerId);
+			const userId = await getOptionalUserId(c);
+			if (showLocked !== "true" && userId != null) {
+				const ctx = await buildAccessContext(userId);
 				// The access table compares against what the viewer gives *that Work's creator*,
 				// a different number per row, so the viewer's allocations travel as a jsonb map
 				// keyed by creator id and are looked up per row.
@@ -4835,7 +4835,7 @@ const contentRoutes = new Hono()
 				const purchased = [...ctx.purchasedWorkIds].map(Number).filter(Number.isInteger);
 				conditions.push(
 					containsWork(sql`(
-						${viewerId} = w.creator_id
+						${userId} = w.creator_id
 						OR w.id = ANY(${sql.raw(`ARRAY[${purchased.length ? purchased.join(",") : ""}]::int[]`)})
 						OR EXISTS (
 							SELECT 1 FROM jsonb_array_elements(COALESCE(w.access, '[]'::jsonb)) r
@@ -4989,7 +4989,7 @@ const contentRoutes = new Hono()
 
 	.get("/projects/:slug", async (c) => {
 		const { slug } = c.req.param();
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 
 		const result = await db
 			.select({
@@ -5037,7 +5037,7 @@ const contentRoutes = new Hono()
 					// members', so a draft added to a project leaked its title, slug and
 					// thumbnail to anyone holding the project URL. Metadata only — post detail
 					// already 404'd and the delivery routes re-resolve — but a leak all the same.
-					viewerId === row.project.creatorId ? undefined : eq(posts.isPublished, true),
+					userId === row.project.creatorId ? undefined : eq(posts.isPublished, true),
 				),
 			)
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
@@ -5052,13 +5052,13 @@ const contentRoutes = new Hono()
 				and(
 					eq(projectItems.projectId, row.project.id),
 					// A creator browsing their own project sees drafts; nobody else does.
-					viewerId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
+					userId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
 					// A project is a listing like any other, so an Adult member is absent
 					// from it rather than present and locked.
-					(await adultVisibility(viewerId)).hidden,
+					(await adultVisibility(userId)).hidden,
 					// A guardian's blocks hide as well as refuse — a shelf of cards a child
 					// cannot click is an advertisement, not a protection.
-					(await parentalVisibility(viewerId)).hidden,
+					(await parentalVisibility(userId)).hidden,
 				),
 			)
 			.orderBy(asc(projectItems.sortOrder));
@@ -5066,8 +5066,8 @@ const contentRoutes = new Hono()
 		const memberWorkIds = itemRows.map((r) => r.work.id);
 		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(memberWorkIds);
 		const [workCtx, projectSpent] = await Promise.all([
-			buildAccessContext(viewerId, { workIds: memberWorkIds }),
-			allowanceSpent(viewerId),
+			buildAccessContext(userId, { workIds: memberWorkIds }),
+			allowanceSpent(userId),
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
@@ -5082,17 +5082,17 @@ const contentRoutes = new Hono()
 				works: await Promise.all(
 					itemRows.map(async (m) => ({
 						sortOrder: m.sortOrder,
-						...(await serializeWorkForViewer(
+						...(await serializeWorkForUser(
 							m.work,
 							assetsByWork.get(m.work.id) ?? [],
 							jobByWork.get(m.work.id) ?? null,
 							resolveAccessSync(
 								m.work as AccessibleWork,
-								contextFor(m.work, viewerId, workCtx, previewRequest(c)),
+								contextFor(m.work, userId, workCtx, previewRequest(c)),
 							),
 							deliveryCtx(),
 							projectSpent,
-							viewerId,
+							userId,
 							pagesByWork.get(m.work.id) ?? 0,
 						)),
 					})),
@@ -5816,7 +5816,7 @@ const contentRoutes = new Hono()
 								// Derived from `purchases` on every read, never stamped on the row —
 								// so a refund releases the entry with nothing to keep in step.
 								purchased: permanent.has(w.id),
-								work: await serializeWorkForViewer(
+								work: await serializeWorkForUser(
 									w,
 									assetsByWork.get(w.id) ?? [],
 									jobByWork.get(w.id) ?? null,

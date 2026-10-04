@@ -19,7 +19,7 @@
  * that was established rather than assumed.** Hoisting the share clause to the top of the
  * resolver turns gated and priced work red — and leaves Adult green, because the *route*
  * 404s an Adult Work before the resolver is reached, and leaves the skeleton-key test green,
- * because `requireViewerOrShareLink` refuses a token naming a different Work before that. Both
+ * because `requireUserOrShareLink` refuses a token naming a different Work before that. Both
  * are genuinely layered rather than duplicated, so both are asserted **twice** below: once at
  * the surface a recipient actually lands on, and once at a delivery route, which has neither
  * of those outer guards and therefore reaches the resolver's own answer.

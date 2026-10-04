@@ -451,7 +451,7 @@ interface WorkEligibility {
  */
 async function loadWorkEligibility(
 	workIds: number[],
-	viewerId: number | null,
+	userId: number | null,
 	sharedBy: number | null = null,
 ): Promise<Map<number, WorkEligibility>> {
 	const byId = new Map<number, WorkEligibility>();
@@ -460,7 +460,7 @@ async function loadWorkEligibility(
 	const workRows = await db.select().from(works).where(inArray(works.id, workIds));
 	if (workRows.length === 0) return byId;
 
-	const ctx = await buildAccessContext(viewerId, {
+	const ctx = await buildAccessContext(userId, {
 		workIds: workRows.map((w) => w.id),
 		sharedBy,
 	});
@@ -530,7 +530,7 @@ async function attributionFor(
  * A session, **or** a live share link. See the note on `POST /attention` for why this
  * endpoint wants an *attributable* caller rather than a logged-in one.
  */
-const requireAttributableViewer = createMiddleware(async (c, next) => {
+const requireAttributableUser = createMiddleware(async (c, next) => {
 	const token = c.req.query("share");
 	if (token && (await resolveShareToken(token))) return next();
 	return requireAuth(c, next);
@@ -1103,7 +1103,7 @@ const subscriptionRoutes = new Hono()
 
 	// ── Time (Attention) Events ──────────────────────────────────────────────
 	/**
-	 * 🚨 **`requireAuth` became `requireAttributableViewer` on 2026-08-28, and the name is the
+	 * 🚨 **`requireAuth` became `requireAttributableUser` on 2026-08-28, and the name is the
 	 * whole argument.** This endpoint is where time turns into money, so what it has always
 	 * needed is not a *logged-in* caller but an *attributable* one — somebody a creator can be
 	 * paid on behalf of. An account is the ordinary way to be that. A **share link** is the
@@ -1117,7 +1117,7 @@ const subscriptionRoutes = new Hono()
 	 */
 	.post(
 		"/attention",
-		requireAttributableViewer,
+		requireAttributableUser,
 		zValidator(
 			"query",
 			z.object({
@@ -2136,7 +2136,7 @@ const subscriptionRoutes = new Hono()
 		if (!STICKER_SUBJECTS.includes(subjectType as StickerSubject) || !Number.isInteger(subjectId)) {
 			return c.json({ error: "Bad subject" }, 400);
 		}
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 		const rows = await db
 			.select({ id: stickers.id, artKey: stickers.artKey, giverId: stickers.giverId })
 			.from(stickers)
@@ -2156,7 +2156,7 @@ const subscriptionRoutes = new Hono()
 			const key = row.artKey ?? "";
 			const entry = byArt.get(key) ?? { artKey: key, count: 0, mine: [] };
 			entry.count++;
-			if (viewerId && row.giverId === viewerId) entry.mine.push(row.id);
+			if (userId && row.giverId === userId) entry.mine.push(row.id);
 			byArt.set(key, entry);
 		}
 		return c.json({ stickers: [...byArt.values()] });

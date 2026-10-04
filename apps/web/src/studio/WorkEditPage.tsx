@@ -669,7 +669,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			 * Lyrics — plain text, untimestamped, under the player where a listener reads them.
 			 *
 			 * The help text says the gate covers them on purpose. Lyrics ride with the payload
-			 * (`serializeWorkForViewer` blanks them alongside the audio), and a creator who
+			 * (`serializeWorkForUser` blanks them alongside the audio), and a creator who
 			 * assumed the opposite would only find out from a reader. The escape hatch is stated
 			 * too: Description stays visible when locked.
 			 */

@@ -45,7 +45,7 @@ function cycleKey(): string {
  * cycle — the picker's own replace-not-stack rule), so hopping down is honest: $12 → $3
  * reads as $3, never as $15.
  */
-export async function applyAnthersSupport(viewerId: number, dollars: string): Promise<void> {
+export async function applyAnthersSupport(userId: number, dollars: string): Promise<void> {
 	const anthers = await anthersUserIdOfSession();
 	// Free is the absence of a holding (the 2026-10-03 reversal), not a rung at $0: the
 	// $0 hop clears the viewer's Anthers holdings and writes nothing, which is the same
@@ -54,7 +54,7 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 		await db
 			.delete(userBadges)
 			.where(
-				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
+				sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
 			);
 		return;
 	}
@@ -71,10 +71,10 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 	await db
 		.delete(userBadges)
 		.where(
-			sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
+			sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
 		);
 	await db.insert(userBadges).values({
-		userId: viewerId,
+		userId: userId,
 		badgeId: rung.id,
 		billingCycle: cycleKey(),
 	});
@@ -96,11 +96,11 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
  * freshly created dev user has no `billing_accounts` row (the table is lazily created),
  * so the upsert is the hop, not an update behind a lookup.
  */
-export async function applySupportBudget(viewerId: number, dollars: string): Promise<void> {
+export async function applySupportBudget(userId: number, dollars: string): Promise<void> {
 	await db
 		.insert(billingAccounts)
 		.values({
-			userId: viewerId,
+			userId: userId,
 			directedBudget: dollars,
 			isActive: true,
 		})

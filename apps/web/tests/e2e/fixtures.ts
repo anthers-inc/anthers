@@ -25,18 +25,18 @@ export const API_URL = `http://localhost:${process.env.API_PORT ?? 8000}`;
  * cookie). The gauntlet project loads it via its `use.storageState`.
  */
 export const AUTH_STATE_PATH = fileURLToPath(
-	new URL("./.auth/gauntlet-viewer.json", import.meta.url),
+	new URL("./.auth/gauntlet-walker.json", import.meta.url),
 );
 
 /**
  * Where the walk setup project (`gauntlet-walk.setup.ts`) writes its own viewer's storage
  * state — the gauntlet walk project's session, over its OWN fixture instance
- * (`walk-viewer`, instance B). Deliberately a different file from
+ * (`walk-walker`, instance B). Deliberately a different file from
  * `AUTH_STATE_PATH`: the two projects' sessions must not share state, which is the same
  * isolation the walk's separate fixture rows buy.
  */
 export const WALK_AUTH_STATE_PATH = fileURLToPath(
-	new URL("./.auth/gauntlet-walk-viewer.json", import.meta.url),
+	new URL("./.auth/gauntlet-walk-walker.json", import.meta.url),
 );
 
 /**

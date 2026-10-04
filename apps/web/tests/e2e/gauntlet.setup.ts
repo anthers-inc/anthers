@@ -19,16 +19,16 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_VIEWER_EMAIL } from "@anthers/db/gauntlet";
+import { GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
 import { expect, test as setup } from "@playwright/test";
 import { API_URL, AUTH_STATE_PATH, emailedCode, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 setup("reset the gauntlet fixture and sign the viewer in", async () => {
-	// Canonical fixture reset. --ensure-viewer creates gauntlet_viewer on first run and
+	// Canonical fixture reset. --ensure-walker creates gauntlet_walker on first run and
 	// targets it thereafter, so the walk never touches the dev account.
-	execFileSync("bun", ["run", "db:gauntlet", "--ensure-viewer"], {
+	execFileSync("bun", ["run", "db:gauntlet", "--ensure-walker"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
@@ -54,13 +54,13 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 	await fetch(`${API_URL}/api/auth/signin/start`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({ email: GAUNTLET_VIEWER_EMAIL }),
+		body: JSON.stringify({ email: GAUNTLET_WALKER_EMAIL }),
 	});
-	const code = await emailedCode(GAUNTLET_VIEWER_EMAIL);
+	const code = await emailedCode(GAUNTLET_WALKER_EMAIL);
 	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email: GAUNTLET_VIEWER_EMAIL, code }),
+		body: JSON.stringify({ email: GAUNTLET_WALKER_EMAIL, code }),
 	});
 	expect(res.ok, `sign-in failed: ${res.status} ${await res.text().catch(() => "")}`).toBe(true);
 

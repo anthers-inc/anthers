@@ -272,7 +272,7 @@ export async function consumedSeconds(
  */
 export function parentalHiddenFrom(
 	policy: ParentalPolicy,
-	viewerId: number | null,
+	userId: number | null,
 	creatorColumn: SQL | unknown = works.creatorId,
 	typeColumn: SQL | unknown = works.type,
 ): SQL | undefined {
@@ -330,15 +330,15 @@ export function parentalHiddenFrom(
 
 	if (conditions.length === 0) return undefined;
 	const all = sql.join(conditions, sql` AND `);
-	if (viewerId == null) return sql`(${all})`;
-	return sql`((${all}) OR ${creatorColumn} = ${viewerId})`;
+	if (userId == null) return sql`(${all})`;
+	return sql`((${all}) OR ${creatorColumn} = ${userId})`;
 }
 
 /** The policy and the listing condition that follows, in one step. */
-export async function parentalVisibility(viewerId: number | null): Promise<{
+export async function parentalVisibility(userId: number | null): Promise<{
 	policy: ParentalPolicy;
 	hidden: SQL | undefined;
 }> {
-	const policy = await parentalPolicyFor(viewerId);
-	return { policy, hidden: parentalHiddenFrom(policy, viewerId) };
+	const policy = await parentalPolicyFor(userId);
+	return { policy, hidden: parentalHiddenFrom(policy, userId) };
 }

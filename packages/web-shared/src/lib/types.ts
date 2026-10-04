@@ -1016,7 +1016,7 @@ export interface AnalyticsOverview {
 		listens: number;
 	};
 	totalDurationHours: number;
-	uniqueViewers: number;
+	uniqueUsers: number;
 	contentCounts: {
 		projects: number;
 		posts: number;

@@ -31,11 +31,11 @@ export const GAUNTLET_CREATOR_EMAIL = `${GAUNTLET_PREFIX}creator@example.test`;
  * dev account (`DEV_ACCOUNT_USERNAME`), but the e2e spec needs an account it may freely
  * reset — so it owns both ends of the walk. Signing either fixture in is the emailed
  * code, read from the session's mail catcher; no account holds a password. Created on
- * demand by `seed-gauntlet.ts --ensure-viewer`; email pre-verified because checkout and
+ * demand by `seed-gauntlet.ts --ensure-walker`; email pre-verified because checkout and
  * giving carry `requireVerified`.
  */
-export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
-export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
+export const GAUNTLET_WALKER_USERNAME = `${GAUNTLET_PREFIX}walker`;
+export const GAUNTLET_WALKER_EMAIL = `${GAUNTLET_PREFIX}walker@example.test`;
 
 /**
  * The session's stand-in for the Anthers creator account, which owns the seeded Anthers

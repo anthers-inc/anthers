@@ -11,7 +11,7 @@
  * ⚠️ This module intentionally does not decide whether the caller is the contributor. The
  * route layer checks that; this layer trusts its caller to supply the right user id.
  *
- * Alongside the accept/reject flow, this module owns the **viewer overlay** (`creditsForViewer`)
+ * Alongside the accept/reject flow, this module owns the **viewer overlay** (`creditsForUser`)
  * and the credit-offered notification (`notifyCreditedAccounts`) — the two halves of showing
  * credits to people who were not in the room when they were written. The routes call both and
  * decide nothing.
@@ -350,12 +350,12 @@ interface OverlayWork {
  * ⚠️ **Only queries when a Work's credits actually contain a DID string**, so the common
  * case — no credits, or none naming an identity — pays nothing.
  *
- * Like the rest of this module, it trusts its caller for who the viewer is: `viewerId` is
+ * Like the rest of this module, it trusts its caller for who the viewer is: `userId` is
  * the signed-in account's id or null for a signed-out viewer.
  */
-export async function creditsForViewer(
+export async function creditsForUser(
 	work: OverlayWork,
-	viewerId: number | null,
+	userId: number | null,
 ): Promise<ViewerWorkCredit[]> {
 	const credits = work.credits ?? [];
 	// The one DID-parse is `creditContributorIsDid`; nothing here re-derives it.
@@ -366,7 +366,7 @@ export async function creditsForViewer(
 
 	// One read each for the acceptances and the accounts behind the DIDs, batched over the
 	// whole credits array — a Work naming five identities still pays two queries.
-	const [acceptedRows, accountRows, viewerRows] = await Promise.all([
+	const [acceptedRows, accountRows, userRows] = await Promise.all([
 		db
 			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
 			.from(creditAcceptances)
@@ -383,11 +383,11 @@ export async function creditsForViewer(
 			.where(inArray(users.atprotoDid, dids)),
 		// The named-person exception needs the viewer's own DID. A second users read rather
 		// than a parameter, because the call sites hold a user id and nothing else.
-		viewerId != null
+		userId != null
 			? db
 					.select({ atprotoDid: users.atprotoDid })
 					.from(users)
-					.where(eq(users.id, viewerId))
+					.where(eq(users.id, userId))
 					.limit(1)
 			: Promise.resolve([] as { atprotoDid: string }[]),
 	]);
@@ -395,8 +395,8 @@ export async function creditsForViewer(
 	const nameForDid = new Map(
 		accountRows.map((r) => [r.atprotoDid, r.displayName?.trim() || r.handle]),
 	);
-	const viewerDid = viewerRows[0]?.atprotoDid ?? null;
-	const isCreator = viewerId != null && viewerId === work.creatorId;
+	const userDid = userRows[0]?.atprotoDid ?? null;
+	const isCreator = userId != null && userId === work.creatorId;
 
 	const visible: ViewerWorkCredit[] = [];
 	for (const credit of credits) {
@@ -410,10 +410,10 @@ export async function creditsForViewer(
 			// its own DID), so a miss is the invariant broken. Withheld rather than named: a
 			// bare `did:` string in public copy is exactly what this overlay exists to prevent.
 			if (name) visible.push({ ...credit, contributor: name });
-			else if (isCreator || viewerDid === credit.contributor) visible.push(credit);
+			else if (isCreator || userDid === credit.contributor) visible.push(credit);
 			continue;
 		}
-		if (viewerDid === credit.contributor) {
+		if (userDid === credit.contributor) {
 			visible.push({ ...credit, awaitingYourConfirmation: true });
 			continue;
 		}
@@ -438,7 +438,7 @@ export async function creditsForViewer(
  * stored DID replaced by a display name would stop matching it — the published record
  * would then withhold a credit the person had accepted, and an unrelated title edit
  * would be what destroyed the linkage. Resolution-to-name is the VIEWER overlay's job
- * (`creditsForViewer`), because the public Work page only renders.
+ * (`creditsForUser`), because the public Work page only renders.
  *
  * The flags carry the only thing an owner cannot see from the raw rows alone: which
  * identity credits are still awaiting their contributor's word.

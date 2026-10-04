@@ -11,22 +11,22 @@
  * Usage:
  *   bun run db:gauntlet                 # reset to the floor (make gauntlet-reset)
  *   bun run db:gauntlet --user alice    # use a viewer other than DEV_ACCOUNT_USERNAME
- *   bun run db:gauntlet --ensure-viewer # create + use the harness's own gauntlet_viewer
+ *   bun run db:gauntlet --ensure-walker # create + use the harness's own gauntlet_walker
  *   bun run db:gauntlet --clean         # remove the fixture entirely, then stop
  *   bun run db:gauntlet --instance walk # the walk's OWN instance — see below
  *
- * The viewer defaults to your dev account (`DEV_ACCOUNT_USERNAME` in `.env`). Its rows are
+ * The walker defaults to your dev account (`DEV_ACCOUNT_USERNAME` in `.env`). Its rows are
  * *reset*, never deleted — the account itself, its password and its other content survive.
  * Only this fixture's own footprint (the `gauntlet_` creator + `gauntlet-` posts, and the
- * viewer's relationship to them) is touched.
+ * walker's relationship to them) is touched.
  *
- * `--ensure-viewer` is the e2e harness's entry point: it creates the fixture-owned
- * `gauntlet_viewer` account if missing (email pre-verified, not a creator) and resets THAT
- * viewer — so the automated walk never touches the dev account, and works where no dev
+ * `--ensure-walker` is the e2e harness's entry point: it creates the fixture-owned
+ * `gauntlet_walker` account if missing (email pre-verified, not a creator) and resets THAT
+ * walker — so the automated walk never touches the dev account, and works where no dev
  * account exists at all (CI).
  *
  * **Instances.** `--instance walk` seeds the walk's own copy of the fixture instead of the
- * shared one: the `walk-creator` / `walk-viewer` accounts and the `walk-gauntlet-` posts
+ * shared one: the `walk-creator` / `walk-walker` accounts and the `walk-gauntlet-` posts
  * defined in `gauntlet-walk.ts`. The e2e `authed` project runs on instance A (the
  * default), and the e2e `gauntlet` walk runs on instance B — both reset their own fixture
  * in their own setup, which is safe only because the two row sets are disjoint. The Anthers stand-in and the
@@ -65,8 +65,8 @@ import {
 	GAUNTLET_ANTHERS_USERNAME,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
-	GAUNTLET_VIEWER_EMAIL,
-	GAUNTLET_VIEWER_USERNAME,
+	GAUNTLET_WALKER_EMAIL,
+	GAUNTLET_WALKER_USERNAME,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
 import {
@@ -75,8 +75,8 @@ import {
 	WALK_CREATOR_USERNAME,
 	WALK_POSTS,
 	WALK_SLUG_PREFIX,
-	WALK_VIEWER_EMAIL,
-	WALK_VIEWER_USERNAME,
+	WALK_WALKER_EMAIL,
+	WALK_WALKER_USERNAME,
 } from "@anthers/db/gauntlet-walk";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
@@ -96,9 +96,9 @@ interface Instance {
 	/** The instance's own creator, whose account and Works the seeding owns. */
 	creatorUsername: string;
 	creatorEmail: string;
-	/** The instance's own viewer — the account `--ensure-viewer` creates and resets. */
-	viewerUsername: string;
-	viewerEmail: string;
+	/** The instance's own viewer — the account `--ensure-walker` creates and resets. */
+	walkerUsername: string;
+	userEmail: string;
 	/** The instance's slug prefix; `deleteGauntletPosts` scopes deletions with it. */
 	slugPrefix: string;
 	/** The instance's posts, carrying its slug prefix and its publicId range. */
@@ -113,8 +113,8 @@ interface Instance {
 const INSTANCE_A: Instance = {
 	creatorUsername: GAUNTLET_CREATOR_USERNAME,
 	creatorEmail: GAUNTLET_CREATOR_EMAIL,
-	viewerUsername: GAUNTLET_VIEWER_USERNAME,
-	viewerEmail: GAUNTLET_VIEWER_EMAIL,
+	walkerUsername: GAUNTLET_WALKER_USERNAME,
+	userEmail: GAUNTLET_WALKER_EMAIL,
 	slugPrefix: GAUNTLET_SLUG_PREFIX,
 	posts: GAUNTLET_POSTS,
 	badges: GAUNTLET_BADGES,
@@ -125,8 +125,8 @@ const INSTANCE_A: Instance = {
 const INSTANCE_WALK: Instance = {
 	creatorUsername: WALK_CREATOR_USERNAME,
 	creatorEmail: WALK_CREATOR_EMAIL,
-	viewerUsername: WALK_VIEWER_USERNAME,
-	viewerEmail: WALK_VIEWER_EMAIL,
+	walkerUsername: WALK_WALKER_USERNAME,
+	userEmail: WALK_WALKER_EMAIL,
 	slugPrefix: WALK_SLUG_PREFIX,
 	posts: WALK_POSTS,
 	badges: WALK_BADGES,
@@ -163,21 +163,21 @@ const CONTENT_ROOT = localContentRoot();
 
 /**
  * Resolve the viewer whose relationship with the creator the gauntlet walks.
- * `inst` names the default viewer only — the walk instance's `--ensure-viewer` resolves
- * the walk viewer, instance A's resolves `gauntlet_viewer` — while `--user` still
+ * `inst` names the default viewer only — the walk instance's `--ensure-walker` resolves
+ * the walk viewer, instance A's resolves `gauntlet_walker` — while `--user` still
  * overrides which viewer gets reset, in either instance.
  */
-function resolveViewerUsername(inst: Instance): string {
+function resolveWalkerUsername(inst: Instance): string {
 	const flagIndex = process.argv.indexOf("--user");
 	const fromFlag = flagIndex !== -1 ? process.argv[flagIndex + 1]?.trim() : undefined;
-	if (process.argv.includes("--ensure-viewer")) {
+	if (process.argv.includes("--ensure-walker")) {
 		// The harness's own account; --user may still override which viewer gets reset.
-		return fromFlag || inst.viewerUsername;
+		return fromFlag || inst.walkerUsername;
 	}
 	const username = fromFlag || process.env.DEV_ACCOUNT_USERNAME?.trim();
 	if (!username) {
 		throw new Error(
-			"No account to reset. Set DEV_ACCOUNT_USERNAME in .env (the account `make dev` bootstraps), pass --user <username>, or pass --ensure-viewer for the harness's own account.",
+			"No account to reset. Set DEV_ACCOUNT_USERNAME in .env (the account `make dev` bootstraps), pass --user <username>, or pass --ensure-walker for the harness's own account.",
 		);
 	}
 	return username;
@@ -188,13 +188,13 @@ async function ensureViewer(inst: Instance): Promise<void> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, await fixtureHandle(inst.viewerUsername)))
+		.where(eq(users.atprotoHandle, await fixtureHandle(inst.walkerUsername)))
 		.limit(1);
 	if (existing) return;
 
 	const created = await createLocalAccount({
-		email: inst.viewerEmail,
-		handleName: inst.viewerUsername,
+		email: inst.userEmail,
+		handleName: inst.walkerUsername,
 		// Pre-verified: checkout and support carry requireVerified, and there is no email loop to
 		// click through in a headless run. Signing in is the emailed code, read from the
 		// session's mail catcher by the spec's own setup.
@@ -208,7 +208,7 @@ async function ensureViewer(inst: Instance): Promise<void> {
 			termsAcceptedAt: new Date(),
 		},
 	});
-	console.log(`${TAG} created viewer "${inst.viewerUsername}" (id ${created.id})`);
+	console.log(`${TAG} created walker "${inst.walkerUsername}" (id ${created.id})`);
 }
 
 /**
@@ -501,18 +501,18 @@ async function resetGates(inst: Instance, creatorId: number): Promise<void> {
  * Put the viewer back on the floor. Everything here is scoped to this fixture — the
  * viewer's own account, content and other relationships are left alone.
  */
-async function resetViewer(viewerId: number, creatorId: number, postIds: number[]): Promise<void> {
+async function resetWalker(userId: number, creatorId: number, postIds: number[]): Promise<void> {
 	// The floor is no holding at all: Free is the absence of Anthers-ladder and creator-ladder
 	// rows this cycle, and the viewer's Anthers-side reads answer 0 for a user with no
 	// holdings — which is what "Badge back to Free" means under the Badge model. The Anthers
 	// ladder's rungs go too, since a prior hop may have parked one on the staircase. There is no
 	// billing row to touch: the amounts the old reset zeroed are `user_badges` holdings
 	// now, and the billing table carries no amount to reset.
-	await db.delete(userBadges).where(eq(userBadges.userId, viewerId));
+	await db.delete(userBadges).where(eq(userBadges.userId, userId));
 
 	await db
 		.delete(follows)
-		.where(and(eq(follows.followerId, viewerId), eq(follows.creatorId, creatorId)));
+		.where(and(eq(follows.followerId, userId), eq(follows.creatorId, creatorId)));
 
 	// Badge holdings ratchet within a cycle (add-only), so a re-run inside the same month
 	// CANNOT walk back down through the UI. Clearing the viewer's holdings on this creator
@@ -523,18 +523,18 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 	await db
 		.delete(userBadges)
 		.where(
-			sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+			sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
 		);
 
 	await db
 		.delete(poolDistributions)
 		.where(
-			and(eq(poolDistributions.subscriberId, viewerId), eq(poolDistributions.creatorId, creatorId)),
+			and(eq(poolDistributions.subscriberId, userId), eq(poolDistributions.creatorId, creatorId)),
 		);
 
 	await db
 		.delete(attentionEvents)
-		.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.creatorId, creatorId)));
+		.where(and(eq(attentionEvents.userId, userId), eq(attentionEvents.creatorId, creatorId)));
 
 	// A purchase unlocks permanently, so a leftover one would silently pre-open G9.
 	//
@@ -548,7 +548,7 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 		.delete(purchases)
 		.where(
 			and(
-				eq(purchases.buyerId, viewerId),
+				eq(purchases.buyerId, userId),
 				like(purchases.stripePaymentIntentId, "pi_gauntlet_hop_%"),
 			),
 		);
@@ -561,7 +561,7 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 			.delete(comments)
 			.where(
 				and(
-					eq(comments.userId, viewerId),
+					eq(comments.userId, userId),
 					eq(comments.subjectType, "post"),
 					inArray(comments.subjectId, postIds),
 				),
@@ -600,19 +600,19 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	if (process.argv.includes("--ensure-viewer")) {
+	if (process.argv.includes("--ensure-walker")) {
 		await ensureViewer(inst);
 	}
-	const viewerUsername = resolveViewerUsername(inst);
-	const viewerHandle = await fixtureHandle(viewerUsername);
+	const walkerUsername = resolveWalkerUsername(inst);
+	const userHandle = await fixtureHandle(walkerUsername);
 	const [viewer] = await db
 		.select({ id: users.id, handle: users.atprotoHandle })
 		.from(users)
-		.where(eq(users.atprotoHandle, viewerHandle))
+		.where(eq(users.atprotoHandle, userHandle))
 		.limit(1);
 	if (!viewer) {
 		throw new Error(
-			`Viewer "${viewerUsername}" not found. Run \`make dev\` once (it bootstraps DEV_ACCOUNT_USERNAME), or pass --user with an account that exists.`,
+			`Viewer "${walkerUsername}" not found. Run \`make dev\` once (it bootstraps DEV_ACCOUNT_USERNAME), or pass --user with an account that exists.`,
 		);
 	}
 
@@ -625,7 +625,7 @@ async function main(): Promise<void> {
 		postIds.push(await createPost(creatorId, spec));
 	}
 	await resetGates(inst, creatorId);
-	await resetViewer(viewer.id, creatorId, postIds);
+	await resetWalker(viewer.id, creatorId, postIds);
 
 	// The Anthers ladder is platform state, not dev-account state: every reader of "what the
 	// viewer holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws

@@ -276,7 +276,7 @@ export async function creatorAnalyticsRanges<K extends string>(
 	creatorId: number,
 	since: Date,
 	groupBy: (row: { creatorId: number; workId: number | null; eventType: string; day: string }) => K,
-): Promise<Array<{ key: K; totalSeconds: number; eventCount: number; viewers: Set<number> }>> {
+): Promise<Array<{ key: K; totalSeconds: number; eventCount: number; users: Set<number> }>> {
 	const rows = await db
 		.select({
 			id: attentionEvents.id,
@@ -293,24 +293,24 @@ export async function creatorAnalyticsRanges<K extends string>(
 		.from(attentionEvents)
 		.where(and(eq(attentionEvents.creatorId, creatorId), sql`${RANGE_END} > ${iso(since)}`));
 
-	// Group rows by viewer, split each viewer's ranges against their own, then fold
-	// into the caller's buckets. Splitting across viewers would divide seconds that
+	// Group rows by user, split each user's ranges against their own, then fold
+	// into the caller's buckets. Splitting across users would divide seconds that
 	// were never contested — two people can watch the same minute whole.
-	const byViewer = new Map<number, typeof rows>();
+	const byUser = new Map<number, typeof rows>();
 	for (const r of rows) {
-		const list = byViewer.get(r.userId) ?? [];
+		const list = byUser.get(r.userId) ?? [];
 		list.push(r);
-		byViewer.set(r.userId, list);
+		byUser.set(r.userId, list);
 	}
 
 	const nowMs = Date.now();
 	const groups = new Map<
 		K,
-		{ key: K; totalSeconds: number; eventCount: number; viewers: Set<number> }
+		{ key: K; totalSeconds: number; eventCount: number; users: Set<number> }
 	>();
-	for (const [viewerId, viewerRows] of byViewer) {
-		const credited = splitRows(viewerRows, since, new Date(nowMs));
-		for (const row of viewerRows) {
+	for (const [userId, userRows] of byUser) {
+		const credited = splitRows(userRows, since, new Date(nowMs));
+		for (const row of userRows) {
 			const seconds = credited.get(row.id) ?? 0;
 			const day = (
 				row.startedAt ?? new Date(row.createdAt.getTime() - (row.durationSeconds ?? 0) * 1_000)
@@ -327,11 +327,11 @@ export async function creatorAnalyticsRanges<K extends string>(
 				key,
 				totalSeconds: 0,
 				eventCount: 0,
-				viewers: new Set<number>(),
+				users: new Set<number>(),
 			};
 			held.totalSeconds += seconds;
 			held.eventCount += 1;
-			held.viewers.add(viewerId);
+			held.users.add(userId);
 			groups.set(key, held);
 		}
 	}

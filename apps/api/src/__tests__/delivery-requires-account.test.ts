@@ -61,11 +61,11 @@ const TEXT_BODY = "<p>prose-that-requires-an-account</p>";
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `dra_creator_${id}`;
-const viewerName = `dra_viewer_${id}`;
+const userName = `dra_viewer_${id}`;
 
 describe("Consuming a Work requires an account", () => {
 	let creatorCookie: string;
-	let viewerCookie: string;
+	let userCookie: string;
 	let creatorId: number;
 	/** A Public Access audio Work with a completed transcode — the media half. */
 	let audioId: number;
@@ -79,10 +79,10 @@ describe("Consuming a Work requires an account", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
-		viewerCookie = await signUp(viewerName);
+		userCookie = await signUp(userName);
 		const [creator] = await db
 			.select({ id: users.id })
 			.from(users)
@@ -158,7 +158,7 @@ describe("Consuming a Work requires an account", () => {
 
 	afterAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 	});
 
@@ -188,14 +188,14 @@ describe("Consuming a Work requires an account", () => {
 		// The other direction, and it has to be here: a guard that refuses everybody is
 		// indistinguishable from a working one in a file that only asserts refusals.
 		const audio = await req(`/api/content/works/${audioId}/audio`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 			redirect: "manual",
 		});
 		expect(audio.status).toBe(302);
 
 		const download = await req(`/api/content/works/${downloadId}/assets/${assetId}/download`, {
 			method: "POST",
-			headers: { Origin: ORIGIN, Cookie: viewerCookie },
+			headers: { Origin: ORIGIN, Cookie: userCookie },
 		});
 		expect(download.status).toBe(200);
 		expect((await download.json()).url).toBeTruthy();

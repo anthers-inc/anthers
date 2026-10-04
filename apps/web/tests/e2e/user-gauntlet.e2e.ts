@@ -19,7 +19,7 @@
  * the real billing UI; the staircase itself is asserted identically either way.
  *
  * Serial on purpose: it is one stateful walk, not independent tests — and the walk runs
- * on its OWN fixture instance (instance B: the `walk-creator` / `walk-viewer` accounts
+ * on its OWN fixture instance (instance B: the `walk-creator` / `walk-walker` accounts
  * and the `walk-gauntlet-*` slugs of `@anthers/db/gauntlet-walk`), disjoint from the
  * shared instance A the `authed` project's specs run on. The walk's `beforeAll` resets
  * instance B only, so a reset can no longer collide with anything another project holds,
@@ -41,7 +41,7 @@ import {
 import {
 	WALK_CREATOR_USERNAME,
 	WALK_POSTS,
-	WALK_VIEWER_USERNAME,
+	WALK_WALKER_USERNAME,
 	walkPost,
 } from "@anthers/db/gauntlet-walk";
 import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
@@ -61,7 +61,7 @@ test.describe.configure({ mode: "serial" });
 function hop(...args: string[]): void {
 	execFileSync(
 		"bun",
-		["run", "db:gauntlet:state", "--instance", "walk", "--user", WALK_VIEWER_USERNAME, ...args],
+		["run", "db:gauntlet:state", "--instance", "walk", "--user", WALK_WALKER_USERNAME, ...args],
 		{
 			cwd: REPO_ROOT,
 			stdio: "inherit",
@@ -85,7 +85,7 @@ const workIds: Record<string, number> = {};
 /** The fixture accounts' real handles, resolved in beforeAll — the username column is gone,
  *  so profiles are addressed by the handle the server issued for each fixture name. */
 let creatorHandle = "";
-let viewerHandle = "";
+let userHandle = "";
 
 function staircaseRow(state: string): StaircaseState {
 	const row = EXPECTED_STAIRCASE.find((r) => r.state === state);
@@ -307,7 +307,7 @@ test.beforeAll(async () => {
 	// touches sessions). Instance A's rows are untouched, so the authed specs could be
 	// running beside this right now; that is the isolation this file's `--instance walk`
 	// buys.
-	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-viewer"], {
+	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-walker"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
@@ -338,7 +338,7 @@ test.beforeAll(async () => {
 	}
 
 	creatorHandle = await gauntletHandle(API_URL, WALK_CREATOR_USERNAME);
-	viewerHandle = await gauntletHandle(API_URL, WALK_VIEWER_USERNAME);
+	userHandle = await gauntletHandle(API_URL, WALK_WALKER_USERNAME);
 
 	for (const post of WALK_POSTS) {
 		// The fixture's subject is the WORK — the staircase this walks is an access
@@ -462,7 +462,7 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	await expect(page.getByText(commentText)).toBeVisible();
 	// The comment author span is the bare handle; exact match so a substring can't land
 	// on another mention of it elsewhere on the page.
-	await expect(page.getByText(viewerHandle, { exact: true })).toBeVisible();
+	await expect(page.getByText(userHandle, { exact: true })).toBeVisible();
 
 	// The negative the spec says to RECORD, not assume: can a user comment on a post they
 	// cannot access? The comment route carries requireAuth and no access check, so the

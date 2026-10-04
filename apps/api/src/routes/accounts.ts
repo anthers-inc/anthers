@@ -1081,8 +1081,8 @@ const accountRoutes = new Hono()
 	)
 
 	.get("/me/content-preferences", async (c) => {
-		const viewerId = await getOptionalUserId(c);
-		return c.json(await contentPreferencesFor(viewerId));
+		const userId = await getOptionalUserId(c);
+		return c.json(await contentPreferencesFor(userId));
 	})
 
 	.patch(

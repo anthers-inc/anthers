@@ -692,7 +692,7 @@ export const attentionEvents = pgTable(
  * and rolled-up, and the creator's history is preserved at the granularity the policy
  * says they keep — per Work, per day — rather than lost along with the identities.
  *
- * `uniqueViewers` is stored per day and **cannot be summed across days** without
+ * `uniqueUsers` is stored per day and **cannot be summed across days** without
  * counting a returning viewer twice, which is a real limit of holding no identities:
  * the number is genuinely unrecoverable once the rows are gone. The analytics layer
  * reports unique viewers over the raw window only, and says which window that is,
@@ -718,8 +718,8 @@ export const attentionDaily = pgTable(
 		eventType: text("event_type").notNull(),
 		eventCount: integer("event_count").notNull().default(0),
 		totalSeconds: integer("total_seconds").notNull().default(0),
-		/** Distinct viewers **on that day**. Not summable across days — see the note. */
-		uniqueViewers: integer("unique_viewers").notNull().default(0),
+		/** Distinct users **on that day**. Not summable across days — see the note. */
+		uniqueUsers: integer("unique_viewers").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [

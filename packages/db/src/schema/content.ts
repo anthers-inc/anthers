@@ -151,7 +151,7 @@ export const works = pgTable(
 		// rich text — lyrics are line-broken text, and a rich-text surface here would
 		// invite formatting nobody wants and a sanitizer nobody needs.
 		//
-		// 🚨 **Gated with the payload.** `serializeWorkForViewer` blanks this alongside
+		// 🚨 **Gated with the payload.** `serializeWorkForUser` blanks this alongside
 		// `body`/`bodyHtml`/`sourceKey`, because a gated track's words are as much the
 		// deliverable as its audio. The failure is quiet in either direction, so the
 		// asymmetry decided it: a creator who wants them public can put them in

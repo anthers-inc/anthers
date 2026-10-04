@@ -83,7 +83,7 @@ export default defineConfig({
 			metadata: { needsMedia: true },
 		},
 		// The same job for the walk's OWN fixture instance: seeds instance B
-		// (`walk-creator` / `walk-viewer` / `walk-gauntlet-*` — see
+		// (`walk-creator` / `walk-walker` / `walk-gauntlet-*` — see
 		// `packages/db/src/gauntlet-walk.ts`) and signs the walk viewer in, writing the
 		// storageState the gauntlet project runs under. No dependencies — it is itself a
 		// setup project, and it must not wait on (nor be waited on by) instance A's chain.
@@ -118,7 +118,7 @@ export default defineConfig({
 			name: "authed",
 			use: {
 				...devices["Desktop Chrome"],
-				storageState: "tests/e2e/.auth/gauntlet-viewer.json",
+				storageState: "tests/e2e/.auth/gauntlet-walker.json",
 			},
 			testMatch: "**/*.authed.e2e.ts",
 			dependencies: ["setup"],
@@ -127,7 +127,7 @@ export default defineConfig({
 		// The User Gauntlet walk: authenticated (storageState from setup-walk), strictly serial —
 		// it is one stateful staircase, not a bag of independent tests.
 		//
-		// The walk owns instance B of the fixture: the `walk-creator` / `walk-viewer`
+		// The walk owns instance B of the fixture: the `walk-creator` / `walk-walker`
 		// accounts and the `walk-gauntlet-*` slugs defined in
 		// `packages/db/src/gauntlet-walk.ts`. Its
 		// `beforeAll` resets instance B (`db:gauntlet --instance walk`) and ratchets only
@@ -144,7 +144,7 @@ export default defineConfig({
 			name: "gauntlet",
 			use: {
 				...devices["Desktop Chrome"],
-				storageState: "tests/e2e/.auth/gauntlet-walk-viewer.json",
+				storageState: "tests/e2e/.auth/gauntlet-walk-walker.json",
 			},
 			testMatch: "**/user-gauntlet.e2e.ts",
 			dependencies: ["setup-walk"],

@@ -90,7 +90,7 @@ async function makeWork(title: string, access: unknown): Promise<number> {
  * ⚠️ `access` is optional in the return type on purpose, because the endpoint genuinely
  * returns two shapes: an **owner** gets `serializeWork` — full media keys, the editable
  * access table, and no `access` verdict, since an owner never needed one — and everybody
- * else gets `serializeWorkForViewer`. Asking for a preview is what moves a creator from
+ * else gets `serializeWorkForUser`. Asking for a preview is what moves a creator from
  * the first shape to the second, which is the whole mechanism.
  */
 async function view(workId: number, cookie: string, query = "") {

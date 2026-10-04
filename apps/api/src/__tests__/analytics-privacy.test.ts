@@ -63,13 +63,13 @@ async function signUp(username: string): Promise<string> {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `apriv_creator_${id}`;
-const viewerAName = `apriv_watcher_alpha_${id}`;
-const viewerBName = `apriv_watcher_beta_${id}`;
+const userAName = `apriv_watcher_alpha_${id}`;
+const userBName = `apriv_watcher_beta_${id}`;
 
 let creator: string;
 let creatorId: number;
-let viewerAId: number;
-let viewerBId: number;
+let userAId: number;
+let userBId: number;
 let workId: number;
 
 /** Every analytics surface a creator can read. If a fourth appears, it belongs here. */
@@ -101,14 +101,14 @@ function allKeys(value: unknown, out: string[] = []): string[] {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userAName}@example.com`}`, sql`${`${userBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
-	const viewerA = await signUp(viewerAName);
-	await enablePayouts(viewerAName);
-	const viewerB = await signUp(viewerBName);
-	await enablePayouts(viewerBName);
+	const userA = await signUp(userAName);
+	await enablePayouts(userAName);
+	const userB = await signUp(userBName);
+	await enablePayouts(userBName);
 	await db.execute(
 		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
@@ -121,8 +121,8 @@ beforeAll(async () => {
 		return row.id;
 	};
 	creatorId = await idOf(creatorName);
-	viewerAId = await idOf(viewerAName);
-	viewerBId = await idOf(viewerBName);
+	userAId = await idOf(userAName);
+	userBId = await idOf(userBName);
 
 	const workRes = await post("/api/content/works", creator, {
 		type: "video",
@@ -152,8 +152,8 @@ beforeAll(async () => {
 	// something to distinguish. One viewer would let a per-user figure masquerade as
 	// a total.
 	for (const [cookie, seconds] of [
-		[viewerA, 120],
-		[viewerB, 45],
+		[userA, 120],
+		[userB, 45],
 	] as const) {
 		const now = Date.now();
 		const res = await post("/api/subscriptions/attention", cookie, {
@@ -182,8 +182,8 @@ describe("creator analytics never expose per-viewer identity", () => {
 			const serialized = JSON.stringify(body);
 
 			// Neither viewer's username, nor their ids under any key name.
-			expect(serialized).not.toContain(viewerAName);
-			expect(serialized).not.toContain(viewerBName);
+			expect(serialized).not.toContain(userAName);
+			expect(serialized).not.toContain(userBName);
 			expect(serialized).not.toContain("watcher_alpha");
 			expect(serialized).not.toContain("watcher_beta");
 		}
@@ -196,14 +196,14 @@ describe("creator analytics never expose per-viewer identity", () => {
 
 			// The allowlist is an explicit set rather than a looser pattern, so adding a
 			// viewer-ish field is a deliberate edit here with a reason attached — this
-			// assertion has already caught one addition (`uniqueViewersWindowDays`, added
+			// assertion has already caught one addition (`uniqueUsersWindowDays`, added
 			// with the retention rollup), which is the behavior wanted.
 			//
-			//   `uniqueViewers`           — a COUNT. How many, never who. A creator knowing
+			//   `uniqueUsers`           — a COUNT. How many, never who. A creator knowing
 			//                               two people watched reveals nothing about either.
-			//   `uniqueViewersWindowDays` — how far back that count reaches, in days. A
+			//   `uniqueUsersWindowDays` — how far back that count reaches, in days. A
 			//                               property of the query, not of any person.
-			const COUNTS_NOT_IDENTITIES = new Set(["uniqueViewers", "uniqueViewersWindowDays"]);
+			const COUNTS_NOT_IDENTITIES = new Set(["uniqueUsers", "uniqueUsersWindowDays"]);
 
 			const identityish = keys.filter(
 				(k) =>
@@ -220,7 +220,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		const overview = await (
 			await req(ANALYTICS_ROUTES[0], { headers: { Cookie: creator } })
 		).json();
-		expect(overview.uniqueViewers).toBe(2);
+		expect(overview.uniqueUsers).toBe(2);
 		expect(overview.events.watches).toBe(2);
 		// 120 + 45 seconds as hours, which the overview rounds to two places. The exact
 		// figure is asserted below off `/content`, where it arrives unrounded.
@@ -248,7 +248,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		);
 
 		const overview = await (await req(ANALYTICS_ROUTES[0], { headers: { Cookie: other } })).json();
-		expect(overview.uniqueViewers).toBe(0);
+		expect(overview.uniqueUsers).toBe(0);
 		expect(overview.events.total).toBe(0);
 		expect(overview.totalDurationHours).toBe(0);
 	});
@@ -265,7 +265,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		// and the tests above became vacuous — they would pass against an empty table.
 		const [row] = await db.execute(
 			sql`SELECT count(*)::int AS n FROM attention_events
-			    WHERE creator_id = ${creatorId} AND user_id IN (${viewerAId}, ${viewerBId})`,
+			    WHERE creator_id = ${creatorId} AND user_id IN (${userAId}, ${userBId})`,
 		);
 		expect(Number((row as { n: number }).n)).toBe(2);
 	});

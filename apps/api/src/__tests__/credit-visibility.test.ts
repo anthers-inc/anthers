@@ -38,7 +38,7 @@ import { blockUser } from "../services/blocks.js";
 import {
 	acceptCredit,
 	creditsForOwner,
-	creditsForViewer,
+	creditsForUser,
 	notifyCreditedAccounts,
 } from "../services/credit-acceptance.js";
 import { createAccount } from "./account-fixture";
@@ -111,7 +111,7 @@ beforeAll(async () => {
 
 // ─── The overlay ──────────────────────────────────────────────────────────────
 
-describe("creditsForViewer", () => {
+describe("creditsForUser", () => {
 	let overlayWork: Awaited<ReturnType<typeof insertWork>>;
 	const namedCredit: WorkCredit = {
 		role: "Edited by",
@@ -132,7 +132,7 @@ describe("creditsForViewer", () => {
 	});
 
 	it("withholds an unaccepted did-credit from a signed-out viewer, leaving named credits untouched", async () => {
-		const seen = await creditsForViewer(overlayWork, null);
+		const seen = await creditsForUser(overlayWork, null);
 		expect(seen).toHaveLength(1);
 		// The untouched promise: the named credit ships with exactly what was stored.
 		expect(seen[0]).toEqual(namedCredit);
@@ -140,13 +140,13 @@ describe("creditsForViewer", () => {
 	});
 
 	it("withholds an unaccepted did-credit from a third-party viewer", async () => {
-		const seen = await creditsForViewer(overlayWork, thirdParty.userId);
+		const seen = await creditsForUser(overlayWork, thirdParty.userId);
 		expect(seen).toHaveLength(1);
 		expect(seen[0]).toEqual(namedCredit);
 	});
 
 	it("shows the did-credit to the named person, flagged for their confirmation", async () => {
-		const seen = await creditsForViewer(overlayWork, contributor.userId);
+		const seen = await creditsForUser(overlayWork, contributor.userId);
 		expect(seen).toHaveLength(2);
 		const pending = seen.find((c) => c.contributor === contributor.did);
 		expect(pending).toBeDefined();
@@ -158,7 +158,7 @@ describe("creditsForViewer", () => {
 	});
 
 	it("shows the did-credit to the creator, flagged as awaiting the contributor", async () => {
-		const seen = await creditsForViewer(overlayWork, creator.userId);
+		const seen = await creditsForUser(overlayWork, creator.userId);
 		expect(seen).toHaveLength(2);
 		const pending = seen.find((c) => c.contributor === contributor.did);
 		expect(pending?.awaitingContributorConfirmation).toBe(true);
@@ -198,7 +198,7 @@ describe("creditsForViewer", () => {
 		// Every viewer — signed-out, third-party, the creator, the contributor — now sees a
 		// name, never a bare did: string.
 		for (const viewer of [null, thirdParty.userId, creator.userId, contributor.userId]) {
-			const seen = await creditsForViewer(overlayWork, viewer);
+			const seen = await creditsForUser(overlayWork, viewer);
 			expect(seen).toHaveLength(2);
 			const resolved = seen.find((c) => c.role === "Written by");
 			expect(resolved?.contributor).toBe(contributor.handle);
@@ -213,7 +213,7 @@ describe("creditsForViewer", () => {
 			.update(users)
 			.set({ displayName: "Contributor Display Name" })
 			.where(eq(users.id, contributor.userId));
-		const seen = await creditsForViewer(overlayWork, null);
+		const seen = await creditsForUser(overlayWork, null);
 		expect(seen.find((c) => c.role === "Written by")?.contributor).toBe("Contributor Display Name");
 	});
 
@@ -236,7 +236,7 @@ describe("creditsForViewer", () => {
 
 		// The creator's viewer-path serialization of the SAME work still resolves — the
 		// public page only renders, and a stranger must never meet a bare did: string.
-		const viewed = await creditsForViewer(overlayWork, creator.userId);
+		const viewed = await creditsForUser(overlayWork, creator.userId);
 		expect(viewed.find((c) => c.role === "Written by")?.contributor).toBe(
 			"Contributor Display Name",
 		);

@@ -53,14 +53,14 @@ const HLS_URL = "https://cdn.example.com/creators/x/videos/hls/secret/master.m3u
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `deliv_${id}`;
-const viewerName = `deliv_viewer_${id}`;
+const userName = `deliv_viewer_${id}`;
 
 /** Locked to everyone but the owner: present rows, none allowed. */
 const LOCKED = { access: [{ threshold: 0, allow: false, price: "0" }] };
 
 describe("Delivery-layer access", () => {
 	let creatorCookie: string;
-	let viewerCookie: string;
+	let userCookie: string;
 	let creatorId: number;
 	let audioItemId: number;
 	let videoItemId: number;
@@ -72,10 +72,10 @@ describe("Delivery-layer access", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 		creatorCookie = await signUp(creatorName);
-		viewerCookie = await signUp(viewerName);
+		userCookie = await signUp(userName);
 
 		const [creator] = await db
 			.select({ id: users.id })
@@ -160,11 +160,11 @@ describe("Delivery-layer access", () => {
 	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
 	// outlives its creator's account), so deleting the users alone orphans them instead.
 	afterAll(async () => {
-		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`;
+		const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`;
 		await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
 		await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 	});
 
@@ -174,7 +174,7 @@ describe("Delivery-layer access", () => {
 
 	it("withholds every media URL from a denied viewer on Work detail", async () => {
 		for (const [who, headers] of [
-			["signed-in viewer", { Cookie: viewerCookie }],
+			["signed-in viewer", { Cookie: userCookie }],
 			["anonymous", {}],
 		] as const) {
 			for (const workId of [audioItemId, videoItemId]) {
@@ -202,7 +202,7 @@ describe("Delivery-layer access", () => {
 			bodyHtml: "<p>the gated prose</p>",
 			...LOCKED,
 		});
-		const res = await req(`/api/content/works/${essay.id}`, { headers: { Cookie: viewerCookie } });
+		const res = await req(`/api/content/works/${essay.id}`, { headers: { Cookie: userCookie } });
 		expect(res.status).toBe(200);
 		const { work } = await res.json();
 		expect(work.access.canAccess).toBe(false);
@@ -226,7 +226,7 @@ describe("Delivery-layer access", () => {
 			lyrics: "the gated words\nsecond line",
 			...LOCKED,
 		});
-		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: viewerCookie } });
+		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: userCookie } });
 		expect(res.status).toBe(200);
 		const { work } = await res.json();
 		expect(work.access.canAccess).toBe(false);
@@ -246,7 +246,7 @@ describe("Delivery-layer access", () => {
 			lyrics: "the open words",
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
-		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: viewerCookie } });
+		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: userCookie } });
 		expect(res.status).toBe(200);
 		const { work } = await res.json();
 		expect(work.access.canAccess).toBe(true);
@@ -275,7 +275,7 @@ describe("Delivery-layer access", () => {
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		const denied = await req(`/api/content/works/${staging.id}`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 		});
 		expect(denied.status).toBe(404);
 		const owner = await req(`/api/content/works/${staging.id}`, {
@@ -288,7 +288,7 @@ describe("Delivery-layer access", () => {
 
 	it("withholds media URLs from a denied viewer on the transcoding route", async () => {
 		const res = await req(`/api/content/works/${videoItemId}/transcoding`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 		});
 		// Deliberately not a 403: the poller is allowed to learn that media is still
 		// processing. What it must not be is a second door to the URLs detail withheld.
@@ -323,7 +323,7 @@ describe("Delivery-layer access", () => {
 		// viewer without the gate cleared is *forbidden*; a signed-out one has not said
 		// who they are, and every delivery endpoint asks that first since 2026-08-28.
 		const denied = await req(`/api/content/works/${audioItemId}/audio`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 			redirect: "manual",
 		});
 		expect(denied.status).toBe(403);
@@ -336,7 +336,7 @@ describe("Delivery-layer access", () => {
 
 	it("redirects an entitled viewer to the media, uncacheably", async () => {
 		const res = await req(`/api/content/works/${freeAudioId}/audio`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 			redirect: "manual",
 		});
 		expect(res.status).toBe(302);
@@ -346,7 +346,7 @@ describe("Delivery-layer access", () => {
 
 	it("rejects a non-numeric Work id instead of 500ing on it", async () => {
 		const res = await req("/api/content/works/not-a-number/audio", {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 			redirect: "manual",
 		});
 		expect(res.status).toBe(404);
@@ -358,7 +358,7 @@ describe("Delivery-layer access", () => {
 		// The listing is a second door at the same rows, and a batch endpoint is exactly
 		// where a per-item check gets forgotten.
 		const res = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 		});
 		expect(res.status).toBe(200);
 		const { works: listed } = await res.json();
@@ -373,7 +373,7 @@ describe("Delivery-layer access", () => {
 
 	it("hides unreleased Works from the public Catalog but shows them to the creator", async () => {
 		const publicView = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 		});
 		const ownerView = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {
 			headers: { Cookie: creatorCookie },
@@ -389,11 +389,11 @@ describe("Delivery-layer access", () => {
 	it("never ships post bodies through the follow feed", async () => {
 		const follow = await req(`/api/accounts/users/${await handleOf(creatorName)}/follow`, {
 			method: "POST",
-			headers: { Origin: ORIGIN, Cookie: viewerCookie },
+			headers: { Origin: ORIGIN, Cookie: userCookie },
 		});
 		expect(follow.ok).toBe(true);
 
-		const res = await req("/api/accounts/me/feed", { headers: { Cookie: viewerCookie } });
+		const res = await req("/api/accounts/me/feed", { headers: { Cookie: userCookie } });
 		expect(res.status).toBe(200);
 		const { posts } = await res.json();
 		// `...row.post` used to spread the whole row here, body included — following a
@@ -420,7 +420,7 @@ describe("Delivery-layer access", () => {
 		const [buyer] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.email, `${viewerName}@example.com`))
+			.where(eq(users.email, `${userName}@example.com`))
 			.limit(1);
 
 		const [purchase] = await db
@@ -446,7 +446,7 @@ describe("Delivery-layer access", () => {
 		try {
 			const res = await req(`/api/content/works/${freeWorkId}/assets/${freeAssetId}/download`, {
 				method: "POST",
-				headers: { Origin: ORIGIN, Cookie: viewerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			expect(res.status).toBe(200);
 

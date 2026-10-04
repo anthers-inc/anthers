@@ -3,7 +3,7 @@
  * A shared video plays for somebody with no account, all the way down its playlists.
  *
  * 🚨 **The share token has to reach every playlist the player fetches, not only the first.**
- * A recipient with no session gets through `requireViewerOrShareLink` by presenting the token,
+ * A recipient with no session gets through `requireUserOrShareLink` by presenting the token,
  * and hls.js follows the master playlist's variant URLs exactly as written, with no way for the
  * page to add anything. So a variant URL without the token is a 401, and the video never
  * starts, although the page around it renders and the master playlist answers. A signed-in

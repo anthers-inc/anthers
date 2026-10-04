@@ -61,7 +61,7 @@ function req(path: string, options?: RequestInit) {
 
 const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `pam_creator_${run}`;
-const viewerName = `pam_viewer_${run}`;
+const userName = `pam_viewer_${run}`;
 const seededName = `pam_seeded_${run}`;
 
 /** Ungated + streaming + free to everyone. This is what Public Access *is*. */
@@ -76,8 +76,8 @@ const FOR_SALE = [{ threshold: 0, allow: true, price: "5.00" }];
 
 let creatorId: number;
 let creatorCookie: string;
-let viewerId: number;
-let viewerCookie: string;
+let userId: number;
+let userCookie: string;
 let seededId: number;
 let seededCookie: string;
 let paWorkId: number;
@@ -240,10 +240,10 @@ async function setSupport(userId: number, anthersSupport: number) {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`, sql`${`${seededName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`, sql`${`${seededName}@example.com`}`], sql`, `)})`,
 	);
 	({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
-	({ cookie: viewerCookie, id: viewerId } = await signUp(viewerName));
+	({ cookie: userCookie, id: userId } = await signUp(userName));
 	({ cookie: seededCookie, id: seededId } = await signUp(seededName));
 
 	const pa = await insertWork({
@@ -337,18 +337,18 @@ beforeAll(async () => {
 
 describe("the meter withholds bytes, not just numbers", () => {
 	it("serves Public Access to a free account inside its allowance", async () => {
-		await setSupport(viewerId, 0);
-		await spend(viewerId, 60);
+		await setSupport(userId, 0);
+		await spend(userId, 60);
 		// Not a 402. (Storage has no real playlist behind the fixture URL, so a 404 here
 		// is the *pass* — it means the request got past every gate to the fetch.)
-		expect((await playlist(paWorkId, viewerCookie)).status).not.toBe(402);
+		expect((await playlist(paWorkId, userCookie)).status).not.toBe(402);
 	});
 
 	it("refuses Public Access once the allowance is spent — 402, not 403", async () => {
-		await setSupport(viewerId, 0);
-		await spend(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, 0);
+		await spend(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
-		const res = await playlist(paWorkId, viewerCookie);
+		const res = await playlist(paWorkId, userCookie);
 		// 402 Payment Required, deliberately: the viewer is not forbidden, they have spent
 		// a monthly allowance that the Public Access price removes. 403 would say "you may not" where the
 		// truth is "you may, and here is how".
@@ -375,9 +375,9 @@ describe("what the meter must NOT charge for", () => {
 		// Over the limit AND holding this creator's Badge: the gate opens, and the
 		// meter must not close it. Billing a supporter's free allowance for work they paid
 		// a creator to reach charges them twice for one thing.
-		await setSupport(viewerId, 0);
-		await holdBadge(viewerId, "3.00");
-		const res = await playlist(gatedWorkId, viewerCookie);
+		await setSupport(userId, 0);
+		await holdBadge(userId, "3.00");
+		const res = await playlist(gatedWorkId, userCookie);
 		// Not 402: the meter has no claim on work the viewer paid to reach. And not 403 —
 		// the assertion that actually pins the Badge path, which a sabotage pass showed
 		// the old bare `not.toBe(402)` did not: without the holding, delivery is refused
@@ -388,7 +388,7 @@ describe("what the meter must NOT charge for", () => {
 
 	it("purchased work draws no allowance", async () => {
 		await db.insert(purchases).values({
-			buyerId: viewerId,
+			buyerId: userId,
 			workId: boughtWorkId,
 			creatorId,
 			workTitle: "Purchased video",
@@ -401,7 +401,7 @@ describe("what the meter must NOT charge for", () => {
 			stripePaymentIntentId: `pi_pam_${run}`,
 			status: "completed",
 		});
-		expect((await playlist(boughtWorkId, viewerCookie)).status).not.toBe(402);
+		expect((await playlist(boughtWorkId, userCookie)).status).not.toBe(402);
 	});
 
 	it("a creator's own catalog draws no allowance", async () => {
@@ -580,36 +580,36 @@ describe("media with no player of their own", () => {
 	}
 
 	it("serves a Public Access essay inside the allowance", async () => {
-		await setSupport(viewerId, 0);
-		await setSpent(viewerId, 60);
+		await setSupport(userId, 0);
+		await setSpent(userId, 60);
 
-		const { work } = await fetchWork(textWorkId, viewerCookie);
+		const { work } = await fetchWork(textWorkId, userCookie);
 		expect(work.bodyHtml).toBe(TEXT_BODY);
 	});
 
 	it("withholds the essay once the allowance is spent", async () => {
-		await setSupport(viewerId, 0);
-		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, 0);
+		await setSpent(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
-		const { work } = await fetchWork(textWorkId, viewerCookie);
+		const { work } = await fetchWork(textWorkId, userCookie);
 		// The body is the deliverable for a text Work. Hiding it in the client would be
 		// decoration; the bytes must not arrive.
 		expect(work.bodyHtml).toBe("");
 	});
 
 	it("withholds a game's embed once the allowance is spent", async () => {
-		await setSupport(viewerId, 0);
-		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, 0);
+		await setSpent(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
-		const { work } = await fetchWork(gameWorkId, viewerCookie);
+		const { work } = await fetchWork(gameWorkId, userCookie);
 		expect(work.embedUrl).toBe("");
 	});
 
 	it("🚨 still reports the Work as FREE — the meter is not a gate on the Work", async () => {
-		await setSupport(viewerId, 0);
-		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, 0);
+		await setSpent(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
-		const { work } = await fetchWork(textWorkId, viewerCookie);
+		const { work } = await fetchWork(textWorkId, userCookie);
 		/*
 		 * The whole distinction the model rests on. The Work is free to everyone and stays
 		 * free to everyone; what ran out belongs to the *account*. If `access` ever starts
@@ -623,12 +623,12 @@ describe("media with no player of their own", () => {
 	});
 
 	it("the Public Access price restores it, and nothing above it buys more", async () => {
-		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
-		await setSupport(viewerId, PUBLIC_ACCESS_PRICE);
-		expect((await fetchWork(textWorkId, viewerCookie)).work.bodyHtml).toBe(TEXT_BODY);
+		await setSpent(userId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, PUBLIC_ACCESS_PRICE);
+		expect((await fetchWork(textWorkId, userCookie)).work.bodyHtml).toBe(TEXT_BODY);
 
-		await setSupport(viewerId, PUBLIC_ACCESS_PRICE * 4);
-		expect((await fetchWork(textWorkId, viewerCookie)).work.bodyHtml).toBe(TEXT_BODY);
+		await setSupport(userId, PUBLIC_ACCESS_PRICE * 4);
+		expect((await fetchWork(textWorkId, userCookie)).work.bodyHtml).toBe(TEXT_BODY);
 	});
 
 	it("🚨 gated text the viewer CLEARED survives a spent allowance", async () => {
@@ -646,10 +646,10 @@ describe("media with no player of their own", () => {
 		 * requires `access.isFree`. Gated work the viewer cleared is accessible but NOT
 		 * free, so it is untouched. Widen that condition to "canAccess" and this fails.
 		 */
-		await setSupport(viewerId, 0);
-		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, 0);
+		await setSpent(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
-		const { work } = await fetchWork(gatedTextWorkId, viewerCookie);
+		const { work } = await fetchWork(gatedTextWorkId, userCookie);
 		expect(work.access.canAccess).toBe(true);
 		expect(work.publicAccess).toBe(false);
 		expect(work.bodyHtml).toBe(TEXT_BODY);
@@ -715,11 +715,11 @@ describe("media with no player of their own", () => {
 		 * Found by sabotage — switching `assets` from `canAccess` to `deliverable` broke
 		 * no test in the entire suite before this one existed.
 		 */
-		await setSupport(viewerId, 0);
-		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSupport(userId, 0);
+		await setSpent(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const res = await req(`/api/content/works/${downloadableWorkId}`, {
-			headers: { Cookie: viewerCookie },
+			headers: { Cookie: userCookie },
 		});
 		const { work } = (await res.json()) as {
 			work: { assets: { file: string }[]; publicAccess: boolean };

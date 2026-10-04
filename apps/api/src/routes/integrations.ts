@@ -9,11 +9,11 @@
  * > raw table silently returns zero for the older part of the window** — not an error,
  * > just a history that quietly stops. Every query below unions the two.
  * >
- * > The one figure that cannot be unioned is `uniqueViewers`: the rollup holds daily
+ * > The one figure that cannot be unioned is `uniqueUsers`: the rollup holds daily
  * > distinct counts and adding them across days counts a returning viewer once per
  * > day. That is a genuine, permanent consequence of not keeping identities, so the
  * > count is reported over the raw window only and the response says which window that
- * > is (`uniqueViewersWindowDays`) rather than overstating a total.
+ * > is (`uniqueUsersWindowDays`) rather than overstating a total.
  *
  * The privacy property these queries carry is pinned by `analytics-privacy.test.ts`:
  * no analytics response may contain a viewer-identifying field. `attention_daily` has
@@ -56,7 +56,7 @@ const integrationRoutes = new Hono()
 		// Raw ranges, split per viewer on read: a creator's totals can never include
 		// the same real second twice from one account.
 		const rawGroups = await creatorAnalyticsRanges(user.id, since, () => "all");
-		const raw = rawGroups[0] ?? { totalSeconds: 0, eventCount: 0, viewers: new Set<number>() };
+		const raw = rawGroups[0] ?? { totalSeconds: 0, eventCount: 0, users: new Set<number>() };
 		const byType = await creatorAnalyticsRanges(user.id, since, (r) => r.eventType);
 
 		// The rolled-up half of the same window. Counts and seconds add across the two
@@ -111,8 +111,8 @@ const integrationRoutes = new Hono()
 			// once per day, and there is no identity left to deduplicate against. Reporting
 			// it over the raw window and naming that window is the honest version; the
 			// alternative is a bigger number that means nothing.
-			uniqueViewers: raw.viewers.size,
-			uniqueViewersWindowDays: Math.min(period, ATTENTION_RAW_RETENTION_DAYS),
+			uniqueUsers: raw.users.size,
+			uniqueUsersWindowDays: Math.min(period, ATTENTION_RAW_RETENTION_DAYS),
 			contentCounts: {
 				projects: Number(projectCount.count),
 				posts: Number(postCount.count),

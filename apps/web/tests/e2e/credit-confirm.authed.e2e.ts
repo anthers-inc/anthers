@@ -11,7 +11,7 @@
  *
  * Runs on `media_fixture` as the creator (whose Works nothing else resets, and whose payout
  * setup is seeded — see `work-release.authed.e2e.ts` for why any other owner cannot release)
- * and on the `authed` project's own signed-in viewer, `gauntlet_viewer`, as the credited
+ * and on the `authed` project's own signed-in viewer, `gauntlet_walker`, as the credited
  * person. The viewer's DID comes off their public profile rather than out of the database:
  * the credit is written the way a creator would write it, by pasting the address of a real
  * account, and the walk then proves that account's own page renders the ask.
@@ -25,7 +25,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_VIEWER_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
+import { GAUNTLET_WALKER_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -47,9 +47,9 @@ interface PublicProfile {
 
 let session = "";
 /** The viewer's DID, read from their public profile before the Work is created. */
-let viewerDid = "";
+let userDid = "";
 /** The viewer's handle, for the sweep and for reading their notifications. */
-let viewerHandle = "";
+let userHandle = "";
 
 async function ownWorks(): Promise<OwnedWork[]> {
 	const res = await fetch(`${API_URL}/api/content/works`, {
@@ -135,12 +135,12 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// comfortably past Playwright's 30s default, as the gauntlet's own budget notes.
 	test.setTimeout(120_000);
 	session = await signInAsMediaFixture(context);
-	viewerHandle = await gauntletHandle(API_URL, GAUNTLET_VIEWER_USERNAME);
+	userHandle = await gauntletHandle(API_URL, GAUNTLET_WALKER_USERNAME);
 	const profile = (await (
-		await fetch(`${API_URL}/api/accounts/users/${viewerHandle}`)
+		await fetch(`${API_URL}/api/accounts/users/${userHandle}`)
 	).json()) as PublicProfile;
 	expect(profile.user?.atprotoDid, "the gauntlet viewer has no DID to credit").toBeTruthy();
-	viewerDid = profile.user?.atprotoDid as string;
+	userDid = profile.user?.atprotoDid as string;
 	// Sweep a crashed prior run's Work before creating this run's own.
 	await sweep();
 
@@ -169,7 +169,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
 	// The contributor field is free text; a `did:` string is just text, which is exactly
 	// how a creator pastes the address of a real account.
-	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill(viewerDid);
+	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill(userDid);
 
 	// The Studio does NOT yet know whether the person has confirmed — the credit is new —
 	// but the marker appears the moment the save returns the owner overlay's flag.
@@ -194,7 +194,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// the row comes back flagged with its DID intact.
 	await page.reload();
 	await expect(page.getByText(/waiting on the contributor/i)).toBeVisible();
-	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(viewerDid);
+	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
 
 	// The payload assertion, made while the FLAGGED row sits in draft state: an unrelated
 	// edit's save must send only role, contributor and types. The overlay flags are
@@ -232,25 +232,25 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// A second browser context signed in as the viewer — the authed project's own page
 	// belongs to them already, but a fresh context keeps the two sessions from bleeding
 	// into each other across the walk.
-	const viewerContext = await browser.newContext({
-		storageState: "tests/e2e/.auth/gauntlet-viewer.json",
+	const userContext = await browser.newContext({
+		storageState: "tests/e2e/.auth/gauntlet-walker.json",
 	});
-	const viewerPage = await viewerContext.newPage();
-	await viewerPage.goto(`/works/${work.publicId}`);
+	const userPage = await userContext.newPage();
+	await userPage.goto(`/works/${work.publicId}`);
 
 	// The confirm ask renders, with the credit's own role — and the DID is what the
 	// viewer sees, not their resolved name, because they have not confirmed yet.
-	const ask = viewerPage.getByText("You're credited — confirm?");
+	const ask = userPage.getByText("You're credited — confirm?");
 	await expect(ask).toBeVisible();
-	await expect(viewerPage.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
-	await expect(viewerPage.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
-	await expect(viewerPage.locator("section").filter({ hasText: "Credits" })).toContainText(
-		viewerDid,
+	await expect(userPage.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
+	await expect(userPage.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
+	await expect(userPage.locator("section").filter({ hasText: "Credits" })).toContainText(
+		userDid,
 	);
 
 	// The notification is in their list, pointing at this page.
 	const notificationsRes = await fetch(`${API_URL}/api/accounts/me/notifications`, {
-		headers: { Cookie: await viewerSessionCookie(viewerContext) },
+		headers: { Cookie: await viewerSessionCookie(userContext) },
 	});
 	expect(
 		notificationsRes.ok,
@@ -265,14 +265,14 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 
 	// Accept, and the credit settles from the server's own answer: the DID is gone and
 	// the viewer's name is in its place, with no confirm ask left on the page.
-	await viewerPage.getByRole("button", { name: "Accept", exact: true }).click();
+	await userPage.getByRole("button", { name: "Accept", exact: true }).click();
 	await expect(
-		viewerPage.locator("section").filter({ hasText: "Credits" }),
+		userPage.locator("section").filter({ hasText: "Credits" }),
 		"the accepted credit did not resolve to the viewer's name",
 	).toContainText(VIEWER_NAME, { timeout: 15_000 });
-	await expect(viewerPage.getByText("You're credited — confirm?")).toHaveCount(0);
+	await expect(userPage.getByText("You're credited — confirm?")).toHaveCount(0);
 	await expect(
-		viewerPage.getByRole("button", { name: "Accept", exact: true }),
+		userPage.getByRole("button", { name: "Accept", exact: true }),
 		"the confirm controls survived their own acceptance",
 	).toHaveCount(0);
 
@@ -283,7 +283,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await page.reload();
 	await expect(page.getByText(/waiting on the contributor/i)).toHaveCount(0);
 	await expect(page.getByRole("textbox", { name: "Credit 1 role" })).toHaveValue(`${ROLE} more`);
-	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(viewerDid);
+	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
 
 	// ── A stranger sees no ask and no DID ─────────────────────────────────────────
 	const stranger = await browser.newContext();
@@ -301,7 +301,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	);
 	await stranger.close();
 
-	await viewerContext.close();
+	await userContext.close();
 });
 
 /**

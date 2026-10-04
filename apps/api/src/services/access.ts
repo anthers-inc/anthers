@@ -539,7 +539,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		 * cover, duration, and the verdict itself — and what requires an account is
 		 * **delivery**. A signed-out visitor still learns that this Work is free to everyone,
 		 * which is what makes the page worth sharing and worth unfurling; they simply are not
-		 * handed the bytes. `serializeWorkForViewer` reads `canAccess` for the deliverable and
+		 * handed the bytes. `serializeWorkForUser` reads `canAccess` for the deliverable and
 		 * `isFree` for the Public Access badge, so both halves of that sentence land.
 		 *
 		 * **`payment_required` and `gated` are deliberately left alone below and above.**
