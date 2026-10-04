@@ -303,7 +303,7 @@ describe("a user's comments, reviews, votes and follows", () => {
 
 	beforeAll(async () => {
 		user = await makeUser("user", "brought");
-		hostedUser = await makeUser("hosted", "hosted");
+		hostedUser = await makeUser("huser", "hosted");
 		// Something to react to: a post by the creator who holds every grant.
 		const res = await call("POST", "/api/content/posts", granted.cookie, {
 			title: `Perm thread ${run}`,
