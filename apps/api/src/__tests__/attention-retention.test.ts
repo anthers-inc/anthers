@@ -161,7 +161,7 @@ describe("the rollup table cannot hold an identity", () => {
 		expect(columns).toContain("total_seconds");
 		// The whole point. Not "we don't select it" — it isn't there to select.
 		expect(columns).not.toContain("user_id");
-		expect(columns.filter((c) => /user|user|subscriber/.test(c))).toEqual(["unique_viewers"]);
+		expect(columns.filter((c) => /user|viewer|subscriber/.test(c))).toEqual(["unique_viewers"]);
 	});
 });
 

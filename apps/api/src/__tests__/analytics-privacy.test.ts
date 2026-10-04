@@ -207,7 +207,7 @@ describe("creator analytics never expose per-user identity", () => {
 
 			const identityish = keys.filter(
 				(k) =>
-					/user|user|watcher|account|member|audience/i.test(k) && !COUNTS_NOT_IDENTITIES.has(k),
+					/user|viewer|watcher|account|member|audience/i.test(k) && !COUNTS_NOT_IDENTITIES.has(k),
 			);
 			expect(identityish).toEqual([]);
 		}
