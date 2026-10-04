@@ -14,6 +14,7 @@ import {
 	isAddressComplete,
 	toCheckoutContact,
 	US_STATES,
+	zipForTax,
 } from "./UsBillingAddressForm";
 
 const complete = {
@@ -98,6 +99,28 @@ describe("toCheckoutContact", () => {
 		const contact = toCheckoutContact({ ...complete, line1: "  123 Main St  " });
 		expect(contact.address.line1).toBe("123 Main St");
 		expect(contact.address.line2).toBeNull();
+	});
+});
+
+describe("zipForTax — the five digits the session gets", () => {
+	test("strips a ZIP+4 suffix to the five-digit code", () => {
+		expect(zipForTax("80202-1234")).toBe("80202");
+	});
+
+	test("passes a five-digit ZIP through", () => {
+		expect(zipForTax("80202")).toBe("80202");
+	});
+
+	test("trims whitespace either way", () => {
+		expect(zipForTax(" 80202-1234 ")).toBe("80202");
+		expect(zipForTax(" 80202 ")).toBe("80202");
+	});
+
+	test("the contact the session receives carries the five-digit form", () => {
+		// The buyer may type nine; the session takes five — asserted at the boundary,
+		// where a regression would otherwise ship to Stripe Tax.
+		const contact = toCheckoutContact({ ...complete, postalCode: "80202-1234" });
+		expect(contact.address.postal_code).toBe("80202");
 	});
 });
 

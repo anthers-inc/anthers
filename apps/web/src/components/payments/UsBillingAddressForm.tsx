@@ -86,9 +86,26 @@ export const EMPTY_ADDRESS: UsAddressInput = {
 	postalCode: "",
 };
 
-/** Is this ZIP shaped like a US ZIP — `12345` or `12345-6789`? */
+/**
+ * Is this ZIP shaped like a US ZIP — `12345` or `12345-6789`?
+ */
 function isUsZip(zip: string): boolean {
 	return /^\d{5}(-\d{4})?$/.test(zip.trim());
+}
+
+/**
+ * The five-digit ZIP tax resolution needs, from whatever the buyer typed.
+ *
+ * 🚨 **Five digits is what goes to the session, whatever the field holds.** A ZIP+4 is
+ * welcome in the input (it is what a password manager often autofills, and letting the
+ * buyer type it beats refusing it), but Stripe Tax resolves from the five-digit code and
+ * the purchase row's `buyerPostalCode` is read back as one — so the +4 suffix is
+ * stripped here, at the boundary to the session, rather than anywhere a reader would
+ * have to remember to do it again. `80202-1234` → `80202`; anything else passes through
+ * trimmed and is refused by the shape check before it gets this far.
+ */
+export function zipForTax(postalCode: string): string {
+	return postalCode.trim().replace(/-\d{4}$/, "");
 }
 
 /**
@@ -125,7 +142,8 @@ export function toCheckoutContact(address: UsAddressInput): StripeCheckoutContac
 			line2: address.line2.trim() || null,
 			city: address.city.trim(),
 			state: address.state,
-			postal_code: address.postalCode.trim(),
+			// Five digits — see `zipForTax`; the +4 a buyer typed never reaches the session.
+			postal_code: zipForTax(address.postalCode),
 		},
 	};
 }
@@ -170,14 +188,21 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 
 	return (
 		<div className="flex flex-col gap-3">
+			{/* 🚨 Every field carries BOTH a `name` and a full `autocomplete` token.
+			    Bitwarden (and every password manager) keys on the pair: 2026-10-03's live
+			    checkout filled only Address line 1 — Name on Card, City and State stayed
+			    empty — because these three had no `name` attribute and, for the state
+			    `<select>`, no token at all. The tokens are the WHAT-WAS-TYPED-HERE
+			    contract; a missing one is an unfilled field, not a style nit. */}
 			<label className={labelClass}>
 				<span className="label-text mb-1">Name on card</span>
 				<input
 					className={inputClass}
+					name="cc-name"
+					autoComplete="cc-name"
 					value={value.name}
 					onChange={set("name")}
 					onBlur={() => setTouched(true)}
-					autoComplete="billing name"
 					required
 				/>
 			</label>
@@ -185,10 +210,11 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 				<span className="label-text mb-1">Street address</span>
 				<input
 					className={inputClass}
+					name="address"
+					autoComplete="billing address-line1"
 					value={value.line1}
 					onChange={set("line1")}
 					onBlur={() => setTouched(true)}
-					autoComplete="billing address-line1"
 					required
 				/>
 			</label>
@@ -196,9 +222,10 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 				<span className="label-text mb-1">Apartment, suite, etc. (optional)</span>
 				<input
 					className={inputClass}
+					name="address2"
+					autoComplete="billing address-line2"
 					value={value.line2}
 					onChange={set("line2")}
-					autoComplete="billing address-line2"
 				/>
 			</label>
 			<div className="flex gap-2">
@@ -206,10 +233,11 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 					<span className="label-text mb-1">City</span>
 					<input
 						className={inputClass}
+						name="city"
+						autoComplete="billing address-level2"
 						value={value.city}
 						onChange={set("city")}
 						onBlur={() => setTouched(true)}
-						autoComplete="billing address-level2"
 						required
 					/>
 				</label>
@@ -217,6 +245,8 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 					<span className="label-text mb-1">State</span>
 					<select
 						className="select select-bordered w-full"
+						name="state"
+						autoComplete="billing address-level1"
 						value={value.state}
 						onChange={set("state")}
 						onBlur={() => setTouched(true)}
@@ -237,13 +267,17 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 				<span className="label-text mb-1">ZIP code</span>
 				<input
 					className={inputClass}
+					name="zip"
+					autoComplete="billing postal-code"
 					value={value.postalCode}
 					onChange={set("postalCode")}
 					onBlur={() => setTouched(true)}
-					autoComplete="billing postal-code"
 					inputMode="numeric"
+					// A nine-digit (ZIP+4) value is accepted — see `zipForTax`, which strips
+					// the suffix before the address reaches the session. The pattern keeps
+					// native validation honest for everything else.
 					pattern="\d{5}(-\d{4})?"
-					title="A five-digit ZIP, optionally ZIP+4"
+					title="A five-digit ZIP, or a nine-digit ZIP+4"
 					required
 				/>
 				{touched && value.postalCode !== "" && !isUsZip(value.postalCode) && (
