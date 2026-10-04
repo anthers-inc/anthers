@@ -129,7 +129,7 @@ function ConversionEngine() {
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
 					Pick the Badge a viewer chose, then how they spend their month. Their Time Pool is split
 					across everyone they watch, by time; your slice of their time — plus anything they direct
-					to you — is what you take home from them. Anthers is a non-profit—no profit-taking.
+					to you — is what you take home from them. Anthers is a nonprofit—no profit-taking.
 				</p>
 
 				<div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-6">
