@@ -268,7 +268,7 @@ describe("blocking is symmetric", () => {
 			reviews: { handle: string }[];
 		};
 
-		// The list shrank; the aggregate did not. A per-viewer average would mean two
+		// The list shrank; the aggregate did not. A per-user average would mean two
 		// people see different reviews for the same Work, and would hand one user a way
 		// to move a creator's public score by blocking a reviewer.
 		expect(after.reviews.map((r) => r.handle)).not.toContain(H(beeName));

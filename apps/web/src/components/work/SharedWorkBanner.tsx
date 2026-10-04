@@ -36,7 +36,7 @@ export default function SharedWorkBanner({
 				Want your own? Pick a handle, confirm your email, and you'll be brought back here. No
 				payment, no plan to pick.
 			</p>
-			{/* The share token stays out of `next`: a signed-in reader watches on their own
+			{/* The share token stays out of `next`: a signed-in user watches on their own
 			    allowance, which is the point of making the account. */}
 			<Link to={withNextPath("/signup", location.pathname)} className="btn btn-primary btn-sm mt-3">
 				Create a Free Account

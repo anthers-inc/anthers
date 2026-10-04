@@ -255,7 +255,7 @@ export function getBaseUrl(
 export const EMAIL_SCOPE = "transition:email";
 
 /**
- * The permission set a reader's own records are asked for under: comments, reviews, votes and
+ * The permission set a user's own records are asked for under: comments, reviews, votes and
  * follows, in their own repository.
  */
 export const USER_PERMISSION_SET = "org.anthers.userPermissions";
@@ -303,7 +303,7 @@ export const CREATOR_COLLECTIONS: readonly string[] = [
  * one replaces.
  *
  * 🚨 **Asked for at every door that establishes an identity, and never kept back.** Follows,
- * comments, reviews and votes belong in the reader's own repository — see `71.02 User Records in
+ * comments, reviews and votes belong in the user's own repository — see `71.02 User Records in
  * the Atmosphere` — and a record in your repository is Anthers working, not an extra somebody
  * opts into.
  */
@@ -317,7 +317,7 @@ export const USER_SCOPES: readonly string[] = [
  *
  * ⚠️ **Asked for alongside {@link USER_SCOPES}, never instead of them.** One OAuth session is
  * stored per DID and each authorization replaces the last, so a creator request naming only
- * this set would destroy the reader grant and leave somebody unable to comment as a consequence
+ * this set would destroy the user grant and leave somebody unable to comment as a consequence
  * of becoming a creator. {@link scopeFor} spreads both, so the creator ask is a superset by
  * construction.
  */

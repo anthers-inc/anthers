@@ -10,7 +10,7 @@
 // The page is sequenced as TWO products, not three ways: direct creator support first
 // (monthly giving + purchases, no platform cut — the wedge), the Anthers commons second
 // (what goes to Anthers funds free public content via the Time Pool and lifts the
-// viewer's own Public Access limit).
+// user's own Public Access limit).
 //
 // 🚨 **The creator ask leads and Public Access follows it, and reordering that back is a
 // product decision rather than a layout one.** Support for Anthers buys Public Access and
@@ -373,7 +373,7 @@ export default function ForUsersPage() {
 						 *
 						 * ⚠️ Deliberately says nothing about the Adult rung. It is invisible by default,
 						 * and a general marketing page naming it would undo that for a caveat almost no
-						 * reader here needs. The fact is disclosed where somebody actually meets it: the
+						 * user here needs. The fact is disclosed where somebody actually meets it: the
 						 * Settings panel opens the card field at the moment they opt in, and `/parents`
 						 * spells out the whole check.
 						 */}

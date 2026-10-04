@@ -17,7 +17,7 @@
  * works alone — this one would pass on a helper that returned nonsense, and that one cannot see
  * a link that was never rendered on the page it happened to visit.
  *
- * ⚠️ **Scope is URLs, not printed handles.** `displayHandle` exists for the `@handle` a reader
+ * ⚠️ **Scope is URLs, not printed handles.** `displayHandle` exists for the `@handle` a user
  * sees in a byline, but a stray `@${…}` in copy is a cosmetic slip that shows itself, while a
  * missing one in a path is invisible. There is no longer a second namespace to exempt: an
  * account's ATProto handle IS the profile identity, so a path built from a handle is a profile

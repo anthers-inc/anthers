@@ -88,7 +88,7 @@ function GiveBadgeCard({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	/** The viewer's directed budget and what's still unallocated across all creators. */
+	/** The user's directed budget and what's still unallocated across all creators. */
 	const loadBudget = useCallback(async () => {
 		const res = await client.api.subscriptions["my-badges"].$get();
 		if (!res.ok) return;
@@ -127,7 +127,7 @@ function GiveBadgeCard({
 			}
 			// Both halves have to move: `onGiven` re-reads the ladder and the holding
 			// (so a tier flips to Unlocked), and `loadBudget` re-reads what's left to give.
-			// Refreshing only the ladder leaves the budget line stating a total the viewer
+			// Refreshing only the ladder leaves the budget line stating a total the user
 			// has already spent.
 			await Promise.all([onGiven(), loadBudget()]);
 			setPending(null);
@@ -365,7 +365,7 @@ export default function CreatorProfilePage() {
 	const [_posts, setPosts] = useState<PostListItem[]>([]);
 	const [works, setWorks] = useState<CatalogWork[]>([]);
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
-	// viewer here to act, and dropping them on the default tab loses the intent they arrived with.
+	// user here to act, and dropping them on the default tab loses the intent they arrived with.
 	const tabParam = searchParams.get("tab") as Tab | null;
 	const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "all";
 	const setTab = (next: Tab) => {
@@ -396,7 +396,7 @@ export default function CreatorProfilePage() {
 	useReportVisit({ creatorId: creator?.id ?? null });
 
 	/**
-	 * Re-read the viewer's standing with this creator. Holding a Badge changes which rungs
+	 * Re-read the user's standing with this creator. Holding a Badge changes which rungs
 	 * are unlocked, and the whole point of the control is watching a tier flip to Unlocked —
 	 * so the ladder has to reflect it without a reload.
 	 */
@@ -897,7 +897,7 @@ export default function CreatorProfilePage() {
 										</ul>
 									</div>
 								</div>
-								{/* The viewer's Anthers Badge, and the rung held here */}
+								{/* The user's Anthers Badge, and the rung held here */}
 								{creatorStatus && creatorStatus.badge !== "free" && (
 									<div className="flex items-center gap-2 text-xs">
 										<span className="badge badge-sm badge-outline">

@@ -29,7 +29,7 @@ function access(over: Partial<AccessResult>): AccessResult {
 }
 
 describe("presentsAsLocked", () => {
-	test("a Work the viewer can open is never locked", () => {
+	test("a Work the user can open is never locked", () => {
 		expect(presentsAsLocked(access({ canAccess: true, reason: "free", isFree: true }))).toBe(false);
 		expect(presentsAsLocked(access({ canAccess: true, reason: "purchased" }))).toBe(false);
 		expect(presentsAsLocked(access({ canAccess: true, reason: "owner" }))).toBe(false);

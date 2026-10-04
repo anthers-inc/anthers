@@ -5,7 +5,7 @@
  *
  * 🚨 **The appeal half is not a nicety and the tests for it are not optional.** An Adult
  * rating makes a Work invisible to everyone who has not opted in and verified, so an
- * over-cautious call does not merely add a warning to a work — it removes it from most readers'
+ * over-cautious call does not merely add a warning to a work — it removes it from most users'
  * sight, and for a queer coming-of-age story wrongly flagged that is exactly the harm the
  * category exists to prevent, produced by the mechanism meant to prevent it (the wiki's
  * *Content Standards*). A suite that covered only the correction would
@@ -16,9 +16,9 @@
  * field outright would pass a test that only tried to lower it, and would have taken a
  * creator's ability to be more careful about their own work away from them.
  *
- * ⭐ **What a viewer is NOT told is asserted too.** The rating and its notes travel with the
+ * ⭐ **What a user is NOT told is asserted too.** The rating and its notes travel with the
  * public blurb — a warning that appears only once you have the thing is not a warning — but
- * `maturitySource` does not, because a viewer able to read it could tell a corrected Work
+ * `maturitySource` does not, because a user able to read it could tell a corrected Work
  * from a self-declared one.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -285,7 +285,7 @@ describe("content ratings", () => {
 		it("refuses a Work holding a rating with no rows behind it", async () => {
 			// 🚨 Rated means every row answered, not a rating held. A Work rated before the matrix
 			// existed has a General that cannot say whether it means a General form of something or
-			// none of it, which is what a reader's filter needs to know. Written straight to the
+			// none of it, which is what a user's filter needs to know. Written straight to the
 			// column, because no creator path produces this any more.
 			const workId = await makeWork();
 			await db
@@ -463,7 +463,7 @@ describe("content ratings", () => {
 
 		it("never locks which rows are marked, only how high they reach", async () => {
 			// Notes carry no access consequence, so there is nothing for a lock to protect —
-			// and locking them would take a creator's own warnings to their own readers out
+			// and locking them would take a creator's own warnings to their own users out
 			// of their hands.
 			const workId = await makeWork(rated("general"));
 			await correct(workId, "mature", ["violence"]);
@@ -626,7 +626,7 @@ describe("content ratings", () => {
 		});
 	});
 
-	describe("what a viewer is and is not told", () => {
+	describe("what a user is and is not told", () => {
 		it("shows the rating and the notes on a Work nobody can open", async () => {
 			// The warning has to arrive before the thing, not with it — so it rides with the
 			// public blurb rather than with the payload.
@@ -640,8 +640,8 @@ describe("content ratings", () => {
 			expect(work.maturityNotes).toEqual(["violence"]);
 		});
 
-		it("never tells a viewer who set the rating", async () => {
-			// 🚨 A viewer able to read this could tell a corrected Work from a self-declared
+		it("never tells a user who set the rating", async () => {
+			// 🚨 A user able to read this could tell a corrected Work from a self-declared
 			// one, which is operator information about somebody else's account.
 			const workId = await makeWork(rated("general"));
 			await patch(workId, { visibility: "released" });
@@ -673,7 +673,7 @@ describe("content ratings", () => {
 			expect(row.maturity).toBe("mature");
 			expect(row.maturitySource).toBe("creator");
 			expect(row.maturityNotes).toEqual(["violence", "language"]);
-			// Stored as marked, Not in It and all, which is what a reader's filter can rely on.
+			// Stored as marked, Not in It and all, which is what a user's filter can rely on.
 			expect(row.maturityRows).toMatchObject({ violence: "mature", horror: "none" });
 		});
 
@@ -712,11 +712,11 @@ describe("content ratings", () => {
 		});
 
 		it("gives the creator their matrix back, and a reader the rows their own filter reads", async () => {
-			// A reader's filter by kind of content blurs in the browser, so the reader's copy carries
+			// A user's filter by kind of content blurs in the browser, so the user's copy carries
 			// the rows. They restate the public notes plus which rows are Not in It, and what stays
 			// behind is who set the rating, asserted above.
 			const workId = await makeWork();
-			// Released, so the stranger is answered with the reader's shape rather than a 404.
+			// Released, so the stranger is answered with the user's shape rather than a 404.
 			const released = await patch(workId, {
 				maturityRows: rows({ horror: "general" }),
 				visibility: "released",

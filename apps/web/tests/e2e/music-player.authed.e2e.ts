@@ -13,7 +13,7 @@
  *      Garnet has no equivalent for (it indexes a filesystem: what it lists, it can play),
  *      so nothing about it is ported and nothing but a test protects it.
  *
- *   🚨 **The gate reaches the words.** A denied viewer gets no lyrics, because a gated
+ *   🚨 **The gate reaches the words.** A denied user gets no lyrics, because a gated
  *      track's lyrics are as much the deliverable as its audio. The API-level assertion
  *      lives in `delivery-access.test.ts`; this one proves the browser never renders them.
  *

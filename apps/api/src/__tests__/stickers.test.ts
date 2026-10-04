@@ -481,7 +481,7 @@ describe("the Stickers on a page", () => {
 		expect(spentAfter.length).toBe(spentBefore.length);
 	});
 
-	it("🚨 identifies a viewer's own Stickers, and nobody's to a stranger", async () => {
+	it("🚨 identifies a user's own Stickers, and nobody's to a stranger", async () => {
 		const work = await insertWork({ creatorId, type: "text", title: `Mine ${RUN}` });
 		expect(
 			(await give(cookie, { subjectType: "work", subjectId: work.id, artKey: "butterfly-small" }))
@@ -491,7 +491,7 @@ describe("the Stickers on a page", () => {
 		// The giver gets a row id back, because taking one back is theirs alone to do.
 		expect((await listOn(work.id, cookie))[0]?.mine.length).toBe(1);
 
-		// A signed-out reader sees the Sticker and no identity attached to it.
+		// A signed-out user sees the Sticker and no identity attached to it.
 		const anon = (await listOn(work.id))[0];
 		expect(anon?.count).toBe(1);
 		expect(anon?.mine).toEqual([]);

@@ -179,7 +179,7 @@ describe("A verdict cannot be left without words", () => {
 		const list = await readReviews();
 		expect(list.count).toBe(1);
 		expect(list.reviews).toHaveLength(1);
-		// Trimmed on the way in, so leading/trailing space never reaches a reader.
+		// Trimmed on the way in, so leading/trailing space never reaches a user.
 		expect(list.reviews[0].body).toBe("the pacing is the thing — nothing overstays");
 		expect(list.reviews[0].verdict).toBe("recommended");
 		expect(list.reviews[0].handle).toBe(await handleOf(userAName));
@@ -244,10 +244,10 @@ describe("Editing a review", () => {
 describe("Reviews written before text was required", () => {
 	it("still render and still count, with an empty body", async () => {
 		// Insert the legacy shape directly — the API can no longer produce it.
-		const [viewer] = (await db.execute(
+		const [user] = (await db.execute(
 			sql`SELECT id FROM users WHERE email = ${`${userBName}@example.com`}`,
 		)) as unknown as { id: number }[];
-		await db.insert(reviews).values({ userId: viewer.id, workId, verdict: "recommended" });
+		await db.insert(reviews).values({ userId: user.id, workId, verdict: "recommended" });
 
 		const list = await readReviews();
 		expect(list.count).toBe(1);
@@ -261,8 +261,8 @@ describe("Reviews written before text was required", () => {
 });
 
 describe("Helpfulness — reviews sort by it and are never weighted by it", () => {
-	it("carries a floored net and the viewer's own vote on every review", async () => {
-		// The userB review from the block above is the subject. Three fresh readers
+	it("carries a floored net and the user's own vote on every review", async () => {
+		// The userB review from the block above is the subject. Three fresh users
 		// vote on it: two up and one down lands it at 1, which the REVIEWER sees
 		// decomposed and everybody else sees as one number.
 		const reviewId = (await readReviews()).reviews[0].id;
@@ -331,7 +331,7 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 
 describe("The reviewer's own upvote", () => {
 	// Reddit's rule, settled 2026-09-21: posting something says the author thinks it is
-	// worth reading, so a new review starts at 1 and a 0 always means a reader said no.
+	// worth reading, so a new review starts at 1 and a 0 always means a user said no.
 	it("starts a new review at 1, cast by its author", async () => {
 		const cookie = await signUp(`rv_auto_${id}`);
 		const res = await post(`/api/content/works/${workId}/reviews`, cookie, {
@@ -381,7 +381,7 @@ describe("The reviewer's own upvote", () => {
 });
 
 describe("The Recent share", () => {
-	// A reader-selectable window beside All Time (Parker, 2026-09-13): the same proportion
+	// A user-selectable window beside All Time (Parker, 2026-09-13): the same proportion
 	// over only the reviews inside it, or null rather than 0 when the window is empty.
 	it("computes over the chosen window and nowhere else", async () => {
 		// userB's review above is "recommended" and is the only one we move. Everything

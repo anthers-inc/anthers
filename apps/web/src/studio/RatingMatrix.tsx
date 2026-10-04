@@ -11,7 +11,7 @@
  * go and find. A rung a row never reaches is shown and not offered.
  *
  * ⭐ ***Not in it* is an answer, and an unanswered row is not.** Parker kept the column because it
- * helps a reader who does not mind rated work but has one thing they want to avoid: a row
+ * helps a user who does not mind rated work but has one thing they want to avoid: a row
  * marked *Not in it* is a statement their own filter can rely on. So the matrix never fills a row
  * on the creator's behalf, and the Work stays unrated until every row has been answered.
  */

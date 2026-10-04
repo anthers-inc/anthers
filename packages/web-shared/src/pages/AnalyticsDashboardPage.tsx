@@ -217,7 +217,7 @@ function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] 
 		return (
 			<EmptyState
 				title="No content activity yet"
-				description="Analytics will appear here once viewers interact with your content."
+				description="Analytics will appear here once users interact with your content."
 			/>
 		);
 	}

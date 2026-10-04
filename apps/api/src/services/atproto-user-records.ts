@@ -1,27 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Mapping a reader's rows onto the records they own — comments, reviews, votes and follows.
+ * Mapping a user's rows onto the records they own — comments, reviews, votes and follows.
  *
  * These are pure functions and write nothing. They exist ahead of any writer for the same
  * reason `atproto-records.ts` does: a Lexicon nobody has mapped real rows onto is a guess,
  * and publishing one is a public commitment that is expensive to correct. What a mapper
  * catches that reasoning does not is a required field there is no column to fill.
  *
- * 🚨 **These records are CANONICAL in the reader's repository and the row is an index**,
+ * 🚨 **These records are CANONICAL in the user's repository and the row is an index**,
  * which is the opposite arrangement from a Work's listing. A Work's row carries price, gate,
  * delivery key and takedown state that can never be public, so the repository cannot hold
  * the whole of it; a comment, a review, a vote and a follow have no such field. The wiki's
  * *Federation → Where the Data Is Canonical* is the rule and the exception.
  *
  * ⚠️ **Every mapper refuses rather than throws.** "This one has no record" is an ordinary
- * outcome of walking a reader's history, not an error — the same shape `unpublishableReason`
+ * outcome of walking a user's history, not an error — the same shape `unpublishableReason`
  * uses for Works.
  */
 import { isReviewVerdict } from "@anthers/shared/content";
 import { isVoteDirection } from "@anthers/shared/votes";
 
 /**
- * Why a reader's row has no record.
+ * Why a user's row has no record.
  *
  * ⚠️ **`no_author` is the tombstone case and it is common rather than exceptional.** Comments
  * and reviews keep their row with a null author when an account is deleted, so that a thread
@@ -30,8 +30,8 @@ import { isVoteDirection } from "@anthers/shared/votes";
  *
  * 🚨 **`subject_unpublished` is the compounding condition.** A record names its subject by
  * address, so an interaction can only be published once the thing it is about has a record of
- * its own. That depends on the SUBJECT's creator rather than on the reader acting here, which
- * is why it is reported as a distinct reason: a reader whose interactions stop publishing has
+ * its own. That depends on the SUBJECT's creator rather than on the user acting here, which
+ * is why it is reported as a distinct reason: a user whose interactions stop publishing has
  * done nothing, and the fix is not theirs to make.
  */
 export type UnpublishableUserReason =
@@ -224,7 +224,7 @@ export interface FollowRecord {
  * follower's, and nothing the follower does will close it.
  *
  * ⚠️ **This is `org.anthers.follow` and never `app.bsky.graph.follow`.** Following a creator
- * for their releases is a different act from an edge in a microblog's social graph, a reader
+ * for their releases is a different act from an edge in a microblog's social graph, a user
  * may reasonably want one without the other, and a permission set cannot address another
  * namespace in any case. Mirroring a follow onto that network is something a person chooses.
  */

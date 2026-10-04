@@ -5,7 +5,7 @@
  * The old `accounts` table carried both facts as columns — the user's monthly Anthers
  * amount and the directed support total — and the split (2026-10-03) deleted them; under
  * the Badge model the amounts are `user_badges` holdings. These two helpers are the
- * hops' replacement shapes, and each docblock names the production readers that resolve
+ * hops' replacement shapes, and each docblock names the production users that resolve
  * from the shape it writes.
  *
  * 🚨 Dev-fixture only — both writes are reached through `gauntlet-state.ts`, which asserts
@@ -27,8 +27,8 @@ function cycleKey(): string {
  * under the Badge model the only honest place for the amount.** The old hop wrote the
  * accounts table's Anthers-Support column, which fed `heldAnthersBadgeAmount` and
  * `publicAccessBudget`; that column died with the split, and the issuer pass re-pointed
- * both readers at exactly this shape — the holder's row on the Anthers ladder, threshold
- * resolved through the badge. The re-pointed readers are `services/access.ts` and
+ * both users at exactly this shape — the holder's row on the Anthers ladder, threshold
+ * resolved through the badge. The re-pointed users are `services/access.ts` and
  * `services/public-access.ts`, and the account is found by its handle —
  * `anthersUserIdOfSession` below, the session-side twin of the API's `anthersUserId`.
  *
@@ -48,7 +48,7 @@ function cycleKey(): string {
 export async function applyAnthersSupport(userId: number, dollars: string): Promise<void> {
 	const anthers = await anthersUserIdOfSession();
 	// Free is the absence of a holding (the 2026-10-03 reversal), not a rung at $0: the
-	// $0 hop clears the viewer's Anthers holdings and writes nothing, which is the same
+	// $0 hop clears the user's Anthers holdings and writes nothing, which is the same
 	// shape a canceled subscription leaves.
 	if (Number(dollars) === 0) {
 		await db

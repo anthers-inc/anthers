@@ -102,7 +102,7 @@ export function PublicAccessCountdown() {
  *
  * 🚨 Note what this is **not**: it is not a locked-content panel, and it must never
  * borrow that language. The Work is free to everyone and stays free to everyone — what
- * ran out belongs to the *viewer*, and the copy has to put it that way round or the
+ * ran out belongs to the *user*, and the copy has to put it that way round or the
  * commons quietly reads as stratified again, which is exactly what retiring Anthers
  * Gates was for. "You've used your ten hours", never "this is locked".
  */
@@ -124,7 +124,7 @@ export function PublicAccessWall({ budget }: { budget: PublicAccessBudget }) {
 				Support Anthers
 			</Link>
 			{/* "watched" was wrong here on three of the four media — the allowance is one pool
-			    of time spent however the viewer likes, which is the equal-time principle the
+			    of time spent however the user likes, which is the equal-time principle the
 			    Hub is explicit about. A minute is a minute, whatever it is spent on. */}
 			{budget.usedSeconds > 0 && (
 				<p className="text-xs text-base-content/45">
@@ -146,7 +146,7 @@ export function PublicAccessWall({ budget }: { budget: PublicAccessBudget }) {
  * `InlineUnlock`, which is a better place for it than underneath something already playing.
  *
  * Reduced to one case rather than deleted outright: the players call this, it names the one
- * thing a metered viewer needs told, and a second branch will come back the day share links
+ * thing a metered user needs told, and a second branch will come back the day share links
  * land — at which point the recipient really is watching without an account of their own.
  */
 export function PublicAccessFooter() {

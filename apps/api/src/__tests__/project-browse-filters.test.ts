@@ -223,13 +223,13 @@ describe("project browse filters", () => {
 		);
 	});
 
-	it("exempts signed-out viewers from the locked filter", async () => {
-		// Everything gated is locked to a signed-out viewer, so applying the filter would
+	it("exempts signed-out users from the locked filter", async () => {
+		// Everything gated is locked to a signed-out user, so applying the filter would
 		// empty the list every time — which reads as a broken page, not as a filter.
 		expect(await listSlugs("pricing=gated")).toEqual([mine.get("text")!]);
 	});
 
-	it("hides gated Works a signed-in viewer cannot open, unless show_locked says otherwise", async () => {
+	it("hides gated Works a signed-in user cannot open, unless show_locked says otherwise", async () => {
 		const cookie = (await createAccount(userName)).cookie;
 
 		const asUser = async (query: string) => {
@@ -240,7 +240,7 @@ describe("project browse filters", () => {
 			return (projects as { slug: string }[]).map((p) => p.slug).filter((s) => ours.has(s));
 		};
 
-		// This viewer has given nothing, so the $2 gate is shut to them.
+		// This user has given nothing, so the $2 gate is shut to them.
 		expect(await asUser("pricing=gated")).toEqual([]);
 		expect(await asUser("pricing=gated&show_locked=true")).toEqual([mine.get("text")!]);
 	});

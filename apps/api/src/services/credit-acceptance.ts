@@ -11,7 +11,7 @@
  * ⚠️ This module intentionally does not decide whether the caller is the contributor. The
  * route layer checks that; this layer trusts its caller to supply the right user id.
  *
- * Alongside the accept/reject flow, this module owns the **viewer overlay** (`creditsForUser`)
+ * Alongside the accept/reject flow, this module owns the **user overlay** (`creditsForUser`)
  * and the credit-offered notification (`notifyCreditedAccounts`) — the two halves of showing
  * credits to people who were not in the room when they were written. The routes call both and
  * decide nothing.
@@ -296,18 +296,18 @@ export async function findRejectedCredit(
 	return null;
 }
 
-// ─── The viewer overlay ───────────────────────────────────────────────────────
+// ─── The user overlay ───────────────────────────────────────────────────────
 
 /**
- * One credit as a given viewer may see it.
+ * One credit as a given user may see it.
  *
  * The two flag fields are emitted by the overlay below and exist nowhere in storage:
  *
- * - `awaitingYourConfirmation` — the viewer IS the credited person and has not accepted yet.
+ * - `awaitingYourConfirmation` — the user IS the credited person and has not accepted yet.
  *   The front-end renders Accept/Decline controls from it. Only the named person's own
  *   serialization carries it, and the credit ships with its role and types intact because
  *   those are what they need to act.
- * - `awaitingContributorConfirmation` — the viewer is the Work's creator, looking at a
+ * - `awaitingContributorConfirmation` — the user is the Work's creator, looking at a
  *   credit that names somebody else and is not accepted yet. Only an owner-facing
  *   serialization carries it.
  *
@@ -331,13 +331,13 @@ interface OverlayWork {
 }
 
 /**
- * The credits a given viewer should see on a Work.
+ * The credits a given user should see on a Work.
  *
  * The published record already withholds an unaccepted `did`-naming credit (see
  * `creditToRecord`); this is the same rule on the API's own serialization, so a credit a
  * person has not confirmed does not render to strangers as fact. Three answers:
  *
- * - **Non-DID credits pass through untouched**, whatever the viewer.
+ * - **Non-DID credits pass through untouched**, whatever the user.
  * - **An accepted DID credit ships resolved** — `contributor` becomes the account's display
  *   name or handle, never a bare `did:` string. Acceptance requires a signed-in account
  *   whose identity IS the credited DID, so a `users` row always resolves; if one is ever
@@ -350,8 +350,8 @@ interface OverlayWork {
  * ⚠️ **Only queries when a Work's credits actually contain a DID string**, so the common
  * case — no credits, or none naming an identity — pays nothing.
  *
- * Like the rest of this module, it trusts its caller for who the viewer is: `userId` is
- * the signed-in account's id or null for a signed-out viewer.
+ * Like the rest of this module, it trusts its caller for who the user is: `userId` is
+ * the signed-in account's id or null for a signed-out user.
  */
 export async function creditsForUser(
 	work: OverlayWork,
@@ -381,7 +381,7 @@ export async function creditsForUser(
 			})
 			.from(users)
 			.where(inArray(users.atprotoDid, dids)),
-		// The named-person exception needs the viewer's own DID. A second users read rather
+		// The named-person exception needs the user's own DID. A second users read rather
 		// than a parameter, because the call sites hold a user id and nothing else.
 		userId != null
 			? db
@@ -420,7 +420,7 @@ export async function creditsForUser(
 		if (isCreator) {
 			visible.push({ ...credit, awaitingContributorConfirmation: true });
 		}
-		// Everybody else — signed-out and third-party viewers alike — does not see the
+		// Everybody else — signed-out and third-party users alike — does not see the
 		// credit at all: an unconfirmed claim about a third party is not a liner note.
 	}
 	return visible;

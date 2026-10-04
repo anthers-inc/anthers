@@ -3,7 +3,7 @@
  * Setup project for the User Gauntlet walk's OWN fixture instance: reset instance B
  * through its canonical script (`db:gauntlet --instance walk` — the same seeder instance
  * A's setup runs, pointed at the walk's own rows, never a reimplementation), sign the
- * walk's viewer in through the real sign-in route, and persist the resulting session as
+ * walk's user in through the real sign-in route, and persist the resulting session as
  * the storageState the gauntlet project runs under.
  *
  * Instance B is the walk's private copy of the fixture (`walk-creator` / `walk-walker`
@@ -31,7 +31,7 @@ import { API_URL, emailedCode, WALK_AUTH_STATE_PATH, WEB_ORIGIN } from "./fixtur
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
-setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
+setup("reset the walk's gauntlet fixture and sign its user in", async () => {
 	// Canonical fixture reset, for instance B. --ensure-walker creates walk-walker on
 	// first run and targets it thereafter, so the walk never touches the dev account
 	// or instance A's gauntlet_walker.
@@ -43,7 +43,7 @@ setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
 	// resets the fixture again — which deletes the content items, and with them any media
 	// attached now — and then re-attaches it. Generating it here meant running ffmpeg twice
 	// per CI run and throwing the first result away. What this step must leave behind is the
-	// viewer, so the sign-in below has an account to authenticate.
+	// user, so the sign-in below has an account to authenticate.
 
 	// 🚨 The MEDIA FIXTURE (`db:media-fixture`) is deliberately NOT seeded here either —
 	// that is instance A's setup's job. It seeds creators (`media_fixture`, the gauntlet
@@ -71,7 +71,7 @@ setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
 	expect(token, `no session cookie in Set-Cookie: "${setCookie}"`).toBeTruthy();
 
 	// The storage state, by hand (see the gotcha above): the session cookie for the API
-	// host, which is the whole of the viewer's state now that the pre-launch gate is gone.
+	// host, which is the whole of the user's state now that the pre-launch gate is gone.
 	const state = {
 		cookies: [
 			{

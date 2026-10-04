@@ -5,12 +5,12 @@
  * 🚨 **Why this job exists at all, when the creator already uploaded a perfectly good
  * PDF.** The delivery rule is that every derived media object is stored private and every
  * URL to one is minted per request at an endpoint that re-resolves access — and a PDF is
- * *one* object. A reader pointed at a signed URL for it has the whole book the moment page
+ * *one* object. A user pointed at a signed URL for it has the whole book the moment page
  * one opens, which makes `downloadEnabled: false` a lie for this medium specifically and
  * would surprise a creator who deliberately turned downloads off. Pages are to a book what
  * HLS segments are to a video: the unit that can actually be checked.
  *
- * The happy side effect is that the *client* gets simpler, not heavier — the reader shows
+ * The happy side effect is that the *client* gets simpler, not heavier — the user shows
  * images, so no PDF parser (~1 MB) ships to the browser at all.
  *
  * Uses **poppler** (`pdfinfo` + `pdftoppm`), which is a new system dependency alongside
@@ -192,7 +192,7 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 				console.warn(
 					`[rasterize-ebook] panel detection failed for work ${work.id} page ${i + 1}: ${message}`,
 				);
-				// A detection failure leaves the page without panels, which the reader treats as
+				// A detection failure leaves the page without panels, which the user treats as
 				// whole-page fallback. The job continues.
 			}
 

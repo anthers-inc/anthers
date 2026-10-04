@@ -280,7 +280,7 @@ describe("the export is complete, readable, and handed over safely", () => {
 			true,
 		);
 
-		// Present as sections even when empty, so a reader can tell "nothing here" from
+		// Present as sections even when empty, so a user can tell "nothing here" from
 		// "we didn't include this".
 		expect(data.money).toHaveProperty("purchases");
 		expect(data).toHaveProperty("viewingHistory");

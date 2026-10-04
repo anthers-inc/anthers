@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Report dialog — the reader's half of the moderation surface.
+ * Report dialog — the user's half of the moderation surface.
  *
  * Deliberately says nothing about what happens next. Whether the item is already
  * reported, already hidden, or was already looked at and dismissed is operator
@@ -40,7 +40,7 @@ import { useState } from "react";
 interface ReportDialogProps {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	/** What the reader is reporting, named in their words ("this comment", "@ada"). */
+	/** What the user is reporting, named in their words ("this comment", "@ada"). */
 	label: string;
 	onClose: () => void;
 }

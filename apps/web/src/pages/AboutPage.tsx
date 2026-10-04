@@ -12,7 +12,7 @@
 // Inc. is a Colorado nonprofit corporation), then what that fact actually binds,
 // then the mission, then the person. An earlier arrangement opened on the mission
 // and reached the organization in section five, which buries the one thing a
-// reader came here to establish.
+// user came here to establish.
 //
 // ── What this page owns, and what it must not grow back ──────────────────────
 //
@@ -49,7 +49,7 @@
 // The wiki's *How Anthers Talks About Itself* § Claims used to read *"say nothing about federal status at
 // all"*, and this page said nothing. **Parker's call is that the page states the
 // intention** — the two-list structure below is what makes that safe, because it
-// partitions present from future explicitly rather than leaving a reader to guess
+// partitions present from future explicitly rather than leaving a user to guess
 // which column a sentence belongs in. The wiki's *How Anthers Talks About Itself* carries the narrowed rule now.
 //
 // What did NOT change, and what `about-claims.test.ts` still holds:
@@ -81,7 +81,7 @@
 // draft headed the last section *"Anthers Is One Person"* over a lede about how
 // pages like this usually find a way around saying so — which dresses an ordinary
 // fact as courage. People can count. What the section is actually for is the
-// thing every organization owes a reader: here is who we are.
+// thing every organization owes a user: here is who we are.
 //
 // 🚨 **The reference for the first-person passages is Parker's own about page,
 // and its source is on this machine at `~/Daisy/apps/web/src/pages/about.tsx`** —
@@ -98,7 +98,7 @@
 // The hero is the standing introduction, verbatim (the wiki's *How Anthers Talks About
 // Itself* § The Standing Introduction), split across the
 // headline and the lede. Quote it rather than writing a fresh introduction, so
-// the platform sounds like one thing wherever a reader meets it. ⚠️ It replaced
+// the platform sounds like one thing wherever a user meets it. ⚠️ It replaced
 // a hero reading *"Anthers is a federated, open content network…"*, which
 // asserted federation that has not shipped — `RETIRED_COPY` carries a rule for
 // the wording now, since its ATProto rule matched the claim's other phrasings

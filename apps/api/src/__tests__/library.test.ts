@@ -43,20 +43,20 @@ function req(path: string, options?: RequestInit) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `lib_c_${id}`;
-const readerName = `lib_r_${id}`;
+const userName = `lib_r_${id}`;
 
 /** Free to everyone — the commons, and the case the Library exists to be able to hold. */
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
-/** Behind $2 given to the creator, which the reader never gives. */
+/** Behind $2 given to the creator, which the user never gives. */
 const GATED = [
 	{ threshold: 0, allow: false, price: "0" },
 	{ threshold: 2, allow: true, price: "0" },
 ];
 
 let creatorAuth: Record<string, string>;
-let readerAuth: Record<string, string>;
-let readerCookie: string;
-let readerId = 0;
+let userAuth: Record<string, string>;
+let userCookie: string;
+let userId = 0;
 let creatorId = 0;
 
 let freeWorkId = 0;
@@ -97,10 +97,10 @@ async function makeWork(title: string, access: unknown, released = true): Promis
 	return workId;
 }
 
-/** The reader's shelf. `hidden` includes the tidied-away entries. */
+/** The user's shelf. `hidden` includes the tidied-away entries. */
 async function shelf(opts: { hidden?: boolean } = {}) {
 	const res = await req(`/api/content/library${opts.hidden ? "?hidden=1" : ""}`, {
-		headers: { Cookie: readerCookie },
+		headers: { Cookie: userCookie },
 	});
 	expect(res.status).toBe(200);
 	return (await res.json()).items as {
@@ -115,14 +115,14 @@ async function shelf(opts: { hidden?: boolean } = {}) {
 async function save(body: Record<string, number>) {
 	return req("/api/content/library", {
 		method: "POST",
-		headers: readerAuth,
+		headers: userAuth,
 		body: JSON.stringify(body),
 	});
 }
 
-/** Whether the reader can actually open a Work, asked at the endpoint that gates bytes. */
+/** Whether the user can actually open a Work, asked at the endpoint that gates bytes. */
 async function canOpen(workId: number): Promise<boolean> {
-	const res = await req(`/api/content/works/${workId}`, { headers: { Cookie: readerCookie } });
+	const res = await req(`/api/content/works/${workId}`, { headers: { Cookie: userCookie } });
 	expect(res.status).toBe(200);
 	return (await res.json()).work.access.canAccess as boolean;
 }
@@ -130,17 +130,17 @@ async function canOpen(workId: number): Promise<boolean> {
 describe("the Library", () => {
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 		const creator = await signUp(creatorName);
 		await enablePayouts(creatorName);
-		const reader = await signUp(readerName);
-		await enablePayouts(readerName);
+		const user = await signUp(userName);
+		await enablePayouts(userName);
 		creatorId = creator.userId;
-		readerId = reader.userId;
-		readerCookie = reader.cookie;
+		userId = user.userId;
+		userCookie = user.cookie;
 		creatorAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator.cookie };
-		readerAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: reader.cookie };
+		userAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: user.cookie };
 
 		freeWorkId = await makeWork(`Free ${id}`, FREE);
 		gatedWorkId = await makeWork(`Gated ${id}`, GATED);
@@ -151,7 +151,7 @@ describe("the Library", () => {
 		// driving Stripe would test the checkout route instead. The auto-save hook is
 		// covered separately, below, by calling the service the webhook calls.
 		await db.insert(purchases).values({
-			buyerId: readerId,
+			buyerId: userId,
 			workId: boughtWorkId,
 			creatorId,
 			type: "digital",
@@ -167,7 +167,7 @@ describe("the Library", () => {
 	// ── The property everything else rests on ──────────────────────────────────
 
 	it("🚨 saving a Work grants NO access to it", async () => {
-		// Gated, and the reader has given nothing — so this is denied before and must be
+		// Gated, and the user has given nothing — so this is denied before and must be
 		// denied after. Asked at the Work endpoint rather than of `resolveAccessSync`, so
 		// a mistake made in a route rather than in the resolver still fails here.
 		expect(await canOpen(gatedWorkId)).toBe(false);
@@ -217,7 +217,7 @@ describe("the Library", () => {
 		// Nothing wrote a "this was bought" flag — `purchases` is read back on every
 		// request, which is why a refund can release it with no sweep.
 		const { saveOnPurchase } = await import("../services/library.js");
-		await saveOnPurchase({ buyerId: readerId, workId: boughtWorkId, type: "digital" });
+		await saveOnPurchase({ buyerId: userId, workId: boughtWorkId, type: "digital" });
 
 		const entry = (await shelf()).find((i) => i.work?.id === boughtWorkId);
 		expect(entry, "a completed purchase should be on the shelf").toBeTruthy();
@@ -228,7 +228,7 @@ describe("the Library", () => {
 		const entry = (await shelf()).find((i) => i.work?.id === boughtWorkId);
 		const res = await req(`/api/content/library/${entry?.id}`, {
 			method: "DELETE",
-			headers: readerAuth,
+			headers: userAuth,
 		});
 		expect(res.status).toBe(409);
 		expect((await res.json()).reason).toBe("purchased");
@@ -241,7 +241,7 @@ describe("the Library", () => {
 
 		const hide = await req(`/api/content/library/${entry?.id}`, {
 			method: "PATCH",
-			headers: readerAuth,
+			headers: userAuth,
 			body: JSON.stringify({ hidden: true }),
 		});
 		expect(hide.status).toBe(200);
@@ -252,7 +252,7 @@ describe("the Library", () => {
 
 		const show = await req(`/api/content/library/${entry?.id}`, {
 			method: "PATCH",
-			headers: readerAuth,
+			headers: userAuth,
 			body: JSON.stringify({ hidden: false }),
 		});
 		expect(show.status).toBe(200);
@@ -263,14 +263,14 @@ describe("the Library", () => {
 		await db
 			.update(purchases)
 			.set({ status: "refunded" })
-			.where(and(eq(purchases.buyerId, readerId), eq(purchases.workId, boughtWorkId)));
+			.where(and(eq(purchases.buyerId, userId), eq(purchases.workId, boughtWorkId)));
 
 		const entry = (await shelf()).find((i) => i.work?.id === boughtWorkId);
 		expect(entry?.purchased, "a refunded purchase is no longer permanent").toBe(false);
 
 		const res = await req(`/api/content/library/${entry?.id}`, {
 			method: "DELETE",
-			headers: readerAuth,
+			headers: userAuth,
 		});
 		expect(res.status).toBe(204);
 
@@ -278,7 +278,7 @@ describe("the Library", () => {
 		await db
 			.update(purchases)
 			.set({ status: "completed" })
-			.where(and(eq(purchases.buyerId, readerId), eq(purchases.workId, boughtWorkId)));
+			.where(and(eq(purchases.buyerId, userId), eq(purchases.workId, boughtWorkId)));
 	});
 
 	// ── Removing what you merely saved ─────────────────────────────────────────
@@ -287,7 +287,7 @@ describe("the Library", () => {
 		const entry = (await shelf()).find((i) => i.work?.id === freeWorkId);
 		const res = await req(`/api/content/library/${entry?.id}`, {
 			method: "DELETE",
-			headers: readerAuth,
+			headers: userAuth,
 		});
 		expect(res.status).toBe(204);
 		expect((await shelf()).some((i) => i.work?.id === freeWorkId)).toBe(false);
@@ -298,7 +298,7 @@ describe("the Library", () => {
 		const entry = (await shelf()).find((i) => i.work?.id === freeWorkId);
 		await req(`/api/content/library/${entry?.id}`, {
 			method: "PATCH",
-			headers: readerAuth,
+			headers: userAuth,
 			body: JSON.stringify({ hidden: true }),
 		});
 		expect((await shelf()).some((i) => i.work?.id === freeWorkId)).toBe(false);
@@ -334,7 +334,7 @@ describe("the Library", () => {
 		const mine = await db
 			.select({ id: libraryItems.id })
 			.from(libraryItems)
-			.where(eq(libraryItems.userId, readerId));
+			.where(eq(libraryItems.userId, userId));
 		const mineIds = new Set(mine.map((m) => m.id));
 		expect(items.every((i) => !mineIds.has(i.id))).toBe(true);
 	});

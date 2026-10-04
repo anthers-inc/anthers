@@ -12,12 +12,12 @@ import { useMemo, useState } from "react";
 import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 
 // ---------------------------------------------------------------------------
-// Support-model economics. A viewer gives Anthers a monthly amount, which names their
+// Support-model economics. A user gives Anthers a monthly amount, which names their
 // Badge (Root $3 … Blossom $12). That amount splits into a Time Pool (a share of it, to
 // creators by time) and "Supports Anthers" (the remainder funding free access and
-// programs). Money to creators = the Time Pool + what a viewer gives directly to a
+// programs). Money to creators = the Time Pool + what a user gives directly to a
 // creator (any amount, no platform cut). The Time Pool is distributed
-// across the creators a viewer watches, in proportion to time (equal-time
+// across the creators a user watches, in proportion to time (equal-time
 // principle — a minute is a minute across every medium). There is no bandwidth term:
 // delivery costs $0 at any volume, so it appears on nobody's bill.
 //
@@ -31,12 +31,12 @@ const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 
 const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
 /**
- * A loose illustrative cap on what a viewer directs to creators, by Badge — **dollars a
+ * A loose illustrative cap on what a user directs to creators, by Badge — **dollars a
  * month**, and independent of what they give Anthers.
  *
  * 🚨 **Dollars, and a stray multiplier here overstated the whole page threefold once.**
  * When `thresholdForBadge` changed what its return value *meant*, everything downstream
- * kept multiplying by $3 and Blossom modeled a viewer directing **$36** rather than $12.
+ * kept multiplying by $3 and Blossom modeled a user directing **$36** rather than $12.
  * Nothing caught it, because a modeling coefficient is not a typed figure `econ:figures`
  * can see — so read what this returns rather than assuming its unit.
  */
@@ -65,7 +65,7 @@ function rate(n: number): string {
 const cnt = (n: number) => Math.round(n).toLocaleString("en-US");
 
 // ---------------------------------------------------------------------------
-// Section 1 — the conversion engine (one viewer)
+// Section 1 — the conversion engine (one user)
 // ---------------------------------------------------------------------------
 
 function ConversionEngine() {
@@ -109,7 +109,7 @@ function ConversionEngine() {
 		};
 	}, [badge, total, you, directedToYou]);
 
-	// Split bar over what the viewer gives Anthers.
+	// Split bar over what the user gives Anthers.
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
 		{

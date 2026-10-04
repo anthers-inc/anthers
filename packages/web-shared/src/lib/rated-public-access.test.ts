@@ -17,7 +17,7 @@ describe("showsRatedPublicAccessNotice", () => {
 		expect(showsRatedPublicAccessNotice({ ...RELEASED_PA, maturity: "adult" })).toBe(true);
 	});
 
-	it("stays quiet for General, which every reader meets", () => {
+	it("stays quiet for General, which every user meets", () => {
 		expect(showsRatedPublicAccessNotice({ ...RELEASED_PA, maturity: "general" })).toBe(false);
 	});
 

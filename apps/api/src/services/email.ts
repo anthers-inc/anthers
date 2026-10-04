@@ -206,7 +206,7 @@ export function escapeHtml(s: string): string {
  * The signup ceremony's code, to an address with no account yet.
  *
  * The code is spelled out in a monospace block rather than wrapped in a button, because
- * the reader's next move is to *type it into six boxes on the page they came from* — a
+ * the user's next move is to *type it into six boxes on the page they came from* — a
  * link would take them somewhere else and lose the picks they had already made. That is
  * the whole reason this flow uses a code instead of a link email.
  */
@@ -499,7 +499,7 @@ export async function sendAbuseAlert(args: { subject: string; html: string }): P
  *
  * 🛑 **Deliberately NOT `abuse@`.** That mailbox summons a person to stop what they are
  * doing and look at reported content, and the standing rule is that nothing may train its
- * reader to skim it. An infrastructure alert is a different job for a different person on a
+ * user to skim it. An infrastructure alert is a different job for a different person on a
  * different clock, so it gets its own address rather than borrowing the one that already
  * commands attention.
  *

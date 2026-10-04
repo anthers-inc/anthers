@@ -96,7 +96,7 @@ export const billingAccounts = pgTable("billing_accounts", {
  *
  * 🚨 **One writer**: `services/content-preferences.ts` (the display and Adult states) and
  * the adulthood-verification flow that stamps `adultVerifiedAt`/`adultVerifiedMethod` on
- * the API side — a later phase of this split. Nothing else writes here, so a reader of
+ * the API side — a later phase of this split. Nothing else writes here, so a user of
  * any column knows exactly which doors could have set it.
  *
  * ⚠️ **Rows are creatable eagerly, which is the change the split buys.** The old
@@ -260,7 +260,7 @@ export const accountCycles = pgTable(
 		 * recomputed later is not the figure settlement acted on. What was booked to the
 		 * remainder has to be readable years afterwards from the row that booked it.
 		 *
-		 * Two things leave a pool undistributed and both land here: a viewer who streamed no
+		 * Two things leave a pool undistributed and both land here: a user who streamed no
 		 * Public Access at all in the cycle, and a sharer who watched nothing themselves, whose
 		 * share-link slice is a ceiling rather than a reservation. See `distribute-pool.ts`.
 		 */
@@ -573,19 +573,19 @@ export const attentionEvents = pgTable(
 		 * 🚨 **Stamped at the write boundary, never re-derived on read**, and that is the
 		 * whole point of the column. A Work's access can change after the fact: a creator
 		 * may gate something they had left open, or open something they had gated. Reading
-		 * today's access to decide what a viewer consumed last week gets it wrong in both
+		 * today's access to decide what a user consumed last week gets it wrong in both
 		 * directions — and one of those directions is harmful, because it would charge a
 		 * supporter's free allowance for gated work they had actually paid a creator to
 		 * reach.
 		 *
 		 * Same discipline as attention eligibility itself: decided once, where the fact is
-		 * known, so no later reader can apply a different rule.
+		 * known, so no later user can apply a different rule.
 		 *
-		 * 🚨 **Two readers depend on this flag and they must not diverge.** The Public
-		 * Access meter (`services/public-access.ts`) spends a viewer's monthly allowance
+		 * 🚨 **Two users depend on this flag and they must not diverge.** The Public
+		 * Access meter (`services/public-access.ts`) spends a user's monthly allowance
 		 * against it, and `distribute-pool` pays the Time Pool against it — because
 		 * distributor-pays says the pool buys the commons and nothing else. Gated work the
-		 * viewer cleared, work they bought, and their own catalog are all `false` here
+		 * user cleared, work they bought, and their own catalog are all `false` here
 		 * and earn nothing from the pool; whoever cleared the gate or made the purchase
 		 * already paid that creator in full, and paying again would dilute exactly the
 		 * Public Access creators the pool exists for.
@@ -602,13 +602,13 @@ export const attentionEvents = pgTable(
 		 * named by `user_id`?
 		 *
 		 * 🚨 **`user_id` is the SHARER on these rows, not the person who watched**, and that
-		 * is the point rather than an inaccuracy. A share-link viewer has no account, so the
+		 * is the point rather than an inaccuracy. A share-link user has no account, so the
 		 * time is attributed to whoever shared the link — which is what makes it attributable
 		 * at all, and the Time Pool cannot pay a creator for time it cannot attribute to
-		 * anybody. Nothing here identifies the viewer, and nothing should: they are a stranger
+		 * anybody. Nothing here identifies the user, and nothing should: they are a stranger
 		 * we deliberately did not ask to sign up.
 		 *
-		 * Two readers, drawing two different boundaries, and they are not the same boundary:
+		 * Two users, drawing two different boundaries, and they are not the same boundary:
 		 *
 		 *   - The **share-link budget** (`services/public-access.ts`) counts every row with
 		 *     this flag, `public_access` or not, because what it bounds is *relay volume* —
@@ -621,7 +621,7 @@ export const attentionEvents = pgTable(
 		 * ⚠️ A creator sharing their **own** Work writes rows with `public_access: false`, so
 		 * the seconds are still metered against the relay budget and earn nothing. Paying a
 		 * creator out of their own pool is the same refusal the owner branch already makes in
-		 * `resolveAccessSync`; a share context has a null viewer, so that branch cannot make it
+		 * `resolveAccessSync`; a share context has a null user, so that branch cannot make it
 		 * here and the stamp does it instead.
 		 */
 		viaShareLink: boolean("via_share_link").notNull().default(false),
@@ -693,9 +693,9 @@ export const attentionEvents = pgTable(
  * says they keep — per Work, per day — rather than lost along with the identities.
  *
  * `uniqueUsers` is stored per day and **cannot be summed across days** without
- * counting a returning viewer twice, which is a real limit of holding no identities:
+ * counting a returning user twice, which is a real limit of holding no identities:
  * the number is genuinely unrecoverable once the rows are gone. The analytics layer
- * reports unique viewers over the raw window only, and says which window that is,
+ * reports unique users over the raw window only, and says which window that is,
  * rather than adding daily counts together and calling the total unique.
  */
 // org — the daily rollup is the org's analytics and the privacy-preserving survivor
@@ -824,7 +824,7 @@ export const poolDistributions = pgTable(
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
 		// 🚨 **NET — a payout figure, written after the destination's share of processing is
-		// deducted**, and every earnings reader draws from it. The gross counterpart is the
+		// deducted**, and every earnings user draws from it. The gross counterpart is the
 		// held Badge's threshold in `user_badges`; see the warning there for what confusing
 		// them costs.
 		badgeAmount: numeric("badge_amount").notNull().default("0.00"), // directed-share of held Badges
@@ -844,7 +844,7 @@ export const poolDistributions = pgTable(
 		 */
 		stickerAmount: numeric("sticker_amount").notNull().default("0.00"),
 		// The **Public Access** seconds that earned `poolAmount`, not all the time this
-		// viewer spent with this creator. It is the numerator of the pool split, so it has
+		// user spent with this creator. It is the numerator of the pool split, so it has
 		// to be the same set of seconds the money was divided by — a row whose seconds and
 		// dollars came from different populations could not be audited against each other,
 		// and the subscriber's Time Pool pie would draw a slice with no payout beside it.
@@ -952,7 +952,7 @@ export const badges = pgTable(
 		// discrete-picks model honest.** A Badge IS its threshold to the machinery —
 		// billing resolves a subscription item to "the issuer's badge at this price"
 		// (`applyDirectedSupportFromSub` find-or-creates on this key), the seed upsert
-		// (`ensureAnthersBadges`) is idempotent on it, and a viewer holding two of an
+		// (`ensureAnthersBadges`) is idempotent on it, and a user holding two of an
 		// issuer's badges at one price would be two spellings of the same purchase. A
 		// duplicate would make all three of those reads ambiguous rather than merely
 		// redundant.
@@ -1023,8 +1023,8 @@ export const parentalControls = pgTable("parental_controls", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// both — a Sticker is a viewer's directed payment to a creator, so it splits exactly as
-// `pool_distributions` does: the giver is org-side (a viewer has no node), the recipient
+// both — a Sticker is a user's directed payment to a creator, so it splits exactly as
+// `pool_distributions` does: the giver is org-side (a user has no node), the recipient
 // and the thing it sits on are a creator's. The payment half is org accounting; the
 // display half is node content.
 /**

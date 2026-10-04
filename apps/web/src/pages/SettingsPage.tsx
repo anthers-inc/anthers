@@ -272,16 +272,16 @@ function AdultVerificationCard({ onVerified }: { onVerified: () => Promise<void>
 }
 
 /**
- * What the reader meets at each rung, and the door to the Adult rung.
+ * What the user meets at each rung, and the door to the Adult rung.
  *
  * 🚨 **The two rungs get separate controls, and that separation is the design rather than
- * layout.** A reader who wants difficult work unblurred has said nothing about whether they
+ * layout.** A user who wants difficult work unblurred has said nothing about whether they
  * want explicit work at all, and one control covering both would make them say it (wiki
  * The wiki's *Content Standards*).
  *
  * **Each kind of content gets a control too, whatever the rating** (Parker, 2026-09-18), for a
- * reader who does not mind rated work but wants to avoid one thing. Show by default, because a note
- * may drive a reader's own filter and never a platform default. A guardian's lock covers these
+ * user who does not mind rated work but wants to avoid one thing. Show by default, because a note
+ * may drive a user's own filter and never a platform default. A guardian's lock covers these
  * with the rungs, since they are written by the same writer.
  *
  * 🚨 **Nothing here may describe paying as an age check.** A payment proves nothing about
@@ -1102,7 +1102,7 @@ interface ActivityEntry {
  * Activity history — a person's own attention ranges, exactly as recorded.
  *
  * This is the answer the Privacy Policy points at: the record of what was watched is
- * not a hidden analytics byproduct, it is the viewer's own file, and they can read
+ * not a hidden analytics byproduct, it is the user's own file, and they can read
  * every row of it here. Nothing about it is computed for display — what is stored
  * is what is shown, evidence included, which is what makes the record inspectable
  * rather than a summary somebody chose to write.
@@ -1710,7 +1710,7 @@ export default function SettingsPage() {
 
 			{activeTab === "content" && (
 				<>
-					{/* What the reader meets at each rung, and the door to the Adult rung. */}
+					{/* What the user meets at each rung, and the door to the Adult rung. */}
 					<MatureContentSection />
 
 					{/* Directly under it, because the first thing the pin protects is the section

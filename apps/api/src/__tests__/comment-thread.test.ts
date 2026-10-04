@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * How a thread is put in front of a reader: replies under what they answer, removed comments
+ * How a thread is put in front of a user: replies under what they answer, removed comments
  * kept only as the place replies hang from, and a blocked author's replies gone with them.
  *
  * 🚨 **The absence of a parent column is a claim, and a claim about an absence needs a test.** A

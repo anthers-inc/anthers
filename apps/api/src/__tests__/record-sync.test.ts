@@ -5,8 +5,8 @@
  *
  * 🚨 **The ordering is what this suite is for.** Opening a hosted writer is a `createSession`
  * against the account's server, which the reference PDS limits to thirty in five minutes and
- * three hundred a day per account. A reader may cast thirty votes a minute, so a sync that opened
- * a session before finding it had nothing to write would spend a busy reader's budget on drafts,
+ * three hundred a day per account. A user may cast thirty votes a minute, so a sync that opened
+ * a session before finding it had nothing to write would spend a busy user's budget on drafts,
  * kept records and schemas not yet published — and the first sign of it would be their real
  * writes failing. The fake opener counts, so "nothing to write" can be asserted as "no session".
  */
@@ -159,7 +159,7 @@ describe("with every schema published", () => {
 });
 
 describe("a record whose schema is unpublished", () => {
-	// ⚠️ **The draft has to be constructed now** — every reader schema is published for real, so
+	// ⚠️ **The draft has to be constructed now** — every user schema is published for real, so
 	// no kind is unpublished under the real set. What is still worth pinning is the ORDER: a row
 	// that would otherwise be written, under a schema treated as a draft, must cost no session.
 	// `comment` is made a draft by hand for the duration of this test.

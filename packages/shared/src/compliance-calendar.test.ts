@@ -139,7 +139,7 @@ describe("calendarDeadlines — resolution around a moment", () => {
 		const rows = calendarDeadlines(at("2027-06-15T00:00:00Z"));
 		const nines = rows.filter((r) => r.id === "form-990");
 		// Upcoming first, passed beside it — a passed filing is still owed, but the live one
-		// is the one the reader came for.
+		// is the one the user came for.
 		expect(nines.map((r) => r.instance)).toEqual(["2028-05-15", "2027-05-15"]);
 		expect(rows.some((r) => r.id === "hb26-1223")).toBe(true);
 		// The periodic report window is open: the passed-instances rule does not apply to a

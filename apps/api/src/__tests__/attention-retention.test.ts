@@ -139,7 +139,7 @@ beforeAll(async () => {
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;
 
-	// Two viewers on one day, one viewer twice on another (back-to-back, never
+	// Two users on one day, one user twice on another (back-to-back, never
 	// overlapping — same-person overlap is the split, not this fixture's subject),
 	// plus a null-Work visit ping — which is the row the COALESCE key exists for.
 	await seedEvent(userAId, OLD_DAY, "watch", 120);
@@ -161,7 +161,7 @@ describe("the rollup table cannot hold an identity", () => {
 		expect(columns).toContain("total_seconds");
 		// The whole point. Not "we don't select it" — it isn't there to select.
 		expect(columns).not.toContain("user_id");
-		expect(columns.filter((c) => /user|viewer|subscriber/.test(c))).toEqual(["unique_viewers"]);
+		expect(columns.filter((c) => /user|user|subscriber/.test(c))).toEqual(["unique_viewers"]);
 	});
 });
 
@@ -201,7 +201,7 @@ describe("pruning drops the people and keeps the totals", () => {
 		expect(watchOld!.eventCount).toBe(2);
 		expect(watchOld!.uniqueUsers).toBe(2);
 
-		// Same viewer twice in a day is two events but ONE unique viewer — the figure
+		// Same user twice in a day is two events but ONE unique user — the figure
 		// would be meaningless if it just counted rows.
 		const watchOlder = daily.find((d) => d.day === OLDER_DAY && d.eventType === "watch");
 		expect(watchOlder!.totalSeconds).toBe(40);
@@ -276,7 +276,7 @@ describe("analytics survive the prune", () => {
 			await req("/api/integrations/analytics/overview?period=365", { headers: { Cookie: creator } })
 		).json();
 
-		// Only the one live row's viewer. Adding the rollup's daily distinct counts would
+		// Only the one live row's user. Adding the rollup's daily distinct counts would
 		// give a bigger number that double-counts anyone who came back on another day —
 		// and with the identities gone there is nothing left to deduplicate against. The
 		// window is named rather than the overstatement being made quietly.

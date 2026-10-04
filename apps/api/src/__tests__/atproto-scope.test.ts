@@ -2,7 +2,7 @@
 /**
  * Reading an AT Protocol OAuth scope string.
  *
- * ⭐ **The two cases worth having are the ones where a naive reader is confidently wrong**, and
+ * ⭐ **The two cases worth having are the ones where a naive user is confidently wrong**, and
  * both come from proposal 0011's own formatter rather than from anything exotic: a permission
  * with no `action` parameter grants every action, and a permission granted in full comes back
  * spelled differently from the way it was asked for. Everything else here is grammar.

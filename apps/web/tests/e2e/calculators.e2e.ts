@@ -83,7 +83,7 @@ test.describe("Resources calculators", () => {
 	 * 🚨 **This asserted only that the phrase was VISIBLE, and that is how the page came to
 	 * overstate creator revenue threefold for a fortnight.** When the indivisible unit
 	 * retired, `thresholdForBadge` began returning dollars while the page still multiplied
-	 * by $3, so a Sprout viewer was modeled as directing $18 rather than $6 — and a test
+	 * by $3, so a Sprout user was modeled as directing $18 rather than $6 — and a test
 	 * asking "does the string `reaches creators` appear" passed every run.
 	 *
 	 * Every figure on this page is computed, so the typed-figure scan has nothing to look
@@ -111,7 +111,7 @@ test.describe("Resources calculators", () => {
 		// The directed figure is the Badge's own amount. Under the retirement bug it was
 		// that amount × the Public Access price, which is the assertion that would have
 		// caught it — and nothing else on the page would have.
-		expect(text, "what the viewer directs, NOT a multiple of it").toContain(usd(sprout));
+		expect(text, "what the user directs, NOT a multiple of it").toContain(usd(sprout));
 		expect(text, "reaches creators = Time Pool + directed").toContain(
 			usd(timePoolFor(sprout) + sprout),
 		);

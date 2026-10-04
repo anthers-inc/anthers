@@ -2,7 +2,7 @@
 /**
  * Setup project for the User Gauntlet walk: reset the fixture through its canonical
  * script (the same one `make gauntlet-reset` runs — never a reimplementation), sign the
- * harness's viewer in through the real sign-in route, and persist the resulting session
+ * harness's user in through the real sign-in route, and persist the resulting session
  * as the storageState the gauntlet project runs under.
  *
  * The storage state carries the one thing the walk needs before any app script runs:
@@ -25,7 +25,7 @@ import { API_URL, AUTH_STATE_PATH, emailedCode, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
-setup("reset the gauntlet fixture and sign the viewer in", async () => {
+setup("reset the gauntlet fixture and sign the user in", async () => {
 	// Canonical fixture reset. --ensure-walker creates gauntlet_walker on first run and
 	// targets it thereafter, so the walk never touches the dev account.
 	execFileSync("bun", ["run", "db:gauntlet", "--ensure-walker"], {
@@ -36,7 +36,7 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 	// resets the fixture again — which deletes the content items, and with them any media
 	// attached now — and then re-attaches it. Generating it here meant running ffmpeg twice
 	// per CI run and throwing the first result away. What this step must leave behind is the
-	// viewer, so the sign-in below has an account to authenticate.
+	// user, so the sign-in below has an account to authenticate.
 
 	// The MEDIA FIXTURE is the opposite case and does belong here: nothing in the run resets
 	// it, so it is seeded once into the session's fresh database and every spec shares it.
@@ -69,7 +69,7 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 	expect(token, `no session cookie in Set-Cookie: "${setCookie}"`).toBeTruthy();
 
 	// The storage state, by hand (see the gotcha above): the session cookie for the API
-	// host, which is the whole of the viewer's state now that the pre-launch gate is gone.
+	// host, which is the whole of the user's state now that the pre-launch gate is gone.
 	const state = {
 		cookies: [
 			{

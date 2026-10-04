@@ -9,7 +9,7 @@
  * show the reader exactly what they asked to have covered.
  *
  * The Works are made by `media_fixture`, which nothing else resets, and read by the gauntlet
- * viewer the `authed` project signs in as. The viewer's setting is put back afterward, since other
+ * user the `authed` project signs in as. The user's setting is put back afterward, since other
  * walks share the account.
  */
 
@@ -85,13 +85,13 @@ async function release(title: string, rows: Record<string, string>): Promise<voi
 test.afterAll(async ({ browser }) => {
 	await sweep();
 	await creatorContext?.close();
-	// Put the shared viewer's setting back, whatever the walk got to.
-	const viewer = await browser.newContext({ storageState: AUTH_STATE_PATH });
-	await viewer.request.patch(`${API_URL}/api/accounts/me/content-preferences`, {
+	// Put the shared user's setting back, whatever the walk got to.
+	const user = await browser.newContext({ storageState: AUTH_STATE_PATH });
+	await user.request.patch(`${API_URL}/api/accounts/me/content-preferences`, {
 		headers: { Origin: WEB_ORIGIN },
 		data: { notes: { violence: "show" } },
 	});
-	await viewer.close();
+	await user.close();
 });
 
 test("a reader who blurs or hides violence meets it covered, then not at all", async ({

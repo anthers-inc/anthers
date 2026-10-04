@@ -3,14 +3,14 @@
  * The User Gauntlet fixture — deterministic, idempotent, and self-cleaning.
  *
  * Builds `gauntlet_creator` and the nine posts defined in `gauntlet.ts`, then resets the
- * viewer to the gauntlet's floor: Free badge, nothing given, not following, nothing purchased,
+ * user to the gauntlet's floor: Free badge, nothing given, not following, nothing purchased,
  * no comments. Run it before every gauntlet walk; it always produces the same starting
  * state, which is the whole point — a gauntlet that starts somewhere slightly different
  * each time can't tell you what changed.
  *
  * Usage:
  *   bun run db:gauntlet                 # reset to the floor (make gauntlet-reset)
- *   bun run db:gauntlet --user alice    # use a viewer other than DEV_ACCOUNT_USERNAME
+ *   bun run db:gauntlet --user alice    # use a user other than DEV_ACCOUNT_USERNAME
  *   bun run db:gauntlet --ensure-walker # create + use the harness's own gauntlet_walker
  *   bun run db:gauntlet --clean         # remove the fixture entirely, then stop
  *   bun run db:gauntlet --instance walk # the walk's OWN instance — see below
@@ -30,8 +30,8 @@
  * defined in `gauntlet-walk.ts`. The e2e `authed` project runs on instance A (the
  * default), and the e2e `gauntlet` walk runs on instance B — both reset their own fixture
  * in their own setup, which is safe only because the two row sets are disjoint. The Anthers stand-in and the
- * Anthers Badge ladder are deliberately NOT per-instance: holdings are viewer-scoped
- * rows, and one shared Anthers ladder keeps every viewer's Anthers-side reads reading the
+ * Anthers Badge ladder are deliberately NOT per-instance: holdings are user-scoped
+ * rows, and one shared Anthers ladder keeps every user's Anthers-side reads reading the
  * same ladder rather than a second, private one.
  *
  * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
@@ -96,7 +96,7 @@ interface Instance {
 	/** The instance's own creator, whose account and Works the seeding owns. */
 	creatorUsername: string;
 	creatorEmail: string;
-	/** The instance's own viewer — the account `--ensure-walker` creates and resets. */
+	/** The instance's own user — the account `--ensure-walker` creates and resets. */
 	walkerUsername: string;
 	userEmail: string;
 	/** The instance's slug prefix; `deleteGauntletPosts` scopes deletions with it. */
@@ -162,16 +162,16 @@ async function fixtureHandle(name: string): Promise<string> {
 const CONTENT_ROOT = localContentRoot();
 
 /**
- * Resolve the viewer whose relationship with the creator the gauntlet walks.
- * `inst` names the default viewer only — the walk instance's `--ensure-walker` resolves
- * the walk viewer, instance A's resolves `gauntlet_walker` — while `--user` still
- * overrides which viewer gets reset, in either instance.
+ * Resolve the user whose relationship with the creator the gauntlet walks.
+ * `inst` names the default user only — the walk instance's `--ensure-walker` resolves
+ * the walk user, instance A's resolves `gauntlet_walker` — while `--user` still
+ * overrides which user gets reset, in either instance.
  */
 function resolveWalkerUsername(inst: Instance): string {
 	const flagIndex = process.argv.indexOf("--user");
 	const fromFlag = flagIndex !== -1 ? process.argv[flagIndex + 1]?.trim() : undefined;
 	if (process.argv.includes("--ensure-walker")) {
-		// The harness's own account; --user may still override which viewer gets reset.
+		// The harness's own account; --user may still override which user gets reset.
 		return fromFlag || inst.walkerUsername;
 	}
 	const username = fromFlag || process.env.DEV_ACCOUNT_USERNAME?.trim();
@@ -183,7 +183,7 @@ function resolveWalkerUsername(inst: Instance): string {
 	return username;
 }
 
-/** Create the harness-owned viewer account if it doesn't exist yet. */
+/** Create the harness-owned user account if it doesn't exist yet. */
 async function ensureViewer(inst: Instance): Promise<void> {
 	const [existing] = await db
 		.select({ id: users.id })
@@ -216,7 +216,7 @@ async function ensureViewer(inst: Instance): Promise<void> {
  * Badge ladder.
  *
  * See `GAUNTLET_ANTHERS_USERNAME` for why the owner can be neither the creator nor the
- * viewer, and for why the account takes the reserved "anthers" name. This account gates
+ * user, and for why the account takes the reserved "anthers" name. This account gates
  * nothing and holds nothing; its only job is to be the issuer of the Anthers rungs so
  * Anthers-ladder reads and creator-ladder reads never collide.
  *
@@ -307,7 +307,7 @@ async function ensureCreator(inst: Instance): Promise<number> {
 			displayName: "Gauntlet Creator",
 			bio: "A fixture creator for the User Gauntlet. Every post below sits on a known rung of the ladder.",
 			isCreator: true,
-			// Terms accepted, as with the viewer — the fixture drives the app, not onboarding.
+			// Terms accepted, as with the user — the fixture drives the app, not onboarding.
 			termsAcceptedAt: new Date(),
 		},
 	});
@@ -498,12 +498,12 @@ async function resetGates(inst: Instance, creatorId: number): Promise<void> {
 }
 
 /**
- * Put the viewer back on the floor. Everything here is scoped to this fixture — the
- * viewer's own account, content and other relationships are left alone.
+ * Put the user back on the floor. Everything here is scoped to this fixture — the
+ * user's own account, content and other relationships are left alone.
  */
 async function resetWalker(userId: number, creatorId: number, postIds: number[]): Promise<void> {
 	// The floor is no holding at all: Free is the absence of Anthers-ladder and creator-ladder
-	// rows this cycle, and the viewer's Anthers-side reads answer 0 for a user with no
+	// rows this cycle, and the user's Anthers-side reads answer 0 for a user with no
 	// holdings — which is what "Badge back to Free" means under the Badge model. The Anthers
 	// ladder's rungs go too, since a prior hop may have parked one on the staircase. There is no
 	// billing row to touch: the amounts the old reset zeroed are `user_badges` holdings
@@ -515,10 +515,10 @@ async function resetWalker(userId: number, creatorId: number, postIds: number[])
 		.where(and(eq(follows.followerId, userId), eq(follows.creatorId, creatorId)));
 
 	// Badge holdings ratchet within a cycle (add-only), so a re-run inside the same month
-	// CANNOT walk back down through the UI. Clearing the viewer's holdings on this creator
+	// CANNOT walk back down through the UI. Clearing the user's holdings on this creator
 	// is what makes the gate rung repeatable at all. Scoped through the ladder's badges
 	// rather than by a creator id on the holding: `user_badges` carries the badge, and the
-	// issuer is reachable through it — which is the shape every reader of "who holds this
+	// issuer is reachable through it — which is the shape every user of "who holds this
 	// creator's Badges" now takes.
 	await db
 		.delete(userBadges)
@@ -554,7 +554,7 @@ async function resetWalker(userId: number, creatorId: number, postIds: number[])
 		);
 
 	if (postIds.length > 0) {
-		// Clear the viewer's own comments so the comment rung starts empty each run.
+		// Clear the user's own comments so the comment rung starts empty each run.
 		// Comments are polymorphic now, so the subject type has to be named — without it
 		// this would also match a Work whose id happened to collide with a post's.
 		await db
@@ -605,12 +605,12 @@ async function main(): Promise<void> {
 	}
 	const walkerUsername = resolveWalkerUsername(inst);
 	const userHandle = await fixtureHandle(walkerUsername);
-	const [viewer] = await db
+	const [user] = await db
 		.select({ id: users.id, handle: users.atprotoHandle })
 		.from(users)
 		.where(eq(users.atprotoHandle, userHandle))
 		.limit(1);
-	if (!viewer) {
+	if (!user) {
 		throw new Error(
 			`Viewer "${walkerUsername}" not found. Run \`make dev\` once (it bootstraps DEV_ACCOUNT_USERNAME), or pass --user with an account that exists.`,
 		);
@@ -625,14 +625,14 @@ async function main(): Promise<void> {
 		postIds.push(await createPost(creatorId, spec));
 	}
 	await resetGates(inst, creatorId);
-	await resetWalker(viewer.id, creatorId, postIds);
+	await resetWalker(user.id, creatorId, postIds);
 
-	// The Anthers ladder is platform state, not dev-account state: every reader of "what the
-	// viewer holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws
+	// The Anthers ladder is platform state, not dev-account state: every user of "what the
+	// user holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws
 	// loudly when no ladder exists, and an e2e session runs this script rather than
 	// `db:seed` — so the ladder is ensured here, owned by the fixture's Anthers stand-in
 	// (see `GAUNTLET_ANTHERS_USERNAME` for why the owner can be neither the creator nor the
-	// viewer). `ensure-dev-account` (the dev door) seeds the same rows owned by the dev
+	// user). `ensure-dev-account` (the dev door) seeds the same rows owned by the dev
 	// account; whichever runs first wins and both are idempotent.
 	// 🚨 **This must run AFTER `resetGates`** — that rebuild deletes every badge the
 	// fixture creator owns, and the Anthers rows would be rebuilt by nobody if seeded first.
@@ -647,7 +647,7 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`  Creator  /${inst.creatorUsername}  (${inst.posts.length} posts)`);
 	console.log(
-		`  Viewer   ${viewer.handle}  —  Free badge · giving $0 · not following · nothing purchased`,
+		`  Viewer   ${user.handle}  —  Free badge · giving $0 · not following · nothing purchased`,
 	);
 	console.log("");
 	for (const spec of inst.posts) {

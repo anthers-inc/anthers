@@ -26,7 +26,7 @@
  * so it is shareable, indexable and unfurls properly. Delivery is what asks who is calling.
  *
  * ⚠️ **Two independent guards, and neither is redundant.** `requireAuth` covers the four
- * routes that hand over media. `resolveAccessSync` refusing a null viewer covers text,
+ * routes that hand over media. `resolveAccessSync` refusing a null user covers text,
  * games, images and software, whose deliverable rides inside `GET /works/:id` and passes no
  * route of its own. Sabotage either one and a different half of this file goes red.
  */
@@ -205,7 +205,7 @@ describe("Consuming a Work requires an account", () => {
 
 	it("🚨 withholds a text Work's prose from a signed-out reader, and keeps its page", async () => {
 		// `requireAuth` does nothing for this one: a text Work's deliverable rides inside
-		// `GET /works/:id`. Only the resolver refusing a null viewer closes it.
+		// `GET /works/:id`. Only the resolver refusing a null user closes it.
 		const res = await req(`/api/content/works/${textId}`);
 		expect(res.status).toBe(200);
 		const { work } = await res.json();
@@ -230,7 +230,7 @@ describe("Consuming a Work requires an account", () => {
 		expect(work.bodyHtml).toBe(TEXT_BODY);
 	});
 
-	it("withholds every pointer at the media from a signed-out viewer", async () => {
+	it("withholds every pointer at the media from a signed-out user", async () => {
 		for (const workId of [audioId, videoId]) {
 			const res = await req(`/api/content/works/${workId}`);
 			expect(res.status).toBe(200);

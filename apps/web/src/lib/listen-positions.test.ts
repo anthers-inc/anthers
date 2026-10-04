@@ -51,7 +51,7 @@ beforeEach(() => {
 	// 🚨 Assigned rather than defineProperty'd. `volume.test.ts` assigns the global the
 	// plain way in the same process, and a defineProperty here would turn its writes into
 	// "readonly property" TypeErrors — file-local stubbing is the shared convention, and
-	// the weaker write must not be able to break the stronger one's readers.
+	// the weaker write must not be able to break the stronger one's users.
 	Object.assign(globalThis, { localStorage: store });
 });
 

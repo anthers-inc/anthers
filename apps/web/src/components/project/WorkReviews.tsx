@@ -11,17 +11,17 @@
  * ⭐ **The aggregate is a proportion and not an average**, because a review recommends a Work
  * or does not. `@anthers/shared/content` carries why, and it is the same reasoning that gives
  * Anthers one opinion primitive rather than two. It comes in two rows — **All Time** over every
- * review, and a **Recent** share over a reader-chosen window — so a Work that changed after
- * release can be seen to have changed its readers' minds. All Time is always the constant; the
+ * review, and a **Recent** share over a user-chosen window — so a Work that changed after
+ * release can be seen to have changed its users' minds. All Time is always the constant; the
  * Recent share simply has nothing to say (and says so) when its window holds too few reviews.
  *
  * ⭐ **The list sorts by helpfulness, not by when the review was written** (2026-09-12). What
- * a reader finds worth reading is what other readers found helpful, so the default is Helpful
+ * a user finds worth reading is what other users found helpful, so the default is Helpful
  * First with Newest First as the explicit alternative — neither is a re-fetch; both are this
  * payload read two ways. Helpfulness is the same vote a post or a comment takes, asked here as
  * "was this helpful?" — and it only ever *sorts*; one person's review counts once in either
  * share however many votes it drew. A new review's `1` is its author's own upvote — posting
- * something says the author thinks it worth reading, so `0` always means a reader said no.
+ * something says the author thinks it worth reading, so `0` always means a user said no.
  *
  * Bodies render as React text nodes, never as markup — the API stores plain text and nothing
  * here interprets it.
@@ -129,7 +129,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 
 	// The visible list: the filter narrows it, the sort orders it — both over the one
 	// payload so the two controls can never disagree about what was fetched. Newest first
-	// breaks a helpfulness tie, recency being the only other thing a reader can check.
+	// breaks a helpfulness tie, recency being the only other thing a user can check.
 	const shown = useMemo(() => {
 		if (!agg) return [];
 		const filtered =

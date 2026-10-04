@@ -9,7 +9,7 @@
  * at most one second, split evenly among whatever they were consuming in it —
  * in every tab and on every device.
  *
- * Every reader that used to `SUM(duration_seconds)` over `created_at` goes through
+ * Every user that used to `SUM(duration_seconds)` over `created_at` goes through
  * `creditedSeconds` or `creditedSecondsByCreator` instead, so the split is applied
  * once, identically, everywhere — the meter, parental controls, distribution, the
  * rollup, and analytics all answer the same question the same way.
@@ -69,7 +69,7 @@ async function rangesOverlapping(
 			and(
 				eq(attentionEvents.userId, userId),
 				// Zero-duration visit pings carry no time and no window; they are
-				// analytics, and no reader of *time* should see them.
+				// analytics, and no user of *time* should see them.
 				sql`${attentionEvents.durationSeconds} > 0`,
 				// Overlap: the range starts before the window ends and ends after it begins.
 				sql`${RANGE_START} < ${iso(windowEnd)}`,
@@ -154,7 +154,7 @@ export async function creditedSecondsByCreator(
  * devices), and only the split seconds are handed back. Because that happens
  * before the per-person rows are deleted, the anonymous survivor (`attention_daily`,
  * which has no `user_id` by design) stores already-correct totals and never needs a
- * viewer for anything but `unique_viewers`, which the caller counts distinctly.
+ * user for anything but `unique_viewers`, which the caller counts distinctly.
  */
 export async function creditedSecondsForRollup(
 	userId: number,
@@ -265,9 +265,9 @@ export async function visitPingsForRollup(
 }
 
 /**
- * Creator-facing analytics over RAW ranges: per-viewer split applied, then grouped
+ * Creator-facing analytics over RAW ranges: per-user split applied, then grouped
  * however the caller needs. Analytics aggregates across people, so the split's
- * overlap division — which is per account — is resolved viewer by viewer first,
+ * overlap division — which is per account — is resolved user by user first,
  * and only the credited remainders are combined. `groupBy` keys each credited row.
  *
  * Windows on when the time was spent (`started_at`), not when it was recorded.

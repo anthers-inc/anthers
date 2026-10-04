@@ -157,7 +157,7 @@ async function recordLines(
 		// `invoice_lines.creator_id` keeps its documented meaning: null IS the Anthers
 		// line. So the Anthers id maps back to null here, which is the one bend between
 		// the unified stamp and the settlement record, stated here rather than derived
-		// at every reader.
+		// at every user.
 		const anthersId = await anthersUserId();
 		for (const item of itemsFromSub(
 			sub ?? ({ items: { data: [] } } as unknown as Stripe.Subscription),

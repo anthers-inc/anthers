@@ -7,7 +7,7 @@
  * and only the second one is worth acting on. This module answers the second from the scope
  * string the token carries.
  *
- * ⚠️ **This is a reader, never the authority.** The repository itself decides whether a write
+ * ⚠️ **This is a user, never the authority.** The repository itself decides whether a write
  * is allowed, and it decides at the moment of the write. What this buys is knowing *before*
  * the round trip — so the Studio can say whether publishing is on, and so a job can skip
  * quietly instead of provoking a refusal it already expects. A disagreement between this and

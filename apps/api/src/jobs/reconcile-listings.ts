@@ -218,7 +218,7 @@ async function reconcileCreatorRecords(
 }
 
 /**
- * The half of the sweep that catches a reader's interactions up with their subjects.
+ * The half of the sweep that catches a user's interactions up with their subjects.
  *
  * 🚨 **This is what makes a comment's record appear once the thing it is about is listed.** A
  * record names its subject by address, so a comment on a post with no record yet writes nothing,
@@ -227,7 +227,7 @@ async function reconcileCreatorRecords(
  * written and asks for each, a sweep's worth at a time.
  *
  * ⚠️ **There is no "should not exist" half, and that is the design rather than an omission.** A
- * reader's record comes down only when the reader takes it back — unvoting, unfollowing, editing
+ * user's record comes down only when the user takes it back — unvoting, unfollowing, editing
  * their words away — and each of those enqueues its own removal as it happens. A hidden comment,
  * or one whose subject has gone, keeps its record; a net for them would find only rows the
  * planner is going to leave alone.

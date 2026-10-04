@@ -58,14 +58,14 @@ export interface QueueTrack {
 	 * play goes back through the check. Caching what it redirects to would be a pointer at
 	 * the bytes that outlives the permission to have them.
 	 *
-	 * Null when this viewer cannot reach the track — the API withholds the URL rather than
+	 * Null when this user cannot reach the track — the API withholds the URL rather than
 	 * handing out one that would fail, so null IS the locked signal and needs no flag
 	 * beside it that could disagree with it.
 	 */
 	src: string | null;
-	/** Whether playing this draws the viewer's monthly Public Access allowance. */
+	/** Whether playing this draws the user's monthly Public Access allowance. */
 	publicAccess: boolean;
-	/** Untimestamped words, when the creator attached them and the viewer may see them. */
+	/** Untimestamped words, when the creator attached them and the user may see them. */
 	lyrics: string | null;
 }
 

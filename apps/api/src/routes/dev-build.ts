@@ -17,7 +17,7 @@
  *   3. Every request re-checks `isDevCheckout()`, so a route that somehow got mounted
  *      anyway still refuses. A missing value never removes a protection.
  *
- * The production shape this previews, and the two deviations a reader should know:
+ * The production shape this previews, and the two deviations a user should know:
  *
  *   - **Same shape:** one URL prefix (`/api/dev/build/<id>/`) the page hands the runtime
  *     as its iframe `src`, and every file — `.wasm`, `.pck`, the loader — resolves

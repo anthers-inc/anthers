@@ -187,7 +187,7 @@ export const QUEUES = {
 	// request — a record is a call to another server, and a creator's publishing must not fail
 	// because that server is down.
 	SYNC_WORK_LISTING: "sync-work-listing",
-	// Write, replace or remove the record for one row: a creator's post or project, or a reader's
+	// Write, replace or remove the record for one row: a creator's post or project, or a user's
 	// comment, review, vote or follow. Carries a kind and an id and nothing else, for the same
 	// reason the queue above carries only a Work id: the handler re-reads the row and decides from
 	// its current state.
@@ -443,7 +443,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	[QUEUES.RECONCILE_LISTINGS, "20 4 * * *"],
 	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
 	// 3:30 AM daily. Nothing depends on the ordering — an expired session is dead to every
-	// reader the moment it expires, so this only reclaims the row and the IP on it.
+	// user the moment it expires, so this only reclaims the row and the IP on it.
 	[QUEUES.PRUNE_CREDENTIALS, "30 3 * * *"],
 	// 4 AM daily. Hourly would honor the grace period more precisely, but the window
 	// is a week — a few hours' latency on the far end of it is not something a user can

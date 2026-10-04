@@ -2,7 +2,7 @@
 /**
  * Locked-Work presentation — the *chrome* around a gate, not the flow through one.
  *
- * When a Work is gated to the viewer the whole thing locks (body + media are withheld
+ * When a Work is gated to the user the whole thing locks (body + media are withheld
  * server-side), and this file supplies what a card or a page shows in its place: a blurred
  * cover with a lock chip, and the two labels that name what the lock IS and what to do
  * about it. Consumers are `WorkCard` and `WorkPage`.
@@ -12,7 +12,7 @@
  * two reason-aware components that offered log-in / sign-up / join-the-creator routes and
  * had **no callers anywhere in the repo** (deleted 2026-08-17). They are worth a note
  * rather than a silent removal, because of what believing in them cost: when the signup
- * consolidation landed, "the logged-out viewer lost their way back to the post" was
+ * consolidation landed, "the logged-out user lost their way back to the post" was
  * diagnosed against `UnlockModal` — which did carry a return destination — and the real
  * live surface, `InlineUnlock`, turned out never to have had one at all. **Reading a file
  * tells you what a component would do, not whether anything renders it.** Grep first.
@@ -34,7 +34,7 @@ import type { AccessResult, UnlockRoute } from "../../lib/types";
  * account for the time to be attributed to.
  *
  * That is the same line the Public Access meter draws and for the same reason — a Work is
- * never described as gated by something that belongs to the viewer, or the commons quietly
+ * never described as gated by something that belongs to the user, or the commons quietly
  * reads as stratified again, which the binary model exists to prevent.
  */
 export function presentsAsLocked(access: AccessResult | null | undefined): boolean {
@@ -75,7 +75,7 @@ function amountToGo(moreNeeded: number): string {
 }
 
 /**
- * The imperative: what to do, in the fewest words, about the gap the viewer is actually
+ * The imperative: what to do, in the fewest words, about the gap the user is actually
  * facing. One kind of giving, named by where it goes — there is no second kind. (The
  * point survives whatever the amounts are called, because it is about the shape.)
  */

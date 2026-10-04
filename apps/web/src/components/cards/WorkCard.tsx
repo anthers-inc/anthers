@@ -53,12 +53,12 @@ function dateLabel(work: WorkCardItem): string {
 export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	const date = dateLabel(post);
 
-	// The viewer-facing serialization is the only shape a card renders; the owner's
+	// The user-facing serialization is the only shape a card renders; the owner's
 	// (whose `access` is the editable rows) never reaches a card. `isAccessResult` is the
 	// honest way to take the verdict out of the one-type union.
 	const access = isAccessResult(post.access) ? post.access : null;
 
-	// Locked to the viewer → the card is a gated preview (blurred cover, visible title).
+	// Locked to the user → the card is a gated preview (blurred cover, visible title).
 	// Clicking still navigates into the post, where the unlock options live.
 	//
 	// ⚠️ Not `!canAccess`. A signed-out visitor is refused the bytes of free work too, and
@@ -66,8 +66,8 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	// person the public page is for — see `presentsAsLocked`.
 	const locked = presentsAsLocked(access);
 
-	// What this reader asked to meet at this rung, and for each kind of content in it. **A veil is
-	// not a lock**: a veiled Work is listed, reachable and earning, and the reader can uncover it
+	// What this user asked to meet at this rung, and for each kind of content in it. **A veil is
+	// not a lock**: a veiled Work is listed, reachable and earning, and the user can uncover it
 	// in one click. The two treatments never stack — a locked cover is already blurred, and
 	// covering it twice would say the same thing twice while implying the rating is what shut
 	// them out.

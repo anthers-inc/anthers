@@ -7,7 +7,7 @@
  * and hls.js follows the master playlist's variant URLs exactly as written, with no way for the
  * page to add anything. So a variant URL without the token is a 401, and the video never
  * starts, although the page around it renders and the master playlist answers. A signed-in
- * viewer never meets this, because their session cookie rides every request — which is how it
+ * user never meets this, because their session cookie rides every request — which is how it
  * reached production unnoticed, found by the first person to open a share link signed out.
  *
  * ⚠️ **This stores real playlists, because a test that asks for one that is not there passes on

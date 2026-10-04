@@ -11,7 +11,7 @@
  * the media, the media belongs to a **Work**, and a post only *links* Works — so there was
  * never anything for the post itself to wait for. The readiness gate now sits on releasing
  * a Work, which is where the media actually is. A post may go live announcing a Work that
- * is still encoding, exactly as it may link one the reader cannot open.
+ * is still encoding, exactly as it may link one the user cannot open.
  *
  * 🚨 **Only a fully set-up creator's draft goes live** — creator mode, a permission Anthers can
  * write their records with, and completed payout setup, the rule `publishRefusal` holds for

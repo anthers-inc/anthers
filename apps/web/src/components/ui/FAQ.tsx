@@ -9,7 +9,7 @@
 // ⚠️ **The heading is generic and lives here, not on the pages.** Each page had its own
 // eyebrow, title and lede introducing its FAQ — three pieces of bespoke copy saying the
 // same thing in three voices, which is work to write, work to keep true, and worth
-// nothing to a reader who can already see a stack of questions. One heading, used
+// nothing to a user who can already see a stack of questions. One heading, used
 // everywhere. A page that wants to say something particular can still say it above this;
 // none of them needs to.
 
@@ -51,7 +51,7 @@ export function FAQAccordion({ item, open = false }: { item: FAQItem; open?: boo
  * The questions one page carries, plus the way out to the rest of them.
  *
  * 🚨 **The link to /faq is not decoration.** A page-level FAQ is a pruned selection —
- * six of twenty-odd questions — and the pruning is only honest if the reader whose
+ * six of twenty-odd questions — and the pruning is only honest if the user whose
  * question was cut has somewhere to go. Dropping the link would turn a considered
  * shortlist into a page that appears to have answered everything it intends to.
  */

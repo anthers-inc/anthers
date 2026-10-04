@@ -47,7 +47,7 @@ async function makeUser(tag: string): Promise<number> {
 }
 
 /**
- * A viewer giving Anthers `anthersSupport`, holding each creator's Badge at `amount`.
+ * A user giving Anthers `anthersSupport`, holding each creator's Badge at `amount`.
  *
  * Under the discrete-picks model a fixture that "gives $N" creates the issuer's badge at
  * that threshold (unless the creator already has one) and writes the holding — exactly
@@ -58,7 +58,7 @@ async function seedCycle(
 	anthersSupport: number,
 	directed: { creatorId: number; amount: string }[],
 ) {
-	const userId = await makeUser("viewer");
+	const userId = await makeUser("user");
 	// The billing row carries the period the estimate keys from; the Anthers amount is
 	// the Anthers rung held below (the badge-holdings shape, since the amount columns are
 	// the old table's).
@@ -127,14 +127,14 @@ async function seedCycle(
 }
 
 /**
- * A per-viewer cursor for fixture ranges: each watch for a given user ends where
+ * A per-user cursor for fixture ranges: each watch for a given user ends where
  * the previous one began, so fixture time never overlaps. Overlapping is the
  * cross-tab case — the split divides it — and a fixture that stacks identical
  * windows would be asserting a split, not a straightforward spend.
  */
 const watchCursor = new Map<number, number>();
 
-/** Seconds this viewer spent with this creator, inside the cycle, flagged or not. */
+/** Seconds this user spent with this creator, inside the cycle, flagged or not. */
 async function watch(
 	userId: number,
 	creatorId: number,
@@ -292,7 +292,7 @@ describe("distributePool — directed Badge thresholds are paid NET of the card 
  *
  * Distributor-pays: gated or sold work is paid in full by whoever cleared the gate or
  * bought it, and only ungated streaming — Public Access — draws the pool. Until
- * 2026-08-26 this job summed every attention row, so a creator the viewer had already
+ * 2026-08-26 this job summed every attention row, so a creator the user had already
  * paid was paid a second time and every Public Access creator on that cycle was diluted
  * by exactly that much.
  *
@@ -308,7 +308,7 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 		await db.execute("SELECT 1");
 	}, DB_SETUP_TIMEOUT);
 
-	it("pays nothing from the pool for a creator the viewer already paid to reach", async () => {
+	it("pays nothing from the pool for a creator the user already paid to reach", async () => {
 		const commons = await makeUser("creator");
 		const alreadyPaid = await makeUser("creator");
 		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
@@ -357,7 +357,7 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 		await distributePool({ accountId });
 
 		// `attention_seconds` is the numerator of the split, so it holds the 600 that
-		// earned the pool and not the 6000 the viewer spent with this creator overall.
+		// earned the pool and not the 6000 the user spent with this creator overall.
 		expect((await ledger(userId)).get(creatorId)?.attentionSeconds).toBe(600);
 	});
 
@@ -371,13 +371,13 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 
 		const row = (await ledger(userId)).get(creatorId);
 		// Directed support is the other half of distributor-pays and is untouched by this:
-		// the viewer paid this creator on purpose, and gets no pool draw on top of it.
+		// the user paid this creator on purpose, and gets no pool draw on top of it.
 		expect(new Decimal(row?.badgeAmount ?? 0).toFixed(2)).toBe("2.61");
 		expect(new Decimal(row?.poolAmount ?? 0).toFixed(2)).toBe("0.00");
 		expect(row?.attentionSeconds).toBe(0);
 	});
 
-	it("holds the whole pool undistributed when the viewer watched no Public Access", async () => {
+	it("holds the whole pool undistributed when the user watched no Public Access", async () => {
 		const gated = await makeUser("creator");
 		const { userId, accountId } = await seedCycle(9, []);
 
@@ -478,7 +478,7 @@ describe("distributePool — the share-link slice is a ceiling, not a reservatio
 		// Deliberately NOT symmetric with the first case. A ceiling that lifted whenever the
 		// sharer happened to watch nothing would be no ceiling at all — somebody could post one
 		// link publicly, never open the site, and hand strangers command of their whole pool.
-		// The remainder is the subject of its own open question, which a viewer with no
+		// The remainder is the subject of its own open question, which a user with no
 		// attention at all already raises.
 		const viaLink = await makeUser("creator");
 		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
@@ -491,7 +491,7 @@ describe("distributePool — the share-link slice is a ceiling, not a reservatio
 	});
 });
 
-/** A Sticker this viewer directed at this creator, out of their own Time Pool. */
+/** A Sticker this user directed at this creator, out of their own Time Pool. */
 async function giveSticker(
 	userId: number,
 	creatorId: number,
@@ -546,7 +546,7 @@ describe("distributePool — a Sticker overrides the Time Pool rather than addin
 		expect(total.toFixed(2)).toBe(new Decimal(timePoolFor(12)).minus(1).toFixed(2));
 	});
 
-	it("⭐ leaves a viewer who gave none exactly where they were", async () => {
+	it("⭐ leaves a user who gave none exactly where they were", async () => {
 		const [a, b] = [await makeUser("c"), await makeUser("c")];
 		const { userId, accountId } = await seedCycle(12, []);
 		await watch(userId, a, 600, true);
@@ -604,7 +604,7 @@ describe("distributePool — a Sticker overrides the Time Pool rather than addin
 		expect(paidA.plus(paidB).toFixed(2)).toBe(timePoolFor(12).toFixed(2));
 	});
 
-	it("pays a creator the viewer never watched, if they were handed a Sticker", async () => {
+	it("pays a creator the user never watched, if they were handed a Sticker", async () => {
 		// Without `stickerAmount` in the write guard this row is computed and dropped, and
 		// the money vanishes with it.
 		const [watched, unwatched] = [await makeUser("c"), await makeUser("c")];

@@ -187,10 +187,10 @@ describe("where a sign-in lands", () => {
 		expect(user.id).toBeGreaterThan(0);
 	});
 
-	it("asks a reader for their own records and nothing else", async () => {
+	it("asks a user for their own records and nothing else", async () => {
 		await startAuth({ handle: "someone.bsky.social", intent: "login" });
-		// ⚠️ **This passes because the account is a reader, not because a sign-in never asks
-		// for more.** Every account is asked for the reader set, since a reader's comments and
+		// ⚠️ **This passes because the account is a user, not because a sign-in never asks
+		// for more.** Every account is asked for the user set, since a user's comments and
 		// votes are Anthers working; a creator's sign-in also carries the creator set through —
 		// `atproto-publishing.test.ts` pins that half, and asking for less there would silently
 		// discard a grant they had made.

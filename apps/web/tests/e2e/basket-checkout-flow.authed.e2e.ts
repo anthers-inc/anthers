@@ -14,7 +14,7 @@
  * The single-item basket is asserted deliberately: since the Work page's inline checkout
  * was retired, one item is the PRIMARY flow (Buy Now lands there), not an edge case.
  *
- * Runs in the `authed` project, signed in as the gauntlet viewer (storageState), with
+ * Runs in the `authed` project, signed in as the gauntlet user (storageState), with
  * the Work created on `media_fixture` — the shared-fixture ownership rule every spec in
  * this directory carries: media_fixture is nobody else's reset target, and this spec
  * cleans up after itself with a prefix sweep, the pattern `work-release.authed.e2e.ts`
@@ -75,7 +75,7 @@ async function sweep(): Promise<void> {
  *
  * 🚨 **The seeding is sent through `page.request`, which carries the page's own session
  * cookie** — the basket is the account's now (Parker, 2026-10-03), and the account the
- * page renders for is the gauntlet viewer, not the fixture creator who owns the walk
+ * page renders for is the gauntlet user, not the fixture creator who owns the walk
  * Work. Seeding from a different account's session would plant a basket on the wrong
  * account and the page would not show it — the exact property this server-side move
  * exists to establish. The seeding path (rather than driving the Add to Basket button)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Bring the record for one row into line with the row — a creator's post or project, or a
- * reader's comment, review, vote or follow.
+ * user's comment, review, vote or follow.
  *
  * 🚨 **A job rather than part of the request, and the reason is which failure is acceptable.**
  * Writing a record is a call to another server. Doing it inside the request would make posting a

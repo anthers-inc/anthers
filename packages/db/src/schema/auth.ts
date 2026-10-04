@@ -341,7 +341,7 @@ export const desktopAuthRequests = pgTable(
  * The address is the key — **one live code per address, ever**, replaced on re-request
  * rather than appended. That is what makes "Send it again" safe: a second code silently
  * retires the first, so a mailbox holding three codes has exactly one that works (the
- * newest), which is the behavior a reader already expects from every other site.
+ * newest), which is the behavior a user already expects from every other site.
  *
  * What proving the address buys depends on whether it is already an account:
  * a new address is **created** and signed in; an existing one is **signed in**. Both
@@ -426,7 +426,7 @@ export const atprotoSessions = pgTable("atproto_sessions", {
 	 * grant again instead of failing quietly at the next write.
 	 *
 	 * Null on a row written before the column existed, and on one whose token would not report
-	 * itself. Both mean the same thing to every reader: nothing is known to be granted.
+	 * itself. Both mean the same thing to every user: nothing is known to be granted.
 	 */
 	scope: text("scope"),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -604,7 +604,7 @@ describe("an abandoned signup does not linger", () => {
 			.set({ expiresAt: new Date(Date.now() - 1000) })
 			.where(eq(pendingSignups.token, token));
 
-		// Absent to a reader before the sweep runs — the sweep is housekeeping, never the gate.
+		// Absent to a user before the sweep runs — the sweep is housekeeping, never the gate.
 		expect(await readPendingSignup(token)).toBeUndefined();
 
 		await sweepExpiredPendingSignups();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A **logged-out** viewer at a Work — the surface where the app has to hand someone to an
+ * A **logged-out** user at a Work — the surface where the app has to hand someone to an
  * auth flow and get them back afterwards.
  *
  * Two Works, because there are now two of these and they must not look alike: a **gated**
@@ -24,12 +24,12 @@
 import { gauntletPost } from "@anthers/db/gauntlet";
 import { expect, test } from "./fixtures";
 
-// No cookies, no origins: this spec's whole subject is the anonymous viewer. It overrides
+// No cookies, no origins: this spec's whole subject is the anonymous user. It overrides
 // the project's `storageState`, not its `dependencies`, so the fixture is still seeded.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 /**
- * The first gated rung — baseline denied, so an anonymous viewer resolves `login_required`.
+ * The first gated rung — baseline denied, so an anonymous user resolves `login_required`.
  *
  * Taken from the fixture definition rather than typed, for the reason the gauntlet spec
  * gives: the rung slugs are generated from `BADGE_RUNGS`, so a hardcoded one silently stops

@@ -19,7 +19,7 @@ import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
 const TRACK = mediaFixtureWork("track1");
 
 /**
- * Save the fixture album and one loose track for the signed-in viewer, through the real
+ * Save the fixture album and one loose track for the signed-in user, through the real
  * endpoint. Idempotent server-side, so re-runs need no cleanup.
  */
 async function saveFixtures(page: Page) {

@@ -6,9 +6,9 @@
 // There are two layers, and the page is honest about both. The **raw changelist** —
 // every change between two tags, one line each — is published unedited as the GitHub
 // release on each version's tag, and this page links to it beside every release. This
-// page is the **reader-facing pass** over that list: the changes grouped into arcs
-// rather than commits, filtered of what a reader cannot see (test machinery,
-// contributor tooling, internal rewrites), and translated into what a reader or a
+// page is the **user-facing pass** over that list: the changes grouped into arcs
+// rather than commits, filtered of what a user cannot see (test machinery,
+// contributor tooling, internal rewrites), and translated into what a user or a
 // creator can now do that they could not before. No entry here adds anything the
 // release does not contain, and nothing a user can see is silently dropped — the
 // raw list stays one click away on the tag.
@@ -16,7 +16,7 @@
 // **The page is grouped by month, not release by release.** One section per month,
 // with a small divider inside it naming each release whose changes sit below it, so a
 // `####.##.0` release and the `####.##.1` hotfixes after it read as one month's full
-// set of changes — which is what a reader wants from the page. The grouping is derived
+// set of changes — which is what a user wants from the page. The grouping is derived
 // here from what each entry already carries, because the content module is a way
 // station that must not gain fields the exporter would have to reproduce.
 //
@@ -70,7 +70,7 @@ export interface ChangelogMonth {
  * first appearance — `CHANGELOG` is newest first, so both the months and the releases
  * inside each come out newest first without sorting. The month is the month of the
  * entry's `date`, not of its calver version: a `####.##.5` numbered for one month can
- * ship early in the next, and a reader's question is when it shipped — the divider
+ * ship early in the next, and a user's question is when it shipped — the divider
  * carries the version beside the date either way.
  *
  * Exported for `changelog-grouping.test.ts`, which pins the grouping's shape, rather

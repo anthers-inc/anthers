@@ -63,7 +63,7 @@ export const BADGE_ART: Record<Badge, { emblem: string; shape: string; color: st
 	// shares, exactly as a scout set does.
 	//
 	// ⭐ **Emblems rather than emoji** (Parker, 2026-09-04). The ladder was drawn with 🫚 🌱
-	// 🌷 🌼, which is somebody else's artwork rendered in whatever emoji font the viewer
+	// 🌷 🌼, which is somebody else's artwork rendered in whatever emoji font the user
 	// happens to have — so the same four Badges looked different on every platform and
 	// matched nothing else on the site. These are chosen Noun Project art, recorded in
 	// packages/brand/provenance.json, and they go through the same per-shape box a creator's emblem does.

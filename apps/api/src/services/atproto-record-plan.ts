@@ -2,7 +2,7 @@
 /**
  * Deciding what should happen to a record, and carrying it out against a repository.
  *
- * This is `atproto-repo.ts` for everything that is not a Work listing — a reader's comments,
+ * This is `atproto-repo.ts` for everything that is not a Work listing — a user's comments,
  * reviews, votes and follows, and a creator's posts and projects. The shape is the same —
  * a pure planner with its own tests, then a sync that performs the plan over the
  * {@link RepoWriter} seam — and it is deliberately ONE generic pair rather than one per record.
@@ -18,7 +18,7 @@
  *
  * 🚨 **Whether a refusal takes an existing record DOWN depends on whose record it is, and each
  * kind says so itself.** A creator's post that goes back to a draft is the creator withdrawing
- * it, so its record comes down. A reader's comment that an operator hides is not the reader
+ * it, so its record comes down. A user's comment that an operator hides is not the user
  * withdrawing anything: the record stays where its author put it and Anthers declines to show
  * it, which is the wiki's *User Records in the Atmosphere* ruling and how Bluesky treats the same
  * problem. The same goes for a comment whose subject disappears — other people's records
@@ -257,9 +257,9 @@ export async function carryOutPlan<R extends object, Reason extends string>(
 // pure function of what it is given.
 
 /**
- * Which refusals of a reader's record are the reader taking it back.
+ * Which refusals of a user's record are the user taking it back.
  *
- * 🚨 **Only `empty_text`, which a reader reaches by editing their own words away.** Every other
+ * 🚨 **Only `empty_text`, which a user reaches by editing their own words away.** Every other
  * refusal leaves an existing record exactly where it is:
  *
  * - `hidden` is a moderator's decision, and the record stays where its author put it.
@@ -269,7 +269,7 @@ export async function carryOutPlan<R extends object, Reason extends string>(
  * - `bad_verdict` and `bad_direction` are a row that drifted after a valid record was written,
  *   which is a reason to look at the row and not a reason to delete somebody's statement.
  *
- * A reader deleting the comment, the vote or the follow outright is the other way a record comes
+ * A user deleting the comment, the vote or the follow outright is the other way a record comes
  * down, and it does not pass through here at all — the row is gone, so `remove-atproto-record`
  * carries it.
  */
@@ -371,7 +371,7 @@ export const POST_COLLECTION = "org.anthers.post";
  * out there comes down.
  *
  * ⚠️ **`no_creator` is a closed account, and those records go with the account rather than one
- * at a time** — for the same reason a reader's `no_author` keeps. There is also nobody left to
+ * at a time** — for the same reason a user's `no_author` keeps. There is also nobody left to
  * open a repository for, so a plan to delete could not be carried out in any case.
  */
 function creatorRemoves(reason: UnpublishableCreatorReason): boolean {

@@ -69,7 +69,7 @@ export interface ParentalPolicy {
 	 * the Adult opt-in that decides whether the account reaches the rung at all.
 	 *
 	 * 🚨 **Two switches, not one, and they are worth locking independently.** The scale runs
-	 * `general · mature · adult`, and a reader who wants difficult work unblurred has said
+	 * `general · mature · adult`, and a user who wants difficult work unblurred has said
 	 * nothing about whether they want explicit work at all — so a guardian may reasonably
 	 * unblur Mature for a sixteen-year-old while leaving Adult off. The lock covers the six
 	 * content notes for the same reason: allowing intense horror and blurring substance use is

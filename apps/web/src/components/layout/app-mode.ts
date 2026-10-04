@@ -25,7 +25,7 @@ export type AppMode = "user" | "studio";
 
 /**
  * The pages that belong to user mode, so that arriving on one leaves the Studio. The account
- * menu's pages are here, and so is the basket, because each is about the person as a reader.
+ * menu's pages are here, and so is the basket, because each is about the person as a user.
  */
 const USER_PATHS = [
 	"/feed",

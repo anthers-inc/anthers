@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Flat navigation over a Work's pages and panels for the panel-mode reader.
+ * Flat navigation over a Work's pages and panels for the panel-mode user.
  *
  * Pages and panels are read from `/works/:id/panels` and kept in reading order:
  * top-left-first within a page, then the next page. This hook turns that tree into a

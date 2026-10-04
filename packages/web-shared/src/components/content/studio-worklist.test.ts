@@ -105,7 +105,7 @@ describe("buildWorklist", () => {
 	});
 
 	it("tells the creator of a released Work with unanswered rows who is missing it", () => {
-		// Only a Work released before the matrix existed can be here, and a reader hiding any kind
+		// Only a Work released before the matrix existed can be here, and a user hiding any kind
 		// of content never meets it, because an unanswered row counts as present.
 		const items = build([work({ visibility: "released", maturityRows: {} })]);
 		expect(items.map((i) => i.kind)).toEqual(["unanswered-rows"]);

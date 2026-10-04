@@ -62,8 +62,8 @@ const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.
 type PostKey = string;
 
 /**
- * A viewer context. `givenAmount` is **monthly dollars given to the gauntlet creator this
- * cycle**, and it is the only viewer fact gate resolution reads besides purchases.
+ * A user context. `givenAmount` is **monthly dollars given to the gauntlet creator this
+ * cycle**, and it is the only user fact gate resolution reads besides purchases.
  *
  * The staircase row's `anthersSupport` is deliberately NOT passed: there is nowhere to put
  * it. A Badge cannot reach resolution at all, which is
@@ -88,9 +88,9 @@ const PAY: AccessReason = "payment_required";
  * shared with the e2e walk, for the same reason the posts are shared: neither consumer can
  * quietly drift from what the other proved. Each row is realized as a resolver context here;
  * the `following` and `anthersSupport` fields are untestable at this layer (see the header
- * note) and ride along as documentation. Resolution reads what the viewer has given THIS
+ * note) and ride along as documentation. Resolution reads what the user has given THIS
  * creator as a raw amount, never a Badge or a list position, so a sparse ladder resolves
- * correctly and a viewer is never quantised to the nearest named rung.
+ * correctly and a user is never quantised to the nearest named rung.
  */
 const STAIRCASE = EXPECTED_STAIRCASE.map((row) => ({
 	state: row.state,
@@ -106,11 +106,11 @@ const POST_KEYS = Object.keys(POSTS) as PostKey[];
 const BUY = `G${2 + BADGE_RUNGS.length}`;
 
 describe("User Gauntlet — expected-access staircase", () => {
-	for (const { state, ctx: viewer, reasons } of STAIRCASE) {
+	for (const { state, ctx: user, reasons } of STAIRCASE) {
 		for (const key of POST_KEYS) {
 			const want = reasons[key];
 			it(`${state} → ${key} is ${want}`, () => {
-				const got = resolveAccessSync(POSTS[key], viewer);
+				const got = resolveAccessSync(POSTS[key], user);
 				expect(got.reason).toBe(want);
 				// canAccess must agree with the reason — a gate that reports "gated" but lets
 				// you in (or vice versa) is the failure this whole gauntlet exists to catch.
@@ -121,9 +121,9 @@ describe("User Gauntlet — expected-access staircase", () => {
 
 	it("the ladders only ever climb — no state unlocks less than the one before it", () => {
 		let previous = new Set<PostKey>();
-		for (const { state, ctx: viewer } of STAIRCASE) {
+		for (const { state, ctx: user } of STAIRCASE) {
 			const unlocked = new Set(
-				POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], viewer).canAccess),
+				POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], user).canAccess),
 			);
 			for (const key of previous) {
 				expect(unlocked.has(key), `${state} lost access to ${key}`).toBe(true);
@@ -134,7 +134,7 @@ describe("User Gauntlet — expected-access staircase", () => {
 
 	it("each Badge rung unlocks exactly one more post than the rung below", () => {
 		// Derived from the fixture's rungs, never typed, so retuning BADGE_RUNGS needs no
-		// matching edit here. A viewer who has given nothing sees only G1; each rung adds exactly one.
+		// matching edit here. A user who has given nothing sees only G1; each rung adds exactly one.
 		const counts = [0, ...BADGE_RUNGS].map(
 			(s) => POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(s)).canAccess).length,
 		);
@@ -142,12 +142,12 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	/**
-	 * ⭐ The reason `BADGE_RUNGS` is sparse. Between two rungs, a viewer's amount and the
+	 * ⭐ The reason `BADGE_RUNGS` is sparse. Between two rungs, a user's amount and the
 	 * rung's POSITION in the ladder diverge — so an implementation that compared positions
 	 * (the retired `badgeRank = indexOf` shape) opens one post too many here, toward
 	 * over-granting. On a consecutive ladder this state does not exist to test.
 	 */
-	it("a viewer between two rungs clears the lower and NOT the higher", () => {
+	it("a user between two rungs clears the lower and NOT the higher", () => {
 		for (let i = 0; i < BADGE_RUNGS.length - 1; i++) {
 			const lower = BADGE_RUNGS[i];
 			const higher = BADGE_RUNGS[i + 1];
@@ -200,7 +200,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 		expect(entitled.isEntitled).toBe(true);
 	});
 
-	it("an anonymous viewer is 'login_required' where a logged-in one is 'gated'", () => {
+	it("an anonymous user is 'login_required' where a logged-in one is 'gated'", () => {
 		const anon: AccessContext = {
 			userId: null,
 			supportByCreator: new Map(),
@@ -213,7 +213,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 		expect(resolveAccessSync(POSTS.G2, ctx(0)).reason).toBe("gated");
 	});
 
-	it("🚨 an anonymous viewer is 'login_required' for FREE work too, and it is still free", () => {
+	it("🚨 an anonymous user is 'login_required' for FREE work too, and it is still free", () => {
 		/*
 		 * The whole account requirement, in one assertion. This read `expect(…G1,
 		 * anon).reason).toBe("free")` until 2026-08-28 — *"a free post is free to anyone,

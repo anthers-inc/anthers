@@ -515,7 +515,7 @@ describe("the proved identity on a pending signup", () => {
 			.set({ expiresAt: new Date(Date.now() - 1000) })
 			.where(eq(pendingSignups.token, token));
 
-		// Absent to a reader immediately — the sweep is housekeeping, never the gate.
+		// Absent to a user immediately — the sweep is housekeeping, never the gate.
 		expect(await readPendingSignup(token)).toBeUndefined();
 
 		await sweepExpiredPendingSignups();

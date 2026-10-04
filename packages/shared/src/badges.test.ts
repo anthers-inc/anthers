@@ -240,7 +240,7 @@ describe("amountLabel — the one place an amount is written for a human", () =>
 	});
 
 	// Same normalization as everything else that reads an amount: it goes through `cents`,
-	// so a negative floors and sub-cent precision drops rather than reaching a reader.
+	// so a negative floors and sub-cent precision drops rather than reaching a user.
 	test("it normalizes rather than trusting its input", () => {
 		expect(amountLabel(-5)).toBe("$0");
 		expect(amountLabel(null)).toBe("$0");

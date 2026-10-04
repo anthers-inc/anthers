@@ -15,7 +15,7 @@
  * when logged out, so those assertions pass whether or not the UI exists. That is why this
  * is an `.authed` spec.
  *
- * ⚠️ **Nothing here actually deletes an account.** The gauntlet viewer is shared fixture
+ * ⚠️ **Nothing here actually deletes an account.** The gauntlet user is shared fixture
  * state that later rungs depend on, and a spec that consumed it would break them in a way
  * that looks like an unrelated failure. It asserts as far as the confirmation — which is
  * also the part that was missing, since the counts are the whole substance of informed

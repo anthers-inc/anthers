@@ -9,10 +9,10 @@
  *
  *   - that the meter actually **withholds bytes**, at the endpoints that serve them,
  *     rather than merely reporting a smaller number somewhere;
- *   - that it withholds them for **Public Access only** — gated work the viewer cleared,
+ *   - that it withholds them for **Public Access only** — gated work the user cleared,
  *     work they bought and their own catalog must never draw the allowance;
  *   - that the `public_access` flag is **stamped at write time** from the access the
- *     viewer actually had, so re-gating a Work later cannot retroactively bill someone.
+ *     user actually had, so re-gating a Work later cannot retroactively bill someone.
  *
  * Same reasoning as `delivery-access.test.ts`: a reason-only suite is structurally
  * incapable of catching a delivery leak, so these assertions are about status codes on
@@ -132,7 +132,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	return { cookie: account.cookie, id };
 }
 
-/** Put `seconds` of Public Access on the clock for a viewer, this month. */
+/** Put `seconds` of Public Access on the clock for a user, this month. */
 async function spend(userId: number, seconds: number, publicAccess = true) {
 	// A range, matching the model, anchored at the START of the current cycle rather than
 	// "just ended". The meter credits a range by splitting it against the calendar-month
@@ -159,9 +159,9 @@ async function spend(userId: number, seconds: number, publicAccess = true) {
 }
 
 /**
- * Put a viewer at exactly `seconds` spent, clearing whatever came before.
+ * Put a user at exactly `seconds` spent, clearing whatever came before.
  *
- * ⚠️ `spend` above **accumulates** — it inserts an event — so tests that need a viewer
+ * ⚠️ `spend` above **accumulates** — it inserts an event — so tests that need a user
  * *inside* their allowance cannot use it once an earlier test has spent one. That
  * ordering coupling is fine for a suite that only ever climbs; it is a trap for one that
  * moves in both directions, which is why this exists.
@@ -349,7 +349,7 @@ describe("the meter withholds bytes, not just numbers", () => {
 		await spend(userId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const res = await playlist(paWorkId, userCookie);
-		// 402 Payment Required, deliberately: the viewer is not forbidden, they have spent
+		// 402 Payment Required, deliberately: the user is not forbidden, they have spent
 		// a monthly allowance that the Public Access price removes. 403 would say "you may not" where the
 		// truth is "you may, and here is how".
 		expect(res.status).toBe(402);
@@ -371,14 +371,14 @@ describe("the meter withholds bytes, not just numbers", () => {
 });
 
 describe("what the meter must NOT charge for", () => {
-	it("gated work the viewer cleared draws no allowance", async () => {
+	it("gated work the user cleared draws no allowance", async () => {
 		// Over the limit AND holding this creator's Badge: the gate opens, and the
 		// meter must not close it. Billing a supporter's free allowance for work they paid
 		// a creator to reach charges them twice for one thing.
 		await setSupport(userId, 0);
 		await holdBadge(userId, "3.00");
 		const res = await playlist(gatedWorkId, userCookie);
-		// Not 402: the meter has no claim on work the viewer paid to reach. And not 403 —
+		// Not 402: the meter has no claim on work the user paid to reach. And not 403 —
 		// the assertion that actually pins the Badge path, which a sabotage pass showed
 		// the old bare `not.toBe(402)` did not: without the holding, delivery is refused
 		// as gated (403) and a 402-only check sails past it.
@@ -433,7 +433,7 @@ describe("the stamp is taken at write time", () => {
 		expect((await playlist(paWorkId, cookie)).status).not.toBe(402);
 	});
 
-	it("the attention endpoint stamps the flag from the viewer's real access", async () => {
+	it("the attention endpoint stamps the flag from the user's real access", async () => {
 		const { cookie, id } = await signUp(`pam_write_${run}`);
 		await setSupport(id, 0);
 
@@ -465,7 +465,7 @@ describe("the stamp is taken at write time", () => {
 		).json();
 		expect(after.usedSeconds).toBe(120);
 
-		// A Work this viewer cannot reach at all is ineligible and records nothing — so it
+		// A Work this user cannot reach at all is ineligible and records nothing — so it
 		// cannot draw the allowance either. Two protections, and this asserts the outer one.
 		const denied = await post(gatedWorkId);
 		expect((await denied.json()).recorded).toBe(0);
@@ -479,14 +479,14 @@ describe("the stamp is taken at write time", () => {
 	 * 🚨 **The inner protection, and the one a sabotage pass showed nothing else covered.**
 	 * The test above only proves that *inaccessible* work records nothing — which a
 	 * `publicAccess: true` stamp on every row would satisfy just as happily. The load-
-	 * bearing case is work the viewer genuinely CAN reach that is not the commons: they
+	 * bearing case is work the user genuinely CAN reach that is not the commons: they
 	 * cleared the creator's gate, so the seconds are eligible, recorded, and paid from the
 	 * Time Pool — and must still not draw a free allowance they were never spending.
 	 */
-	it("records gated work the viewer CLEARED without stamping it Public Access", async () => {
+	it("records gated work the user CLEARED without stamping it Public Access", async () => {
 		const { cookie, id } = await signUp(`pam_cleared_${run}`);
 		await setSupport(id, 0);
-		// Holding this creator's Badge this cycle: the gate opens for this viewer.
+		// Holding this creator's Badge this cycle: the gate opens for this user.
 		await holdBadge(id, "3.00");
 
 		const now = Date.now();
@@ -518,12 +518,12 @@ describe("the stamp is taken at write time", () => {
 	});
 });
 
-describe("an anonymous viewer", () => {
+describe("an anonymous user", () => {
 	/*
 	 * 🚨 **This block asserted the opposite until 2026-08-28**, under the heading *"gets
 	 * the full allowance rather than a refusal"*: `allowed: true`, and a playlist request
 	 * that was not a 402. Both were true, and together they were the defect — anonymous
-	 * Public Access streaming was **unlimited** while a signed-in viewer got ten hours a
+	 * Public Access streaming was **unlimited** while a signed-in user got ten hours a
 	 * month, and since `POST /attention` requires an account, none of that time was ever
 	 * attributed and **the creator earned nothing for it**. The incentive ran backwards
 	 * directly underneath the platform's only conversion event.
@@ -631,11 +631,11 @@ describe("media with no player of their own", () => {
 		expect((await fetchWork(textWorkId, userCookie)).work.bodyHtml).toBe(TEXT_BODY);
 	});
 
-	it("🚨 gated text the viewer CLEARED survives a spent allowance", async () => {
+	it("🚨 gated text the user CLEARED survives a spent allowance", async () => {
 		/*
 		 * The don't-bill-them-twice property, for the media that have no delivery endpoint.
 		 *
-		 * By this point the viewer has given this creator money (an earlier test in
+		 * By this point the user has given this creator money (an earlier test in
 		 * this file did so), so the gate is open to them. Their allowance is also
 		 * gone. Those two facts must not interact: they paid a creator to reach this, it
 		 * was never part of the commons, and it never drew an allowance — so an empty
@@ -643,7 +643,7 @@ describe("media with no player of their own", () => {
 		 *
 		 * The mechanism that makes this true is worth naming, because it is easy to break:
 		 * `deliverable` withholds only when `publicAccess` is true, and `publicAccess`
-		 * requires `access.isFree`. Gated work the viewer cleared is accessible but NOT
+		 * requires `access.isFree`. Gated work the user cleared is accessible but NOT
 		 * free, so it is untouched. Widen that condition to "canAccess" and this fails.
 		 */
 		await setSupport(userId, 0);
@@ -655,8 +655,8 @@ describe("media with no player of their own", () => {
 		expect(work.bodyHtml).toBe(TEXT_BODY);
 	});
 
-	it("gated text the viewer has NOT cleared is withheld for access, not for the meter", async () => {
-		// A viewer with no Seed to this creator, and a full allowance. Empty for the
+	it("gated text the user has NOT cleared is withheld for access, not for the meter", async () => {
+		// A user with no Seed to this creator, and a full allowance. Empty for the
 		// access reason alone — asserted so a refactor cannot collapse the two reasons
 		// into one flag: they mean different things and produce different UI.
 		const { cookie, id } = await signUp(`pam_nogate_${run}`);
@@ -673,11 +673,11 @@ describe("media with no player of their own", () => {
 		/*
 		 * The account requirement, at the one choke point text passes through.
 		 *
-		 * This asserted `bodyHtml === TEXT_BODY` until 2026-08-28 — *"an anonymous reader
+		 * This asserted `bodyHtml === TEXT_BODY` until 2026-08-28 — *"an anonymous user
 		 * is never withheld from"* — and text is the medium where that mattered most,
 		 * because a text Work has no delivery endpoint of its own. Its deliverable rides
 		 * inside `GET /works/:id`, so adding `requireAuth` to the four media routes does
-		 * nothing for it; only `resolveAccessSync` refusing a null viewer closes it. That
+		 * nothing for it; only `resolveAccessSync` refusing a null user closes it. That
 		 * is why neither guard is redundant.
 		 *
 		 * The rest of the payload staying present is the other half of the rule: the page

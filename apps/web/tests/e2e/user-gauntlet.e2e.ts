@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The User Gauntlet spec pass — one viewer's whole arc with one creator, walked in order,
+ * The User Gauntlet spec pass — one user's whole arc with one creator, walked in order,
  * asserting every cell of the expected-access staircase after every transition.
  *
  * The staircase (`EXPECTED_STAIRCASE`) and the nine posts come from `@anthers/db` — the
@@ -57,7 +57,7 @@ const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 test.describe.configure({ mode: "serial" });
 
-/** Hop the walk viewer's billing state through the canonical fixture script — instance B. */
+/** Hop the walk user's billing state through the canonical fixture script — instance B. */
 function hop(...args: string[]): void {
 	execFileSync(
 		"bun",
@@ -126,7 +126,7 @@ async function expectPostUnlocked(page: Page, key: string): Promise<void> {
  * A locked post shows the unlock panel, and that panel says what it is locked BY and what
  * to do about it. The heading carries the gate's identity — "Locked · Root" when the gate
  * sits on a Badge, "Unlock this post" when it doesn't — and the CTA carries the *marginal*
- * ask, which is the thing a viewer actually needs: how much more, and to whom.
+ * ask, which is the thing a user actually needs: how much more, and to whom.
  */
 async function expectPostLocked(page: Page, key: string): Promise<void> {
 	const spec = walkPost(key);
@@ -152,7 +152,7 @@ async function expectPostLocked(page: Page, key: string): Promise<void> {
  *
  * **These call the access-checked delivery endpoints by URL rather than following the
  * pointer in the post JSON, and that is deliberate.** With `STORAGE_BACKEND=local` the API
- * sets no delivery context (`deliveryCtxFor` returns null), so an entitled viewer is handed
+ * sets no delivery context (`deliveryCtxFor` returns null), so an entitled user is handed
  * the raw `/content/...` URL and the app never touches `/posts/:slug/hls/...` at all. A
  * test that followed the JSON pointer would therefore assert *static file serving* in dev
  * and the real route only in production — the weaker half, in the place with less scrutiny.
@@ -181,7 +181,7 @@ interface ContentItemView {
 	} | null;
 }
 
-/** The Work as this viewer sees it — media URLs blanked when denied. */
+/** The Work as this user sees it — media URLs blanked when denied. */
 async function mediaItem(page: Page, key: string): Promise<ContentItemView | null> {
 	const spec = walkPost(key);
 	const res = await page.request.get(`${API_URL}/api/content/works/${spec.slug}`);
@@ -210,7 +210,7 @@ async function expectVideoBytes(page: Page, key: string): Promise<void> {
 	expect(item?.transcoding?.status, `${key} transcode status`).toBe("completed");
 	expect(
 		item?.transcoding?.hlsManifestUrl,
-		`${key} withheld its video from an entitled viewer`,
+		`${key} withheld its video from an entitled user`,
 	).toBeTruthy();
 
 	// 1. The master playlist, through the access-checked route.
@@ -258,7 +258,7 @@ async function _expectAudioBytes(page: Page, key: string): Promise<void> {
 	expect(item?.transcoding?.status, `${key} transcode status`).toBe("completed");
 	expect(
 		item?.transcoding?.outputFileUrl,
-		`${key} withheld its audio from an entitled viewer`,
+		`${key} withheld its audio from an entitled user`,
 	).toBeTruthy();
 
 	// The endpoint 302s to the stored object (signed, in S3 mode); the request follows it.
@@ -273,7 +273,7 @@ async function _expectAudioBytes(page: Page, key: string): Promise<void> {
 }
 
 /**
- * The negative, and the sharper of the two: a denied viewer gets no pointer at the media
+ * The negative, and the sharper of the two: a denied user gets no pointer at the media
  * *and* cannot reach it by constructing the URL themselves. The second half is the one
  * that matters — withholding a URL is not access control if the endpoint serves anyone
  * who guesses it, and guessing is trivial (the content item id is in the same response).
@@ -287,7 +287,7 @@ async function expectMediaWithheld(page: Page, key: string): Promise<void> {
 
 	for (const url of [hlsUrl(key, item?.id as number), audioUrl(key, item?.id as number)]) {
 		const res = await page.request.get(url);
-		expect(res.status(), `${key} served ${url} to a denied viewer`).toBe(403);
+		expect(res.status(), `${key} served ${url} to a denied user`).toBe(403);
 	}
 }
 
@@ -303,7 +303,7 @@ test.beforeAll(async () => {
 	test.setTimeout(180_000);
 
 	// Reset to the floor through the canonical script, for instance B — this is what makes
-	// re-runs and retries deterministic. The viewer's session survives (reset never
+	// re-runs and retries deterministic. The user's session survives (reset never
 	// touches sessions). Instance A's rows are untouched, so the authed specs could be
 	// running beside this right now; that is the isolation this file's `--instance walk`
 	// buys.
@@ -414,7 +414,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 
 	// And the unlock control is the ONLY route in on this page: no surface offers an
 	// Anthers Badge as a way into a creator's gate. This is a UI property, not a resolver
-	// property — the resolver cannot see the viewer's Badge count at all (a Badge is
+	// property — the resolver cannot see the user's Badge count at all (a Badge is
 	// standing, not access) — so a regression here is a *surface* reappearing, and only
 	// the browser can see it.
 	await expect(page.getByRole("button", { name: /Badge for Anthers/ })).toBeHidden();
@@ -423,7 +423,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 
 	if (mediaSeeded) {
 		// "Free streams" as a claim about BYTES, not about a reason string: G1's video
-		// really plays for a viewer holding nothing, and G3's audio really doesn't.
+		// really plays for a user holding nothing, and G3's audio really doesn't.
 		await expectVideoBytes(page, "G1");
 		await expectMediaWithheld(page, "G3");
 	}
@@ -593,10 +593,10 @@ test("rung 5 — purchases go through the basket, and only a purchase unlocks th
 // ── The meter rung: the free-limit moment ────────────────────────────────────
 //
 // 🚨 This lives inside the gauntlet walk rather than in an `.authed` spec of its own,
-// and the reason is `fullyParallel: true`. These assertions have to move the viewer's
+// and the reason is `fullyParallel: true`. These assertions have to move the user's
 // support for Anthers and rewrite their attention events — shared fixture state the
 // staircase above depends on — so a parallel file would race the walk and fail somewhere
-// unrelated. The serial walk already owns this viewer, so it owns this too, and it runs
+// unrelated. The serial walk already owns this user, so it owns this too, and it runs
 // last where disturbing the ladder costs nothing.
 //
 // What is being guarded is specific: **the meter regressing to silence.** Every part of
@@ -604,7 +604,7 @@ test("rung 5 — purchases go through the basket, and only a purchase unlocks th
 // replaces the player, a limit that stops applying — and none of that fails a test that
 // only checks the page loads. The failure mode is a working feature that says nothing,
 // which is exactly the state this whole surface was built to end.
-test("the meter — a free viewer is warned before the limit, not after", async ({ page }) => {
+test("the meter — a free user is warned before the limit, not after", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 
 	// Down to Free, and 9½ hours spent. `--watched-minutes` writes real `attention_events`
@@ -640,7 +640,7 @@ test("the meter — spent, the player gives way to an explanation", async ({ pag
 	await expect(page.locator("video")).toHaveCount(0);
 
 	// It must not read as locked content. The Work is free to everyone and stays free to
-	// everyone; what ran out belongs to the viewer, and saying it the other way round is
+	// everyone; what ran out belongs to the user, and saying it the other way round is
 	// how the commons quietly reads as stratified again.
 	await expect(page.getByText(/this work stays free to everyone/i)).toBeVisible();
 	await expect(page.getByText(/\block(ed)?\b/i)).toHaveCount(0);
@@ -659,7 +659,7 @@ test("the meter — the Public Access price removes it, and nothing above it buy
 
 	await expect(page.locator("video")).toBeVisible();
 	await expect(page.getByRole("heading", { name: /that's your 10 hours/i })).toHaveCount(0);
-	// Nothing counts down for an unlimited viewer either: there is no limit to count toward,
+	// Nothing counts down for an unlimited user either: there is no limit to count toward,
 	// and showing one would state a restriction that does not exist.
 	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);
 

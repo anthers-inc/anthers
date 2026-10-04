@@ -28,8 +28,8 @@
 /**
  * The NSIDs published under anthers.org whose records Anthers writes.
  *
- * ⭐ **The reader collections are written only because the hosted writer reuses its session.**
- * `org.anthers.comment`, `review`, `vote` and `follow` are high-frequency — a reader's pooled
+ * ⭐ **The user collections are written only because the hosted writer reuses its session.**
+ * `org.anthers.comment`, `review`, `vote` and `follow` are high-frequency — a user's pooled
  * activity spends writes across all of them — and the reference PDS limits `createSession` to
  * thirty in five minutes and three hundred a day per account. They could not be written while
  * every write opened a fresh login; `services/hosted-session-store.ts` is what made that one

@@ -21,7 +21,7 @@ interface AudioPlayerProps {
 	 */
 	attention?: { creatorId: number | null; workId: number | null };
 	/**
-	 * Whether this Work draws the viewer's Public Access allowance. Same meaning as on
+	 * Whether this Work draws the user's Public Access allowance. Same meaning as on
 	 * `VideoPlayer` — see there for why gated, bought and own-catalog playback are all
 	 * exempt.
 	 */

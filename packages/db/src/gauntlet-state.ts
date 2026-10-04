@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Deterministic state hops for the User Gauntlet — the harness's way to place the viewer
+ * Deterministic state hops for the User Gauntlet — the harness's way to place the user
  * on an exact rung of the staircase without walking a billing flow.
  *
  * Why this exists: the support model made billing real. Changing what a user gives Anthers
@@ -8,7 +8,7 @@
  * without Stripe configured and needs a running `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
  * hops the *billing* facts here, at the same rows the webhooks would have written:
- * the viewer's `billing_accounts` row and a completed `purchases` row. Under the Badge
+ * the user's `billing_accounts` row and a completed `purchases` row. Under the Badge
  * model the **amounts are `user_badges` holdings**, which is what the `--give` hop
  * writes; the two amount columns the old `accounts` table carried are gone.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
 
 	// The instance's own walker is the fallback: `--user` still wins, and with neither
 	// `--user` nor the dev account set, walk mode falls back to `walk-walker`
-	// rather than instance A's viewer.
+	// rather than instance A's user.
 	const walkerUsername =
 		flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim() || inst.userFallbackUsername;
 	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
@@ -211,7 +211,7 @@ async function main(): Promise<void> {
 	 *
 	 * 🚨 Writes rows rather than a total, because there is no total to write: the budget
 	 * is **derived** from the events every time it is read. A hop that set some cached
-	 * figure would place the viewer in a state the app cannot actually produce, and would
+	 * figure would place the user in a state the app cannot actually produce, and would
 	 * pass whether or not the derivation worked.
 	 */
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
@@ -282,9 +282,9 @@ async function main(): Promise<void> {
 	// and creates it if the fixture ladder has no row there yet — the gauntlet is a
 	// dev-only fixture and may not depend on the seed scripts having run.
 	//
-	// 🚨 **The hop REPLACES the viewer's holding on this creator, it does not add one.**
+	// 🚨 **The hop REPLACES the user's holding on this creator, it does not add one.**
 	// The walk the e2e drives is cumulative — $3, then the gap states, then $6, upward —
-	// and a viewer holds ONE Badge per issuer per cycle, the highest they have reached.
+	// and a user holds ONE Badge per issuer per cycle, the highest they have reached.
 	// A hop that inserted beside the existing holding would stack rungs ($3 + $4.50 +
 	// $6 …) against the cycle's budget until the picker's affordability check refused
 	// the next step — a fixture drifting away from what the model can produce, which is
@@ -385,7 +385,7 @@ async function main(): Promise<void> {
 		.from(billingAccounts)
 		.where(eq(billingAccounts.userId, userId))
 		.limit(1);
-	// The viewer's holdings on the gauntlet creator this cycle, summed through the
+	// The user's holdings on the gauntlet creator this cycle, summed through the
 	// badge thresholds — the number the old allocation row's `amount` used to carry.
 	const [alloc] = await db
 		.select({ amount: sql<string>`COALESCE(SUM(${badges.threshold}), 0)` })

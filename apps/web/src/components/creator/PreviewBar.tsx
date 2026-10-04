@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * **Creator preview** — see your own gating the way a reader does.
+ * **Creator preview** — see your own gating the way a user does.
  *
  * A creator sees everything of theirs unlocked, which is right and also means they have
  * no way to check what they actually built. The alternative, before this, was juggling a

@@ -18,7 +18,7 @@
 //
 // ⚠️ **The order in `PAGE_FAQS` is editorial and is not derived from anything.** An FAQ's
 // first question is the most important thing about it — it is the objection you believe is
-// standing between the reader and the button below it — so the sequence is written per
+// standing between the user and the button below it — so the sequence is written per
 // page rather than falling out of category order. Ordering by category instead would open
 // the signup page's FAQ with a question about the feed.
 //
@@ -382,7 +382,7 @@ export type FAQSurface = "users" | "creators" | "signup";
  * Which questions each page ends on, in the order it asks them.
  *
  * ⚠️ **Keep these short.** A page-level FAQ is the last objection standing between a
- * reader and the button under it, not a second copy of /faq — six or seven closed
+ * user and the button under it, not a second copy of /faq — six or seven closed
  * accordions read as a considered list, and fifteen read as a page that gave up
  * explaining itself. The link to /faq underneath is what makes the pruning safe.
  *

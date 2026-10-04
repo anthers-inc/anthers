@@ -709,7 +709,7 @@ export function freePotSensitivity() {
 		pot: money(new Decimal(pot)),
 		shipped: pot === FREE_TIME_POOL,
 		floorPct: `${(floorPayingShare({ staffing: NO_STAFFING, freeTimePool: pot }) * 100).toFixed(1)}%`,
-		/** How much more a creator earns per unit of attention from a viewer paying the Public Access price. */
+		/** How much more a creator earns per unit of attention from a user paying the Public Access price. */
 		multiple: timePoolFor(PUBLIC_ACCESS_PRICE) / pot,
 	}));
 }
@@ -738,8 +738,8 @@ export function edBandSensitivity() {
  * The creator population by size, at a reference rung — who earns what, and who is
  * carried.
  *
- * `attentionPct` is a share of viewer attention, **not** hours: with unlimited Public
- * Access a viewer's hours are a free variable while their contribution is fixed by their
+ * `attentionPct` is a share of user attention, **not** hours: with unlimited Public
+ * Access a user's hours are a free variable while their contribution is fixed by their
  * monthly amount, so a per-hour rate is an emergent ratio nobody is paid at. It is also what
  * the equal-time principle actually governs — a minute is a minute, whichever medium it
  * was spent on.
@@ -771,7 +771,7 @@ export function creatorSegments(accounts = 80_000) {
 // ⚠️ **`paIncentiveCeiling()` was removed on 2026-08-30 along with its subject.** It priced
 // the Public Access storage exemption against `PA_INCENTIVE_CEILING` and rendered 61.01's
 // `growth-pa-ceiling` block. With the exemption retired the function reported 0.00% at every
-// rung — a generated table saying nothing, which is worse than no table, because a reader
+// rung — a generated table saying nothing, which is worse than no table, because a user
 // takes a published figure as evidence that something was measured. The ceiling itself is
 // kept in `growth.ts`; what a future incentive costs is for whoever builds it to render.
 
@@ -788,18 +788,18 @@ export function directedSupportWorstCase(monthly = PUBLIC_ACCESS_PRICE) {
 // ── The published case studies ───────────────────────────────────────────────
 //
 // 🚨 **These exist because two public pages CLAIMED to be generated and were not.**
-// *What It Costs, Against What You Pay Now* opened by telling a reader that every
+// *What It Costs, Against What You Pay Now* opened by telling a user that every
 // Anthers figure on it came from the platform's own code — while every one of them
 // had been typed by hand, on the page whose entire argument is that Anthers can be
 // checked. The figures happened to be right; the sentence about them was not, and it
-// was the sentence a reader would rely on. Corrected 2026-08-31 by making it true.
+// was the sentence a user would rely on. Corrected 2026-08-31 by making it true.
 //
 // Only the **Anthers** side belongs here. What a rival charges is research, dated and
 // perishable, and both pages say so in their own words — see `RIVAL_STOREFRONTS` for
 // the storefront rates and 62.04 in the vault for the sourcing discipline.
 
 /**
- * A reader's month, as the public case studies state it.
+ * A user's month, as the public case studies state it.
  *
  * `anthers` and `creators` are the two ASSUMPTIONS — what this person gives Anthers
  * and what they point at creators. Everything else derives. Sales tax is the only

@@ -17,13 +17,13 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  *
  * 🚨 **This is a property of the ACCOUNT, never of the Work**, and that is what lets
  * Public Access be described as free to everyone without qualification. A Work is not
- * "10-hour content"; a *viewer* has a monthly allowance. The distinction matters because
+ * "10-hour content"; a *user* has a monthly allowance. The distinction matters because
  * the alternative — metering per Work — is how you end up back at a stratified commons,
  * which is exactly what the binary model exists to prevent.
  *
  * **What the meter does NOT count**, and each exclusion is load-bearing:
  *
- * - **Gated work the viewer cleared.** They gave that creator money; charging their free
+ * - **Gated work the user cleared.** They gave that creator money; charging their free
  *   allowance for it would bill them twice for one thing.
  * - **Work they bought.** A purchase is permanent access, not a draw against anything.
  * - **Their own work.** A creator watching their own catalog is not consuming a commons.
@@ -62,7 +62,7 @@ export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
  * The slice of a sharer's month that **share-link viewing** may draw — of their allowance,
  * and of their Time Pool.
  *
- * 🚨 **A ceiling, never a reservation, and the difference is the whole design.** A viewer
+ * 🚨 **A ceiling, never a reservation, and the difference is the whole design.** A user
  * who shares nothing distributes 100% of their Time Pool to the creators they watched, exactly
  * as before; the slice only comes into being when somebody actually watches through a link.
  * Reserving it unconditionally would quietly cut every non-sharer's creators by a tenth to
@@ -77,7 +77,7 @@ export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
  * ⚠️ **Parker settled this on 2026-08-28**, choosing a proportional sub-pool over the
  * alternative shape — share-link minutes accruing at a *lower rate* in one undivided pool.
  * The rejected shape taxed the sharer for the exact behavior the feature exists to
- * encourage, and it made a minute worth less for how the viewer arrived rather than for how
+ * encourage, and it made a minute worth less for how the user arrived rather than for how
  * well attended it was, which sits badly beside the equal-time principle (the wiki's *What the Time Pool Pays For*).
  *
  * The figure is illustrative in the share-link design (*"90% own time / 10% shared"*) and belongs to the
@@ -99,9 +99,9 @@ export const SHARED_PUBLIC_ACCESS_SECONDS = Math.round(
 	FREE_PUBLIC_ACCESS_SECONDS * SHARE_LINK_POOL_FRACTION,
 );
 
-/** A viewer's standing against the meter this month. */
+/** A user's standing against the meter this month. */
 export interface PublicAccessBudget {
-	/** No limit applies — the viewer gives Anthers at least the Public Access price. */
+	/** No limit applies — the user gives Anthers at least the Public Access price. */
 	unlimited: boolean;
 	/** Public Access seconds already watched this month. */
 	usedSeconds: number;
@@ -109,7 +109,7 @@ export interface PublicAccessBudget {
 	limitSeconds: number | null;
 	/** Seconds left before the cap, or null when unlimited. Never negative. */
 	remainingSeconds: number | null;
-	/** Whether the viewer may start more Public Access right now. */
+	/** Whether the user may start more Public Access right now. */
 	allowed: boolean;
 }
 
@@ -143,7 +143,7 @@ export const NO_PUBLIC_ACCESS_ALLOWANCE: PublicAccessBudget = {
  * two budgets answer different questions about different people — *may I watch more?* about
  * the account holder, and *may somebody else watch more through my link?* about strangers —
  * and folding the second into `PublicAccessBudget` would put a field on every budget response
- * that almost no reader of it means.
+ * that almost no user of it means.
  *
  * `unlimited` is absent because there is nothing to buy: the shared budget is a flat constant
  * for every account, paying or not. See {@link SHARED_PUBLIC_ACCESS_SECONDS}.
@@ -174,9 +174,9 @@ export function shareLinkBudget(usedSeconds: number): ShareLinkBudget {
 }
 
 /**
- * Resolve a viewer's Public Access standing from the two facts it depends on.
+ * Resolve a user's Public Access standing from the two facts it depends on.
  *
- * `anthersDollars` is the **monthly amount in dollars** the viewer currently gives Anthers
+ * `anthersDollars` is the **monthly amount in dollars** the user currently gives Anthers
  * — point-in-time, like everything else in the model, resolved by the caller from the
  * held Anthers Badge (its threshold IS the amount). Reaching the Public Access
  * price is the only threshold that matters, and nothing above it buys more.
@@ -214,7 +214,7 @@ export function publicAccessBudget(
 		usedSeconds: used,
 		limitSeconds: FREE_PUBLIC_ACCESS_SECONDS,
 		remainingSeconds: remaining,
-		// Strictly greater than zero: a viewer who has exactly spent the allowance has
+		// Strictly greater than zero: a user who has exactly spent the allowance has
 		// spent it. Starting one more stream on an empty budget is the case this exists
 		// to refuse.
 		allowed: remaining > 0,

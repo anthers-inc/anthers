@@ -26,7 +26,7 @@ import { accessState } from "./work-state";
 
 /**
  * Why an item is on the list. The value is stable and is what a test names, so renaming one
- * is a change to the test rather than to a string a reader sees.
+ * is a change to the test rather than to a string a user sees.
  */
 export type WorklistKind =
 	| "locked"
@@ -103,7 +103,7 @@ export interface WorklistInput {
  *
  * ⭐ **`locked` leads, above even payout setup.** It is the only condition here describing
  * something that is already wrong *in public*: the Work is listed, its page loads for the
- * person checking, and no reader can get in. Everything else on this list is work that has
+ * person checking, and no user can get in. Everything else on this list is work that has
  * not gone out yet.
  */
 export function buildWorklist({
@@ -191,9 +191,9 @@ export function buildWorklist({
 	}
 
 	// A RELEASED Work with a row unanswered, which can only be one released before the matrix
-	// existed. It stays out, but a reader hiding a kind of content never meets it, because a filter
+	// existed. It stays out, but a user hiding a kind of content never meets it, because a filter
 	// counts an unanswered row as present (`mayContain`). Wrong out in the world and the creator's to
-	// fix, so it is on the list, though only some readers are missing it.
+	// fix, so it is on the list, though only some users are missing it.
 	const unanswered = group(
 		works.filter(
 			(w) => w.visibility === "released" && !isRatingComplete(w.maturityRows, gridFor(w.type)),

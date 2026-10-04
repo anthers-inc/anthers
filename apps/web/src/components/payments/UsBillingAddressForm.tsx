@@ -100,7 +100,7 @@ function isUsZip(zip: string): boolean {
  * welcome in the input (it is what a password manager often autofills, and letting the
  * buyer type it beats refusing it), but Stripe Tax resolves from the five-digit code and
  * the purchase row's `buyerPostalCode` is read back as one — so the +4 suffix is
- * stripped here, at the boundary to the session, rather than anywhere a reader would
+ * stripped here, at the boundary to the session, rather than anywhere a user would
  * have to remember to do it again. `80202-1234` → `80202`; anything else passes through
  * trimmed and is refused by the shape check before it gets this far.
  */

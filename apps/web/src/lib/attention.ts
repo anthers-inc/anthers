@@ -148,7 +148,7 @@ let listenersBound = false;
  *
  * ⚠️ Per-element visibility does NOT cover that case on its own. The IntersectionObserver
  * gate is ANDed with the idle gate in `isLive`, so a Work on screen still stops earning after
- * `IDLE_TIMEOUT_MS` with no interaction — `mousemove` is what keeps a still reader live.
+ * `IDLE_TIMEOUT_MS` with no interaction — `mousemove` is what keeps a still user live.
  */
 const INTERACTION_EVENTS = [
 	"pointerdown",
@@ -328,7 +328,7 @@ async function flushEvents() {
 	const batch = pendingEvents.splice(0, MAX_EVENTS_PER_REQUEST);
 	try {
 		const res = await client.api.subscriptions.attention.$post({
-			// Sent only when there is one. A signed-in viewer's claim is theirs whatever link
+			// Sent only when there is one. A signed-in user's claim is theirs whatever link
 			// they arrived by, and the server ignores a token beside a session anyway — but
 			// sending one would say something untrue about what this request is.
 			query: shareToken ? { share: shareToken } : {},
@@ -361,7 +361,7 @@ async function flushEvents() {
 		 * is the only place in the app that learns it in the ordinary course of watching.
 		 *
 		 * 🚨 That makes this line the meter's live signal, not a nicety: the flush that
-		 * spends a viewer's last minute is the same flush that reports zero remaining, so
+		 * spends a user's last minute is the same flush that reports zero remaining, so
 		 * publishing it here is what lets a player stop at the limit and *say so* rather
 		 * than discovering it by having a segment request refused. Without it the first
 		 * sign of the limit is a dead player.
@@ -423,7 +423,7 @@ export function useAttentionClaim(params: {
 	contentType: string;
 	/** Required for playback-mode content (video/audio); ignored otherwise. */
 	playing?: boolean;
-	/** Set false to suspend the claim (e.g. the viewer can't access the Work). */
+	/** Set false to suspend the claim (e.g. the user can't access the Work). */
 	active?: boolean;
 	/** Ref to the deliverable element. Presence-mode only; gates the claim on the element being on screen. */
 	elementRef?: RefObject<HTMLElement | null>;

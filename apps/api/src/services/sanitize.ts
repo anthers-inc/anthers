@@ -31,7 +31,7 @@ const POST_HTML_OPTIONS: sanitizeHtml.IOptions = {
 		// The same emphasis as `<s>`: CommonMark has one strikethrough delimiter (`~~`),
 		// and every producer here emits `<del>` for it — marked does when markdown carrying
 		// it is round-tripped in `normalizeStoredMarkdown`, and react-markdown's HTML
-		// renderer does for a viewer's own prose copy. The sanitizer sits between them.
+		// renderer does for a user's own prose copy. The sanitizer sits between them.
 		"del",
 		"u",
 		"code",

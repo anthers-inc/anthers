@@ -7,12 +7,12 @@
  * Work page renders Accept/Decline only for the person the credit names, whether the Studio
  * marks the row as waiting, or whether a stranger's page shows no controls and no credit at
  * all. The flag is the whole gate — the UI is forbidden from deciding identity for itself —
- * so these walks assert what each viewer's serialization actually rendered.
+ * so these walks assert what each user's serialization actually rendered.
  *
  * Runs on `media_fixture` as the creator (whose Works nothing else resets, and whose payout
  * setup is seeded — see `work-release.authed.e2e.ts` for why any other owner cannot release)
- * and on the `authed` project's own signed-in viewer, `gauntlet_walker`, as the credited
- * person. The viewer's DID comes off their public profile rather than out of the database:
+ * and on the `authed` project's own signed-in user, `gauntlet_walker`, as the credited
+ * person. The user's DID comes off their public profile rather than out of the database:
  * the credit is written the way a creator would write it, by pasting the address of a real
  * account, and the walk then proves that account's own page renders the ask.
  *
@@ -46,9 +46,9 @@ interface PublicProfile {
 }
 
 let session = "";
-/** The viewer's DID, read from their public profile before the Work is created. */
+/** The user's DID, read from their public profile before the Work is created. */
 let userDid = "";
-/** The viewer's handle, for the sweep and for reading their notifications. */
+/** The user's handle, for the sweep and for reading their notifications. */
 let userHandle = "";
 
 async function ownWorks(): Promise<OwnedWork[]> {
@@ -139,7 +139,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	const profile = (await (
 		await fetch(`${API_URL}/api/accounts/users/${userHandle}`)
 	).json()) as PublicProfile;
-	expect(profile.user?.atprotoDid, "the gauntlet viewer has no DID to credit").toBeTruthy();
+	expect(profile.user?.atprotoDid, "the gauntlet user has no DID to credit").toBeTruthy();
 	userDid = profile.user?.atprotoDid as string;
 	// Sweep a crashed prior run's Work before creating this run's own.
 	await sweep();
@@ -181,7 +181,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 		timeout: 15_000,
 	});
 
-	// The release made the credit public, which is the moment the viewer is owed the ask.
+	// The release made the credit public, which is the moment the user is owed the ask.
 	// The listing sync is run by hand here — no worker runs in a browser session (see
 	// `syncListing` above) — so the record exists before the credited person's page is
 	// asked to accept against it.
@@ -229,7 +229,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	expect(stored, "the released Work is missing from the creator's own catalog").toBeTruthy();
 
 	// ── The credited person confirms ──────────────────────────────────────────────
-	// A second browser context signed in as the viewer — the authed project's own page
+	// A second browser context signed in as the user — the authed project's own page
 	// belongs to them already, but a fresh context keeps the two sessions from bleeding
 	// into each other across the walk.
 	const userContext = await browser.newContext({
@@ -239,7 +239,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await userPage.goto(`/works/${work.publicId}`);
 
 	// The confirm ask renders, with the credit's own role — and the DID is what the
-	// viewer sees, not their resolved name, because they have not confirmed yet.
+	// user sees, not their resolved name, because they have not confirmed yet.
 	const ask = userPage.getByText("You're credited — confirm?");
 	await expect(ask).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
@@ -254,21 +254,21 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	});
 	expect(
 		notificationsRes.ok,
-		`reading the viewer's notifications failed: ${notificationsRes.status}`,
+		`reading the user's notifications failed: ${notificationsRes.status}`,
 	).toBe(true);
 	const notifications = (await notificationsRes.json()) as {
 		notifications: { title?: string; linkPath?: string }[];
 	};
 	const offered = notifications.notifications.find((n) => n.title?.includes("credited"));
-	expect(offered, "no credit-offered notification for the viewer").toBeTruthy();
+	expect(offered, "no credit-offered notification for the user").toBeTruthy();
 	expect(offered?.linkPath).toContain(String(work.publicId));
 
 	// Accept, and the credit settles from the server's own answer: the DID is gone and
-	// the viewer's name is in its place, with no confirm ask left on the page.
+	// the user's name is in its place, with no confirm ask left on the page.
 	await userPage.getByRole("button", { name: "Accept", exact: true }).click();
 	await expect(
 		userPage.locator("section").filter({ hasText: "Credits" }),
-		"the accepted credit did not resolve to the viewer's name",
+		"the accepted credit did not resolve to the user's name",
 	).toContainText(VIEWER_NAME, { timeout: 15_000 });
 	await expect(userPage.getByText("You're credited — confirm?")).toHaveCount(0);
 	await expect(
@@ -307,7 +307,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 /**
  * Read the session cookie out of a signed-in context, for calling the API as that account.
  *
- * The viewer's storageState carries it; `fetch` here is plain, so the cookie travels the
+ * The user's storageState carries it; `fetch` here is plain, so the cookie travels the
  * same way every other API call in these suites makes it travel.
  */
 async function viewerSessionCookie(
@@ -315,6 +315,6 @@ async function viewerSessionCookie(
 ): Promise<string> {
 	const cookies = await context.cookies(API_URL);
 	const session = cookies.find((c) => c.name === "session")?.value;
-	expect(session, "the viewer context carries no session cookie").toBeTruthy();
+	expect(session, "the user context carries no session cookie").toBeTruthy();
 	return `session=${session}`;
 }

@@ -11,7 +11,7 @@
  *
  * Plus the takedown-state check that is the whole point of Phase 1:
  * - A taken-down Work denies access to EVERYONE — the creator, buyers, and
- *   entitled viewers — through `resolveAccessSync`.
+ *   entitled users — through `resolveAccessSync`.
  * - The `takedown` reason is returned, not `gated` or `payment_required`.
  */
 
@@ -45,7 +45,7 @@ function req(path: string, options?: RequestInit) {
  * 🚨 **The cookie is not optional, and it stopped being optional on 2026-08-28.** These
  * assertions used a logged-out request because that was the shortest way to reach
  * `resolveAccessSync` without hitting the owner branch. Consuming a Work now requires an
- * account, so a logged-out viewer resolves `login_required` on everything and the takedown
+ * account, so a logged-out user resolves `login_required` on everything and the takedown
  * this file exists to prove would be masked by a denial that has nothing to do with it —
  * which is precisely what happened: `login_required` arrived where `takedown` was expected.
  * A signed-in stranger reaches the same resolver and is refused for the real reason.
@@ -224,9 +224,9 @@ describe("DMCA takedown — the access denial", () => {
 		expect(access.reason).toBe("takedown");
 	});
 
-	it("a taken-down Work outranks the account requirement for a logged-out viewer", async () => {
+	it("a taken-down Work outranks the account requirement for a logged-out user", async () => {
 		// 🚨 The takedown is checked before everything else in the resolver, and this is
-		// where that ordering earns its place. A logged-out viewer is refused twice over
+		// where that ordering earns its place. A logged-out user is refused twice over
 		// now — no account, and the material is down — and the reason they are given must
 		// be the takedown, or a notice would look like a login prompt to anyone auditing
 		// what we serve.

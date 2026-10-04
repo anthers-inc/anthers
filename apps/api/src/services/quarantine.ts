@@ -454,7 +454,7 @@ async function recordWorkQuarantine(
 		//
 		// `action: "hide"` with a distinguishing `reason`, which is exactly what
 		// `takeDownWork` does with `reason: "dmca"`. The action vocabulary stays two-valued
-		// on purpose — widening `ModerationActionType` would mean every reader of the log
+		// on purpose — widening `ModerationActionType` would mean every user of the log
 		// grew a case for a decision that is, mechanically, still "this stopped being
 		// served". What kind of stopping it was is the reason's job.
 		await tx.insert(moderationActions).values({

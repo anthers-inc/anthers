@@ -28,7 +28,7 @@ describe("the batches", () => {
 	});
 
 	it("⭐ hold one Sticker per denomination, so the drawing tells you the amount", () => {
-		// Three per batch is the whole reason a reader never has to compare numbers. Two at
+		// Three per batch is the whole reason a user never has to compare numbers. Two at
 		// the same price would leave the elaborateness signal ambiguous.
 		for (const batch of STICKER_BATCHES) {
 			expect(batch.art.length).toBe(STICKER_DENOMINATIONS.length);

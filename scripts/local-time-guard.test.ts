@@ -2,7 +2,7 @@
 /**
  * Nothing that decides a billing month may read the machine's local calendar.
  *
- * 🚨 **A local-time reader and a UTC reader agree on almost every input, which is what makes
+ * 🚨 **A local-time user and a UTC user agree on almost every input, which is what makes
  * this class of bug survive.** `getFullYear`, `getMonth` and `getDate` answer in whatever zone
  * the process happens to be in; `getUTCFullYear` and friends do not. Five separate functions
  * computed the billing-cycle key by hand, all of them local, and they were safe only because
@@ -10,19 +10,19 @@
  *
  * ⚠️ **Unifying four of them to UTC is what made the fifth dangerous**, which is the lesson
  * worth keeping. Anchoring every account to the 1st set `accounts.current_period_start` to
- * exactly midnight UTC, and midnight UTC is the single input a local reader gets wrong **by a
+ * exactly midnight UTC, and midnight UTC is the single input a local user gets wrong **by a
  * whole month** in any zone behind it. `stickerCycleFor` then recorded Stickers against a cycle
  * `distribute-pool` would never pay — a supporter's money aimed at a creator, reaching nobody,
  * with every total still adding up.
  *
  * 🚨 **No test could have caught it, which is why this is a source scan rather than a test of
- * behavior.** `bun test` runs with no `TZ` and behaves as UTC, so a local reader and a UTC
- * reader are indistinguishable to the whole suite. See the public wiki's *Writing Tests That
+ * behavior.** `bun test` runs with no `TZ` and behaves as UTC, so a local user and a UTC
+ * user are indistinguishable to the whole suite. See the public wiki's *Writing Tests That
  * Can Fail*.
  *
  * The rule is narrow on purpose: it covers the files that decide what month money belongs to,
  * not every file that touches a `Date`. A deadline counted in business days and a parental
- * control that resets at the viewer's local midnight are both legitimately local.
+ * control that resets at the user's local midnight are both legitimately local.
  */
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
@@ -32,7 +32,7 @@ import { stripComments } from "./node-env-guard.test.js";
  * The files that decide which billing month something belongs to.
  *
  * ⚠️ **An allowlist rather than a denylist, deliberately.** A denylist over the whole tree
- * would have to carve out every legitimate local-time reader, and each carve-out is a place a
+ * would have to carve out every legitimate local-time user, and each carve-out is a place a
  * real violation can hide. Adding a file here is the cost of it becoming money-deciding, and
  * that is a moment somebody should have to think about.
  */

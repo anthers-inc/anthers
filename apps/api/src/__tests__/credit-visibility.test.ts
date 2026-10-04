@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What a Work's credits look like to each viewer, and how the credited person finds out.
+ * What a Work's credits look like to each user, and how the credited person finds out.
  *
  * Two halves of one premise — a `did`-naming credit is a claim about a third party, not a
  * liner note yet:
  *
  * 1. **The overlay.** An unaccepted identity-credit is withheld from everyone except the
  *    person it names and the Work's creator; an accepted one resolves to a handle and never
- *    ships a bare `did:` string on the viewer path; a named credit is untouched in every
+ *    ships a bare `did:` string on the user path; a named credit is untouched in every
  *    case. The OWNER shape keeps the stored identity verbatim — the Studio round-trips
  *    `contributor` on save, so a resolved name there would destroy the acceptance linkage.
  * 2. **The notification.** Making a credit public — releasing the Work, or changing
@@ -131,7 +131,7 @@ describe("creditsForUser", () => {
 		fixtureWorkIds.push(overlayWork.id);
 	});
 
-	it("withholds an unaccepted did-credit from a signed-out viewer, leaving named credits untouched", async () => {
+	it("withholds an unaccepted did-credit from a signed-out user, leaving named credits untouched", async () => {
 		const seen = await creditsForUser(overlayWork, null);
 		expect(seen).toHaveLength(1);
 		// The untouched promise: the named credit ships with exactly what was stored.
@@ -139,7 +139,7 @@ describe("creditsForUser", () => {
 		expect(seen.some((c) => c.contributor.includes(contributor.did))).toBe(false);
 	});
 
-	it("withholds an unaccepted did-credit from a third-party viewer", async () => {
+	it("withholds an unaccepted did-credit from a third-party user", async () => {
 		const seen = await creditsForUser(overlayWork, thirdParty.userId);
 		expect(seen).toHaveLength(1);
 		expect(seen[0]).toEqual(namedCredit);
@@ -173,7 +173,7 @@ describe("creditsForUser", () => {
 		).toBe(true);
 	});
 
-	it("resolves an accepted did-credit to the account's name for every viewer", async () => {
+	it("resolves an accepted did-credit to the account's name for every user", async () => {
 		const result = await acceptCredit({
 			callerUserId: contributor.userId,
 			callerDid: contributor.did,
@@ -195,10 +195,10 @@ describe("creditsForUser", () => {
 		expect(row).toBeDefined();
 		expect(row.handle).toBe(contributor.handle);
 
-		// Every viewer — signed-out, third-party, the creator, the contributor — now sees a
+		// Every user — signed-out, third-party, the creator, the contributor — now sees a
 		// name, never a bare did: string.
-		for (const viewer of [null, thirdParty.userId, creator.userId, contributor.userId]) {
-			const seen = await creditsForUser(overlayWork, viewer);
+		for (const user of [null, thirdParty.userId, creator.userId, contributor.userId]) {
+			const seen = await creditsForUser(overlayWork, user);
 			expect(seen).toHaveLength(2);
 			const resolved = seen.find((c) => c.role === "Written by");
 			expect(resolved?.contributor).toBe(contributor.handle);
@@ -234,7 +234,7 @@ describe("creditsForUser", () => {
 		// The named credit beside it is untouched too.
 		expect(seen.find((c) => c.role === "Edited by")?.contributor).toBe("An Editor");
 
-		// The creator's viewer-path serialization of the SAME work still resolves — the
+		// The creator's user-path serialization of the SAME work still resolves — the
 		// public page only renders, and a stranger must never meet a bare did: string.
 		const viewed = await creditsForUser(overlayWork, creator.userId);
 		expect(viewed.find((c) => c.role === "Written by")?.contributor).toBe(
@@ -272,7 +272,7 @@ describe("work serialization", () => {
 		fixtureWorkIds.push(releasedWork.id);
 	});
 
-	it("withholds an unaccepted did-credit from the work detail route for a signed-out viewer", async () => {
+	it("withholds an unaccepted did-credit from the work detail route for a signed-out user", async () => {
 		const res = await app.request(`/api/content/works/${releasedWork.id}`);
 		expect(res.status).toBe(200);
 		const body = await res.json();

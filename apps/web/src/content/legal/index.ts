@@ -22,7 +22,7 @@
  * stripped marked copy, which is how the child-safety scanner ran for three days while the
  * published policy named four recipients and not the fifth. **Nothing is hidden here.** The
  * pending banner is what carries the caveat, and the inventory of what is still unbuilt is
- * in the review task rather than in the text, because a term a reader has to decode is
+ * in the review task rather than in the text, because a term a user has to decode is
  * worse than a term that is simply not yet in force.
  *
  * When the text changes materially, `services/notifications.ts` is how people are told

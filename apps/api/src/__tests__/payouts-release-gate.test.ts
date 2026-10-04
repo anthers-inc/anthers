@@ -9,7 +9,7 @@
  * `about-claims.test.ts` guards from the other side.
  *
  * **Why the gate exists** (Parker, 2026-08-28 for Works and 2026-09-13 for everything else,
- * since a post can be paid through Stickers), because a future reader will meet it as an
+ * since a post can be paid through Stickers), because a future user will meet it as an
  * obstacle and needs both halves:
  *
  *   1. It is the **only** structural check making every creator here an adult. Stripe runs

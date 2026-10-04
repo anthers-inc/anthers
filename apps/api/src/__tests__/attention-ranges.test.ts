@@ -90,13 +90,13 @@ async function reportedSeconds(userId: number): Promise<number> {
 	return row?.total ?? 0;
 }
 
-let viewer: { cookie: string; id: number };
+let user: { cookie: string; id: number };
 let creator: { cookie: string; id: number };
 let earningWorkId: number;
 
 beforeAll(async () => {
 	const stamp = Date.now().toString(36);
-	viewer = await signUp(`rangeviewer${stamp}`);
+	user = await signUp(`rangeviewer${stamp}`);
 	creator = await signUp(`rangecreator${stamp}`);
 
 	// Inserted rather than created through the API: a video Work queues a transcode,
@@ -114,7 +114,7 @@ beforeAll(async () => {
 describe("attention range intake", () => {
 	it("records an ordinary range in full, with its window and evidence", async () => {
 		const ev = rangeEvent(30, { surface: "work", device: "desktop", playing: true });
-		const res = await postAttention(viewer.cookie, [ev]);
+		const res = await postAttention(user.cookie, [ev]);
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.recorded).toBe(1);
@@ -133,18 +133,18 @@ describe("attention range intake", () => {
 
 	it("a retried flush is one range, never two — (user_id, client_id) is unique", async () => {
 		const ev = rangeEvent(45);
-		await postAttention(viewer.cookie, [ev]);
-		const before = await reportedSeconds(viewer.id);
+		await postAttention(user.cookie, [ev]);
+		const before = await reportedSeconds(user.id);
 		// A network drop re-delivers the identical batch; it must not double-count.
-		const res = await postAttention(viewer.cookie, [ev]);
+		const res = await postAttention(user.cookie, [ev]);
 		expect(res.status).toBe(200);
-		expect(await reportedSeconds(viewer.id)).toBe(before);
+		expect(await reportedSeconds(user.id)).toBe(before);
 	});
 
 	it("drops a range ending in the future", async () => {
 		const now = Date.now();
 		const ev = rangeEvent(30, { startedAt: now, endedAt: now + 60_000 });
-		const res = await postAttention(viewer.cookie, [ev]);
+		const res = await postAttention(user.cookie, [ev]);
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.malformed).toBe(1);
@@ -162,7 +162,7 @@ describe("attention range intake", () => {
 			startedAt: Math.floor(now - old * 1_000),
 			endedAt: Math.floor(now - old * 1_000 + 60_000),
 		});
-		const res = await postAttention(viewer.cookie, [ev]);
+		const res = await postAttention(user.cookie, [ev]);
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.malformed).toBe(1);
@@ -176,7 +176,7 @@ describe("attention range intake", () => {
 	it("drops a range with no clientId — a timed claim has to be dedupable", async () => {
 		const ev = rangeEvent(30);
 		const { clientId: _omit, ...noId } = ev;
-		const res = await postAttention(viewer.cookie, [noId]);
+		const res = await postAttention(user.cookie, [noId]);
 		expect(res.status).toBe(200);
 		expect((await res.json()).malformed).toBe(1);
 	});
@@ -184,19 +184,19 @@ describe("attention range intake", () => {
 	it("drops a range whose window is inverted or empty", async () => {
 		const now = Date.now();
 		const backwards = rangeEvent(30, { startedAt: now - 1_000, endedAt: now - 31_000 });
-		const res = await postAttention(viewer.cookie, [backwards]);
+		const res = await postAttention(user.cookie, [backwards]);
 		expect(res.status).toBe(200);
 		expect((await res.json()).malformed).toBe(1);
 	});
 
 	it("still records a zero-duration visit ping, which claims no window", async () => {
-		const before = await reportedSeconds(viewer.id);
-		const res = await postAttention(viewer.cookie, [
+		const before = await reportedSeconds(user.id);
+		const res = await postAttention(user.cookie, [
 			{ creatorId: creator.id, eventType: "page_view", durationSeconds: 0 },
 		]);
 		expect(res.status).toBe(200);
 		expect((await res.json()).recorded).toBe(1);
-		expect(await reportedSeconds(viewer.id)).toBe(before);
+		expect(await reportedSeconds(user.id)).toBe(before);
 	});
 
 	it("a range longer than the bound is refused by validation, not written", async () => {
@@ -204,7 +204,7 @@ describe("attention range intake", () => {
 		const ev = rangeEvent(MAX_RANGE_SECONDS + 1, {
 			startedAt: Date.now() - (MAX_RANGE_SECONDS + 1) * 1_000 - 1_000,
 		});
-		const res = await postAttention(viewer.cookie, [ev]);
+		const res = await postAttention(user.cookie, [ev]);
 		expect(res.status).toBe(400);
 	});
 

@@ -307,7 +307,7 @@ export interface InteractionPermissionRefusal {
  * whose permission lapsed keeps everything it can read and stops creating (Parker, 2026-09-12).
  *
  * ⚠️ **Not behind `ATPROTO_PUBLISH_ENABLED`**, which gates asking for the creator tier. The
- * reader tier is asked for at every door that establishes an identity, so it can always be given
+ * user tier is asked for at every door that establishes an identity, so it can always be given
  * again. Like {@link publishingPermissionRefusal} it reads what is on file and calls nobody's
  * server, so an outage never refuses a comment, and taking something back — withdrawing a vote,
  * unfollowing, deleting a comment — is never refused.
@@ -361,8 +361,8 @@ export async function recordPublishGrant(
 	const { isHostedIdentity } = await import("./hosted-accounts.js");
 	if (await isHostedIdentity(user.did)) return { status: "refused", reason: "hosted" };
 
-	// ⚠️ **A reader is asked for the reader tier alone**, so that is what their answer is judged
-	// against; judging it against the creator tier would call every reader's grant a decline.
+	// ⚠️ **A user is asked for the user tier alone**, so that is what their answer is judged
+	// against; judging it against the creator tier would call every user's grant a decline.
 	if (user.isCreator !== true) {
 		if (!grantCoversUserRecords(grantedScope)) return { status: "declined" };
 		const { queueAllUserRecordsFor } = await import("./user-record-listing.js");

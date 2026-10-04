@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The two rules a reader can check with their own eyes, and one they cannot.
+ * The two rules a user can check with their own eyes, and one they cannot.
  *
  * 🚨 **The rule under test is that the published score is the ranking key.** Parker,
  * 2026-09-04: *"there's nothing ranking stuff that the users can't see."* That is a claim

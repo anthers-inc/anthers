@@ -31,13 +31,13 @@ import { users } from "./auth.js";
  * their own levels to any amount, so there is no shared price that could leak into a
  * stored row — and storing a count would
  * instead bake in a conversion that no longer means anything. A gate needs no Badge to sit
- * on it: with Badges at $2 and $4, a gate at $3 is legal and a viewer giving $3 clears it.
+ * on it: with Badges at $2 and $4, a gate at $3 is legal and a user giving $3 clears it.
  *
  * `threshold: 0` is the **baseline** row — everyone. It is what makes a Work free to all
  * (allow, price 0) or buyable by all (allow, price > 0), and it is not a gate at all.
  *
  * 🚨 **ONE table, and a second one is a model change rather than a refactor.** A
- * platform-side gate reading the viewer's own Badge stratifies the commons — better public
+ * platform-side gate reading the user's own Badge stratifies the commons — better public
  * content behind a higher Badge, beside worse public content that is actually free — which
  * is a class-of-citizen problem inside the one part of the platform that exists in order
  * not to have one. A Work is gated by its creator or it is **Public Access**, and a Badge
@@ -140,7 +140,7 @@ export const works = pgTable(
 		bodyHtml: text("body_html").default(""),
 		estimatedReadMinutes: integer("estimated_read_minutes"),
 		// type = "music": the song's words. **A column, not `metadata`** — lyrics are
-		// creator-authored, reader-visible content, the same class of thing as `description`
+		// creator-authored, user-visible content, the same class of thing as `description`
 		// and `body`, both of which are columns. `metadata` is for incidental shape
 		// (`clientVariants`, a physical item's note), and burying published text in the
 		// jsonb grab-bag makes it invisible to future search and to any migration that has
@@ -238,13 +238,13 @@ export const works = pgTable(
 		// a rung may ever mean. `@anthers/shared/content-rating` is the transcription.
 		maturity: text("maturity").notNull().default("unrated"),
 		// Content notes — the matrix rows marked at any rung, derived from `maturity_rows` when a
-		// creator rates through the matrix. Warnings for a reader rather than a classification:
+		// creator rates through the matrix. Warnings for a user rather than a classification:
 		// nothing reads this to decide access.
 		maturityNotes: jsonb("maturity_notes").$type<string[]>().notNull().default([]),
 		// The rating matrix as its creator marked it: each kind of content (`RATING_ROWS`) as
 		// `none` or the rung it reaches, and a row absent from the object not yet answered. The
 		// difference between `none` and absent is the point of storing it: *Not in it* is a
-		// statement a reader's own filter can rely on, and an unanswered row is not (Parker,
+		// statement a user's own filter can rely on, and an unanswered row is not (Parker,
 		// 2026-09-18). `maturity` is the highest row once every row is answered, and an
 		// incomplete matrix changes no rating, so a rated Work is never un-rated by one.
 		maturityRows: jsonb("maturity_rows").$type<Record<string, string>>().notNull().default({}),
@@ -338,7 +338,7 @@ export const works = pgTable(
  * A Post may **reference** Works (`post_work_refs`), which renders as a card and gives the
  * Work its posting history in return. That reference is **inert: it confers no access
  * whatsoever.** A Work linked from a Post is reachable exactly to the extent its own gates
- * allow, and a Post may freely link something the reader cannot open. This is what stops
+ * allow, and a Post may freely link something the user cannot open. This is what stops
  * the two concepts re-coupling through the back door.
  *
  * Because a Post is not a container, a Post earns no Time Pool minutes — unchanged policy,
@@ -572,14 +572,14 @@ export const assets = pgTable(
  *
  * 🚨 **Why pages exist as rows at all, when the creator uploaded one PDF.** The delivery
  * rule is that every derived media object is stored private and every URL to one is minted
- * per request at an endpoint that re-resolves access. A PDF is *one* object, so a reader
+ * per request at an endpoint that re-resolves access. A PDF is *one* object, so a user
  * pointed at a signed URL for it has the whole book the moment it opens page one — which
  * makes `download_enabled: false` a lie for this medium specifically, and would surprise
  * a creator who had deliberately turned downloads off. Rendering to pages on upload is the
  * same shape as the HLS ladder: one source in, many private per-unit deliverables out,
  * each served through a check.
  *
- * It also makes the client *simpler* rather than heavier — the reader shows images, so no
+ * It also makes the client *simpler* rather than heavier — the user shows images, so no
  * PDF parser ships to the browser at all.
  *
  * **Ordering and identity are deliberate**, not incidental: panel-to-panel navigation is
@@ -595,7 +595,7 @@ export const workPages = pgTable(
 		workId: integer("work_id")
 			.notNull()
 			.references(() => works.id, { onDelete: "cascade" }),
-		/** 1-based, matching how a reader counts and how `pdftoppm` numbers its output. */
+		/** 1-based, matching how a user counts and how `pdftoppm` numbers its output. */
 		pageNumber: integer("page_number").notNull(),
 		/** Private storage key. Never served directly — see `/works/:id/pages/:n`. */
 		file: text("file").notNull(),
@@ -610,10 +610,10 @@ export const workPages = pgTable(
 );
 
 /**
- * The panels of a comic page — the reading order a reader moves through, panel by panel.
+ * The panels of a comic page — the reading order a user moves through, panel by panel.
  *
  * Detection is hybrid: the rasterizer proposes, the Studio corrects. A row detected
- * automatically carries `auto: true` until a creator touch clears it, so the reader can
+ * automatically carries `auto: true` until a creator touch clears it, so the user can
  * mark a guessed panel boundary rather than silently trust it. Coordinates are normalized
  * 0..1 fractions of the page width/height so a re-rasterize at a different DPI does not
  * silently move every region. Reading direction is LTR; no Work field for reading direction
@@ -628,7 +628,7 @@ export const workPanels = pgTable(
 		pageId: integer("page_id")
 			.notNull()
 			.references(() => workPages.id, { onDelete: "cascade" }),
-		/** 1-based within the page, top-left-first after sorting; the reader walks this. */
+		/** 1-based within the page, top-left-first after sorting; the user walks this. */
 		panelNumber: integer("panel_number").notNull(),
 		/**
 		 * Normalized 0..1 page coordinates — fractions of width/height, not pixels, so
@@ -639,7 +639,7 @@ export const workPanels = pgTable(
 		width: real("width").notNull(),
 		height: real("height").notNull(),
 		/**
-		 * True until a creator touch clears it. The reader visually distinguishes a
+		 * True until a creator touch clears it. The user visually distinguishes a
 		 * guessed panel from a confirmed one; the Studio uses it to badge pages that
 		 * still need a creator pass.
 		 */
@@ -714,8 +714,8 @@ export const inlineImages = pgTable(
  * resolve the subject themselves.
  */
 // both — comments are polymorphic over (post|work) subjects. A creator's comments on
-// their own content are node; a viewer's comments on someone else's content are the
-// viewer's node. The `moderation_status` column is org-imposed. The row's author owns
+// their own content are node; a user's comments on someone else's content are the
+// user's node. The `moderation_status` column is org-imposed. The row's author owns
 // it, the subject's creator hosts it, and the org moderates it — three roles on one
 // row, which is the `both` case the polymorphic shape exists to handle.
 export const comments = pgTable(
@@ -862,10 +862,10 @@ export const bookmarks = pgTable(
 );
 
 /**
- * Reviews — a reader's verdict on a **Work**, and deliberately not on a Post.
+ * Reviews — a user's verdict on a **Work**, and deliberately not on a Post.
  *
  * Unlike comments this is NOT polymorphic, because reviewing an announcement is a category
- * error: the wiki's *How Anthers Talks About Itself* defines a review as "a reader's verdict on a work", and the wiki's *Moderation & Reporting* makes reviews
+ * error: the wiki's *How Anthers Talks About Itself* defines a review as "a user's verdict on a work", and the wiki's *Moderation & Reporting* makes reviews
  * floor-level moderation precisely because "a creator moderating reviews of their own work
  * is the conflict reviews exist to avoid". Both sentences are about works. Giving reviews a
  * subject type would invite a shape the model has no meaning for.
@@ -944,7 +944,7 @@ export const reviews = pgTable(
  * other refusal still runs.
  *
  * ⚠️ **Which means the "ungated only" rule is enforced by construction rather than by a
- * check anyone has to remember.** A share context resolves with a null viewer, so a gated
+ * check anyone has to remember.** A share context resolves with a null user, so a gated
  * Work has no qualifying allowed row and falls to `login_required`, a priced one falls to
  * `payment_required`, and an **Adult** one is refused above both because a share context
  * carries no opt-in and can never carry one. Nothing but universally-free work can come out
@@ -955,7 +955,7 @@ export const reviews = pgTable(
  * delete, because a revoked token must stay un-mintable rather than becoming available again.
  */
 // org — the same reasoning as `libraryItems`, from the sharer's side rather than the
-// viewer's. A share link is not a content record: it is one account's pointer at somebody
+// user's. A share link is not a content record: it is one account's pointer at somebody
 // else's Work, and what it actually conveys is an *allowance* drawn from the sharer's own
 // org-side balance. The Work is node content, referenced by id; the quantity being spent is
 // pool accounting, which is org by the treasury rule and cannot move to a node without
@@ -1022,8 +1022,8 @@ export const shareLinks = pgTable(
  * vote stays. Postgres treats NULLs as distinct, so the unique index below still holds for
  * live accounts and does not collide across departed ones.
  */
-// both — a vote is a viewer's verdict on a creator's thing, so it splits the same way
-// `reviews` does: the vote is org-side (a viewer has no node), the thing voted on is a
+// both — a vote is a user's verdict on a creator's thing, so it splits the same way
+// `reviews` does: the vote is org-side (a user has no node), the thing voted on is a
 // creator's. It is polymorphic over (work|post|comment), and a comment is itself `both`.
 export const votes = pgTable(
 	"votes",

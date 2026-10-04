@@ -8,7 +8,7 @@
  * impact on a value the user can see is the worst case scenario."*
  *
  * ⭐ **What this shows is what ordered the thread.** The score is the ranking key, so a
- * reader can always account for the order from what is in front of them. `@anthers/shared/votes`
+ * user can always account for the order from what is in front of them. `@anthers/shared/votes`
  * carries why the published number and the sort key have to be the same one.
  *
  * ⚠️ **Optimistic, and it reconciles with the server rather than trusting itself.** The
@@ -154,7 +154,7 @@ export default function VoteControl({
 			onChange?.({ ...data, userVote: next });
 		} catch {
 			// Put it back. A control that silently keeps an optimistic value it failed to
-			// save is telling the reader their vote counted when it did not.
+			// save is telling the user their vote counted when it did not.
 			setMine(before.mine);
 			setShown(before.shown);
 		} finally {
@@ -185,7 +185,7 @@ export default function VoteControl({
 			>
 				<Up className="h-4 w-4" />
 			</button>
-			{/* The number twice, on purpose: sighted readers get the digit between the two
+			{/* The number twice, on purpose: sighted users get the digit between the two
 			    buttons, and a screen reader gets a sentence. A lone integer announced as "5"
 			    says nothing about what it counts, and this number is the entire published
 			    state of the feature. */}

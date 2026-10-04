@@ -10,9 +10,9 @@
  * a token pointed at some other Work entirely.
  *
  * ⚠️ **The gated and priced refusals are a consequence of where ONE line sits**, not of two
- * separate checks. A share context resolves with a **null viewer** carrying `sharedBy`, and
+ * separate checks. A share context resolves with a **null user** carrying `sharedBy`, and
  * `resolveAccessSync` reads `sharedBy` at exactly the branch reached by universally-free work.
- * Everything above that line runs on the ordinary rules against a viewer who has given nobody
+ * Everything above that line runs on the ordinary rules against a user who has given nobody
  * anything and cannot have opted into anything.
  *
  * 🚨 **Adult and the token's scope each have a SECOND, independent guard, and sabotage is how
@@ -454,7 +454,7 @@ describe("Share links", () => {
 	});
 
 	it("🚨 a creator's own Work earns them nothing through their own link", async () => {
-		// A share context has a null viewer, so the owner branch never fires and `isFree` comes
+		// A share context has a null user, so the owner branch never fires and `isFree` comes
 		// back true — the same refusal has to be made at the stamp instead, or the sharer's
 		// Time Pool would pay the sharer. The seconds are still recorded, because the relay
 		// budget bounds how much viewing one account may fund and this is the case most in

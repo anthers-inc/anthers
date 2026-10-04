@@ -195,7 +195,7 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 			};
 
 			for (const { userId } of users) {
-				// Timed ranges, split against this viewer's own other ranges for the day.
+				// Timed ranges, split against this user's own other ranges for the day.
 				// Each returned group is one row per range, so a group's rows are counted
 				// as the events they were.
 				for (const g of await creditedSecondsForRollup(userId, dayStartUtc, dayEndUtc)) {

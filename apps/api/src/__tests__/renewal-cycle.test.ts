@@ -109,7 +109,7 @@ function uid() {
 
 const SUB_ID = "sub_under_test";
 
-/** A subscription in the shape `itemsFromSub` and the period readers expect. */
+/** A subscription in the shape `itemsFromSub` and the period users expect. */
 function subscription(opts: {
 	anthers?: number;
 	directed?: Record<number, number>;
@@ -755,7 +755,7 @@ describe("a renewal that fails", () => {
  *
  * 🚨 **The invoice's own `period_start` is the month BEFORE the renewal**, and only its lines'
  * `period` names the month it pays for. A fixture that put the renewal's month on `period_start`
- * would pass a reader of that field, which looks for reductions against the wrong month on every
+ * would pass a user of that field, which looks for reductions against the wrong month on every
  * real renewal.
  */
 function draftInvoice(opts: {

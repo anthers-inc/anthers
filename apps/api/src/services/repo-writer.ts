@@ -45,8 +45,8 @@ export function isOrdinary(reason: NoAccountWriterReason): boolean {
 /**
  * Open a writer onto the repository this account's records belong in, whichever it is.
  *
- * An account rather than a creator, because a reader's comments, reviews, votes and follows go
- * into the reader's own repository exactly as a creator's listings go into theirs.
+ * An account rather than a creator, because a user's comments, reviews, votes and follows go
+ * into the user's own repository exactly as a creator's listings go into theirs.
  *
  * 🚨 **`collections` is required and names everything the caller is about to write.** A hosted
  * identity can write any of them, but a permission granted over an identity held elsewhere is

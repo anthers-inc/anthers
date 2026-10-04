@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Work's page as a reader sees it, in parts, shared by the public Work page and the Studio's
+ * A Work's page as a user sees it, in parts, shared by the public Work page and the Studio's
  * Edit page. Parker's direction (2026-09-17) is that the Edit page looks like the Work, with its
  * details editable where they appear, rather than being a form a creator fills in blind.
  *
- * 🚨 **One layout, so the Edit page cannot drift from what a reader sees.** The Edit page exists
+ * 🚨 **One layout, so the Edit page cannot drift from what a user sees.** The Edit page exists
  * to show a creator the truth about their Work's page, and a second copy of this layout would
- * start lying the first time one of the two changed. Each part renders the reader's version by
+ * start lying the first time one of the two changed. Each part renders the user's version by
  * default, and the Edit page passes its controls into the slots for the parts a creator changes.
  *
  * Nothing here decides access. Whether the deliverable may be shown at all is the caller's
- * question, answered by the server's verdict on the reader page and by ownership on the Edit page.
+ * question, answered by the server's verdict on the user page and by ownership on the Edit page.
  */
 
 import { isListened, isPaged } from "@anthers/shared/content";
@@ -63,7 +63,7 @@ export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
  *
  * ⭐ **The reading experience is what tells writing apart from a post** (Parker, 2026-09-11): a
  * post is social and a text Work is an essay, a story or a poem, and the two were prose in the same
- * editor with nothing on the page to say which a reader was holding. So a text Work gets a reading
+ * editor with nothing on the page to say which a user was holding. So a text Work gets a reading
  * column, a display serif for its headline (Fraunces), its description as a standfirst under the
  * headline, and a text serif for its body (Spectral), where every post is set in the app's sans.
  */
@@ -121,9 +121,9 @@ export function formatOriginallyReleased(iso: string | null | undefined): string
  *
  * `VideoPlayer` and `AudioPlayer` each subscribe to the budget and render their own
  * countdown and wall, because they own the playback state the footer needs. Nothing
- * else does — and that now includes the **ebook** reader, which is deliberate rather
+ * else does — and that now includes the **ebook** user, which is deliberate rather
  * than an oversight: its pages are fetched one at a time from a metered endpoint, so
- * a spent allowance would otherwise surface as a reader full of broken images, which
+ * a spent allowance would otherwise surface as a user full of broken images, which
  * is the dead-player failure this whole meter design exists to avoid. The page shows
  * the wall instead.
  */
@@ -132,7 +132,7 @@ export function pageHoldsTheMeter(type: string): boolean {
 }
 
 /**
- * The page's column, shared so the Edit page is the width a reader's page is. A piece of writing
+ * The page's column, shared so the Edit page is the width a user's page is. A piece of writing
  * gets a reading column, narrow enough that a line of its body stays a comfortable length.
  */
 export function WorkColumn({ children, type }: { children: ReactNode; type?: string }) {
@@ -233,7 +233,7 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 
 /**
  * The rating and its content notes, for a Mature or Adult Work. Nothing for a General Work,
- * which is nearly all of them. An Adult Work reaches only readers who opted in and verified, and
+ * which is nearly all of them. An Adult Work reaches only users who opted in and verified, and
  * it is labeled for them all the same, because its notes are as much a warning there as anywhere.
  */
 export function WorkRating({ work }: { work: WorkDetail }) {
@@ -255,7 +255,7 @@ export function WorkRating({ work }: { work: WorkDetail }) {
 }
 
 /**
- * The Work itself, for somebody who may open it: the player, the reader, the image, the
+ * The Work itself, for somebody who may open it: the player, the user, the image, the
  * embedded build or the gated prose, whichever the kind has.
  */
 export function WorkDeliverable({
@@ -305,8 +305,8 @@ export function WorkDeliverable({
 						onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 					/>
 					{/* A song's words, under the player. Gated with the audio: the API blanks
-					    them for a viewer without access, so reaching this branch at all
-					    means the viewer may read them. */}
+					    them for a user without access, so reaching this branch at all
+					    means the user may read them. */}
 					{lyrics ??
 						(work.lyrics?.trim() && (
 							<section className={WORK_LYRICS_CLASS}>
@@ -356,7 +356,7 @@ export function WorkDeliverable({
 			{/*
 			 * Reading, playing and looking draw the allowance exactly as watching does,
 			 * and until now said nothing about it — the countdown and the wall were
-			 * wired into the two players and nowhere else, so a reader nine hours in
+			 * wired into the two players and nowhere else, so a user nine hours in
 			 * got no signal at all and then met a wall at a video.
 			 *
 			 * 🚨 Rendered here rather than inside each medium's block because there is
@@ -370,7 +370,7 @@ export function WorkDeliverable({
 }
 
 /**
- * The public blurb — visible whether or not the viewer can open the Work, because a locked
+ * The public blurb — visible whether or not the user can open the Work, because a locked
  * Work still has to say what it is. The gated prose renders inside the deliverable. For a piece
  * of writing it is the standfirst, which the page sets under the headline rather than here.
  */
@@ -417,7 +417,7 @@ function creditBadges(types: string[]): { ai: boolean; blended: boolean; license
  * The Accept/Decline row the overlay hands the person a credit names.
  *
  * Renders ONLY from the `awaitingYourConfirmation` flag the server emits on the named
- * person's own serialization — no viewer logic lives here, and every other viewer never
+ * person's own serialization — no user logic lives here, and every other user never
  * receives the flag so never receives these controls. The credit ships with role and
  * types intact because those are what the person needs to act on.
  */
@@ -494,10 +494,10 @@ function CreditConfirmationControls({
 
 /**
  * The Work's credits, rendered as liner notes — one line per credit, with AI involvement
- * badged rather than buried. Public: any viewer of a released Work sees these, gated or
+ * badged rather than buried. Public: any user of a released Work sees these, gated or
  * not, as they see the description. A Work with no credits renders nothing.
  *
- * A credit the viewer's own identity has not confirmed yet renders beside a
+ * A credit the user's own identity has not confirmed yet renders beside a
  * "You're credited — confirm?" ask with Accept and Decline, because the credit is a
  * public claim about them and their word is what publishes it.
  */

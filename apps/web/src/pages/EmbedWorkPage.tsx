@@ -5,7 +5,7 @@
  * An embed is **a share link that renders in a player**, settled 2026-09-20: one share
  * affordance, two output shapes — a *Link* or an *Embed* — and both follow the identical
  * mechanism. The token is the same opaque string a `Link` carries; this page only changes
- * what it renders into, not what it opens. Every question about what a viewer may see is
+ * what it renders into, not what it opens. Every question about what a user may see is
  * answered by the same resolver, against the same `?share=` token, that answers it on the
  * full Work page — so metering, the sharer's relay budget, attribution and the gated /
  * priced / Adult refusals are all inherited rather than re-decided here.
@@ -148,7 +148,7 @@ export default function EmbedWorkPage() {
 			) : (
 				// A share token only ever reaches universally-free work, so hitting this branch
 				// means the Work stopped being shareable after the token was minted. There is
-				// no gate to clear inside an embed — send the viewer to the full page instead.
+				// no gate to clear inside an embed — send the user to the full page instead.
 				<div className="py-12 text-center">
 					<p className="text-sm text-base-content/70">This work isn't open to embed right now.</p>
 					<Link

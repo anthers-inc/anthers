@@ -61,7 +61,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	{
 		// Roadmap and Changelog live here rather than under About (Parker, 2026-10-03):
 		// they are the record of the thing being built, not what the organization is —
-		// and a reader looking for "what's next" is looking for development, not "About Us".
+		// and a user looking for "what's next" is looking for development, not "About Us".
 		title: "Development",
 		links: [
 			["Roadmap", "/roadmap"],

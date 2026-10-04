@@ -64,7 +64,7 @@ describe("Catalog vertical slice", () => {
 	// A setup step wearing a test's clothes: the cookies it assigns are what every test
 	// below authenticates with, so its budget is a hook's, not an assertion's.
 	it(
-		"signs up a creator and a viewer",
+		"signs up a creator and a user",
 		async () => {
 			creatorCookie = await signUp(creatorName);
 			await enablePayouts(creatorName);
@@ -217,7 +217,7 @@ describe("Catalog vertical slice", () => {
 		expect(listed[0].id).toBe(oldGameId);
 	});
 
-	it("refuses the download to a viewer without access (403)", async () => {
+	it("refuses the download to a user without access (403)", async () => {
 		const res = await req(`/api/content/works/${oldGameId}/assets/${paidAssetId}/download`, {
 			method: "POST",
 			headers: { Origin: ORIGIN, Cookie: otherCookie },
@@ -248,7 +248,7 @@ describe("Catalog vertical slice", () => {
 		expect(res.status).toBe(201);
 		announcementSlug = (await res.json()).post.slug;
 
-		// The viewer can read the announcement in full...
+		// The user can read the announcement in full...
 		const detail = await req(`/api/content/posts/${announcementSlug}`, {
 			headers: { Cookie: otherCookie },
 		});

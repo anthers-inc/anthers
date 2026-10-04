@@ -69,7 +69,7 @@ import { applyReductionsToInvoice } from "../services/support-reductions.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the Work, confirm it's
- * purchasable by this viewer, and compute the fee breakdown — so both endpoints
+ * purchasable by this user, and compute the fee breakdown — so both endpoints
  * quote identical numbers. Returns an error shape (with an HTTP status) or the
  * resolved Work + amount + fees.
  *
@@ -679,7 +679,7 @@ const paymentRoutes = new Hono()
 	/**
 	 * The signed-in buyer's server-side basket.
 	 *
-	 * 🚨 **These routes are the basket's only writers and readers, and `resolveBasket` is
+	 * 🚨 **These routes are the basket's only writers and users, and `resolveBasket` is
 	 * never bypassed.** The table holds ids and nothing more; quote and checkout re-resolve
 	 * exactly what the client-supplied list used to be re-resolved against — so a row that
 	 * fell out of purchasability (withdrawn, already owned, moved behind a higher gate,
@@ -860,7 +860,7 @@ const paymentRoutes = new Hono()
 		 *
 		 * 🚨 The per-item money is apportioned, not recomputed. `calculateFees` on a $1
 		 * item would attach a fresh $0.30 to it, so the rows would sum to far more than
-		 * was charged and every downstream reader — earnings, the tax remittance record,
+		 * was charged and every downstream user — earnings, the tax remittance record,
 		 * refunds — would be wrong. The fee is split **pro-rata by item value**, with the
 		 * last row absorbing the rounding remainder so the parts sum to the whole exactly.
 		 */

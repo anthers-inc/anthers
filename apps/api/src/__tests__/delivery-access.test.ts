@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Delivery-layer access — that a denied viewer is never handed a *pointer* at the media,
+ * Delivery-layer access — that a denied user is never handed a *pointer* at the media,
  * not merely that the access reason says "gated".
  *
  * This distinction is the whole point of the file. `access-staircase.test.ts` proves the
@@ -47,7 +47,7 @@ async function signUp(username: string) {
 	return (await createAccount(username)).cookie;
 }
 
-/** The raw stored URLs the fixtures below stand in for. Neither may reach a denied viewer. */
+/** The raw stored URLs the fixtures below stand in for. Neither may reach a denied user. */
 const AUDIO_URL = "https://cdn.example.com/creators/x/audio/processed/secret.mp3";
 const HLS_URL = "https://cdn.example.com/creators/x/videos/hls/secret/master.m3u8";
 
@@ -64,7 +64,7 @@ describe("Delivery-layer access", () => {
 	let creatorId: number;
 	let audioItemId: number;
 	let videoItemId: number;
-	/** A released, free audio Work — the "entitled viewer" side of every assertion below. */
+	/** A released, free audio Work — the "entitled user" side of every assertion below. */
 	let freeAudioId: number;
 	/** A free, downloadable Work plus its asset — for the delivery-stamp assertion. */
 	let freeWorkId: number;
@@ -86,7 +86,7 @@ describe("Delivery-layer access", () => {
 
 		// An audio and a video Work, each with a COMPLETED job carrying a stored media URL —
 		// the state a real upload reaches once the worker is done with it. Both LOCKED, so
-		// the only viewer who should ever see a URL is their owner.
+		// the only user who should ever see a URL is their owner.
 		const audio = await insertWork({
 			creatorId,
 			type: "audio",
@@ -172,9 +172,9 @@ describe("Delivery-layer access", () => {
 
 	// ── Work detail ────────────────────────────────────────────────────────────
 
-	it("withholds every media URL from a denied viewer on Work detail", async () => {
+	it("withholds every media URL from a denied user on Work detail", async () => {
 		for (const [who, headers] of [
-			["signed-in viewer", { Cookie: userCookie }],
+			["signed-in user", { Cookie: userCookie }],
 			["anonymous", {}],
 		] as const) {
 			for (const workId of [audioItemId, videoItemId]) {
@@ -234,8 +234,8 @@ describe("Delivery-layer access", () => {
 		expect(work.description).toBe("A song about gates.");
 	});
 
-	it("hands the lyrics over once the viewer can actually reach the track", async () => {
-		// Free to everyone, so `canAccess` is true and the payload is the viewer's. Without
+	it("hands the lyrics over once the user can actually reach the track", async () => {
+		// Free to everyone, so `canAccess` is true and the payload is the user's. Without
 		// this case the assertion above passes against a build that never sends lyrics at
 		// all — an "always empty" implementation is indistinguishable from a working gate
 		// if you only ever look at the denied side.
@@ -286,7 +286,7 @@ describe("Delivery-layer access", () => {
 
 	// ── The transcoding poller ─────────────────────────────────────────────────
 
-	it("withholds media URLs from a denied viewer on the transcoding route", async () => {
+	it("withholds media URLs from a denied user on the transcoding route", async () => {
 		const res = await req(`/api/content/works/${videoItemId}/transcoding`, {
 			headers: { Cookie: userCookie },
 		});
@@ -318,9 +318,9 @@ describe("Delivery-layer access", () => {
 
 	// ── The audio endpoint ─────────────────────────────────────────────────────
 
-	it("403s the audio endpoint for a denied viewer, and 401s for an anonymous one", async () => {
+	it("403s the audio endpoint for a denied user, and 401s for an anonymous one", async () => {
 		// The two refusals are different and the difference is the point. A signed-in
-		// viewer without the gate cleared is *forbidden*; a signed-out one has not said
+		// user without the gate cleared is *forbidden*; a signed-out one has not said
 		// who they are, and every delivery endpoint asks that first since 2026-08-28.
 		const denied = await req(`/api/content/works/${audioItemId}/audio`, {
 			headers: { Cookie: userCookie },
@@ -334,7 +334,7 @@ describe("Delivery-layer access", () => {
 		expect(anonymous.status).toBe(401);
 	});
 
-	it("redirects an entitled viewer to the media, uncacheably", async () => {
+	it("redirects an entitled user to the media, uncacheably", async () => {
 		const res = await req(`/api/content/works/${freeAudioId}/audio`, {
 			headers: { Cookie: userCookie },
 			redirect: "manual",
@@ -354,7 +354,7 @@ describe("Delivery-layer access", () => {
 
 	// ── The Catalog listing ────────────────────────────────────────────────────
 
-	it("withholds media URLs from a denied viewer across the whole Catalog listing", async () => {
+	it("withholds media URLs from a denied user across the whole Catalog listing", async () => {
 		// The listing is a second door at the same rows, and a batch endpoint is exactly
 		// where a per-item check gets forgotten.
 		const res = await req(`/api/content/catalog/${await handleOf(creatorName)}`, {

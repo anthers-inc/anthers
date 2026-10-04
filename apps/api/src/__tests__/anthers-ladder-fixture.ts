@@ -4,7 +4,7 @@
  * `db:dev-account` seeds one — owned by a fixture account created for the purpose.
  *
  * Why this exists: the accounts split (2026-10-03) deleted the amount columns the old
- * fixtures wrote, and every Anthers-side read now resolves the viewer's holding on the
+ * fixtures wrote, and every Anthers-side read now resolves the user's holding on the
  * Anthers ladder — which no test session seeds, because that seeding runs in a dev session's
  * `db:seed` (`ensure-dev-account`), not in a test session. A suite that "gives $N to
  * Anthers" awaits {@link ensureAnthersLadder} before writing holdings; every suite shares the

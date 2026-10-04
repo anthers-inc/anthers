@@ -22,7 +22,7 @@
  *
  * So the assertion is deliberately NOT "the queries group by workId". That would
  * restate the implementation and agree with it forever. It is: **two identified
- * viewers generate attention, the creator reads every analytics surface, and nothing
+ * users generate attention, the creator reads every analytics surface, and nothing
  * that comes back can be traced to either of them** — which stays true as a test of a
  * new field nobody has written yet.
  */
@@ -84,7 +84,7 @@ const ANALYTICS_ROUTES = [
  *
  * The identity check below is a *shape* assertion rather than a value one, because a
  * value scan only finds what it already knows to look for. A creator-facing payload
- * that grew a `viewers: [...]` array would slip past a search for one username the
+ * that grew a `users: [...]` array would slip past a search for one username the
  * moment the field held a display name, an avatar URL, or an id.
  */
 function allKeys(value: unknown, out: string[] = []): string[] {
@@ -148,8 +148,8 @@ beforeAll(async () => {
 	});
 	expect(release.status).toBe(200);
 
-	// Two DIFFERENT viewers, with different amounts of time, so a leak would have
-	// something to distinguish. One viewer would let a per-user figure masquerade as
+	// Two DIFFERENT users, with different amounts of time, so a leak would have
+	// something to distinguish. One user would let a per-user figure masquerade as
 	// a total.
 	for (const [cookie, seconds] of [
 		[userA, 120],
@@ -173,15 +173,15 @@ beforeAll(async () => {
 	}
 }, DB_SETUP_TIMEOUT);
 
-describe("creator analytics never expose per-viewer identity", () => {
-	it("names no viewer in any analytics response", async () => {
+describe("creator analytics never expose per-user identity", () => {
+	it("names no user in any analytics response", async () => {
 		for (const route of ANALYTICS_ROUTES) {
 			const res = await req(route, { headers: { Cookie: creator } });
 			expect(res.status).toBe(200);
 			const body = await res.json();
 			const serialized = JSON.stringify(body);
 
-			// Neither viewer's username, nor their ids under any key name.
+			// Neither user's username, nor their ids under any key name.
 			expect(serialized).not.toContain(userAName);
 			expect(serialized).not.toContain(userBName);
 			expect(serialized).not.toContain("watcher_alpha");
@@ -189,13 +189,13 @@ describe("creator analytics never expose per-viewer identity", () => {
 		}
 	});
 
-	it("carries no viewer-identifying FIELD, whatever it might be called", async () => {
+	it("carries no user-identifying FIELD, whatever it might be called", async () => {
 		for (const route of ANALYTICS_ROUTES) {
 			const res = await req(route, { headers: { Cookie: creator } });
 			const keys = allKeys(await res.json());
 
 			// The allowlist is an explicit set rather than a looser pattern, so adding a
-			// viewer-ish field is a deliberate edit here with a reason attached — this
+			// user-ish field is a deliberate edit here with a reason attached — this
 			// assertion has already caught one addition (`uniqueUsersWindowDays`, added
 			// with the retention rollup), which is the behavior wanted.
 			//
@@ -207,7 +207,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 
 			const identityish = keys.filter(
 				(k) =>
-					/user|viewer|watcher|account|member|audience/i.test(k) && !COUNTS_NOT_IDENTITIES.has(k),
+					/user|user|watcher|account|member|audience/i.test(k) && !COUNTS_NOT_IDENTITIES.has(k),
 			);
 			expect(identityish).toEqual([]);
 		}
@@ -231,7 +231,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 			(r) => r.id === workId,
 		);
 		expect(row).toBeDefined();
-		// Per-WORK totals are the aggregation axis the policy names, and both viewers'
+		// Per-WORK totals are the aggregation axis the policy names, and both users'
 		// time is summed into one figure.
 		expect(row!.totalDuration).toBe(165);
 	});
@@ -253,7 +253,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		expect(overview.totalDurationHours).toBe(0);
 	});
 
-	it("the viewer ids ARE in the table — this is a read-time property, not an absence of data", async () => {
+	it("the user ids ARE in the table — this is a read-time property, not an absence of data", async () => {
 		// Worth pinning explicitly, because it is what makes the promise a real one and
 		// what makes it fragile. `attention_events.user_id` exists and is populated —
 		// the Time Pool cannot pay by attention without it, and the clamp cannot bound

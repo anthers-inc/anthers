@@ -14,9 +14,9 @@
  * browser store: seeding fake ids the way the localStorage spec did would now test
  * nothing, because the server excludes an id that does not resolve.
  *
- * 🚨 **This spec's buyer is a throwaway account, not the gauntlet viewer** — and that is
+ * 🚨 **This spec's buyer is a throwaway account, not the gauntlet user** — and that is
  * load-bearing now rather than tidy. The basket is per-account, and
- * `basket-checkout-flow.authed.e2e.ts` walks the viewer's own basket in the SAME
+ * `basket-checkout-flow.authed.e2e.ts` walks the user's own basket in the SAME
  * `authed` project beside this file; two files seeding and asserting counts on ONE
  * account's basket would race (`fullyParallel: true` is the project config, so the two
  * files run on different workers at once). A buyer of our own makes this spec's server
@@ -131,7 +131,7 @@ async function newBuyerContext(
 	return browser.newContext({
 		// 🚨 Empty storageState, stated: `browser.newContext()` on this suite's `browser`
 		// fixture empirically carried the project's storageState (verified in the
-		// scoping walk — the gauntlet viewer's cookie arrived in a fresh context), and
+		// scoping walk — the gauntlet user's cookie arrived in a fresh context), and
 		// a spec about A count on B's account would then be about nothing.
 		storageState: {
 			cookies: [

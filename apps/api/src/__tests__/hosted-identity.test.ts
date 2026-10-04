@@ -124,7 +124,7 @@ describe("assessIdentity", () => {
 
 	// 🚨 The case the whole `listed: null` distinction exists for. A directory or a server
 	// that did not answer is not evidence about anybody's identity, and a watcher that
-	// alerted on it would be teaching its reader to ignore it within a week.
+	// alerted on it would be teaching its user to ignore it within a week.
 	it("does NOT treat an unreachable server as a disappearance", () => {
 		const out = assessIdentity({ did: DID, stored: stored(), observed: seen, listed: null });
 		expect(out.map((f) => f.kind)).toEqual(["unchanged"]);
@@ -312,7 +312,7 @@ describe("describeFinding", () => {
 
 	// 🚨 **The defect this whole change exists for.** The first two live alerts reported the
 	// handle and the server as unchanged — correctly — while the rotation keys had been
-	// replaced, and the mail did not mention them. A reader was told everything except what
+	// replaced, and the mail did not mention them. A user was told everything except what
 	// they would be recovering from.
 	it("says the signing keys changed, in the subject and in the body", () => {
 		const { subject, html } = changed({

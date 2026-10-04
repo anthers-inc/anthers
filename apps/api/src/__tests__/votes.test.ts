@@ -216,7 +216,7 @@ describe("votes", () => {
 		expect(await read()).not.toHaveProperty("up");
 	});
 
-	it("shows a viewer their own vote, and shows nobody else's", async () => {
+	it("shows a user their own vote, and shows nobody else's", async () => {
 		const asVoter = await thread(voterCookies[0]);
 		expect(asVoter.find((c) => c.id === likedId)!.userVote).toBe("up");
 		const anonymous = await thread();
@@ -244,7 +244,7 @@ describe("votes", () => {
 	});
 
 	it("⭐ collapses a buried comment without hiding it, which is a different thing", async () => {
-		// Removal is a state and never reaches a reader; this comment is still in the
+		// Removal is a state and never reaches a user; this comment is still in the
 		// response, still carries its text, and merely arrives folded.
 		const buried = (await thread()).find((c) => c.id === buriedId)!;
 		expect(buried.collapsed).toBe(true);
@@ -335,7 +335,7 @@ describe("a review takes votes, as helpfulness", () => {
 
 describe("the author's own upvote", () => {
 	// Settled 2026-09-21: posting something says the author thinks it is worth reading, so
-	// a new post or comment starts at 1 and a 0 always means a reader said no. Reviews are
+	// a new post or comment starts at 1 and a 0 always means a user said no. Reviews are
 	// covered in reviews.test.ts beside the section they sort.
 	it("starts a new post at 1, cast by its creator", async () => {
 		const cookie = await signUp(`votes_post_${id}`);

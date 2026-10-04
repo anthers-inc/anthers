@@ -262,9 +262,9 @@ export async function reverseNettingForWonDispute(disputeId: number, now: Date):
 			subscriberId: null,
 			// The cycle the reversal lands in, because the column is NOT NULL and the
 			// credit is nobody's month — it is a compensation for a sale, credited the
-			// moment the bank ruled. The cycle key is what every reader groups by, so an
+			// moment the bank ruled. The cycle key is what every user groups by, so an
 			// honest "not from any month" is impossible to store; the month it lands in is
-			// the least-dishonest answer, and the `kind` is what tells a reader what it is.
+			// the least-dishonest answer, and the `kind` is what tells a user what it is.
 			billingCycle: cycleKeyFor(now),
 			kind: NETTING_REVERSAL_KIND,
 			fundedBy: "anthers",

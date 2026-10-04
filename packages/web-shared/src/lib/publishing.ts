@@ -47,7 +47,7 @@ let shared: { at: number; answer: Promise<PublishingState | null> } | null = nul
  * One request's answer, shared by every caller within a minute of it.
  *
  * ⚠️ **Shared because a thread has a vote control per comment**, and each asking separately would
- * be a request per comment for one fact about the viewer.
+ * be a request per comment for one fact about the user.
  */
 function readPublishingState(fresh = false): Promise<PublishingState | null> {
 	const now = Date.now();
@@ -62,7 +62,7 @@ function readPublishingState(fresh = false): Promise<PublishingState | null> {
 /**
  * The publishing state, read on mount and, with `poll`, again every quarter hour.
  *
- * ⚠️ **Only the banner polls.** It is mounted on every signed-in page, so it is the one reader
+ * ⚠️ **Only the banner polls.** It is mounted on every signed-in page, so it is the one user
  * that sees a tab left open for an afternoon. A control reads once, which is enough to decide
  * whether it should be offered.
  */
@@ -109,7 +109,7 @@ export function usePublishingPermissionMissing(): boolean | null {
  * false once known, null until then.
  *
  * ⚠️ **Not tied to whether Anthers is asking creators to publish**, exactly as the API refuses:
- * the reader tier is asked for at every door, so it can always be given again.
+ * the user tier is asked for at every door, so it can always be given again.
  */
 export function interactionPermissionMissing(state: PublishingState | null): boolean | null {
 	if (!state) return null;
@@ -119,7 +119,7 @@ export function interactionPermissionMissing(state: PublishingState | null): boo
 /**
  * The one-read form, for a comment box, a review form, a vote or a follow.
  *
- * Off for a signed-out viewer, who has no permission to be missing and whose controls send them
+ * Off for a signed-out user, who has no permission to be missing and whose controls send them
  * to sign in instead.
  */
 export function useInteractionPermissionMissing(signedIn: boolean): boolean | null {

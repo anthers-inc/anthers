@@ -37,7 +37,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 	 * Adding is exactly what makes `inBasket` true, so the component swaps branches on the
 	 * same tick the message is set — and the first version put this warning in the branch
 	 * that had just stopped rendering. It set state on a view that immediately unmounted:
-	 * the basket was correctly replaced and the reader was told nothing, which is the one
+	 * the basket was correctly replaced and the user was told nothing, which is the one
 	 * outcome worse than refusing the add. (Same family as the signup ceremony's
 	 * auth-context bug: a view that changes shape in response to the very action whose
 	 * result it needs to report.) Verified in a browser, because nothing about it fails.

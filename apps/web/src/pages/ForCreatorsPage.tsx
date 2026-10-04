@@ -33,7 +33,7 @@
 // Guide (the wiki's *How Anthers Talks About Itself*): "0% cut" is now unconditionally true of EVERY creator transaction,
 // but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
 // of the price. Where a cut and a price appear together the take-home figure must
-// appear with them, or a reader concludes the creator gets the whole list price.
+// appear with them, or a user concludes the creator gets the whole list price.
 // "nonprofit", never "501(c)(3)", until the IRS determination letter lands.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
@@ -916,7 +916,7 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
  *
  * 🚨 **A basis that disagrees with its own numbers is worse than no basis at all**, and
  * this page shipped one: a stray multiplier left behind by a rename made it compute a $2
- * scenario while every sentence around it said $6, including the note telling the reader
+ * scenario while every sentence around it said $6, including the note telling the user
  * rival figures were all-in take-home at the same $6. Nothing caught it, because a
  * scenario basis is arithmetic rather than a typed figure `econ:figures` can see.
  *

@@ -51,7 +51,7 @@ export type { GauntletPost, GauntletReason, StaircaseState } from "./gauntlet.js
 export { BADGE_RUNGS, BADGE_WALK, DOWNLOAD_PRICE, EXPECTED_STAIRCASE } from "./gauntlet.js";
 
 /**
- * Instance B's account names — the walk's own creator and viewer.
+ * Instance B's account names — the walk's own creator and user.
  *
  * 🚨 **Handle-safe on purpose, and the shape costs a small naming departure from instance
  * A.** An account's handle is a domain label a reference PDS caps at 18 characters
@@ -69,7 +69,7 @@ export const WALK_CREATOR_USERNAME = "walk-creator";
 export const WALK_CREATOR_EMAIL = "walk-creator@example.test";
 
 /**
- * Instance B's viewer, created on demand by `seed-gauntlet.ts --instance walk
+ * Instance B's user, created on demand by `seed-gauntlet.ts --instance walk
  * --ensure-walker` — the walk's own harness account, reset freely without ever touching
  * instance A's `gauntlet_walker`. Signing in is the emailed code, as everywhere.
  */

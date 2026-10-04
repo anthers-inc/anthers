@@ -16,12 +16,12 @@ createRoot(root).render(
 	<BrowserRouter>
 		<ScrollToTop />
 		<AuthProvider>
-			{/* Inside AuthProvider, because who the reader is decides which preferences
+			{/* Inside AuthProvider, because who the user is decides which preferences
 			    they get — and outside the player, because a cover is veiled long before
 			    anything plays. */}
 			<ContentPreferencesProvider>
 				{/* Beside the rating preferences, for the same reason: both are things a
-				    reader asked for about how text and covers are shown to them, and both
+				    user asked for about how text and covers are shown to them, and both
 				    are read by surfaces far from where they are set. */}
 				<LanguageFilterProvider>
 					<MediaPlayerProvider>
