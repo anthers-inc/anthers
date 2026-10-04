@@ -39,7 +39,7 @@ import {
 	projectRecord,
 	workRecord,
 } from "@anthers/shared/lexicons";
-import { eq, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
 	type PostRecord,
 	type ProjectRecord,
@@ -285,7 +285,6 @@ export async function driftReport(
 		})
 		.from(works)
 		.leftJoin(users, eq(users.id, works.creatorId))
-		.where(isNotNull(works.id))
 		.orderBy(works.id)
 		.limit(limit);
 
@@ -337,7 +336,6 @@ export async function driftReport(
 		})
 		.from(posts)
 		.leftJoin(users, eq(users.id, posts.creatorId))
-		.where(isNotNull(posts.id))
 		.orderBy(posts.id)
 		.limit(limit);
 
@@ -382,7 +380,6 @@ export async function driftReport(
 		})
 		.from(projects)
 		.leftJoin(users, eq(users.id, projects.creatorId))
-		.where(isNotNull(projects.id))
 		.orderBy(projects.id)
 		.limit(limit);
 

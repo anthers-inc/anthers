@@ -56,7 +56,7 @@ const fakeFetch = (async (input: RequestInfo | URL) => {
 	const value = server.get(`at://${DID}/${collection}/${rkey}`);
 	if (value === undefined) return new Response("not found", { status: 404 });
 	return Response.json({ uri: `at://${DID}/${collection}/${rkey}`, cid: "cid", value });
-});
+}) as typeof fetch;
 
 function putRecord(collection: string, rkey: string, value: unknown) {
 	server.set(`at://${DID}/${collection}/${rkey}`, value);
@@ -183,9 +183,8 @@ describe("the drift report", () => {
 		const report = await driftReport({ fetchImpl: fakeFetch, limit: 1000 });
 		const row = report.rows.find((r) => r.kind === "work" && r.id === w.id);
 		expect(row?.status).toBe("drift");
-		expect(row && row.derived && "title" in row.derived ? row.derived.title : null).toBe(
-			"New Title",
-		);
+		const derived = row?.derived;
+		expect(derived && "title" in derived ? derived.title : null).toBe("New Title");
 	});
 
 	it("reports a record that matches the row as match", async () => {
