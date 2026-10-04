@@ -99,7 +99,7 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 				className="btn btn-outline btn-sm gap-1.5"
 			>
 				<EyeIcon className="size-4" />
-				Preview as a reader
+				Preview as User
 			</button>
 		);
 	}
@@ -114,7 +114,7 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 			<div className="flex flex-wrap items-center gap-x-4 gap-y-2">
 				<span className="flex items-center gap-1.5 text-sm font-semibold">
 					<EyeIcon className="size-4" />
-					Previewing as a reader
+					Previewing as a user
 				</span>
 
 				<div className="join">

@@ -250,7 +250,7 @@ export const FAQ_ITEMS = {
 		category: "Creators",
 		question: "What kinds of content can I publish?",
 		answer:
-			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player/reader experiences.",
+			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player and reading experiences.",
 	},
 	// ⚠️ **Payout setup gates RELEASE, and this answer is the one that says so plainly.**
 	// The Creator Terms always claimed it; the code only started enforcing it on

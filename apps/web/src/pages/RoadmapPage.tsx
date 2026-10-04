@@ -414,8 +414,8 @@ function Growth({ tint }: { tint: boolean }) {
 						</p>
 						<p>
 							<strong>There are two queues and they move independently.</strong> Accounts and
-							creators are bounded by different things, so you may be admitted as a reader while
-							still waiting as a creator, and the creator queue may be closed while the reader queue
+							creators are bounded by different things, so you may be admitted as a user while
+							still waiting as a creator, and the creator queue may be closed while the user queue
 							moves.
 						</p>
 						<p>
@@ -487,7 +487,7 @@ function Closing({ tint }: { tint: boolean }) {
 					This page is written by hand rather than generated from anything, which means it can go
 					out of date without anything noticing. The source that runs Anthers is public, so the
 					fastest way to check a claim on this page is to go and read the thing it describes.
-					Priorities here are shaped by creators and readers rather than by investors, because there
+					Priorities here are shaped by creators and users rather than by investors, because there
 					are no investors.
 				</Lede>
 				<div className="mt-9 flex flex-wrap justify-center gap-3">

@@ -32,8 +32,8 @@ const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE_PREFIX = "Credit walk ";
 const TITLE = `${TITLE_PREFIX}${Date.now()}`;
 const ROLE = "Written by";
-/** The viewer's seeded display name, which an accepted credit resolves the DID to. */
-const VIEWER_NAME = "Gauntlet Viewer";
+/** The walker's seeded display name, which an accepted credit resolves the DID to. */
+const VIEWER_NAME = "Gauntlet User";
 
 interface OwnedWork {
 	id: number;

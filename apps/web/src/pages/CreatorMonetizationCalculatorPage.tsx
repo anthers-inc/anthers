@@ -124,10 +124,10 @@ function ConversionEngine() {
 		<div className="card bg-base-100 border border-base-300">
 			<div className="card-body p-5 sm:p-6">
 				<h2 className="font-mono text-xs uppercase tracking-[0.14em] text-base-content/40">
-					1 · The conversion engine — one viewer
+					1 · The conversion engine — one user
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
-					Pick the Badge a viewer chose, then how they spend their month. Their Time Pool is split
+					Pick the Badge a user chose, then how they spend their month. Their Time Pool is split
 					across everyone they watch, by time; your slice of their time — plus anything they direct
 					to you — is what you take home from them. Anthers is a nonprofit—no profit-taking.
 				</p>
@@ -313,7 +313,7 @@ function ConversionEngine() {
 							    amount, and the sentence read "$6.00/mo. Of that, $9.00 reaches
 							    creators". Under the pre-2026-08-16 triple it read $21 of $6, which is
 							    absurd enough that nobody can have looked at it. */}
-							This viewer gives Anthers <b className="text-success">{usd2(m.price)}</b>/mo (
+							This user gives Anthers <b className="text-success">{usd2(m.price)}</b>/mo (
 							{badgeLabel(badge)}), of which <b>{usd2(m.tp)}</b> becomes Time Pool, and directs
 							about <b>{usd2(m.toCreatorsDirect)}</b> more straight to creators — so{" "}
 							<b>{usd2(m.toCreators)}</b> reaches creators in all and Anthers keeps <b>$0</b>. You
@@ -381,7 +381,7 @@ function ValueMatrix() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					The same hour of content pays wildly different amounts depending on who's watching. Each
-					cell is <b className="text-base-content">$ per view-hour</b> = that viewer's Time Pool ÷
+					cell is <b className="text-base-content">$ per view-hour</b> = that user's Time Pool ÷
 					their total monthly time. Rows are the paid Badges; edit the consumption columns to
 					explore.
 				</p>
@@ -751,13 +751,13 @@ export default function CreatorMonetizationCalculatorPage() {
 					title="How time with a creator becomes revenue"
 					lede={
 						<>
-							On Anthers, a viewer's <b className="text-base-content">Time Pool</b> — set by the
-							Badge they chose — is split across every creator they engage with,{" "}
+							On Anthers, your <b className="text-base-content">Time Pool</b> — set by the
+							Badge you chose — is split across every creator you engage with,{" "}
 							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
 							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
 							platform rate: it's worth a{" "}
-							<b className="text-base-content">slice of that viewer's Time Pool</b>, plus anything
-							they direct your way. This tool traces that conversion, from one viewer up to a
+							<b className="text-base-content">slice of your Time Pool</b>, plus anything
+							you direct a creator's way. This tool traces that conversion, from one user up to a
 							creator's monthly earnings.
 						</>
 					}
@@ -777,7 +777,7 @@ export default function CreatorMonetizationCalculatorPage() {
 							</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
-									A viewer gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
+									A user gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
 									Blossom). It splits into a <b>Time Pool</b> (${" "}
 									{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of every ${PUBLIC_ACCESS_PRICE}, to
 									creators by time) and <b>Supports Anthers</b> (the remainder, which funds free
@@ -787,8 +787,8 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}
 									<b>in proportion to time spent</b>. A creator who holds <code>s</code> = (their
-									minutes ÷ the viewer's total minutes) earns <code>s × Time Pool</code> from that
-									viewer, plus anything the viewer directs to them.
+									minutes ÷ the user's total minutes) earns <code>s × Time Pool</code> from that
+									user, plus anything the user directs to them.
 								</li>
 								<li>
 									<b>Equal-time principle:</b> a minute counts the same across all media types.

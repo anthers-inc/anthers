@@ -251,7 +251,7 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<TrophyIcon className="h-6 w-6" />}
 							title="Community features"
-							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics like project reviews, comments, and follow/feed—built for the kind of interactive, collaborative community that forms around indie games and creative projects."
+							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics around the works themselves — project reviews, comments, and follow/feed — built for the kind of interactive, collaborative community that forms around indie games and creative projects."
 						/>
 					</Reveal>
 					<Reveal delay={500}>

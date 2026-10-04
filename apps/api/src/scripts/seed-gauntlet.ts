@@ -177,7 +177,7 @@ function resolveViewerUsername(inst: Instance): string {
 	const username = fromFlag || process.env.DEV_ACCOUNT_USERNAME?.trim();
 	if (!username) {
 		throw new Error(
-			"No viewer to reset. Set DEV_ACCOUNT_USERNAME in .env (the account `make dev` bootstraps), pass --user <username>, or pass --ensure-viewer for the harness's own account.",
+			"No account to reset. Set DEV_ACCOUNT_USERNAME in .env (the account `make dev` bootstraps), pass --user <username>, or pass --ensure-viewer for the harness's own account.",
 		);
 	}
 	return username;
@@ -200,8 +200,8 @@ async function ensureViewer(inst: Instance): Promise<void> {
 		// session's mail catcher by the spec's own setup.
 		emailVerified: true,
 		fields: {
-			displayName: "Gauntlet Viewer",
-			bio: "The harness's viewer for automated User Gauntlet walks.",
+			displayName: "Gauntlet User",
+			bio: "The harness's account for automated User Gauntlet walks.",
 			isCreator: false,
 			// Terms accepted: the walk drives the app itself, whose guarded routes a
 			// terms-owing account never reaches; onboarding has its own suites.

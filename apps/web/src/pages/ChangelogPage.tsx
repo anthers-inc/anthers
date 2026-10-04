@@ -10,7 +10,7 @@
 // rather than commits, filtered of what a reader cannot see (test machinery,
 // contributor tooling, internal rewrites), and translated into what a reader or a
 // creator can now do that they could not before. No entry here adds anything the
-// release does not contain, and nothing a reader can see is silently dropped — the
+// release does not contain, and nothing a user can see is silently dropped — the
 // raw list stays one click away on the tag.
 //
 // **The page is grouped by month, not release by release.** One section per month,
@@ -132,10 +132,10 @@ function Hero() {
 				</Reveal>
 				<Reveal delay={150}>
 					<Lede>
-						Every numbered release, month by month, and what a reader or a creator can do now that
+						Every numbered release, month by month, and what a user or a creator can do now that
 						they could not before. The raw, unedited list of every change stays on the GitHub
 						release for each version — this page is the pass that groups and translates it. No entry
-						here adds anything the release does not contain, and nothing a reader can see is
+						here adds anything the release does not contain, and nothing a user can see is
 						silently dropped.
 					</Lede>
 				</Reveal>

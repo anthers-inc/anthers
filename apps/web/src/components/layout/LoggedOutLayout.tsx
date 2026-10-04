@@ -229,7 +229,7 @@ export default function LoggedOutLayout() {
 
 						🚨 **"Sign Up Free", and the word is doing real work** (2026-08-22). The
 						button leads to `/signup`, a page that also asks about supporting a
-						creator and supporting Anthers — so a bare "Sign Up" invites the reader to
+						creator and supporting Anthers — so a bare "Sign Up" invites the user to
 						assume the door has a price on it. It does not: creating an account costs
 						nothing. The claim is safe to make outright because the free tier is
 						free forever by charter rather than by pricing decision (the wiki's *How Anthers Talks About Itself*), and the

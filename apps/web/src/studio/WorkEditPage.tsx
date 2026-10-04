@@ -737,7 +737,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					title={dirty ? "Shows what's saved, so save first to see your changes there" : undefined}
 				>
 					<EyeIcon className="size-4" />
-					Preview as a reader
+					Preview as User
 				</Link>
 			</div>
 
@@ -1033,7 +1033,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							This Work is rated {maturityLabel(storedMaturity)} today, but not every row is
 							answered. Answering every row replaces that with the rating the rows add up to.
 							{current.visibility === "released" &&
-								" Until then, readers who hide a kind of content won't see it."}
+								" Until then, users who hide a kind of content won't see it."}
 						</p>
 					)}
 					{maturityLocked && (

@@ -88,9 +88,9 @@ test("a Work's Edit page shows the Work as a reader sees it", async ({ page, con
 	expect(asStranger.work && "recordUrl" in asStranger.work).toBe(false);
 
 	// The reader's view, and back again from it.
-	await page.getByRole("link", { name: "Preview as a reader" }).click();
+	await page.getByRole("link", { name: "Preview as User" }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+\?previewAs=out$/);
-	await expect(page.getByText("Previewing as a reader")).toBeVisible();
+	await expect(page.getByText("Previewing as a user")).toBeVisible();
 	await page.getByRole("link", { name: "Edit This Work" }).click();
 	await expect(page).toHaveURL(new RegExp(`/studio/works/${video.publicId}/edit$`));
 });
