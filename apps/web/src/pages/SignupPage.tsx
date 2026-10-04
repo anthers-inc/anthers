@@ -2749,7 +2749,7 @@ export default function SignupPage() {
 					<Reveal>
 						<div className="text-center">
 							<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-								A non-profit · no ads, no shareholders, no strings
+								A nonprofit · no ads, no shareholders, no strings
 							</p>
 							<h1
 								style={serif}
@@ -2941,13 +2941,13 @@ export default function SignupPage() {
 						</p>
 					</Reveal>
 
-					{/* Why non-profit */}
+					{/* Why nonprofit */}
 					<div className="mx-auto mt-16 max-w-3xl pb-4 text-center">
 						<h2 style={serif} className="mb-4 text-2xl font-light sm:text-3xl">
-							Why non-profit
+							Why nonprofit
 						</h2>
 						<p className="mx-auto max-w-2xl text-sm leading-relaxed text-base-content/60">
-							Anthers is a non-profit because the only way to guarantee that our platform always
+							Anthers is a nonprofit because the only way to guarantee that our platform always
 							serves creators is to make it legally impossible for it to act otherwise. Anthers
 							cannot distribute profits to insiders, cannot be acquired, and cannot have its mission
 							diluted by investors. If it ever ceases to operate, its assets go to another exempt

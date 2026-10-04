@@ -179,7 +179,7 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				Welcome to Anthers
 			</h1>
 			<p className="mt-3 text-base leading-relaxed text-base-content/70">
-				Anthers is a non-profit home for creators — no ads, no shareholders. Your account is free
+				Anthers is a nonprofit home for creators — no ads, no shareholders. Your account is free
 				forever and comes with{" "}
 				<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month</strong>: the work
 				creators leave open to everyone.

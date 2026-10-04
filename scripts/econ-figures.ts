@@ -1282,6 +1282,11 @@ async function unpublished(file: string): Promise<boolean> {
 	// `CLAUDE.md` sits at the root where reference pages sit, and is machinery: it exists
 	// only so the harness auto-loads something that routes to the Agents Hub.
 	if (file.startsWith("90-99 Agents/") || file === "CLAUDE.md") return true;
+	// Agent-tooling artifacts. `.agents/audits/` holds the broken-links auditor's review
+	// docs, which quote the guard's own `why` strings by construction — a "Seed" hit in
+	// one is the tool doing its job, and one sitting unapplied would otherwise wedge
+	// every `make verify` until somebody fixed links by hand.
+	if (file.startsWith(".agents/")) return true;
 	// The task board's Base and the templates are machinery; a task note is public copy.
 	if (file.startsWith("00-09 Metafiles/01 Tasks/")) return false;
 	// Vault machinery — attachments, conventions, templates, the task board's Base.
@@ -1507,8 +1512,13 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// annotate accurate copy about a rival, which is how a guard becomes noise. Hence
 		// `our|a new|the` rather than a bare match; note `\bthe\b` cannot match inside
 		// "their", which is what spares the Ghost line.
+		//
+		// Copy spells the organization form *nonprofit*, one word (the wiki's *How Anthers
+		// Talks About Itself* § The Words), so the spelling runs `non[- ]profit`: the
+		// premise is a defect in either spelling, and the hyphenated form is what a sweep
+		// retires rather than what the guard should narrow past.
 		pattern: new RegExp(
-			`${NOT_NEGATED}(?:Anthers Foundation|\\b(?:our|a new|the)\\s+non-profit\\s+foundation)`,
+			`${NOT_NEGATED}(?:Anthers Foundation|\\b(?:our|a new|the)\\s+non[- ]profit\\s+foundation)`,
 			"gi",
 		),
 		why: "there is one legal person and it is `Anthers, Inc.` — name the function, not an entity (the wiki's *How Anthers Talks About Itself* § The Words)",

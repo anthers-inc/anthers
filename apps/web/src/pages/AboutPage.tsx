@@ -184,7 +184,7 @@ export default function AboutPage() {
 							style={serif}
 							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
 						>
-							A non-profit creative garden{" "}
+							A nonprofit creative garden{" "}
 							<em className="font-medium text-primary not-italic">for everyone.</em>
 						</h1>
 					</Reveal>

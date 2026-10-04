@@ -34,7 +34,7 @@
 // but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
 // of the price. Where a cut and a price appear together the take-home figure must
 // appear with them, or a reader concludes the creator gets the whole list price.
-// "non-profit", never "501(c)(3)", until the IRS determination letter lands.
+// "nonprofit", never "501(c)(3)", until the IRS determination letter lands.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
 // sets up "The solution" — an interactive matrix (how a fan supports you × the
@@ -522,7 +522,7 @@ export default function ForCreatorsPage() {
 							{fmtMoney(PUBLIC_ACCESS_PRICE)} a month also lifts their own Public Access limit, so
 							they can spend as much time with your free work as they like. Whatever is left over
 							funds free access and the charitable programs—not Anthers' pocket. Anthers is a
-							non-profit: no investors, no profit-taking.
+							nonprofit: no investors, no profit-taking.
 						</SignpostCard>
 					</Reveal>
 				</div>
