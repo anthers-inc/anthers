@@ -42,20 +42,20 @@ export default function IssueReportsPage() {
 		<div className="container mx-auto max-w-3xl px-4 py-10">
 			<h1 className="text-3xl font-bold">Report an Issue</h1>
 			<p className="mt-3 text-lg text-base-content/70">
-				Something on Anthers not working the way it should? Tell us about it. You do not need an
-				account, and you do not need to figure out whose bug it is — that is our job.
+				If something on Anthers is not working the way it should, tell us about it. You do not need
+				an account, and you do not need to figure out whose bug it is. That is our job.
 			</p>
 
 			<Section title="What This Is For">
 				<p>
 					Broken pages, uploads that will not finish, playback that stutters, buttons that do
-					nothing — anything where Anthers itself is misbehaving. Describe what you did, what you
+					nothing: anything where Anthers itself is misbehaving. Describe what you did, what you
 					expected, and what happened instead.
 				</p>
 				<p>
 					<strong>Problems with content or conduct belong on a different page.</strong> If something
-					here breaks the law or breaks our rules — harmful material, harassment, anything like that
-					— report it at{" "}
+					here breaks the law or breaks our rules, such as harmful material or harassment, report it
+					at{" "}
 					<Link to="/abuse" className="link">
 						Report Abuse
 					</Link>{" "}
@@ -72,20 +72,20 @@ export default function IssueReportsPage() {
 
 			<Section title="What Happens Next">
 				<p>
-					Every report is read by a person. When we take one up, it goes onto our{" "}
+					Every report is read by a person. What we take up joins the work shown on our{" "}
 					<Link to="/roadmap" className="link">
 						roadmap
-					</Link>{" "}
-					with the other work — and a fix ships through the{" "}
+					</Link>
+					, and when a fix ships it is announced on the{" "}
 					<Link to="/changelog" className="link">
 						changelog
 					</Link>
-					, so what changed and when is public whether or not we can trace your report to it.
+					, so what changed and when is public either way.
 				</p>
 				<p>
 					We may not be able to reply to every report, especially ones filed anonymously. If you
-					leave an email address we can ask a question if we have one — but an issue report is not a
-					support ticket, and there is nothing to track here.
+					leave an email address we can ask a question if we have one, but an issue report is not a
+					support ticket and there is nothing to track here.
 				</p>
 			</Section>
 
