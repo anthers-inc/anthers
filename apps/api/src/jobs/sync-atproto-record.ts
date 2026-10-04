@@ -24,7 +24,7 @@ import {
 	syncFollowRecord,
 	syncReviewRecord,
 	syncVoteRecord,
-} from "../services/reader-record-listing.js";
+} from "../services/user-record-listing.js";
 import type { RecordSyncKind, RecordSyncResult } from "../services/record-sync.js";
 import { isOrdinary } from "../services/repo-writer.js";
 

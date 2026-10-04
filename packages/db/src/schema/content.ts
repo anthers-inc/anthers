@@ -1041,7 +1041,7 @@ export const votes = pgTable(
 		// the arithmetic, and the address is the only thing that lets a rebuild find its way
 		// back. ⚠️ **Null is ordinary and is not a failure** — a vote from an account that has
 		// since been deleted has no repository to live in and still counts, which is the one
-		// case where the row legitimately outlives the record. `atproto-reader-records.ts`
+		// case where the row legitimately outlives the record. `atproto-user-records.ts`
 		// carries the full list of reasons a row has none.
 		atprotoUri: text("atproto_uri").unique(),
 		/**

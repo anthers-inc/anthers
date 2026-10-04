@@ -2799,7 +2799,7 @@ const contentRoutes = new Hono()
 			await authorUpvote("comment", comment.id, user.id);
 
 			// The record goes in the commenter's own repository, once the post has a record for it
-			// to name — see `reader-record-listing.ts` for what happens while it does not.
+			// to name — see `user-record-listing.ts` for what happens while it does not.
 			void queueRecordSync("comment", comment.id);
 
 			return c.json({ comment: { ...comment, handle: user.handle } }, 201);

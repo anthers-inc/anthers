@@ -27,7 +27,7 @@ import {
 	unpublishableReviewReason,
 	unpublishableVoteReason,
 	voteToRecord,
-} from "../services/atproto-reader-records.js";
+} from "../services/atproto-user-records.js";
 
 const WORK_URI = "at://did:plc:z72i7hdynmk6r22z27h6tvur/org.anthers.work/3lbk2vqf7yk2a";
 const COMMENT_URI = "at://did:plc:z72i7hdynmk6r22z27h6tvur/org.anthers.comment/3lbk4mzq2rc2h";

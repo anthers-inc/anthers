@@ -38,7 +38,7 @@ import {
 	syncFollowRecord,
 	syncReviewRecord,
 	syncVoteRecord,
-} from "../services/reader-record-listing.js";
+} from "../services/user-record-listing.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";

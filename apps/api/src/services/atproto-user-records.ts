@@ -34,7 +34,7 @@ import { isVoteDirection } from "@anthers/shared/votes";
  * is why it is reported as a distinct reason: a reader whose interactions stop publishing has
  * done nothing, and the fix is not theirs to make.
  */
-export type UnpublishableReaderReason =
+export type UnpublishableUserReason =
 	| "no_author"
 	| "hidden"
 	| "empty_text"
@@ -76,7 +76,7 @@ export interface CommentRecord {
 export function unpublishableCommentReason(
 	comment: PublishableComment,
 	subjectUri: string | null,
-): UnpublishableReaderReason | null {
+): UnpublishableUserReason | null {
 	if (comment.userId === null) return "no_author";
 	if (comment.moderationStatus !== "visible") return "hidden";
 	if (!comment.body.trim()) return "empty_text";
@@ -128,7 +128,7 @@ export interface ReviewRecord {
 export function unpublishableReviewReason(
 	review: PublishableReview,
 	subjectUri: string | null,
-): UnpublishableReaderReason | null {
+): UnpublishableUserReason | null {
 	if (review.userId === null) return "no_author";
 	if (review.moderationStatus !== "visible") return "hidden";
 	if (!isReviewVerdict(review.verdict)) return "bad_verdict";
@@ -185,7 +185,7 @@ export interface VoteRecord {
 export function unpublishableVoteReason(
 	vote: PublishableVote,
 	subjectUri: string | null,
-): UnpublishableReaderReason | null {
+): UnpublishableUserReason | null {
 	if (vote.userId === null) return "no_author";
 	if (!isVoteDirection(vote.direction)) return "bad_direction";
 	if (!subjectUri) return "subject_unpublished";
@@ -231,7 +231,7 @@ export interface FollowRecord {
 export function unpublishableFollowReason(
 	follow: PublishableFollow,
 	creatorDid: string | null,
-): UnpublishableReaderReason | null {
+): UnpublishableUserReason | null {
 	if (follow.followerId === null) return "no_author";
 	if (!creatorDid?.trim()) return "subject_has_no_identity";
 	return null;

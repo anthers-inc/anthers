@@ -9,7 +9,7 @@
  * 🚨 **These records are canonical in the reader's repository, and that decides what may take
  * one down.** Only the reader's own act does — unvoting, unfollowing, editing their words away.
  * A moderator hiding a comment leaves its record where its author put it, and a subject that
- * disappears leaves every record about it standing. See `readerRemoves` in
+ * disappears leaves every record about it standing. See `userRemoves` in
  * `atproto-record-plan.ts`, and the wiki's *User Records in the Atmosphere*.
  *
  * ⚠️ **An interaction publishes only once its subject has a record of its own**, because a
@@ -26,14 +26,14 @@ import type {
 	CommentRecord,
 	FollowRecord,
 	ReviewRecord,
-	UnpublishableReaderReason,
+	UnpublishableUserReason,
 	VoteRecord,
-} from "./atproto-reader-records.js";
+} from "./atproto-user-records.js";
 import { COMMENT_KIND, FOLLOW_KIND, REVIEW_KIND, VOTE_KIND } from "./atproto-record-plan.js";
 import { queueRecordSync, type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
 
 /** What syncing one reader record did. */
-export type ReaderRecordSyncResult<R> = RecordSyncResult<R, UnpublishableReaderReason>;
+export type UserRecordSyncResult<R> = RecordSyncResult<R, UnpublishableUserReason>;
 
 type Opts = { fetchImpl?: typeof fetch };
 
@@ -90,7 +90,7 @@ export async function subjectRecordUri(
 export async function syncCommentRecord(
 	commentId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<CommentRecord>> {
+): Promise<UserRecordSyncResult<CommentRecord>> {
 	const [row] = await db
 		.select({
 			userId: comments.userId,
@@ -121,7 +121,7 @@ export async function syncCommentRecord(
 export async function syncReviewRecord(
 	reviewId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<ReviewRecord>> {
+): Promise<UserRecordSyncResult<ReviewRecord>> {
 	const [row] = await db
 		.select({
 			userId: reviews.userId,
@@ -153,7 +153,7 @@ export async function syncReviewRecord(
 export async function syncVoteRecord(
 	voteId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<VoteRecord>> {
+): Promise<UserRecordSyncResult<VoteRecord>> {
 	const [row] = await db
 		.select({
 			userId: votes.userId,
@@ -189,7 +189,7 @@ export async function syncVoteRecord(
 export async function syncFollowRecord(
 	followId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<FollowRecord>> {
+): Promise<UserRecordSyncResult<FollowRecord>> {
 	const [row] = await db
 		.select({
 			followerId: follows.followerId,
@@ -222,7 +222,7 @@ export async function syncFollowRecord(
  * unwritten, and giving it back should bring those records out rather than only the next one.
  * Each row still decides for itself. Returns how many rows were queued.
  */
-export async function queueAllReaderRecordsFor(userId: number): Promise<number> {
+export async function queueAllUserRecordsFor(userId: number): Promise<number> {
 	const [commentRows, reviewRows, voteRows, followRows] = await Promise.all([
 		db.select({ id: comments.id }).from(comments).where(eq(comments.userId, userId)),
 		db.select({ id: reviews.id }).from(reviews).where(eq(reviews.userId, userId)),

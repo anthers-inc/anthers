@@ -122,10 +122,10 @@ export async function reconcileListings(sinks: SweepSinks = {}): Promise<void> {
 	for (const row of missing) await enqueueWork(row.id);
 
 	const creator = await reconcileCreatorRecords(enqueueRecord);
-	const reader = await reconcileReaderRecords(enqueueRecord);
+	const user = await reconcileUserRecords(enqueueRecord);
 
 	const toCorrect = stale.length + creator.stale;
-	const toPublish = missing.length + creator.missing + reader.missing;
+	const toPublish = missing.length + creator.missing + user.missing;
 	if (toCorrect > 0 || toPublish > 0) {
 		console.log(
 			`[reconcile-listings] queued ${toCorrect} to remove or correct, ${toPublish} to publish`,
@@ -235,7 +235,7 @@ async function reconcileCreatorRecords(
  * ⚠️ **Hosted accounts only, with the same gap the Works half states**, and each kind is skipped
  * while its schema is unpublished.
  */
-async function reconcileReaderRecords(enqueueRecord: Enqueue): Promise<{ missing: number }> {
+async function reconcileUserRecords(enqueueRecord: Enqueue): Promise<{ missing: number }> {
 	const subjectHasRecord = (type: SQL, id: SQL) => sql`(
 		(${type} = 'work' AND EXISTS (SELECT 1 FROM works s WHERE s.id = ${id} AND s.atproto_uri IS NOT NULL))
 		OR (${type} = 'post' AND EXISTS (SELECT 1 FROM posts s WHERE s.id = ${id} AND s.atproto_uri IS NOT NULL))

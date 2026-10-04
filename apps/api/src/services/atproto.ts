@@ -365,8 +365,8 @@ export async function recordPublishGrant(
 	// against; judging it against the creator tier would call every reader's grant a decline.
 	if (user.isCreator !== true) {
 		if (!grantCoversUserRecords(grantedScope)) return { status: "declined" };
-		const { queueAllReaderRecordsFor } = await import("./reader-record-listing.js");
-		return { status: "granted", queued: await queueAllReaderRecordsFor(userId) };
+		const { queueAllUserRecordsFor } = await import("./user-record-listing.js");
+		return { status: "granted", queued: await queueAllUserRecordsFor(userId) };
 	}
 
 	if (!grantCoversCreatorRecords(grantedScope)) return { status: "declined" };
