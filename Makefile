@@ -359,6 +359,19 @@ resource-snapshot: ## Append a live resource snapshot to resource_snapshots (DOC
 resource-alerts: ## Verify App Platform metric alerts and set their destinations (DOCTL_CONTEXT=anthers)
 	bun run scripts/resource-alerts.ts
 
+# The one door to the production database. Fetches doadmin's connection string from
+# DigitalOcean at run time and injects it into the environment of the command you name —
+# the URI never reaches a command line or this Makefile, so it never lands in a session
+# transcript (that is how the 2026-10-03 audit's `PGPASSWORD` leak happened). The wrapper
+# also refuses a URI with an inline password if one somehow reaches its stdin. Example:
+#   make prod-db CMD="bun run admin:account list"
+# Extra arguments to the doctl fetch (never secrets): ARGS="--output json".
+# Deliberately NOT part of `verify`: needs doctl authenticated against the Anthers
+# account (DOCTL_CONTEXT=anthers) and reaches production; see the Runbook.
+prod-db: ## Run CMD (e.g. `bun run admin:account list`) against production, DATABASE_URL injected
+	@if [ -z "$(CMD)" ]; then echo 'Usage: make prod-db CMD="bun run admin:account list"' >&2; exit 64; fi
+	@bun run scripts/prod-db.ts --cmd "$(CMD)" $(ARGS)
+
 # Assert Stripe can actually reach the webhook and that production holds secrets that work.
 # Production once ran for weeks with no registered endpoint and a `stripe listen` secret
 # copied from a developer's .env, and nothing anywhere noticed. Needs `bws` (vault read) and

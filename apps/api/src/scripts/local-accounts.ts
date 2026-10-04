@@ -44,6 +44,20 @@ export interface LocalAccountOptions {
 	identity?: "hosted" | "brought";
 	/** The handle name to ask for. A name the server would refuse falls back to a generated one. */
 	handleName?: string;
+	/**
+	 * Take the reserved-name list's own exception: this account IS the official thing a
+	 * reserved name protects (`anthers` — the Anthers creator account's stand-in), so the
+	 * name passes through untouched rather than falling back to `-dev` or a generated one.
+	 *
+	 * ⚠️ **Pairs with `identity: "brought"`, and the production parallel is the design**:
+	 * the real `@anthers.org` account brought its Bluesky identity, and the brought path
+	 * has no reserved-name check at all (`establishSignupIdentity` accepts a proved DID
+	 * with no name test) — the reservation exists to stop somebody *pretending* to be
+	 * official, and it was never meant to stop the platform's own fixture from standing
+	 * in for the account. `localHandleName` runs the reservation check, so the bypass
+	 * skips it and the brought path never sees it.
+	 */
+	bypassReserved?: boolean;
 	emailVerified?: boolean;
 	fields?: LocalAccountFields;
 }
@@ -114,7 +128,15 @@ export async function createLocalAccount(opts: LocalAccountOptions): Promise<Use
 		}
 	}
 
-	const handleName = localHandleName(opts.handleName);
+	const handleName = opts.bypassReserved
+		? // The reserved-list exception above: the official name passes through untouched,
+			// sanitization only, and the caller pairs it with `identity: "brought"` so
+			// issuance never re-checks.
+			(opts.handleName ?? "")
+				.toLowerCase()
+				.replace(/[^a-z0-9-]+/g, "-")
+				.replace(/^-+|-+$/g, "") || generatedHandleName()
+		: localHandleName(opts.handleName);
 	const pendingToken =
 		opts.identity === "brought"
 			? await startPendingSignup({

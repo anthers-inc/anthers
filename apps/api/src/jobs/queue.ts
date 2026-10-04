@@ -228,11 +228,11 @@ export const QUEUES = {
 	// "absence of a finding by the deadline" IS the default outcome — so this sweep
 	// is the release mechanism rather than a reminder for one.
 	RELEASE_PAYOUT_HOLDS: "release-payout-holds",
-	// Delete expired sessions and verification tokens. Privacy Policy promises "Sessions: deleted
-	// when they expire"; until 2026-08-12 `deleteExpiredSessions()` and
-	// `deleteExpiredTokens()` were exported and called from NOWHERE, so every session row
-	// ever written — with its `ip_address` and `user_agent` — was filtered out of reads
-	// and kept forever. A retention promise with no mechanism behind it.
+	// Delete expired sessions, signup codes and admin credentials. Privacy Policy promises
+	// "Sessions: deleted when they expire"; until 2026-08-12 `deleteExpiredSessions()` was
+	// exported and called from NOWHERE, so every session row ever written — with its
+	// `ip_address` and `user_agent` — was filtered out of reads and kept forever. A
+	// retention promise with no mechanism behind it.
 	PRUNE_CREDENTIALS: "prune-credentials",
 	// Restore Works whose DMCA counter-notice window has closed (§ 512(g)(2)(C)).
 	// The sweep checks `restoreNoEarlierThan` and `suitFiledAt` — a suit filing

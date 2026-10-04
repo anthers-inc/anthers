@@ -79,8 +79,8 @@ export default function ForUsersPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<p className="text-justify [text-align-last:center] mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
-							Anthers is a non-profit creative garden for everyone: a place for videos, games,
-							music, writing, crafts, services, and more, all on an open-source, ad-free platform. A
+							Anthers is a nonprofit creative garden for everyone: a place for videos, games, music,
+							writing, crafts, services, and more, all on an open-source, ad-free platform. A
 							harmonious ecosystem where we can all nurture a creative internet worth loving again.
 						</p>
 						<p className="text-justify [text-align-last:center] mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
@@ -235,7 +235,7 @@ export default function ForUsersPage() {
 						style={serif}
 						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
 					>
-						0% cut. Not a cent of it is ours. That's why Anthers is a non-profit; it's not about us.
+						0% cut. Not a cent of it is ours. That's why Anthers is a nonprofit; it's not about us.
 					</p>
 				</Reveal>
 			</Section>
@@ -251,7 +251,7 @@ export default function ForUsersPage() {
 						you are never asked to pay for it: every account downloads without a meter—no allowance
 						to run out of, no data cap, no per-gigabyte charge, on as many devices as you like—and
 						streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever. This
-						isn't a trial or a trick (we're a non-profit; there's little incentive for either), it's
+						isn't a trial or a trick (we're a nonprofit; there's little incentive for either), it's
 						an attempt to fulfill what we believe is a common right: for everyone to share and
 						experience creativity and community with their neighbors around the world.
 					</Lede>

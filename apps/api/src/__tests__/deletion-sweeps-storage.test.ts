@@ -11,8 +11,8 @@
  *   only `DELETE /works/:id` reached — so a deleted profile's avatar stayed publicly
  *   downloadable at its CDN URL forever, and every original, HLS rendition and asset
  *   stayed in the private bucket.
- * - `deleteExpiredSessions()` and `deleteExpiredTokens()` were exported and called from
- *   nowhere, so every session row ever written kept its `ip_address` and `user_agent`.
+ * - `deleteExpiredSessions()` was exported and called from nowhere, so every session
+ *   row ever written kept its `ip_address` and `user_agent`.
  *
  * 🚨 **The reason neither was caught is the reason these assertions are written the way
  * they are.** Every reader of `sessions` already filters on `expiresAt > now()`, so a
@@ -24,22 +24,15 @@
  * *"where a document claims an absence, that absence needs a test."*
  *
  * Verified by sabotage before being committed: stubbing `sweepCollected` to a no-op fails
- * the storage cases, and stubbing either cleanup to `return 0` fails the credential ones.
+ * the storage cases, and stubbing the cleanup to `return 0` fails the credential one.
  */
 
 import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import {
-	poolDistributions,
-	purchases,
-	sessions,
-	users,
-	verificationTokens,
-	works,
-} from "@anthers/db/schema";
+import { poolDistributions, purchases, sessions, users, works } from "@anthers/db/schema";
 import { eq, inArray, lt } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
-import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
+import { deleteExpiredSessions } from "../services/auth.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -229,29 +222,6 @@ describe("expired credentials are actually deleted", () => {
 				.select({ id: sessions.id })
 				.from(sessions)
 				.where(lt(sessions.expiresAt, new Date()));
-			expect(stragglers).toHaveLength(0);
-		},
-		DB_SETUP_TIMEOUT,
-	);
-
-	it(
-		"removes expired verification tokens",
-		async () => {
-			const userId = await makeUser("tok");
-			await db.insert(verificationTokens).values({
-				userId,
-				token: `expired_${SUFFIX}`,
-				type: "email_verify",
-				expiresAt: new Date(Date.now() - 60_000),
-			});
-
-			const removed = await deleteExpiredTokens();
-			expect(removed).toBeGreaterThan(0);
-
-			const stragglers = await db
-				.select({ id: verificationTokens.id })
-				.from(verificationTokens)
-				.where(lt(verificationTokens.expiresAt, new Date()));
 			expect(stragglers).toHaveLength(0);
 		},
 		DB_SETUP_TIMEOUT,

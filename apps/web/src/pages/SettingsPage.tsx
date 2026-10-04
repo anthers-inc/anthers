@@ -1672,14 +1672,6 @@ export default function SettingsPage() {
 										</p>
 									</div>
 								</label>
-								{!user?.emailVerified && (
-									<p className="text-xs text-warning mt-2">
-										<Link to="/verify-email" className="link">
-											Verify your email
-										</Link>{" "}
-										to enable creator mode.
-									</p>
-								)}
 							</div>
 						</div>
 					</div>

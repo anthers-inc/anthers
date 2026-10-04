@@ -16,9 +16,10 @@
  *   bun run admin:account deactivate <email>
  *   bun run admin:account reactivate <email>
  *
- * In production, point `DATABASE_URL` at the managed database for the one command:
- *   DATABASE_URL="$(doctl databases connection <id> --format URI --no-header)" \
- *     bun run admin:account list
+ * In production, use the wrapper Make target, which injects `DATABASE_URL` without the
+ * connection string ever appearing on a command line (an inline one lands verbatim in the
+ * agent session transcript — see the 2026-10-03 audit):
+ *   make prod-db CMD="bun run admin:account list"
  *
  * ⚠️ **Deliberately not guarded by `assertDevCheckout`.** Running against a deployed database is
  * this script's purpose rather than its failure mode, the same line `packages/db/src/dev-only.ts`

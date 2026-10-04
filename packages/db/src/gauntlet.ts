@@ -38,19 +38,29 @@ export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
 export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
 
 /**
- * The session's stand-in for the org identity, which owns the seeded Anthers Badge ladder.
+ * The session's stand-in for the Anthers creator account, which owns the seeded Anthers
+ * Badge ladder.
  *
  * 🚨 **Neither the creator nor the viewer can own it.** The creator's own ladder gates the
  * staircase's Works, and access resolution reads "what the viewer holds" grouped by the
- * badge's issuer — an org ladder owned by the creator fuses the two identities and makes
- * every Anthers Badge count as creator support. The viewer is the walk's actor: every
+ * badge's issuer — an Anthers ladder owned by the creator fuses the two identities and
+ * makes every Anthers Badge count as creator support. The viewer is the walk's actor: every
  * holding the walk parks on the viewer is summed into the directed budget's `allocated`,
- * so an org ladder owned by the viewer turns an Anthers Badge into spendable budget. A
+ * so an Anthers ladder owned by the viewer turns an Anthers Badge into spendable budget. A
  * third account, holding nothing and gating nothing, is the honest dev shape — the
- * identity decision (2026-10-03) settled that the org is an ordinary `users` row, and
- * this is that row until production seeds the real `@anthers.org` account.
+ * identity decision (2026-10-03) settled that the Anthers creator account is an ordinary
+ * `users` row, and this is that row in fixture form.
+ *
+ * ⭐ **The handle name is `anthers`, the same first label as the production account's
+ * `@anthers.org`** (2026-10-04): the account is identified by its handle in both places,
+ * so the stand-in takes the reserved name on the session's own network suffix and every
+ * lookup — the API's `anthersUserId`, the gauntlet's copy in `gauntlet-support.ts` — finds
+ * it the same way. The name is reserved on the issuing path (`handleNameProblem`), so no
+ * ordinary signup in a session can collide with it; the fixture creates it before
+ * anybody could, and the pending-signup reservation keeps the race honest the same way it
+ * does for any account.
  */
-export const GAUNTLET_ORG_USERNAME = `${GAUNTLET_PREFIX}org`;
+export const GAUNTLET_ORG_USERNAME = "anthers";
 export const GAUNTLET_ORG_EMAIL = `${GAUNTLET_PREFIX}org@example.test`;
 
 /**

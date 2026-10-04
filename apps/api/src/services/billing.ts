@@ -27,7 +27,7 @@ import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
 	createCustomer,
@@ -37,7 +37,7 @@ import {
 	paymentsConfigured,
 	updateProduct,
 } from "../lib/processor.js";
-import { orgOwnerUserId } from "./anthers-badges.js";
+import { anthersUserId } from "./anthers-badges.js";
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
@@ -114,10 +114,10 @@ export async function ensureAnthersProduct(): Promise<string> {
 	return created.id;
 }
 
-/** What one subscription item is for. `null` creatorId means the Anthers line. */
+/** What one subscription item is for — the user id of the account the line supports. */
 export interface SupportItem {
 	itemId: string;
-	creatorId: number | null;
+	creatorId: number;
 	/** Monthly dollars on this line. */
 	amount: number;
 }
@@ -131,30 +131,33 @@ export interface SupportItem {
  * because both are plausible numbers on a well-formed subscription. That is the same
  * failure PR #223 existed to prevent, wearing the shape the N-item model gives it.
  *
- * An **unstamped** item is treated as the Anthers line rather than dropped, which is the
- * migration path and not a guess: every subscription predating this change carried one
- * item, and the accounts on them were Anthers-only or had their split in metadata that no
- * longer applies. Dropping it instead would silently zero a paying supporter's Badge.
+ * ⭐ **Every destination is a user id, Anthers' own line included** (the issuer pass,
+ * 2026-10-04): the Anthers creator account is an ordinary issuer, so its line is stamped
+ * with its user id exactly like a creator's — one vocabulary, no `null` destination, no
+ * special case in `applyDirectedSupportFromSub`. An item still carrying the retired
+ * `"anthers"` literal or a blank stamp is read as the Anthers account's line: no
+ * subscription in any environment carries one (the stamp changed while the table was
+ * empty), so this is a belt against a hand-authored Stripe object rather than a
+ * migration path.
  */
-export function itemsFromSub(sub: Stripe.Subscription): SupportItem[] {
+export function itemsFromSub(sub: Stripe.Subscription, anthersId: number): SupportItem[] {
 	return sub.items.data.map((item) => {
 		const raw = item.metadata?.destination?.trim();
-		// A blank stamp is UNSTAMPED, not creator 0. `Number("")` is 0, which would credit
+		// A blank stamp is UNSTAMPED, not account 0. `Number("")` is 0, which would credit
 		// a real supporter's money to whichever account happens to hold user id 0.
-		const creatorId = !raw || raw === "anthers" ? null : Number(raw);
+		const parsed = !raw || raw === "anthers" ? anthersId : Number(raw);
 		const unitCents = item.price?.unit_amount ?? 0;
 		return {
 			itemId: item.id,
-			creatorId:
-				Number.isFinite(creatorId) && creatorId !== null && creatorId > 0 ? creatorId : null,
+			creatorId: Number.isFinite(parsed) && parsed > 0 ? parsed : anthersId,
 			amount: (unitCents * Math.max(0, item.quantity ?? 1)) / 100,
 		};
 	});
 }
 
 /** Everything on the charge — Anthers' line and the creators' together. */
-export function totalSupportFromSub(sub: Stripe.Subscription): number {
-	return itemsFromSub(sub).reduce((sum, i) => sum + i.amount, 0);
+export function totalSupportFromSub(sub: Stripe.Subscription, anthersId: number): number {
+	return itemsFromSub(sub, anthersId).reduce((sum, i) => sum + i.amount, 0);
 }
 
 /**
@@ -168,21 +171,28 @@ export function totalSupportFromSub(sub: Stripe.Subscription): number {
  * The creators' amounts are deliberately unequal and deliberately not $3: a creator sets
  * their own Badge levels to any amount, and $3 is only ever the price of Public Access.
  */
-export function anthersSupportFromSub(sub: Stripe.Subscription): number {
-	return itemsFromSub(sub)
-		.filter((i) => i.creatorId === null)
-		.reduce((sum, i) => sum + i.amount, 0);
-}
-
-/** The monthly dollars on the charge pointed at creators rather than at Anthers. */
-export function directedSupportFromSub(sub: Stripe.Subscription): number {
-	return itemsFromSub(sub)
-		.filter((i) => i.creatorId !== null)
+export function anthersSupportFromSub(sub: Stripe.Subscription, anthersId: number): number {
+	return itemsFromSub(sub, anthersId)
+		.filter((i) => i.creatorId === anthersId)
 		.reduce((sum, i) => sum + i.amount, 0);
 }
 
 /**
- * The per-creator picks, read from the items themselves.
+ * The monthly dollars on the charge pointed at creators rather than at Anthers.
+ *
+ * The Anthers line is an ordinary destination now (the issuer pass, 2026-10-04), so this
+ * keeps its creator-only meaning by exclusion — the one place the Anthers account is still
+ * named as such in the item model rather than as "just another destination".
+ */
+export function directedSupportFromSub(sub: Stripe.Subscription, anthersId: number): number {
+	return itemsFromSub(sub, anthersId)
+		.filter((i) => i.creatorId !== anthersId)
+		.reduce((sum, i) => sum + i.amount, 0);
+}
+
+/**
+ * The per-destination picks, read from the items themselves — every line is a pick now,
+ * Anthers' own included.
  *
  * ⚠️ These used to travel in subscription **metadata**, applied on activation and then
  * cleared, because the amounts lived nowhere else — a quantity of a shared unit could not
@@ -192,9 +202,10 @@ export function directedSupportFromSub(sub: Stripe.Subscription): number {
  */
 export function directedPicksFromSub(
 	sub: Stripe.Subscription,
+	anthersId: number,
 ): { creatorId: number; amount: number }[] {
-	return itemsFromSub(sub)
-		.filter((i): i is SupportItem & { creatorId: number } => i.creatorId !== null && i.amount > 0)
+	return itemsFromSub(sub, anthersId)
+		.filter((i) => i.amount > 0)
 		.map((i) => ({ creatorId: i.creatorId, amount: i.amount }));
 }
 
@@ -319,6 +330,7 @@ export async function creatorProductTaxCode(creatorId: number): Promise<string> 
  */
 export function supportItems(
 	anthersProduct: string,
+	anthersId: number,
 	anthersDollars: number,
 	directed: { creatorId: number; product: string; amount: number }[],
 ): Stripe.SubscriptionCreateParams.Item[] {
@@ -334,7 +346,7 @@ export function supportItems(
 		metadata: { destination },
 	});
 	const items: Stripe.SubscriptionCreateParams.Item[] = [];
-	if (anthersDollars > 0) items.push(monthly(anthersProduct, anthersDollars, "anthers"));
+	if (anthersDollars > 0) items.push(monthly(anthersProduct, anthersDollars, String(anthersId)));
 	for (const d of directed) {
 		if (d.amount > 0) items.push(monthly(d.product, d.amount, String(d.creatorId)));
 	}
@@ -343,8 +355,8 @@ export function supportItems(
 
 /** A destination's desired monthly amount, with the Product its line is billed against. */
 export interface DesiredLine {
-	/** `null` for the Anthers line, a creator's user id otherwise. */
-	creatorId: number | null;
+	/** The account the line supports — the Anthers creator account's id for its own line. */
+	creatorId: number;
 	product: string;
 	amount: number;
 }
@@ -356,7 +368,7 @@ export interface ItemChange {
 	/** Items to send under `proration_behavior: "none"` — they take effect on the 1st. */
 	drops: Stripe.SubscriptionUpdateParams.Item[];
 	/** What began or grew today, and is therefore owed the days before it. */
-	started: { creatorId: number | null; amount: number }[];
+	started: { creatorId: number; amount: number }[];
 }
 
 /**
@@ -376,14 +388,19 @@ export interface ItemChange {
 export function planItemChange(
 	sub: Stripe.Subscription,
 	anthersProduct: string,
+	anthersId: number,
 	anthersDollars: number,
 	directed: { creatorId: number; product: string; amount: number }[],
 ): ItemChange {
-	const key = (creatorId: number | null) => (creatorId === null ? "anthers" : String(creatorId));
+	const key = (creatorId: number) => String(creatorId);
 
 	const desired = new Map<string, DesiredLine>();
 	if (anthersDollars > 0) {
-		desired.set("anthers", { creatorId: null, product: anthersProduct, amount: anthersDollars });
+		desired.set(key(anthersId), {
+			creatorId: anthersId,
+			product: anthersProduct,
+			amount: anthersDollars,
+		});
 	}
 	for (const d of directed) {
 		if (d.amount > 0) {
@@ -396,7 +413,7 @@ export function planItemChange(
 	}
 
 	const current = new Map<string, SupportItem>();
-	for (const item of itemsFromSub(sub)) {
+	for (const item of itemsFromSub(sub, anthersId)) {
 		const k = key(item.creatorId);
 		// Two lines pointed at one destination is not a shape this writes, but an older
 		// subscription can carry one — sum them so the comparison is against everything that
@@ -518,6 +535,11 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		.limit(1);
 	if (!acct) return;
 
+	// The Anthers creator account's id — the one destination this sync still names as
+	// such (its own line is an ordinary destination; see `itemsFromSub`). Resolved once
+	// here because the in-force comparisons and the snapshot need it.
+	const anthersId = await anthersUserId();
+
 	const gone = sub.status === "canceled" || sub.status === "incomplete_expired";
 	if (gone) {
 		// Ignore a stale subscription that isn't the account's current one.
@@ -595,14 +617,14 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		heldOver ? Decimal.max(fromSub, stored) : new Decimal(fromSub);
 
 	// The held Anthers badge's threshold — the "stored" half of the in-force comparison,
-	// read from the org-ladder holding rather than from a dead amount column.
+	// read from the Anthers-ladder holding rather than from a dead amount column.
 	const heldAnthers = await heldAnthersBadgeAmountForSync(acct.userId);
 	// The paid-for directed balance is what the subscription's directed items add up to,
 	// held over the same way — a supporter who drops a creator on the 10th has already
 	// paid that creator for the month. The stored figure participates only while the
 	// period has not turned; past that the items are the whole truth.
 	const directedTotal = inForce(
-		directedSupportFromSub(sub),
+		directedSupportFromSub(sub, anthersId),
 		// A stored read participates in the held-over guard only, same as the amount
 		// columns this replaced; the budget rides the billing row, which is where the
 		// picker reads it back.
@@ -631,9 +653,27 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 			.where(eq(billingAccounts.id, acct.id));
 		// The in-force Anthers figure — possibly the higher, held-over one — is what the
 		// holding gets stamped with, and what the snapshot records for the cycle.
-		const anthersInForce = inForce(anthersSupportFromSub(sub), heldAnthers.toFixed(2)).toNumber();
-		await applyAnthersBadgeHolding(acct.userId, anthersInForce);
-		await applyDirectedSupportFromSub(acct.userId, sub);
+		const anthersInForce = inForce(
+			anthersSupportFromSub(sub, anthersId),
+			heldAnthers.toFixed(2),
+		).toNumber();
+		/**
+		 * ⭐ **One apply for every destination, Anthers' own line included** (the issuer pass,
+		 * 2026-10-04). The separate `applyAnthersBadgeHolding` dissolved into
+		 * `applyDirectedSupport`: the Anthers line is stamped with the account's user
+		 * id like every creator's, so the directed apply's find-or-create resolves its rung
+		 * exactly as it resolves a creator's. The in-force rule rides in as a substitution —
+		 * the Anthers pick's amount is the held-over figure when that is higher, so the
+		 * add-only-upsert (which cannot lower within a cycle) receives the amount the
+		 * holding should end at rather than the raw item price the items already moved off
+		 * of. A $0 Anthers amount still means Free: the apply is skipped for zero-amount
+		 * picks, and no holding is written for the new cycle — Free is the absence of a
+		 * held rung, not a row at $0 (the 2026-10-03 reversal).
+		 */
+		const picks = directedPicksFromSub(sub, anthersId).map((pick) =>
+			pick.creatorId === anthersId ? { ...pick, amount: anthersInForce } : pick,
+		);
+		await applyDirectedSupport(acct.userId, picks);
 		// The cycle snapshot keeps its history columns — pass the numbers this run
 		// computed; the columns are the record, never a read source for live state.
 		await snapshotCycle(acct.userId, anthersInForce, directedTotal.toNumber());
@@ -641,21 +681,20 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 }
 
 /**
- * The held org rung's threshold, for the sync's own in-force comparison.
+ * The held Anthers rung's threshold, for the sync's own in-force comparison.
  *
  * A read, not a re-export: this returns 0 (rather than throwing) when no ladder is
  * seeded, because a sync against an unseeded database must proceed with amounts of zero
- * rather than fail the billing webhook — the loud failure belongs to the org read at
+ * rather than fail the billing webhook — the loud failure belongs to the Anthers read at
  * resolve time, and seeding is a deployment step that this sync cannot perform.
  */
 async function heldAnthersBadgeAmountForSync(userId: number): Promise<number> {
-	const [row] = await db
-		.select({ id: badges.creatorId })
-		.from(badges)
-		.where(eq(badges.threshold, "0.00"))
-		.orderBy(badges.id)
-		.limit(1);
-	if (!row) return 0;
+	let anthersId: number;
+	try {
+		anthersId = await anthersUserId();
+	} catch {
+		return 0;
+	}
 	const cycle = currentCycleKey();
 	const [held] = await db
 		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
@@ -665,7 +704,7 @@ async function heldAnthersBadgeAmountForSync(userId: number): Promise<number> {
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, cycle),
-				sql`${badges.creatorId} = ${row.id}`,
+				sql`${badges.creatorId} = ${anthersId}`,
 			),
 		);
 	return Number(held?.held ?? 0);
@@ -693,7 +732,7 @@ export async function applyAnthersBadgeHolding(
 	userId: number,
 	anthersDollars: number,
 ): Promise<void> {
-	const org = await orgOwnerUserId();
+	const org = await anthersUserId();
 	const cycle = currentCycleKey();
 	// The org's other rungs go first — replace-not-stack, and it clears the held rung on
 	// a cancel, which is the whole of "reverts to Free".
@@ -789,11 +828,10 @@ async function lapseUnpaidMonth(userId: number): Promise<void> {
  * Idempotent: the webhook can deliver the same event more than once, so each row is an
  * upsert keyed on (user, badge, cycle).
  */
-async function applyDirectedSupportFromSub(
+export async function applyDirectedSupport(
 	userId: number,
-	sub: Stripe.Subscription,
+	picks: { creatorId: number; amount: number }[],
 ): Promise<void> {
-	const picks = directedPicksFromSub(sub);
 	if (picks.length === 0) return;
 
 	const cycle = currentCycleKey();
@@ -820,6 +858,24 @@ async function applyDirectedSupportFromSub(
 				})
 				.returning({ id: badges.id });
 		}
+		// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
+		// rungs rather than sitting beside them**, the same rule the picker's POST
+		// enforces and the one the dissolved Anthers special path carried. Without the
+		// delete, a webhook after a re-price stacks the new rung beside the old one and
+		// every MAX-reading surface reports the higher — a viewer who lowered from $12
+		// to $3 would keep reading $12 the moment the cycle turned, with no error
+		// anywhere. The unique key makes the re-delivered webhook idempotent; this makes
+		// a *changed* subscription honest.
+		await db
+			.delete(userBadges)
+			.where(
+				and(
+					eq(userBadges.userId, userId),
+					eq(userBadges.billingCycle, cycle),
+					ne(userBadges.badgeId, badge.id),
+					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${pick.creatorId})`,
+				),
+			);
 		await db
 			.insert(userBadges)
 			.values({ userId, badgeId: badge.id, billingCycle: cycle })

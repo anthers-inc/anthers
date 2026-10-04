@@ -159,7 +159,7 @@ export default function ResourcesPage() {
 					<H2>Not finding what you need?</H2>
 					<Lede>
 						The tools above cover the numbers. For everything else — how accounts work, what's
-						shipping next, why we're built as a non-profit — start with the FAQ.
+						shipping next, why we're built as a nonprofit — start with the FAQ.
 					</Lede>
 					<div className="mt-9 flex flex-wrap justify-center gap-3">
 						<Link to="/faq" className="btn btn-primary rounded-lg px-7">
