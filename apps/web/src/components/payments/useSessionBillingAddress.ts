@@ -91,7 +91,15 @@ export function useSessionBillingAddress(
 	// tick, so the resolve effect below must not name it as a dependency — it would
 	// re-arm on every tick. The latest session object is read through this ref at fire
 	// time instead; this effect keeps it current on every commit.
-	const checkoutRef = useRef<StripeCheckoutSession | null>(null);
+	// 🚨 The ref is typed from the hook's own SUCCESS branch — `Extract` picks the
+	// merged value the hook actually returns (session state AND the update actions,
+	// `updateBillingAddress` among them). Typing it as the narrow `StripeCheckoutSession`
+	// does not compile against the real package types: the action lives on the SDK
+	// object, not the session interface. (CI caught exactly this — a hand-patched local
+	// `node_modules` copy of stripe-js's types, widening the session interface to carry
+	// the action, let the wrong typecheck pass locally while the fresh CI install
+	// failed it. Found 2026-10-04 on PR #348.)
+	const checkoutRef = useRef<Extract<StripeUseCheckoutElementsResult, { type: "success" }>["checkout"] | null>(null);
 	useEffect(() => {
 		checkoutRef.current = checkoutState.type === "success" ? checkoutState.checkout : null;
 	});
