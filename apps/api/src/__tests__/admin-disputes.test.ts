@@ -19,6 +19,12 @@
  *   • the standing states fire from EITHER half of the line — the count is what a small
  *     account trips first, so a state computed from the ratio alone would stay quiet
  *     through it;
+ *   • the standing count is tested in an ERA the suite owns (rows stamped into an empty
+ *     era, read through the service's own `now`), so the window arithmetic — both edges,
+ *     the `warning_*` exclusion, closed rows still counting — is exact and provable
+ *     without depending on what any other suite left in the real window, which is where
+ *     the old whole-table `before + 1` delta broke (order-dependent greenness, audit
+ *     finding 8's unit half);
  *   • ratio null is "nothing to say," never 0%;
  *   • an open dispute's evidence deadline joins the deadline list through the existing
  *     gather, and a closed dispute's does not.
@@ -30,6 +36,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { disputes, invoices, purchases, users, works } from "@anthers/db/schema";
+import { DISPUTE_WINDOW_DAYS } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -215,6 +222,12 @@ async function dispute(opts: {
 	status?: string;
 	outcome?: string | null;
 	evidenceDueBy?: Date | null;
+	/**
+	 * Stamps the row into an era the suite owns — the standing panel's test (below)
+	 * counts a window no other fixture can enter. Undefined keeps the column's own
+	 * default (now), which is what the real path writes.
+	 */
+	createdAt?: Date;
 }) {
 	const [row] = await db
 		.insert(disputes)
@@ -232,6 +245,7 @@ async function dispute(opts: {
 			evidenceDueBy:
 				opts.evidenceDueBy === undefined ? new Date(Date.now() + 10 * DAY_MS) : opts.evidenceDueBy,
 			outcome: opts.outcome ?? null,
+			...(opts.createdAt === undefined ? {} : { createdAt: opts.createdAt }),
 		})
 		.returning({ id: disputes.id });
 	fixtureDisputeIds.push(row.id);
@@ -396,14 +410,97 @@ describe("the standing panel", () => {
 	});
 
 	it("counts the window's disputes and names the state from them", async () => {
-		const before = await disputesList();
+		// 🚨 The count is read in an ERA this suite owns rather than the real one, which
+		// is the standing-test audit's cure for order-dependent greenness (finding 8's
+		// unit half): the old form read the whole table's `before + 1`, green only while
+		// every other suite's cleanup happened to keep the window still — and it flaked
+		// live in a full-suite run on 2026-10-04, passing isolated. These rows are
+		// stamped into an empty era and read through `disputeStanding`'s own `now`, so
+		// every figure below is exactly this suite's, whatever any other suite left in
+		// the real window.
+		const { disputeStanding } = await import("../services/admin-disputes.js");
+		const ERA_NOW = new Date("2020-07-01T00:00:00Z");
+		const windowStartMs = ERA_NOW.getTime() - DISPUTE_WINDOW_DAYS * DAY_MS;
+
+		// The era is empty before we furnish it — the assertion that makes every later
+		// figure exact. Its ratio is also null: no successful payments exist in the era,
+		// which is the small-account case the count half exists for — the state can
+		// fire on the count while the ratio has nothing to say.
+		const before = await disputeStanding(ERA_NOW);
+		expect(before.count).toBe(0);
+		expect(before.ratio).toBeNull();
+		expect(before.state).toBe("quiet");
+
+		// One second before the window's start: outside, never counted — the window's
+		// opening edge. (One second after its end is furnished below, for the same
+		// proof at the closing edge.)
+		await dispute({ createdAt: new Date(windowStartMs - 1000) });
+
+		// Three open rows inside the window. A count of 3 is half of Visa's VAMP line
+		// (5 a month) with the ratio still null — "approaching" from the count half
+		// alone, the trip the pure tests above pin and this proves the query serves.
+		const inWindow = new Date("2020-06-15T12:00:00Z");
+		for (let i = 0; i < 3; i += 1) {
+			await dispute({ createdAt: new Date(inWindow.getTime() + i * 1000) });
+		}
+		const approaching = await disputeStanding(ERA_NOW);
+		expect(approaching.count).toBe(3);
+		expect(approaching.ratio).toBeNull();
+		expect(approaching.state).toBe("approaching");
+
+		// A closed dispute still counts — the window's rows are disputes that landed,
+		// not only ones a person still owes evidence on (that is `openCount`'s read).
+		await dispute({
+			createdAt: new Date(inWindow.getTime() + 10 * 1000),
+			status: "lost",
+			outcome: "lost",
+		});
+		// A fourth open row carries the count across the full line: early-warning from
+		// the count half alone.
+		await dispute({ createdAt: new Date(inWindow.getTime() + 20 * 1000) });
+		const warning = await disputeStanding(ERA_NOW);
+		expect(warning.count).toBe(5);
+		expect(warning.ratio).toBeNull();
+		expect(warning.state).toBe("early-warning");
+
+		// A `warning_*` row in the window is radar, not a dispute that landed — the
+		// exclusion every count here and in `disputeActivityRatio` carries. It sits in
+		// the window and the count stays at 5.
+		await dispute({
+			createdAt: new Date(inWindow.getTime() + 30 * 1000),
+			status: "warning_closed",
+		});
+		const excluding = await disputeStanding(ERA_NOW);
+		expect(excluding.count).toBe(5);
+		expect(excluding.state).toBe("early-warning");
+
+		// One second after the era's end: outside, never counted — the window's
+		// closing edge.
+		await dispute({ createdAt: new Date(ERA_NOW.getTime() + 1000) });
+		const edges = await disputeStanding(ERA_NOW);
+		expect(edges.count).toBe(5);
+	});
+
+	it("the panel and the list read the same rows on one request", async () => {
+		// Same single request, two halves — so no suite-order or cleanup timing can move
+		// them apart, which is what the old whole-table `before + 1` delta left the
+		// coupling exposed to. `openCount` is an all-time read (no window), and the
+		// list is an all-time list (loadDisputes filters nothing), so the panel's open
+		// count is exactly the rows the list shows as open, warning radar excluded.
 		const p = await purchase({ buyer: otherBuyerId });
 		const d = await dispute({ purchaseId: p.id, userId: otherBuyerId });
 		const body = await disputesList();
-		expect(body.standing.count).toBe(before.standing.count + 1);
-		expect(body.standing.openCount).toBe(before.standing.openCount + 1);
 		// The row the list reads and the row the panel reads are the same row.
 		expect(body.items.find((i) => i.id === d.id)).toBeDefined();
+		const openShown = body.items.filter(
+			(i) => i.outcome === null && !i.status.startsWith("warning_"),
+		).length;
+		expect(body.standing.openCount).toBe(openShown);
+		// And the row just inserted is inside the panel's window count, whatever else
+		// the window holds: standing is not asserted against a whole-table delta any
+		// more (the era test above owns the arithmetic), but a landed dispute must
+		// still stand in it.
+		expect(body.standing.count).toBeGreaterThanOrEqual(1);
 	});
 });
 
