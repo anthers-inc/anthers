@@ -44,12 +44,40 @@ describe("the basket page's two-column layout", () => {
 		// column first (order-1) and the checkout last (order-3) in the reading flow.
 		expect(source).toContain("flex flex-col");
 		expect(source).toContain("order-3");
-		expect(source).toContain("lg:order-2");
+		expect(source).toContain("order-1");
+	});
+
+	it("sits the checkout column LEFT on desktop, the items column right (2026-10-04)", () => {
+		// Flip day: the checkout (form) column was visually right since the two-column
+		// layout landed; Parker turned it around the next day — the form belongs left,
+		// the pricing right. At `lg` the checkout is order-1 and the items order-2.
+		expect(source).toMatch(/className="order-3 lg:order-1" data-testid="basket-checkout-column"/);
+		expect(source).toMatch(/className="order-1 lg:order-2[^"]*" data-testid="basket-items-column"/);
+		// And the old right-side placement of the checkout column is gone.
+		expect(source).not.toContain('order-3 lg:order-2" data-testid="basket-checkout-column"');
 	});
 
 	it("keeps the checkout and its column locatable — the e2e specs anchor on these", () => {
 		expect(source).toContain('data-testid="basket-checkout-column"');
 		expect(source).toContain('data-testid="basket-items-column"');
 		expect(source).toContain('data-testid="basket-items"');
+	});
+
+	it("splits the receipt into the buyer's section and the creator's section", () => {
+		// 2026-10-04: the card fee is not the buyer's to pay — it comes out of the
+		// price. Its line must sit INSIDE the creator's section (after the "You pay"
+		// divider, before the receives line), and never between Subtotal and You pay.
+		// Anchored on the JSX text nodes with surrounding punctuation so comments and
+		// prose cannot satisfy them (the word "receives" itself appears in commentary).
+		const payIdx = source.indexOf(">You pay</span>");
+		const feeIdx = source.indexOf("Card processing");
+		const receivesIdx = source.indexOf('data-testid="basket-creator-earns"');
+		const taxIdx = source.indexOf("sessionTotals?.tax ?? 0");
+		expect(payIdx).toBeGreaterThan(-1);
+		expect(feeIdx).toBeGreaterThan(payIdx);
+		expect(receivesIdx).toBeGreaterThan(feeIdx);
+		// The tax line, by contrast, belongs to the buyer's half — before "You pay".
+		expect(taxIdx).toBeGreaterThan(-1);
+		expect(taxIdx).toBeLessThan(payIdx);
 	});
 });

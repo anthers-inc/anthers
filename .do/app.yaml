@@ -216,6 +216,13 @@ envs:
   - key: STRIPE_PUBLISHABLE_KEY
     scope: RUN_TIME
     value: pk_live_51T9K9C3WJAPZ8pU6Ork5QyDxB39FXOuQig2866QiqjFjzC3fC4Qrszw1Sm2gr7Szrz9DopUgmj42bVQmUWcvVGqp002jowXSre
+  # Card-only checkout (2026-10-04): names the account's "Card only" payment-method
+  # configuration (card on, every other method off) — the buyer-facing list on the
+  # embedded Payment Element is governed by a configuration on this API version, and
+  # this is the one code-side lever onto it. Public value, not a secret.
+  - key: STRIPE_PAYMENT_METHOD_CONFIGURATION
+    scope: RUN_TIME
+    value: pmc_1UMxLl3WJAPZ8pU6EaCMNJie
   - key: STRIPE_SECRET_KEY
     scope: RUN_TIME
     type: SECRET
