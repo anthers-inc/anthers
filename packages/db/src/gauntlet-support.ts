@@ -46,7 +46,7 @@ function cycleKey(): string {
  * reads as $3, never as $15.
  */
 export async function applyAnthersSupport(viewerId: number, dollars: string): Promise<void> {
-	const org = await anthersUserIdOfSession();
+	const anthers = await anthersUserIdOfSession();
 	// Free is the absence of a holding (the 2026-10-03 reversal), not a rung at $0: the
 	// $0 hop clears the viewer's Anthers holdings and writes nothing, which is the same
 	// shape a canceled subscription leaves.
@@ -54,14 +54,14 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 		await db
 			.delete(userBadges)
 			.where(
-				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
 			);
 		return;
 	}
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, org), eq(badges.threshold, dollars)))
+		.where(and(eq(badges.creatorId, anthers), eq(badges.threshold, dollars)))
 		.limit(1);
 	if (!rung) {
 		throw new Error(
@@ -71,7 +71,7 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 	await db
 		.delete(userBadges)
 		.where(
-			sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+			sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
 		);
 	await db.insert(userBadges).values({
 		userId: viewerId,

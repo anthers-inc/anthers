@@ -60,8 +60,8 @@ export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
  * anybody could, and the pending-signup reservation keeps the race honest the same way it
  * does for any account.
  */
-export const GAUNTLET_ORG_USERNAME = "anthers";
-export const GAUNTLET_ORG_EMAIL = `${GAUNTLET_PREFIX}org@example.test`;
+export const GAUNTLET_ANTHERS_USERNAME = "anthers";
+export const GAUNTLET_ANTHERS_EMAIL = `${GAUNTLET_PREFIX}org@example.test`;
 
 /**
  * The handle a fixture account actually holds, for a harness that cannot import the API's

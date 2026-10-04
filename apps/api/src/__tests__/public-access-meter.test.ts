@@ -39,12 +39,12 @@ import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureOrgLadder } from "./org-ladder-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -198,12 +198,12 @@ function playlist(workId: number, cookie?: string) {
  * and only the Anthers ladder, since Anthers' set is the one whose price lifts this meter.
  */
 async function setSupport(userId: number, anthersSupport: number) {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const threshold = anthersSupport.toFixed(2);
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -211,7 +211,7 @@ async function setSupport(userId: number, anthersSupport: number) {
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the meter suite holds.",
@@ -226,7 +226,7 @@ async function setSupport(userId: number, anthersSupport: number) {
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	if (anthersSupport > 0) {

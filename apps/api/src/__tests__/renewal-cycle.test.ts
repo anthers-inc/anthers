@@ -32,10 +32,10 @@ import { planItemChange, syncSubscriptionToAccount } from "../services/billing";
 import { applyReductionsToInvoice } from "../services/support-reductions";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureOrgLadder } from "./org-ladder-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
-const ANTHERS_ID = await ensureOrgLadder();
+const ANTHERS_ID = await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
@@ -206,11 +206,11 @@ async function clearSubscription() {
  * holding, replacing the Anthers ladder's other rungs the way every real write does.
  */
 async function holdOrgRung(userId: number, threshold: string): Promise<void> {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -218,7 +218,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the renewal suite holds.",
@@ -231,7 +231,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, currentCycleKey()),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	await db
@@ -241,7 +241,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 
 /** What the Anthers ladder says this user holds, in dollars — the read the assertions make. */
 async function heldOnOrgLadder(userId: number): Promise<number> {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const [held] = await db
 		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
 		.from(userBadges)
@@ -250,7 +250,7 @@ async function heldOnOrgLadder(userId: number): Promise<number> {
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, currentCycleKey()),
-				sql`${badges.creatorId} = ${orgId}`,
+				sql`${badges.creatorId} = ${anthersId}`,
 			),
 		);
 	return Number(held?.held ?? 0);

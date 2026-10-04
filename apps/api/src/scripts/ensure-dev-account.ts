@@ -99,7 +99,7 @@ async function main() {
 	// handle (`anthersUserId`), and the dev account's handle is the developer's own name;
 	// seeding onto it would leave every Anthers-side read throwing. The stand-in takes the
 	// reserved "anthers" name on the session's suffix, brought like the production account
-	// it stands in for — the same shape `ensureOrg` (gauntlet) and the session preload
+	// it stands in for — the same shape `ensureAnthersAccount` (gauntlet) and the session preload
 	// create. Found by email so a re-run repairs rather than duplicates, matching the
 	// dev-account reconciliation above.
 	const LADDER_EMAIL = "seed_org_ladder@example.com";

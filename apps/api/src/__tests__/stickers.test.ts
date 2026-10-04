@@ -30,12 +30,12 @@ import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { userIdByName } from "./handles.js";
-import { ensureOrgLadder } from "./org-ladder-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
 
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
@@ -66,12 +66,12 @@ async function atSupport(userId: number, dollars: number, cycle: string): Promis
 		})
 		.onConflictDoNothing();
 	if (dollars <= 0) return;
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const threshold = dollars.toFixed(2);
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -79,7 +79,7 @@ async function atSupport(userId: number, dollars: number, cycle: string): Promis
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the sticker suite holds.",
@@ -92,7 +92,7 @@ async function atSupport(userId: number, dollars: number, cycle: string): Promis
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, cycle),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	await db

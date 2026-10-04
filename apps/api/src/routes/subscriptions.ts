@@ -1549,7 +1549,7 @@ const subscriptionRoutes = new Hono()
 
 		// The Anthers creator account, so its rungs can be excluded from the directed
 		// budget's arithmetic — see `allocated` below for why.
-		const org = await anthersUserId();
+		const anthers = await anthersUserId();
 
 		const result = await db
 			.select({
@@ -1573,7 +1573,7 @@ const subscriptionRoutes = new Hono()
 		// Summing it here would double-count the same charge and quietly shrink the picker
 		// until a mid-ladder walk ran out of "budget" the viewer had paid for.
 		const allocated = result
-			.filter((r) => r.badge.creatorId !== org)
+			.filter((r) => r.badge.creatorId !== anthers)
 			.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
 
 		return c.json({
@@ -1635,7 +1635,7 @@ const subscriptionRoutes = new Hono()
 
 			// The Anthers creator account, for the allocation check's exclusion — see the comment
 			// beside `currentAllocated` below.
-			const org = await anthersUserId();
+			const anthers = await anthersUserId();
 
 			// The Badge itself: its threshold is the amount this pick directs, and the
 			// route never takes a number from the request — the pick names the rung.
@@ -1649,7 +1649,7 @@ const subscriptionRoutes = new Hono()
 			// changed (signup and the dashboard's Anthers side) — routing it through the
 			// directed picker would draw it from the creator budget, which is the same
 			// conflation the allocation check excludes the Anthers account from.
-			if (badge.creatorId === org) {
+			if (badge.creatorId === anthers) {
 				return c.json(
 					{ error: "Anthers' own Badges are chosen with your Anthers amount, not a creator pick" },
 					400,
@@ -1697,7 +1697,7 @@ const subscriptionRoutes = new Hono()
 						eq(userBadges.userId, user.id),
 						eq(userBadges.billingCycle, cycle),
 						sql`${badges.creatorId} != ${badge.creatorId}`,
-						sql`${badges.creatorId} != ${org}`,
+						sql`${badges.creatorId} != ${anthers}`,
 					),
 				);
 

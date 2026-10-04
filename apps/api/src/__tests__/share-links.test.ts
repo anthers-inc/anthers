@@ -45,13 +45,13 @@ import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
-import { ensureOrgLadder } from "./org-ladder-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 // The Anthers ladder seeds first, so its owner sits below the purge's high-water mark.
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -98,12 +98,12 @@ async function forceLink(sharerId: number, workId: number): Promise<string> {
  * The share-link suite's stand-in for the amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string): Promise<void> {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const cycle = sql`to_char(now(), 'YYYY-MM-01')`;
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -111,7 +111,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the share-link suite holds.",
@@ -124,7 +124,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, cycle),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	await db.insert(userBadges).values({ userId, badgeId: badge.id, billingCycle: cycle });

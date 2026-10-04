@@ -61,8 +61,8 @@ import {
 	GAUNTLET_BADGES,
 	GAUNTLET_CREATOR_EMAIL,
 	GAUNTLET_CREATOR_USERNAME,
-	GAUNTLET_ORG_EMAIL,
-	GAUNTLET_ORG_USERNAME,
+	GAUNTLET_ANTHERS_EMAIL,
+	GAUNTLET_ANTHERS_USERNAME,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_VIEWER_EMAIL,
@@ -215,7 +215,7 @@ async function ensureViewer(inst: Instance): Promise<void> {
  * The session's Anthers-stand-in account — the `users` row that owns the seeded Anthers
  * Badge ladder.
  *
- * See `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
+ * See `GAUNTLET_ANTHERS_USERNAME` for why the owner can be neither the creator nor the
  * viewer, and for why the account takes the reserved "anthers" name. This account gates
  * nothing and holds nothing; its only job is to be the issuer of the Anthers rungs so
  * Anthers-ladder reads and creator-ladder reads never collide.
@@ -229,7 +229,7 @@ async function ensureViewer(inst: Instance): Promise<void> {
  * "I created it".
  * Any other failure still throws.
  */
-async function ensureOrg(): Promise<number> {
+async function ensureAnthersAccount(): Promise<number> {
 	const resolveId = async (): Promise<number | null> => {
 		// The bypassed name, not `fixtureHandle`: `localHandleName` downgrades the reserved
 		// "anthers" to "anthers-dev", but this account is created with `bypassReserved`, so
@@ -248,13 +248,13 @@ async function ensureOrg(): Promise<number> {
 
 	try {
 		const created = await createLocalAccount({
-			email: GAUNTLET_ORG_EMAIL,
+			email: GAUNTLET_ANTHERS_EMAIL,
 			// ⭐ Brought, like the production account it stands in for: the real
 			// `@anthers.org` account brought its Bluesky identity, and the brought path
 			// has no reserved-name check — so the stand-in takes the reserved "anthers"
 			// name on the session's own suffix without a hole in the reservation list.
 			identity: "brought",
-			handleName: GAUNTLET_ORG_USERNAME,
+			handleName: GAUNTLET_ANTHERS_USERNAME,
 			bypassReserved: true,
 			emailVerified: true,
 			fields: {
@@ -264,7 +264,7 @@ async function ensureOrg(): Promise<number> {
 				termsAcceptedAt: new Date(),
 			},
 		});
-		console.log(`${TAG} created Anthers stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
+		console.log(`${TAG} created Anthers stand-in "${GAUNTLET_ANTHERS_USERNAME}" (id ${created.id})`);
 		return created.id;
 	} catch (err) {
 		// The brought path has no pending-signup reservation, so the race is the PDS
@@ -281,7 +281,7 @@ async function ensureOrg(): Promise<number> {
 			if (Date.now() > deadline) {
 				throw err instanceof Error
 					? new Error(
-							`the Anthers stand-in "${GAUNTLET_ORG_USERNAME}" lost a creation race to another seeder and never appeared (${err.message})`,
+							`the Anthers stand-in "${GAUNTLET_ANTHERS_USERNAME}" lost a creation race to another seeder and never appeared (${err.message})`,
 						)
 					: err;
 			}
@@ -631,15 +631,15 @@ async function main(): Promise<void> {
 	// viewer holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws
 	// loudly when no ladder exists, and an e2e session runs this script rather than
 	// `db:seed` — so the ladder is ensured here, owned by the fixture's Anthers stand-in
-	// (see `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
+	// (see `GAUNTLET_ANTHERS_USERNAME` for why the owner can be neither the creator nor the
 	// viewer). `ensure-dev-account` (the dev door) seeds the same rows owned by the dev
 	// account; whichever runs first wins and both are idempotent.
 	// 🚨 **This must run AFTER `resetGates`** — that rebuild deletes every badge the
 	// fixture creator owns, and the Anthers rows would be rebuilt by nobody if seeded first.
 	if (await anthersLadderMissing()) {
-		const orgId = await ensureOrg();
-		await ensureAnthersBadges(orgId);
-		console.log(`${TAG} seeded the Anthers Badge ladder (owned by ${GAUNTLET_ORG_USERNAME})`);
+		const anthersId = await ensureAnthersAccount();
+		await ensureAnthersBadges(anthersId);
+		console.log(`${TAG} seeded the Anthers Badge ladder (owned by ${GAUNTLET_ANTHERS_USERNAME})`);
 	}
 
 	console.log("");

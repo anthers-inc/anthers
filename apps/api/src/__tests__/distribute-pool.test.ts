@@ -27,11 +27,11 @@ import { distributePool } from "../jobs/distribute-pool";
 import { createAccount } from "./account-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureOrgLadder } from "./org-ladder-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 /** A cycle far enough out that it can't collide with fixture or dev data. */
@@ -72,12 +72,12 @@ async function seedCycle(
 		})
 		.returning({ id: billingAccounts.id });
 	{
-		const orgId = await ensureOrgLadder();
+		const anthersId = await ensureAnthersLadder();
 		const threshold = anthersSupport.toFixed(2);
 		const [rung] = await db
 			.select({ id: badges.id })
 			.from(badges)
-			.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+			.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 			.limit(1);
 		const badge =
 			rung ??
@@ -85,7 +85,7 @@ async function seedCycle(
 				await db
 					.insert(badges)
 					.values({
-						creatorId: orgId,
+						creatorId: anthersId,
 						threshold,
 						label: `$${threshold}`,
 						description: "A fixture rung the distribution suite holds.",
