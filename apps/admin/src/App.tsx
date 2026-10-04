@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 import { useSession } from "./lib/session";
 import Accounts from "./pages/Accounts";
+import AtProtoRecords from "./pages/AtProtoRecords";
 import ClosePackage from "./pages/books/ClosePackage";
 import Disputes from "./pages/books/Disputes";
 import SalesTaxWorksheet from "./pages/books/SalesTax";
@@ -45,6 +46,7 @@ export default function App() {
 				<Route path="moderation/people" element={<People />} />
 				<Route path="moderation/people/:id" element={<People />} />
 				<Route path="infrastructure" element={<Infrastructure />} />
+				<Route path="infrastructure/atproto" element={<AtProtoRecords />} />
 				<Route path="issues" element={<IssueReports />} />
 				<Route path="books/sales-tax" element={<SalesTaxWorksheet />} />
 				<Route path="books/sales-tax-forecast" element={<SalesTaxForecast />} />
