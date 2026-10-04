@@ -152,7 +152,7 @@ describe("links into the FAQ", () => {
 	// A question's id is its anchor, so a link held by another surface is a route reference
 	// nothing else can follow: it typechecks and lints while pointing at a question renamed
 	// out from under it, and lands a user at the top of the page instead.
-	it("the Studio's note on rated Public Access opens the answer about reader controls", () => {
+	it("the Studio's note on rated Public Access opens the answer about content controls", () => {
 		const [path, anchor] = RATED_PUBLIC_ACCESS_HELP.split("#");
 		expect(path).toBe("/faq");
 		const item = ALL_FAQ_ITEMS.find((i) => i.id === anchor);
