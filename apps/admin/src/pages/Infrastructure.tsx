@@ -19,7 +19,12 @@ import {
 	type ResourceComponent,
 	type ResourceSignal,
 } from "@anthers/shared/resource-thresholds";
-import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
+import {
+	ArrowTopRightOnSquareIcon,
+	ChevronDownIcon,
+	ChevronUpIcon,
+} from "@heroicons/react/24/outline";
+import { useState } from "react";
 import { ErrorAlert, Loading, PageHeader, SectionHeading } from "../components/ui";
 import { useAdminData } from "../lib/load";
 
@@ -308,6 +313,39 @@ const OPERATOR_LINKS = [
 	},
 ];
 
+/**
+ * An error cell that starts as one clipped line and expands to the full, selectable text on click.
+ * Long failure messages are the whole story of a failure row; the tooltip could show them but not
+ * let an operator copy them, so the toggle is the cell itself rather than a separate control.
+ */
+function ExpansibleError({ text }: { text: string }) {
+	const [expanded, setExpanded] = useState(false);
+	if (!text) return <>—</>;
+
+	return expanded ? (
+		<button
+			type="button"
+			className="block max-w-md whitespace-pre-wrap break-words text-left font-mono text-xs text-error"
+			onClick={() => setExpanded(false)}
+			aria-expanded
+		>
+			{text}
+			<ChevronUpIcon className="ml-1 inline h-3 w-3 align-[-1px] text-base-content/40" />
+		</button>
+	) : (
+		<button
+			type="button"
+			className="block max-w-md truncate font-mono text-xs hover:text-primary"
+			onClick={() => setExpanded(true)}
+			title={text}
+			aria-expanded={false}
+		>
+			{text}
+			<ChevronDownIcon className="ml-1 inline h-3 w-3 align-[-1px] text-base-content/40" />
+		</button>
+	);
+}
+
 export default function Infrastructure() {
 	const { data: jobs, loading, error, reload } = useAdminData<Jobs>("/api/admin/jobs");
 
@@ -399,8 +437,8 @@ export default function Infrastructure() {
 															<td className="whitespace-nowrap text-xs">
 																{new Date(f.createdOn).toLocaleString()}
 															</td>
-															<td className="max-w-md truncate text-xs" title={f.error}>
-																{f.error || "—"}
+															<td className="text-xs">
+																<ExpansibleError text={f.error} />
 															</td>
 														</tr>
 													))}
@@ -452,8 +490,8 @@ export default function Infrastructure() {
 															{p.stuck ? "stuck" : p.status}
 														</span>
 													</td>
-													<td className="max-w-xs truncate text-xs" title={p.error}>
-														{p.error || "—"}
+													<td className="text-xs">
+														<ExpansibleError text={p.error} />
 													</td>
 													<td className="whitespace-nowrap text-xs">
 														{new Date(p.updatedAt).toLocaleString()}
