@@ -34,6 +34,15 @@ import {
 	ABUSE_URL_MAX,
 	fileAbuseReport,
 } from "../services/abuse-reports.js";
+import {
+	fileIssueReport,
+	ISSUE_DETAILS_MAX,
+	ISSUE_DETAILS_MIN,
+	ISSUE_EMAIL_MAX,
+	ISSUE_SUMMARY_MAX,
+	ISSUE_SUMMARY_MIN,
+	ISSUE_URL_MAX,
+} from "../services/issue-reports.js";
 import { fileReport, findSubject } from "../services/moderation.js";
 
 const reportSchema = z.object({
@@ -58,6 +67,22 @@ const abuseReportSchema = z.object({
 	details: z.string().trim().min(ABUSE_DETAILS_MIN).max(ABUSE_DETAILS_MAX),
 	// Optional, and requiring it would turn an anonymous route into an identified one.
 	reporterEmail: z.string().trim().email().max(320).optional().or(z.literal("")),
+});
+
+/**
+ * What the Issue Reports form accepts — no URL taxonomy, no legal reasons, just what went
+ * wrong, where it went wrong, and a way to answer.
+ *
+ * The page's location field is **free-text on purpose**: the reporter may paste a URL or
+ * describe the screen they were on, and both are the record. The email stays optional,
+ * again matching the abuse intake — requiring one would turn a bug report into an
+ * identified one, and a reporter who cannot file anonymously waits, or files nothing.
+ */
+const issueReportSchema = z.object({
+	summary: z.string().trim().min(ISSUE_SUMMARY_MIN).max(ISSUE_SUMMARY_MAX),
+	details: z.string().trim().min(ISSUE_DETAILS_MIN).max(ISSUE_DETAILS_MAX),
+	pageUrl: z.string().trim().max(ISSUE_URL_MAX).optional().or(z.literal("")),
+	reporterEmail: z.string().trim().email().max(ISSUE_EMAIL_MAX).optional().or(z.literal("")),
 });
 
 /**
@@ -99,6 +124,25 @@ function tooManyFrom(key: string): boolean {
 	// Bounded so a long-running process cannot accumulate a key per address seen. The map
 	// is a cache of the last few minutes, and dropping it entirely only ever forgives.
 	if (abuseSubmissions.size > 10_000) abuseSubmissions.clear();
+	return false;
+}
+
+const ISSUE_WINDOW_MS = 10 * 60 * 1000;
+const ISSUE_MAX_PER_WINDOW = 5;
+const issueSubmissions = new Map<string, number[]>();
+
+/** The issue intake's own cap — deliberately not shared with the abuse one, so a burst of one kind never starves the other's allowance. */
+function tooManyIssueFrom(key: string): boolean {
+	if (!key) return false; // Fails open, for the same reason the abuse cap does.
+	const now = Date.now();
+	const recent = (issueSubmissions.get(key) ?? []).filter((t) => now - t < ISSUE_WINDOW_MS);
+	if (recent.length >= ISSUE_MAX_PER_WINDOW) {
+		issueSubmissions.set(key, recent);
+		return true;
+	}
+	recent.push(now);
+	issueSubmissions.set(key, recent);
+	if (issueSubmissions.size > 10_000) issueSubmissions.clear();
 	return false;
 }
 
@@ -194,6 +238,52 @@ const moderationRoutes = new Hono()
 		// Same silence as the authenticated route and the DMCA intake: what we do next is
 		// operator information. What the reporter is told is that it arrived.
 		return c.json({ reported: true, reportId }, 201);
+	})
+
+	/**
+	 * Report a bug or defect in Anthers itself, with no account required.
+	 *
+	 * 🚨 **A separate intake from `/abuse-reports` above, never a second door into it.** That
+	 * route is illegal-content notice-and-action with a statutory destination and a human
+	 * escalation floor; this is plain bug intake about the site working wrong, and `the two
+	 * share no table, no service and no queue` is the boundary — see `services/issue-reports.ts`.
+	 * A person reporting a broken button and a person reporting abuse are different callers
+	 * headed to different queues, and pointing a bug report at the abuse floor would send it
+	 * to a person mid-statutory-duty while a genuine abuse report filed here would wait in a
+	 * bug queue nobody is watching for it.
+	 *
+	 * There is no mail in this pipeline by design — the admin console's queue is where these
+	 * are read — so no rate cap is inherited here either, and this route carries its own,
+	 * narrower than the abuse one: an unauthenticated write endpoint needs *something*, and
+	 * this is the same best-effort in-memory shape rather than invented infrastructure.
+	 */
+	.post("/issue-reports", zValidator("json", issueReportSchema), async (c) => {
+		const limited = tooManyIssueFrom(clientKeyFor(c));
+		if (limited) {
+			return c.json(
+				{
+					error: "Too many reports from here in the last few minutes. Please try again shortly.",
+					code: "rate_limited",
+				},
+				429,
+			);
+		}
+
+		const { summary, details, pageUrl, reporterEmail } = c.req.valid("json");
+		const { issueId } = await fileIssueReport({
+			summary,
+			details,
+			pageUrl,
+			reporterEmail,
+			// Optional, never required, for the same reason the abuse intake reads a session
+			// with `getOptionalUserId` — a signed-out filer is ordinary, not an error.
+			reporterId: await getOptionalUserId(c),
+		});
+
+		// What the reporter is told is that it arrived. What we do with it — triage,
+		// filing, dismissal as a duplicate — is operator information, exactly as on
+		// every other public intake in this app.
+		return c.json({ reported: true, issueId }, 201);
 	});
 
 export { moderationRoutes };

@@ -100,6 +100,7 @@ const ProjectPage = lazy(() => import("./pages/ProjectPage"));
 const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
+const IssueReportsPage = lazy(() => import("./pages/IssueReportsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
@@ -332,6 +333,11 @@ export default function App() {
 					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 					<Route path="/changelog" element={<ChangelogPage />} />
+					{/* Defect reports about the site itself — separate intake from /abuse above,
+					    which is statutory notice-and-action. Both links live in the footer's
+					    Development column, and neither page names the other's process except to
+					    hand the reporter across where it clearly belongs there. */}
+					<Route path="/issues" element={<IssueReportsPage />} />
 
 					{/* Resource tools / calculators — public, work logged-in or out. */}
 					<Route element={<MeadowDecorLayout />}>
