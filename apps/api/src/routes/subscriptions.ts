@@ -91,7 +91,7 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { anthersUserId } from "../services/anthers-badges.js";
+import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds } from "../services/attention-ranges.js";
 import {
 	ensureAnthersProduct,
@@ -563,6 +563,29 @@ const subscriptionRoutes = new Hono()
 	// here. ⚠️ Phase C should note the path change: `/subscriptions/badges` →
 	// `/subscriptions/anthers-badges`.
 	.get("/anthers-badges", (c) => c.json({ badges: BADGE_VIEWS }))
+
+	// ── The seeded ladder, as the database states it ─────────────────────────
+	//
+	// ⭐ **The rows are the source of truth now that they exist** (Parker, 2026-10-03:
+	// "there's no reason to pin `PUBLIC_ACCESS_PRICE` as a doc constant. Go look at the
+	// code — or now the database — and read whatever value is actually there."). The
+	// constants (`ANTHERS_BADGES`, `PUBLIC_ACCESS_PRICE`) remain the seeding's INPUT and
+	// the billing validators' floor, but the copy surfaces — the signup matrix, the
+	// marketing pages, the FAQ, the meter notice — read the seeded value through here so
+	// a change made in the database reaches the copy the next fetch, the way
+	// `econ:figures` already delivers every other published figure from code.
+	//
+	// 🚨 **Refuses rather than falls back when the ladder is unseeded** (503): a placeholder
+	// constant answering in its place would publish the old values past the point they were
+	// retired — the exact drift this endpoint exists to prevent. The signup page's loader
+	// treats the refusal as "figures unknown" and keeps the page usable.
+	.get("/anthers-ladder", async (c) => {
+		const { rungs, publicAccessPrice } = await loadAnthersLadder();
+		if (rungs.length === 0 || publicAccessPrice === null) {
+			return c.json({ error: "The Anthers Badge ladder has not been seeded." }, 503);
+		}
+		return c.json({ rungs, publicAccessPrice });
+	})
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	// ── Public Access meter ──────────────────────────────────────────────────
