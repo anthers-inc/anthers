@@ -35,18 +35,22 @@ export default function BuyNow(props: BuyNowProps) {
 			type="button"
 			className="btn btn-primary"
 			onClick={() => {
-				// Replace-clash handling is `add`'s own behavior: a basket held across
-				// creators is replaced, and Add to-basket's own notice explains it when
-				// the buyer looks. Here the basket page is where they're about to be.
-				add({
-					workId: props.workId,
-					slug: props.slug,
-					title: props.title,
-					price: props.price,
-					creatorHandle: props.creatorHandle,
-					thumbnail: props.thumbnail ?? null,
-				});
-				navigate("/basket");
+				// Replace-clash handling is the basket's own behavior (the server's in
+				// server mode, the hook's in scratch mode): a basket held across creators is
+				// replaced, and Add to-basket's own notice explains it when the buyer looks.
+				// Here the basket page is where they're about to be. The add is awaited in
+				// server mode so navigation lands on the basket the server actually holds —
+				// navigating first would race the POST the page's own GET then answers.
+				void Promise.resolve(
+					add({
+						workId: props.workId,
+						slug: props.slug,
+						title: props.title,
+						price: props.price,
+						creatorHandle: props.creatorHandle,
+						thumbnail: props.thumbnail ?? null,
+					}),
+				).then(() => navigate("/basket"));
 			}}
 		>
 			<BoltIcon className="w-4 h-4" /> Buy Now

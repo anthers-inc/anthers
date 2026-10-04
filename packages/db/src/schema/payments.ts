@@ -264,6 +264,68 @@ export const disputes = pgTable(
 	],
 );
 
+/**
+ * org — the signed-in buyer's basket, one row per (user, Work). A **scratchpad, not a
+ * record** — nothing here is money and nothing is an entitlement — but it is the buyer's,
+ * not the browser's (Parker, 2026-10-03): the basket is scoped to the account, so a second
+ * account signing in on the same machine starts empty. It moved out of client-side
+ * `localStorage` for exactly that reason, and the anonymous scratch basket that still lives
+ * in the browser MERGES into this table at sign-in and is then cleared — once a session has
+ * an account, this table is the only basket it reads.
+ *
+ * 🚨 **Never trusted.** The rows are ids, not facts: every id is re-resolved server-side
+ * through `resolveBasket` at quote and checkout (price, release state, ownership, the
+ * one-creator rule, the item cap — all the refusals that fired on the client-supplied list
+ * still fire on these rows), and `list` returns only what still resolves — so a Work that
+ * stopped being buyable between add and checkout counts on no badge and charges in no
+ * checkout. A tampered table buys nothing it shouldn't.
+ *
+ * ⚠️ **The rows do not self-clean.** A Work that stops being buyable leaves its row here
+ * until the buyer removes it or the basket clears at a completed checkout. That is
+ * deliberate: resolution is what the reads are for, and a sweeper job is one more thing
+ * that can disagree with them.
+ *
+ * 🚨 **One creator per basket**, enforced at `add`: adding a second creator's Work
+ * REPLACES the rows rather than rejecting them — the buyer's most recent intent wins, the
+ * same courtesy the old client-side basket kept. The rule is enforced again at quote and
+ * checkout (`mixed_creators`), because Stripe's `transfer_data.destination` names exactly
+ * one connected account — see `resolveBasket` in `routes/payments.ts`.
+ *
+ * Cascade on both sides, like `library_items`: a basket is a preference, not a record —
+ * it dies with the account and with the Work, and never outlives either.
+ */
+// org — a buyer's basket is the buyer's record (same reasoning as `libraryItems`: the
+// user has no node in the current topology, so their preferences are org-side rows).
+// It sits with the payments tables because only the payments routes read it, but note
+// it is NOT money: no column here is a figure, and nothing downstream books from it.
+export const basketItems = pgTable(
+	"basket_items",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// Cascade, not SET NULL (opposite of `purchases.work_id`): a purchase is money and
+		// must outlive the Work; a basket entry is scratch and must not name a Work that
+		// no longer exists. resolveBasket would refuse the row anyway — this just is not
+		// in the business of remembering it.
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		// Insertion order is the basket's display order — the client's old array order —
+		// and no column reorders it: newest Work at the end, like a physical basket.
+		addedAt: timestamp("added_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// A Work sits in an account's basket once. Both columns are NOT NULL, so unlike
+		// `library_items`' partial uniques this one is plain.
+		uniqueIndex("uq_basket_items_user_work").on(table.userId, table.workId),
+		// The cascade's read side: deleting a Work finds its basket rows here. The user
+		// list is covered by the uniques's leading column.
+		index("idx_basket_items_work").on(table.workId),
+	],
+);
+
 // org — the CRF (Creator Resilience Fund) ledger. Org money record.
 export const crfLedger = pgTable(
 	"crf_ledger",

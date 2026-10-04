@@ -4,7 +4,7 @@ import { userPreferences, users } from "@anthers/db/schema";
 // `BADGE_ORDER` is the display list of Anthers' ladder — Free plus each paid Badge — which
 // is exactly the set a signup's `badge` pick may name. Read from it rather than restating
 // the names, so a rung added to the ladder is pickable the moment it exists.
-import { BADGE_ORDER } from "@anthers/shared/constants";
+import { BADGE_ORDER, MAX_BASKET_ITEMS } from "@anthers/shared/constants";
 import { MAX_PICKED_CREATORS } from "@anthers/shared/signup";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
@@ -34,6 +34,7 @@ import {
 	validateSession,
 	verifyEmailToken,
 } from "../services/auth.js";
+import { addBasketItem } from "../services/basket.js";
 import {
 	sendSignInCodeEmail,
 	sendSignupCodeEmail,
@@ -72,6 +73,16 @@ import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/s
  */
 const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
+});
+
+/**
+ * The anonymous scratch basket the browser hands over at sign-in. Work ids only —
+ * everything else the scratchpad held (titles, prices) was display copy, and the merge's
+ * answer re-derives what matters through the same resolution every other route uses.
+ * Bounded to the basket's own cap, so a padded scratch spends a bounded amount of work.
+ */
+const basketMergeSchema = z.object({
+	items: z.array(z.object({ workId: z.number().int().positive() })).max(MAX_BASKET_ITEMS),
 });
 
 // The names a signup's `badge` pick may carry: Anthers' own ladder, Free included.
@@ -880,6 +891,47 @@ const authRoutes = new Hono()
 
 		return c.json({ user: await serializeUser(result.user) });
 	})
+
+	// ── Basket Merge ─────────────────────────────────────────────────────────
+	/**
+	 * Fold the anonymous scratch basket this browser has been keeping into the account's
+	 * own server-side basket, and clear the scratchpad.
+	 *
+	 * 🚨 **Called after every authentication that lands a session in a browser** — the email
+	 * code's verify and the ATProto callback both call it once `refreshUser` is about to
+	 * succeed (the client, below, makes the call ordering explicit). Not on session
+	 * *restore* (`/auth/me`), on purpose: a returning session is not a new intent, and a
+	 * merge that fired on every page load would be a write path keyed to a read.
+	 *
+	 * The scratch arrives as the client told us, and is treated exactly as the scratchpad
+	 * always deserved: each item goes through `addBasketItem` — the same function the Work
+	 * page's button calls — so the one-creator rule (a clash REPLACES, most recent intent
+	 * wins), the item cap and the existence check all fire rather than being bypassed by a
+	 * bulk insert. Unbuyable items in the scratch are still merged (they are intent, and
+	 * quote/checkout re-resolve everything anyway); a Work that no longer exists is not.
+	 *
+	 * The merge order is scratch order, so "most recent intent" means the LAST scratch item
+	 * on a creator clash — which is what the buyer clicked last.
+	 */
+	.post(
+		"/basket/merge",
+		requireAuth,
+		zValidator("json", basketMergeSchema, invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const added: number[] = [];
+			let replacedCreator: string | null = null;
+			for (const item of c.req.valid("json").items) {
+				const result = await addBasketItem(user.id, item.workId);
+				if (!result.ok) continue; // gone from the catalog — not an intent anyone can honor
+				added.push(item.workId);
+				if (result.replacedCreatorHandle) replacedCreator = result.replacedCreatorHandle;
+			}
+			// The scratchpad is the client's to clear, and it clears it below on `ok` — but the
+			// contract is server-stated all the same: once answered, the browser's copy is dead.
+			return c.json({ added, replacedCreator });
+		},
+	)
 
 	// ── Email Verification ───────────────────────────────────────────────────
 	.post("/verify-email", zValidator("json", verifyEmailSchema, invalidBody), async (c) => {
