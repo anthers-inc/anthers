@@ -72,6 +72,16 @@ export interface ChangelogRelease {
  */
 export const CHANGELOG: ChangelogRelease[] = [
 	{
+		version: "2026.10.7",
+		date: "2026-10-04",
+		lede: "The basket's checkout met its first real use, and this release is what that use turned up.",
+		entries: [
+			"The basket's checkout no longer starts itself over while a buyer is filling it, which used to wipe the card and address mid-fill along with any tax it had already worked out. Only a genuine change to what the basket holds starts it over now.",
+			"Sales tax on the basket fills itself in from the billing address. The calculate-tax button is gone: a complete address resolves the receipt's tax and total on its own, a half-typed one does nothing, and the only button left on the checkout is the one that pays.",
+			"The basket page is two columns now: what is being bought and its receipt on one side, the address and card that pay for them on the other. On a phone they stack to one column: items, receipt, checkout.",
+		],
+	},
+	{
 		version: "2026.10.0",
 		date: "2026-10-02",
 		lede: "Anthers' first numbered release — the changes that landed between opening this changelog's plan and the first calver tag.",
