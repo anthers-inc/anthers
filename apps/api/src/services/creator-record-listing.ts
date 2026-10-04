@@ -50,6 +50,9 @@ export async function syncPostRecord(
 			// Both, and the mapper needs both: a retracted post keeps its `published_at`.
 			isPublished: posts.isPublished,
 			publishedAt: posts.publishedAt,
+			// The stored markdown — what `content` publishes. Dropping it here is how the
+			// record degrades to a listing without anything noticing, which happened once.
+			body: posts.body,
 			atprotoUri: posts.atprotoUri,
 		})
 		.from(posts)

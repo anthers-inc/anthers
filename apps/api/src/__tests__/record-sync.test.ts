@@ -104,6 +104,7 @@ describe("with every schema published", () => {
 			publicId: 12,
 			isPublished: false,
 			publishedAt: null,
+			body: "draft words nobody may read yet",
 		};
 		await syncOwnedRecord({ ownerId: 7, kind: POST_KIND, input: draft, existingUri: null, ...h });
 		expect(h.opened).toEqual([]);

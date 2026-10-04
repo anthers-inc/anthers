@@ -118,6 +118,8 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 				title: "What I Learned Making a Small Thing",
 				isPublished: true,
 				publishedAt: new Date("2026-08-14T00:00:00.000Z"),
+				// The stored body is markdown, and this is what the record's `content` carries.
+				body: "A small thing, and what making it taught me.",
 			})
 			.returning();
 		postId = post.id;
@@ -141,10 +143,13 @@ describe.skipIf(!SERVICE)("a creator's records in a repository Anthers hosts", (
 		expect(record.value.url).toContain(`/posts/${RUN}-published-`);
 		// The post's own date, not the moment the record happened to be written.
 		expect(record.value.publishedAt).toBe("2026-08-14T00:00:00.000Z");
-		// ⚠️ No body. A post is authored as sanitized HTML and the Lexicon publishes markdown, so
-		// there is nothing to carry yet — asserted here as well as in the mapper's own test,
-		// because this is the layer that would actually put somebody's writing on a network.
-		expect(record.value.content).toBeUndefined();
+		// 🚨 The content rides along — markdown in, markdown published, nothing converted
+		// here. This is the layer that actually puts somebody's writing on a network, so
+		// the field it ships is asserted here as well as in the mapper's own test.
+		expect(record.value.content).toEqual({
+			format: "markdown",
+			value: "A small thing, and what making it taught me.",
+		});
 	}, 60_000);
 
 	it("replaces the record rather than creating a second when the post is renamed", async () => {

@@ -10,5 +10,5 @@
 		// `AppType` from apps/api reaches Bun-only files transitively.
 		"types": ["bun"]
 	},
-	"include": ["src"]
+	"include": ["src", "../api/src/types"]
 }

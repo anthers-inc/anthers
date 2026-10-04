@@ -9,5 +9,5 @@
 		// every transitive global surfaces as a TS error. Mirrors apps/web/tsconfig.
 		"types": ["bun"]
 	},
-	"include": ["src"]
+	"include": ["src", "../../apps/api/src/types"]
 }

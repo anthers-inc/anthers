@@ -169,6 +169,11 @@ import {
 	parentalVisibility,
 } from "../services/parental-controls.js";
 import { canBePaid } from "../services/payouts.js";
+import {
+	normalizeStoredMarkdown,
+	POST_BODY_LIMIT,
+	postHtmlToMarkdown,
+} from "../services/post-markdown.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
 import { queueRecordSync } from "../services/record-sync.js";
@@ -612,6 +617,36 @@ async function replyRefusal(
 	return null;
 }
 
+/**
+ * The markdown a post save carries. The editor sends HTML (`bodyHtml`) and it is converted
+ * at this boundary; a client that already holds markdown sends `body` and it is normalized.
+ * Sending both names the editor's HTML the winner — it is the thing the creator was looking
+ * at — and the `body` a stale client derived from that same HTML is dropped as the shadow
+ * it no longer has any business being.
+ */
+function postBodyFromCreate(data: z.infer<typeof postBaseSchema>): string {
+	if (data.bodyHtml) return postHtmlToMarkdown(data.bodyHtml);
+	return normalizeStoredMarkdown(data.body);
+}
+
+/**
+ * The same rule for a PATCH, against the row's current markdown: only what actually changed
+ * is written, so an unrelated save never rewrites (or re-derives) the stored body.
+ */
+function postBodyUpdatesFromPatch(
+	data: z.infer<typeof updatePostSchema>,
+	existing: typeof posts.$inferSelect,
+): Record<string, unknown> {
+	const updates: Record<string, unknown> = {};
+	if (data.bodyHtml !== undefined) {
+		updates.body = postHtmlToMarkdown(data.bodyHtml);
+	} else if (data.body !== undefined) {
+		updates.body = normalizeStoredMarkdown(data.body);
+	}
+	void existing;
+	return updates;
+}
+
 function estimateReadMinutes(text: string): number {
 	const wordCount = text.split(/\s+/).filter(Boolean).length;
 	return Math.max(1, Math.ceil(wordCount / 200));
@@ -910,7 +945,14 @@ const postBaseSchema = z.object({
 		.max(255)
 		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens")
 		.optional(),
-	body: z.string().optional().default(""),
+	// The post's content, as **markdown — the stored, canonical form**. A client may send it
+	// directly; whatever arrives goes through `normalizeStoredMarkdown`, so a `body` is bound
+	// by exactly what the HTML allowlist permits. Search reads this column directly: LIKE
+	// over markdown source matches the same words a plain-text shadow would, so no shadow.
+	body: z.string().max(POST_BODY_LIMIT).optional().default(""),
+	// The editor's HTML, converted to markdown server-side and never stored. Kept on the
+	// wire because TipTap lives in the client; a client that has moved to markdown simply
+	// stops sending it.
 	bodyHtml: z.string().optional().default(""),
 
 	// Works this post points at. Inert references — they confer no access.
@@ -1249,7 +1291,7 @@ function changedPostFields(
 	if (data.slug !== undefined && data.slug !== existing.slug) changed.push("slug");
 	const bodyChanged =
 		(data.body !== undefined && data.body !== (existing.body ?? "")) ||
-		(data.bodyHtml !== undefined && sanitizePostHtml(data.bodyHtml) !== (existing.bodyHtml ?? ""));
+		(data.bodyHtml !== undefined && postHtmlToMarkdown(data.bodyHtml) !== (existing.body ?? ""));
 	if (bodyChanged) changed.push("body");
 	if (refsChanged) changed.push("linked works");
 	if (data.showOnTimeline !== undefined && data.showOnTimeline !== existing.showOnTimeline)
@@ -2402,7 +2444,7 @@ const contentRoutes = new Hono()
 			slug = await makeUniqueSlug(data.title || "post", postSlugExists);
 		}
 
-		const bodyHtml = sanitizePostHtml(data.bodyHtml);
+		const body = postBodyFromCreate(data);
 		const publicId = await makeUniquePublicId(posts);
 
 		const [post] = await db
@@ -2412,8 +2454,7 @@ const contentRoutes = new Hono()
 				publicId,
 				slug,
 				title: data.title,
-				body: data.body,
-				bodyHtml,
+				body,
 				showOnTimeline: data.showOnTimeline,
 				isPinned: data.isPinned,
 				tags: data.tags,
@@ -2460,6 +2501,8 @@ const contentRoutes = new Hono()
 		void queueRecordSync("post", post.id);
 
 		const linkedWorks = await loadPostWorks(post.id, user.id, deliveryCtx());
+		// The row no longer carries `body_html`; the stored body is markdown in `body`,
+		// which the spread ships as it is.
 		return c.json({ post: { ...post, linkedWorks } }, 201);
 	})
 
@@ -2544,8 +2587,10 @@ const contentRoutes = new Hono()
 			.where(eq(postEdits.postId, post.id))
 			.orderBy(desc(postEdits.editedAt));
 
+		// The row no longer carries `body_html`; the stored body is markdown in `body`.
 		return c.json({
 			post: {
+				// The row carries no `body_html`; the stored body is markdown in `body`.
 				...post,
 				creator: { ...creator, hasStripe: creatorHasStripe },
 				linkedWorks,
@@ -2596,8 +2641,7 @@ const contentRoutes = new Hono()
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
 		if (data.title !== undefined) updates.title = data.title;
-		if (data.body !== undefined) updates.body = data.body;
-		if (data.bodyHtml !== undefined) updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
+		Object.assign(updates, postBodyUpdatesFromPatch(data, existing));
 		if (data.showOnTimeline !== undefined) updates.showOnTimeline = data.showOnTimeline;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;

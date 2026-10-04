@@ -27,6 +27,7 @@ const post = (o: Partial<PublishablePost> = {}): PublishablePost => ({
 	publicId: 1204,
 	isPublished: true,
 	publishedAt: PUBLISHED,
+	body: "## What I learned\n\nA **devlog**, of all things.",
 	...o,
 });
 
@@ -61,13 +62,17 @@ describe("a post", () => {
 		expect(record?.publishedAt).toBe(PUBLISHED.toISOString());
 	});
 
-	// 🚨 `content` is markdown in the Lexicon and a post is stored as sanitized HTML, so there
-	// is nothing to map yet. This asserts the absence deliberately: a mapper that started
-	// converting HTML here would make a lossy conversion happen invisibly on every write.
-	it("carries no content, because there is no markdown source to carry", () => {
+	// 🚨 `content` is why this record exists — the stored body is markdown now, so the record
+	// carries it rather than being a listing with nothing to read. This was written the
+	// other way once (`expect(record).not.toHaveProperty("content")`) when the stored form
+	// was still HTML; the assertion flipped with the storage.
+	it("carries the markdown body as its content", () => {
 		const record = postToRecord(post(), { baseUrl: BASE });
-		expect(record).not.toHaveProperty("content");
-		// And the Lexicon accepts that, which is what makes shipping without it legitimate.
+		expect(record?.content).toEqual({
+			format: "markdown",
+			value: "## What I learned\n\nA **devlog**, of all things.",
+		});
+		// And the Lexicon accepts that, which is what makes shipping it legitimate.
 		expect(postRecord.safeParse(record).success).toBe(true);
 	});
 

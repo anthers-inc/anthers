@@ -9,6 +9,7 @@
  * where the thing being gated actually lives. Tags are parsed from `#hashtag` tokens in
  * the body on save.
  */
+import { marked } from "marked";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RichTextEditor from "../components/editor/RichTextEditor";
@@ -23,6 +24,14 @@ import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioEditPostUrl, studioUrl } from "../lib/studio";
 import type { Post, Project, Work } from "../lib/types";
+
+/** The body HTML's own text — what tag tokens are parsed from, as before. */
+function htmlTextOf(html: string): string {
+	if (!html) return "";
+	const tmp = document.createElement("div");
+	tmp.innerHTML = html;
+	return tmp.textContent || "";
+}
 
 /** Parse `#hashtag` tokens out of the body text into a deduped tag list. */
 function parseTags(text: string): string[] {
@@ -47,7 +56,8 @@ export default function PostFormPage() {
 
 	// ── Basics ──
 	const [title, setTitle] = useState("");
-	const [body, setBody] = useState("");
+	// One body, held as the editor's HTML and converted to markdown at the API's write
+	// boundary — the stored, canonical form. Nothing else about the body is sent.
 	const [bodyHtml, setBodyHtml] = useState("");
 	const [showOnTimeline, setShowOnTimeline] = useState(true);
 	const [projectId, setProjectId] = useState<string>("");
@@ -93,8 +103,11 @@ export default function PostFormPage() {
 					const { post } = (await res.json()) as { post: Post };
 					if (canceled) return;
 					setTitle(post.title ?? "");
-					setBody(post.body ?? "");
-					setBodyHtml(post.bodyHtml ?? "");
+					// The stored body is markdown; the editor reads HTML, so the load converts
+					// back. The round trip is the write boundary's own pair (marked ↔ turndown,
+					// through the same sanitizer), and the vocabulary the editor can produce is
+					// exactly the one that survives it.
+					setBodyHtml(marked.parse(post.body ?? "", { async: false }));
 					setShowOnTimeline(post.showOnTimeline);
 					setIsPinned(post.isPinned);
 					setWasPublished(post.isPublished === true);
@@ -136,9 +149,6 @@ export default function PostFormPage() {
 
 	const handleBodyChange = (html: string) => {
 		setBodyHtml(html);
-		const tmp = document.createElement("div");
-		tmp.innerHTML = html;
-		setBody(tmp.textContent || "");
 	};
 
 	const handleSubmit = async (publish: boolean) => {
@@ -147,11 +157,10 @@ export default function PostFormPage() {
 
 		const base = {
 			title,
-			body,
 			bodyHtml,
 			showOnTimeline,
 			isPinned,
-			tags: parseTags(body),
+			tags: parseTags(htmlTextOf(bodyHtml)),
 			isPublished: publish,
 			// Publishing now clears any schedule; otherwise persist the chosen auto-publish time.
 			scheduledFor: publish || !scheduledFor ? null : new Date(scheduledFor).toISOString(),
@@ -233,7 +242,7 @@ export default function PostFormPage() {
 
 					<FormField label="Body">
 						<RichTextEditor
-							content={bodyHtml || body}
+							content={bodyHtml}
 							onChange={handleBodyChange}
 							placeholder="Write your post... (use #tags to categorize)"
 						/>
