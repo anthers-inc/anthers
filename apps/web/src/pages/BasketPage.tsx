@@ -14,6 +14,17 @@
  * `BasketCheckout`'s `onTotals`). Nothing on this page does money arithmetic: a receipt
  * that derives its own totals stops reconciling the moment a dial moves, which is the
  * failure this codebase has already had twice.
+ *
+ * **Two columns, from the second live checkout (2026-10-03).** Checkout on the left —
+ * the only column with buttons on it; the items and the receipt on the right, so the
+ * buyer reads what they're buying beside where they pay for it. The checkout's column
+ * never re-renders the checkout's input state: the work ids handed down are derived once
+ * per basket content (`useMemo` — see `BasketCheckout`'s header for why that identity
+ * was load-bearing), and totals reporting up only re-renders the receipt. Below `lg` the
+ * grid stacks to one column in reading order: items, breakdown, checkout — you read
+ * what you're buying before you pay for it. On desktop the two columns sit side by side
+ * (`lg:grid-cols-2`), which is why the checkout renders FIRST in the JSX (it owns the
+ * page's only form) and sits visually right via `lg:order-2`.
  */
 
 import { useAuth } from "@anthers/web-shared/auth";
@@ -23,7 +34,7 @@ import { client } from "@anthers/web-shared/rpc";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ShoppingBagIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBasket } from "@/lib/basket";
 import BasketCheckout from "../components/basket/BasketCheckout";
 
@@ -59,6 +70,15 @@ export default function BasketPage() {
 	const handleTotals = useCallback((t: SessionTotals | null) => setSessionTotals(t), []);
 
 	const creator = items[0]?.creatorHandle ?? null;
+
+	// 🚨 Derived ONCE per basket content, not per render — `items` is re-read from
+	// storage on every basket event, so `items.map(...)` inline at the use site was a new
+	// array identity on every render, and the checkout's session POST keyed on that
+	// identity re-fired on the totals-reporting re-render, remounting the Payment
+	// Element mid-fill (the first live checkout's worst defect). Stable identity here is
+	// the belt; BasketCheckout keys on sorted CONTENT (the suspenders). The quote still
+	// maps inline — it re-runs on the items effect's own identity anyway.
+	const workIds = useMemo(() => items.map((i) => i.workId), [items]);
 
 	const refresh = useCallback(async () => {
 		if (count === 0) {
@@ -104,8 +124,97 @@ export default function BasketPage() {
 
 	const taxResolved = sessionTotals?.buyerTotal != null;
 
+	// The receipt, in two states of the same set of numbers. From the quote: subtotal
+	// and the at-cost card fee, with tax named as coming. From the session (once the
+	// billing address resolved the rate): the real tax and the tax-inclusive total —
+	// `sessionTotals`' dollars, formatted, never recomputed here. One figure set the
+	// buyer reads top to bottom, in any column they find it in.
+	const receipt = quote ? (
+		<>
+			<div className="rounded-lg border border-base-300 p-4 text-sm" data-testid="basket-receipt">
+				<div className="flex justify-between py-1">
+					<span>Subtotal</span>
+					<span className="tabular-nums">${quote.subtotal}</span>
+				</div>
+				<div className="flex justify-between py-1 text-base-content/60">
+					<span>
+						Card processing{" "}
+						<span className="text-xs">at cost — taken from the price, not added to it</span>
+					</span>
+					<span className="tabular-nums">−${quote.processingFee}</span>
+				</div>
+				{taxResolved ? (
+					<div className="flex justify-between py-1 text-base-content/60">
+						<span>
+							Sales tax <span className="text-xs">from your address</span>
+						</span>
+						<span className="tabular-nums">+${(sessionTotals?.tax ?? 0).toFixed(2)}</span>
+					</div>
+				) : (
+					<div className="flex justify-between py-1 text-base-content/60">
+						<span>Sales tax</span>
+						<span className="text-xs">calculated from your address</span>
+					</div>
+				)}
+				<div className="mt-2 flex justify-between border-t border-base-300 pt-2 font-semibold">
+					<span>You pay</span>
+					<span className="tabular-nums" data-testid="basket-total">
+						{taxResolved
+							? `$${(sessionTotals?.buyerTotal ?? 0).toFixed(2)}`
+							: `$${quote.subtotal} + tax`}
+					</span>
+				</div>
+				<div className="mt-1 flex justify-between text-success">
+					<span>{creator} receives</span>
+					<span className="tabular-nums">${quote.creatorEarnings}</span>
+				</div>
+			</div>
+			{/*
+			 * Only shown when it is actually non-zero — a "you saved $0.00" on a
+			 * single-item basket would teach the reader to ignore the line that
+			 * matters. Anthers keeps nothing either way, so the saving is not ours
+			 * to share: it is entirely the creator's, and the copy says so.
+			 */}
+			{Number(quote.creatorGains) > 0 && (
+				<p className="mt-3 rounded-lg bg-success/10 p-3 text-sm text-success-content">
+					Buying these together sends <strong>${quote.creatorGains} more</strong> to {creator} than
+					buying them one at a time would. The card fee is charged once per purchase rather than
+					once per item, and Anthers keeps none of it either way.
+				</p>
+			)}
+		</>
+	) : null;
+
+	// The items list carries its remove buttons; removing an item is a basket-content
+	// change, which is what legitimately re-runs the checkout's session fetch.
+	const itemsList = (
+		<ul
+			className="divide-y divide-base-300 rounded-lg border border-base-300"
+			data-testid="basket-items"
+		>
+			{items.map((item) => (
+				<li key={item.workId} className="flex items-center gap-3 p-3">
+					<div className="min-w-0 flex-1">
+						<Link to={creatorWorkUrl(item.creatorHandle, item.slug)} className="link-hover">
+							<span className="block truncate text-sm font-medium">{item.title}</span>
+						</Link>
+					</div>
+					<span className="shrink-0 text-sm tabular-nums">${item.price}</span>
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs shrink-0"
+						onClick={() => remove(item.workId)}
+						aria-label={`Remove ${item.title}`}
+					>
+						<XMarkIcon className="w-4 h-4" />
+					</button>
+				</li>
+			))}
+		</ul>
+	);
+
 	return (
-		<div className="container mx-auto max-w-2xl px-4 py-8">
+		<div className="container mx-auto max-w-6xl px-4 py-8">
 			<h1 className="text-2xl font-bold mb-1">Your basket</h1>
 			{creator && (
 				<p className="text-sm text-base-content/60 mb-6">
@@ -133,100 +242,21 @@ export default function BasketPage() {
 				</div>
 			)}
 
-			<ul className="mb-6 divide-y divide-base-300 rounded-lg border border-base-300">
-				{items.map((item) => (
-					<li key={item.workId} className="flex items-center gap-3 p-3">
-						<div className="min-w-0 flex-1">
-							<Link to={creatorWorkUrl(item.creatorHandle, item.slug)} className="link-hover">
-								<span className="block truncate text-sm font-medium">{item.title}</span>
-							</Link>
-						</div>
-						<span className="shrink-0 text-sm tabular-nums">${item.price}</span>
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs shrink-0"
-							onClick={() => remove(item.workId)}
-							aria-label={`Remove ${item.title}`}
-						>
-							<XMarkIcon className="w-4 h-4" />
-						</button>
-					</li>
-				))}
-			</ul>
-
 			{loading && !quote ? (
 				<div className="flex justify-center py-6">
 					<LoadingSpinner size="sm" />
 				</div>
 			) : quote ? (
-				<>
-					{/*
-					 * The receipt, in two states of the same set of numbers. From the quote:
-					 * subtotal and the at-cost card fee, with tax named as coming. From the
-					 * session (once the billing address resolved the rate): the real tax and
-					 * the tax-inclusive total — `sessionTotals`' dollars, formatted, never
-					 * recomputed here. One card the buyer can read top to bottom.
-					 */}
-					<div
-						className="rounded-lg border border-base-300 p-4 text-sm"
-						data-testid="basket-receipt"
-					>
-						<div className="flex justify-between py-1">
-							<span>Subtotal</span>
-							<span className="tabular-nums">${quote.subtotal}</span>
-						</div>
-						<div className="flex justify-between py-1 text-base-content/60">
-							<span>
-								Card processing{" "}
-								<span className="text-xs">at cost — taken from the price, not added to it</span>
-							</span>
-							<span className="tabular-nums">−${quote.processingFee}</span>
-						</div>
-						{taxResolved ? (
-							<div className="flex justify-between py-1 text-base-content/60">
-								<span>
-									Sales tax <span className="text-xs">from your address</span>
-								</span>
-								<span className="tabular-nums">+${(sessionTotals?.tax ?? 0).toFixed(2)}</span>
-							</div>
-						) : (
-							<div className="flex justify-between py-1 text-base-content/60">
-								<span>Sales tax</span>
-								<span className="text-xs">calculated at checkout</span>
-							</div>
-						)}
-						<div className="mt-2 flex justify-between border-t border-base-300 pt-2 font-semibold">
-							<span>You pay</span>
-							<span className="tabular-nums" data-testid="basket-total">
-								{taxResolved
-									? `$${(sessionTotals?.buyerTotal ?? 0).toFixed(2)}`
-									: `$${quote.subtotal} + tax`}
-							</span>
-						</div>
-						<div className="mt-1 flex justify-between text-success">
-							<span>{creator} receives</span>
-							<span className="tabular-nums">${quote.creatorEarnings}</span>
-						</div>
-					</div>
-
-					{/*
-					 * Only shown when it is actually non-zero — a "you saved $0.00" on a
-					 * single-item basket would teach the reader to ignore the line that
-					 * matters. Anthers keeps nothing either way, so the saving is not ours
-					 * to share: it is entirely the creator's, and the copy says so.
-					 */}
-					{Number(quote.creatorGains) > 0 && (
-						<p className="mt-3 rounded-lg bg-success/10 p-3 text-sm text-success-content">
-							Buying these together sends <strong>${quote.creatorGains} more</strong> to {creator}{" "}
-							than buying them one at a time would. The card fee is charged once per purchase rather
-							than once per item, and Anthers keeps none of it either way.
-						</p>
-					)}
-
-					<div className="mt-6">
+				/*
+				 * The two columns. DOM order is checkout first (its form is the page's only
+				 * one), visually right at `lg`; on mobile the flex column reads items →
+				 * receipt → checkout, in that DOM order via the `order` utilities.
+				 */
+				<div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:gap-12">
+					<section className="order-3 lg:order-2" data-testid="basket-checkout-column">
 						{user ? (
 							<BasketCheckout
-								workIds={items.map((i) => i.workId)}
+								workIds={workIds}
 								buyerTotal={quote.subtotal}
 								onTotals={handleTotals}
 								onComplete={() => {
@@ -240,8 +270,12 @@ export default function BasketPage() {
 								Log in to buy
 							</Link>
 						)}
-					</div>
-				</>
+					</section>
+					<aside className="order-1 lg:order-1 space-y-4" data-testid="basket-items-column">
+						{itemsList}
+						{receipt}
+					</aside>
+				</div>
 			) : null}
 		</div>
 	);

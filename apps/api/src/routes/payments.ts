@@ -253,14 +253,30 @@ function purchaseSession(params: {
 		// A Customer is created for every buyer, so the address and email survive the
 		// session and are readable at completion.
 		customer_creation: "always",
-		// 🚨 NO `payment_method_types` here, and that is a live-API-version constraint
-		// rather than a choice: newer API versions removed the parameter entirely (the
-		// live account rejects the session with "payment_method_types is no longer
-		// supported… Payment methods are now managed from your Dashboard settings").
-		// The methods a session offers come from the Dashboard's payment-method settings,
-		// so the card-only posture is enforced there, not here. Found at the live cutover
-		// (2026-10-03), where every checkout failed while the sandbox — an older API
-		// version — accepted the same parameter happily.
+		// 🚨 Payment methods on this session shape are DASHBOARD-governed by default: this
+		// live API version removed `payment_method_types` from Checkout Session creation
+		// (the live account rejects the session with "payment_method_types is no longer
+		// supported… Payment methods are now managed from your Dashboard settings"), so
+		// the embedded Payment Element offers whatever the account's payment-method
+		// configuration enables. Found at the live cutover (2026-10-03), where every
+		// checkout failed while the sandbox — an older API version — accepted the same
+		// parameter happily. ⚠️ WHAT THIS MEANS: the buyer-facing list (Card, Bank, Cash
+		// App Pay, Klarna, Amazon Pay, Link) can only be changed in the Dashboard's
+		// payment-method settings — there is no code-side control (Parker, 2026-10-03).
+		//
+		// TODO(Dashboard): the account-wide configuration (pmc_1T9K9l3WJAPZ8pU64cUUNUAv)
+		// enables card, link, cashapp, klarna, amazon_pay, affirm, apple_pay. Narrowing
+		// what buyers are offered is a Dashboard action on that configuration; no code
+		// change exists or is wanted.
+		//
+		// The one code-side lever the types DO support on this API version:
+		// `payment_method_configuration` — and ONLY when `STRIPE_PAYMENT_METHOD_CONFIGURATION`
+		// is set. Unset by default, the Dashboard's account-wide configuration
+		// (pmc_1T9K9l3WJAPZ8pU64cUUNUAv) governs what every session offers; setting the
+		// env names a configuration to override that default per deployment.
+		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
+			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
+			: {}),
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {

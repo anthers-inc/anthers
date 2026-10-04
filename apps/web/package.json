@@ -37,11 +37,13 @@
 	},
 	"devDependencies": {
 		"@anthers/db": "workspace:*",
+		"@happy-dom/global-registrator": "20.14.5",
 		"@types/bun": "latest",
 		"@types/react": "^19.0.0",
 		"@types/react-dom": "^19.0.0",
 		"bun-plugin-tailwind": "latest",
 		"daisyui": "^5.0.0",
+		"happy-dom": "20.14.5",
 		"tailwindcss": "^4.0.0",
 		"typescript": "^5.8.0"
 	}

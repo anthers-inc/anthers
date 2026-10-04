@@ -1,31 +1,71 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
-import UsBillingAddressForm, { formatAddress } from "./UsBillingAddressForm";
-import type { SessionBillingAddress } from "./useSessionBillingAddress";
-
 /**
- * The billing address block on a purchase surface: Anthers' own US-only form before the
- * session has the address, a one-line editable summary after.
+ * The billing address block on a purchase surface: Anthers' own US-only form, resolving
+ * tax automatically as the buyer types.
+ *
+ * There is NO submit button here (Parker, 2026-10-03: "the only button you click is the
+ * button to complete the purchase") — the block is an owned `<div>`, never a `<form>`,
+ * because a purchase surface's only `<form>` is the checkout's own, whose submit is the
+ * Pay button. Tax resolution lives in `useSessionBillingAddress`: once the typed address
+ * is complete and settled, it is written to the session and Stripe Tax resolves the rate.
  *
  * The block never disappears once the address is accepted — the buyer needs to see what
  * their tax resolved from, and a buyer who typoed their ZIP needs to be able to fix it
- * without starting over. Editing re-opens the form and requires a fresh submit, which
- * re-resolves the session's tax before the buyer can confirm again (the gate re-arms
- * because `accepted` is only set by a successful `updateBillingAddress`).
+ * without starting over. Editing re-opens the form; the effect in the hook re-resolves
+ * the session's tax from the settled, changed value (the gate re-arms because `accepted`
+ * is only set by a successful `updateBillingAddress`).
  */
+import { useEffect, useRef, useState } from "react";
+import UsBillingAddressForm, { formatAddress, type UsAddressInput } from "./UsBillingAddressForm";
+import type { SessionBillingAddress } from "./useSessionBillingAddress";
+
 export default function CheckoutBillingAddressBlock({
 	billing,
 }: {
 	billing: SessionBillingAddress;
 }) {
 	const [editing, setEditing] = useState(false);
-	const { address, setAddress, submitAddress, accepted, error, updating } = billing;
+	// Pinned when the buyer opens the form over an accepted address; an auto-resolve is
+	// only the edit's own result if the typed value was still that accepted one.
+	const editOriginRef = useRef<UsAddressInput | null>(null);
+	const { address, setAddress, acceptedAddress, accepted, error, updating } = billing;
 	const showForm = !accepted || editing;
+
+	// When a settled edit resolves, the form folds back to the one-line summary — the
+	// same "the session took it" moment a submit used to produce. The origin guard is
+	// what keeps this honest: if the buyer changed the fields again while the first edit
+	// was resolving, that resolve is not accepted as the close (nothing did), and the
+	// form stays open for the newer value's own resolution.
+	const wasEditingRef = useRef(false);
+	useEffect(() => {
+		if (editing && acceptedAddress && editOriginRef.current == null) {
+			editOriginRef.current = acceptedAddress;
+			wasEditingRef.current = true;
+		}
+		if (!editing) {
+			editOriginRef.current = null;
+			wasEditingRef.current = false;
+		}
+	}, [editing, acceptedAddress]);
+	useEffect(() => {
+		if (!wasEditingRef.current || updating || error) return;
+		if (
+			accepted &&
+			acceptedAddress &&
+			editOriginRef.current != null &&
+			formatAddress(editOriginRef.current) !== formatAddress(acceptedAddress)
+		) {
+			setEditing(false);
+		}
+	}, [accepted, acceptedAddress, error, updating]);
 
 	return (
 		<div className="border border-base-300 rounded-lg p-3 bg-base-100">
 			<div className="flex items-center justify-between mb-2">
 				<span className="font-semibold text-sm">Billing address</span>
+				{/* The edit control opens the typed-fields view while the session still holds
+				    the accepted address — its totals keep showing until the changed address
+				    resolves, and an abandoned edit costs nothing. */}
 				{accepted && !editing && (
 					<button
 						type="button"
@@ -37,34 +77,24 @@ export default function CheckoutBillingAddressBlock({
 				)}
 			</div>
 			{showForm ? (
-				<form
-					className="flex flex-col gap-2"
-					onSubmit={(e) => {
-						e.preventDefault();
-						// Close the form only on a submit the session accepted — a failed
-						// one leaves the buyer looking at what they typed, with the error.
-						void submitAddress().then((ok) => {
-							if (ok) setEditing(false);
-						});
-					}}
-				>
+				<div data-testid="billing-address-form">
 					<UsBillingAddressForm value={address} onChange={setAddress} />
-					{/* The label says what the button does — it submits the address to the
-					    session so the tax resolves. It never saves anything (no address is
-					    persisted anywhere; whether one ever is, is the saved-payment-data
-					    task's decision), and a "Save address" label promising persistence
-					    was read as both broken and unintuitive at the live checkout
-					    (2026-10-03). */}
-					<button type="submit" className="btn btn-sm btn-outline btn-primary" disabled={updating}>
-						{updating ? "Calculating tax…" : "Calculate tax & continue"}
-					</button>
-				</form>
-			) : (
-				<div className="flex items-start justify-between gap-2">
-					<p className="text-sm">{formatAddress(address)}</p>
 				</div>
+			) : acceptedAddress ? (
+				<div className="flex items-start justify-between gap-2">
+					<p className="text-sm">{formatAddress(acceptedAddress)}</p>
+				</div>
+			) : null}
+			{updating && (
+				<p className="text-base-content/60 text-xs mt-2" data-testid="tax-resolving">
+					Calculating tax…
+				</p>
 			)}
-			{error && <p className="text-error text-xs mt-2">{error}</p>}
+			{error && (
+				<p className="text-error text-xs mt-2" data-testid="billing-address-error">
+					{error}
+				</p>
+			)}
 		</div>
 	);
 }
