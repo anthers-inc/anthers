@@ -35,6 +35,8 @@ import { type AdminEnv, adminHostOnly, requireAdminSession } from "../middleware
 import { invalidBody } from "../middleware/validate.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import { disputeStanding, loadDispute, loadDisputes } from "../services/admin-disputes.js";
+// ── ATProto records (drift report, re-sync, listing correction) ─────────────────────────
+import { driftReport, resyncRecord } from "../services/atproto-drift.js";
 import { parseFilingPeriod, salesTaxForecast, salesTaxWorksheet } from "../services/books.js";
 import { closePackage } from "../services/close-package.js";
 import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
@@ -95,9 +97,27 @@ import {
 	quarantineSummary,
 	quarantineWork,
 } from "../services/quarantine.js";
-
+import { editWorkListing, notifyListingCorrected } from "../services/work-edit.js";
 import { adminAccountRoutes } from "./admin-accounts.js";
 import { adminAuthRoutes } from "./admin-auth.js";
+
+/** The drift statuses a re-sync report may answer with, as an enum for the schema. */
+const DRIFT_KINDS = ["work", "post", "project"] as const;
+
+const resyncSchema = z.object({
+	kind: z.enum(DRIFT_KINDS),
+	id: z.number().int().positive(),
+});
+
+const listingEditSchema = z.object({
+	workId: z.number().int().positive(),
+	/** The corrected title. Omitted to leave it alone; a refused edit leaves everything alone. */
+	title: z.string().max(255).optional(),
+	/** The corrected description. Omitted to leave it alone. */
+	description: z.string().max(50000).optional(),
+	/** Why the correction was made — recorded in the log row and quoted to the creator. */
+	note: z.string().max(1000).optional(),
+});
 
 /** A notice's status as an operator reads it in a refusal. */
 const NOTICE_STATUS_WORDS: Record<DmcaNoticeStatus, string> = {
@@ -954,6 +974,50 @@ const adminRoutes = new Hono<AdminEnv>()
 			});
 		},
 	)
+
+	// ── ATProto records ─────────────────────────────────────────────────────────
+	// The operator's view of what the rows say and what the records say: the drift report
+	// fetches the network records and diffs each against what its row derives now; a re-sync
+	// runs the row's own sync in place; a listing correction edits the fields the record
+	// carries, through the same service the creator's edit uses, logged with before/after.
+	//
+	// All three answer only after requireAdminSession, like every route above; the report is
+	// a read, the other two are mutations gated by the origin check in adminHostOnly.
+
+	.get("/atproto/drift", async (c) => {
+		return c.json({ report: await driftReport() });
+	})
+
+	.post("/atproto/resync", zValidator("json", resyncSchema, invalidBody), async (c) => {
+		const { kind, id } = c.req.valid("json");
+		const result = await resyncRecord(kind, id);
+		return c.json({ result });
+	})
+
+	.post("/works/listing", zValidator("json", listingEditSchema, invalidBody), async (c) => {
+		const admin = c.get("admin");
+		const { workId, title, description, note } = c.req.valid("json");
+		const result = await editWorkListing({
+			workId,
+			adminId: admin.id,
+			note,
+			edits: {
+				...(title !== undefined ? { title } : {}),
+				...(description !== undefined ? { description } : {}),
+			},
+		});
+		if (result.status === "no_work") return c.json({ error: "Work not found" }, 404);
+		if (result.status === "quarantined") {
+			// Same answer the creator route gives, for the same reason: material under a
+			// preservation hold is not renamed by anybody, and saying why is a signal.
+			return c.json({ error: "Work not found" }, 404);
+		}
+		if (result.status === "no_change") {
+			return c.json({ error: "Nothing in the request differed from the stored values" }, 400);
+		}
+		await notifyListingCorrected(result.work, { changed: result.changed, note });
+		return c.json({ work: { id: result.work.id }, changed: result.changed });
+	})
 
 	// ── Public illegal-content reports ──────────────────────────────────────────
 	// The no-account intake's queue. Separate from `/moderation` above because the
