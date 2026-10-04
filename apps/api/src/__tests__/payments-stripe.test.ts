@@ -1374,6 +1374,45 @@ describe("Checkout — session construction under automatic tax", () => {
 		expect(line?.price_data?.tax_behavior).toBe("exclusive");
 	});
 
+	// 🚨 **Payment methods are Dashboard-governed** (2026-10-03): this API version removed
+	// `payment_method_types` from Checkout Session creation, and `SessionCreateParams`'
+	// types still carry `payment_method_configuration` — but unset by default, so the
+	// Dashboard's account-wide configuration (pmc_1T9K9l3WJAPZ8pU64cUUNUAv) governs what
+	// buyers are offered. These two tests pin the env-conditional lever and the default:
+	// the session never carries the parameter merely because a key exists somewhere.
+	it("leaves payment methods to the Dashboard by default — no configuration param", async () => {
+		await connectCreator();
+		delete process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION;
+
+		const { res } = await checkout();
+		expect(res.status).toBe(200);
+		const params = fake.lastCall("checkout.sessions.create")?.args[0] as
+			| Stripe.Checkout.SessionCreateParams
+			| undefined;
+		expect(params?.payment_method_configuration).toBeUndefined();
+		// And the parameter that would hard-code the list is never sent — this API
+		// version rejects the session when it is.
+		expect(params?.payment_method_types).toBeUndefined();
+	});
+
+	it("names an explicit configuration when STRIPE_PAYMENT_METHOD_CONFIGURATION is set", async () => {
+		await connectCreator();
+		const previous = process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION;
+		process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION = "pmc_test_override";
+		try {
+			const { res } = await checkout();
+			expect(res.status).toBe(200);
+			const params = fake.lastCall("checkout.sessions.create")?.args[0] as
+				| Stripe.Checkout.SessionCreateParams
+				| undefined;
+			expect(params?.payment_method_configuration).toBe("pmc_test_override");
+			expect(params?.payment_method_types).toBeUndefined();
+		} finally {
+			if (previous === undefined) delete process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION;
+			else process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION = previous;
+		}
+	});
+
 	it("pins the creator's transfer to their earnings, location-independent", async () => {
 		const acctId = await connectCreator();
 

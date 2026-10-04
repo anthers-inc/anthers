@@ -10,10 +10,18 @@
  *
  * The session is created server-side (`POST /basket/checkout`) and confirmed in place
  * with Stripe's Checkout-flavored Payment Element. The billing address is Anthers' own
- * US-only form (`CheckoutBillingAddressBlock`), submitted to the session as its own step
- * so Stripe Tax resolves the rate and the buyer sees the tax-inclusive total BEFORE
- * confirming. Nothing here prices anything: the server builds the line items, the tax
- * codes and the transfer; this component reports what they resolved to.
+ * US-only form (`CheckoutBillingAddressBlock`) writing to the session as the buyer types
+ * (no address button — see `useSessionBillingAddress`), so Stripe Tax resolves the rate
+ * and the buyer sees the tax-inclusive total BEFORE confirming. Nothing here prices
+ * anything: the server builds the line items, the tax codes and the transfer; this
+ * component reports what they resolved to.
+ *
+ * 🚨 **The session POST fires once per basket content — never per render.** The first
+ * live checkout remounted this whole subtree every time the parent re-rendered (totals
+ * reporting up, the quote refreshing), because a fresh `workIds` array identity reached
+ * the fetch effect and re-fired it: the address the buyer had typed was wiped mid-fill.
+ * See `workIdsKey` for how the identity is pinned now, and the failing case the session
+ * remount test exists to keep out.
  *
  * 🚨 **Reliability rules this file owns** (each paid for by the first live checkout,
  * 2026-10-03):
@@ -44,7 +52,7 @@ interface BasketCheckoutProps {
 	buyerTotal: string;
 	/**
 	 * The session's own totals, reported up as they resolve — the tax-inclusive total
-	 * and the tax, nulls before the address lands. The receipt above the checkout
+	 * and the tax, nulls before the address lands. The receipt beside the checkout
 	 * renders from the quote before they exist and from them once they do, so the
 	 * buyer reads one set of numbers that grows rather than two sets that disagree.
 	 */
@@ -52,7 +60,17 @@ interface BasketCheckoutProps {
 	onComplete: () => void;
 }
 
-function CheckoutForm({ workIds, buyerTotal, onComplete, onTotals }: BasketCheckoutProps) {
+/**
+ * A content identity for the basket the session is being created for: the ids sorted and
+ * joined. Two arrays of the same ids are the same basket, whatever their identity — this
+ * is the value the fetch effect keys on, because the page renders from `localStorage`
+ * reads whose array identity churns on every render.
+ */
+export function workIdsKey(workIds: number[]): string {
+	return [...workIds].sort((a, b) => a - b).join(",");
+}
+
+function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<BasketCheckoutProps, "workIds">) {
 	const checkoutState = useCheckoutElements();
 	const billing = useSessionBillingAddress(checkoutState);
 	const [processing, setProcessing] = useState(false);
@@ -90,8 +108,9 @@ function CheckoutForm({ workIds, buyerTotal, onComplete, onTotals }: BasketCheck
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		// The address must already be on the session — its own submit step resolved the
-		// tax. Confirming without one would charge a total whose rate was never resolved.
+		// The address must already be on the session — writing it as the buyer types is
+		// what resolved the tax. Confirming without one would charge a total whose rate
+		// was never resolved.
 		if (checkoutState.type !== "success" || !billing.accepted) return;
 		setProcessing(true);
 		setError(null);
@@ -139,8 +158,8 @@ function CheckoutForm({ workIds, buyerTotal, onComplete, onTotals }: BasketCheck
 
 	// 🚨 Two gates, and neither implies the other: Stripe's `canConfirm` tracks the
 	// Payment Element, `accepted` is our own record that the session took a US address —
-	// and the session's own total is null until the same event lands, so a third read of
-	// the truth agrees with both. A buyer cannot confirm past any one of them.
+	// and the session's own total is null until the tax lands, so a third read of the
+	// truth agrees with both. A buyer cannot confirm past any one of them.
 	const canConfirm =
 		checkoutState.type === "success" &&
 		mayConfirm(checkoutState.checkout.canConfirm, billing.accepted) &&
@@ -149,8 +168,9 @@ function CheckoutForm({ workIds, buyerTotal, onComplete, onTotals }: BasketCheck
 	return (
 		<form onSubmit={handleSubmit} className="space-y-3">
 			{/* Anthers' own US-only form, not Stripe's Billing Address Element — the element
-			    offers no country allow-list, so this form is US by construction. Submitting
-			    it resolves the session's tax, which is what makes the button's total real. */}
+			    offers no country allow-list, so this form is US by construction. Address
+			    edits resolve the session's tax automatically as they settle — this form's
+			    submit is the Pay button and nothing else. */}
 			<CheckoutBillingAddressBlock billing={billing} />
 			<div className="rounded-lg border border-base-300 p-3">
 				{/* `fields.billingDetails: "never"` because the address above already
@@ -168,11 +188,7 @@ function CheckoutForm({ workIds, buyerTotal, onComplete, onTotals }: BasketCheck
 					<span>{error}</span>
 				</div>
 			)}
-			<button
-				type="submit"
-				className="btn btn-primary w-full"
-				disabled={!canConfirm || processing || workIds.length === 0}
-			>
+			<button type="submit" className="btn btn-primary w-full" disabled={!canConfirm || processing}>
 				{processing
 					? "Processing…"
 					: totals?.buyerTotal != null
@@ -184,8 +200,8 @@ function CheckoutForm({ workIds, buyerTotal, onComplete, onTotals }: BasketCheck
 }
 
 /**
- * Fetch the basket's session client secret from the server, once, on mount — and hand
- * back the means to try again.
+ * Fetch the basket's session client secret from the server — exactly once per basket
+ * content — and hand back the means to try again.
  *
  * 🚨 **A failure is a state with a Retry button, not a tombstone.** The first live
  * checkout stranded buyers on a skeleton when the session POST refused, and the only
@@ -198,11 +214,25 @@ function useBasketClientSecret(workIds: number[]) {
 	const [failed, setFailed] = useState<string | null>(null);
 	const [fetching, setFetching] = useState(true);
 
+	// 🚨 The POST fires once per basket content, by CONTENT rather than by dependency
+	// identity. The first live checkout keyed this effect on `workIds` — a fresh array
+	// from `items.map(...)` on every render — so the totals-reporting re-render that
+	// follows a tax resolution re-fired the POST and remounted the Element tree from
+	// scratch: card cleared, address reset, resolved tax discarded. The buyer read that
+	// as "the page refreshed and wiped my form". The ref pin means the parent may render
+	// a fresh array as often as it likes; the effect below re-runs on every re-render
+	// (so a genuinely NEW basket — an id added or removed — is still picked up the
+	// moment it arrives) but fires only when the sorted contents actually changed.
+	const workIdsRef = useRef(workIds);
+	const sentKeyRef = useRef<string | null>(null);
+
 	const fetchSecret = useCallback(async () => {
 		setFetching(true);
 		setFailed(null);
 		try {
-			const res = await client.api.payments.basket.checkout.$post({ json: { workIds } });
+			const res = await client.api.payments.basket.checkout.$post({
+				json: { workIds: workIdsRef.current },
+			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setFailed(body?.error ?? "Couldn't start checkout — please try again.");
@@ -220,13 +250,15 @@ function useBasketClientSecret(workIds: number[]) {
 		} finally {
 			setFetching(false);
 		}
-	}, [workIds]);
+	}, []);
 
 	useEffect(() => {
-		// The basket's contents are fixed at mount — the page re-renders the component
-		// with a new key when the basket changes, so `workIds` is not a dependency here.
+		workIdsRef.current = workIds;
+		const key = workIdsKey(workIds);
+		if (sentKeyRef.current === key) return;
+		sentKeyRef.current = key;
 		void fetchSecret();
-	}, [fetchSecret]);
+	});
 
 	return { secret, failed, fetching, retry: fetchSecret };
 }
@@ -248,7 +280,11 @@ export default function BasketCheckout(props: BasketCheckoutProps) {
 	}
 	return (
 		<CheckoutElementsProvider stripe={getStripe()} options={{ clientSecret: secret }}>
-			<CheckoutForm {...props} />
+			<CheckoutForm
+				buyerTotal={props.buyerTotal}
+				onTotals={props.onTotals}
+				onComplete={props.onComplete}
+			/>
 		</CheckoutElementsProvider>
 	);
 }

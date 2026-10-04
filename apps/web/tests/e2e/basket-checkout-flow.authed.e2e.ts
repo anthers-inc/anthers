@@ -207,7 +207,7 @@ test.describe("the basket purchase flow", () => {
 
 		// The quote's fee breakdown prices the purchase, from the server.
 		await expect(page.getByText("Card processing")).toBeVisible();
-		await expect(page.getByText("calculated at checkout")).toBeVisible();
+		await expect(page.getByText("calculated from your address")).toBeVisible();
 	});
 
 	/** The receipt renders once the quote POST answers; under the shared-Postgres contention
@@ -247,7 +247,62 @@ test.describe("the basket purchase flow", () => {
 		// tax named as coming (never estimated).
 		await expectReceiptWithQuote(page);
 		await expect(page.getByTestId("basket-total")).toHaveText(`$${PRICE} + tax`);
-		await expect(page.getByTestId("basket-receipt")).toContainText("calculated at checkout");
+		await expect(page.getByTestId("basket-receipt")).toContainText("calculated from your address");
+	});
+
+	test("the basket reads in two columns on desktop and stacks on mobile", async ({ page }) => {
+		// 🚨 **Two columns is the second checkout's layout decision (2026-10-03)**: the
+		// checkout in one column (the only column with buttons on it), items and receipt
+		// in the other; below `lg` it stacks to one column reading items → receipt →
+		// checkout. Asserted by computed layout rather than class strings, so a Tailwind
+		// class that silently loses cannot pass.
+		await seedBasket(page);
+		await expectReceiptWithQuote(page);
+		// The receipt lives in the items column; visible here means the columns exist.
+		await expect(page.getByTestId("basket-items-column")).toBeVisible();
+		await expect(page.getByTestId("basket-checkout-column")).toBeVisible();
+		await expect(page.getByTestId("basket-items")).toBeVisible();
+
+		// Desktop (the project default, 1280×720): the two columns sit side by side —
+		// the checkout column's left edge is at or right of the items column's RIGHT
+		// edge, on the same rows.
+		const desktop = async () => {
+			const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
+			const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
+			expect(itemsBox).not.toBeNull();
+			expect(checkoutBox).not.toBeNull();
+			expect(
+				checkoutBox!.x,
+				"the checkout column must sit beside (not above) the items column on desktop",
+			).toBeGreaterThanOrEqual(itemsBox!.x + itemsBox!.width - 1);
+		};
+		await desktop();
+
+		// Mobile (390px, the phone width `MOBILE_WIDTH` designs for): stacked — the
+		// checkout column starts BELOW the items column, and reading order is items →
+		// receipt → checkout (the DOM order under the flex column).
+		await page.setViewportSize({ width: 390, height: 844 });
+		const stacked = async () => {
+			const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
+			const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
+			expect(itemsBox).not.toBeNull();
+			expect(checkoutBox).not.toBeNull();
+			expect(
+				checkoutBox!.y,
+				"the checkout column must stack below the items column on mobile",
+			).toBeGreaterThanOrEqual(itemsBox!.y + itemsBox!.height - 1);
+		};
+		await stacked();
+		// And the receipt sits between them vertically — the reading-order claim.
+		const receiptBox = await page.getByTestId("basket-receipt").boundingBox();
+		const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
+		const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
+		expect(receiptBox!.y).toBeGreaterThanOrEqual(itemsBox!.y);
+		expect(receiptBox!.y + receiptBox!.height).toBeLessThanOrEqual(checkoutBox!.y + 1);
+
+		// Back to desktop for the next test in the serial run.
+		await page.setViewportSize({ width: 1280, height: 720 });
+		await desktop();
 	});
 
 	test("the checkout page's forms are siblings, never ancestors of each other", async ({
