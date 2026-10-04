@@ -15,7 +15,7 @@
  * exactly that gap. A check derived from the account rather than from the request belongs in
  * the writer, because the writer is the thing every door has to go through.
  *
- * 🚨 **Every setting here belongs to the READER and reaches nobody else.** A user hiding or
+ * 🚨 **Every setting here belongs to the USER and reaches nobody else.** A user hiding or
  * blurring a rung changes what *they* meet: the Work stays listed for everyone else, stays
  * searchable, stays earning, and is never demoted or paid less. The wiki's *Content Standards* is explicit that
  * this is deliberately not platform-side suppression — the platform picks the default and

@@ -1967,7 +1967,7 @@ function SignupForm({
 			    trademark, so the tab behind it carries the whole selected state. */}
 			{/* The strip's own height, held while it is not yet known whether there is one. Without
 			    this the card grows by a tab's worth the moment the answer lands, which moves the
-			    whole page under the reader — the defect the panel heights are all managed for. */}
+			    whole page under the user — the defect the panel heights are all managed for. */}
 			{!doorsAnswered && !signedIn && (
 				<div aria-hidden="true" className="h-[3.0625rem] border-b border-base-300 bg-base-300/30" />
 			)}

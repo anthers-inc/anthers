@@ -1031,7 +1031,7 @@ const accountRoutes = new Hono()
 	// are what a signed-out visitor gets and the client has to know them to apply the
 	// Mature blur to somebody who has never had an account.
 	//
-	// 🚨 **These change what the READER meets and reach nobody else.** A Work somebody
+	// 🚨 **These change what the USER meets and reach nobody else.** A Work somebody
 	// blurred stays listed for everyone else, stays searchable, stays earning, and is never
 	// demoted. The wiki's *Content Standards* is explicit that this is not platform-side suppression.
 

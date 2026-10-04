@@ -438,6 +438,6 @@ export const GAUNTLET_BADGES: Array<{
 	// bug instead of catching it. With a sparse ladder the two genuinely differ.
 	threshold: String(seeds),
 	label: amountLabel(seeds),
-	description: `Readers who've given at least ${amountLabel(seeds)} this cycle.`,
+	description: `Users who've given at least ${amountLabel(seeds)} this cycle.`,
 	sortOrder: i,
 }));

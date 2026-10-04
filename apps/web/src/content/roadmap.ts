@@ -370,7 +370,7 @@ export const ROADMAP: RoadmapGroup[] = [
 	},
 	{
 		id: "audience",
-		label: "For Readers, Players & Viewers",
+		label: "For Users",
 		blurb:
 			"Finding work worth your time, spending time with it, and paying the people who made it.",
 		subgroups: [

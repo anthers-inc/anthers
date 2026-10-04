@@ -127,7 +127,7 @@ describe.skipIf(!SERVICE)("a user's records in a repository Anthers hosts", () =
 
 	// 🚨 The compounding condition, end to end. A comment on a post with no record has nothing to
 	// name; once the post is listed, the same sync writes it.
-	it("waits for the post to have a record, then writes the comment into the READER's repository", async () => {
+	it("waits for the post to have a record, then writes the comment into the USER's repository", async () => {
 		const [post] = await db
 			.insert(posts)
 			.values({

@@ -1373,7 +1373,7 @@ function RatingLine({
 			)}
 			{maturity === "general" && (
 				<span className="text-xs text-base-content/50">
-					Readers see no rating on a General Work.
+					Users see no rating on a General Work.
 				</span>
 			)}
 			{change}

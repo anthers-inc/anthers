@@ -401,7 +401,7 @@ describe("the light grid, for writing, books, music and other audio", () => {
 		expect(gridFor(null)).toBe("visual");
 	});
 
-	it("asks about the same kinds of content as the visual grid, so a reader's filter reads both", () => {
+	it("asks about the same kinds of content as the visual grid, so a user's filter reads both", () => {
 		for (const row of RATING_ROWS) {
 			expect(row.rungs.light.general, row.note).not.toBeNull();
 			expect(row.rungs.light.mature, row.note).not.toBeNull();

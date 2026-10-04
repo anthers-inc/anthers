@@ -658,7 +658,7 @@ export interface Review {
 	handle: string;
 	avatar: string | null;
 	/**
-	 * Readers' judgment of this review, as a net floored at zero.
+	 * Users' judgment of this review, as a net floored at zero.
 	 *
 	 * ⭐ **Helpfulness sorts and never weights.** This moves a review up the list; it has
 	 * no effect on the recommended share, where every visible review still counts once.

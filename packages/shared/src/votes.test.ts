@@ -36,7 +36,7 @@ describe("what a vote adds up to", () => {
 		expect(netScore(tally(2, 9))).toBe(-7);
 	});
 
-	it("🚨 never orders two comments by a difference a reader cannot see", () => {
+	it("🚨 never orders two comments by a difference a user cannot see", () => {
 		// The ranking key IS the published number. Two comments that show the same score
 		// must be tied on score however far apart their true nets are — otherwise the order
 		// is decided by something nobody can observe.
