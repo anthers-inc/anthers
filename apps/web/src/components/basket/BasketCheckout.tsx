@@ -230,9 +230,11 @@ function useBasketClientSecret(workIds: number[]) {
 		setFetching(true);
 		setFailed(null);
 		try {
-			const res = await client.api.payments.basket.checkout.$post({
-				json: { workIds: workIdsRef.current },
-			});
+			// The body carries nothing: the server buys the account's own stored basket —
+			// the same ids this page displayed and the quote priced. A client-named list
+			// was the localStorage design's trust; the server-side basket does not accept
+			// it, and the empty body is the honest request.
+			const res = await client.api.payments.basket.checkout.$post({ json: {} });
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setFailed(body?.error ?? "Couldn't start checkout — please try again.");

@@ -36,7 +36,7 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ShoppingBagIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBasket } from "@/lib/basket";
-import BasketCheckout from "../components/basket/BasketCheckout";
+import BasketCheckout, { workIdsKey } from "../components/basket/BasketCheckout";
 
 interface Quote {
 	items: { workId: number; slug: string; title: string | null; price: string }[];
@@ -76,21 +76,31 @@ export default function BasketPage() {
 	// array identity on every render, and the checkout's session POST keyed on that
 	// identity re-fired on the totals-reporting re-render, remounting the Payment
 	// Element mid-fill (the first live checkout's worst defect). Stable identity here is
-	// the belt; BasketCheckout keys on sorted CONTENT (the suspenders). The quote still
-	// maps inline — it re-runs on the items effect's own identity anyway.
+	// the belt; BasketCheckout keys on sorted CONTENT (the suspenders).
 	const workIds = useMemo(() => items.map((i) => i.workId), [items]);
+	/** The basket's CONTENT identity — what a re-quote actually keys on. */
+	const contentKey = workIdsKey(workIds);
 
+	// The quote's re-fire trigger is the basket's CONTENT — the sorted-id key below —
+	// and never the `items` array identity, whose churn is exactly the re-firing the
+	// first live checkout paid for. `useExhaustiveDependencies` wants the body's own
+	// reads listed; the key is deliberately NOT one of them, so the suppression is the
+	// honest form and the deps below carry only `workIds.length` beside it.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the trigger is basket CONTENT, not a body value
 	const refresh = useCallback(async () => {
-		if (count === 0) {
+		if (items.length === 0) {
 			setQuote(null);
 			return;
 		}
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await client.api.payments.basket.quote.$post({
-				json: { workIds: items.map((i) => i.workId) },
-			});
+			// The body carries nothing: the server prices the account's own stored basket,
+			// never a list the client named — that trust ended with the localStorage
+			// design. Which contents this call prices is decided by the effect below —
+			// it re-fires on a change of the basket's CONTENT (the sorted ids), not on
+			// array identity, so a totals-reporting re-render re-quotes nothing.
+			const res = await client.api.payments.basket.quote.$post({ json: {} });
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setError(body?.error ?? "Couldn't price your basket.");
@@ -103,8 +113,7 @@ export default function BasketPage() {
 		} finally {
 			setLoading(false);
 		}
-		// `items` is re-read from storage on every change, so its identity is the signal.
-	}, [items, count]);
+	}, [contentKey, workIds.length]);
 
 	useEffect(() => {
 		void refresh();
@@ -261,8 +270,11 @@ export default function BasketPage() {
 								onTotals={handleTotals}
 								onComplete={() => {
 									setSessionTotals(null);
-									clear();
-									void refresh();
+									// The server already emptied the stored basket when the checkout
+									// session was built; this clears this hook's cache. Awaiting it
+									// (async in server mode) before the quote refresh stops the
+									// receipt from being re-quoted off a half-cleared basket.
+									void Promise.resolve(clear()).then(() => void refresh());
 								}}
 							/>
 						) : (

@@ -65,6 +65,7 @@ import SignupSteps, { signupSteps } from "../components/onboarding/SignupSteps";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
+import { mergeIntoServerBasket } from "../lib/basket";
 import { useHandleAvailability } from "../lib/hosted-handle";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -295,9 +296,19 @@ export default function FinishSignupPage() {
 	 * `PublicShell` returns a different component type for a signed-in visitor, so the moment
 	 * `refreshUser()` resolves React tears this subtree down. `/signup` paid for that
 	 * lesson with a payment modal that never opened.
+	 *
+	 * The account exists and this browser holds a session. Commit what was chosen.
+	 *
+	 * Following costs nothing, so it is applied straight away rather than waiting on a charge
+	 * — and the anonymous scratch basket (built before this signup began) folds into the
+	 * account's server-side basket in the same breath: the session is new and real, so this
+	 * is the merge moment. A failed merge keeps the scratch for a later attempt.
+	 * `refreshUser` above (in `leave`) is the part that unmounts this page — the merge is
+	 * deliberately ahead of it, never behind.
 	 */
 	const leave = useCallback(
 		async (path: string) => {
+			await mergeIntoServerBasket().catch(() => {});
 			await refreshUser();
 			navigate(path, { replace: true });
 		},

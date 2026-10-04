@@ -54,6 +54,7 @@ import {
 } from "../lib/processor.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
+import { addBasketItem, clearBasket, listBasket, removeBasketItem } from "../services/basket.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
@@ -423,6 +424,48 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	}
 }
 
+// ─── Basket storage: the shared read the storage routes answer with ─────────
+
+/** The basket item shape every storage route answers with — the resolution `/basket` returns. */
+interface ResolvedBasketItem {
+	workId: number;
+	slug: string;
+	title: string | null;
+	price: string;
+	creatorHandle: string;
+	thumbnail: string | null;
+}
+
+/**
+ * The account's basket, each row resolved to what the buyer could actually buy.
+ *
+ * 🚨 **A stale row answers by absence, never by error.** The table may hold a Work that
+ * stopped being buyable after it was added (withdrawn, already owned, moved behind a
+ * higher gate, creator unconnected, deleted from the catalog outright) — this read is
+ * where it stops being visible. Returning it with an error flag would make every
+ * subscriber (the badge first) into a place that has to know the rules; the basket page
+ * rendering only what a checkout could charge is the honest shape, and the refusals keep
+ * firing where money is at stake — at quote and checkout. See `resolveBasket`.
+ */
+async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]> {
+	const rows = await listBasket(userId);
+	const items: ResolvedBasketItem[] = [];
+	for (const row of rows) {
+		if (!row.slug || !row.creatorHandle) continue;
+		const q = await resolvePurchase(row.slug, userId);
+		if (!q.ok) continue;
+		items.push({
+			workId: row.workId,
+			slug: row.slug,
+			title: row.title,
+			price: q.amount.toFixed(2),
+			creatorHandle: row.creatorHandle,
+			thumbnail: row.thumbnail,
+		});
+	}
+	return items;
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const paymentRoutes = new Hono()
@@ -634,14 +677,81 @@ const paymentRoutes = new Hono()
 	})
 
 	/**
+	 * The signed-in buyer's server-side basket.
+	 *
+	 * 🚨 **These routes are the basket's only writers and readers, and `resolveBasket` is
+	 * never bypassed.** The table holds ids and nothing more; quote and checkout re-resolve
+	 * exactly what the client-supplied list used to be re-resolved against — so a row that
+	 * fell out of purchasability (withdrawn, already owned, moved behind a higher gate,
+	 * creator unconnected) is refused with the same sentence at the same door it always was.
+	 * `list` returns only what resolves, so a badge counts Work the buyer could actually be
+	 * charged for and nothing else.
+	 *
+	 * The one-creator rule keeps the client's courtesy (`add` REPLACES on a clash and says
+	 * so) in `services/basket.ts` — the sign-in merge and the Work-page button go through
+	 * the same function, so they cannot disagree; quote and checkout still refuse a
+	 * `mixed_creators` basket on top, because the table can only be made to clash by a
+	 * race (a creator account deleted mid-basket) and Stripe would refuse the charge.
+	 */
+	// What the header badge and the basket page read. Resolved live, per read: a Work
+	// that stopped being buyable does not count — the buyer is never teased with a badge
+	// for something their money cannot reach. Price and creator handle come off the same
+	// resolution, so the receipt's line items and the page's creator line read the
+	// server's numbers, exactly as the quote's always did.
+	.get("/basket", requireAuth, async (c) => {
+		const user = c.get("user");
+		const items = await resolvedBasketItems(user.id);
+		return c.json({ items, count: items.length });
+	})
+
+	.post("/basket/items", requireAuth, async (c) => {
+		const user = c.get("user");
+		const body = await c.req.json().catch(() => null);
+		const workId = Number(body?.workId);
+		if (!Number.isInteger(workId) || workId <= 0)
+			return c.json({ error: "A Work id is required." }, 400);
+
+		const result = await addBasketItem(user.id, workId);
+		if (!result.ok) {
+			const status = result.reason === "not_found" ? 404 : 409;
+			return c.json({ error: "Work not found", code: result.reason }, status);
+		}
+		// Answer with the post-add basket so the client's optimistic update can reconcile
+		// against the truth in one round trip — each item resolved exactly as `/basket`
+		// resolves it, plus whose basket the add replaced (null on an ordinary add).
+		const items = await resolvedBasketItems(user.id);
+		return c.json({ items, replacedCreator: result.replacedCreatorHandle });
+	})
+
+	.delete("/basket/items/:workId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = Number(c.req.param("workId"));
+		if (!Number.isInteger(workId) || workId <= 0) return c.json({ error: "Work not found" }, 404);
+		await removeBasketItem(user.id, workId);
+		return c.json({ items: await resolvedBasketItems(user.id) });
+	})
+
+	.delete("/basket", requireAuth, async (c) => {
+		const user = c.get("user");
+		await clearBasket(user.id);
+		return c.json({ items: [] });
+	})
+
+	/**
 	 * What a basket would cost, without creating anything. The buy UI quotes from here so
 	 * the saving is visible *before* the decision, which is the whole reason a basket is
 	 * worth building rather than a convenience.
 	 */
 	.post("/basket/quote", requireAuth, async (c) => {
 		const user = c.get("user");
-		const body = await c.req.json().catch(() => null);
-		const workIds = Array.isArray(body?.workIds) ? (body.workIds as number[]) : [];
+		// 🚨 **The resolved basket is the source of `workIds`; the request body never was.**
+		// The account's table is asked for its ids through the SAME resolution `/basket`
+		// answers with — so a row that stopped being buyable is excluded here exactly as
+		// the badge excluded it, and the buyer is never failed by an item they cannot see
+		// or remove. What remains is then re-resolved by `resolveBasket` below, whose
+		// refusal paths (mixed creators, the cap, the per-Work rules) keep firing.
+		const stored = await resolvedBasketItems(user.id);
+		const workIds = stored.map((row) => row.workId);
 		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
@@ -684,8 +794,13 @@ const paymentRoutes = new Hono()
 	 */
 	.post("/basket/checkout", requireAuth, requireVerified, async (c) => {
 		const user = c.get("user");
-		const body = await c.req.json().catch(() => null);
-		const workIds = Array.isArray(body?.workIds) ? (body.workIds as number[]) : [];
+		// Same rule as quote: the account's resolved basket is what's bought — an item
+		// that stopped being buyable is excluded by the same resolution the page showed,
+		// and what remains is re-resolved by `resolveBasket` below, whose refusal paths
+		// keep firing on it. Nothing trusts the table further than the client's old word
+		// was trusted.
+		const stored = await resolvedBasketItems(user.id);
+		const workIds = stored.map((row) => row.workId);
 		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
@@ -783,6 +898,13 @@ const paymentRoutes = new Hono()
 			};
 		});
 		await db.insert(purchases).values(rows);
+
+		// The basket has been bought — emptied now, at the moment the charge exists, rather
+		// than waiting on the webhook: a buyer who closes the tab at the Pay screen holds a
+		// session they can come back and confirm, and the basket's ids are already spent.
+		// (The webhook completing is what grants access; this only stops the badge counting
+		// what they have just paid for.)
+		await clearBasket(user.id);
 
 		return c.json({
 			subtotal: q.subtotal.toFixed(2),

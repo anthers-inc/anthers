@@ -10,6 +10,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeModal from "../components/auth/EmailCodeModal";
+import { mergeIntoServerBasket } from "../lib/basket";
 
 /**
  * The shape of an address, loosely — enough to tell "alice" from "alice@example.com".
@@ -231,6 +232,12 @@ export default function LoginPage() {
 				navigate("/finish", { replace: true });
 				return;
 			}
+
+			// The anonymous scratch basket folds into the account's server-side basket now
+			// — before the context refresh tears this subtree down (see the warning below:
+			// NOTHING may be queued after `refreshUser()`). A failed merge keeps the scratch
+			// for a later attempt; the buyer's filled basket is never dropped to a blip.
+			await mergeIntoServerBasket().catch(() => {});
 
 			await refreshUser();
 			// An account that never finished onboarding still owes the terms, so this door

@@ -71,15 +71,21 @@ export default function AddToBasket(props: AddToBasketProps) {
 				type="button"
 				className="btn btn-outline btn-sm"
 				onClick={() => {
-					const r = add({
-						workId: props.workId,
-						slug: props.slug,
-						title: props.title,
-						price: props.price,
-						creatorHandle: props.creatorHandle,
-						thumbnail: props.thumbnail ?? null,
+					// `add` is async in server mode (the answer carries the creator clash) and
+					// sync in scratch mode; `Promise` handles both, and the only thing read
+					// off the result is the replaced-creator notice either way.
+					void Promise.resolve(
+						add({
+							workId: props.workId,
+							slug: props.slug,
+							title: props.title,
+							price: props.price,
+							creatorHandle: props.creatorHandle,
+							thumbnail: props.thumbnail ?? null,
+						}),
+					).then((r) => {
+						if ("replacedCreator" in r && r.replacedCreator) setReplaced(r.replacedCreator);
 					});
-					setReplaced(r.replacedCreator ?? null);
 				}}
 			>
 				<ShoppingBagIcon className="w-4 h-4" /> Add to basket

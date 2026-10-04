@@ -24,6 +24,7 @@ import { db } from "@anthers/db/client";
 import {
 	assets,
 	badges,
+	basketItems,
 	billingAccounts,
 	crfLedger,
 	purchases,
@@ -1108,12 +1109,43 @@ describe("Basket checkout — one charge, one card fee", () => {
 	const UNIT = "3.33";
 	const ODD = [{ threshold: 0, allow: true, price: UNIT }];
 
-	async function basket(workIds: number[], path = "checkout") {
+	/**
+	 * Put the given Works into the buyer's SERVER-side basket (one add per Work, through
+	 * the route the Work page's own button calls), then act on the basket the way the
+	 * client now does — with no body naming ids, because the stored basket is what is
+	 * bought. The replace-on-clash courtesy lives in the add; a caller that wants a
+	 * mixed-creator basket for the refusal test seeds both creators' Works in sequence
+	 * and the ADD is what replaces — so `seed` here must not re-clear per call.
+	 */
+	async function seedBasket(newIds: number[], { fresh = false } = {}) {
+		if (fresh) await clearBasketDirect();
+		for (const id of newIds) {
+			const res = await req("/api/payments/basket/items", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
+				body: JSON.stringify({ workId: id }),
+			});
+			expect(res.status, `seeding basket with ${id}`).toBe(200);
+		}
+	}
+
+	async function clearBasketDirect() {
+		const res = await req("/api/payments/basket", {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: buyerCookie },
+		});
+		expect(res.status, "clearing the basket").toBe(200);
+	}
+
+	async function basket(_workIds: number[], path = "checkout") {
+		// The legacy `workIds` argument is kept in the call sites unchanged but carries no
+		// meaning now: quote and checkout price the account's own stored basket. A test
+		// that wants a particular basket seeds it first (`seedBasket`).
 		fake.reset();
 		const res = await req(`/api/payments/basket/${path}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
-			body: JSON.stringify({ workIds }),
+			body: JSON.stringify({}),
 		});
 		return { res, body: await res.json() };
 	}
@@ -1148,6 +1180,10 @@ describe("Basket checkout — one charge, one card fee", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	it("charges the flat fee ONCE, not once per item", async () => {
+		await seedBasket(
+			items.map((i) => i.id),
+			{ fresh: true },
+		);
 		const { res, body } = await basket(items.map((i) => i.id));
 		expect(res.status).toBe(200);
 
@@ -1159,9 +1195,20 @@ describe("Basket checkout — one charge, one card fee", () => {
 		// one basket fee must be strictly less than three separate ones.
 		const separately = cardFee(new Decimal(UNIT)).times(3);
 		expect(new Decimal(body.processingFee).lessThan(separately)).toBe(true);
+
+		// The basket the charge was built from is emptied at checkout — the ids are spent
+		// the moment the session exists, and the badge must not count what was just paid.
+		const after = await req("/api/payments/basket", {
+			headers: { Origin: ORIGIN, Cookie: buyerCookie },
+		});
+		expect(((await after.json()) as { count: number }).count).toBe(0);
 	});
 
 	it("builds one session for the whole basket, one line per Work, each coded", async () => {
+		await seedBasket(
+			items.map((i) => i.id),
+			{ fresh: true },
+		);
 		const { body } = await basket(items.map((i) => i.id));
 		const params = fake.lastCall("checkout.sessions.create")
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
@@ -1196,6 +1243,10 @@ describe("Basket checkout — one charge, one card fee", () => {
 	});
 
 	it("writes one purchase row per Work, keyed by the session, and they reconcile", async () => {
+		await seedBasket(
+			items.map((i) => i.id),
+			{ fresh: true },
+		);
 		const { body } = await basket(items.map((i) => i.id));
 		// The fake records call ARGS, not return values, so the session id comes back off
 		// the response's own client secret — `cs_xxx_secret_test`.
@@ -1225,13 +1276,39 @@ describe("Basket checkout — one charge, one card fee", () => {
 	});
 
 	it("refuses a basket spanning two creators, and creates no session", async () => {
-		const { res, body } = await basket([items[0].id, otherCreatorWorkId]);
+		// Seed X's Works, then Y's — the ADD of Y's Work REPLACES the basket (the
+		// one-creator courtesy), so to get a mixed table the mixed state must be reached
+		// past the add. It cannot be, which is the honesty being tested: assert the add
+		// itself replaced, then restore X's basket and confirm quote stays clean.
+		await seedBasket([otherCreatorWorkId], { fresh: true });
+		const clash = await req("/api/payments/basket/items", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
+			body: JSON.stringify({ workId: items[0].id }),
+		});
+		expect(clash.status).toBe(200);
+		const listed = await req("/api/payments/basket", {
+			headers: { Origin: ORIGIN, Cookie: buyerCookie },
+		});
+		const after = (await listed.json()) as { items: { workId: number }[] };
+		expect(after.items.map((i) => i.workId)).toEqual([items[0].id]);
+
+		// The mixed-creator REFUSAL is still live at checkout for the state a race could
+		// still produce (a creator account deleted mid-basket is the only path; the
+		// resolver's guard is what the unit suite pins — drive it through a seeded
+		// two-creator table written directly, the way the race would leave it).
+		await db.insert(basketItems).values({ userId: buyerId, workId: otherCreatorWorkId });
+		const { res, body } = await basket([]);
 		expect(res.status).toBe(400);
 		expect(body.code).toBe("mixed_creators");
 		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 	});
 
 	it("quotes the saving without creating anything", async () => {
+		await seedBasket(
+			items.map((i) => i.id),
+			{ fresh: true },
+		);
 		const { res, body } = await basket(
 			items.map((i) => i.id),
 			"quote",
@@ -1245,6 +1322,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 	});
 
 	it("refuses an empty basket", async () => {
+		await clearBasketDirect();
 		const { res } = await basket([]);
 		expect(res.status).toBe(400);
 	});
