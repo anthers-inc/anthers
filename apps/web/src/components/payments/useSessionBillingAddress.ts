@@ -99,7 +99,9 @@ export function useSessionBillingAddress(
 	// `node_modules` copy of stripe-js's types, widening the session interface to carry
 	// the action, let the wrong typecheck pass locally while the fresh CI install
 	// failed it. Found 2026-10-04 on PR #348.)
-	const checkoutRef = useRef<Extract<StripeUseCheckoutElementsResult, { type: "success" }>["checkout"] | null>(null);
+	const checkoutRef = useRef<
+		Extract<StripeUseCheckoutElementsResult, { type: "success" }>["checkout"] | null
+	>(null);
 	useEffect(() => {
 		checkoutRef.current = checkoutState.type === "success" ? checkoutState.checkout : null;
 	});
