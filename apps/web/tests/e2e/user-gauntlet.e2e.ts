@@ -559,17 +559,35 @@ test("rung 5 — the ratchet: a lower rung is not offered once it is held", asyn
 });
 
 // ── The purchase rung ────────────────────────────────────────────────────────
-test("rung 6 — purchase unlocks the download, and only the purchase does", async ({ page }) => {
-	const errors = trackErrorsStrict(page, ALLOWED);
+test("rung 6 — purchases go through the basket, and only a purchase unlocks the download", async ({
+	page,
+}) => {
+	// The basket's session POST answers 503 in the browser session (no Stripe key in this
+	// harness — the real charge belongs to the Stripe walk), and Chromium logs every non-2xx
+	// response as a console error. That one refusal IS the state under test; anything else
+	// is not.
+	const errors = trackErrorsStrict(page, ALLOWED.concat([/status of 503/]));
 
 	// Even from the very top of the ladder, the purchase rung still quotes its price — asserted by
-	// every row so far. Now the hop writes the completed purchase the payment webhook
-	// would have written (the real charge belongs to the Stripe walk).
+	// every row so far. The Work page shows the price and NOTHING that takes it: no
+	// payment form of any kind (Parker, 2026-10-03 — every purchase goes through the
+	// basket, and the basket is where the money moves).
+	await page.goto(`/works/${gauntletPost(BUY).slug}`);
+	await expect(page.getByRole("heading", { name: "Pricing" })).toBeVisible();
+	await expect(page.locator("iframe[src*='stripe.com']")).toHaveCount(0);
+	await expect(page.locator("input[name='cc-name']")).toHaveCount(0);
+
+	// The buy door itself can only render once the creator has connected Stripe, which is
+	// the fixture's own posture (the gauntlet creator is connect-less; seeding real
+	// Connect state is `GAUNTLET_STRIPE_ACCOUNT`'s business, unwalked here). The door
+	// WITH the checkout behind it is walked in `basket-checkout-flow.authed.e2e.ts`.
+	// Now the hop: the completed purchase the payment webhook would have written (the
+	// real charge belongs to the Stripe walk).
 	hop("--purchase", gauntletPost(BUY).slug);
 
 	await expectStaircase(page, "+ purchased");
 
-	// The post page must now offer the download instead of a checkout.
+	// The Work page must now offer the download instead of a checkout.
 	await page.goto(`/works/${gauntletPost(BUY).slug}`);
 	await expect(page.getByRole("heading", { name: "Downloads" })).toBeVisible();
 	await expect(page.getByText("Purchase this post to access downloads.")).toBeHidden();

@@ -9,9 +9,11 @@
  * is the creator's. A basket that merely batched clicks would not be worth building.
  *
  * Every figure here comes from `/basket/quote`, which computes it with the same
- * `calculateFees` that checkout charges from. Nothing on this page does money arithmetic:
- * a receipt that derives its own totals stops reconciling the moment a dial moves, which
- * is the failure this codebase has already had twice.
+ * `calculateFees` that checkout charges from — and, once the checkout's billing address
+ * resolves, the session's own tax-inclusive total joins it (reported up through
+ * `BasketCheckout`'s `onTotals`). Nothing on this page does money arithmetic: a receipt
+ * that derives its own totals stops reconciling the moment a dial moves, which is the
+ * failure this codebase has already had twice.
  */
 
 import { useAuth } from "@anthers/web-shared/auth";
@@ -38,12 +40,23 @@ interface Quote {
 	creatorGains: string;
 }
 
+/** The session's reported totals, in dollars — nulls before the address resolves. */
+interface SessionTotals {
+	buyerTotal: number | null;
+	tax: number | null;
+}
+
 export default function BasketPage() {
 	const { user } = useAuth();
 	const { items, remove, clear, count } = useBasket();
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	// The checkout's session totals, reported up once the billing address resolves —
+	// what turns the receipt's tax line from "coming" into a real number.
+	const [sessionTotals, setSessionTotals] = useState<SessionTotals | null>(null);
+	// Cleared with the basket, so a completed purchase never leaves stale numbers up.
+	const handleTotals = useCallback((t: SessionTotals | null) => setSessionTotals(t), []);
 
 	const creator = items[0]?.creatorHandle ?? null;
 
@@ -89,6 +102,8 @@ export default function BasketPage() {
 		);
 	}
 
+	const taxResolved = sessionTotals?.buyerTotal != null;
+
 	return (
 		<div className="container mx-auto max-w-2xl px-4 py-8">
 			<h1 className="text-2xl font-bold mb-1">Your basket</h1>
@@ -104,7 +119,17 @@ export default function BasketPage() {
 
 			{error && (
 				<div className="alert alert-error text-sm mb-4">
-					<span>{error}</span>
+					<span className="block">{error}</span>
+					{/* No dead ends: the quote can be asked for again in place — a basket page
+					    that needed a reload to re-price itself would be one the buyer has to
+					    trust on faith. */}
+					<button
+						type="button"
+						className="btn btn-outline btn-xs mt-2"
+						onClick={() => void refresh()}
+					>
+						Try again
+					</button>
 				</div>
 			)}
 
@@ -135,28 +160,48 @@ export default function BasketPage() {
 				</div>
 			) : quote ? (
 				<>
-					<div className="rounded-lg border border-base-300 p-4 text-sm">
+					{/*
+					 * The receipt, in two states of the same set of numbers. From the quote:
+					 * subtotal and the at-cost card fee, with tax named as coming. From the
+					 * session (once the billing address resolved the rate): the real tax and
+					 * the tax-inclusive total — `sessionTotals`' dollars, formatted, never
+					 * recomputed here. One card the buyer can read top to bottom.
+					 */}
+					<div
+						className="rounded-lg border border-base-300 p-4 text-sm"
+						data-testid="basket-receipt"
+					>
 						<div className="flex justify-between py-1">
 							<span>Subtotal</span>
 							<span className="tabular-nums">${quote.subtotal}</span>
 						</div>
 						<div className="flex justify-between py-1 text-base-content/60">
 							<span>
-								Card processing <span className="text-xs">at cost</span>
+								Card processing{" "}
+								<span className="text-xs">at cost — taken from the price, not added to it</span>
 							</span>
 							<span className="tabular-nums">−${quote.processingFee}</span>
 						</div>
-						{/* No "est." figure anymore: the rate varies by location and is resolved
-						    from the billing address at checkout, where the buyer sees the real
-						    number before confirming. Saying a number here would be the flat-rate
-						    charge this flow exists to retire. */}
-						<div className="flex justify-between py-1 text-base-content/60">
-							<span>Sales tax</span>
-							<span className="text-xs">calculated at checkout</span>
-						</div>
+						{taxResolved ? (
+							<div className="flex justify-between py-1 text-base-content/60">
+								<span>
+									Sales tax <span className="text-xs">from your address</span>
+								</span>
+								<span className="tabular-nums">+${(sessionTotals?.tax ?? 0).toFixed(2)}</span>
+							</div>
+						) : (
+							<div className="flex justify-between py-1 text-base-content/60">
+								<span>Sales tax</span>
+								<span className="text-xs">calculated at checkout</span>
+							</div>
+						)}
 						<div className="mt-2 flex justify-between border-t border-base-300 pt-2 font-semibold">
-							<span>Subtotal you pay</span>
-							<span className="tabular-nums">${quote.subtotal}</span>
+							<span>You pay</span>
+							<span className="tabular-nums" data-testid="basket-total">
+								{taxResolved
+									? `$${(sessionTotals?.buyerTotal ?? 0).toFixed(2)}`
+									: `$${quote.subtotal} + tax`}
+							</span>
 						</div>
 						<div className="mt-1 flex justify-between text-success">
 							<span>{creator} receives</span>
@@ -183,7 +228,9 @@ export default function BasketPage() {
 							<BasketCheckout
 								workIds={items.map((i) => i.workId)}
 								buyerTotal={quote.subtotal}
+								onTotals={handleTotals}
 								onComplete={() => {
+									setSessionTotals(null);
 									clear();
 									void refresh();
 								}}

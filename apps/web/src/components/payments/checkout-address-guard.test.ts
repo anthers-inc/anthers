@@ -29,13 +29,26 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const surfaces = {
-	ProjectPricing: "src/components/project/ProjectPricing.tsx",
 	BasketCheckout: "src/components/basket/BasketCheckout.tsx",
+} as const;
+
+/**
+ * The surfaces that must NOT carry a purchase form, with what their retirement means.
+ *
+ * `ProjectPricing` sat in this list as a purchase surface until 2026-10-03, when its
+ * whole checkout half was retired and it became a price card: it now appears below,
+ * where "must not mount Checkout" belongs, because the Work page is no longer a
+ * purchase surface at all — Parker's decision, "we really just shouldn't have a
+ * payment/billing form on the Work page at all."
+ */
+const retiredSurfaces = {
+	ProjectPricing: "src/components/project/ProjectPricing.tsx",
+	WorkPage: "src/pages/WorkPage.tsx",
 } as const;
 
 const read = (rel: string) => readFileSync(join(import.meta.dir, "../../..", rel), "utf8");
 
-describe("the purchase surfaces' billing address", () => {
+describe("the purchase surface's billing address", () => {
 	for (const [name, rel] of Object.entries(surfaces)) {
 		const source = read(rel);
 
@@ -79,6 +92,49 @@ describe("the purchase surfaces' billing address", () => {
 			expect(source, `${name} re-asks for billing details on the Payment Element`).toContain(
 				'fields: { billingDetails: "never" }',
 			);
+		});
+	}
+});
+
+describe("checkout lives in exactly one place", () => {
+	// 🚨 **The Work page's inline checkout is retired, not deprecated.** It cost the
+	// first live purchase three defects at once (nested forms, a session POST per page
+	// view, swallowed refusals), and the fix was the decision that purchases go through
+	// the basket — so any reappearance of Checkout on the Work page's tree regresses a
+	// decision, and this is the guard that says so at a glance.
+	//
+	// Comments are stripped before matching: the retirement's doc comments name the
+	// retired mechanism ("CheckoutElementsProvider") to explain why it must not come
+	// back, and a scan over the whole file would read that history as a reintroduction —
+	// the same lesson `stripe-redirect-guard.test.ts` records about prose matching.
+
+	const code = (rel: string) =>
+		read(rel)
+			// Block comments first — the file headers live in them.
+			.replace(/\/\*[\s\S]*?\*\//g, "")
+			// Then line comments.
+			.replace(/^\s*\/\/.*$/gm, "");
+
+	for (const [name, rel] of Object.entries(retiredSurfaces)) {
+		const source = code(rel);
+
+		it(`${name} mounts no Checkout of any kind`, () => {
+			expect(source, `${name} re-imported the checkout subtree`).not.toContain(
+				"CheckoutElementsProvider",
+			);
+			expect(source, `${name} re-imported the checkout subtree`).not.toContain(
+				"useCheckoutElements",
+			);
+		});
+
+		it(`${name} renders no payment form`, () => {
+			if (name === "ProjectPricing") {
+				// The price card keeps one form-free rule: no `<form>` at all — its two
+				// buttons are plain buttons, and buying happens elsewhere.
+				expect(source, `${name} grew a form; buying happens in the basket`).not.toMatch(
+					/<form[\s>]/,
+				);
+			}
 		});
 	}
 });
