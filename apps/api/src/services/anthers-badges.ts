@@ -89,13 +89,23 @@ export async function ensureAnthersBadges(ownerUserId: number) {
  *
  * ⭐ **Ownership is how the ladder is recognized** — "does this account hold rungs" —
  * rather than "is there a $0 row anywhere", which is the retired marker-row test.
+ *
+ * 🚨 **No account also means no ladder**, so the stand-in's absence answers "missing"
+ * rather than throwing: the gauntlet's seeding order calls this before creating the
+ * stand-in, and the first seeding in a fresh session is exactly the case it exists to
+ * catch.
  */
 export async function anthersLadderMissing(): Promise<boolean> {
-	const owner = await anthersUserId();
+	let anthersId: number;
+	try {
+		anthersId = await anthersUserId();
+	} catch {
+		return true;
+	}
 	const [row] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(eq(badges.creatorId, owner))
+		.where(eq(badges.creatorId, anthersId))
 		.limit(1);
 	return row === undefined;
 }

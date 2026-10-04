@@ -49,6 +49,17 @@ function cycleKey(): string {
  */
 export async function applyAnthersSupport(viewerId: number, dollars: string): Promise<void> {
 	const org = await anthersUserIdOfSession();
+	// Free is the absence of a holding (the 2026-10-03 reversal), not a rung at $0: the
+	// $0 hop clears the viewer's Anthers holdings and writes nothing, which is the same
+	// shape a canceled subscription leaves.
+	if (Number(dollars) === 0) {
+		await db
+			.delete(userBadges)
+			.where(
+				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+			);
+		return;
+	}
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
@@ -56,7 +67,7 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 		.limit(1);
 	if (!rung) {
 		throw new Error(
-			`The org ladder has no Badge at $${dollars}. Run \`make gauntlet-reset\` first — the hop must place a state the model can produce.`,
+			`The Anthers ladder has no Badge at $${dollars}. Run \`make gauntlet-reset\` first — the hop must place a state the model can produce.`,
 		);
 	}
 	await db

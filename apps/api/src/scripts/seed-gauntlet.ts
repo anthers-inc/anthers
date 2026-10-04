@@ -82,7 +82,6 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import { anthersLadderMissing, ensureAnthersBadges } from "../services/anthers-badges.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
-import { HandleReservedError } from "../services/pending-signups.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
 const TAG = "[gauntlet]";
@@ -223,18 +222,22 @@ async function ensureViewer(inst: Instance): Promise<void> {
  *
  * ⚠️ **Two fixture instances share this one account, so creation can lose a race.** When
  * the walk's seeder and instance A's seeder run side by side (the projects now run in
- * parallel), both can pass the `existing` check together, and the pending-signup's
- * unique handle reservation makes exactly one creation fail with `HandleReservedError`.
+ * parallel), both can pass the `existing` check together, and the brought identity's
+ * direct PDS creation makes exactly one creation fail — the handle is already taken.
  * The loser re-reads: the winner's account is there by then, and that is success —
  * this function's contract is "the org row exists, return its id", not "I created it".
  * Any other failure still throws.
  */
 async function ensureOrg(): Promise<number> {
 	const resolveId = async (): Promise<number | null> => {
+		// The bypassed name, not `fixtureHandle`: `localHandleName` downgrades the reserved
+		// "anthers" to "anthers-dev", but this account is created with `bypassReserved`, so
+		// the handle it actually holds is `anthers.<suffix>`.
+		const suffix = await hostedHandleSuffix();
 		const [existing] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_ORG_USERNAME)))
+			.where(eq(users.atprotoHandle, `anthers.${suffix}`))
 			.limit(1);
 		return existing?.id ?? null;
 	};
@@ -263,18 +266,23 @@ async function ensureOrg(): Promise<number> {
 		console.log(`${TAG} created Anthers stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
 		return created.id;
 	} catch (err) {
-		// Only "another signup is holding the handle" is the race; the winner may still be
-		// BETWEEN reserving the handle and writing its `users` row, so one re-read can see
-		// neither loser nor winner — poll briefly for the account to appear.
-		if (!(err instanceof HandleReservedError)) throw err;
+		// The brought path has no pending-signup reservation, so the race is the PDS
+		// refusing a handle another seeder just created — a raw fetch failure, not
+		// `HandleReservedError` (that error belongs to the hosted reservation the old
+		// shape used). The winner may still be between creating the identity and writing
+		// its `users` row, so one re-read can see neither loser nor winner — poll briefly
+		// for the account to appear, and only a poll that finds nothing by the deadline
+		// is a real failure.
 		const deadline = Date.now() + 10_000;
 		for (;;) {
 			const winner = await resolveId();
 			if (winner) return winner;
 			if (Date.now() > deadline) {
-				throw new Error(
-					`the Anthers stand-in "${GAUNTLET_ORG_USERNAME}" lost a creation race to another seeder and never appeared`,
-				);
+				throw err instanceof Error
+					? new Error(
+							`the Anthers stand-in "${GAUNTLET_ORG_USERNAME}" lost a creation race to another seeder and never appeared (${err.message})`,
+						)
+					: err;
 			}
 			await new Promise((resolve) => setTimeout(resolve, 250));
 		}
