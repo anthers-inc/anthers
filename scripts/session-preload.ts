@@ -59,20 +59,26 @@ if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 {
 	const { db } = await import("@anthers/db/client");
 	const { users } = await import("@anthers/db/schema");
+	const { eq } = await import("drizzle-orm");
 	const { ensureAnthersBadges } = await import("../apps/api/src/services/anthers-badges.js");
 	const { createAccount } = await import("../apps/api/src/__tests__/account-fixture.js");
+	// The stand-in takes the reserved "anthers" name on the session's suffix — brought,
+	// like the production account it stands in for — so the handle-based lookups
+	// (`anthersUserId`) find it exactly as they find the real `@anthers.org`.
 	const ORG_EMAIL = "seed_org_ladder@example.com";
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where((await import("drizzle-orm")).eq(users.email, ORG_EMAIL))
+		.where(eq(users.email, ORG_EMAIL))
 		.limit(1);
 	if (existing) {
 		await ensureAnthersBadges(existing.id);
 	} else {
-		const account = await createAccount("seed_org_ladder", {
+		const account = await createAccount("anthers", {
 			email: ORG_EMAIL,
 			emailVerified: true,
+			identity: "brought",
+			bypassReserved: true,
 		});
 		await ensureAnthersBadges(account.userId);
 	}

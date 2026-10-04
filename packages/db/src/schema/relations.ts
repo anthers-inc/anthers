@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { relations } from "drizzle-orm";
-import {
-	atprotoSessions,
-	follows,
-	sessions,
-	userBlocks,
-	users,
-	verificationTokens,
-} from "./auth.js";
+import { atprotoSessions, follows, sessions, userBlocks, users } from "./auth.js";
 import {
 	assets,
 	bookmarks,
@@ -39,7 +32,6 @@ import {
 
 export const usersRelations = relations(users, ({ one, many }) => ({
 	sessions: many(sessions),
-	verificationTokens: many(verificationTokens),
 	atprotoSession: one(atprotoSessions),
 
 	// Follows (both directions)
@@ -82,10 +74,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
 	user: one(users, { fields: [sessions.userId], references: [users.id] }),
-}));
-
-export const verificationTokensRelations = relations(verificationTokens, ({ one }) => ({
-	user: one(users, { fields: [verificationTokens.userId], references: [users.id] }),
 }));
 
 export const atprotoSessionsRelations = relations(atprotoSessions, ({ one }) => ({

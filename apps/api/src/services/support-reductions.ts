@@ -33,6 +33,7 @@ import {
 	retrieveSubscription,
 	updateInvoiceLines,
 } from "../lib/processor.js";
+import { anthersUserId } from "./anthers-badges.js";
 import { itemsFromSub } from "./billing.js";
 import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
@@ -42,15 +43,21 @@ const money = (d: Decimal.Value) => new Decimal(d).toDecimalPlaces(2, Decimal.RO
 /**
  * The destination label a reduction is keyed by — the same vocabulary as a subscription
  * item's `metadata.destination`, because the two are compared directly.
+ *
+ * ⭐ **One vocabulary: every destination is a user id** (the issuer pass, 2026-10-04) —
+ * Anthers' own line carries the Anthers creator account's id exactly like a creator's,
+ * so the label is the id and nothing else. No row in any environment carries the retired
+ * `"anthers"` spelling (no subscription has ever been taken out), so no read-side
+ * compat is needed.
  */
-function destinationLabel(creatorId: number | null): string {
-	return creatorId === null ? "anthers" : String(creatorId);
+function destinationLabel(creatorId: number): string {
+	return String(creatorId);
 }
 
 /** One line's worth of what somebody just started paying for. */
 export interface StartedLine {
-	/** `null` for the Anthers line, a creator's user id otherwise. */
-	creatorId: number | null;
+	/** The account the line supports — the Anthers creator account's id for its own line. */
+	creatorId: number;
 	/** The monthly amount in dollars this line will renew at. */
 	amount: number;
 }
@@ -173,8 +180,9 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 
 	const sub = await retrieveSubscription(subscriptionId);
 	if (!sub) return 0;
+	const anthersId = await anthersUserId();
 	const destinationOfItem = new Map(
-		itemsFromSub(sub).map((i) => [i.itemId, destinationLabel(i.creatorId)]),
+		itemsFromSub(sub, anthersId).map((i) => [i.itemId, destinationLabel(i.creatorId)]),
 	);
 
 	const lines = spendableLines(await allInvoiceLines(invoice), destinationOfItem);

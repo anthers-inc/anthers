@@ -52,7 +52,6 @@ import {
 	amountMeets,
 	BADGE_ART_MAX_BYTES,
 	BADGE_ART_PX,
-	CHARGEABLE_AMOUNT_MESSAGE,
 	heldBadgeName,
 	isChargeableAmount,
 	PUBLIC_ACCESS_PRICE,
@@ -92,7 +91,7 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { orgOwnerUserId } from "../services/anthers-badges.js";
+import { anthersUserId } from "../services/anthers-badges.js";
 import { creditedSeconds } from "../services/attention-ranges.js";
 import {
 	ensureAnthersProduct,
@@ -674,7 +673,8 @@ const subscriptionRoutes = new Hono()
 					// Preview only the ANTHERS line moving. Sending the whole item set would
 					// price a change to every creator the user supports as well, which is not
 					// what this modal is asking about.
-					const existing = itemsFromSub(sub).find((i) => i.creatorId === null);
+					const anthersId = await anthersUserId();
+					const existing = itemsFromSub(sub, anthersId).find((i) => i.creatorId === anthersId);
 					const preview = await previewInvoice({
 						customer: acct.stripeCustomerId ?? undefined,
 						subscription: sub.id,
@@ -689,7 +689,7 @@ const subscriptionRoutes = new Hono()
 										recurring: { interval: "month" as const },
 									},
 									quantity: 1,
-									metadata: { destination: "anthers" },
+									metadata: { destination: String(anthersId) },
 								},
 							],
 							proration_behavior: "always_invoice",
@@ -844,7 +844,8 @@ const subscriptionRoutes = new Hono()
 					amount: d.amount,
 				});
 			}
-			const items = supportItems(product, anthersSupport, picks);
+			const anthersId = await anthersUserId();
+			const items = supportItems(product, anthersId, anthersSupport, picks);
 			const now = new Date();
 
 			/**
@@ -883,7 +884,7 @@ const subscriptionRoutes = new Hono()
 					);
 				}
 				if (sub.status === "active" || sub.status === "trialing") {
-					const change = planItemChange(sub, product, anthersSupport, picks);
+					const change = planItemChange(sub, product, anthersId, anthersSupport, picks);
 
 					// Up first, because it is the call that takes money and the one a declined
 					// card should stop. A decrease that silently followed a failed raise would
@@ -976,7 +977,7 @@ const subscriptionRoutes = new Hono()
 			// has been raised, and a subscription that never activates has its reductions
 			// carried against an invoice that never arrives, which costs nothing.
 			await recordReductions(user.id, now, [
-				{ creatorId: null, amount: anthersSupport },
+				{ creatorId: anthersId, amount: anthersSupport },
 				...picks.map((p) => ({ creatorId: p.creatorId, amount: p.amount })),
 			]);
 
@@ -1546,9 +1547,9 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
 
-		// The org identity, so its rungs can be excluded from the directed budget's
-		// arithmetic — see `allocated` below for why.
-		const org = await orgOwnerUserId();
+		// The Anthers creator account, so its rungs can be excluded from the directed
+		// budget's arithmetic — see `allocated` below for why.
+		const org = await anthersUserId();
 
 		const result = await db
 			.select({
@@ -1563,14 +1564,14 @@ const subscriptionRoutes = new Hono()
 			.where(and(eq(userBadges.userId, user.id), eq(userBadges.billingCycle, cycle)));
 
 		const budget = await directedBudgetFor(user.id);
-		// 🚨 **The budget is CREATOR-DIRECTED dollars, so the org's rungs are not
-		// "allocated" against it.** `directedBudget` is written from the charge's
+		// 🚨 **The budget is CREATOR-DIRECTED dollars, so the Anthers account's own rungs are
+		// not "allocated" against it.** `directedBudget` is written from the charge's
 		// creator-destination items (`directedSupportFromSub` filters to
-		// `creatorId !== null` — the Anthers line is the null destination), so the money
-		// the viewer holds on the org's ladder draws from the subscription's Anthers
-		// side and never from this budget. Summing it here would double-count the same
-		// charge and quietly shrink the picker until a mid-ladder walk ran out of
-		// "budget" the viewer had paid for.
+		// `creatorId !== anthersId` — every destination is a user id now, so the exclusion
+		// is by the Anthers account's id), so the money the viewer holds on Anthers' own
+		// ladder draws from the subscription's Anthers line and never from this budget.
+		// Summing it here would double-count the same charge and quietly shrink the picker
+		// until a mid-ladder walk ran out of "budget" the viewer had paid for.
 		const allocated = result
 			.filter((r) => r.badge.creatorId !== org)
 			.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
@@ -1634,7 +1635,7 @@ const subscriptionRoutes = new Hono()
 
 			// The org identity, for the allocation check's exclusion — see the comment
 			// beside `currentAllocated` below.
-			const org = await orgOwnerUserId();
+			const org = await anthersUserId();
 
 			// The Badge itself: its threshold is the amount this pick directs, and the
 			// route never takes a number from the request — the pick names the rung.
@@ -1643,11 +1644,11 @@ const subscriptionRoutes = new Hono()
 			if (badge.creatorId === user.id) {
 				return c.json({ error: "You cannot hold your own Badge" }, 400);
 			}
-			// 🚨 **Anthers' own Badges are not a directed pick.** Money on the org's ladder
+			// 🚨 **Anthers' own Badges are not a directed pick.** Money on Anthers' own ladder
 			// is the subscription's Anthers line, changed where the Anthers amount is
 			// changed (signup and the dashboard's Anthers side) — routing it through the
 			// directed picker would draw it from the creator budget, which is the same
-			// conflation the allocation check excludes the org from.
+			// conflation the allocation check excludes the Anthers account from.
 			if (badge.creatorId === org) {
 				return c.json(
 					{ error: "Anthers' own Badges are chosen with your Anthers amount, not a creator pick" },
@@ -1680,11 +1681,11 @@ const subscriptionRoutes = new Hono()
 			}
 
 			// Check total allocated (excluding this creator's holding) against the budget.
-			// 🚨 **The org's rungs are not "allocated" against the directed budget** — the
-			// same exclusion `/my-badges` GET applies, for the same reason: the budget is
-			// the charge's creator-destination items, and money held on the org's ladder
-			// draws from the subscription's Anthers side. Counting it here would let an
-			// Anthers Badge shrink a budget the viewer paid separately for.
+			// 🚨 **The Anthers account's own rungs are not "allocated" against the directed
+			// budget** — the same exclusion `/my-badges` GET applies, for the same reason:
+			// the budget is the charge's creator-destination items, and money held on
+			// Anthers' own ladder draws from the subscription's Anthers line. Counting it
+			// here would let an Anthers Badge shrink a budget the viewer paid separately for.
 			const [currentAllocated] = await db
 				.select({
 					total: sql<string>`COALESCE(SUM(${badges.threshold}), 0)`,
@@ -1793,10 +1794,20 @@ const subscriptionRoutes = new Hono()
 				// anything between zero and that floor, so a $0.25 Badge is a rung no viewer
 				// can climb — the creator would find out through a supporter failing rather
 				// than through their own editor.
+				//
+				// 🚨 **And never $0 (Parker, 2026-10-03): Free is the absence of a Badge.**
+				// `isChargeableAmount` allows zero because the *Anthers* amount needs it —
+				// "$0 to Anthers" is the ordinary state of not supporting, and the Badge Maker's
+				// input has refused $0 all along. A Badge at $0 would be a rung everybody
+				// already holds, which gates nothing and directs nothing — and for Anthers' own
+				// ladder it was the marker-row identification this pass retired. A creator's
+				// ungated Work is what "free" is; no ladder needs to say so.
 				threshold: z
 					.string()
 					.regex(/^\d+(\.\d{1,2})?$/)
-					.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE }),
+					.refine((v) => isChargeableAmount(Number(v)) && Number(v) > 0, {
+						message: `A Badge level is a level of monthly support — at least $${STRIPE_MIN_CHARGE.toFixed(2)}, and never $0, because everyone can already see an ungated Work.`,
+					}),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
 			}),
@@ -1828,7 +1839,9 @@ const subscriptionRoutes = new Hono()
 				threshold: z
 					.string()
 					.regex(/^\d+(\.\d{1,2})?$/)
-					.refine((v) => isChargeableAmount(Number(v)), { message: CHARGEABLE_AMOUNT_MESSAGE })
+					.refine((v) => isChargeableAmount(Number(v)) && Number(v) > 0, {
+						message: `A Badge level is a level of monthly support — at least $${STRIPE_MIN_CHARGE.toFixed(2)}, and never $0, because everyone can already see an ungated Work.`,
+					})
 					.optional(),
 				label: z.string().min(1).max(100).optional(),
 				description: z.string().max(1000).optional(),

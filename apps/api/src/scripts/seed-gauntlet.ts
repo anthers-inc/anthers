@@ -29,9 +29,9 @@
  * shared one: the `walk-creator` / `walk-viewer` accounts and the `walk-gauntlet-` posts
  * defined in `gauntlet-walk.ts`. The e2e `authed` project runs on instance A (the
  * default), and the e2e `gauntlet` walk runs on instance B — both reset their own fixture
- * in their own setup, which is safe only because the two row sets are disjoint. The org stand-in and the
+ * in their own setup, which is safe only because the two row sets are disjoint. The Anthers stand-in and the
  * Anthers Badge ladder are deliberately NOT per-instance: holdings are viewer-scoped
- * rows, and one shared org ladder keeps every viewer's Anthers-side reads reading the
+ * rows, and one shared Anthers ladder keeps every viewer's Anthers-side reads reading the
  * same ladder rather than a second, private one.
  *
  * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
@@ -80,7 +80,7 @@ import {
 } from "@anthers/db/gauntlet-walk";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
-import { ensureAnthersBadges, orgLadderMissing } from "../services/anthers-badges.js";
+import { anthersLadderMissing, ensureAnthersBadges } from "../services/anthers-badges.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { HandleReservedError } from "../services/pending-signups.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
@@ -213,11 +213,13 @@ async function ensureViewer(inst: Instance): Promise<void> {
 }
 
 /**
- * The session's org stand-in — the `users` row that owns the seeded Anthers Badge ladder.
+ * The session's Anthers-stand-in account — the `users` row that owns the seeded Anthers
+ * Badge ladder.
  *
  * See `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
- * viewer. This account gates nothing and holds nothing; its only job is to be the issuer
- * of the org's rungs so org-ladder reads and creator-ladder reads never collide.
+ * viewer, and for why the account takes the reserved "anthers" name. This account gates
+ * nothing and holds nothing; its only job is to be the issuer of the Anthers rungs so
+ * Anthers-ladder reads and creator-ladder reads never collide.
  *
  * ⚠️ **Two fixture instances share this one account, so creation can lose a race.** When
  * the walk's seeder and instance A's seeder run side by side (the projects now run in
@@ -243,16 +245,22 @@ async function ensureOrg(): Promise<number> {
 	try {
 		const created = await createLocalAccount({
 			email: GAUNTLET_ORG_EMAIL,
+			// ⭐ Brought, like the production account it stands in for: the real
+			// `@anthers.org` account brought its Bluesky identity, and the brought path
+			// has no reserved-name check — so the stand-in takes the reserved "anthers"
+			// name on the session's own suffix without a hole in the reservation list.
+			identity: "brought",
 			handleName: GAUNTLET_ORG_USERNAME,
+			bypassReserved: true,
 			emailVerified: true,
 			fields: {
 				displayName: "Anthers (fixture)",
-				bio: "The session's stand-in for the org identity; owns the seeded Anthers Badge ladder.",
+				bio: "The session's stand-in for the Anthers creator account; owns the seeded Anthers Badge ladder.",
 				isCreator: false,
 				termsAcceptedAt: new Date(),
 			},
 		});
-		console.log(`${TAG} created org stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
+		console.log(`${TAG} created Anthers stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
 		return created.id;
 	} catch (err) {
 		// Only "another signup is holding the handle" is the race; the winner may still be
@@ -265,7 +273,7 @@ async function ensureOrg(): Promise<number> {
 			if (winner) return winner;
 			if (Date.now() > deadline) {
 				throw new Error(
-					`the org stand-in "${GAUNTLET_ORG_USERNAME}" lost a creation race to another seeder and never appeared`,
+					`the Anthers stand-in "${GAUNTLET_ORG_USERNAME}" lost a creation race to another seeder and never appeared`,
 				);
 			}
 			await new Promise((resolve) => setTimeout(resolve, 250));
@@ -610,16 +618,16 @@ async function main(): Promise<void> {
 	await resetGates(inst, creatorId);
 	await resetViewer(viewer.id, creatorId, postIds);
 
-	// The org ladder is platform state, not dev-account state: every reader of "what the
+	// The Anthers ladder is platform state, not dev-account state: every reader of "what the
 	// viewer holds on Anthers' ladder" (`heldAnthersBadgeAmount` and its call sites) throws
 	// loudly when no ladder exists, and an e2e session runs this script rather than
-	// `db:seed` — so the ladder is ensured here, owned by the fixture's org stand-in
+	// `db:seed` — so the ladder is ensured here, owned by the fixture's Anthers stand-in
 	// (see `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
 	// viewer). `ensure-dev-account` (the dev door) seeds the same rows owned by the dev
 	// account; whichever runs first wins and both are idempotent.
 	// 🚨 **This must run AFTER `resetGates`** — that rebuild deletes every badge the
-	// fixture creator owns, and the org rows would be rebuilt by nobody if seeded first.
-	if (await orgLadderMissing()) {
+	// fixture creator owns, and the Anthers rows would be rebuilt by nobody if seeded first.
+	if (await anthersLadderMissing()) {
 		const orgId = await ensureOrg();
 		await ensureAnthersBadges(orgId);
 		console.log(`${TAG} seeded the Anthers Badge ladder (owned by ${GAUNTLET_ORG_USERNAME})`);

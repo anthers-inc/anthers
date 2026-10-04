@@ -16,6 +16,13 @@
  * for exactly the same reason. So the assertions below name each half separately and never
  * derive one from the other.
  *
+ * ⭐ **Every destination is a user id, Anthers' own line included** (the issuer pass,
+ * 2026-10-04): the Anthers creator account is an ordinary issuer, so its line is stamped
+ * with its user id and "the Anthers half" is the filter `creatorId === anthersId` rather
+ * than a special spelling. The retired `"anthers"` literal and a blank stamp still read as
+ * the Anthers line — no subscription carries either, so it is a belt against a hand-authored
+ * Stripe object rather than a migration path.
+ *
  * Scope: the SPLIT only. The per-creator picks are applied on activation — so a card that
  * declines cannot leave support directed that nobody paid for — and that path is
  * upsert-keyed on (user, creator, cycle) against a replayed webhook. Neither is covered
@@ -30,6 +37,9 @@ import {
 	periodEndFromSub,
 	totalSupportFromSub,
 } from "../services/billing";
+
+/** The Anthers creator account's id, as the issuer pass stamps it. */
+const ANTHERS_ID = 7;
 
 /** One subscription item: dollars, and who they are for. `undefined` = unstamped. */
 function item(dollars: number, destination?: string, periodEnd = 1_800_000_000) {
@@ -56,72 +66,87 @@ function sub(...items: ReturnType<typeof item>[]) {
 describe("the support split on one subscription", () => {
 	it("reads each half from the items' destinations, never from the total", () => {
 		// $3 to Anthers, $5 and $2.50 to two creators — one charge of $10.50.
-		const s = sub(item(3, "anthers"), item(5, "42"), item(2.5, "77"));
-		expect(totalSupportFromSub(s)).toBe(10.5);
-		expect(anthersSupportFromSub(s)).toBe(3);
-		expect(directedSupportFromSub(s)).toBe(7.5);
+		const s = sub(item(3, String(ANTHERS_ID)), item(5, "42"), item(2.5, "77"));
+		expect(totalSupportFromSub(s, ANTHERS_ID)).toBe(10.5);
+		expect(anthersSupportFromSub(s, ANTHERS_ID)).toBe(3);
+		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(7.5);
 	});
 
 	it("carries cents, which is the whole reason the unit retired", () => {
-		const s = sub(item(2.5, "anthers"), item(1.75, "42"));
-		expect(anthersSupportFromSub(s)).toBe(2.5);
-		expect(directedSupportFromSub(s)).toBe(1.75);
-		expect(totalSupportFromSub(s)).toBe(4.25);
+		const s = sub(item(2.5, String(ANTHERS_ID)), item(1.75, "42"));
+		expect(anthersSupportFromSub(s, ANTHERS_ID)).toBe(2.5);
+		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(1.75);
+		expect(totalSupportFromSub(s, ANTHERS_ID)).toBe(4.25);
 	});
 
-	it("treats an unstamped item as Anthers-only", () => {
-		// Every subscription predating the N-item model carried one item and was either
-		// Anthers-only or split in metadata that no longer applies. Crediting it to Anthers
-		// is the migration path, not a guess — and dropping it instead would silently zero a
-		// paying supporter's Badge.
+	it("treats an unstamped item as the Anthers line", () => {
+		// No subscription carries an unstamped item; an object authored by hand in Stripe's
+		// dashboard could. Crediting it to Anthers — the account a blank stamp most plausibly
+		// names — rather than dropping it keeps the total honest.
 		const s = sub(item(6));
-		expect(anthersSupportFromSub(s)).toBe(6);
-		expect(directedSupportFromSub(s)).toBe(0);
+		expect(anthersSupportFromSub(s, ANTHERS_ID)).toBe(6);
+		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(0);
 	});
 
-	it("ignores a destination stamp that isn't a creator id", () => {
+	it("still reads the retired \"anthers\" spelling as the Anthers line", () => {
+		const s = sub(item(3, "anthers"), item(5, "42"));
+		expect(anthersSupportFromSub(s, ANTHERS_ID)).toBe(3);
+		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(5);
+	});
+
+	it("ignores a destination stamp that isn't an account id", () => {
 		// 🚨 `Number("")` is 0, and user id 0 is a real row shape. A blank, negative or
 		// non-numeric stamp must fall back to Anthers rather than credit somebody arbitrary.
 		for (const bad of ["", "  ", "none", "-1", "NaN", "0"]) {
 			const s = sub(item(4, bad));
-			expect(anthersSupportFromSub(s), `stamp ${JSON.stringify(bad)}`).toBe(4);
-			expect(directedSupportFromSub(s), `stamp ${JSON.stringify(bad)}`).toBe(0);
+			expect(anthersSupportFromSub(s, ANTHERS_ID), `stamp ${JSON.stringify(bad)}`).toBe(4);
+			expect(directedSupportFromSub(s, ANTHERS_ID), `stamp ${JSON.stringify(bad)}`).toBe(0);
 		}
 	});
 
 	it("sums several lines pointed at the same side", () => {
-		const s = sub(item(3, "anthers"), item(6, "anthers"), item(1, "42"), item(2, "42"));
-		expect(anthersSupportFromSub(s)).toBe(9);
-		expect(directedSupportFromSub(s)).toBe(3);
-		expect(totalSupportFromSub(s)).toBe(12);
+		const s = sub(
+			item(3, String(ANTHERS_ID)),
+			item(6, String(ANTHERS_ID)),
+			item(1, "42"),
+			item(2, "42"),
+		);
+		expect(anthersSupportFromSub(s, ANTHERS_ID)).toBe(9);
+		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(3);
+		expect(totalSupportFromSub(s, ANTHERS_ID)).toBe(12);
 	});
 
 	it("the two halves always reconstruct the total", () => {
-		const s = sub(item(3, "anthers"), item(5, "42"), item(2.5, "77"), item(1, undefined));
-		expect(anthersSupportFromSub(s) + directedSupportFromSub(s)).toBeCloseTo(
-			totalSupportFromSub(s),
+		const s = sub(item(3, String(ANTHERS_ID)), item(5, "42"), item(2.5, "77"), item(1, undefined));
+		expect(anthersSupportFromSub(s, ANTHERS_ID) + directedSupportFromSub(s, ANTHERS_ID)).toBeCloseTo(
+			totalSupportFromSub(s, ANTHERS_ID),
 			10,
 		);
 	});
 });
 
-describe("the per-creator picks come from the items", () => {
-	it("names each creator and what they are given", () => {
-		const s = sub(item(3, "anthers"), item(5, "42"), item(2.5, "77"));
-		expect(directedPicksFromSub(s)).toEqual([
+describe("the per-destination picks come from the items", () => {
+	it("names every destination and what it is given — Anthers' own line included", () => {
+		const s = sub(item(3, String(ANTHERS_ID)), item(5, "42"), item(2.5, "77"));
+		expect(directedPicksFromSub(s, ANTHERS_ID)).toEqual([
+			{ creatorId: ANTHERS_ID, amount: 3 },
 			{ creatorId: 42, amount: 5 },
 			{ creatorId: 77, amount: 2.5 },
 		]);
 	});
 
-	it("excludes the Anthers line and anything unstamped", () => {
-		const s = sub(item(3, "anthers"), item(9, undefined), item(1, "42"));
-		expect(directedPicksFromSub(s)).toEqual([{ creatorId: 42, amount: 1 }]);
+	it("resolves an unstamped line to the Anthers destination rather than dropping it", () => {
+		const s = sub(item(3, String(ANTHERS_ID)), item(9, undefined), item(1, "42"));
+		expect(directedPicksFromSub(s, ANTHERS_ID)).toEqual([
+			{ creatorId: ANTHERS_ID, amount: 3 },
+			{ creatorId: ANTHERS_ID, amount: 9 },
+			{ creatorId: 42, amount: 1 },
+		]);
 	});
 
 	it("drops a zero-amount line rather than writing an empty allocation", () => {
 		const s = sub(item(0, "42"), item(1, "77"));
-		expect(directedPicksFromSub(s)).toEqual([{ creatorId: 77, amount: 1 }]);
+		expect(directedPicksFromSub(s, ANTHERS_ID)).toEqual([{ creatorId: 77, amount: 1 }]);
 	});
 });
 
@@ -133,7 +158,7 @@ describe("the billing period", () => {
 	 * answer depending on which creator happens to sort first.
 	 */
 	it("reads across the items rather than off the first one", () => {
-		const s = sub(item(3, "anthers", 1_700_000_000), item(5, "42", 1_800_000_000));
+		const s = sub(item(3, String(ANTHERS_ID), 1_700_000_000), item(5, "42", 1_800_000_000));
 		expect(periodEndFromSub(s)).toBe(1_800_000_000);
 	});
 
@@ -145,8 +170,8 @@ describe("the billing period", () => {
 
 describe("itemsFromSub", () => {
 	it("reports the item id, so a change can target the right line", () => {
-		const s = sub(item(3, "anthers"), item(5, "42"));
-		expect(itemsFromSub(s).map((i) => i.creatorId)).toEqual([null, 42]);
-		expect(itemsFromSub(s).every((i) => i.itemId.length > 0)).toBe(true);
+		const s = sub(item(3, String(ANTHERS_ID)), item(5, "42"));
+		expect(itemsFromSub(s, ANTHERS_ID).map((i) => i.creatorId)).toEqual([ANTHERS_ID, 42]);
+		expect(itemsFromSub(s, ANTHERS_ID).every((i) => i.itemId.length > 0)).toBe(true);
 	});
 });

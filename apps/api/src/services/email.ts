@@ -19,7 +19,7 @@ import { isPublicDeployment } from "../lib/deployment.js";
 
 const FROM = process.env.EMAIL_FROM ?? "Anthers <noreply@anthers.org>";
 
-/** Base URL of the web frontend, for links users click (verify email, etc.). */
+/** Base URL of the web frontend, for links users click. */
 function frontendUrl(): string {
 	return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 }
@@ -152,10 +152,6 @@ async function deliverToCatcher(
 	}
 }
 
-export function verifyEmailUrl(token: string): string {
-	return `${frontendUrl()}/verify-email?token=${encodeURIComponent(token)}`;
-}
-
 // ─── Templates ───────────────────────────────────────────────────────────────
 
 const BRAND = "#7c3aed";
@@ -180,18 +176,6 @@ function shell(heading: string, bodyHtml: string): string {
 		</table>
 	</body>
 </html>`;
-}
-
-function button(href: string, label: string): string {
-	return `<a href="${href}" style="display:inline-block;background:${BRAND};color:#ffffff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:9px;font-size:15px;">${label}</a>`;
-}
-
-function verifyBody(intro: string, verifyUrl: string): string {
-	return `<p style="margin:0 0 18px;">${intro}</p>
-		<p style="margin:0 0 22px;">${button(verifyUrl, "Verify my email")}</p>
-		<p style="margin:0 0 6px;color:#8f8ba0;font-size:13px;">Or paste this link into your browser:</p>
-		<p style="margin:0;color:#8f8ba0;font-size:13px;word-break:break-all;">${verifyUrl}</p>
-		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This link expires in 24 hours. If you didn't create an Anthers account, you can ignore this email.</p>`;
 }
 
 /**
@@ -219,23 +203,12 @@ export function escapeHtml(s: string): string {
 // ─── Senders ─────────────────────────────────────────────────────────────────
 
 /**
- * How to address someone who may not have claimed a handle yet.
- *
- * Since the signup ceremony an account can exist before onboarding names it, and mail
- * still has to reach it. Interpolating the null would greet a reader as "Hi null", so
- * the fallback is to greet nobody in particular and let the sentence carry itself.
- */
-function greet(username: string | null): string {
-	return username ? `, ${escapeHtml(username)}` : "";
-}
-
-/**
  * The signup ceremony's code, to an address with no account yet.
  *
  * The code is spelled out in a monospace block rather than wrapped in a button, because
  * the reader's next move is to *type it into six boxes on the page they came from* — a
  * link would take them somewhere else and lose the picks they had already made. That is
- * the whole reason this flow uses a code instead of the verification link above.
+ * the whole reason this flow uses a code instead of a link email.
  */
 export async function sendSignupCodeEmail(to: string, code: string): Promise<void> {
 	const html = shell(
@@ -471,24 +444,6 @@ export async function sendRightsRequestAnswerEmail(to: string, note: string): Pr
 		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">You're receiving this because a data-rights request was made to Anthers from this address. The account that made it has since been deleted, so this email is the only copy of the answer. If anything in it is wrong or incomplete, write to privacy@anthers.org.</p>`,
 	);
 	return sendEmail({ to, subject: "Your data request has been answered", html });
-}
-
-/** Standalone re-send of the verification email. */
-export async function sendVerificationEmail(
-	to: string,
-	username: string | null,
-	token: string,
-): Promise<void> {
-	const url = verifyEmailUrl(token);
-	const html = shell(
-		"Verify your email",
-		verifyBody(
-			`Hi${greet(username)}, confirm your email address to finish setting up your Anthers account.`,
-			url,
-		),
-	);
-	const { sent } = await sendEmail({ to, subject: "Verify your email for Anthers", html });
-	if (!sent) console.info(`[email] verify link for ${to}: ${url}`);
 }
 
 /**

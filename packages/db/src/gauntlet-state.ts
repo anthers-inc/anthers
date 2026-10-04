@@ -40,7 +40,11 @@ import {
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_VIEWER_USERNAME,
 } from "./gauntlet.js";
-import { applyAnthersSupport, applySupportBudget } from "./gauntlet-support.js";
+import {
+	anthersUserIdOfSession,
+	applyAnthersSupport,
+	applySupportBudget,
+} from "./gauntlet-support.js";
 import { WALK_CREATOR_USERNAME, WALK_SLUG_PREFIX, WALK_VIEWER_USERNAME } from "./gauntlet-walk.js";
 import {
 	attentionEvents,
@@ -358,11 +362,13 @@ async function main(): Promise<void> {
 	}
 
 	// Report the state actually in the database — the numbers the caller should trust.
-	// The Anthers side reads the held Badge's threshold summed over the org's ladder —
-	// the same derivation Phase B's `heldAnthersBadgeAmount` will take, and the reason
-	// the report does not echo the flag it was handed; the budget side reads the
-	// `billing_accounts` balance the budget hop writes. The org is the Free rung's
-	// owner, exactly as `gauntlet-support.ts` finds it for the write.
+	// The Anthers side reads the held Badge's threshold summed over the Anthers ladder —
+	// the same derivation `heldAnthersBadgeAmount` takes, and the reason the report does
+	// not echo the flag it was handed; the budget side reads the `billing_accounts`
+	// balance the budget hop writes. The Anthers account is found by its handle's first
+	// label, exactly as `gauntlet-support.ts` finds it for the write — the retired shape
+	// identified the ladder by a $0 rung that no longer exists (2026-10-03).
+	const anthersId = await anthersUserIdOfSession();
 	const [anthersHeld] = await db
 		.select({ amount: sql<string>`COALESCE(SUM(${badges.threshold}), 0)` })
 		.from(userBadges)
@@ -371,7 +377,7 @@ async function main(): Promise<void> {
 			and(
 				eq(userBadges.userId, viewerId),
 				eq(userBadges.billingCycle, currentBillingCycle()),
-				sql`${badges.creatorId} = (SELECT creator_id FROM badges WHERE threshold = '0.00' ORDER BY id LIMIT 1)`,
+				sql`${badges.creatorId} = ${anthersId}`,
 			),
 		)
 		.limit(1);
