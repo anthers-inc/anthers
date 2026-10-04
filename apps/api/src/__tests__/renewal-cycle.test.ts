@@ -29,7 +29,6 @@ import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { planItemChange, syncSubscriptionToAccount } from "../services/billing";
 
-
 import { applyReductionsToInvoice } from "../services/support-reductions";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -324,7 +323,9 @@ describe("a new subscription is anchored to the 1st", () => {
 			expect(rows).toHaveLength(0);
 			return;
 		}
-		expect(rows.map((r) => r.destination).sort()).toEqual([String(ANTHERS_ID), String(creatorId)].sort());
+		expect(rows.map((r) => r.destination).sort()).toEqual(
+			[String(ANTHERS_ID), String(creatorId)].sort(),
+		);
 		for (const row of rows) {
 			expect(row.billingCycle).toBe(cycle);
 			expect(row.appliedAt).toBeNull();

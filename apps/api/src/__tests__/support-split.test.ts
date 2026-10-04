@@ -88,7 +88,7 @@ describe("the support split on one subscription", () => {
 		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(0);
 	});
 
-	it("still reads the retired \"anthers\" spelling as the Anthers line", () => {
+	it('still reads the retired "anthers" spelling as the Anthers line', () => {
 		const s = sub(item(3, "anthers"), item(5, "42"));
 		expect(anthersSupportFromSub(s, ANTHERS_ID)).toBe(3);
 		expect(directedSupportFromSub(s, ANTHERS_ID)).toBe(5);
@@ -118,10 +118,9 @@ describe("the support split on one subscription", () => {
 
 	it("the two halves always reconstruct the total", () => {
 		const s = sub(item(3, String(ANTHERS_ID)), item(5, "42"), item(2.5, "77"), item(1, undefined));
-		expect(anthersSupportFromSub(s, ANTHERS_ID) + directedSupportFromSub(s, ANTHERS_ID)).toBeCloseTo(
-			totalSupportFromSub(s, ANTHERS_ID),
-			10,
-		);
+		expect(
+			anthersSupportFromSub(s, ANTHERS_ID) + directedSupportFromSub(s, ANTHERS_ID),
+		).toBeCloseTo(totalSupportFromSub(s, ANTHERS_ID), 10);
 	});
 });
 
