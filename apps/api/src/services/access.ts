@@ -606,7 +606,7 @@ export async function buildAccessContext(
 			// here rather than left to a default so the closed answer is visible at the one
 			// place the logged-out context is built.
 			adultAccess: false,
-			// Set by `viewerFor` in routes/content.ts when a request carries a live
+			// Set by `requesterFor` in routes/content.ts when a request carries a live
 			// share token. Null here because this is the ordinary logged-out context, and a
 			// default that guessed otherwise would hand out an allowance nobody offered.
 			sharedBy: opts.sharedBy ?? null,

@@ -330,7 +330,7 @@ describe("Share links", () => {
 		});
 		expect(res.status).toBe(401);
 
-		// The same refusal one layer down, at the page a recipient lands on. `viewerFor`
+		// The same refusal one layer down, at the page a recipient lands on. `requesterFor`
 		// discards a token naming a different Work independently of the middleware, so a
 		// token for the video reads as no token at all here.
 		const { work } = await (await req(`/api/content/works/${textId}?share=${openToken}`)).json();

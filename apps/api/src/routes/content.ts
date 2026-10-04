@@ -572,7 +572,7 @@ async function listComments(
 			 */
 			collapsed: isCollapsed(tally),
 			/** What this viewer did, so the control can show itself as pressed. */
-			viewerVote: mine.get(r.comment.id) ?? null,
+			userVote: mine.get(r.comment.id) ?? null,
 		};
 	});
 }
@@ -1583,7 +1583,7 @@ const previewQuerySchema = z.object({
 	previewOwned: z.string().optional(),
 	/**
 	 * A **share link** token. Declared here so the RPC client can send it; it is read by
-	 * `viewerFor`, which refuses a token naming a different Work.
+	 * `requesterFor`, which refuses a token naming a different Work.
 	 */
 	share: z.string().optional(),
 });
@@ -1678,7 +1678,7 @@ const requireUserOrShareLink = createMiddleware(async (c, next) => {
  * way to consume on somebody else's meter while signed in, and (worse) a way around the
  * recipient's own Adult opt-in.
  */
-async function viewerFor(
+async function requesterFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	workId: number,
 ): Promise<{ userId: number | null; sharedBy: number | null }> {
@@ -1704,7 +1704,7 @@ async function workAccessFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 ): Promise<AccessResultLike> {
-	const { userId, sharedBy } = await viewerFor(c, work.id);
+	const { userId, sharedBy } = await requesterFor(c, work.id);
 	const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 	return resolveAccessSync(work as AccessibleWork, ctx);
 }
@@ -1742,7 +1742,7 @@ async function publicAccessGate(
 	// purchase — or a creator's own work is not Public Access and draws nothing.
 	if (!(access.isFree && work.streamEnabled)) return null;
 
-	const { userId, sharedBy } = await viewerFor(c, work.id);
+	const { userId, sharedBy } = await requesterFor(c, work.id);
 
 	if (sharedBy != null) {
 		const shared = await loadShareLinkBudget(sharedBy);
@@ -2834,7 +2834,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerVote: mine.get(subjectId) ?? null,
+			userVote: mine.get(subjectId) ?? null,
 			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
@@ -2886,7 +2886,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerVote: direction,
+			userVote: direction,
 			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
@@ -2923,7 +2923,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerVote: null,
+			userVote: null,
 			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
@@ -3071,7 +3071,7 @@ const contentRoutes = new Hono()
 						// and they see their own raw counts the same way — `ownsSubject` already
 						// treats a review's author as its owner.
 						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
-						viewerVote: mine.get(r.id) ?? null,
+						userVote: mine.get(r.id) ?? null,
 					}))
 					.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
 			});
@@ -3512,7 +3512,7 @@ const contentRoutes = new Hono()
 		// share link has no session to fall back on, so a variant URL without the token is a 401
 		// while the page and the master playlist both look fine. Carried only when the viewer
 		// really arrived by the link, the same rule the Work page applies.
-		const { sharedBy } = await viewerFor(c, workId);
+		const { sharedBy } = await requesterFor(c, workId);
 		const rewritten = await rewriteHlsPlaylist(new TextDecoder().decode(bytes), {
 			isMaster: file === "master.m3u8",
 			prefixKey,
@@ -3800,9 +3800,9 @@ const contentRoutes = new Hono()
 			.execute();
 
 		// A share link rides in on the query string and is resolved here, at the one route a
-		// recipient actually lands on. `viewerFor` refuses a token that names a different
+		// recipient actually lands on. `requesterFor` refuses a token that names a different
 		// Work, and a signed-in caller ignores tokens entirely.
-		const { sharedBy } = await viewerFor(c, work.id);
+		const { sharedBy } = await requesterFor(c, work.id);
 		const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
 		const [creator] = work.creatorId

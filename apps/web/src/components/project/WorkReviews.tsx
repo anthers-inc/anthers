@@ -353,15 +353,15 @@ export default function WorkReviews({ workId }: { workId: number }) {
 												subjectType="review"
 												subjectId={review.id}
 												score={review.score}
-												viewerVote={review.viewerVote}
+												userVote={review.userVote}
 												label={`${review.handle}'s review`}
-												onChange={({ score, viewerVote }) =>
+												onChange={({ score, userVote }) =>
 													setAgg((current) =>
 														current
 															? {
 																	...current,
 																	reviews: current.reviews.map((r) =>
-																		r.id === review.id ? { ...r, score, viewerVote } : r,
+																		r.id === review.id ? { ...r, score, userVote } : r,
 																	),
 																}
 															: current,

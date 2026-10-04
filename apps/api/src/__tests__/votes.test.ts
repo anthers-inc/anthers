@@ -129,7 +129,7 @@ describe("votes", () => {
 			id: number;
 			score: number;
 			collapsed: boolean;
-			viewerVote: "up" | "down" | null;
+			userVote: "up" | "down" | null;
 		}[];
 	}
 
@@ -167,7 +167,7 @@ describe("votes", () => {
 		await vote(voterCookies[1], quietId, "down");
 		const removed = await unvote(voterCookies[1], quietId);
 		expect(removed.status).toBe(200);
-		expect((await removed.json()).viewerVote).toBeNull();
+		expect((await removed.json()).userVote).toBeNull();
 		const [row] = await db.select({ id: votes.id }).from(votes).where(eq(votes.subjectId, quietId));
 		expect(row).toBeUndefined();
 	});
@@ -218,9 +218,9 @@ describe("votes", () => {
 
 	it("shows a viewer their own vote, and shows nobody else's", async () => {
 		const asVoter = await thread(voterCookies[0]);
-		expect(asVoter.find((c) => c.id === likedId)!.viewerVote).toBe("up");
+		expect(asVoter.find((c) => c.id === likedId)!.userVote).toBe("up");
 		const anonymous = await thread();
-		expect(anonymous.find((c) => c.id === likedId)!.viewerVote).toBeNull();
+		expect(anonymous.find((c) => c.id === likedId)!.userVote).toBeNull();
 	});
 
 	it("🚨 floors the published score at zero, so a pile-on has no counter to run up", async () => {

@@ -625,7 +625,7 @@ export interface Comment {
 	 */
 	collapsed: boolean;
 	/** What this viewer did: `up`, `down`, or nothing yet. */
-	viewerVote: "up" | "down" | null;
+	userVote: "up" | "down" | null;
 }
 
 /**
@@ -667,7 +667,7 @@ export interface Review {
 	 */
 	score: number;
 	/** What this viewer did to this review: `up`, `down`, or nothing yet. */
-	viewerVote: "up" | "down" | null;
+	userVote: "up" | "down" | null;
 }
 
 export interface ReviewAggregate {

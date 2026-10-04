@@ -360,7 +360,7 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 						subjectType="comment"
 						subjectId={comment.id}
 						score={comment.score}
-						viewerVote={comment.viewerVote}
+						userVote={comment.userVote}
 						up={comment.up}
 						down={comment.down}
 						label={`${author}'s ${noun}`}

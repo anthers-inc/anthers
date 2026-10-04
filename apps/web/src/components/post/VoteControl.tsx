@@ -43,7 +43,7 @@ export default function VoteControl({
 	subjectType,
 	subjectId,
 	score,
-	viewerVote,
+	userVote,
 	up,
 	down,
 	label,
@@ -60,7 +60,7 @@ export default function VoteControl({
 	 * small control. Two ways in, one component.
 	 */
 	score?: number;
-	viewerVote?: VoteDirection | null;
+	userVote?: VoteDirection | null;
 	/**
 	 * The exact counts, shown only to whoever authored the thing.
 	 *
@@ -76,13 +76,13 @@ export default function VoteControl({
 	onChange?: (next: {
 		score: number;
 		collapsed: boolean;
-		viewerVote: VoteDirection | null;
+		userVote: VoteDirection | null;
 	}) => void;
 }) {
 	const { isAuthenticated } = useAuth();
 	const permissionMissing = useInteractionPermissionMissing(isAuthenticated);
 	const given = score !== undefined;
-	const [mine, setMine] = useState<VoteDirection | null>(viewerVote ?? null);
+	const [mine, setMine] = useState<VoteDirection | null>(userVote ?? null);
 	const [shown, setShown] = useState(score ?? 0);
 	const [detail, setDetail] = useState<{ up: number; down: number } | null>(
 		up === undefined || down === undefined ? null : { up, down },
@@ -101,12 +101,12 @@ export default function VoteControl({
 				if (!res.ok || !live) return;
 				const data = (await res.json()) as {
 					score: number;
-					viewerVote: VoteDirection | null;
+					userVote: VoteDirection | null;
 					up?: number;
 					down?: number;
 				};
 				setShown(data.score);
-				setMine(data.viewerVote);
+				setMine(data.userVote);
 				if (data.up !== undefined && data.down !== undefined) {
 					setDetail({ up: data.up, down: data.down });
 				}
@@ -140,7 +140,7 @@ export default function VoteControl({
 			const data = (await res.json()) as {
 				score: number;
 				collapsed: boolean;
-				viewerVote: VoteDirection | null;
+				userVote: VoteDirection | null;
 				up?: number;
 				down?: number;
 			};
@@ -151,7 +151,7 @@ export default function VoteControl({
 				setDetail({ up: data.up, down: data.down });
 			}
 			setMine(next);
-			onChange?.({ ...data, viewerVote: next });
+			onChange?.({ ...data, userVote: next });
 		} catch {
 			// Put it back. A control that silently keeps an optimistic value it failed to
 			// save is telling the reader their vote counted when it did not.

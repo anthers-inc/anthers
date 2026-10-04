@@ -244,7 +244,7 @@ export const FAQ_ITEMS = {
 	"creator-take-home": {
 		category: "Creators",
 		question: "How much do creators keep?",
-		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus what viewers direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets ${FREE_STORAGE_GIB} GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
+		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what users give Anthers, distributed by the time people spend with them, and paid out in full) plus what users direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets ${FREE_STORAGE_GIB} GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
 	},
 	"what-can-i-publish": {
 		category: "Creators",

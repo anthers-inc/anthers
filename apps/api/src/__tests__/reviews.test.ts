@@ -71,7 +71,7 @@ interface ReviewList {
 		body: string;
 		handle: string;
 		score: number;
-		viewerVote: "up" | "down" | null;
+		userVote: "up" | "down" | null;
 	}[];
 }
 
@@ -286,14 +286,14 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		// Two up and one down is a net of 1. This review predates the author auto-upvote (the
 		// row was inserted directly above), so nothing else is in the tally.
 		expect(entry.score).toBe(1);
-		expect(entry.viewerVote).toBeNull();
+		expect(entry.userVote).toBeNull();
 		expect(entry).not.toHaveProperty("up");
 		expect(entry).not.toHaveProperty("down");
 
 		// A voter sees their own; the aggregate is untouched — 100% recommended from one
 		// review however many votes the review draws.
 		const asVoter = await readReviews(cookies[2]);
-		expect(asVoter.reviews[0].viewerVote).toBe("down");
+		expect(asVoter.reviews[0].userVote).toBe("down");
 		expect(asVoter.recommendedPercent).toBe(100);
 		expect(asVoter.count).toBe(1);
 
@@ -345,7 +345,7 @@ describe("The reviewer's own upvote", () => {
 		const entry = list.reviews.find((r) => r.id === reviewId)!;
 		expect(entry.score).toBe(1);
 		const asAuthor = await readReviews(cookie);
-		expect(asAuthor.reviews.find((r) => r.id === reviewId)!.viewerVote).toBe("up");
+		expect(asAuthor.reviews.find((r) => r.id === reviewId)!.userVote).toBe("up");
 	});
 
 	it("does not resurrect a withdrawn vote when the review is edited", async () => {
