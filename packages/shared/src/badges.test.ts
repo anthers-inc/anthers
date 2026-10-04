@@ -162,6 +162,12 @@ describe("gates are thresholds, and need not sit on a Badge", () => {
 
 describe("thresholdForBadge returns a threshold", () => {
 	test("Anthers' Badges report their monthly cost", () => {
+		// RETIREMENT TRIGGER: delete this pin when the seeded-rows migration lands
+		// (the ladder becomes ordinary `badges` rows rather than these constants) —
+		// the seeded values are then covered by the suites that read the table
+		// (distribute-pool, the meter suites), and a constant re-proving itself is
+		// a placeholder guard outliving its placeholder. See the wiki's
+		// *What Deserves a Standing Test*.
 		expect(thresholdForBadge("free")).toBe(0);
 		expect(thresholdForBadge("root")).toBe(3);
 		expect(thresholdForBadge("blossom")).toBe(12);
