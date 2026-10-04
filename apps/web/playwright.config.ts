@@ -71,9 +71,27 @@ export default defineConfig({
 	 * run every project, so the pre-push gate keeps meaning what it meant.
 	 */
 	projects: [
-		// Seeds the gauntlet fixture and signs its viewer in (writes the storageState the
-		// gauntlet project runs under). *.setup.ts so `bun test` never claims it either.
-		{ name: "setup", testMatch: "**/*.setup.ts", metadata: { needsMedia: true } },
+		// Seeds instance A of the gauntlet fixture and signs its viewer in (writes the
+		// storageState the authed project runs under). *.setup.ts so `bun test` never
+		// claims it either — EXCEPT the walk's own setup, which belongs to `setup-walk`
+		// alone: two projects matching the same file would run it twice, and the two
+		// instances' fixtures must be seeded by their own owners.
+		{
+			name: "setup",
+			testMatch: "**/*.setup.ts",
+			testIgnore: "**/gauntlet-walk.setup.ts",
+			metadata: { needsMedia: true },
+		},
+		// The same job for the walk's OWN fixture instance: seeds instance B
+		// (`walk-creator` / `walk-viewer` / `walk-gauntlet-*` — see
+		// `packages/db/src/gauntlet-walk.ts`) and signs the walk viewer in, writing the
+		// storageState the gauntlet project runs under. No dependencies — it is itself a
+		// setup project, and it must not wait on (nor be waited on by) instance A's chain.
+		{
+			name: "setup-walk",
+			testMatch: "**/gauntlet-walk.setup.ts",
+			metadata: { needsMedia: true },
+		},
 		// The static suite — pure client-side specs (calculators) that predate the API wiring.
 		// e2e specs are named *.e2e.ts so `bun test` (which claims *.test/*.spec) never tries
 		// to run them — only Playwright does.
@@ -92,8 +110,10 @@ export default defineConfig({
 		// a single stateful staircase where order is the point, and dropping unrelated tests
 		// into it would make its ratchet assertions depend on what else ran.
 		//
-		// ⚠️ **These run on the fixture as `setup` left it, which is why `gauntlet` waits for
-		// them rather than the other way round.** See the note on that project.
+		// These run on instance A of the gauntlet fixture (`setup` seeds it and leaves it
+		// at the floor). The gauntlet walk seeds and resets its OWN instance since the two
+		// fixtures are disjoint — see the note on that project — so no ordering between the
+		// two projects is required, and none is declared.
 		{
 			name: "authed",
 			use: {
@@ -104,37 +124,30 @@ export default defineConfig({
 			dependencies: ["setup"],
 			metadata: { needsMedia: true },
 		},
-		// The User Gauntlet walk: authenticated (storageState from setup), strictly serial —
+		// The User Gauntlet walk: authenticated (storageState from setup-walk), strictly serial —
 		// it is one stateful staircase, not a bag of independent tests.
 		//
-		// 🚨 **It runs AFTER `authed`, and the ordering is load-bearing in both directions.**
-		// Its `beforeAll` RESETS the shared fixture — `db:gauntlet` deletes the fixture
-		// creator's posts and Works and rebuilds them — so running beside `authed` pulls rows
-		// out from under any spec holding one. `votes.authed.e2e.ts` is the one that holds
-		// them, and its symptom is a thread that existed in `beforeAll` and reads "No comments
-		// yet" by the assertion. ⚠️ The race is scheduling-dependent rather than reliable: it
-		// surfaced when that spec was renamed and its alphabetical position moved, so it was
-		// latent and winning by luck before that.
+		// The walk owns instance B of the fixture: the `walk-creator` / `walk-viewer`
+		// accounts and the `walk-gauntlet-*` slugs defined in
+		// `packages/db/src/gauntlet-walk.ts`. Its
+		// `beforeAll` resets instance B (`db:gauntlet --instance walk`) and ratchets only
+		// instance B's viewer — and instance A's specs and resets never touch a
+		// `walk-gauntlet-` row, because A's own helpers scope every delete on the `gauntlet-`
+		// prefix and the walk creator's id. With the row sets disjoint, the two projects run
+		// independently and in any order: `--project=gauntlet` alone, `--project=authed`
+		// alone, and the two together in one invocation are each a complete, correct suite.
 		//
-		// ⚠️ **The dependency points this way and not the other, which was tried first.**
-		// Making `authed` wait for `gauntlet` also removes the race and is wrong, because the
-		// walk deliberately ratchets the viewer's state upward — it leaves them supporting,
-		// purchased and following. The authed specs assume the floor `setup` established, and
-		// the basket spec fails immediately on the leftovers. So: reset, then the specs that
-		// need the floor, then the staircase that climbs away from it.
-		//
-		// ⚠️ **The cost is real and it is the right trade.** Serializing adds the two projects'
-		// wall clocks instead of overlapping them. A suite that is fast and sometimes wrong
-		// teaches people to re-run it until it is green, and that habit is what makes every
-		// later failure ambiguous.
+		// (The staircase itself — `EXPECTED_STAIRCASE`, `BADGE_RUNGS`, `DOWNLOAD_PRICE` —
+		// is still SHARED between the instances, imported from `@anthers/db/gauntlet` by
+		// the walk. Only the fixture's rows fork; the published access table must not.)
 		{
 			name: "gauntlet",
 			use: {
 				...devices["Desktop Chrome"],
-				storageState: "tests/e2e/.auth/gauntlet-viewer.json",
+				storageState: "tests/e2e/.auth/gauntlet-walk-viewer.json",
 			},
 			testMatch: "**/user-gauntlet.e2e.ts",
-			dependencies: ["setup", "authed"],
+			dependencies: ["setup-walk"],
 			fullyParallel: false,
 			metadata: { needsMedia: true },
 		},

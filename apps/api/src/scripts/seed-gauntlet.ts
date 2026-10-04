@@ -13,6 +13,7 @@
  *   bun run db:gauntlet --user alice    # use a viewer other than DEV_ACCOUNT_USERNAME
  *   bun run db:gauntlet --ensure-viewer # create + use the harness's own gauntlet_viewer
  *   bun run db:gauntlet --clean         # remove the fixture entirely, then stop
+ *   bun run db:gauntlet --instance walk # the walk's OWN instance — see below
  *
  * The viewer defaults to your dev account (`DEV_ACCOUNT_USERNAME` in `.env`). Its rows are
  * *reset*, never deleted — the account itself, its password and its other content survive.
@@ -23,6 +24,15 @@
  * `gauntlet_viewer` account if missing (email pre-verified, not a creator) and resets THAT
  * viewer — so the automated walk never touches the dev account, and works where no dev
  * account exists at all (CI).
+ *
+ * **Instances.** `--instance walk` seeds the walk's own copy of the fixture instead of the
+ * shared one: the `walk-creator` / `walk-viewer` accounts and the `walk-gauntlet-` posts
+ * defined in `gauntlet-walk.ts`. The e2e `authed` project runs on instance A (the
+ * default), and the e2e `gauntlet` walk runs on instance B — both reset their own fixture
+ * in their own setup, which is safe only because the two row sets are disjoint. The org stand-in and the
+ * Anthers Badge ladder are deliberately NOT per-instance: holdings are viewer-scoped
+ * rows, and one shared org ladder keeps every viewer's Anthers-side reads reading the
+ * same ladder rather than a second, private one.
  *
  * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
@@ -59,13 +69,83 @@ import {
 	GAUNTLET_VIEWER_USERNAME,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
+import {
+	WALK_BADGES,
+	WALK_CREATOR_EMAIL,
+	WALK_CREATOR_USERNAME,
+	WALK_POSTS,
+	WALK_SLUG_PREFIX,
+	WALK_VIEWER_EMAIL,
+	WALK_VIEWER_USERNAME,
+} from "@anthers/db/gauntlet-walk";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import { ensureAnthersBadges, orgLadderMissing } from "../services/anthers-badges.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
+import { HandleReservedError } from "../services/pending-signups.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 
 const TAG = "[gauntlet]";
+
+/**
+ * Which copy of the fixture this run acts on. The values are the selected identifiers
+ * themselves, so every helper below takes this one object and reads nothing from the
+ * module constants directly — a helper that reads a constant skips the parameterization,
+ * and the next instance to come along re-forks the script.
+ */
+interface Instance {
+	/** The instance's own creator, whose account and Works the seeding owns. */
+	creatorUsername: string;
+	creatorEmail: string;
+	/** The instance's own viewer — the account `--ensure-viewer` creates and resets. */
+	viewerUsername: string;
+	viewerEmail: string;
+	/** The instance's slug prefix; `deleteGauntletPosts` scopes deletions with it. */
+	slugPrefix: string;
+	/** The instance's posts, carrying its slug prefix and its publicId range. */
+	posts: GauntletPost[];
+	/** The instance's advertised Badge ladder, rebuilt by `resetGates`. */
+	badges: typeof GAUNTLET_BADGES;
+	/** Which `--instance` value selected this, for the log lines. */
+	name: "a" | "walk";
+}
+
+/** Instance A — the shared fixture exactly as `gauntlet.ts` defines it, the default. */
+const INSTANCE_A: Instance = {
+	creatorUsername: GAUNTLET_CREATOR_USERNAME,
+	creatorEmail: GAUNTLET_CREATOR_EMAIL,
+	viewerUsername: GAUNTLET_VIEWER_USERNAME,
+	viewerEmail: GAUNTLET_VIEWER_EMAIL,
+	slugPrefix: GAUNTLET_SLUG_PREFIX,
+	posts: GAUNTLET_POSTS,
+	badges: GAUNTLET_BADGES,
+	name: "a",
+};
+
+/** Instance B — the walk's own fixture, `gauntlet-walk.ts`'s derivation. */
+const INSTANCE_WALK: Instance = {
+	creatorUsername: WALK_CREATOR_USERNAME,
+	creatorEmail: WALK_CREATOR_EMAIL,
+	viewerUsername: WALK_VIEWER_USERNAME,
+	viewerEmail: WALK_VIEWER_EMAIL,
+	slugPrefix: WALK_SLUG_PREFIX,
+	posts: WALK_POSTS,
+	badges: WALK_BADGES,
+	name: "walk",
+};
+
+/**
+ * Read the `--instance` flag. Only `walk` selects something other than the default, and
+ * an unrecognized value refuses loudly — silently seeding instance A when `--instance`
+ * was misspelled would reset a fixture the caller believes is B's.
+ */
+function resolveInstance(): Instance {
+	const i = process.argv.indexOf("--instance");
+	const value = i !== -1 ? process.argv[i + 1]?.trim() : undefined;
+	if (value === undefined || value === "a") return INSTANCE_A;
+	if (value === "walk") return INSTANCE_WALK;
+	throw new Error(`Unknown --instance "${value}" (expected "a" or "walk")`);
+}
 
 /**
  * The handle account creation actually wrote for a fixture name — the preferred name when
@@ -82,13 +162,18 @@ async function fixtureHandle(name: string): Promise<string> {
  */
 const CONTENT_ROOT = localContentRoot();
 
-/** Resolve the viewer whose relationship with the creator the gauntlet walks. */
-function resolveViewerUsername(): string {
+/**
+ * Resolve the viewer whose relationship with the creator the gauntlet walks.
+ * `inst` names the default viewer only — the walk instance's `--ensure-viewer` resolves
+ * the walk viewer, instance A's resolves `gauntlet_viewer` — while `--user` still
+ * overrides which viewer gets reset, in either instance.
+ */
+function resolveViewerUsername(inst: Instance): string {
 	const flagIndex = process.argv.indexOf("--user");
 	const fromFlag = flagIndex !== -1 ? process.argv[flagIndex + 1]?.trim() : undefined;
 	if (process.argv.includes("--ensure-viewer")) {
 		// The harness's own account; --user may still override which viewer gets reset.
-		return fromFlag || GAUNTLET_VIEWER_USERNAME;
+		return fromFlag || inst.viewerUsername;
 	}
 	const username = fromFlag || process.env.DEV_ACCOUNT_USERNAME?.trim();
 	if (!username) {
@@ -100,17 +185,17 @@ function resolveViewerUsername(): string {
 }
 
 /** Create the harness-owned viewer account if it doesn't exist yet. */
-async function ensureViewer(): Promise<void> {
+async function ensureViewer(inst: Instance): Promise<void> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_VIEWER_USERNAME)))
+		.where(eq(users.atprotoHandle, await fixtureHandle(inst.viewerUsername)))
 		.limit(1);
 	if (existing) return;
 
 	const created = await createLocalAccount({
-		email: GAUNTLET_VIEWER_EMAIL,
-		handleName: GAUNTLET_VIEWER_USERNAME,
+		email: inst.viewerEmail,
+		handleName: inst.viewerUsername,
 		// Pre-verified: checkout and support carry requireVerified, and there is no email loop to
 		// click through in a headless run. Signing in is the emailed code, read from the
 		// session's mail catcher by the spec's own setup.
@@ -124,7 +209,7 @@ async function ensureViewer(): Promise<void> {
 			termsAcceptedAt: new Date(),
 		},
 	});
-	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
+	console.log(`${TAG} created viewer "${inst.viewerUsername}" (id ${created.id})`);
 }
 
 /**
@@ -133,42 +218,73 @@ async function ensureViewer(): Promise<void> {
  * See `GAUNTLET_ORG_USERNAME` for why the owner can be neither the creator nor the
  * viewer. This account gates nothing and holds nothing; its only job is to be the issuer
  * of the org's rungs so org-ladder reads and creator-ladder reads never collide.
+ *
+ * ⚠️ **Two fixture instances share this one account, so creation can lose a race.** When
+ * the walk's seeder and instance A's seeder run side by side (the projects now run in
+ * parallel), both can pass the `existing` check together, and the pending-signup's
+ * unique handle reservation makes exactly one creation fail with `HandleReservedError`.
+ * The loser re-reads: the winner's account is there by then, and that is success —
+ * this function's contract is "the org row exists, return its id", not "I created it".
+ * Any other failure still throws.
  */
 async function ensureOrg(): Promise<number> {
-	const [existing] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_ORG_USERNAME)))
-		.limit(1);
-	if (existing) return existing.id;
+	const resolveId = async (): Promise<number | null> => {
+		const [existing] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_ORG_USERNAME)))
+			.limit(1);
+		return existing?.id ?? null;
+	};
 
-	const created = await createLocalAccount({
-		email: GAUNTLET_ORG_EMAIL,
-		handleName: GAUNTLET_ORG_USERNAME,
-		emailVerified: true,
-		fields: {
-			displayName: "Anthers (fixture)",
-			bio: "The session's stand-in for the org identity; owns the seeded Anthers Badge ladder.",
-			isCreator: false,
-			termsAcceptedAt: new Date(),
-		},
-	});
-	console.log(`${TAG} created org stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
-	return created.id;
+	const existing = await resolveId();
+	if (existing) return existing;
+
+	try {
+		const created = await createLocalAccount({
+			email: GAUNTLET_ORG_EMAIL,
+			handleName: GAUNTLET_ORG_USERNAME,
+			emailVerified: true,
+			fields: {
+				displayName: "Anthers (fixture)",
+				bio: "The session's stand-in for the org identity; owns the seeded Anthers Badge ladder.",
+				isCreator: false,
+				termsAcceptedAt: new Date(),
+			},
+		});
+		console.log(`${TAG} created org stand-in "${GAUNTLET_ORG_USERNAME}" (id ${created.id})`);
+		return created.id;
+	} catch (err) {
+		// Only "another signup is holding the handle" is the race; the winner may still be
+		// BETWEEN reserving the handle and writing its `users` row, so one re-read can see
+		// neither loser nor winner — poll briefly for the account to appear.
+		if (!(err instanceof HandleReservedError)) throw err;
+		const deadline = Date.now() + 10_000;
+		for (;;) {
+			const winner = await resolveId();
+			if (winner) return winner;
+			if (Date.now() > deadline) {
+				throw new Error(
+					`the org stand-in "${GAUNTLET_ORG_USERNAME}" lost a creation race to another seeder and never appeared`,
+				);
+			}
+			await new Promise((resolve) => setTimeout(resolve, 250));
+		}
+	}
 }
 
 /** Create the fixture creator if absent; return its id either way. */
-async function ensureCreator(): Promise<number> {
+async function ensureCreator(inst: Instance): Promise<number> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_CREATOR_USERNAME)))
+		.where(eq(users.atprotoHandle, await fixtureHandle(inst.creatorUsername)))
 		.limit(1);
 	if (existing) return existing.id;
 
 	const created = await createLocalAccount({
-		email: GAUNTLET_CREATOR_EMAIL,
-		handleName: GAUNTLET_CREATOR_USERNAME,
+		email: inst.creatorEmail,
+		handleName: inst.creatorUsername,
 		emailVerified: true,
 		fields: {
 			displayName: "Gauntlet Creator",
@@ -178,7 +294,7 @@ async function ensureCreator(): Promise<number> {
 			termsAcceptedAt: new Date(),
 		},
 	});
-	console.log(`${TAG} created creator "${GAUNTLET_CREATOR_USERNAME}" (id ${created.id})`);
+	console.log(`${TAG} created creator "${inst.creatorUsername}" (id ${created.id})`);
 	return created.id;
 }
 
@@ -230,15 +346,18 @@ async function ensureCreatorConnect(creatorId: number): Promise<void> {
 }
 
 /**
- * Delete the fixture's posts. Their content items, post_contents, assets, comments and
- * purchases all cascade from the post row, so this clears the whole subtree — which is what
- * makes re-running safe rather than additive.
+ * Delete the fixture's posts — the SELECTED INSTANCE's posts, identified by its own slug
+ * prefix, which is exactly what keeps instances A and B disjoint: instance A matches
+ * `gauntlet-%`, instance B matches `walk-gauntlet-%`, and neither pattern contains the
+ * other. Their content items, post_contents, assets, comments and purchases all cascade
+ * from the post row, so this clears the whole subtree — which is what makes re-running
+ * safe rather than additive.
  */
-async function deleteGauntletPosts(creatorId: number): Promise<void> {
+async function deleteGauntletPosts(inst: Instance, creatorId: number): Promise<void> {
 	const rows = await db
 		.select({ id: posts.id })
 		.from(posts)
-		.where(and(eq(posts.creatorId, creatorId), like(posts.slug, `${GAUNTLET_SLUG_PREFIX}%`)));
+		.where(and(eq(posts.creatorId, creatorId), like(posts.slug, `${inst.slugPrefix}%`)));
 	if (rows.length === 0) return;
 
 	const postIds = rows.map((r) => r.id);
@@ -356,9 +475,9 @@ async function writeDownloadObject(fileKey: string): Promise<void> {
 }
 
 /** Rebuild the creator's advertised Badge ladder from scratch. */
-async function resetGates(creatorId: number): Promise<void> {
+async function resetGates(inst: Instance, creatorId: number): Promise<void> {
 	await db.delete(badges).where(eq(badges.creatorId, creatorId));
-	await db.insert(badges).values(GAUNTLET_BADGES.map((b) => ({ ...b, creatorId })));
+	await db.insert(badges).values(inst.badges.map((b) => ({ ...b, creatorId })));
 }
 
 /**
@@ -433,40 +552,41 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 	}
 }
 
-/** Remove the fixture entirely — creator, posts, gates and all. */
-async function clean(): Promise<void> {
+/** Remove the fixture entirely — creator, posts, gates and all — for the given instance. */
+async function clean(inst: Instance): Promise<void> {
 	const [creator] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoHandle, await fixtureHandle(GAUNTLET_CREATOR_USERNAME)))
+		.where(eq(users.atprotoHandle, await fixtureHandle(inst.creatorUsername)))
 		.limit(1);
 	if (!creator) {
-		console.log(`${TAG} nothing to clean — no "${GAUNTLET_CREATOR_USERNAME}".`);
+		console.log(`${TAG} nothing to clean — no "${inst.creatorUsername}".`);
 		return;
 	}
-	await deleteGauntletPosts(creator.id);
+	await deleteGauntletPosts(inst, creator.id);
 	// Everything else the creator owns (gates, follows, allocations) cascades from the user.
 	await db.delete(users).where(eq(users.id, creator.id));
 	// The download object under the fixture creator's storage prefix goes with it.
 	if ((process.env.STORAGE_BACKEND ?? "local") === "local") {
 		await rm(join(CONTENT_ROOT, `creators/${creator.id}`), { recursive: true, force: true });
 	}
-	console.log(`${TAG} removed the fixture creator and all its rows.`);
+	console.log(`${TAG} removed the instance-${inst.name} fixture creator and all its rows.`);
 }
 
 async function main(): Promise<void> {
 	assertDevCheckout();
 
+	const inst = resolveInstance();
+
 	if (process.argv.includes("--clean")) {
-		await clean();
+		await clean(inst);
 		return;
 	}
 
 	if (process.argv.includes("--ensure-viewer")) {
-		await ensureViewer();
+		await ensureViewer(inst);
 	}
-
-	const viewerUsername = resolveViewerUsername();
+	const viewerUsername = resolveViewerUsername(inst);
 	const viewerHandle = await fixtureHandle(viewerUsername);
 	const [viewer] = await db
 		.select({ id: users.id, handle: users.atprotoHandle })
@@ -479,15 +599,15 @@ async function main(): Promise<void> {
 		);
 	}
 
-	const creatorId = await ensureCreator();
+	const creatorId = await ensureCreator(inst);
 	await ensureCreatorConnect(creatorId);
-	await deleteGauntletPosts(creatorId);
+	await deleteGauntletPosts(inst, creatorId);
 
 	const postIds: number[] = [];
-	for (const spec of GAUNTLET_POSTS) {
+	for (const spec of inst.posts) {
 		postIds.push(await createPost(creatorId, spec));
 	}
-	await resetGates(creatorId);
+	await resetGates(inst, creatorId);
 	await resetViewer(viewer.id, creatorId, postIds);
 
 	// The org ladder is platform state, not dev-account state: every reader of "what the
@@ -506,18 +626,18 @@ async function main(): Promise<void> {
 	}
 
 	console.log("");
-	console.log(`${TAG} Ready. The gauntlet starts here:`);
+	console.log(`${TAG} Ready. Instance ${inst.name} — the gauntlet starts here:`);
 	console.log("");
-	console.log(`  Creator  /${GAUNTLET_CREATOR_USERNAME}  (${GAUNTLET_POSTS.length} posts)`);
+	console.log(`  Creator  /${inst.creatorUsername}  (${inst.posts.length} posts)`);
 	console.log(
 		`  Viewer   ${viewer.handle}  —  Free badge · giving $0 · not following · nothing purchased`,
 	);
 	console.log("");
-	for (const spec of GAUNTLET_POSTS) {
+	for (const spec of inst.posts) {
 		console.log(`  ${spec.key}  /posts/${spec.slug.padEnd(24)} unlocks: ${spec.unlocksWhen}`);
 	}
 	console.log("");
-	console.log(`${TAG} Walk it from /${GAUNTLET_CREATOR_USERNAME}. Re-run this to start over.`);
+	console.log(`${TAG} Walk it from /${inst.creatorUsername}. Re-run this to start over.`);
 }
 
 try {

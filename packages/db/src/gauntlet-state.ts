@@ -19,9 +19,13 @@
  *   bun run db:gauntlet:state --user gauntlet_viewer --give 2               # $2 to the creator
  *   bun run db:gauntlet:state --user gauntlet_viewer --purchase gauntlet-paid-download
  *   bun run db:gauntlet:state --user gauntlet_viewer --watched-minutes 570
+ *   bun run db:gauntlet:state --instance walk …                             # the walk's instance
  *
  * The viewer defaults to `DEV_ACCOUNT_USERNAME`, mirroring `seed-gauntlet.ts`; the harness
- * always passes `--user` explicitly. Everything here is scoped to the gauntlet fixture.
+ * always passes `--user` explicitly; walk mode (`--instance walk`) falls back to
+ * `walk-viewer` instead. Everything here is scoped to the instance's gauntlet
+ * fixture — the creator is the instance's, and `--purchase` accepts only the instance's
+ * slugs.
  *
  * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
@@ -34,9 +38,10 @@ import {
 	DOWNLOAD_PRICE,
 	GAUNTLET_CREATOR_USERNAME,
 	GAUNTLET_SLUG_PREFIX,
-	gauntletHandle,
+	GAUNTLET_VIEWER_USERNAME,
 } from "./gauntlet.js";
 import { applyAnthersSupport, applySupportBudget } from "./gauntlet-support.js";
+import { WALK_CREATOR_USERNAME, WALK_SLUG_PREFIX, WALK_VIEWER_USERNAME } from "./gauntlet-walk.js";
 import {
 	attentionEvents,
 	badges,
@@ -49,6 +54,44 @@ import {
 } from "./index.js";
 
 const TAG = "[gauntlet-state]";
+
+/**
+ * Which copy of the fixture the hop addresses, mirroring `seed-gauntlet.ts`'s
+ * `--instance` flag. The hop must land on the same instance the caller is walking: a
+ * purchase or a give hop pointed at instance A while the browser walks instance B would
+ * write rows the staircase never reads — state that looks landed and is not.
+ */
+interface Instance {
+	creatorUsername: string;
+	/** The default viewer when neither `--user` nor the dev account is in play. */
+	viewerFallbackUsername: string;
+	/** The slug prefix `--purchase` accepts — the instance's own Works only. */
+	slugPrefix: string;
+}
+
+const INSTANCE_A: Instance = {
+	creatorUsername: GAUNTLET_CREATOR_USERNAME,
+	viewerFallbackUsername: GAUNTLET_VIEWER_USERNAME,
+	slugPrefix: GAUNTLET_SLUG_PREFIX,
+};
+
+const INSTANCE_WALK: Instance = {
+	creatorUsername: WALK_CREATOR_USERNAME,
+	viewerFallbackUsername: WALK_VIEWER_USERNAME,
+	slugPrefix: WALK_SLUG_PREFIX,
+};
+
+/**
+ * Read the `--instance` flag the same way `seed-gauntlet.ts` does, refusing loudly on an
+ * unrecognized value rather than silently hopping on instance A.
+ */
+function resolveInstance(): Instance {
+	const i = process.argv.indexOf("--instance");
+	const value = i !== -1 ? process.argv[i + 1]?.trim() : undefined;
+	if (value === undefined || value === "a") return INSTANCE_A;
+	if (value === "walk") return INSTANCE_WALK;
+	throw new Error(`Unknown --instance "${value}" (expected "a" or "walk")`);
+}
 
 function flagValue(name: string): string | undefined {
 	const i = process.argv.indexOf(name);
@@ -103,30 +146,51 @@ function currentBillingCycle(): string {
  * The fixture's username is the preferred NAME the account was created with; the lookup key
  * is the handle the server issued for it — see `gauntletHandle`./
  */
-async function userIdByFixtureName(name: string, role: string, apiUrl: string): Promise<number> {
-	const handle = await gauntletHandle(apiUrl, name);
+/**
+ * The handle an account holds, derived the same way `gauntletHandle` derives it for the
+ * spec — the handle-safe spelling (lowercase, non-handle characters to dashes) under the
+ * hosted suffix the API publishes. The walk's account names are handle-safe themselves
+ * (see `gauntlet-walk.ts` for why), so the two spellings agree, and both the seeder and
+ * the spec resolve the same account for the same name.
+ */
+async function resolveAccountHandle(apiUrl: string, name: string, role: string): Promise<string> {
+	const res = await fetch(`${apiUrl}/api/atproto/config`);
+	if (!res.ok) throw new Error(`/api/atproto/config answered ${res.status}`);
+	const { hostedHandleSuffix: suffix } = (await res.json()) as { hostedHandleSuffix: string };
+	if (!suffix) throw new Error(`${role}: /api/atproto/config named no hosted handle domain`);
+	const dashed = name
+		.toLowerCase()
+		.replace(/[^a-z0-9-]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	return `${dashed}.${suffix}`;
+}
+
+async function userIdByHandle(handle: string): Promise<number> {
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
 		.where(eq(users.atprotoHandle, handle))
 		.limit(1);
-	if (!row) throw new Error(`${role} "${handle}" not found. Run \`make gauntlet-reset\` first.`);
+	if (!row) throw new Error(`${handle} not found. Run \`make gauntlet-reset\` first.`);
 	return row.id;
 }
 
 async function main(): Promise<void> {
 	assertDevCheckout();
 
-	const viewerUsername = flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim();
-	if (!viewerUsername) {
-		throw new Error("Pass --user <username> or set DEV_ACCOUNT_USERNAME in .env.");
-	}
+	const inst = resolveInstance();
+
+	// The instance's own viewer is the fallback: `--user` still wins, and with neither
+	// `--user` nor the dev account set, walk mode falls back to `walk-viewer`
+	// rather than instance A's viewer.
+	const viewerUsername =
+		flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim() || inst.viewerFallbackUsername;
 	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
-	const viewerId = await userIdByFixtureName(viewerUsername, "Viewer", apiUrl);
-	const creatorId = await userIdByFixtureName(
-		GAUNTLET_CREATOR_USERNAME,
-		"Gauntlet creator",
-		apiUrl,
+	const viewerId = await userIdByHandle(
+		await resolveAccountHandle(apiUrl, viewerUsername, "Viewer"),
+	);
+	const creatorId = await userIdByHandle(
+		await resolveAccountHandle(apiUrl, inst.creatorUsername, "Gauntlet creator"),
 	);
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
@@ -259,8 +323,10 @@ async function main(): Promise<void> {
 	// A completed purchase — the fact the payment webhook would write. The synthetic
 	// PaymentIntent id makes the row unmistakably a hop and the insert idempotent.
 	if (purchaseSlug !== undefined) {
-		if (!purchaseSlug.startsWith(GAUNTLET_SLUG_PREFIX)) {
-			throw new Error(`--purchase only accepts gauntlet Works (${GAUNTLET_SLUG_PREFIX}*)`);
+		if (!purchaseSlug.startsWith(inst.slugPrefix)) {
+			throw new Error(
+				`--purchase only accepts this instance's gauntlet Works (${inst.slugPrefix}*)`,
+			);
 		}
 		// A purchase unlocks a WORK — that is where access lives, so that is what a
 		// permanent unlock has to name.
@@ -341,7 +407,7 @@ async function main(): Promise<void> {
 			heldBadgeName(support),
 		)}) · budget $${Number(acct?.directedBudget ?? 0).toFixed(2)} · given $${Number(
 			alloc?.amount ?? 0,
-		).toFixed(2)} to ${GAUNTLET_CREATOR_USERNAME} · Public Access watched ${(
+		).toFixed(2)} to ${inst.creatorUsername} · Public Access watched ${(
 			watchedSeconds / 3600
 		).toFixed(2)}h`,
 	);

@@ -10,6 +10,7 @@
 		"./content-root": "./src/content-root.ts",
 		"./dev-only": "./src/dev-only.ts",
 		"./gauntlet": "./src/gauntlet.ts",
+		"./gauntlet-walk": "./src/gauntlet-walk.ts",
 		"./media-fixture": "./src/media-fixture.ts",
 		"./schema": "./src/schema/index.ts"
 	},

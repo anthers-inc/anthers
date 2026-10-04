@@ -29,6 +29,17 @@ export const AUTH_STATE_PATH = fileURLToPath(
 );
 
 /**
+ * Where the walk setup project (`gauntlet-walk.setup.ts`) writes its own viewer's storage
+ * state — the gauntlet walk project's session, over its OWN fixture instance
+ * (`walk-viewer`, instance B). Deliberately a different file from
+ * `AUTH_STATE_PATH`: the two projects' sessions must not share state, which is the same
+ * isolation the walk's separate fixture rows buy.
+ */
+export const WALK_AUTH_STATE_PATH = fileURLToPath(
+	new URL("./.auth/gauntlet-walk-viewer.json", import.meta.url),
+);
+
+/**
  * One `created` credit for a Work the spec is going to release. Release refuses a Work whose
  * credits name no human (`credits_creator_required`), so a spec that releases without one is
  * testing the gate rather than its own subject. Include this in the create POST body of any
