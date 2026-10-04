@@ -149,6 +149,89 @@ export async function anthersUserId(): Promise<number> {
 }
 
 /**
+ * Anthers' Badge ladder, as the **seeded rows state it** — the source of truth the
+ * constants→rows migration reads (Parker: *"there's no reason to pin `PUBLIC_ACCESS_PRICE`
+ * as a doc constant. Go look at the code — or now the database — and read whatever value
+ * is actually there"*).
+ *
+ * Returns the real rungs in ascending threshold order, threshold as a **number** (the
+ * `numeric` column reads back as a string; every display figure wants the number), plus
+ * the two figure values copy quotes beside the ladder:
+ *
+ * - **`publicAccessPrice`** — the bottom rung's threshold: what unlimited Public Access
+ *   costs is what the lowest Badge costs, by the model's own ruling ("$3 removes the
+ *   limit, and nothing above buys more access"). An empty ladder has no bottom rung, so
+ *   it is null there, and the route refuses rather than letting copy fall back to a
+ *   constant that is no longer the value.
+ * - The Free rung is **not** here — absence means Free, the 2026-10-03 reversal — so the
+ *   caller needing a Free column prepends it as `$0`.
+ *
+ * 🚨 **Fails the same way `anthersUserId` does when the seed has not run** — loud, never
+ * silent zeros, for the same reason: an unseeded database answering "the ladder is empty"
+ * would publish $0 Badges everywhere, which is the failure shape this lookup exists to
+ * prevent.
+ *
+ * The name/label travels with the threshold because the signup page renders rungs by
+ * name; art never does (artKey stays server-side — see `publicBadge` in the routes).
+ * `description` stays too as the row's own words, for whichever surface wants to show it;
+ * it is copy the account may reword, never a figure.
+ */
+export async function loadAnthersLadder(): Promise<{
+	rungs: { name: string; label: string; threshold: number; description: string }[];
+	publicAccessPrice: number | null;
+}> {
+	const anthersId = await anthersUserId();
+	// 🚨 **The LISTED rungs, not every row the account owns.** A subscription paying an
+	// off-rung amount makes Anthers' account the issuer of a rung at that amount
+	// (`applyDirectedSupport` find-or-creates) — a HOLDING record carrying the amount for
+	// its label and the default 0 for its order, which is real in the table and is not a
+	// Badge Anthers lists. Copy quotes the listed ladder, so the read is scoped to the
+	// rungs the seeding wrote — its thresholds AND its labels.
+	//
+	// ⚠️ The filter is by the seeded (threshold, label) pairs rather than by `sortOrder`
+	// (a paid rung lands at the default 0, colliding with Root, and the editor could
+	// legally name a Badge "$5") and rather than by label shape alone (the same "$5"
+	// case). It is **self-healing**: re-running the seed upserts labels back onto the
+	// seeded values, so a re-seed re-lists the ladder, while a payment's dollar-labeled
+	// rung stays out of it. `heldBadgeName` still collapses an off-rung holding onto the
+	// listed Badge beneath it — the resolver's own "collapse onto a Badge" rule.
+	const rows = await db
+		.select({
+			name: badges.label,
+			threshold: badges.threshold,
+			description: badges.description,
+		})
+		.from(badges)
+		.where(
+			and(
+				eq(badges.creatorId, anthersId),
+				sql`${badges.threshold}::text IN (${sql.join(
+					ANTHERS_LADDER.map((r) => sql`${r.threshold.toFixed(2)}`),
+					sql`, `,
+				)})`,
+				sql`${badges.label} IN (${sql.join(
+					ANTHERS_LADDER.map((r) => sql`${r.name.charAt(0).toUpperCase() + r.name.slice(1)}`),
+					sql`, `,
+				)})`,
+			),
+		)
+		.orderBy(badges.threshold);
+	const rungs = rows.map((r) => {
+		const threshold = Number(r.threshold);
+		return {
+			name: r.name.toLowerCase(),
+			label: r.name,
+			threshold,
+			description: r.description ?? "",
+		};
+	});
+	return {
+		rungs,
+		publicAccessPrice: rungs.length > 0 ? rungs[0].threshold : null,
+	};
+}
+
+/**
  * Monthly dollars the Anthers Badge `userId` holds **in cycle `billingCycle`** — what they
  * gave Anthers that cycle, on the Anthers ladder.
  *

@@ -25,10 +25,11 @@
  * *first* ask rather than a second.
  */
 
-import { FREE_TIME_POOL, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import { FREE_TIME_POOL } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
+import { useAnthersLadder } from "../../lib/anthers-ladder";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -80,6 +81,26 @@ export function readArrival(): Arrival {
 	} catch {
 		return { kind: "cold" };
 	}
+}
+
+/**
+ * The "go further" price line, on the cold case.
+ *
+ * Its own component rather than an inline hook in `FirstRun`, because the hot paths
+ * (supporting / free) never show it and a hook must not conditionally run — the store
+ * hook subscribes where the line renders, nowhere else.
+ */
+function FirstRunPrice() {
+	const { publicAccessPrice } = useAnthersLadder();
+	return (
+		<p className="mt-3 text-base leading-relaxed text-base-content/70">
+			When you want to go further, it's ${publicAccessPrice} a month, pointed at Anthers or straight
+			at a creator.{" "}
+			<Link to="/signup" className="link link-primary">
+				How support works
+			</Link>
+		</p>
+	);
 }
 
 function Actions({
@@ -188,14 +209,11 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 			 * The one case where mentioning support is fair, because this person has never
 			 * been asked. It is a link, not a pitch, and it sits below the thing they came
 			 * here to do — which is find something to read or watch.
+			 *
+			 * The price reads the seeded ladder (the rows are the source of truth), with
+			 * the constant as the fallback for the first paint.
 			 */}
-			<p className="mt-3 text-base leading-relaxed text-base-content/70">
-				When you want to go further, it's ${PUBLIC_ACCESS_PRICE} a month, pointed at Anthers or
-				straight at a creator.{" "}
-				<Link to="/signup" className="link link-primary">
-					How support works
-				</Link>
-			</p>
+			<FirstRunPrice />
 			<Actions
 				primary={["Find creators to follow", "/discover"]}
 				secondary={["Go to your feed", "/feed"]}
