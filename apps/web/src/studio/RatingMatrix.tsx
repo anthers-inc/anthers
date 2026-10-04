@@ -63,9 +63,9 @@ export default function RatingMatrix({
 	return (
 		<div className="flex flex-col gap-3">
 			<p className="text-xs text-base-content/60">
-				{INTRO[grid]} A Work's rating can change how it's shown to a user, or whether it's shown
-				at all, depending on their settings and whether they've verified through a payment that
-				they're 18 or older.
+				{INTRO[grid]} A Work's rating can change how it's shown to a user, or whether it's shown at
+				all, depending on their settings and whether they've verified through a payment that they're
+				18 or older.
 			</p>
 
 			{/* Wider than a phone, so it scrolls sideways there rather than squeezing each cell's

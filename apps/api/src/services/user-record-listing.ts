@@ -22,6 +22,7 @@
 import { db } from "@anthers/db";
 import { comments, follows, posts, reviews, users, votes, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { COMMENT_KIND, FOLLOW_KIND, REVIEW_KIND, VOTE_KIND } from "./atproto-record-plan.js";
 import type {
 	CommentRecord,
 	FollowRecord,
@@ -29,7 +30,6 @@ import type {
 	UnpublishableUserReason,
 	VoteRecord,
 } from "./atproto-user-records.js";
-import { COMMENT_KIND, FOLLOW_KIND, REVIEW_KIND, VOTE_KIND } from "./atproto-record-plan.js";
 import { queueRecordSync, type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
 
 /** What syncing one user record did. */

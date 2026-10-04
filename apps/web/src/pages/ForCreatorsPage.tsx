@@ -600,10 +600,10 @@ export default function ForCreatorsPage() {
 						across every creator they spend time with, so what reaches you is your share of their
 						month, not the whole figure. What they give you directly is separate, and carries no
 						platform cut. *A free account pays nothing; free access covers its small Time Pool, so
-						even a free user pays the creators they spend time with—up to{" "}
-						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which supporting Anthers
-						lifts. Delivery costs nothing on either side—no per-GiB charge, however much anyone
-						streams or downloads—and you get {FREE_STORAGE_GIB} GiB of free storage.
+						even a free user pays the creators they spend time with—up to {FREE_PUBLIC_ACCESS_HOURS}{" "}
+						hours of Public Access a month, which supporting Anthers lifts. Delivery costs nothing
+						on either side—no per-GiB charge, however much anyone streams or downloads—and you get{" "}
+						{FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>

@@ -57,6 +57,7 @@ import {
 	type UnpublishableCreditAcceptanceReason,
 	unpublishableCreditAcceptanceReason,
 } from "./atproto-credit-acceptance.js";
+import { type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
 import {
 	type CommentRecord,
 	commentToRecord,
@@ -76,7 +77,6 @@ import {
 	type VoteRecord,
 	voteToRecord,
 } from "./atproto-user-records.js";
-import { type RepoWriter, rkeyFromAtUri } from "./atproto-repo.js";
 import { isLexiconPublished } from "./published-lexicons.js";
 
 export const COMMENT_COLLECTION = "org.anthers.comment";

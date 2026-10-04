@@ -25,9 +25,9 @@ import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import { distributePool } from "../jobs/distribute-pool";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.

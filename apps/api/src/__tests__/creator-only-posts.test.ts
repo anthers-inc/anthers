@@ -117,10 +117,7 @@ describe("creating a post", () => {
 		expect(res.status).toBe(403);
 		expect((await res.json()).code).toBe("creator_required");
 
-		const rows = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(eq(posts.creatorId, user.id));
+		const rows = await db.select({ id: posts.id }).from(posts).where(eq(posts.creatorId, user.id));
 		expect(rows).toEqual([]);
 		expect(recordSyncs()).toEqual([]);
 	});

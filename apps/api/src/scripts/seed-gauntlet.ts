@@ -58,11 +58,11 @@ import {
 import { localContentRoot } from "@anthers/db/content-root";
 import { assertDevCheckout } from "@anthers/db/dev-only";
 import {
+	GAUNTLET_ANTHERS_EMAIL,
+	GAUNTLET_ANTHERS_USERNAME,
 	GAUNTLET_BADGES,
 	GAUNTLET_CREATOR_EMAIL,
 	GAUNTLET_CREATOR_USERNAME,
-	GAUNTLET_ANTHERS_EMAIL,
-	GAUNTLET_ANTHERS_USERNAME,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_WALKER_EMAIL,
@@ -264,7 +264,9 @@ async function ensureAnthersAccount(): Promise<number> {
 				termsAcceptedAt: new Date(),
 			},
 		});
-		console.log(`${TAG} created Anthers stand-in "${GAUNTLET_ANTHERS_USERNAME}" (id ${created.id})`);
+		console.log(
+			`${TAG} created Anthers stand-in "${GAUNTLET_ANTHERS_USERNAME}" (id ${created.id})`,
+		);
 		return created.id;
 	} catch (err) {
 		// The brought path has no pending-signup reservation, so the race is the PDS

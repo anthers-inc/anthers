@@ -384,11 +384,7 @@ export async function creditsForUser(
 		// The named-person exception needs the user's own DID. A second users read rather
 		// than a parameter, because the call sites hold a user id and nothing else.
 		userId != null
-			? db
-					.select({ atprotoDid: users.atprotoDid })
-					.from(users)
-					.where(eq(users.id, userId))
-					.limit(1)
+			? db.select({ atprotoDid: users.atprotoDid }).from(users).where(eq(users.id, userId)).limit(1)
 			: Promise.resolve([] as { atprotoDid: string }[]),
 	]);
 	const accepted = new Set(acceptedRows.map((r) => `${r.contributorDid}|${r.role}`));

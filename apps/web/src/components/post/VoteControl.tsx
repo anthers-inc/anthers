@@ -73,11 +73,7 @@ export default function VoteControl({
 	down?: number;
 	/** Names the thing being reacted to, for a screen reader. */
 	label: string;
-	onChange?: (next: {
-		score: number;
-		collapsed: boolean;
-		userVote: VoteDirection | null;
-	}) => void;
+	onChange?: (next: { score: number; collapsed: boolean; userVote: VoteDirection | null }) => void;
 }) {
 	const { isAuthenticated } = useAuth();
 	const permissionMissing = useInteractionPermissionMissing(isAuthenticated);

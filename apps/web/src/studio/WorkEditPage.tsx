@@ -1372,9 +1372,7 @@ function RatingLine({
 				<span className="text-base-content/60">{notes.map(contentNoteLabel).join(" · ")}</span>
 			)}
 			{maturity === "general" && (
-				<span className="text-xs text-base-content/50">
-					Users see no rating on a General Work.
-				</span>
+				<span className="text-xs text-base-content/50">Users see no rating on a General Work.</span>
 			)}
 			{change}
 		</div>
@@ -1546,10 +1544,10 @@ function CreditsSection({
 	return (
 		<div className="flex flex-col gap-3">
 			<p className="text-xs text-base-content/50">
-				Who and what made this — users see these as liner notes on the Work. A Created credit
-				names who; Licensed and AI credits may stay anonymous. An AI credit never names the model —
-				a tool owns nothing. A Work needs at least one credit naming a human creator before it can
-				be released.
+				Who and what made this — users see these as liner notes on the Work. A Created credit names
+				who; Licensed and AI credits may stay anonymous. An AI credit never names the model — a tool
+				owns nothing. A Work needs at least one credit naming a human creator before it can be
+				released.
 			</p>
 			{rows.length === 0 && (
 				<p className="text-xs text-warning">

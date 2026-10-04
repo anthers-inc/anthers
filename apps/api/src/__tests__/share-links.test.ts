@@ -42,10 +42,10 @@ import { SHARED_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
-import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 

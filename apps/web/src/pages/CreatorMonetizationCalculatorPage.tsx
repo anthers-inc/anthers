@@ -751,14 +751,14 @@ export default function CreatorMonetizationCalculatorPage() {
 					title="How time with a creator becomes revenue"
 					lede={
 						<>
-							On Anthers, your <b className="text-base-content">Time Pool</b> — set by the
-							Badge you chose — is split across every creator you engage with,{" "}
+							On Anthers, your <b className="text-base-content">Time Pool</b> — set by the Badge you
+							chose — is split across every creator you engage with,{" "}
 							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
 							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
 							platform rate: it's worth a{" "}
-							<b className="text-base-content">slice of your Time Pool</b>, plus anything
-							you direct a creator's way. This tool traces that conversion, from one user up to a
-							creator's monthly earnings.
+							<b className="text-base-content">slice of your Time Pool</b>, plus anything you direct
+							a creator's way. This tool traces that conversion, from one user up to a creator's
+							monthly earnings.
 						</>
 					}
 				/>

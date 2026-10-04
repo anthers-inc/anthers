@@ -39,8 +39,8 @@ import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 

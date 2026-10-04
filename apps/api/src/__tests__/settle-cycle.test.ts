@@ -38,9 +38,9 @@ import app from "../index";
 import { distributePool } from "../jobs/distribute-pool";
 import { settleCycle } from "../jobs/settle-cycle";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 
 await ensureAnthersLadder();
 purgeAccountsCreatedHere();

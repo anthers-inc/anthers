@@ -414,9 +414,8 @@ function Growth({ tint }: { tint: boolean }) {
 						</p>
 						<p>
 							<strong>There are two queues and they move independently.</strong> Accounts and
-							creators are bounded by different things, so you may be admitted as a user while
-							still waiting as a creator, and the creator queue may be closed while the user queue
-							moves.
+							creators are bounded by different things, so you may be admitted as a user while still
+							waiting as a creator, and the creator queue may be closed while the user queue moves.
 						</p>
 						<p>
 							<strong>Admissions are metered rather than released all at once.</strong> Opening a

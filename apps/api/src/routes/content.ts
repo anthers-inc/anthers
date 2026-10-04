@@ -562,9 +562,7 @@ async function listComments(
 			 * carry the keys at all — a client cannot render, cache or leak a field that is
 			 * not there.
 			 */
-			...(userId !== null && r.comment.userId === userId
-				? { up: tally.up, down: tally.down }
-				: {}),
+			...(userId !== null && r.comment.userId === userId ? { up: tally.up, down: tally.down } : {}),
 			/**
 			 * ⚠️ A THIRD state, and it is neither of the other two. A removed comment arrives
 			 * as a gap with no text; `deletedByAuthor` is an author who left. This one is still

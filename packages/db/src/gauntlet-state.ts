@@ -190,9 +190,7 @@ async function main(): Promise<void> {
 	const walkerUsername =
 		flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim() || inst.userFallbackUsername;
 	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
-	const userId = await userIdByHandle(
-		await resolveAccountHandle(apiUrl, walkerUsername, "User"),
-	);
+	const userId = await userIdByHandle(await resolveAccountHandle(apiUrl, walkerUsername, "User"));
 	const creatorId = await userIdByHandle(
 		await resolveAccountHandle(apiUrl, inst.creatorUsername, "Gauntlet creator"),
 	);

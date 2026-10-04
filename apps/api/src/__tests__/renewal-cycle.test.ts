@@ -31,8 +31,8 @@ import { planItemChange, syncSubscriptionToAccount } from "../services/billing";
 
 import { applyReductionsToInvoice } from "../services/support-reductions";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const ANTHERS_ID = await ensureAnthersLadder();

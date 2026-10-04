@@ -244,9 +244,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await expect(ask).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
-	await expect(userPage.locator("section").filter({ hasText: "Credits" })).toContainText(
-		userDid,
-	);
+	await expect(userPage.locator("section").filter({ hasText: "Credits" })).toContainText(userDid);
 
 	// The notification is in their list, pointing at this page.
 	const notificationsRes = await fetch(`${API_URL}/api/accounts/me/notifications`, {

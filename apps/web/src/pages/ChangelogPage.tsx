@@ -135,8 +135,8 @@ function Hero() {
 						Every numbered release, month by month, and what a user or a creator can do now that
 						they could not before. The raw, unedited list of every change stays on the GitHub
 						release for each version — this page is the pass that groups and translates it. No entry
-						here adds anything the release does not contain, and nothing a user can see is
-						silently dropped.
+						here adds anything the release does not contain, and nothing a user can see is silently
+						dropped.
 					</Lede>
 				</Reveal>
 			</div>

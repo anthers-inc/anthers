@@ -19,14 +19,14 @@
  */
 
 import { syncPostRecord, syncProjectRecord } from "../services/creator-record-listing.js";
+import type { RecordSyncKind, RecordSyncResult } from "../services/record-sync.js";
+import { isOrdinary } from "../services/repo-writer.js";
 import {
 	syncCommentRecord,
 	syncFollowRecord,
 	syncReviewRecord,
 	syncVoteRecord,
 } from "../services/user-record-listing.js";
-import type { RecordSyncKind, RecordSyncResult } from "../services/record-sync.js";
-import { isOrdinary } from "../services/repo-writer.js";
 
 export interface SyncAtprotoRecordData {
 	kind: RecordSyncKind;

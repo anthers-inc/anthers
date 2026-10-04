@@ -28,8 +28,8 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "../services/sticker-void";
 import { createAccount } from "./account-fixture";
-import { purgeAccountsCreatedHere } from "./cleanup";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
+import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
