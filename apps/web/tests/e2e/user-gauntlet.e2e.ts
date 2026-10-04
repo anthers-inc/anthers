@@ -3,10 +3,11 @@
  * The User Gauntlet spec pass — one viewer's whole arc with one creator, walked in order,
  * asserting every cell of the expected-access staircase after every transition.
  *
- * The staircase (`EXPECTED_STAIRCASE`) and the nine posts (`GAUNTLET_POSTS`) come from
- * `@anthers/db/gauntlet` — the same definitions `make gauntlet-reset` seeds and the
- * access-staircase unit test proves against the pure resolver. This spec adds what neither
- * can: the real app, a real session, and the transitions between states.
+ * The staircase (`EXPECTED_STAIRCASE`) and the nine posts come from `@anthers/db` — the
+ * staircase from `@anthers/db/gauntlet` (one definition, shared with the access-staircase
+ * unit test, never forked per instance) and the posts from `@anthers/db/gauntlet-walk`,
+ * the walk's OWN instance of the fixture. This spec adds what neither can: the real app,
+ * a real session, and the transitions between states.
  *
  * HYBRID MODE (the default). The support model made billing real: changing what is given
  * to Anthers and topping up the creator budget are Stripe charges with
@@ -17,8 +18,13 @@
  * would write. The observational pass (and an eventual GAUNTLET_STRIPE mode) covers
  * the real billing UI; the staircase itself is asserted identically either way.
  *
- * Serial on purpose: it is one stateful walk, not independent tests. A retry restarts
- * the whole file, and beforeAll's fixture reset makes that (and re-runs) safe.
+ * Serial on purpose: it is one stateful walk, not independent tests — and the walk runs
+ * on its OWN fixture instance (instance B: the `walk-creator` / `walk-viewer` accounts
+ * and the `walk-gauntlet-*` slugs of `@anthers/db/gauntlet-walk`), disjoint from the
+ * shared instance A the `authed` project's specs run on. The walk's `beforeAll` resets
+ * instance B only, so a reset can no longer collide with anything another project holds,
+ * and there is no ordering constraint against the `authed` project at all. A retry
+ * restarts the whole file, and beforeAll's fixture reset makes that (and re-runs) safe.
  *
  * Spec: the Anthers wiki, `70-79 Testing & QA/70 - User Gauntlet.md`
  */
@@ -29,13 +35,15 @@ import {
 	BADGE_RUNGS,
 	BADGE_WALK,
 	EXPECTED_STAIRCASE,
-	GAUNTLET_CREATOR_USERNAME,
-	GAUNTLET_POSTS,
-	GAUNTLET_VIEWER_USERNAME,
 	gauntletHandle,
-	gauntletPost,
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
+import {
+	WALK_CREATOR_USERNAME,
+	WALK_POSTS,
+	WALK_VIEWER_USERNAME,
+	walkPost,
+} from "@anthers/db/gauntlet-walk";
 import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { profileUrl } from "@anthers/web-shared/profile";
 
@@ -49,12 +57,16 @@ const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 test.describe.configure({ mode: "serial" });
 
-/** Hop the viewer's billing state through the canonical fixture script. */
+/** Hop the walk viewer's billing state through the canonical fixture script — instance B. */
 function hop(...args: string[]): void {
-	execFileSync("bun", ["run", "db:gauntlet:state", "--user", GAUNTLET_VIEWER_USERNAME, ...args], {
-		cwd: REPO_ROOT,
-		stdio: "inherit",
-	});
+	execFileSync(
+		"bun",
+		["run", "db:gauntlet:state", "--instance", "walk", "--user", WALK_VIEWER_USERNAME, ...args],
+		{
+			cwd: REPO_ROOT,
+			stdio: "inherit",
+		},
+	);
 }
 
 /**
@@ -90,7 +102,7 @@ async function expectStaircase(page: Page, stateName: string): Promise<void> {
 	const row = staircaseRow(stateName);
 	const observed: Record<string, string> = {};
 
-	for (const post of GAUNTLET_POSTS) {
+	for (const post of WALK_POSTS) {
 		const res = await page.request.get(`${API_URL}/api/subscriptions/access/${workIds[post.key]}`);
 		expect(res.ok(), `access lookup failed for ${post.key}: ${res.status()}`).toBe(true);
 		const body = (await res.json()) as { reason: string; price: string | null };
@@ -104,7 +116,7 @@ async function expectStaircase(page: Page, stateName: string): Promise<void> {
 
 /** The Work page's own verdict: unlocked shows the body, locked shows the unlock panel. */
 async function expectPostUnlocked(page: Page, key: string): Promise<void> {
-	const spec = gauntletPost(key);
+	const spec = walkPost(key);
 	await page.goto(`/works/${spec.slug}`);
 	await expect(page.getByText(spec.body)).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeHidden();
@@ -117,7 +129,7 @@ async function expectPostUnlocked(page: Page, key: string): Promise<void> {
  * ask, which is the thing a viewer actually needs: how much more, and to whom.
  */
 async function expectPostLocked(page: Page, key: string): Promise<void> {
-	const spec = gauntletPost(key);
+	const spec = walkPost(key);
 	await page.goto(`/works/${spec.slug}`);
 	await expect(page.getByRole("heading", { name: /^(Locked ·|Unlock this post)/ })).toBeVisible();
 	// The ask must be marginal and must name a destination — never a bare "Join to unlock".
@@ -171,7 +183,7 @@ interface ContentItemView {
 
 /** The Work as this viewer sees it — media URLs blanked when denied. */
 async function mediaItem(page: Page, key: string): Promise<ContentItemView | null> {
-	const spec = gauntletPost(key);
+	const spec = walkPost(key);
 	const res = await page.request.get(`${API_URL}/api/content/works/${spec.slug}`);
 	expect(res.ok(), `work fetch failed for ${key}: ${res.status()}`).toBe(true);
 	const body = (await res.json()) as { work?: ContentItemView };
@@ -290,15 +302,21 @@ test.beforeAll(async () => {
 	// are generous for the same reason.
 	test.setTimeout(180_000);
 
-	// Reset to the floor through the canonical script — this is what makes re-runs and
-	// retries deterministic. The viewer's session survives (reset never touches sessions).
-	execFileSync("bun", ["run", "db:gauntlet", "--ensure-viewer"], {
+	// Reset to the floor through the canonical script, for instance B — this is what makes
+	// re-runs and retries deterministic. The viewer's session survives (reset never
+	// touches sessions). Instance A's rows are untouched, so the authed specs could be
+	// running beside this right now; that is the isolation this file's `--instance walk`
+	// buys.
+	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-viewer"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
-	// The reset deletes the fixture's posts and their content items, so real media has to
-	// be re-attached every time — and through the real transcode job, not a staged row.
-	execFileSync("bun", ["run", "db:gauntlet:media"], { cwd: REPO_ROOT, stdio: "inherit" });
+	// The reset deletes the walk instance's posts and their content items, so real media
+	// has to be re-attached every time — and through the real transcode job, not a staged row.
+	execFileSync("bun", ["run", "db:gauntlet:media", "--instance", "walk"], {
+		cwd: REPO_ROOT,
+		stdio: "inherit",
+	});
 
 	// Ask ffmpeg directly rather than inferring from the API. Inferring is what let a
 	// broken assertion read as a passing skip the first time this was written: the media
@@ -319,10 +337,10 @@ test.beforeAll(async () => {
 		);
 	}
 
-	creatorHandle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
-	viewerHandle = await gauntletHandle(API_URL, GAUNTLET_VIEWER_USERNAME);
+	creatorHandle = await gauntletHandle(API_URL, WALK_CREATOR_USERNAME);
+	viewerHandle = await gauntletHandle(API_URL, WALK_VIEWER_USERNAME);
 
-	for (const post of GAUNTLET_POSTS) {
+	for (const post of WALK_POSTS) {
 		// The fixture's subject is the WORK — the staircase this walks is an access
 		// staircase, and access lives on the Work. Each also has an announcement post.
 		const res = await fetch(`${API_URL}/api/content/works/${post.slug}`);
@@ -344,7 +362,7 @@ test.beforeAll(async () => {
  * the same commit. Counting the requests is the only way this stays fixed.
  */
 test("a bare work URL settles to canonical without fetching the Work twice", async ({ page }) => {
-	const spec = gauntletPost("G1");
+	const spec = walkPost("G1");
 	const detailCalls: string[] = [];
 	page.on("request", (r) => {
 		const u = new URL(r.url());
@@ -363,7 +381,7 @@ test("a bare work URL settles to canonical without fetching the Work twice", asy
 /** The post page carries the same canonicalisation, and had the same bug — worse, because
  *  its effect fetches the post AND its comments, so a bare URL cost four requests. */
 test("a bare post URL settles to canonical without fetching the post twice", async ({ page }) => {
-	const bare = `${gauntletPost("G1").slug}-post`;
+	const bare = `${walkPost("G1").slug}-post`;
 	const calls: string[] = [];
 	page.on("request", (r) => {
 		const u = new URL(r.url());
@@ -382,7 +400,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 
 	// Following nobody, the feed short-circuits to [] — the gauntlet posts must not leak in.
 	await page.goto("/feed");
-	await expect(page.getByText(gauntletPost("G1").title)).toBeHidden();
+	await expect(page.getByText(walkPost("G1").title)).toBeHidden();
 
 	await expectPostUnlocked(page, "G1");
 	await expectPostLocked(page, "G2");
@@ -391,7 +409,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	// The exact number, at the one state where it's unambiguous: holding nothing, G2's
 	// first rung asks for exactly its own amount. Pinning the arithmetic here is what stops
 	// the panel drifting back to quoting the THRESHOLD instead of the gap.
-	await page.goto(`/works/${gauntletPost("G2").slug}`);
+	await page.goto(`/works/${walkPost("G2").slug}`);
 	await expect(page.getByRole("link", { name: /^Unlock with \$3\.00 more to / })).toBeVisible();
 
 	// And the unlock control is the ONLY route in on this page: no surface offers an
@@ -424,7 +442,7 @@ test("rung 2 — follow: the feed fills, access does not change", async ({ page 
 	// both appear — `.first()` rather than a strict single match. Whether the feed should
 	// collapse an announcement into the release it announces is a real question, and not
 	// one this rung is asking.
-	await expect(page.getByText(gauntletPost("G1").title).first()).toBeVisible();
+	await expect(page.getByText(walkPost("G1").title).first()).toBeVisible();
 
 	// The negative assertion this rung exists for: following is not entitlement.
 	// The row must be IDENTICAL to the unfollowed floor.
@@ -437,7 +455,7 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 
 	// Comments still hang off the POST — a Work carries no comment thread yet, and the
 	// fixture gives every Work an announcement post at `<slug>-post`.
-	await page.goto(`/posts/${gauntletPost("G1").slug}-post`);
+	await page.goto(`/posts/${walkPost("G1").slug}-post`);
 	const commentText = "Walking the gauntlet — first rung comment.";
 	await page.getByPlaceholder("Write a comment...").fill(commentText);
 	await page.getByRole("button", { name: "Post comment" }).click();
@@ -451,7 +469,7 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	// honest expectation today is yes. If this ever starts failing, the product got
 	// stricter — update the spec doc's rung-3 note along with this assertion.
 	const res = await page.request.post(
-		`${API_URL}/api/content/posts/${gauntletPost("G2").slug}-post/comments`,
+		`${API_URL}/api/content/posts/${walkPost("G2").slug}-post/comments`,
 		{
 			data: { body: "Commenting on a post I cannot read (recorded gauntlet behavior)." },
 			headers: { Origin: WEB_ORIGIN },
@@ -549,7 +567,7 @@ test("rung 5 — purchases go through the basket, and only a purchase unlocks th
 	// every row so far. The Work page shows the price and NOTHING that takes it: no
 	// payment form of any kind (Parker, 2026-10-03 — every purchase goes through the
 	// basket, and the basket is where the money moves).
-	await page.goto(`/works/${gauntletPost(BUY).slug}`);
+	await page.goto(`/works/${walkPost(BUY).slug}`);
 	await expect(page.getByRole("heading", { name: "Pricing" })).toBeVisible();
 	await expect(page.locator("iframe[src*='stripe.com']")).toHaveCount(0);
 	await expect(page.locator("input[name='cc-name']")).toHaveCount(0);
@@ -560,12 +578,12 @@ test("rung 5 — purchases go through the basket, and only a purchase unlocks th
 	// WITH the checkout behind it is walked in `basket-checkout-flow.authed.e2e.ts`.
 	// Now the hop: the completed purchase the payment webhook would have written (the
 	// real charge belongs to the Stripe walk).
-	hop("--purchase", gauntletPost(BUY).slug);
+	hop("--purchase", walkPost(BUY).slug);
 
 	await expectStaircase(page, "+ purchased");
 
 	// The Work page must now offer the download instead of a checkout.
-	await page.goto(`/works/${gauntletPost(BUY).slug}`);
+	await page.goto(`/works/${walkPost(BUY).slug}`);
 	await expect(page.getByRole("heading", { name: "Downloads" })).toBeVisible();
 	await expect(page.getByText("Purchase this post to access downloads.")).toBeHidden();
 
@@ -594,7 +612,7 @@ test("the meter — a free viewer is warned before the limit, not after", async 
 	// no stored total to fake.
 	hop("--anthers-support", "0", "--watched-minutes", "570");
 
-	await page.goto(`/works/${gauntletPost("G1").slug}`);
+	await page.goto(`/works/${walkPost("G1").slug}`);
 
 	// Half an hour left, so the countdown speaks — and says the remainder, because "you
 	// are near the end" without a number is not information.
@@ -612,7 +630,7 @@ test("the meter — spent, the player gives way to an explanation", async ({ pag
 	const errors = trackErrorsStrict(page, ALLOWED);
 
 	hop("--watched-minutes", "600");
-	await page.goto(`/works/${gauntletPost("G1").slug}`);
+	await page.goto(`/works/${walkPost("G1").slug}`);
 
 	await expect(
 		page.getByRole("heading", { name: /that's your 10 hours for this month/i }),
@@ -637,7 +655,7 @@ test("the meter — the Public Access price removes it, and nothing above it buy
 
 	// Same 10 hours spent; the only change is supporting Anthers at the Public Access price.
 	hop("--anthers-support", String(PUBLIC_ACCESS_PRICE));
-	await page.goto(`/works/${gauntletPost("G1").slug}`);
+	await page.goto(`/works/${walkPost("G1").slug}`);
 
 	await expect(page.locator("video")).toBeVisible();
 	await expect(page.getByRole("heading", { name: /that's your 10 hours/i })).toHaveCount(0);
@@ -648,7 +666,7 @@ test("the meter — the Public Access price removes it, and nothing above it buy
 	// The model's central claim about access — binary, and whole at the first dollar that
 	// buys it. Four times the amount buys no more reach.
 	hop("--anthers-support", String(PUBLIC_ACCESS_PRICE * 4));
-	await page.goto(`/works/${gauntletPost("G1").slug}`);
+	await page.goto(`/works/${walkPost("G1").slug}`);
 	await expect(page.locator("video")).toBeVisible();
 	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);
 

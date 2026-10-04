@@ -34,7 +34,9 @@
  * > proof that the stored object is private. That half is covered at the API layer by
  * > `storage-acl.test.ts`, which asserts the ACL passed at upload time.
  *
- * Usage: `bun run db:gauntlet:media` (run after `db:gauntlet`, which owns the posts).
+ * Usage: `bun run db:gauntlet:media` (run after `db:gauntlet`, which owns the posts);
+ * `--instance walk` attaches to the walk's own fixture instead (run after
+ * `db:gauntlet --instance walk`).
  * A no-op with a loud notice when ffmpeg is absent, so a machine without it still gets a
  * working — if less thorough — gauntlet rather than a failed reset.
  *
@@ -52,6 +54,7 @@ import {
 	GAUNTLET_MEDIA_POSTS,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
+import { WALK_CREATOR_USERNAME, WALK_MEDIA_POSTS } from "@anthers/db/gauntlet-walk";
 import { transcodingJobs, users, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
@@ -131,16 +134,42 @@ async function generateClip(kind: "video" | "audio"): Promise<string> {
 	return path;
 }
 
+/**
+ * Which copy of the fixture the media seeding attaches to, mirroring `seed-gauntlet.ts`'s
+ * `--instance` flag. The walk's instance (`--instance walk`) is the e2e gauntlet project's
+ * own fixture, reset fresh on every run — its media must attach to the walk creator's
+ * Works and nobody else's, or a walk would depend on rows another project can delete.
+ */
+interface InstanceMedia {
+	creatorUsername: string;
+	mediaPosts: Array<GauntletPost & { media: "video" | "audio" }>;
+}
+
+const INSTANCE_A_MEDIA: InstanceMedia = {
+	creatorUsername: GAUNTLET_CREATOR_USERNAME,
+	mediaPosts: GAUNTLET_MEDIA_POSTS,
+};
+
+const INSTANCE_WALK_MEDIA: InstanceMedia = {
+	creatorUsername: WALK_CREATOR_USERNAME,
+	mediaPosts: WALK_MEDIA_POSTS,
+};
+
+function resolveMediaInstance(): InstanceMedia {
+	const i = process.argv.indexOf("--instance");
+	const value = i !== -1 ? process.argv[i + 1]?.trim() : undefined;
+	if (value === undefined || value === "a") return INSTANCE_A_MEDIA;
+	if (value === "walk") return INSTANCE_WALK_MEDIA;
+	throw new Error(`Unknown --instance "${value}" (expected "a" or "walk")`);
+}
+
 /** The gauntlet creator's id, or null when the fixture hasn't been seeded yet. */
-async function creatorId(): Promise<number | null> {
+async function creatorId(creatorUsername: string): Promise<number | null> {
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
 		.where(
-			eq(
-				users.atprotoHandle,
-				`${localHandleName(GAUNTLET_CREATOR_USERNAME)}.${await hostedHandleSuffix()}`,
-			),
+			eq(users.atprotoHandle, `${localHandleName(creatorUsername)}.${await hostedHandleSuffix()}`),
 		)
 		.limit(1);
 	return row?.id ?? null;
@@ -225,15 +254,18 @@ async function main() {
 		return;
 	}
 
-	const creator = await creatorId();
+	const inst = resolveMediaInstance();
+	const creator = await creatorId(inst.creatorUsername);
 	if (creator == null) {
-		throw new Error(`${TAG} no gauntlet creator — run \`bun run db:gauntlet\` first`);
+		throw new Error(
+			`${TAG} no ${inst.creatorUsername} — run \`bun run db:gauntlet${inst === INSTANCE_WALK_MEDIA ? " --instance walk" : ""}\` first`,
+		);
 	}
 
-	for (const post of GAUNTLET_MEDIA_POSTS) {
+	for (const post of inst.mediaPosts) {
 		await seedMediaFor(post, creator);
 	}
-	console.log(`${TAG} seeded ${GAUNTLET_MEDIA_POSTS.length} media post(s)`);
+	console.log(`${TAG} seeded ${inst.mediaPosts.length} media post(s) for ${inst.creatorUsername}`);
 }
 
 main()

@@ -126,8 +126,13 @@ export const BADGE_WALK: number[] = BADGE_RUNGS.flatMap((amount, i) => {
 /** The purchase rung's list price — what the creator receives; fees are added on top. */
 export const DOWNLOAD_PRICE = "9.99";
 
-/** publicIds are stable and sit well clear of the media fixture's 910_000_000 range. */
-const PUBLIC_ID_BASE = 900_000_000;
+/**
+ * publicIds are stable and sit well clear of the media fixture's 910_000_000 range.
+ * Exported because `gauntlet-walk.ts` derives its own base from the same scheme — the
+ * offset keeps the two instances' id spaces the same shape, so B's posts read like A's
+ * with the dial moved rather than renumbered.
+ */
+export const PUBLIC_ID_BASE = 900_000_000;
 
 /** The "everyone" baseline denied, then one rung allowed at `threshold` dollars a month. */
 function badgeRung(threshold: number): AccessRow[] {
