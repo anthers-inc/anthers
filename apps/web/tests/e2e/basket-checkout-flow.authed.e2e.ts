@@ -21,7 +21,6 @@
  * uses.
  */
 
-import { gauntletHandle } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { API_URL, expect, type Page, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
@@ -45,7 +44,6 @@ interface MeResponse {
 
 let sessionToken: string | null = null;
 let work: OwnedWork | null = null;
-let creatorHandle = "";
 
 /** The creator's own Works, by session cookie. The handle is what the catalog keys on. */
 async function ownWorks(): Promise<OwnedWork[]> {
@@ -73,36 +71,46 @@ async function sweep(): Promise<void> {
 }
 
 /**
- * Seed the basket directly into `localStorage`, then reload so `useBasket` reads it.
+ * Seed the SERVER-side basket through the add route, then reload so `useBasket` reads it.
  *
- * The seeding path (rather than driving the Add to Basket button) is used for the tests
- * AFTER the first: the add path is exercised once on its own, and re-driving it per test
- * would make every later assertion depend on a navigation this suite has already proven.
- * Same reasoning as `basket-header.authed.e2e.ts` — evaluate + reload, not addInitScript.
+ * 🚨 **The seeding is sent through `page.request`, which carries the page's own session
+ * cookie** — the basket is the account's now (Parker, 2026-10-03), and the account the
+ * page renders for is the gauntlet viewer, not the fixture creator who owns the walk
+ * Work. Seeding from a different account's session would plant a basket on the wrong
+ * account and the page would not show it — the exact property this server-side move
+ * exists to establish. The seeding path (rather than driving the Add to Basket button)
+ * is used for the tests AFTER the first: the add path is exercised once on its own, and
+ * re-driving it per test would make every later assertion depend on a navigation this
+ * suite has already proven.
  */
 async function seedBasket(page: Page): Promise<void> {
 	if (!work) throw new Error("walk Work was not created");
-	// localStorage is only reachable on a loaded document — an evaluate on a fresh page
-	// throws SecurityError (which is exactly what this spec's first run died on), so
-	// land on the basket's own empty state first. Same reasoning as
-	// `basket-header.authed.e2e.ts`: evaluate + reload, not addInitScript.
-	await page.goto("/basket");
-	await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
-		key: "anthers_basket",
-		value: JSON.stringify({
-			version: 1,
-			items: [
-				{
-					workId: work.id,
-					slug: work.slug,
-					title: work.title,
-					price: PRICE,
-					creatorHandle,
-				},
-			],
-		}),
+	const res = await page.request.post(`${API_URL}/api/payments/basket/items`, {
+		headers: { Origin: WEB_ORIGIN },
+		data: { workId: work.id },
 	});
-	await page.reload();
+	expect(res.status(), `seeding the basket failed: ${await res.text()}`).toBe(200);
+	// The page's own `useBasket` learns the new item only when the page reads the server
+	// again — a `page.request` seed fires nothing in the document — so land on the
+	// basket (or reload it) after seeding. (The `localStorage` design's evaluate+reload
+	// had the same shape; the store just moved across the wire.)
+	await page.goto("/basket");
+}
+
+/**
+ * Empty the buyer's server-side basket, through the page's own session.
+ *
+ * 🚨 **The walk's later tests need the basket they assert on, not the one a sibling test
+ * left** — the basket is per-ACCOUNT now, so it persists across this file's every test
+ * where the `localStorage` design reset with each test's fresh context. "Add to Basket
+ * keeps the buyer on the Work page" in particular asserts the ADD door, which renders
+ * only while the Work is NOT in the basket.
+ */
+async function clearServerBasket(page: Page): Promise<void> {
+	const res = await page.request.delete(`${API_URL}/api/payments/basket`, {
+		headers: { Origin: WEB_ORIGIN },
+	});
+	expect(res.status(), `clearing the basket failed: ${await res.text()}`).toBe(200);
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -111,7 +119,6 @@ test.beforeAll(async ({ browser }) => {
 	sessionToken = await signInAsMediaFixture(context);
 	await context.close();
 
-	creatorHandle = await gauntletHandle(API_URL, MEDIA_FIXTURE_USERNAME);
 	await sweep();
 
 	// Create and price the Work directly through the API — the Studio's access editor is
@@ -233,6 +240,10 @@ test.describe("the basket purchase flow", () => {
 	}
 
 	test("Buy Now adds the item and lands on the basket — the one-item flow", async ({ page }) => {
+		// A sibling file (or a prior run of this one) may have left items on the VIEWER's
+		// server basket — the account's basket is state this file's walk starts from, and
+		// the empty-badge assertion below wants it empty.
+		await clearServerBasket(page);
 		await gotoWork(page);
 
 		// The header badge is empty before the add.
@@ -329,6 +340,9 @@ test.describe("the basket purchase flow", () => {
 	});
 
 	test("Add to Basket keeps the buyer on the Work page", async ({ page }) => {
+		// Whatever the sibling tests left on the account's server basket goes first —
+		// the door under test renders only when the Work isn't already in it.
+		await clearServerBasket(page);
 		await gotoWork(page);
 		await page.getByRole("button", { name: /Add to basket/ }).click();
 		// Still here — the door that adds without leaving, for the buyer building a basket.
