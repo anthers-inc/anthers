@@ -318,7 +318,7 @@ export async function driftReport(
 	// ── Posts ────────────────────────────────────────────────────────────
 	//
 	// A post's record carries the BODY — the one place a record is more than a listing — so
-	// content drift here is a reader-visible lie about what somebody wrote, not just about
+	// content drift here is a user-visible lie about what somebody wrote, not just about
 	// where it points. The query keeps `body` beside the publishability columns, which is
 	// exactly the pairing the mapper's docblock warns must not degrade.
 	const postRows = await db
