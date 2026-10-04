@@ -14,7 +14,6 @@ import WorkCard from "../components/cards/WorkCard";
 import CommentThread from "../components/post/CommentThread";
 import StickerBar from "../components/post/StickerBar";
 import VoteControl from "../components/post/VoteControl";
-import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { studioEditPostUrl } from "../lib/studio";
 
 export default function PostPage() {
@@ -266,14 +265,12 @@ export default function PostPage() {
 				)}
 
 				{/* The post body. Always visible — a post is an announcement, and an
-				    announcement nobody can read is not one. */}
-				{(post.bodyHtml || post.body) && (
+				    announcement nobody can read is not one. It is rendered as the markdown
+				    it is stored as; react-markdown without rehype-raw skips any raw HTML a
+				    stored body somehow carries, so the words show and nothing executes. */}
+				{post.body && (
 					<div className="prose prose-sm max-w-none mb-8">
-						{post.bodyHtml ? (
-							<SanitizedHtml html={post.bodyHtml} />
-						) : (
-							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-						)}
+						<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
 					</div>
 				)}
 

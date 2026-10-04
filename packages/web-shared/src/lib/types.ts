@@ -437,8 +437,8 @@ export interface Post {
 	creatorId: number;
 	slug: string;
 	title: string | null;
+	/** The post's content, as markdown — the stored, canonical form (see `posts.body`). */
 	body: string | null;
-	bodyHtml: string | null;
 
 	// Presentation
 	showOnTimeline: boolean;

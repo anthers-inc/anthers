@@ -446,8 +446,8 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			publicId: spec.publicId + 1_000,
 			slug: `${spec.slug}-post`,
 			title: spec.title,
+			// The stored form is markdown; the announcement's body is its text as written.
 			body: spec.body,
-			bodyHtml: `<p>${spec.body}</p>`,
 			isPublished: true,
 			publishedAt: new Date(),
 		})

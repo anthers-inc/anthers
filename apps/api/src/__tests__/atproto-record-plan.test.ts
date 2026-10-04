@@ -130,6 +130,7 @@ describe("planning a record", () => {
 			publicId: 12,
 			isPublished: false,
 			publishedAt: new Date("2026-08-14T00:00:00.000Z"),
+			body: "words its creator took back",
 		};
 		expect(planRecord(POST_KIND, draft, `at://${DID}/org.anthers.post/3lbk`)).toEqual({
 			action: "delete",

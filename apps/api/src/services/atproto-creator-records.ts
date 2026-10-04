@@ -23,6 +23,8 @@ export interface PublishablePost {
 	publicId: number;
 	isPublished: boolean;
 	publishedAt: Date | null;
+	/** The stored markdown body — what `content` publishes. Kept beside the gate columns. */
+	body: string | null;
 }
 
 export interface PostRecord {
@@ -65,13 +67,12 @@ export function postUrl(post: PublishablePost, baseUrl: string): string {
 /**
  * Build the record for a post, or `null` when it must not have one.
  *
- * 🚨 **`content` is deliberately absent, and it is absent because there is nothing to put in
- * it yet.** The Lexicon publishes content as markdown; a post is authored in TipTap and
- * stored as sanitized HTML in `body_html`, with `body` kept as a plain-text shadow for
- * search. Converting HTML to markdown here would make the mapper the place a lossy
- * conversion happens on every write, invisibly, rather than once where somebody decided it.
- * Until the stored form is markdown, a post record is a listing — which the schema allows,
- * because `content` is optional precisely so this could ship without it.
+ * **`content` rides along, and it is why this whole mechanism exists.** The stored body is
+ * markdown (`posts.body`, converted from the editor's HTML at the write boundary —
+ * `services/post-markdown.ts`), which is exactly the form the Lexicon publishes, so the
+ * record carries it rather than shipping a listing with nothing to read. The query that
+ * feeds this must keep `body` beside the publishability columns, or the record silently
+ * degrades back to a link and a date.
  */
 export function postToRecord(post: PublishablePost, opts: { baseUrl: string }): PostRecord | null {
 	if (unpublishablePostReason(post) !== null) return null;
@@ -81,6 +82,7 @@ export function postToRecord(post: PublishablePost, opts: { baseUrl: string }): 
 		$type: "org.anthers.post",
 		url: postUrl(post, opts.baseUrl),
 		publishedAt: post.publishedAt.toISOString(),
+		content: { format: "markdown", value: post.body ?? "" },
 	};
 }
 

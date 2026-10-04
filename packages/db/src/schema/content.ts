@@ -363,8 +363,15 @@ export const posts = pgTable(
 		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
 		slug: text("slug").notNull().unique(),
 		title: text("title").default(""),
+		// The post's content, as **markdown — the canonical stored form**. It converts from
+		// the editor's HTML at the write boundary (`services/post-markdown.ts`), is what
+		// search reads (LIKE over markdown source matches the same words a stripped-text
+		// shadow would, so there is no shadow), and is what `org.anthers.post` publishes as
+		// `{ format: "markdown", value }` — which is the whole reason the form is markdown.
+		// The `body_html` column this once sat beside is gone: HTML was the stored form
+		// until the record needed a markdown source, and carrying both asked every writer
+		// which one was true.
 		body: text("body").default(""),
-		bodyHtml: text("body_html").default(""),
 
 		// ── Presentation ──
 		showOnTimeline: boolean("show_on_timeline").notNull().default(true),

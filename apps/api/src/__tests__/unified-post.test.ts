@@ -254,7 +254,9 @@ describe("Catalog vertical slice", () => {
 		});
 		expect(detail.status).toBe(200);
 		const { post } = await detail.json();
-		expect(post.bodyHtml).toContain("2015 game");
+		expect(post.body).toContain("2015 game");
+		// The stored form is markdown; the editor's HTML never ships again.
+		expect(post).not.toHaveProperty("bodyHtml");
 		// ...while the Work it links stays exactly as locked as it was.
 		expect(post.linkedWorks.length).toBe(1);
 		expect(post.linkedWorks[0].work.access.canAccess).toBe(false);

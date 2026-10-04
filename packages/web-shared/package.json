@@ -78,7 +78,8 @@
 		"@tiptap/extension-placeholder": "^2.6.0",
 		"@tiptap/react": "^2.6.0",
 		"@tiptap/starter-kit": "^2.6.0",
-		"hono": "^4.7.0"
+		"hono": "^4.7.0",
+		"marked": "18.0.14"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",

@@ -108,10 +108,14 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		return cookie;
 	}
 
-	it("stores sanitized HTML on create and update", async () => {
+	// The stored form is markdown (`posts.body`); the editor's HTML is converted at the
+	// boundary and the converted form is what this suite proves is clean — the same
+	// hostile payloads the HTML suite covered, replayed end to end through the route.
+	it("stores sanitized markdown on create and update", async () => {
 		const cookie = await signUpAndGetCookie();
 
-		// Create with a hostile payload
+		// Create with a hostile payload. `body` says the same thing the HTML's surviving
+		// text says; when both arrive the editor's HTML wins.
 		const createRes = await makeRequest("/api/content/posts", {
 			method: "POST",
 			headers: {
@@ -129,9 +133,13 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		});
 		expect(createRes.status).toBe(201);
 		const created = await createRes.json();
-		expect(created.post.bodyHtml).toContain("<p>legit</p>");
-		expect(created.post.bodyHtml).not.toContain("script");
-		expect(created.post.bodyHtml).not.toContain("onerror");
+		// "legit" survives; the image does too — it is editor vocabulary, and only its
+		// hostile attribute was the attack. The markdown keeps neither the script nor
+		// the handler.
+		expect(created.post.body).toContain("legit");
+		expect(created.post.body).not.toContain("script");
+		expect(created.post.body).not.toContain("onerror");
+		expect(created.post.body).toContain("![](x)");
 
 		// Read back — stored value must be clean too
 		const getRes = await makeRequest(`/api/content/posts/${created.post.slug}`, {
@@ -139,8 +147,9 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		});
 		expect(getRes.status).toBe(200);
 		const fetched = await getRes.json();
-		expect(fetched.post.bodyHtml).not.toContain("script");
-		expect(fetched.post.bodyHtml).not.toContain("onerror");
+		expect(fetched.post.body).not.toContain("script");
+		expect(fetched.post.body).not.toContain("onerror");
+		expect(fetched.post).not.toHaveProperty("bodyHtml");
 
 		// Update with another hostile payload
 		const patchRes = await makeRequest(`/api/content/posts/${created.post.slug}`, {
@@ -157,8 +166,8 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		});
 		expect(patchRes.status).toBe(200);
 		const patched = await patchRes.json();
-		expect(patched.post.bodyHtml).toContain("<p>updated</p>");
-		expect(patched.post.bodyHtml).not.toContain("javascript:");
-		expect(patched.post.bodyHtml).not.toContain("iframe");
+		expect(patched.post.body).toContain("updated");
+		expect(patched.post.body).not.toContain("javascript:");
+		expect(patched.post.body).not.toContain("iframe");
 	});
 });
