@@ -271,38 +271,52 @@ export default function WorkPage() {
 						    missing is an account for the time to be attributed to. So the cover
 						    stays unblurred and un-padlocked here, and the card underneath asks
 						    for the account instead. See `presentsAsLocked`. */}
-						{presentsAsLocked(access) ? (
-							<LockedCover
-								thumbnail={work.thumbnail}
-								className="aspect-video rounded-lg"
-								lockedBy={access ? lockedByBadge(access, creatorName) : null}
-							/>
-						) : (
-							work.thumbnail && (
-								<img
-									src={work.thumbnail}
-									alt=""
-									className="aspect-video w-full rounded-lg object-cover"
-								/>
-							)
-						)}
-						{access &&
-							(access.requiresPurchase ? (
-								/* Every purchase goes through the basket (Parker, 2026-10-03): the
-								   pricing card offers the two doors into it and nothing about a
-								   card lives on this page. */
-								<ProjectPricing
-									workId={work.id}
-									slug={work.slug ?? ""}
-									access={access}
-									title={work.title ?? "Untitled"}
-									creatorHandle={work.creator?.handle ?? ""}
+						{/* The locked preview and the purchase decision are one composition: a
+						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
+						    Demand's buy panel) — the blurred cover left, the price card right,
+						    both cards' edges aligned. They stack below `sm` with the cover
+						    first. Everything else on the page stays full-width; only this
+						    pairing is two-up. */}
+						{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
+						    the row's height lets `aspect-video` derive its WIDTH from that
+						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
+						    aspect ratio silently outranks the track. An explicit width breaks
+						    the derive-back and the cover sizes to its column. Found by
+						    measuring, invisible in the DOM string. */}
+						<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+							{presentsAsLocked(access) ? (
+								<LockedCover
 									thumbnail={work.thumbnail}
-									creatorHasStripe={work.creatorHasStripe ?? false}
+									className="aspect-video w-full rounded-lg"
+									lockedBy={access ? lockedByBadge(access, creatorName) : null}
 								/>
 							) : (
-								<InlineUnlock post={work} access={access} />
-							))}
+								work.thumbnail && (
+									<img
+										src={work.thumbnail}
+										alt=""
+										className="aspect-video w-full rounded-lg object-cover"
+									/>
+								)
+							)}
+							{access &&
+								(access.requiresPurchase ? (
+									/* Every purchase goes through the basket (Parker, 2026-10-03): the
+									   pricing card offers the two doors into it and nothing about a
+									   card lives on this page. */
+									<ProjectPricing
+										workId={work.id}
+										slug={work.slug ?? ""}
+										access={access}
+										title={work.title ?? "Untitled"}
+										creatorHandle={work.creator?.handle ?? ""}
+										thumbnail={work.thumbnail}
+										creatorHasStripe={work.creatorHasStripe ?? false}
+									/>
+								) : (
+									<InlineUnlock post={work} access={access} />
+								))}
+						</div>
 					</div>
 				) : spentOnThis ? (
 					// The server withheld the deliverable because the allowance is gone, so

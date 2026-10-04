@@ -69,7 +69,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 		<div className="space-y-2">
 			<button
 				type="button"
-				className="btn btn-outline btn-sm"
+				className="btn btn-outline btn-sm w-full"
 				onClick={() => {
 					// `add` is async in server mode (the answer carries the creator clash) and
 					// sync in scratch mode; `Promise` handles both, and the only thing read
@@ -91,10 +91,6 @@ export default function AddToBasket(props: AddToBasketProps) {
 				<ShoppingBagIcon className="w-4 h-4" /> Add to basket
 			</button>
 			{notice}
-			<p className="text-xs text-base-content/50">
-				Buying several things from {props.creatorHandle} together sends them more: the card fee is
-				charged once per purchase, not once per item.
-			</p>
 		</div>
 	);
 }

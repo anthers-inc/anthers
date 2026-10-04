@@ -33,7 +33,7 @@ export default function BuyNow(props: BuyNowProps) {
 	return (
 		<button
 			type="button"
-			className="btn btn-primary"
+			className="btn btn-primary w-full"
 			onClick={() => {
 				// Replace-clash handling is the basket's own behavior (the server's in
 				// server mode, the hook's in scratch mode): a basket held across creators is
