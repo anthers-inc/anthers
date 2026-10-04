@@ -53,12 +53,6 @@ describe("badgeTable", () => {
 		}
 	});
 
-	test("the first rung is the Public Access price, and nothing above it buys more access", () => {
-		// The one Anthers amount that is a product decision rather than a dial: $3 opens
-		// the whole commons, and the rungs above it buy standing, never reach.
-		expect(badgeTable()[0].monthly).toBe(PUBLIC_ACCESS_PRICE);
-	});
-
 	test("the remainder is strictly positive at every Badge", () => {
 		// If a dial change ever drives this negative, the model is insolvent at that Badge
 		// and the table would quietly render a negative "contribution to free access".

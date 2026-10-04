@@ -15,6 +15,11 @@ const HOUR = 3600;
 
 describe("the free allowance", () => {
 	test("is 10 hours a month, in whatever unit you ask for", () => {
+		// RETIREMENT TRIGGER: delete this pin if the free allowance ever becomes a
+		// database row (as the Badge ladder already has) — the seeded value is then
+		// covered by the suites that read the table, and a constant re-proving
+		// itself is a placeholder guard outliving its placeholder. See the wiki's
+		// *What Deserves a Standing Test*.
 		expect(FREE_PUBLIC_ACCESS_HOURS).toBe(10);
 		expect(FREE_PUBLIC_ACCESS_SECONDS).toBe(10 * HOUR);
 	});

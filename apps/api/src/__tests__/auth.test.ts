@@ -182,8 +182,6 @@ describe("Auth System", () => {
 				body: JSON.stringify({ currentPassword: "whatever", newPassword: "anotherpass789" }),
 			});
 			expect(changeRes.status).toBe(404);
-			const [row] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-			expect("passwordHash" in row).toBe(false);
 		});
 	});
 

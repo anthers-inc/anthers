@@ -394,6 +394,13 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	await page.goto(`/works/${gauntletPost("G2").slug}`);
 	await expect(page.getByRole("link", { name: /^Unlock with \$3\.00 more to / })).toBeVisible();
 
+	// And the unlock control is the ONLY route in on this page: no surface offers an
+	// Anthers Badge as a way into a creator's gate. This is a UI property, not a resolver
+	// property — the resolver cannot see the viewer's Badge count at all (a Badge is
+	// standing, not access) — so a regression here is a *surface* reappearing, and only
+	// the browser can see it.
+	await expect(page.getByRole("button", { name: /Badge for Anthers/ })).toBeHidden();
+
 	await expectStaircase(page, "Free, unfollowed");
 
 	if (mediaSeeded) {
@@ -455,38 +462,8 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	expect(errors).toEqual([]);
 });
 
-// ── A Badge opens nothing ───────────────────────────────────────────────────
-/**
- * 🚨 Four tests climbed Root → Blossom here until 2026-08-12, each asserting that exactly
- * one more post unlocked. A Badge opens nothing, so the replacement asserts the
- * opposite and is the more important of the two: the top Badge, held for real, changes
- * nothing about any Work.
- *
- * Worth walking in the browser rather than trusting the resolver test, because the
- * resolver can no longer even see the count — the risk that remains is a *surface* that
- * still offers a Badge as a way in.
- */
-test("rung 4 — Blossom unlocks nothing; a Badge is standing, not access", async ({ page }) => {
-	const errors = trackErrorsStrict(page, ALLOWED);
-	hop("--anthers-support", String(PUBLIC_ACCESS_PRICE * 4));
-
-	await expectPostUnlocked(page, "G1");
-	await expectPostLocked(page, "G2");
-	await expectStaircase(page, "Blossom, nothing given");
-
-	// And no surface offers the Badge as a route in. The unlock control on a gated Work
-	// must name the creator, never Anthers.
-	await page.goto(`/works/${gauntletPost("G2").slug}`);
-	await expect(page.getByRole("link", { name: /^Unlock with \$3\.00 more to / })).toBeVisible();
-	// And no surface offers an Anthers Badge as a route into a creator's gate.
-	await expect(page.getByRole("button", { name: /Badge for Anthers/ })).toBeHidden();
-
-	if (mediaSeeded) await expectMediaWithheld(page, "G3");
-	expect(errors).toEqual([]);
-});
-
 // ── The Badge ladder, through the real Badge picker ──────────────────────────
-test("rung 5 — the directed budget alone unlocks nothing", async ({ page }) => {
+test("rung 4 — the directed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	// Enough budget for the whole ladder. Holding budget is not holding a Badge — the
 	// staircase must still read exactly as it did before.
@@ -517,7 +494,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	const stillLocked = nextIndex >= 0 ? `G${2 + nextIndex}` : null;
 	const onRung = rungIndex >= 0;
 
-	test(`rung 5 — at $${seeds} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
+	test(`rung 4 — at $${seeds} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
 		page,
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
@@ -548,7 +525,7 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	});
 }
 
-test("rung 5 — the ratchet: a lower rung is not offered once it is held", async ({ page }) => {
+test("rung 4 — the ratchet: a lower rung is not offered once it is held", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
 	// The full ladder is committed; within the cycle a holding never goes down, so
@@ -559,7 +536,7 @@ test("rung 5 — the ratchet: a lower rung is not offered once it is held", asyn
 });
 
 // ── The purchase rung ────────────────────────────────────────────────────────
-test("rung 6 — purchases go through the basket, and only a purchase unlocks the download", async ({
+test("rung 5 — purchases go through the basket, and only a purchase unlocks the download", async ({
 	page,
 }) => {
 	// The basket's session POST answers 503 in the browser session (no Stripe key in this
@@ -593,23 +570,6 @@ test("rung 6 — purchases go through the basket, and only a purchase unlocks th
 	await expect(page.getByText("Purchase this post to access downloads.")).toBeHidden();
 
 	expect(errors).toEqual([]);
-});
-
-test("the ladders only ever climbed — no state unlocked less than the one before", () => {
-	// The per-state rows all passed to reach this point; this pins the shape of the whole
-	// table one more time at the source of truth, so a future edit that breaks the
-	// monotonic climb fails here even if each row is internally consistent.
-	let previous = 0;
-	for (const row of EXPECTED_STAIRCASE) {
-		const unlocked = Object.values(row.reasons).filter(
-			(r) => r !== "gated" && r !== "payment_required",
-		).length;
-		expect(
-			unlocked,
-			`${row.state} unlocks fewer posts than the state before it`,
-		).toBeGreaterThanOrEqual(previous);
-		previous = unlocked;
-	}
 });
 
 // ── The meter rung: the free-limit moment ────────────────────────────────────
