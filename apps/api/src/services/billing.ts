@@ -519,8 +519,9 @@ export async function savedCardFor(
  * 🚨 **Writes no amount anywhere.** The old accounts row carried two amount columns this
  * update used to rewrite; under the Badge model the amounts are `user_badges` holdings —
  * what the subscription's directed items buy is written by `applyDirectedSupportFromSub`
- * below, and what the Anthers line buys is resolved by reading the org-ladder holding at
- * whatever the ledger needs it for. What this function still owns is the Stripe machinery:
+ * below, and what the Anthers line buys is resolved by reading the Anthers-ladder
+ * holding at whatever the ledger needs it for. What this function still owns is the
+ * Stripe machinery:
  * the subscription id, the period pair, activity and cancellation, plus the directed
  * balance the Badge picker draws against (`billing_accounts.directed_budget` — the
  * subscription's directed items ARE that balance, so the webhook is the writer that
@@ -594,20 +595,19 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	 *
 	 * So within a cycle the higher of the two wins, and the new value is taken outright once
 	 * the cycle turns. A raise is unaffected, since a raise is charged in full today and is
-	 * therefore genuinely in force today. ⭐ **This is the rule `applyDirectedSupportFromSub`
+	 * therefore genuinely in force today. ⭐ **This is the rule `applyDirectedSupport`
 	 * already applies per creator with its add-only-upsert** — allocation is add-only within
 	 * a cycle — rather than a new idea; what this column adds is the account-level half for
 	 * the *budget*, which is the number the picker draws down against.
-	 */
-	/**
+	 *
 	 * 🚨 **The held-over Anthers amount is read off the HOLDING, not the items.** The
 	 * in-force rule on a mid-cycle decrease lives on the badge holding now: the holding
 	 * IS the account-level amount, so when the stored period says this decrease is still
 	 * inside the cycle it was paid in, the existing holding is the "stored" figure —
-	 * `applyAnthersBadgeHolding` takes the GREATER of the item price and the held rung,
-	 * which keeps a Blossom somebody paid $12 for through the month the items already
-	 * say $3. Once the period turns, the items are the whole truth and the holding is
-	 * re-stamped outright.
+	 * the unified apply takes the GREATER of the item price and the held rung for the
+	 * Anthers pick, which keeps a Blossom somebody paid $12 for through the month the
+	 * items already say $3. Once the period turns, the items are the whole truth and the
+	 * holding is re-stamped outright.
 	 */
 	const heldOver =
 		acct.currentPeriodStart != null &&
@@ -708,72 +708,6 @@ async function heldAnthersBadgeAmountForSync(userId: number): Promise<number> {
 			),
 		);
 	return Number(held?.held ?? 0);
-}
-
-/**
- * Write (or clear) the user's holding on the org's ladder for what the Anthers line costs.
- *
- * ⭐ **The Anthers line is a Badge holding like any directed one.** Its threshold IS the
- * amount the old `accounts.anthers_support` column carried, so under the Badge model the
- * webhook's write is what makes the held Badge exist at all — every Anthers-side reader
- * (`heldAnthersBadgeAmount`, the Public Access meter, the Time Pool, the sticker
- * allowance) reads this holding.
- *
- * 🚨 **Replace, never stack, and $0 clears rather than seeds.** The picker's
- * one-holding-per-issuer-per-cycle rule applies to the org's ladder with special force: a
- * viewer moving $12 → $3 mid-cycle must read $3, and a cancel (the items carry no Anthers
- * line at all) must leave NO holding, because "free" under the Badge model is the absence
- * of a held rung, not a $0 row beside a paid one. The holding is find-or-create on the
- * org's ladder exactly as `applyDirectedSupportFromSub` resolves a creator's, so a ladder
- * re-seed cannot drop what was paid for. A $0 line (Free — nothing to hold) clears the
- * org's rungs and writes nothing.
- */
-export async function applyAnthersBadgeHolding(
-	userId: number,
-	anthersDollars: number,
-): Promise<void> {
-	const org = await anthersUserId();
-	const cycle = currentCycleKey();
-	// The org's other rungs go first — replace-not-stack, and it clears the held rung on
-	// a cancel, which is the whole of "reverts to Free".
-	await db
-		.delete(userBadges)
-		.where(
-			sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
-		);
-	if (anthersDollars <= 0) return;
-	const threshold = new Decimal(anthersDollars).toFixed(2);
-	let [badge] = await db
-		.select({ id: badges.id })
-		.from(badges)
-		.where(and(eq(badges.creatorId, org), eq(badges.threshold, threshold)))
-		.limit(1);
-	if (!badge) {
-		// Find-or-create, exactly as the directed path resolves a creator's rung: the
-		// Anthers line is normally priced from the seeded ladder, but a subscription
-		// predating a re-price can name a level the current seed doesn't carry, and a
-		// missing row would silently drop a paid-for holding on a replayed webhook. The
-		// row is created at the level the subscriber actually pays — the rung's label is
-		// its amount, the same shape billing creates creator rungs with.
-		[badge] = await db
-			.insert(badges)
-			.values({
-				creatorId: org,
-				threshold,
-				label: `$${threshold}`,
-				description: "A rung created by billing at a threshold a subscription pays for.",
-			})
-			.returning({ id: badges.id });
-	}
-	await db
-		.insert(userBadges)
-		.values({ userId, badgeId: badge.id, billingCycle: cycle })
-		.onConflictDoUpdate({
-			target: [userBadges.userId, userBadges.badgeId, userBadges.billingCycle],
-			// Add-only within a cycle, same as the directed holdings: a replayed webhook
-			// rewrites the same row rather than stacking a second one.
-			set: { updatedAt: new Date() },
-		});
 }
 
 /**

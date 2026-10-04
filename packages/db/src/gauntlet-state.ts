@@ -217,10 +217,9 @@ async function main(): Promise<void> {
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
 
 	// Billing rows: the facts the subscription webhooks would write. `--anthers-support`
-	// gives the user the Anthers Badge at that amount (a holding on the org's ladder —
-	// see `applyAnthersSupport` in `gauntlet-support.ts` for the Phase B dependency it
-	// carries), and `--support-budget` places the directed balance the Badge picker draws
-	// against (see `applySupportBudget`).
+	// gives the user the Anthers Badge at that amount (a holding on the Anthers ladder —
+	// see `applyAnthersSupport` in `gauntlet-support.ts`), and `--support-budget` places
+	// the directed balance the Badge picker draws against (see `applySupportBudget`).
 	if (anthersSupport !== undefined || supportBudget !== undefined) {
 		if (anthersSupport !== undefined) {
 			await applyAnthersSupport(viewerId, anthersSupport.toFixed(2));
@@ -281,7 +280,7 @@ async function main(): Promise<void> {
 	// creator's ladder lives in `badges`, and `--give` is DOLLARS, like every threshold
 	// in the model. So the hop resolves the rung whose THRESHOLD is the given amount
 	// and creates it if the fixture ladder has no row there yet — the gauntlet is a
-	// dev-only fixture and may not depend on the Phase B seeding having run.
+	// dev-only fixture and may not depend on the seed scripts having run.
 	//
 	// 🚨 **The hop REPLACES the viewer's holding on this creator, it does not add one.**
 	// The walk the e2e drives is cumulative — $3, then the gap states, then $6, upward —

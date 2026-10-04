@@ -188,14 +188,14 @@ function playlist(workId: number, cookie?: string) {
  * $1 a month bought unlimited access priced at $3.
  */
 /**
- * Give `userId` the org's Badge at this month's Anthers dollars.
+ * Give `userId` the Anthers Badge at this month's Anthers dollars.
  *
  * ⚠️ This helper once wrote the accounts table's amount column, and the helper once took
  * a different unit from the function it drove — which is how this suite stayed green while
  * `publicAccessBudget` compared dollars against `>= 1` and $1 a month bought unlimited
  * access priced at $3. The amount is a Badge holding now: the rung is resolved (or
- * created) on the org's ladder and the holding written, exactly like the billing path —
- * and only the org's ladder, since Anthers' set is the one whose price lifts this meter.
+ * created) on the Anthers ladder and the holding written, exactly like the billing path —
+ * and only the Anthers ladder, since Anthers' set is the one whose price lifts this meter.
  */
 async function setSupport(userId: number, anthersSupport: number) {
 	const orgId = await ensureOrgLadder();

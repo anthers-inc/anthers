@@ -21,8 +21,8 @@
  * ⭐ **The stand-in carries the reserved "anthers" handle name, brought** (2026-10-04):
  * `anthersUserId` resolves the Anthers creator account by its handle's first label, so the
  * fixture account must hold that name on the session's suffix — the same shape the
- * production account has on `anthers.org`, and the same one the gauntlet's `ensureOrg`
- * and the session preload create.
+ * production account has on `anthers.org`, and the same one the gauntlet's Anthers
+ * stand-in and the session preload create.
  */
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";

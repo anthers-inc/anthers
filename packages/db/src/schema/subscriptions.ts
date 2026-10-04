@@ -55,15 +55,13 @@ export const billingAccounts = pgTable("billing_accounts", {
 	 * The directed balance this cycle — the dollars the user's subscription directs at
 	 * creators, which the Badge picker draws down against (`/my-badges`' `budget`).
 	 *
-	 * ⚠️ **A Phase B read target written by the fixture, not yet by the webhook.** The
+	 * ⚠️ **A Badge-model read target written by the fixture and by the webhook.** The
 	 * balance used to live on the old accounts table's directed-support column, which
 	 * the split deleted; the Badge-model home for it is this row (it is subscription
 	 * state — what the subscription's directed items add to — so it rides beside the
-	 * period columns). Phase B re-points `routes/subscriptions.ts`' budget check at this
-	 * column and makes the subscription webhook write it; until then only the gauntlet's
-	 * budget hop writes it (`gauntlet-support.ts` carries that note). If Phase B derives
-	 * the budget from Stripe items at read time instead, this column is dropped again —
-	 * either way the fixture's shape is the settled one.
+	 * period columns). The issuer pass re-pointed `routes/subscriptions.ts`' budget
+	 * check at this column and made the subscription webhook write it; the gauntlet's
+	 * budget hop also writes it (`gauntlet-support.ts` carries that note).
 	 */
 	directedBudget: numeric("directed_budget").notNull().default("0.00"),
 	stripeCustomerId: text("stripe_customer_id").default(""),

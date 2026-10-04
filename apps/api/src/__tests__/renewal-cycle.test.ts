@@ -201,9 +201,9 @@ async function clearSubscription() {
 }
 
 /**
- * Give the supporter the org's Badge at `threshold` this cycle — find-or-create the rung
- * on the ladder (the org is the Free rung's owner), then write the holding, replacing the
- * org's other rungs the way every real write does.
+ * Give the supporter the Anthers Badge at `threshold` this cycle — find-or-create the rung
+ * on the ladder (the Anthers creator account is the Free rung's owner), then write the
+ * holding, replacing the Anthers ladder's other rungs the way every real write does.
  */
 async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 	const orgId = await ensureOrgLadder();
@@ -239,7 +239,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 		.values({ userId, badgeId: badge.id, billingCycle: currentCycleKey() });
 }
 
-/** What the org's ladder says this user holds, in dollars — the read the assertions make. */
+/** What the Anthers ladder says this user holds, in dollars — the read the assertions make. */
 async function heldOnOrgLadder(userId: number): Promise<number> {
 	const orgId = await ensureOrgLadder();
 	const [held] = await db
@@ -559,7 +559,7 @@ describe("what is in force does not drop until the cycle turns", () => {
 				directedBudget: "12.00",
 			})
 			.where(eq(billingAccounts.userId, supporterId));
-		// The in-force Badge fixture: a $12 org rung held this cycle. What the webhooks
+		// The in-force Badge fixture: a $12 Anthers rung held this cycle. What the webhooks
 		// find "in force" is this holding — read by `heldOnOrgLadder` below — beside the
 		// stored budget.
 		await holdOrgRung(supporterId, "12.00");
@@ -649,7 +649,7 @@ describe("a renewal that fails", () => {
 		// discrete-picks model the holding names the rung rather than carrying an amount,
 		// so the fixture creates the issuer's badge at that threshold first — the same
 		// find-or-create the billing path applies. The Anthers-side amount, which the
-		// "in force" assertions read, is the org rung this fixture also holds.
+		// "in force" assertions read, is the Anthers rung this fixture also holds.
 		const [existing] = await db
 			.select({ id: badges.id })
 			.from(badges)
@@ -681,8 +681,8 @@ describe("a renewal that fails", () => {
 	});
 
 	// The CREATOR-side holdings — what this month's gates ride. Scoped through the issuer
-	// (the route's own replace query is the shape), since the org's rungs are holdings
-	// now too and would otherwise double the count.
+	// (the route's own replace query is the shape), since the Anthers ladder's rungs are
+	// holdings now too and would otherwise double the count.
 	const holdingsThisMonth = () =>
 		db
 			.select()
@@ -709,7 +709,7 @@ describe("a renewal that fails", () => {
 	it("keeps the Badge and this month's gates through Stripe's retries", async () => {
 		await syncSubscriptionToAccount(thisMonth("past_due"));
 
-		// `past_due` changes nothing: the org rung stays held, the budget stays written.
+		// `past_due` changes nothing: the Anthers rung stays held, the budget stays written.
 		expect(await heldOnOrgLadder(supporterId)).toBe(12);
 		expect(await holdingsThisMonth()).toHaveLength(1);
 	});

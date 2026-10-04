@@ -85,7 +85,7 @@ export async function publicAccessSecondsThisMonth(
  * was not merely wrong about policy, it was the thing that let anonymous Public Access
  * streaming run unmetered while the creator earned nothing for it.
  *
- * ⭐ **The Badge amount reads the holder's org-ladder holding** — `heldAnthersBadgeAmount`
+ * ⭐ **The Badge amount reads the holder's Anthers-ladder holding** — `heldAnthersBadgeAmount`
  * in `services/anthers-badges.ts`, which resolves the ladder as the Free rung's owner and
  * takes the held rung's threshold, MAX per issuer this cycle. The old
  * `accounts.anthers_support` column died with the accounts split (2026-10-03).

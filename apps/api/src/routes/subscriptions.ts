@@ -2,7 +2,7 @@
 /**
  * Account & economics routes — the support model.
  *
- * What a user gives Anthers is their held **Badge** on the org's ladder — one discrete
+ * What a user gives Anthers is their held **Badge** on the Anthers ladder — one discrete
  * pick in `user_badges`, whose threshold IS the amount, read wherever it is needed
  * through `heldAnthersBadgeAmount`. What they direct at creators is a set of **Badge
  * holdings** in `user_badges` — one discrete pick per issuer per cycle, each row naming
@@ -176,7 +176,7 @@ const giveStickerSchema = z.object({
 async function stickerCycleFor(
 	userId: number,
 ): Promise<{ billingCycle: string; allowance: number } | null> {
-	// The Anthers side reads the held Badge on the org's ladder; the period rides the
+	// The Anthers side reads the held Badge on the Anthers ladder; the period rides the
 	// billing row. A viewer with no billing row has no period to key from and no holdings
 	// to draw against — null, as the callers already treat it.
 	const [acct] = await db
@@ -578,7 +578,7 @@ const subscriptionRoutes = new Hono()
 	.get("/me", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		// What the user gives Anthers — their held Badge on the org ladder's ladder — is a
+		// What the user gives Anthers — their held Badge on the Anthers ladder — is a
 		// `user_badges` read now, wherever the billing row stands. The response shapes below
 		// keep the field names the subscription page reads; the amount columns they used to
 		// mirror died with the accounts split.
@@ -627,7 +627,7 @@ const subscriptionRoutes = new Hono()
 
 		const acct = await ensureAccount(user.id);
 		// The held Anthers Badge — what "cancel" would revert and what "current support"
-		// shows — reads the org ladder now, not the billing row. A row with a subscription
+		// shows — reads the Anthers ladder now, not the billing row. A row with a subscription
 		// but no ladder holding yet still cancels correctly: the amount check is against
 		// the holding, the subscription id against the row.
 		const currentSupport = await heldAnthersBadgeAmount(user.id);
@@ -1035,7 +1035,7 @@ const subscriptionRoutes = new Hono()
 	.post("/cancel", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		// What they give Anthers is the held Badge on the org ladder; the amount columns
+		// What they give Anthers is the held Badge on the Anthers ladder; the amount columns
 		// this check used to read died with the accounts split.
 		if (!acct || (await heldAnthersBadgeAmount(user.id)) === 0) {
 			return c.json(
@@ -1633,7 +1633,7 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "You have nothing to give this cycle" }, 400);
 			}
 
-			// The org identity, for the allocation check's exclusion — see the comment
+			// The Anthers creator account, for the allocation check's exclusion — see the comment
 			// beside `currentAllocated` below.
 			const org = await anthersUserId();
 

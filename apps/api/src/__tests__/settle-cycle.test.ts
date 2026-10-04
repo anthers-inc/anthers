@@ -85,7 +85,7 @@ async function makeUserWithCookie(kind: string) {
 /**
  * A supporter whose holdings read `today` — deliberately NOT what the month paid, so that a
  * settlement reading the holdings instead of the invoice is caught. The "amount today" is
- * the org rung held this cycle under the Badge model; the fixture writes it the way the
+ * the Anthers rung held this cycle under the Badge model; the fixture writes it the way the
  * billing write would.
  */
 async function makeSupporter(today = 12) {
@@ -104,9 +104,10 @@ async function makeSupporter(today = 12) {
 }
 
 /**
- * Give a user the org's Badge at `threshold` in `cycle` — find-or-create the rung (the
- * org is the Free rung's owner), then write the holding, replacing the org's other rungs
- * that cycle. The settlement suite's stand-in for the amount write the webhooks made.
+ * Give a user the Anthers Badge at `threshold` in `cycle` — find-or-create the rung (the
+ * Anthers creator account is the Free rung's owner), then write the holding, replacing
+ * the Anthers ladder's other rungs that cycle. The settlement suite's stand-in for the
+ * amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string, cycle: string): Promise<void> {
 	const orgId = await ensureOrgLadder();

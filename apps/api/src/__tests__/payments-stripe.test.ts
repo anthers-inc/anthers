@@ -967,7 +967,7 @@ describe("Webhook: customer.subscription.*", () => {
 			});
 	}, DB_SETUP_TIMEOUT);
 
-	/** What the org's ladder says this subscriber holds, in dollars. */
+	/** What the Anthers ladder says this subscriber holds, in dollars. */
 	async function heldOnOrgLadder(userId: number): Promise<number> {
 		const orgId = await ensureOrgLadder();
 		const [held] = await db
@@ -993,7 +993,7 @@ describe("Webhook: customer.subscription.*", () => {
 			),
 		);
 
-		// The Anthers amount is the holding the webhook writes on the org's ladder — the
+		// The Anthers amount is the holding the webhook writes on the Anthers ladder — the
 		// Badge at the Anthers line's threshold — not an amount column, which died with
 		// the split.
 		expect(await heldOnOrgLadder(subscriberId)).toBe(9);

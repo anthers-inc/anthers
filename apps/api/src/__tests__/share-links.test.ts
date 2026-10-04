@@ -50,7 +50,7 @@ import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
-// The org ladder seeds first, so its owner sits below the purge's high-water mark.
+// The Anthers ladder seeds first, so its owner sits below the purge's high-water mark.
 await ensureOrgLadder();
 purgeAccountsCreatedHere();
 
@@ -92,8 +92,9 @@ async function forceLink(sharerId: number, workId: number): Promise<string> {
 }
 
 /**
- * Give a user the org's Badge at `threshold` this cycle — find-or-create the rung (the
- * org is the Free rung's owner), then write the holding, replacing the org's other rungs.
+ * Give a user the Anthers Badge at `threshold` this cycle — find-or-create the rung (the
+ * Anthers creator account is the Free rung's owner), then write the holding, replacing the
+ * Anthers ladder's other rungs.
  * The share-link suite's stand-in for the amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string): Promise<void> {
@@ -504,7 +505,7 @@ describe("Share links", () => {
 		// would make an unlimited account's relay unlimited — anonymous unmetered streaming,
 		// for $3 a month and one link.
 		// The Anthers amount is a badge holding now (the accounts split dropped the column
-		// this used to UPDATE) — hold the $12 rung on the org ladder this cycle.
+		// this used to UPDATE) — hold the $12 rung on the Anthers ladder this cycle.
 		await holdOrgRung(otherId, "12.00");
 		const spender = await insertWork({
 			creatorId,
