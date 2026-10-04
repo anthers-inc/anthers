@@ -35,7 +35,7 @@ const addr = () =>
  *
  * ⚠️ **`/signup` carries two of these**, since 2026-08-22: one above the optional
  * support sections and one in the closing summary. They share state and their buttons
- * share a label, which is correct for a reader and ambiguous for a locator — so every
+ * share a label, which is correct for a user and ambiguous for a locator — so every
  * assertion here names which one it means rather than relying on `.first()`, whose answer
  * would change the day somebody reorders the page.
  */
@@ -152,7 +152,7 @@ test.describe("one signup door", () => {
 			"/login",
 		);
 		// "Sign Up Free" since 2026-08-22 — the word is load-bearing, because the button
-		// leads to a page that also discusses paying and a bare "Sign Up" invites the reader
+		// leads to a page that also discusses paying and a bare "Sign Up" invites the user
 		// to assume the door has a price on it. Where it points is what this test is about;
 		// what it promises is `signup-free-first.e2e.ts`'s.
 		await expect(header.getByRole("link", { name: "Sign Up Free", exact: true })).toHaveAttribute(
@@ -206,7 +206,7 @@ test.describe("starting an account from /signup", () => {
 		await rung(page, /^root/i).click();
 		await expect(page.getByRole("radio", { name: /^root/i })).toBeChecked();
 
-		// The page's own arithmetic, which is the only number a reader is agreeing to.
+		// The page's own arithmetic, which is the only number a user is agreeing to.
 		await expect(page.getByText("$3", { exact: true }).last()).toBeVisible();
 
 		const cta = topSignup(page).getByRole("button", { name: /create my account & continue/i });
@@ -232,7 +232,7 @@ test.describe("starting an account from /signup", () => {
 	/**
 	 * 🚨 **A rung above the entry price, because Root cannot catch a substitution.**
 	 *
-	 * The test above picks Root, where the amount a reader chose and the amount a buggy
+	 * The test above picks Root, where the amount a user chose and the amount a buggy
 	 * page would substitute are the same $3 — so it stays green through exactly the defect
 	 * the ladder made possible. Sabotage proved that twice: replacing the chosen amount
 	 * with `PUBLIC_ACCESS_PRICE` at the commit site, and then at the single unified call,

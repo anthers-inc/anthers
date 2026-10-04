@@ -82,7 +82,7 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	await released.check();
 	await expect(note).toBeVisible();
 
-	// The rating alone never decides it: General is met by every reader, and Adult is noted too.
+	// The rating alone never decides it: General is met by every user, and Adult is noted too.
 	// The rating is the rating matrix's, and the Work is Mature from its Violence row, so taking
 	// that row to Not in It leaves every row there and the Work General; Adult is one row reaching it.
 	await page.getByRole("radio", { name: "Violence: Not in It" }).check();

@@ -96,7 +96,7 @@ test.describe("Resources calculators", () => {
 	test("creator monetization: the split is the model's, not a multiple of it", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources/creator-monetization");
-		await expect(page.getByText("Viewer's Badge").first()).toBeVisible();
+		await expect(page.getByText("User's Badge").first()).toBeVisible();
 
 		const summary = page.getByText(/reaches creators/).first();
 		await expect(summary).toBeVisible();

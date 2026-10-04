@@ -27,7 +27,7 @@ import { expect, test } from "./fixtures";
 /**
  * Where an element's top edge sits, for order assertions.
  *
- * Position rather than DOM order, because DOM order is not what a reader experiences — a
+ * Position rather than DOM order, because DOM order is not what a user experiences — a
  * section moved visually by CSS would satisfy `:has()` checks and still put the ask first.
  */
 async function topOf(locator: Locator): Promise<number> {
@@ -80,10 +80,10 @@ test.describe("/signup leads with the free door", () => {
 		await page.goto("/signup");
 
 		// 🚨 the wiki's *How Anthers Talks About Itself*: "free forever" and the cap are co-present, on the same rule as "no cut"
-		// and the take-home. A reader who meets the promise without the bound beside it
+		// and the take-home. A user who meets the promise without the bound beside it
 		// hears "unlimited", and then meets the limit as a surprise after signing up.
 		//
-		// ⚠️ **What is pinned is that a BOUND is stated before the reader signs up — not the
+		// ⚠️ **What is pinned is that a BOUND is stated before the user signs up — not the
 		// wording of it, and not the period.** The wiki's *How Anthers Talks About Itself*'s requirement is a co-present limit;
 		// what "forever" denies is an expiry, not that the free tier has edges. Naming the
 		// period is preferred where it fits, and the top label does name it ("hrs/mo"), but
@@ -165,7 +165,7 @@ test.describe("/signup leads with the free door", () => {
 		// of page height, which is why a change anywhere on the page moves the backdrop
 		// everywhere on it.
 		//
-		// ⚠️ **So measure the three things a reader can actually see move**, and keep the
+		// ⚠️ **So measure the three things a user can actually see move**, and keep the
 		// section height among them — it is the one that says *where* a regression is rather
 		// than only that there is one.
 		//
@@ -217,7 +217,7 @@ test.describe("/signup leads with the free door", () => {
 						)
 							top += node.offsetTop;
 						// Its top, not only its height: a section that keeps its size and slides
-						// down the page has still moved out from under the reader's finger.
+						// down the page has still moved out from under the user's finger.
 						return `page ${document.documentElement.scrollHeight} · ladder top ${top} · ladder height ${(el as HTMLElement).offsetHeight}`;
 					}),
 				);

@@ -69,7 +69,7 @@ test("a reload restores the saved panel position", async ({ page }) => {
 	await expect(await panelIndicator(page)).toContainText("Panel 2 of 4 · Page 1");
 
 	await page.reload();
-	// The reader enters page mode by default on a reload; panel mode is a per-session
+	// The user enters page mode by default on a reload; panel mode is a per-session
 	// choice. Flip back in, and the saved panel is where it returns to.
 	await page.getByRole("button", { name: "Panel mode" }).click();
 	await expect(await panelIndicator(page)).toContainText("Panel 2 of 4 · Page 1");

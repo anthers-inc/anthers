@@ -23,7 +23,7 @@
  *
  * ⚠️ **The panel then lost its explanatory paragraph the same day**, because it made the
  * Bluesky tab twice the height of the other and switching tabs resized the card under
- * the reader. Two of the three promises it carried are said again by the flow itself
+ * the user. Two of the three promises it carried are said again by the flow itself
  * (`/welcome` takes the name and the terms; the emailed code arrives and explains itself),
  * so only the email-scope warning needed rehoming — it is in the note under the button now,
  * and it is the one assertion below that is about wording rather than structure.
@@ -36,7 +36,7 @@ import { expect, test } from "./fixtures";
  *
  * ⚠️ **`/signup` renders two of them** (2026-08-22): one above the optional support
  * sections and one in the closing summary. Their buttons share a label, which is right for
- * a reader — it is the same act — and ambiguous for a locator. Naming which one is meant
+ * a user — it is the same act — and ambiguous for a locator. Naming which one is meant
  * beats `.first()`, whose answer changes the day somebody reorders the page.
  */
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
@@ -138,7 +138,7 @@ test.describe("signing up with Bluesky", () => {
 		await openBlueskyDoor(page);
 
 		// ⭐ No press needed. This lives on the panel rather than behind the button, so a
-		// reader meets it before touching anything — which is the point of saying it at all.
+		// user meets it before touching anything — which is the point of saying it at all.
 		//
 		// ⚠️ **Scoped to the top card, where the modal made scoping unnecessary.** The page
 		// renders two signup cards sharing one `door`, so choosing Bluesky renders this copy

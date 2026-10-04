@@ -35,7 +35,7 @@ import { expect, test } from "./fixtures";
  * This read `/projects/${slug}` until 2026-09-03 and rendered the right album anyway: the old
  * root-level `/:username/:slug` catch-all matched it with the username "projects", and
  * `ProjectPage` fetches by slug alone, so nothing needed the first segment to be real. Handles
- * carry an `@` now, that path 404s, and this is the URL a reader actually has.
+ * carry an `@` now, that path 404s, and this is the URL a user actually has.
  */
 const ALBUM_URL = creatorProjectUrl(MEDIA_FIXTURE_USERNAME, MEDIA_FIXTURE_PROJECT.slug);
 const BAR = "[data-testid=player-bar]";

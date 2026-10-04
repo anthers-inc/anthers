@@ -12,7 +12,7 @@
  * allowing anyone in. It is reachable in one click, it is what the server's own default
  * produces, and it is invisible from the creator's side because a creator can always open
  * their own work. That is the "plausible value rather than an error" shape: the Work looks
- * published, its page loads for the person checking, and no reader can get in.
+ * published, its page loads for the person checking, and no user can get in.
  *
  * Runs in the `authed` project. A signed-out version of these assertions would pass
  * whether or not any of it works — see the note at the top of `studio-routes.authed.e2e.ts`
@@ -227,7 +227,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// The editor proposes an allowed baseline at $0, so releasing lands in the commons.
 	await expect(cardFor(page)).toContainText("Public Access");
 
-	// And the reader-facing endpoint agrees, which is the assertion that matters: the badge
+	// And the user-facing endpoint agrees, which is the assertion that matters: the badge
 	// is derived in the browser while `publicAccess` is derived on the server, from
 	// `resolveAccessSync`. Two derivations of one idea — this is where they have to meet.
 	//
@@ -270,7 +270,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
 
 	// Warning first, while the change is still only in the form — a creator should be told
-	// before they save, not discover it from a reader.
+	// before they save, not discover it from a user.
 	await page.locator("table").getByRole("checkbox").first().uncheck();
 	await expect(page.getByText(/nobody can open this/i)).toBeVisible();
 
@@ -282,14 +282,14 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.goto("/studio/catalog");
 	await expect(cardFor(page)).toContainText("Nobody can open");
 
-	// Still released, and now genuinely shut: the server drops it from what a reader sees.
+	// Still released, and now genuinely shut: the server drops it from what a user sees.
 	// Polled for the same reason as the read after Release — and note this direction was
 	// already tolerant of the race by accident, since `find(...)?.publicAccess` on a Work
 	// the fetch has not caught up with is `undefined`, which is falsy and passes. A read
 	// that cannot fail from being early also cannot prove the change landed.
 	await expect
 		.poll(async () => Boolean((await catalogWork())?.publicAccess), {
-			message: "the locked Work is still Public Access to a reader",
+			message: "the locked Work is still Public Access to a user",
 		})
 		.toBe(false);
 

@@ -120,7 +120,7 @@ test.describe("a person can see where they are", () => {
 		// 🚨 **The other half of getting somebody off `/signup`.** Their choices are no
 		// longer in front of them, so a page that asked for a code while saying nothing about
 		// what it was for would trade one kind of disorientation for another. $12 rather than
-		// the entry price, because Root cannot catch a substitution — the amount a reader
+		// the entry price, because Root cannot catch a substitution — the amount a user
 		// chose and the amount a buggy page would substitute are the same $3 there.
 		await expect(page.getByText("What you chose")).toBeVisible();
 		await expect(page.getByText("$12").first()).toBeVisible();
