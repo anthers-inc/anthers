@@ -24,7 +24,15 @@ import { describe, expect, it } from "bun:test";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { RATED_PUBLIC_ACCESS_HELP } from "@anthers/web-shared/rated-public-access";
 import { isValidElement, type ReactNode } from "react";
-import { ALL_FAQ_ITEMS, type FAQItem, type FAQSurface, faqFor, PAGE_FAQS } from "./faq";
+import {
+	ALL_FAQ_ITEMS,
+	type FAQItem,
+	type FAQSurface,
+	faqFor,
+	interpolatePrice,
+	PAGE_FAQS,
+	PRICE_TOKEN,
+} from "./faq";
 
 /**
  * The words of an answer, whether it was written as a string or as JSX.
@@ -47,6 +55,12 @@ function textOf(node: ReactNode): string {
 
 const answerText = (item: FAQItem) => textOf(item.answer).replace(/\s+/g, " ");
 const words = (item: FAQItem) => `${item.question} ${answerText(item)}`.toLowerCase();
+
+/** Whether a fractional entry price keeps its cents when interpolated into an answer. */
+function keepCents(item: FAQItem, price: number): string {
+	const text = answerText({ ...item, answer: interpolatePrice(item.answer, price) });
+	return text.includes("$3.50") ? "keeps cents" : "loses cents";
+}
 
 const SURFACES: FAQSurface[] = ["users", "creators", "signup"];
 
@@ -145,6 +159,28 @@ describe("the FAQ pool", () => {
 		const free = faqFor("signup")[0];
 		expect(free.question.toLowerCase()).toContain("card");
 		expect(words(free)).toContain("no.");
+	});
+
+	// 🚨 The seeded-rows migration (2026-10-04): an answer quoting the entry price carries
+	// the RENDER-time placeholder, not a typed figure the ladder's rows could drift from.
+	// Conditional on the answer mentioning the price at all, because dropping the price is
+	// a legitimate edit — what may not survive is a typed `$3` standing where the rows are
+	// the source. `interpolatePrice` resolves the token; an answer still carrying it after
+	// that means a page skipped interpolation.
+	it("quotes the entry price through the render-time placeholder, never typed", () => {
+		for (const item of ALL_FAQ_ITEMS) {
+			const raw = textOf(item.answer);
+			const resolved = answerText({ ...item, answer: interpolatePrice(item.answer, 3) });
+			const typed = raw.includes("$3 a month") || raw.includes("$3/month");
+			const unresolved = resolved.includes(PRICE_TOKEN);
+			expect(`${item.question}: typed=${typed} unresolved=${unresolved}`).toBe(
+				`${item.question}: typed=false unresolved=false`,
+			);
+			// A fractional price keeps its cents through the same interpolation.
+			if (raw.includes(PRICE_TOKEN)) {
+				expect(keepCents(item, 3.5)).toBe("keeps cents");
+			}
+		}
 	});
 });
 

@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import {
-	CARD_RATE,
-	cardFeeDisplay,
-	PUBLIC_ACCESS_PRICE,
-	STRIPE_MIN_CHARGE,
-} from "@anthers/shared/constants";
+import { CARD_RATE, cardFeeDisplay, STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
 
 /**
@@ -200,6 +195,3 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 		</div>
 	);
 }
-
-/** The Public Access price, re-exported so a caller sizing a default need not import twice. */
-export { PUBLIC_ACCESS_PRICE };

@@ -3,13 +3,13 @@
 import {
 	type BadgeKey,
 	badgeLabel,
-	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";
 import { CalcPageHeader, SegControl } from "../components/calculators/ui";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 // ---------------------------------------------------------------------------
 // Support-model economics. A user gives Anthers a monthly amount, which names their
@@ -738,6 +738,11 @@ function AudienceBuilder() {
 // ---------------------------------------------------------------------------
 
 export default function CreatorMonetizationCalculatorPage() {
+	// The seeded ladder, for the claims the closing notes quote (what a fan's support for
+	// Anthers sets). The calculator's own matrix stays constant-derived — a modeled
+	// arrangement whose parts must agree with each other.
+	const { publicAccessPrice } = useAnthersLadder();
+
 	return (
 		// `min-w-0 w-full` breaks the flex-column min-content cascade — without
 		// `w-full`, `mx-auto` on a flex item disables the default
@@ -779,7 +784,7 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									A user gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
 									Blossom). It splits into a <b>Time Pool</b> (${" "}
-									{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of every ${PUBLIC_ACCESS_PRICE}, to
+									{timePoolFor(publicAccessPrice).toFixed(2)} of every ${publicAccessPrice}, to
 									creators by time) and <b>Supports Anthers</b> (the remainder, which funds free
 									access and the charitable programs). <b>Directed support</b> (any amount, no
 									platform cut) is given alongside.

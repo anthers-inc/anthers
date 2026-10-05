@@ -34,12 +34,14 @@ import {
 	ATTENTION_RAW_RETENTION_DAYS,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
-	PUBLIC_ACCESS_PRICE,
 } from "@anthers/shared/constants";
 import { DIRECTED_SUPPORT_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { Link } from "@anthers/web-shared/router";
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, type ReactNode } from "react";
+
+/** The seeded entry price, interpolated at render — see PRICE_TOKEN below. */
+export const PRICE_TOKEN = "[public-access-price]" as const;
 
 /**
  * Money figures come from the generated table, never typed here — see
@@ -84,8 +86,7 @@ export const FAQ_ITEMS = {
 					<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever</strong>.
 					Public Access is everything a creator has left ungated, and it is free to everyone rather
 					than something an account earns its way into — the limit is on how much of it a free
-					account streams in a month, and ${PUBLIC_ACCESS_PRICE} a month to Anthers removes that
-					limit.
+					account streams in a month, and ${PRICE_TOKEN} a month to Anthers removes that limit.
 				</p>
 				<p>
 					A free account still pays creators, which is the part people don't expect. Anthers funds a
@@ -198,7 +199,7 @@ export const FAQ_ITEMS = {
 	"anthers-badge-unlocks": {
 		category: "Subscriptions & Payments",
 		question: "Does supporting Anthers unlock anything I couldn't see otherwise?",
-		answer: `Nothing at all, and that is deliberate rather than an oversight. Public Access is already free to everyone — there is no ladder inside it and nothing there to be let into. What ${money(PUBLIC_ACCESS_PRICE)} a month removes is the monthly limit on your own streaming, and every dollar above that grows the Time Pool for the creators you spend time with, so the same hour of your time pays them more. Your Anthers Badge is standing rather than a key: no work on the platform sits behind it. A commons with rungs in it would only mean better free work for the people who paid more, which is the one thing a free layer exists to avoid.`,
+		answer: `Nothing at all, and that is deliberate rather than an oversight. Public Access is already free to everyone — there is no ladder inside it and nothing there to be let into. What ${PRICE_TOKEN} a month removes is the monthly limit on your own streaming, and every dollar above that grows the Time Pool for the creators you spend time with, so the same hour of your time pays them more. Your Anthers Badge is standing rather than a key: no work on the platform sits behind it. A commons with rungs in it would only mean better free work for the people who paid more, which is the one thing a free layer exists to avoid.`,
 	},
 	"what-pays-for-free": {
 		category: "Subscriptions & Payments",
@@ -448,12 +449,32 @@ export function faqFor(surface: FAQSurface): FAQItem[] {
 }
 
 /**
- * A whole-dollar amount, written without the trailing cents.
+ * Put the seeded entry price into an answer's placeholders, at render.
  *
- * `PUBLIC_ACCESS_PRICE` is a number, and `$${PUBLIC_ACCESS_PRICE}` renders `$3` today
- * only because the value happens to be integral. Going through here means a price that
- * gains cents renders as `$3.50` rather than silently losing them.
+ * The pool is static copy — string answers are what `faq.test.ts` checks shapes against —
+ * but the PRICE is the seeded ladder's, so the value is carried as the
+ * {@link PRICE_TOKEN} placeholder and resolved where the answer renders, by the page that
+ * holds the store. ⚠️ Unresolved tokens are a defect, not a fallback: a page rendering the
+ * literal `[public-access-price]` has skipped the interpolation, and no answer carries it
+ * by accident.
  */
-function money(amount: number): string {
-	return Number.isInteger(amount) ? `$${amount}` : `$${amount.toFixed(2)}`;
+export function interpolatePrice(answer: string | ReactNode, publicAccessPrice: number): ReactNode {
+	const fill = (s: string): string =>
+		s.replaceAll(
+			PRICE_TOKEN,
+			Number.isInteger(publicAccessPrice)
+				? `$${publicAccessPrice}`
+				: `$${publicAccessPrice.toFixed(2)}`,
+		);
+	if (typeof answer === "string") return fill(answer);
+	if (Array.isArray(answer))
+		return answer.map((child) => interpolatePrice(child, publicAccessPrice));
+	if (isValidElement(answer)) {
+		return cloneElement(
+			answer,
+			undefined,
+			interpolatePrice((answer.props as { children?: ReactNode }).children, publicAccessPrice),
+		);
+	}
+	return answer;
 }

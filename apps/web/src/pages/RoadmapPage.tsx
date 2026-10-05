@@ -36,11 +36,13 @@ import {
 	type Bucket,
 	countIn,
 	docHref,
+	interpolatePriceFor,
 	itemsIn,
 	ROADMAP,
 	type RoadmapGroup,
 	type RoadmapItem,
 } from "../content/roadmap";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -183,6 +185,9 @@ function GroupBlock({
  * cases where the pill is not enough on its own.
  */
 function ItemCard({ item, accent }: { item: RoadmapItem; accent: (typeof ACCENT)[Bucket] }) {
+	// The seeded entry price, for blurbs that quote it (`[public-access-price]`) — the
+	// value is the seeded ladder's, resolved at render.
+	const { publicAccessPrice } = useAnthersLadder();
 	const status =
 		item.bucket === "launched" ? item.quarter : item.bucket === "active" ? "Active" : "Planned";
 
@@ -201,7 +206,9 @@ function ItemCard({ item, accent }: { item: RoadmapItem; accent: (typeof ACCENT)
 					{status}
 				</span>
 			</div>
-			<p className="mt-1.5 text-sm leading-relaxed text-base-content/65">{item.blurb}</p>
+			<p className="mt-1.5 text-sm leading-relaxed text-base-content/65">
+				{interpolatePriceFor(item.blurb, publicAccessPrice)}
+			</p>
 			{item.note && (
 				<p className="mt-2 text-sm leading-relaxed text-base-content/45">{item.note}</p>
 			)}

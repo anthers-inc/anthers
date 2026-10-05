@@ -85,6 +85,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { FAQBlock } from "../components/ui/FAQ";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -93,6 +94,11 @@ const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();
+	// The seeded ladder, for the claims this page quotes a creator: what a fan's support
+	// for Anthers sets (the entry price, the Time Pool share of it) and the modeled
+	// scenario two Public Access prices wide. The constants stand in until the fetch
+	// lands; the figures are ladder claims, so the rows own them.
+	const { publicAccessPrice } = useAnthersLadder();
 	// /signup is the one signup door since 2026-10-02 — /subscribe is now only a
 	// redirect to it (the old URL is in circulation in marketing surfaces), and a hop
 	// through a redirect is not better than a direct link.
@@ -505,8 +511,8 @@ export default function ForCreatorsPage() {
 							That:
 							<ul>
 								<li>
-									puts {fmtMoney(timePoolFor(PUBLIC_ACCESS_PRICE))} of every{" "}
-									{fmtMoney(PUBLIC_ACCESS_PRICE)} into that fan's{" "}
+									puts {fmtMoney(timePoolFor(publicAccessPrice))} of every{" "}
+									{fmtMoney(publicAccessPrice)} into that fan's{" "}
 									<strong className="font-semibold text-base-content/85">Time Pool</strong>, split
 									across the creators they spend time with, by time
 								</li>
@@ -519,7 +525,7 @@ export default function ForCreatorsPage() {
 									or anyone's
 								</li>
 							</ul>
-							{fmtMoney(PUBLIC_ACCESS_PRICE)} a month also lifts their own Public Access limit, so
+							{fmtMoney(publicAccessPrice)} a month also lifts their own Public Access limit, so
 							they can spend as much time with your free work as they like. Whatever is left over
 							funds free access and the charitable programs—not Anthers' pocket. Anthers is a
 							nonprofit: no investors, no profit-taking.
@@ -922,6 +928,12 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
  *
  * Two Public Access prices is the editorial choice, so it is written as that rather than
  * as a bare 6 — the figure moves if the price does.
+ *
+ * ⚠️ **Constant-derived after the rows migration, deliberately**: the whole MATRIX —
+ * scenario, rival rows, receipts — is one modeled arrangement whose parts must agree with
+ * each other (the incident above), and re-deriving only this page's basis from the fetched
+ * rows would split the scenario's arithmetic from its own note mid-page. The direct
+ * quotes of the ladder (the pool a fan's support sets) are the part that reads the rows.
  */
 const SUPPORT_SPEND = PUBLIC_ACCESS_PRICE * 2;
 const BADGE_SPEND = SUPPORT_SPEND;
