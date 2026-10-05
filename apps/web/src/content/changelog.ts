@@ -72,9 +72,97 @@ export interface ChangelogRelease {
  */
 export const CHANGELOG: ChangelogRelease[] = [
 	{
+		version: "2026.10.9",
+		date: "2026-10-04",
+		lede: "Housekeeping in the open, most of it where a visitor will never meet it.",
+		entries: [
+			"The copy spells nonprofit as one word, the way Anthers' style guide already said it; a handful of pages still carried the hyphen.",
+			"Operators reading a failed job in the admin console can expand and copy its full error text, rather than squint at a truncated line.",
+			"The billing layer stopped treating Anthers' own creator account as a special case: it is an ordinary issuer now, collected and paid like any other creator's.",
+		],
+	},
+	{
+		version: "2026.10.8",
+		date: "2026-10-04",
+		lede: "Found the hard way, in the middle of a real purchase: a basket belongs to the buyer, not the browser.",
+		entries: [
+			"A basket follows the account that holds it rather than the browser it was built in. A second account signing in on the same computer no longer inherits the first account's pending purchase; the basket lives on Anthers' server now, scoped to the account. A signed-out browser's scratch basket still works, and it merges into the account at sign-in, after which the browser holds nothing.",
+		],
+	},
+	{
+		version: "2026.10.7",
+		date: "2026-10-04",
+		lede: "The basket's checkout met its first real use, and this release is what that use turned up.",
+		entries: [
+			"The basket's checkout no longer starts itself over while a buyer is filling it, which used to wipe the card and address mid-fill along with any tax it had already worked out. Only a genuine change to what the basket holds starts it over now.",
+			"Sales tax on the basket fills itself in from the billing address. The calculate-tax button is gone: a complete address resolves the receipt's tax and total on its own, a half-typed one does nothing, and the only button left on the checkout is the one that pays.",
+			"The basket page is two columns now: what is being bought and its receipt on one side, the address and card that pay for them on the other. On a phone they stack to one column: items, receipt, checkout.",
+		],
+	},
+	{
+		version: "2026.10.6",
+		date: "2026-10-03",
+		lede: "The purchase funnel found its shape: everything goes through the basket.",
+		entries: [
+			"Every purchase goes through the basket. A Work page's own checkout form is retired, so buying runs one consistent flow with the receipt on it, wherever the purchase starts.",
+			"Beneath that, the billing half of an account split from its preferences, groundwork for the Badge model that stores what somebody supports rather than recomputing it.",
+		],
+	},
+	{
+		version: "2026.10.5",
+		date: "2026-10-03",
+		lede: "One button said more than checkout did.",
+		entries: [
+			"The address step's button is named for what it does now: it calculates sales tax from the address typed. It never saved the address, and the old label implied that it did.",
+		],
+	},
+	{
+		version: "2026.10.4",
+		date: "2026-10-03",
+		lede: "Two fixes, both to doors a buyer walks through.",
+		entries: [
+			"A checkout could read its total out of Stripe's currency-formatted amount string and quote a charge of NaN dollars at the buyer. Totals are read from the raw unit figure now, so the number on the receipt is the number the bank sees.",
+			"The login field takes a Bluesky handle now, routed through the Bluesky flow, where it previously insisted on an email address.",
+		],
+	},
+	{
+		version: "2026.10.3",
+		date: "2026-10-03",
+		lede: "A quiet release: the changelog page learned to group by month, and the Badge model landed.",
+		entries: [
+			"This changelog groups by month, with each numbered release named on a divider inside it, so a month's releases read together.",
+			"The Badge model landed in the database: a level of support somebody gives a creator, set in dollars at any amount, stored rather than recomputed from giving history.",
+		],
+	},
+	{
+		version: "2026.10.2",
+		date: "2026-10-03",
+		lede: "The month creators were paid, and the machinery that keeps money that comes back honest.",
+		entries: [
+			"Creators were paid for the first time. Settled earnings move to a creator's own Stripe account after a fourteen-day hold, and the Studio's Earnings panel shows what is held and what has moved.",
+			"A payment dispute can be contested deliberately rather than only recorded: evidence is assembled from what Anthers honestly holds, the submission names its stakes before it happens, and money that comes back to a buyer after a creator was paid is netted against that creator's next payout, floored at zero and never billed.",
+			"Signup copy leads with what is free: no card, no trial, nothing to cancel. Pages that described an account as an email address and a handle now say what signing up actually is: an identity, or a Bluesky account brought along.",
+			"Every dispute is recorded, and the ones that need a person are flagged, where before only the exceptional ones stood out.",
+			"The automated-test account is invisible on every public listing, so one fixture stops turning up where a real user can meet it.",
+			"The footer gained a Development column and a calmer layout, and the navbar's logo gave up its hover chrome.",
+		],
+	},
+	{
+		version: "2026.10.1",
+		date: "2026-10-02",
+		lede: "The pre-launch gate came down, and signing up is open to everyone.",
+		entries: [
+			"The site's password gate is gone, and Anthers opens freely to signups. The door keeps bots out without a third-party captcha in the funnel: the browser solves a short proof-of-work on submit, a second or so, and proves nothing to anybody but Anthers.",
+			"The signup page is /signup now; the old /subscribe address redirects there, and nothing in the flow calls itself a subscription, because nothing on Anthers is one.",
+			"The public reporting page lives at /abuse, and it stopped describing itself as only for illegal content. A person reporting spam or harassment without an account could already use that form, and the page now says so.",
+			"Reports of a security issue have a dedicated security@anthers.org address, stated where a researcher would look for it.",
+			"This changelog exists, and every release's full commit list is published on the tag it shipped under, generated by the deploy job itself.",
+		],
+	},
+	{
 		version: "2026.10.0",
 		date: "2026-10-02",
-		lede: "Anthers' first numbered release — the changes that landed between opening this changelog's plan and the first calver tag.",
+		lede: "The changes that landed between opening this changelog and the first calver tag.",
 		entries: [
 			"An emailed code is now the only way to sign in. No account holds a password, and nothing accepts one — sign-in, recovery and verification all run through the code Anthers emails.",
 			"A profile's address is its handle. The separate Anthers username is gone, so a person is found at the handle they already own — an Anthers one, or a Bluesky one they brought — and a handle that changes keeps routing for ninety days while it settles.",
