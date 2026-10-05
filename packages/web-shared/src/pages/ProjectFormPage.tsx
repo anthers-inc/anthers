@@ -284,8 +284,8 @@ export default function ProjectFormPage() {
 					{payoutsReady === false && !wasPublished && (
 						<p className="text-xs text-warning mt-1">
 							Set up payouts in{" "}
-							<Link to={studioUrl("/settings")} className="link">
-								Studio settings
+							<Link to={studioUrl("/payments")} className="link">
+								the Studio's Payments tab
 							</Link>{" "}
 							before publishing. You can keep building the project as a draft until then.
 						</p>

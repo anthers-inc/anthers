@@ -168,6 +168,7 @@ test("every Studio tab lands on its own route", async ({ page, context }) => {
 		{ name: "Catalog", url: /\/studio\/catalog$/ },
 		{ name: "Posts", url: /\/studio\/posts$/ },
 		{ name: "Analytics", url: /\/studio\/analytics$/ },
+		{ name: "Payments", url: /\/studio\/payments$/ },
 		{ name: "Settings", url: /\/studio\/settings$/ },
 		{ name: "Dashboard", url: /\/studio$/ },
 	];

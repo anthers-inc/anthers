@@ -1,37 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
- * the boundary: Stripe payout onboarding, publishing to the creator's own repository on the
- * AT Protocol network, and the Badge ladder. Account settings
- * (profile, password, email, identity, the become-a-creator toggle) stay on
- * anthers.org/settings.
+ * the boundary: payout setup's summary card (the surface itself is the Payments tab),
+ * publishing to the creator's own repository on the AT Protocol network, and the Badge
+ * ladder. Account settings (profile, password, email, identity, the become-a-creator
+ * toggle) stay on anthers.org/settings.
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import BadgeLadderEditor from "../components/post/BadgeLadderEditor";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
+import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
+import { studioUrl } from "../lib/studio";
 import type { StripeAccountStatus } from "../lib/types";
 
 /**
- * Payouts — where Connect onboarding starts, and where Stripe returns somebody afterwards.
+ * Payouts — now a doorway rather than the surface.
  *
- * 🚨 **This section is the destination of `STRIPE_RETURN_PATHS.connectReturn`, so the `stripe`
- * parameter it reads is a contract with the API rather than a local detail.** Renaming this
- * section, moving it to a page of its own, or changing which value of `stripe` it answers to
- * breaks the end of Connect onboarding, and it breaks it in the one place no test of ours
- * makes a request: the return URL is navigated by the creator's browser, not by us.
+ * 🚨 **Payout setup lives on the Studio's Payments tab (`/studio/payments`)**, which is
+ * also where Connect's return legs land and where Stripe's requirements, schedule and
+ * balance are shown. This card carries the one-line state and the link, so a creator who
+ * reaches settings for the publishing or Badges sections still finds their payout state
+ * named rather than absent.
  *
- * ⚠️ **Called "Payouts" rather than "Stripe Payments" because that is what a creator is
- * looking for.** Stripe is how it is done and the body says so; getting paid is the thing.
- * `payoutRefusalMessage` sends a blocked creator to "Payouts under Studio settings", so the
- * heading and that sentence have to keep agreeing.
+ * ⚠️ **Called "Payouts" here and "Payments" in the nav deliberately**: the nav names the
+ * *place* (Payments), the card names the *need* (Payouts — getting paid is the thing a
+ * creator is looking for when they arrive). `payoutRefusalMessage` says "Open Payments in
+ * the Studio" to match the nav.
  */
 function StripeOnboardingSection() {
 	const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
 	const [loading, setLoading] = useState(true);
-	const [connecting, setConnecting] = useState(false);
 	const [searchParams] = useSearchParams();
 
 	const stripeResult = searchParams.get("stripe");
@@ -45,17 +46,6 @@ function StripeOnboardingSection() {
 			.finally(() => setLoading(false));
 	}, []);
 
-	const handleConnect = async () => {
-		setConnecting(true);
-		try {
-			const res = await client.api.payments.stripe.onboard.$post();
-			const data = (await res.json()) as { url: string };
-			window.location.href = data.url;
-		} catch {
-			setConnecting(false);
-		}
-	};
-
 	if (loading) {
 		return (
 			<div className="card bg-base-200">
@@ -68,67 +58,37 @@ function StripeOnboardingSection() {
 	}
 
 	const isConnected = stripeStatus?.chargesEnabled && stripeStatus?.onboardingComplete;
-	const isIncomplete = stripeStatus && !stripeStatus.chargesEnabled;
+	const isPending =
+		stripeStatus?.hasAccount &&
+		stripeStatus.chargesEnabled === false &&
+		stripeStatus.onboardingComplete === false &&
+		// Pending means Stripe has the submission; without the flag the incomplete state is
+		// indistinguishable from unstarted, which is why the detail shape carries it.
+		stripeStatus.detailsSubmitted;
+
+	const stateLine = isConnected
+		? "Your Stripe account is connected and ready to receive payments."
+		: isPending
+			? "Stripe onboarding is submitted and being reviewed."
+			: stripeStatus?.hasAccount
+				? "Your Stripe account setup is incomplete."
+				: "Payouts are not set up yet.";
 
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
 				<h3 className="card-title text-lg">Payouts</h3>
-
-				{stripeResult === "complete" && !isConnected && (
-					<div className="alert alert-info text-sm">
-						<span>
-							Stripe onboarding submitted. It may take a moment for your account to be fully
-							activated.
-						</span>
-					</div>
-				)}
-
 				{stripeResult === "refresh" && (
 					<div className="alert alert-warning text-sm">
-						<span>Stripe onboarding link expired. Click below to continue.</span>
+						<span>Stripe onboarding link expired. Continue from the Payments tab.</span>
 					</div>
 				)}
-
-				{isConnected ? (
-					<div className="flex items-center gap-2">
-						<div className="badge badge-success">Connected</div>
-						<span className="text-sm text-base-content/60">
-							Your Stripe account is active and ready to receive payments.
-						</span>
-					</div>
-				) : isIncomplete ? (
-					<div className="flex flex-col gap-2">
-						<p className="text-sm text-base-content/60">
-							Your Stripe account setup is incomplete. Complete onboarding to start receiving
-							payments.
-						</p>
-						<button
-							type="button"
-							className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
-							onClick={handleConnect}
-							disabled={connecting}
-						>
-							{connecting ? "Redirecting..." : "Complete Stripe Setup"}
-						</button>
-					</div>
-				) : (
-					<div className="flex flex-col gap-2">
-						<p className="text-sm text-base-content/60">
-							Connect a Stripe account to receive payments for your paid projects. Anthers uses
-							Stripe Connect and takes no cut—only real costs are deducted, and they go to the
-							processor and the CDN, never to us.
-						</p>
-						<button
-							type="button"
-							className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
-							onClick={handleConnect}
-							disabled={connecting}
-						>
-							{connecting ? "Redirecting..." : "Connect Stripe"}
-						</button>
-					</div>
-				)}
+				<p className="text-sm text-base-content/60">{stateLine}</p>
+				<div className="card-actions justify-end">
+					<Link to={studioUrl("/payments")} className="btn btn-primary btn-sm">
+						Open Payments
+					</Link>
+				</div>
 			</div>
 		</div>
 	);

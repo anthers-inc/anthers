@@ -54,11 +54,40 @@ export async function retrieveConnectAccount(accountId: string): Promise<Stripe.
 	);
 }
 
+/**
+ * Mirrors `stripe.balance.retrieve` reading the connected account's own balance — the
+ * account target rides the request options' `stripeAccount` (a read ON the account's
+ * behalf, made from the platform's signing key), which its Payments tab renders.
+ */
+export async function retrieveConnectBalance(
+	accountId: string,
+): Promise<Stripe.Response<Stripe.Balance> | null> {
+	return (
+		(await getStripe()
+			?.balance.retrieve({}, { stripeAccount: accountId })
+			.catch(() => null)) ?? null
+	);
+}
+
 /** Mirrors `stripe.accountLinks.create` — the hosted onboarding flow for an account. */
 export async function createAccountOnboardingLink(
 	params: Stripe.AccountLinkCreateParams,
 ): Promise<Stripe.AccountLink | null> {
 	return (await getStripe()?.accountLinks.create(params)) ?? null;
+}
+
+/**
+ * Mirrors `stripe.accounts.createLoginLink` — a one-click door into the connected
+ * account's own Express Dashboard, which the Studio Payments tab opens for a creator who
+ * wants to change their payout schedule, read Stripe's notifications or see Stripe's fee
+ * figures. The platform profile named that dashboard the creator's manual-payout surface,
+ * so this is the door rather than a second payout UI beside it.
+ */
+export async function createAccountLoginLink(accountId: string): Promise<string | null> {
+	const link = await getStripe()
+		?.accounts.createLoginLink(accountId)
+		.catch(() => null);
+	return link?.url ?? null;
 }
 
 /** Mirrors `stripe.paymentIntents.create` — a charge against a buyer's card. */

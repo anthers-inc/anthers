@@ -29,7 +29,7 @@ import { signInAsCreator } from "./fixtures";
  */
 const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Promise<void>> = {
 	/**
-	 * The Payouts section, inside the Studio shell.
+	 * The Payments tab, inside the Studio shell — payout setup's home.
 	 *
 	 * ⭐ The `?stripe=complete` acknowledgment itself is deliberately not asserted: it renders
 	 * only for an account Stripe has not yet enabled, so whether the fixture creator sees it
@@ -37,7 +37,7 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	 * proof that the parameter is read at all, because its alert is unconditional.
 	 */
 	connectReturn: async (page) => {
-		await expect(page.getByRole("heading", { name: "Payouts" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Payments" })).toBeVisible();
 		await expect(
 			page.getByRole("navigation").getByRole("link", { name: "Dashboard" }),
 			"left the Studio shell — this is the catch-all rendering something else",
@@ -49,7 +49,7 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	 * rather than merely happening to exist at that address.
 	 */
 	connectRefresh: async (page) => {
-		await expect(page.getByRole("heading", { name: "Payouts" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Payments" })).toBeVisible();
 		await expect(page.getByText(/onboarding link expired/i)).toBeVisible();
 	},
 

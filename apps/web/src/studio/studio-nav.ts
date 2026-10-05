@@ -17,6 +17,7 @@ import { studioUrl } from "@anthers/web-shared/studio";
 import {
 	ChartBarIcon,
 	Cog6ToothIcon,
+	CreditCardIcon,
 	PencilSquareIcon,
 	RectangleStackIcon,
 	Squares2X2Icon,
@@ -56,6 +57,15 @@ export const STUDIO_NAV: readonly StudioNavItem[] = [
 		label: "Analytics",
 		icon: ChartBarIcon,
 		owns: [studioUrl("/analytics")],
+	},
+	// Payments is a place of its own, not a Settings section: payout setup, the connected
+	// account's Stripe view, the balance and the transfer record — the money surface, where
+	// Connect's own return legs land. Settings keeps account-operational things.
+	{
+		to: studioUrl("/payments"),
+		label: "Payments",
+		icon: CreditCardIcon,
+		owns: [studioUrl("/payments")],
 	},
 	// Import is hidden: the itch.io import endpoints return "not yet implemented". Restore an
 	// entry here (and the route and lazy import in App.tsx) when that lane ships.

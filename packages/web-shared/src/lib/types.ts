@@ -725,6 +725,32 @@ export interface StripeAccountStatus {
 	chargesEnabled: boolean | null;
 	payoutsEnabled: boolean | null;
 	onboardingComplete: boolean | null;
+	/**
+	 * Whether Stripe has received the account's submission at all — read live in the base
+	 * shape too, because "pending" (submitted, not yet enabled) is otherwise
+	 * indistinguishable from "incomplete" (rows exist, nothing Stripe-side yet), which is
+	 * exactly the confusion the pending state renders.
+	 */
+	detailsSubmitted: boolean | null;
+	/**
+	 * Present only in the detail shape (`GET /stripe/onboard?detail=1`, the Payments tab):
+	 * what Stripe itself still needs from this account, so "incomplete" can say what.
+	 */
+	requirements?: {
+		currentlyDue: string[];
+		pastDue: string[];
+		pendingVerification: string[];
+		disabledReason: string | null;
+	};
+	/** `settings.payouts.schedule` — null until Stripe has it. */
+	schedule?: { interval: string; delayDays?: number | null } | null;
+	/** The default external (bank) account, by name and last four. */
+	externalAccount?: { bankName: string | null; last4: string | null } | null;
+	/** The connected account's own balance, in minor units; null when unreadable. */
+	balance?: {
+		available: { amount: number; currency: string }[];
+		pending: { amount: number; currency: string }[];
+	} | null;
 }
 
 export interface CheckoutResponse {

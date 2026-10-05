@@ -305,17 +305,17 @@ export type PublishAct = "release" | "publish";
  * they have already filled in.
  *
  * ⚠️ **The first one names a place, so the place has to be real.** It said *"Open Payouts in
- * the Studio"* until 2026-08-29, and the Studio has no Payouts — the section is Payouts under
- * Studio settings, which is also where Connect's own return leg now lands. A sentence sending
- * somebody somewhere is a route reference that no test can follow, exactly like the
- * `return_url` this was wrong alongside, so it is worth re-reading whenever either moves.
+ * the Studio"* until 2026-08-29, when the Studio had no Payouts at all; it now names the
+ * Studio's Payments tab, which owns payout setup — a sentence sending somebody somewhere
+ * is a route reference that no test can follow, exactly like the `return_url` this was
+ * wrong alongside, so it is worth re-reading whenever the tab moves.
  */
 export function payoutRefusalMessage(
 	standing: PayoutStanding,
 	act: PublishAct = "release",
 ): string {
 	return standing.connected
-		? `Your payout setup isn't finished — Stripe still needs something from you. Open Payouts under Studio settings to see what, and you'll be able to ${act} once it clears.`
+		? `Your payout setup isn't finished — Stripe still needs something from you. Open Payments in the Studio to see what, and you'll be able to ${act} once it clears.`
 		: act === "release"
 			? "Set up payouts before releasing your first Work. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you. One limit worth knowing: Stripe's setup reaches only the countries Stripe supports for a platform like ours, so if yours is not among them it can't be completed yet."
 			: "Set up payouts before publishing. It's how you get paid, and it takes a few minutes — Anthers takes no cut, so it all comes to you. One limit worth knowing: Stripe's setup reaches only the countries Stripe supports for a platform like ours, so if yours is not among them it can't be completed yet.";

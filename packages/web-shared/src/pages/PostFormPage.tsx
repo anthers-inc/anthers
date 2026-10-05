@@ -359,8 +359,8 @@ export default function PostFormPage() {
 								<strong>Give Anthers permission to publish first.</strong> A post is written into
 								your own repository when it goes out, and Anthers doesn't have your permission to do
 								that. You can keep this as a draft until then.{" "}
-								<Link to={studioUrl("/settings")} className="link">
-									Give it in Studio settings
+								<Link to={studioUrl("/payments")} className="link">
+									Give it in the Studio's Payments tab
 								</Link>
 								.
 							</span>
@@ -373,8 +373,8 @@ export default function PostFormPage() {
 								<strong>Set up payouts before publishing.</strong> A post can be paid for with
 								Stickers, and payout setup is also what lets us say every creator here is an adult.
 								You can keep this as a draft until then.{" "}
-								<Link to={studioUrl("/settings")} className="link">
-									Set it up in Studio settings
+								<Link to={studioUrl("/payments")} className="link">
+									Set it up in the Studio's Payments tab
 								</Link>
 								.
 							</span>

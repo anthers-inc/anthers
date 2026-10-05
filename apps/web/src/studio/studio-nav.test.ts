@@ -12,6 +12,7 @@ describe("isStudioNavActive", () => {
 		expect(active("/studio/catalog")).toEqual(["Catalog"]);
 		expect(active("/studio/posts")).toEqual(["Posts"]);
 		expect(active("/studio/analytics")).toEqual(["Analytics"]);
+		expect(active("/studio/payments")).toEqual(["Payments"]);
 		expect(active("/studio/settings")).toEqual(["Settings"]);
 	});
 
