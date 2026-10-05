@@ -208,9 +208,9 @@ describe("/works/:id/panels", () => {
 	});
 
 	it("GET for a non-creator still reads panel geometry", async () => {
-		const viewer = await createAccount(`panels_view_${RUN}`);
-		const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, viewer.cookie);
+		const user = await createAccount(`panels_view_${RUN}`);
+		const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
 		expect(res.status).toBe(200);
-		await db.delete(users).where(eq(users.id, viewer.userId as number));
+		await db.delete(users).where(eq(users.id, user.userId as number));
 	});
 });

@@ -203,7 +203,7 @@ export const CHARGEABLE_AMOUNT_MESSAGE = `An amount has to be $0 or at least $${
 export const TIME_POOL_RATE = 0.5;
 /**
  * The Time Pool Anthers funds on a **free account's** behalf each month, so that a free
- * viewer's watching still pays the creators they watch. The user pays $0.
+ * user's watching still pays the creators they watch. The user pays $0.
  *
  * **$0.25 is the number, and the review it was waiting for is closed** (Parker, 2026-08-31).
  * It was flagged PROVISIONAL from 2026-08-12 pending "real modeling and real conversion
@@ -224,7 +224,7 @@ export const TIME_POOL_RATE = 0.5;
  * standing obligation to every free account, so an over-generous opening number becomes a
  * public commitment the charitable budget has to keep funding while the paying share
  * catches up — and the growth ladder is violently non-linear near its floor. Under-shooting
- * costs creators some free-viewer earnings and can be corrected upward at any time.
+ * costs creators some free-user earnings and can be corrected upward at any time.
  *
  * It is also the single dial that sets **free-access cost per account**, since delivery
  * became free: cost is now `free accounts × this number`, headcount times a policy figure,
@@ -329,7 +329,7 @@ export function thresholdForBadge(badge: BadgeKey): number {
  * someone giving $3 to a set with Badges at $2 and $4 answers "the $2 Badge". That is
  * right for *labeling* what someone holds and wrong for *resolving access*, which must
  * compare the amount against the gate's own threshold via `amountMeets`. Rounding down
- * to a Badge first is how a viewer gets denied a gate they actually clear.
+ * to a Badge first is how a user gets denied a gate they actually clear.
  */
 export function heldBadgeName(anthersDollars: number): BadgeKey {
 	return (badgeFor(anthersDollars, ANTHERS_BADGES).badge?.name as Badge) ?? "free";
@@ -471,7 +471,7 @@ export function isStickerDenomination(amount: unknown): boolean {
  * A free account may direct nothing: a third of the subsidized pot buys no Sticker at any
  * denomination, so the arithmetic settles this before policy has to.
  *
- * ⭐ **Giving one is real now**, so a surface may describe it as something a reader can go
+ * ⭐ **Giving one is real now**, so a surface may describe it as something a user can go
  * and do: `StickerBar` sits on a Work and a post, the batch is in `@anthers/shared/
  * stickers`, and the money routes through `distribute-pool`. This figure is still derived
  * rather than typed, so a page quoting it cannot drift from the model.
@@ -724,7 +724,7 @@ export const WITHDRAWN_RESCUE_DAYS = 90;
  * trailing payload, and makes the bytes that are scanned exactly the bytes that are served.
  *
  * 512 because a badge is rendered small everywhere it appears and is worth having at twice
- * that on a dense display; larger buys nothing a viewer can see and costs a creator's
+ * that on a dense display; larger buys nothing a user can see and costs a creator's
  * storage allowance on every rung.
  */
 export const BADGE_ART_PX = 512;
@@ -807,7 +807,7 @@ export const ABUSE_EMAIL = "abuse@anthers.org";
  * hold — so this clock starts at filing rather than at any decision of ours.
  *
  * Sits beside `RECORD_REDACTION_YEARS` deliberately: they are the two statutory
- * clocks over the same records, they run in opposite directions, and a reader
+ * clocks over the same records, they run in opposite directions, and a user
  * comparing them should not have to find them in two files.
  */
 export const PRESERVATION_HOLD_YEARS = 1;

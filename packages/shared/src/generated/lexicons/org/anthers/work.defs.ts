@@ -68,7 +68,7 @@ export const $safeParse = /*#__PURE__*/ main.safeParse.bind(main);
 export const $validate = /*#__PURE__*/ main.validate.bind(main);
 export const $safeValidate = /*#__PURE__*/ main.safeValidate.bind(main);
 
-/** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
+/** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular user is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
 type Access = { $type?: "org.anthers.work#access";
 
   /**
@@ -78,7 +78,7 @@ type Access = { $type?: "org.anthers.work#access";
 
 export type { Access };
 
-/** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
+/** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular user is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
 const access = /*#__PURE__*/ l.typedObject<Access>($nsid, "access", /*#__PURE__*/ l.object({"state":/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32})}));
 
 export { access };
@@ -132,7 +132,7 @@ type Credit = { $type?: "org.anthers.work#credit";
   "contributor"?:l.$Typed<DidContributor> | l.$Typed<NamedContributor> | l.Unknown$TypedObject;
 
   /**
-   * The kind(s) of contribution, published as entered. `created` — a person made this part. `licensed` — this part is pre-existing material used under a right (the source may be named or not, at the creator's choice; many licenses do not require attribution). `ai` — this part was machine-made: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. An open set on purpose: a `created+ai` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as AI' reading of a blend — whether one clears a filter is the reader's own call, and two filters reading a blend opposite ways is a feature, not a defect.
+   * The kind(s) of contribution, published as entered. `created` — a person made this part. `licensed` — this part is pre-existing material used under a right (the source may be named or not, at the creator's choice; many licenses do not require attribution). `ai` — this part was machine-made: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. An open set on purpose: a `created+ai` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as AI' reading of a blend — whether one clears a filter is the user's own call, and two filters reading a blend opposite ways is a feature, not a defect.
    */
   "types":("created" | "licensed" | "ai" | l.UnknownString)[] };
 

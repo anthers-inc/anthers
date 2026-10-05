@@ -4,9 +4,9 @@
  *
  * The assertions here are all of the same shape and it is a deliberate one: they
  * check that **rows survived a sweep that ran**, by counting them directly, rather
- * than checking that some reader stopped returning them. That distinction is the
+ * than checking that some user stopped returning them. That distinction is the
  * whole lesson of the sessions defect Privacy Policy records — `deleteExpiredSessions()` was
- * exported and called from nowhere for months while every reader filtered expired
+ * exported and called from nowhere for months while every user filtered expired
  * sessions out anyway, so a read-side test would have passed throughout. A sweep
  * that does not run and a sweep that correctly skips look identical from the
  * outside; the way to tell them apart is to run the sweep and count.
@@ -75,7 +75,7 @@ async function seedAttention(userId: number, day: string) {
 	`);
 }
 
-/** Raw rows for one person, counted directly rather than through any reader. */
+/** Raw rows for one person, counted directly rather than through any user. */
 async function countAttention(userId: number): Promise<number> {
 	const [row] = await db
 		.select({ n: sql<number>`count(*)::int` })

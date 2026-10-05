@@ -106,16 +106,16 @@ async function seedProject(creatorId: number, values: Partial<typeof projects.$i
 }
 
 let creatorId = 0;
-let _readerId = 0;
+let _userId = 0;
 let operatorId = 0;
 let sendSpy: ReturnType<typeof spyOn>;
 let sent: { name: string; data: Record<string, unknown> }[] = [];
 
 beforeAll(async () => {
 	const creator = await user("c", true);
-	const reader = await user("r", false);
+	const user_ = await user("r", false);
 	creatorId = creator.id;
-	_readerId = reader.id;
+	_userId = user_.id;
 	DID = creator.atprotoDid;
 	operatorId = (await createAdminFixture(`dr-o-${RUN}`)).id;
 

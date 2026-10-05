@@ -108,7 +108,7 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		media: "music",
 		trackNumber: 3,
 		gated: true,
-		// Gated lyrics, so the withholding has something to withhold. A viewer without
+		// Gated lyrics, so the withholding has something to withhold. A user without
 		// access must see neither these words nor the audio.
 		lyrics: "These words are behind the gate",
 	},

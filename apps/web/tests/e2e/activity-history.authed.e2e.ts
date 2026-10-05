@@ -8,7 +8,7 @@
  * on `/api/subscriptions/attention/history` cannot see whether a settings section
  * renders it, so this is an `.authed` browser spec.
  *
- * The gauntlet viewer holds no attention rows by default, so the empty state is
+ * The gauntlet user holds no attention rows by default, so the empty state is
  * what the page can honestly be asserted on here. (A range-bearing fixture would
  * be consumed by the meter rungs' own `--watched-minutes` bookkeeping; the row
  * itself is asserted end-to-end in the API suites.)
@@ -28,7 +28,7 @@ test("a person can read their own activity record in settings", async ({ page })
 	// Time Pool divides by — rather than presenting as a bare list.
 	await expect(page.getByText(/exactly as it is stored/i)).toBeVisible();
 
-	// The gauntlet viewer has no attention rows, so the honest state is the empty one:
+	// The gauntlet user has no attention rows, so the honest state is the empty one:
 	// a page that renders "Nothing recorded yet" until watching has happened is still
 	// the promise kept — the record exists, and it is zero rows long.
 	await expect(page.getByText(/nothing recorded yet/i)).toBeVisible();

@@ -10,7 +10,7 @@
  *
  * ⭐ **Three per batch, one per denomination, four batches a year** (Parker, 2026-09-04).
  * The count is what keeps the amount readable off the drawing: with two Stickers at the
- * same price a reader has to compare numbers, and the whole point is that they do not have
+ * same price a user has to compare numbers, and the whole point is that they do not have
  * to. {@link batchesAreWellFormed} asserts it rather than trusting it.
  *
  * 🚨 **Nothing is ever retired from giving** (Parker, 2026-09-04). A past batch stays
@@ -53,7 +53,7 @@ export interface StickerBatch {
 	/** When it became giveable, as `YYYY-MM`. Newest first in {@link STICKER_BATCHES}. */
 	released: string;
 	/**
-	 * Ordered simple to elaborate, and that order is the meaning: a reader should be able
+	 * Ordered simple to elaborate, and that order is the meaning: a user should be able
 	 * to tell what a Sticker cost from how much drawing is in it.
 	 */
 	art: readonly StickerArt[];

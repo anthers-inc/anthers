@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What covers a Work's cover for a reader: their setting for its rung, and their setting for each
+ * What covers a Work's cover for a user: their setting for its rung, and their setting for each
  * kind of content it may contain.
  *
  * Here because the failure is silent. A cover rule that stops matching shows the picture, which is
- * exactly what a reader who asked for nothing is supposed to see, so only a test can tell the two
+ * exactly what a user who asked for nothing is supposed to see, so only a test can tell the two
  * apart.
  */
 import { describe, expect, it } from "bun:test";
@@ -18,7 +18,7 @@ function asking(notes: Partial<ContentPreferences["notes"]>): ContentPreferences
 }
 
 describe("coverFor", () => {
-	it("covers nothing General for a reader who has asked for nothing", () => {
+	it("covers nothing General for a user who has asked for nothing", () => {
 		expect(coverFor(DEFAULT_PREFERENCES, general)).toBeNull();
 		expect(
 			coverFor(DEFAULT_PREFERENCES, {
@@ -37,7 +37,7 @@ describe("coverFor", () => {
 		});
 	});
 
-	it("covers a General Work for a kind of content the reader blurs, and names it", () => {
+	it("covers a General Work for a kind of content the user blurs, and names it", () => {
 		const cartoon = {
 			maturity: "general",
 			maturityRows: { ...rowsRatedAs("general"), violence: "general" as const },
@@ -46,7 +46,7 @@ describe("coverFor", () => {
 			byRung: false,
 			byNotes: ["violence"],
 		});
-		// Marked Not in It, it is not what the reader asked about.
+		// Marked Not in It, it is not what the user asked about.
 		expect(coverFor(asking({ violence: "blur" }), general)).toBeNull();
 	});
 
@@ -58,7 +58,7 @@ describe("coverFor", () => {
 		);
 	});
 
-	it("covers a kind of content the reader hides wherever it still appears", () => {
+	it("covers a kind of content the user hides wherever it still appears", () => {
 		const horror = {
 			maturity: "mature",
 			maturityRows: { ...rowsRatedAs("general"), horror: "mature" as const },

@@ -27,26 +27,26 @@ export const GAUNTLET_CREATOR_USERNAME = `${GAUNTLET_PREFIX}creator`;
 export const GAUNTLET_CREATOR_EMAIL = `${GAUNTLET_PREFIX}creator@example.test`;
 
 /**
- * The harness's own viewer, for automated walks. The observational pass defaults to the
+ * The harness's own user, for automated walks. The observational pass defaults to the
  * dev account (`DEV_ACCOUNT_USERNAME`), but the e2e spec needs an account it may freely
  * reset — so it owns both ends of the walk. Signing either fixture in is the emailed
  * code, read from the session's mail catcher; no account holds a password. Created on
- * demand by `seed-gauntlet.ts --ensure-viewer`; email pre-verified because checkout and
+ * demand by `seed-gauntlet.ts --ensure-walker`; email pre-verified because checkout and
  * giving carry `requireVerified`.
  */
-export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
-export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
+export const GAUNTLET_WALKER_USERNAME = `${GAUNTLET_PREFIX}walker`;
+export const GAUNTLET_WALKER_EMAIL = `${GAUNTLET_PREFIX}walker@example.test`;
 
 /**
  * The session's stand-in for the Anthers creator account, which owns the seeded Anthers
  * Badge ladder.
  *
- * 🚨 **Neither the creator nor the viewer can own it.** The creator's own ladder gates the
- * staircase's Works, and access resolution reads "what the viewer holds" grouped by the
+ * 🚨 **Neither the creator nor the user can own it.** The creator's own ladder gates the
+ * staircase's Works, and access resolution reads "what the user holds" grouped by the
  * badge's issuer — an Anthers ladder owned by the creator fuses the two identities and
- * makes every Anthers Badge count as creator support. The viewer is the walk's actor: every
- * holding the walk parks on the viewer is summed into the directed budget's `allocated`,
- * so an Anthers ladder owned by the viewer turns an Anthers Badge into spendable budget. A
+ * makes every Anthers Badge count as creator support. The user is the walk's actor: every
+ * holding the walk parks on the user is summed into the directed budget's `allocated`,
+ * so an Anthers ladder owned by the user turns an Anthers Badge into spendable budget. A
  * third account, holding nothing and gating nothing, is the honest dev shape — the
  * identity decision (2026-10-03) settled that the Anthers creator account is an ordinary
  * `users` row, and this is that row in fixture form.
@@ -60,8 +60,8 @@ export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
  * anybody could, and the pending-signup reservation keeps the race honest the same way it
  * does for any account.
  */
-export const GAUNTLET_ORG_USERNAME = "anthers";
-export const GAUNTLET_ORG_EMAIL = `${GAUNTLET_PREFIX}org@example.test`;
+export const GAUNTLET_ANTHERS_USERNAME = "anthers";
+export const GAUNTLET_ANTHERS_EMAIL = `${GAUNTLET_PREFIX}org@example.test`;
 
 /**
  * The handle a fixture account actually holds, for a harness that cannot import the API's
@@ -96,7 +96,7 @@ export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
  * place gates at any level, and a consecutive ladder (1,2,3) makes a threshold and
  * its list position coincide — which is exactly the accident that let the retired
  * `badgeRank = BADGE_ORDER.indexOf(name)` look correct while mis-resolving any set with
- * gaps, toward over-granting. With $15 and $21 in the ladder, a viewer giving $12 must
+ * gaps, toward over-granting. With $15 and $21 in the ladder, a user giving $12 must
  * clear the $9.50 rung and NOT the $15 one, and any implementation that has drifted back
  * to counting positions fails the walk instead of passing it.
  *
@@ -117,7 +117,7 @@ export const BADGE_RUNGS = [3, 6, 9.5, 15, 21] as const;
  * GAP between two rungs.
  *
  * ⭐ The gap states are the payoff of a sparse ladder and cannot exist on a consecutive
- * one. At $12 a viewer is above the rung at $9.50 and below the rung at $15 — so a
+ * one. At $12 a user is above the rung at $9.50 and below the rung at $15 — so a
  * resolver comparing list POSITIONS rather than thresholds (the retired
  * `badgeRank = indexOf` shape) opens one post too many, toward over-granting, in exactly
  * this state.
@@ -248,15 +248,15 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 			2 + i,
 			`G${2 + i}`,
 			`seed-${amount}`,
-			`For readers who've given ${amountLabel(amount)}`,
+			`For users who've given ${amountLabel(amount)}`,
 			`≥ ${amountLabel(amount)}/month given to this creator`,
 			i === 0
-				? "The first rung — only what is given to this creator this cycle opens it. Nothing about a viewer's Anthers Badge is consulted anywhere on this ladder."
+				? "The first rung — only what is given to this creator this cycle opens it. Nothing about a user's Anthers Badge is consulted anywhere on this ladder."
 				: `Rung at ${amountLabel(amount)}. ${amountLabel(BADGE_RUNGS[i - 1])} is not enough; ${amountLabel(amount)} or more opens it.`,
 			{
 				access: badgeRung(amount),
 				// Gated + real audio on the SECOND rung: the mirror of G1, where the bytes must
-				// NOT arrive until the viewer climbs. Audio because it exercises the second
+				// NOT arrive until the user climbs. Audio because it exercises the second
 				// delivery endpoint, which nothing else walks.
 				...(i === 1 ? { contentType: "audio", media: "audio" as const } : {}),
 			},
@@ -302,17 +302,17 @@ export function gauntletPost(key: string): GauntletPost {
  */
 export type GauntletReason = "free" | "entitled" | "gated" | "payment_required" | "purchased";
 
-/** One viewer state of the staircase and the reason it expects for every post. */
+/** One user state of the staircase and the reason it expects for every post. */
 export interface StaircaseState {
 	/** Display name, matching the spec table's row label. */
 	state: string;
-	/** Whether the viewer follows the creator. MUST NOT affect any reason — that's the point. */
+	/** Whether the user follows the creator. MUST NOT affect any reason — that's the point. */
 	following: boolean;
-	/** The monthly amount the viewer gives Anthers; the Badge derives from it (`heldBadgeName`). */
+	/** The monthly amount the user gives Anthers; the Badge derives from it (`heldBadgeName`). */
 	anthersSupport: number;
 	/** Monthly dollars given to the gauntlet creator this cycle. */
 	givenAmount: number;
-	/** Keys of posts the viewer has a completed purchase for. */
+	/** Keys of posts the user has a completed purchase for. */
 	purchased: string[];
 	/** Expected access reason per post key (G1…G9). */
 	reasons: Record<string, GauntletReason>;
@@ -325,11 +325,11 @@ const PAY = "payment_required" as const;
 const BOUGHT = "purchased" as const;
 
 /**
- * A staircase row's reasons, built from what the viewer has given this creator.
+ * A staircase row's reasons, built from what the user has given this creator.
  *
  * Generated rather than written out, because the ladder is **sparse** (`BADGE_RUNGS`) and a
  * hand-written positional table is exactly where a sparse ladder gets silently flattened
- * back into a consecutive one. A rung is entitled iff the viewer's given amount meets its
+ * back into a consecutive one. A rung is entitled iff the user's given amount meets its
  * THRESHOLD — which is the property the whole fixture exists to keep honest.
  */
 function reasonsFor(givenAmount: number, purchased: boolean): Record<string, GauntletReason> {
@@ -391,7 +391,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 	},
 	{
 		// Blossom — the top Badge — and it unlocks NOTHING. The row exists to say so out
-		// loud at the layer a reader looks at, even though the resolver can no longer see
+		// loud at the layer a user looks at, even though the resolver can no longer see
 		// the count. It is the cell that would have been four cells before 2026-08-12.
 		state: "Blossom, nothing given",
 		following: true,
@@ -438,6 +438,6 @@ export const GAUNTLET_BADGES: Array<{
 	// bug instead of catching it. With a sparse ladder the two genuinely differ.
 	threshold: String(seeds),
 	label: amountLabel(seeds),
-	description: `Readers who've given at least ${amountLabel(seeds)} this cycle.`,
+	description: `Users who've given at least ${amountLabel(seeds)} this cycle.`,
 	sortOrder: i,
 }));

@@ -113,7 +113,7 @@ export function loadSharedSpecEnv(
 
 	const filled: string[] = [];
 	for (const key of SHARED_FROM_SPEC) {
-		// Treat empty as absent, the same way every other reader in this repo has learned to.
+		// Treat empty as absent, the same way every other user in this repo has learned to.
 		if ((env[key] ?? "") !== "") continue;
 		const entry = declared.get(key);
 		const value = entry?.value ?? "";

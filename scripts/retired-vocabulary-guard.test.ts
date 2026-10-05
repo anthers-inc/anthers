@@ -4,7 +4,7 @@
  *
  * 🚨 **`econ:figures` blanks comments before it scans, deliberately and correctly** — its
  * job is published copy, and an identifier that legitimately says `seed_allocations` is not
- * a claim to a reader. The cost of that choice is that comments were the one surface where
+ * a claim to a user. The cost of that choice is that comments were the one surface where
  * the retired model could pile up unwatched, and it did: **440 comment lines named a retired
  * mechanism** by 2026-08-29, most of them narrating a rename nobody reading today needs.
  *

@@ -8,7 +8,7 @@
  * notice. The API tests cannot see that, because the API is fine in exactly that case.
  *
  * ⭐ **Collapse is the other half, and it is a rendering claim rather than a logic one.** A
- * collapsed comment must read as *readers pushed this down*, be openable, and look like
+ * collapsed comment must read as *users pushed this down*, be openable, and look like
  * neither of the two states it sits beside — a moderation removal, which never reaches the
  * browser, and a tombstone, which is an author who left. Whether it does is a question about
  * what is on screen.
@@ -127,7 +127,7 @@ test("🚨 the post carries a vote control at all, with a score on it", async ({
 	await expect(page.getByText(/\d+ up, \d+ down/).first()).toBeVisible();
 });
 
-test("⭐ an upvote moves the number the reader can see", async ({ page, context }) => {
+test("⭐ an upvote moves the number the user can see", async ({ page, context }) => {
 	await signInAsCreator(context);
 	await page.goto(`/posts/${POST_SLUG}`);
 
@@ -158,7 +158,7 @@ test("🚨 a buried comment arrives collapsed, says who did it, and opens", asyn
 	// Folded: the text is not on the page yet.
 	await expect(page.getByText(BURIED)).toHaveCount(0);
 	// And it says the crowd did it. A moderation removal would never have reached the
-	// browser, so naming a moderator here would be telling the reader something false.
+	// browser, so naming a moderator here would be telling the user something false.
 	const collapsed = page.getByText(/collapsed — heavily downvoted/).first();
 	await expect(collapsed).toBeVisible();
 

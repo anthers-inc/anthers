@@ -38,7 +38,7 @@ export const HIDDEN_TEST_ACCOUNT_HANDLE = "anthers-test.anthers.social";
  * A SQL predicate excluding rows whose `userColumn` names the automated-test account —
  * the listing half only. Its Works, posts and profile stay reachable by direct link,
  * because direct links are the point of keeping the account: the test suite drives real
- * routes at it, and a reader who follows a link somewhere still arrives at a page that
+ * routes at it, and a user who follows a link somewhere still arrives at a page that
  * answers. What it drops out of is every listing — the feed, Discover, the commons, the
  * follow and project lists — beside `notSuspendedAccount` so the account reads as absent
  * rather than as a state somebody could name.
@@ -62,8 +62,8 @@ export function notTestAccount(userColumn: SQL | unknown): SQL | undefined {
  * `notBlockedBy` cites: filtering a page after the fact silently returns short pages.
  *
  * The suspension's `suspended_until` is deliberately NOT read here: an expired
- * suspension is lifted by the sweep clearing both columns, not by every reader
- * racing the clock. A reader that computed "suspended but past its end" would show
+ * suspension is lifted by the sweep clearing both columns, not by every user
+ * racing the clock. A user that computed "suspended but past its end" would show
  * the account a beat before the log records the lift — and an appeal reads the log.
  */
 export function notSuspendedAccount(userColumn: SQL | unknown): SQL | undefined {

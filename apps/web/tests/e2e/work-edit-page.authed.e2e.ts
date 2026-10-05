@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Work's Edit page is the Work as a reader sees it, with what they see editable in place
+ * A Work's Edit page is the Work as a user sees it, with what they see editable in place
  * (Parker, 2026-09-17), and one explicit Save that leaves the creator on the page.
  *
  * What these pin, each of which a form beside the Work would get wrong without anything failing:
  *
- *   - **The Work itself is on the page**, drawn by the reader's own parts. A processed video
- *     plays in the reader's player rather than appearing as a file name in a form.
+ *   - **The Work itself is on the page**, drawn by the user's own parts. A processed video
+ *     plays in the user's player rather than appearing as a file name in a form.
  *   - **Loading is not an unsaved change.** The page learns things after it loads (the creator's
  *     Badge rungs, the file's processing), and a Save bar that appears on arrival is a page
  *     that cannot be trusted to mean it.
  *   - **Save stays, and Discard puts back what is saved.**
- *   - **The reader's view and the Edit page lead to each other.**
+ *   - **The user's view and the Edit page lead to each other.**
  *
  * Runs on `media_fixture`, whose Works nothing else resets, and whose seeded video is a real
  * processed file. Works made here are titled with this spec's prefix and swept in `afterAll`.
@@ -54,14 +54,14 @@ test.afterAll(async () => {
 	}
 });
 
-test("a Work's Edit page shows the Work as a reader sees it", async ({ page, context }) => {
+test("a Work's Edit page shows the Work as a user sees it", async ({ page, context }) => {
 	session = await signInAsMediaFixture(context);
 	const [video] = (await ownWorks()).filter((w) => w.title === FIXTURE_VIDEO);
 	expect(video, "the media fixture's video is missing").toBeTruthy();
 
 	await page.goto(`/studio/works/${video.publicId}/edit`);
 	await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue(FIXTURE_VIDEO);
-	// The reader's player, not a file name standing in for it.
+	// The user's player, not a file name standing in for it.
 	await expect(page.locator("video")).toHaveCount(1);
 	await expect(page.getByRole("heading", { name: "Only you see these" })).toBeVisible();
 
@@ -87,10 +87,10 @@ test("a Work's Edit page shows the Work as a reader sees it", async ({ page, con
 	).json()) as { work?: Record<string, unknown> };
 	expect(asStranger.work && "recordUrl" in asStranger.work).toBe(false);
 
-	// The reader's view, and back again from it.
-	await page.getByRole("link", { name: "Preview as a reader" }).click();
+	// The user's view, and back again from it.
+	await page.getByRole("link", { name: "Preview as User" }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+\?previewAs=out$/);
-	await expect(page.getByText("Previewing as a reader")).toBeVisible();
+	await expect(page.getByText("Previewing as a user")).toBeVisible();
 	await page.getByRole("link", { name: "Edit This Work" }).click();
 	await expect(page).toHaveURL(new RegExp(`/studio/works/${video.publicId}/edit$`));
 });

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What stands where a Work's deliverable would be, when the viewer cannot have it.
+ * What stands where a Work's deliverable would be, when the user cannot have it.
  *
- * For a gated Work that is an unlock: instead of bouncing the viewer to the creator's
+ * For a gated Work that is an unlock: instead of bouncing the user to the creator's
  * Badges page, this names the *exact minimum upgrade* that opens it — the lowest Badge rung
- * that clears the gate — right where the viewer hit it.
+ * that clears the gate — right where the user hit it.
  *
  * ⚠️ **There is exactly one route out of a gate: the creator's own ladder.** A second branch offering to clear it by giving Anthers more survived here until
  * 2026-08-29, complete with an inline subscribe flow and a confirmation modal — it read
@@ -27,7 +27,7 @@ import { Link, useLocation } from "@anthers/web-shared/router";
 import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon, UserPlusIcon } from "@heroicons/react/24/solid";
 
-/** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
+/** The MARGINAL ask — what the user still has to add, not what the gate requires. */
 function amountToGo(moreNeeded: number): string {
 	// ⚠️ **A MONEY amount, never a count.** Rendering it as a count
 	// would be wrong in two directions at once now: there is no unit to count, and a
@@ -133,7 +133,7 @@ export default function InlineUnlock({
 	return (
 		<UnlockCard
 			// No blurb when there is a route: the button already says what to do and to whom,
-			// and a sentence restating it just makes the reader parse the same fact twice.
+			// and a sentence restating it just makes the user parse the same fact twice.
 			// The blurb survives only where nothing else explains the situation.
 			blurb={
 				creatorRoute

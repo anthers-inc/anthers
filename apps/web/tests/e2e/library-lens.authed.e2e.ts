@@ -19,7 +19,7 @@ import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
 const TRACK = mediaFixtureWork("track1");
 
 /**
- * Save the fixture album and one loose track for the signed-in viewer, through the real
+ * Save the fixture album and one loose track for the signed-in user, through the real
  * endpoint. Idempotent server-side, so re-runs need no cleanup.
  */
 async function saveFixtures(page: Page) {
@@ -125,7 +125,7 @@ test("the music lens's spoken-word dial re-scopes the view without touching the 
 	await expect(dial).not.toBeChecked(); // music by default
 	// Click through the wrapping <label> text rather than `.check()` on the input: the
 	// daisyUI toggle re-skins the control, and the accessible surface a finger or a
-	// reader lands on is the labeled row, which is what the assertion is about.
+	// user lands on is the labeled row, which is what the assertion is about.
 	await page.getByText("Include spoken word", { exact: true }).click();
 	await expect(page).toHaveURL(/spoken=1/);
 	await page.getByText("Include spoken word", { exact: true }).click();

@@ -10,7 +10,7 @@
 // The page is sequenced as TWO products, not three ways: direct creator support first
 // (monthly giving + purchases, no platform cut — the wedge), the Anthers commons second
 // (what goes to Anthers funds free public content via the Time Pool and lifts the
-// viewer's own Public Access limit).
+// user's own Public Access limit).
 //
 // 🚨 **The creator ask leads and Public Access follows it, and reordering that back is a
 // product decision rather than a layout one.** Support for Anthers buys Public Access and
@@ -96,7 +96,7 @@ export default function ForUsersPage() {
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
 							{/* 🚨 /signup is the one signup door, so this button goes nowhere else. It is
-							    where a reader picks a handle or brings their Bluesky identity, and it puts the
+							    where a user picks a handle or brings their Bluesky identity, and it puts the
 							    creator picker in front of a new account, which is the thing this page leads
 							    with. The sentence below has to stay true of what that page asks for. */}
 							<Link to="/signup" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
@@ -274,7 +274,7 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								On most of the internet, advertisers own the roads and make you the product. Here, a
-								free viewer still pays the creators they watch—their small Time Pool is covered as
+								free user still pays the creators they watch—their small Time Pool is covered as
 								free access, from a pool that everything given to Anthers supports. By sharing the
 								load together, mountains diffuse into pebbles—and we all get a healthier internet
 								for it.
@@ -336,7 +336,7 @@ export default function ForUsersPage() {
 			</Section>
 
 			{/* Questions — before the closing CTA rather than after it, deliberately. An FAQ
-			    is the last set of objections standing between a reader and the button, so it
+			    is the last set of objections standing between a user and the button, so it
 			    belongs on the way to the button; putting it below would make the accordions
 			    the final thing on the page and leave the CTA stranded above them. The
 			    questions themselves live in `content/faq.tsx` and are shared with /faq. */}
@@ -373,7 +373,7 @@ export default function ForUsersPage() {
 						 *
 						 * ⚠️ Deliberately says nothing about the Adult rung. It is invisible by default,
 						 * and a general marketing page naming it would undo that for a caveat almost no
-						 * reader here needs. The fact is disclosed where somebody actually meets it: the
+						 * user here needs. The fact is disclosed where somebody actually meets it: the
 						 * Settings panel opens the card field at the moment they opt in, and `/parents`
 						 * spells out the whole check.
 						 */}

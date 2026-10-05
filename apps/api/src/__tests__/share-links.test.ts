@@ -10,16 +10,16 @@
  * a token pointed at some other Work entirely.
  *
  * ⚠️ **The gated and priced refusals are a consequence of where ONE line sits**, not of two
- * separate checks. A share context resolves with a **null viewer** carrying `sharedBy`, and
+ * separate checks. A share context resolves with a **null user** carrying `sharedBy`, and
  * `resolveAccessSync` reads `sharedBy` at exactly the branch reached by universally-free work.
- * Everything above that line runs on the ordinary rules against a viewer who has given nobody
+ * Everything above that line runs on the ordinary rules against a user who has given nobody
  * anything and cannot have opted into anything.
  *
  * 🚨 **Adult and the token's scope each have a SECOND, independent guard, and sabotage is how
  * that was established rather than assumed.** Hoisting the share clause to the top of the
  * resolver turns gated and priced work red — and leaves Adult green, because the *route*
  * 404s an Adult Work before the resolver is reached, and leaves the skeleton-key test green,
- * because `requireViewerOrShareLink` refuses a token naming a different Work before that. Both
+ * because `requireUserOrShareLink` refuses a token naming a different Work before that. Both
  * are genuinely layered rather than duplicated, so both are asserted **twice** below: once at
  * the surface a recipient actually lands on, and once at a delivery route, which has neither
  * of those outer guards and therefore reaches the resolver's own answer.
@@ -42,16 +42,16 @@ import { SHARED_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
-import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 // The Anthers ladder seeds first, so its owner sits below the purge's high-water mark.
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -98,12 +98,12 @@ async function forceLink(sharerId: number, workId: number): Promise<string> {
  * The share-link suite's stand-in for the amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string): Promise<void> {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const cycle = sql`to_char(now(), 'YYYY-MM-01')`;
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -111,7 +111,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the share-link suite holds.",
@@ -124,7 +124,7 @@ async function holdOrgRung(userId: number, threshold: string): Promise<void> {
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, cycle),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	await db.insert(userBadges).values({ userId, badgeId: badge.id, billingCycle: cycle });
@@ -330,7 +330,7 @@ describe("Share links", () => {
 		});
 		expect(res.status).toBe(401);
 
-		// The same refusal one layer down, at the page a recipient lands on. `viewerFor`
+		// The same refusal one layer down, at the page a recipient lands on. `requesterFor`
 		// discards a token naming a different Work independently of the middleware, so a
 		// token for the video reads as no token at all here.
 		const { work } = await (await req(`/api/content/works/${textId}?share=${openToken}`)).json();
@@ -454,7 +454,7 @@ describe("Share links", () => {
 	});
 
 	it("🚨 a creator's own Work earns them nothing through their own link", async () => {
-		// A share context has a null viewer, so the owner branch never fires and `isFree` comes
+		// A share context has a null user, so the owner branch never fires and `isFree` comes
 		// back true — the same refusal has to be made at the stamp instead, or the sharer's
 		// Time Pool would pay the sharer. The seconds are still recorded, because the relay
 		// budget bounds how much viewing one account may fund and this is the case most in

@@ -256,7 +256,7 @@ export async function readPendingSignup(
 		.from(pendingSignups)
 		.where(eq(pendingSignups.token, token))
 		.limit(1);
-	// Absent to a reader the moment it expires; the sweep is housekeeping, never the gate.
+	// Absent to a user the moment it expires; the sweep is housekeeping, never the gate.
 	if (!row || row.expiresAt.getTime() <= Date.now()) return undefined;
 	return row;
 }

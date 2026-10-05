@@ -16,7 +16,7 @@
  */
 
 /**
- * Where the note points: the FAQ's answer on what readers control. It moves to *The Rating
+ * Where the note points: the FAQ's answer on what users control. It moves to *The Rating
  * Standard* once the wiki is served. `faq.test.ts` fails if the anchor stops naming a question.
  */
 export const RATED_PUBLIC_ACCESS_HELP = "/faq#content-controls";

@@ -51,7 +51,7 @@ describe("groupedByMonth folds the changelog into months, newest first", () => {
 	it("derives the month from the entry's date, not the version — a release shipping into the next month lands where it shipped", () => {
 		// The case that decides it: a `####.##.5` numbered for one month that ships early
 		// in the next. A version-derived grouping files it under its number's month, where
-		// the reader can't find it by when it shipped.
+		// the user can't find it by when it shipped.
 		const months = groupedByMonth([
 			release("2026.10.5", "2026-11-02"),
 			release("2026.10.0", "2026-10-02"),

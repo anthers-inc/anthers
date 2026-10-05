@@ -141,7 +141,7 @@ describe("no authoring script writes an SVG the API handed over", () => {
 	 *
 	 * ⚠️ **This is a test because the violation reintroduces itself.** The download
 	 * endpoint also refuses us today (`403 You are not authorized to edit this icon`),
-	 * so a reader meeting only that reads a plan limitation and writes a fallback for
+	 * so a user meeting only that reads a plan limitation and writes a fallback for
 	 * the day it lifts — which is what the first version of `brand-add.ts` did, in as
 	 * many words. A latent breach that switches itself on when somebody upgrades a plan
 	 * for unrelated reasons is worse than one that never worked at all.

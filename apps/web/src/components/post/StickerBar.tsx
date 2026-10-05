@@ -3,7 +3,7 @@
  * The Stickers on something, and the way to add one.
  *
  * ⭐ **Choosing the art is choosing the amount** (Parker, 2026-09-04). The batch runs
- * simple to elaborate, so a reader can tell what a Sticker cost from how much drawing is
+ * simple to elaborate, so a user can tell what a Sticker cost from how much drawing is
  * in it. There is no second control asking for money, and the server reads the amount off
  * the art rather than taking it from here — see `@anthers/shared/stickers`.
  *
@@ -35,7 +35,7 @@ export type StickerSubject = "work" | "post" | "comment";
 interface StickerGroup {
 	artKey: string;
 	count: number;
-	/** Row ids belonging to the viewer — the only ones they may take back. */
+	/** Row ids belonging to the user — the only ones they may take back. */
 	mine: number[];
 }
 
@@ -79,7 +79,7 @@ export default function StickerBar({
 
 	// ⚠️ Only when the picker opens. The allowance is a per-user number that nobody reading
 	// a page needs, and fetching it on every render of every Work would be a request per
-	// card for a control most readers never touch.
+	// card for a control most users never touch.
 	useEffect(() => {
 		if (!picking || !isAuthenticated || allowance) return;
 		void (async () => {

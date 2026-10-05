@@ -1173,7 +1173,7 @@ const adminRoutes = new Hono<AdminEnv>()
 			// line rather than a hunt through the repository's scripts.
 			howToSnapshot: "make resource-snapshot",
 			components,
-			// The spend boundary stated where the reader is, not only in this docblock.
+			// The spend boundary stated where the user is, not only in this docblock.
 			spendNote:
 				"Spend is per account in DigitalOcean's billing, not per component, so the Billing and Usage link is where it lives.",
 		});

@@ -4,7 +4,7 @@
  *
  * 🚨 **What happens to a record that ALREADY EXISTS is what this suite exists for, and it has
  * three answers rather than two.** A creator returning a post to a draft is taking it back, so
- * its record comes down. A moderator hiding a reader's comment is not the reader taking
+ * its record comes down. A moderator hiding a user's comment is not the user taking
  * anything back, so the record stays where its author put it — the wiki's *User Records in the
  * Atmosphere* ruling, which an earlier version of this suite asserted the opposite of. And a row
  * with no record needs nothing at all. Collapsing any two of those is a bug in one direction or
@@ -112,7 +112,7 @@ describe("planning a record", () => {
 		).toMatchObject({ action: "keep", reason: "subject_unpublished" });
 	});
 
-	// The author's own act, and so the one reader refusal that takes a record down.
+	// The author's own act, and so the one user refusal that takes a record down.
 	it("DELETES a comment's record when its author edits the words away", () => {
 		expect(planRecord(COMMENT_KIND, emptiedComment, EXISTING)).toEqual({
 			action: "delete",
@@ -234,7 +234,7 @@ describe("syncing a record", () => {
 });
 
 describe("a collection whose Lexicon is not published", () => {
-	// 🚨 **The draft has to be constructed now.** Every reader schema is genuinely published, so
+	// 🚨 **The draft has to be constructed now.** Every user schema is genuinely published, so
 	// no collection is unpublished under the real set any longer — and the gate's behavior is
 	// still worth pinning, because it is what protects the NEXT schema that arrives as a draft.
 	// These tests therefore run with `comment` made a draft by hand. The first test restores the

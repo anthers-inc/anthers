@@ -10,7 +10,7 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-/** A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a reader's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses. */
+/** A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a user's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses. */
 type Main = { $type: "org.anthers.post";
 
   /**
@@ -25,7 +25,7 @@ type Main = { $type: "org.anthers.post";
 
 export type { Main };
 
-/** A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a reader's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses. */
+/** A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a user's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses. */
 const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"url":/*#__PURE__*/ l.string({"format":"uri","maxLength":2048}),"publishedAt":/*#__PURE__*/ l.string({"format":"datetime","maxLength":64}),"content":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Content>((() => content) as any))}));
 
 export { main };
@@ -52,7 +52,7 @@ export const $safeValidate = /*#__PURE__*/ main.safeValidate.bind(main);
 type Content = { $type?: "org.anthers.post#content";
 
   /**
-   * How to read `value`. `markdown` is what Anthers writes. Carried explicitly because a consumer that renders the wrong format shows syntax to a reader and nothing detects it — and because the alternative, changing what a bare string means later, is a break the evolution rules do not catch. An open set, so a plain-text-and-facets rendering or anything else may join without a new schema.
+   * How to read `value`. `markdown` is what Anthers writes. Carried explicitly because a consumer that renders the wrong format shows syntax to a user and nothing detects it — and because the alternative, changing what a bare string means later, is a break the evolution rules do not catch. An open set, so a plain-text-and-facets rendering or anything else may join without a new schema.
    */
   "format":"markdown" | l.UnknownString;
 

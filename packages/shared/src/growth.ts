@@ -189,8 +189,8 @@ export function remainderPerPayingAccount(mix: Record<number, number>): number {
 /**
  * The creator population by size, as shares of the creator cap.
  *
- * `attention` is each segment's share of viewer attention — what divides the Time Pool.
- * It is deliberately **not** hours: with unlimited Public Access a viewer's hours are a
+ * `attention` is each segment's share of user attention — what divides the Time Pool.
+ * It is deliberately **not** hours: with unlimited Public Access a user's hours are a
  * free variable while their contribution is fixed by what they give, so a per-hour rate
  * is an emergent ratio nobody is paid at. Attention-proportion is the real metric and the
  * one the equal-time principle applies to — a minute is a minute, whatever the medium.
@@ -202,7 +202,7 @@ export interface CreatorSegment {
 	name: string;
 	/** Share of all creators. */
 	share: number;
-	/** Share of viewer attention, which is what divides the Time Pool. */
+	/** Share of user attention, which is what divides the Time Pool. */
 	attention: number;
 	storageGiB: number;
 	/** Whether this segment's storage is entirely on the charitable budget. */

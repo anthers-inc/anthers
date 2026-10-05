@@ -36,7 +36,7 @@ function req(path: string, options?: RequestInit) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `filt_${id}`;
-const viewerName = `filt_v_${id}`;
+const userName = `filt_v_${id}`;
 
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 const PAID = [{ threshold: 0, allow: true, price: "5.00" }];
@@ -59,7 +59,7 @@ describe("project browse filters", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 
 		const creatorAccount = await createAccount(creatorName);
@@ -223,16 +223,16 @@ describe("project browse filters", () => {
 		);
 	});
 
-	it("exempts signed-out viewers from the locked filter", async () => {
-		// Everything gated is locked to a signed-out viewer, so applying the filter would
+	it("exempts signed-out users from the locked filter", async () => {
+		// Everything gated is locked to a signed-out user, so applying the filter would
 		// empty the list every time — which reads as a broken page, not as a filter.
 		expect(await listSlugs("pricing=gated")).toEqual([mine.get("text")!]);
 	});
 
-	it("hides gated Works a signed-in viewer cannot open, unless show_locked says otherwise", async () => {
-		const cookie = (await createAccount(viewerName)).cookie;
+	it("hides gated Works a signed-in user cannot open, unless show_locked says otherwise", async () => {
+		const cookie = (await createAccount(userName)).cookie;
 
-		const asViewer = async (query: string) => {
+		const asUser = async (query: string) => {
 			const res = await req(`/api/content/projects?${query}`, { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 			const { projects } = await res.json();
@@ -240,9 +240,9 @@ describe("project browse filters", () => {
 			return (projects as { slug: string }[]).map((p) => p.slug).filter((s) => ours.has(s));
 		};
 
-		// This viewer has given nothing, so the $2 gate is shut to them.
-		expect(await asViewer("pricing=gated")).toEqual([]);
-		expect(await asViewer("pricing=gated&show_locked=true")).toEqual([mine.get("text")!]);
+		// This user has given nothing, so the $2 gate is shut to them.
+		expect(await asUser("pricing=gated")).toEqual([]);
+		expect(await asUser("pricing=gated&show_locked=true")).toEqual([mine.get("text")!]);
 	});
 
 	it("still honors the filters that already worked", async () => {

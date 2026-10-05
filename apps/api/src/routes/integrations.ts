@@ -9,14 +9,14 @@
  * > raw table silently returns zero for the older part of the window** — not an error,
  * > just a history that quietly stops. Every query below unions the two.
  * >
- * > The one figure that cannot be unioned is `uniqueViewers`: the rollup holds daily
- * > distinct counts and adding them across days counts a returning viewer once per
+ * > The one figure that cannot be unioned is `uniqueUsers`: the rollup holds daily
+ * > distinct counts and adding them across days counts a returning user once per
  * > day. That is a genuine, permanent consequence of not keeping identities, so the
  * > count is reported over the raw window only and the response says which window that
- * > is (`uniqueViewersWindowDays`) rather than overstating a total.
+ * > is (`uniqueUsersWindowDays`) rather than overstating a total.
  *
  * The privacy property these queries carry is pinned by `analytics-privacy.test.ts`:
- * no analytics response may contain a viewer-identifying field. `attention_daily` has
+ * no analytics response may contain a user-identifying field. `attention_daily` has
  * no `user_id` column at all, so the rolled-up half is safe by construction; the raw
  * half is safe by what it selects.
  */
@@ -53,10 +53,10 @@ const integrationRoutes = new Hono()
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-		// Raw ranges, split per viewer on read: a creator's totals can never include
+		// Raw ranges, split per user on read: a creator's totals can never include
 		// the same real second twice from one account.
 		const rawGroups = await creatorAnalyticsRanges(user.id, since, () => "all");
-		const raw = rawGroups[0] ?? { totalSeconds: 0, eventCount: 0, viewers: new Set<number>() };
+		const raw = rawGroups[0] ?? { totalSeconds: 0, eventCount: 0, users: new Set<number>() };
 		const byType = await creatorAnalyticsRanges(user.id, since, (r) => r.eventType);
 
 		// The rolled-up half of the same window. Counts and seconds add across the two
@@ -107,12 +107,12 @@ const integrationRoutes = new Hono()
 				((raw.totalSeconds + Number(rolled.totalDuration)) / 3600).toFixed(2),
 			),
 			// Deliberately NOT summed with the rollup — see the module note. Daily distinct
-			// counts can't be added into a period total without counting a returning viewer
+			// counts can't be added into a period total without counting a returning user
 			// once per day, and there is no identity left to deduplicate against. Reporting
 			// it over the raw window and naming that window is the honest version; the
 			// alternative is a bigger number that means nothing.
-			uniqueViewers: raw.viewers.size,
-			uniqueViewersWindowDays: Math.min(period, ATTENTION_RAW_RETENTION_DAYS),
+			uniqueUsers: raw.users.size,
+			uniqueUsersWindowDays: Math.min(period, ATTENTION_RAW_RETENTION_DAYS),
 			contentCounts: {
 				projects: Number(projectCount.count),
 				posts: Number(postCount.count),
@@ -140,7 +140,7 @@ const integrationRoutes = new Hono()
 		const result: (WorkStats & { type: "work" })[] = [];
 
 		if (type === "all" || type === "posts" || type === "works") {
-			// Raw ranges, split per viewer, grouped per Work.
+			// Raw ranges, split per user, grouped per Work.
 			const rawGroups = await creatorAnalyticsRanges(
 				user.id,
 				since,

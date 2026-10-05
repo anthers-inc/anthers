@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Keeping a reader's comments, reviews, votes and follows in step with the records they own.
+ * Keeping a user's comments, reviews, votes and follows in step with the records they own.
  *
  * This module reads the rows, looks up what each record needs beside its row, and remembers
  * where the records went; `record-sync.ts` does the planning and writing every kind shares. It is
  * the only writer of `atproto_uri` on `comments`, `reviews`, `votes` and `follows`.
  *
- * 🚨 **These records are canonical in the reader's repository, and that decides what may take
- * one down.** Only the reader's own act does — unvoting, unfollowing, editing their words away.
+ * 🚨 **These records are canonical in the user's repository, and that decides what may take
+ * one down.** Only the user's own act does — unvoting, unfollowing, editing their words away.
  * A moderator hiding a comment leaves its record where its author put it, and a subject that
- * disappears leaves every record about it standing. See `readerRemoves` in
+ * disappears leaves every record about it standing. See `userRemoves` in
  * `atproto-record-plan.ts`, and the wiki's *User Records in the Atmosphere*.
  *
  * ⚠️ **An interaction publishes only once its subject has a record of its own**, because a
  * record names its subject by address. That depends on the subject's creator rather than on the
- * reader, so the sync that finds `subject_unpublished` writes nothing and the reconciling sweep
+ * user, so the sync that finds `subject_unpublished` writes nothing and the reconciling sweep
  * comes back for it once the subject is listed. Nothing here fans out from a subject gaining a
  * record to every interaction waiting on it: a busy thread would turn one post's first sync into
  * a burst against every commenter's server.
@@ -22,18 +22,18 @@
 import { db } from "@anthers/db";
 import { comments, follows, posts, reviews, users, votes, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { COMMENT_KIND, FOLLOW_KIND, REVIEW_KIND, VOTE_KIND } from "./atproto-record-plan.js";
 import type {
 	CommentRecord,
 	FollowRecord,
 	ReviewRecord,
-	UnpublishableReaderReason,
+	UnpublishableUserReason,
 	VoteRecord,
-} from "./atproto-reader-records.js";
-import { COMMENT_KIND, FOLLOW_KIND, REVIEW_KIND, VOTE_KIND } from "./atproto-record-plan.js";
+} from "./atproto-user-records.js";
 import { queueRecordSync, type RecordSyncResult, syncOwnedRecord } from "./record-sync.js";
 
-/** What syncing one reader record did. */
-export type ReaderRecordSyncResult<R> = RecordSyncResult<R, UnpublishableReaderReason>;
+/** What syncing one user record did. */
+export type UserRecordSyncResult<R> = RecordSyncResult<R, UnpublishableUserReason>;
 
 type Opts = { fetchImpl?: typeof fetch };
 
@@ -90,7 +90,7 @@ export async function subjectRecordUri(
 export async function syncCommentRecord(
 	commentId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<CommentRecord>> {
+): Promise<UserRecordSyncResult<CommentRecord>> {
 	const [row] = await db
 		.select({
 			userId: comments.userId,
@@ -121,7 +121,7 @@ export async function syncCommentRecord(
 export async function syncReviewRecord(
 	reviewId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<ReviewRecord>> {
+): Promise<UserRecordSyncResult<ReviewRecord>> {
 	const [row] = await db
 		.select({
 			userId: reviews.userId,
@@ -153,7 +153,7 @@ export async function syncReviewRecord(
 export async function syncVoteRecord(
 	voteId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<VoteRecord>> {
+): Promise<UserRecordSyncResult<VoteRecord>> {
 	const [row] = await db
 		.select({
 			userId: votes.userId,
@@ -189,7 +189,7 @@ export async function syncVoteRecord(
 export async function syncFollowRecord(
 	followId: number,
 	opts: Opts = {},
-): Promise<ReaderRecordSyncResult<FollowRecord>> {
+): Promise<UserRecordSyncResult<FollowRecord>> {
 	const [row] = await db
 		.select({
 			followerId: follows.followerId,
@@ -217,12 +217,12 @@ export async function syncFollowRecord(
 /**
  * Ask for every one of an account's comments, reviews, votes and follows to be reconsidered.
  *
- * ⭐ **Called when a reader gives the permission again**, the reader's counterpart of
+ * ⭐ **Called when a user gives the permission again**, the user's counterpart of
  * `queueAllCreatorRecordsFor`: anything they wrote while the permission was quietly gone went
  * unwritten, and giving it back should bring those records out rather than only the next one.
  * Each row still decides for itself. Returns how many rows were queued.
  */
-export async function queueAllReaderRecordsFor(userId: number): Promise<number> {
+export async function queueAllUserRecordsFor(userId: number): Promise<number> {
 	const [commentRows, reviewRows, voteRows, followRows] = await Promise.all([
 		db.select({ id: comments.id }).from(comments).where(eq(comments.userId, userId)),
 		db.select({ id: reviews.id }).from(reviews).where(eq(reviews.userId, userId)),

@@ -175,7 +175,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 		consequence:
 			"§ 2258A(a) makes the mailing address, phone, email and named individual part of the duty, so keeping them accurate is required while the review itself is ours to schedule. The thing most likely to go stale is the named human.",
 		terminal: false,
-		// ⚠️ Self-imposed rather than statutory, in the Calendar's own words — a flag the reader needs
+		// ⚠️ Self-imposed rather than statutory, in the Calendar's own words — a flag the user needs
 		// before deciding how much weight to give a reminder about it.
 		selfImposed: true,
 		recurrence: { kind: "annual", first: "2027-08-27", month: 8, day: 27 },

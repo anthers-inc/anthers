@@ -129,7 +129,7 @@ describe("votes", () => {
 			id: number;
 			score: number;
 			collapsed: boolean;
-			viewerVote: "up" | "down" | null;
+			userVote: "up" | "down" | null;
 		}[];
 	}
 
@@ -167,7 +167,7 @@ describe("votes", () => {
 		await vote(voterCookies[1], quietId, "down");
 		const removed = await unvote(voterCookies[1], quietId);
 		expect(removed.status).toBe(200);
-		expect((await removed.json()).viewerVote).toBeNull();
+		expect((await removed.json()).userVote).toBeNull();
 		const [row] = await db.select({ id: votes.id }).from(votes).where(eq(votes.subjectId, quietId));
 		expect(row).toBeUndefined();
 	});
@@ -177,7 +177,7 @@ describe("votes", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("🚨 publishes the score and NEVER the raw counts to a reader", async () => {
+	it("🚨 publishes the score and NEVER the raw counts to a user", async () => {
 		// Signed out, and to anybody who did not write the comment. Two numbers is the
 		// pile-on scoreboard the single net exists to withhold.
 		for (const rows of [await thread(), await thread(voterCookies[0])]) {
@@ -216,11 +216,11 @@ describe("votes", () => {
 		expect(await read()).not.toHaveProperty("up");
 	});
 
-	it("shows a viewer their own vote, and shows nobody else's", async () => {
+	it("shows a user their own vote, and shows nobody else's", async () => {
 		const asVoter = await thread(voterCookies[0]);
-		expect(asVoter.find((c) => c.id === likedId)!.viewerVote).toBe("up");
+		expect(asVoter.find((c) => c.id === likedId)!.userVote).toBe("up");
 		const anonymous = await thread();
-		expect(anonymous.find((c) => c.id === likedId)!.viewerVote).toBeNull();
+		expect(anonymous.find((c) => c.id === likedId)!.userVote).toBeNull();
 	});
 
 	it("🚨 floors the published score at zero, so a pile-on has no counter to run up", async () => {
@@ -244,7 +244,7 @@ describe("votes", () => {
 	});
 
 	it("⭐ collapses a buried comment without hiding it, which is a different thing", async () => {
-		// Removal is a state and never reaches a reader; this comment is still in the
+		// Removal is a state and never reaches a user; this comment is still in the
 		// response, still carries its text, and merely arrives folded.
 		const buried = (await thread()).find((c) => c.id === buriedId)!;
 		expect(buried.collapsed).toBe(true);
@@ -335,7 +335,7 @@ describe("a review takes votes, as helpfulness", () => {
 
 describe("the author's own upvote", () => {
 	// Settled 2026-09-21: posting something says the author thinks it is worth reading, so
-	// a new post or comment starts at 1 and a 0 always means a reader said no. Reviews are
+	// a new post or comment starts at 1 and a 0 always means a user said no. Reviews are
 	// covered in reviews.test.ts beside the section they sort.
 	it("starts a new post at 1, cast by its creator", async () => {
 		const cookie = await signUp(`votes_post_${id}`);

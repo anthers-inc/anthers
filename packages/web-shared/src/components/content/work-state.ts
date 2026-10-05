@@ -16,11 +16,11 @@ import { accessRowsOf } from "../../lib/types";
 /**
  * What a Work's own access table means to its creator.
  *
- * Derived, never stored — the same property `publicAccess` has on the viewer-facing
+ * Derived, never stored — the same property `publicAccess` has on the user-facing
  * serializer, and deliberately the same rule (`isFree && streamEnabled && released`) so
- * the creator's badge and the reader's experience cannot disagree. The creator's Catalog
+ * the creator's badge and the user's experience cannot disagree. The creator's Catalog
  * response carries `access` in full, so nothing here needs the resolver: with nothing
- * given, a viewer qualifies for the baseline row alone.
+ * given, a user qualifies for the baseline row alone.
  *
  * 🚨 That last sentence is the load-bearing assumption, and it is a claim about code in
  * another package. It is pinned by `apps/api/src/__tests__/catalog-badge-contract.test.ts`
@@ -38,7 +38,7 @@ export type AccessState = "private" | "locked" | "public-access" | "free" | "sal
  *
  * `access` takes the union because a `Work` carries whichever serialization it arrived
  * on; only the OWNER's shape holds rows here, and that is the only shape this function
- * is ever called on — the viewer's carries the resolver's `AccessResult`, which has no
+ * is ever called on — the user's carries the resolver's `AccessResult`, which has no
  * rows to read.
  */
 export interface AccessShape {

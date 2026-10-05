@@ -12,7 +12,7 @@
  * so there is nothing to sanitize here, because nothing is ever interpreted as markup.
  *
  * ⚠️ If this renders nothing for a track you know has lyrics, the likely reason is the
- * gate rather than a bug: `serializeWorkForViewer` blanks them for a viewer without
+ * gate rather than a bug: `serializeWorkForUser` blanks them for a user without
  * access, exactly as it blanks the audio itself.
  */
 import { XMarkIcon } from "@heroicons/react/24/solid";

@@ -13,7 +13,7 @@
  * Instance two of the concept (after the music lens), and built against it as precedent:
  * everything on screen is read from the same `LensItem[]` the shelf carries, never a fresh
  * fetch — which is what keeps "a lens is a view, never a container" true rather than
- * stated, and why a paid-for entry can never drop out from under a viewer who flips views.
+ * stated, and why a paid-for entry can never drop out from under a user who flips views.
  *
  * Customization follows the preset-dials model (Parker, 2026-09-20): this lens ships the
  * built experience and may grow fixed controls we design over its filter, never an

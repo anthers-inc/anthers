@@ -9,8 +9,8 @@
  *
  * For each active account:
  * 1. Sum **Public Access** time-spent seconds per creator during the billing cycle.
- * 2. Time Pool = `TIME_POOL_RATE` (half) of what the viewer gives Anthers, distributed
- *    proportionally by time. A higher Badge = a bigger pool, so all of that viewer's
+ * 2. Time Pool = `TIME_POOL_RATE` (half) of what the user gives Anthers, distributed
+ *    proportionally by time. A higher Badge = a bigger pool, so all of that user's
  *    time pays creators more — no per-item multiplier.
  * 3. Directed support is credited **NET** of the creator side's pro-rata share
  *    of the at-cost card fee (`paymentsSplit`), which is what `fees.ts` has always
@@ -26,7 +26,7 @@
  *
  * > Until 2026-08-26 step 1 summed EVERY attention row, with no `public_access`
  * > predicate, which contradicted distributor-pays in the direction that costs the
- * > creators the pool exists for: a creator the viewer had already paid in full — by
+ * > creators the pool exists for: a creator the user had already paid in full — by
  * > clearing a Badge gate or by buying the Work — was paid a second time out of the
  * > pool, and every Public Access creator on the same cycle was diluted by exactly
  * > that much. The money always summed correctly, which is why nothing caught it;
@@ -97,7 +97,7 @@ export const billingCycleDate = cycleKeyFor;
 export interface Dist {
 	poolAmount: Decimal;
 	badgeAmount: Decimal;
-	/** What this viewer directed at this creator by hand, out of their own Time Pool. */
+	/** What this user directed at this creator by hand, out of their own Time Pool. */
 	stickerAmount: Decimal;
 	attentionSeconds: number;
 }
@@ -153,7 +153,7 @@ export async function computeMonth(input: {
 
 	// 1. Aggregate **Public Access** attention seconds per creator.
 	//
-	// The pool pays for the commons and only for the commons. Gated work the viewer
+	// The pool pays for the commons and only for the commons. Gated work the user
 	// cleared, work they bought, and their own catalog were all paid for by whoever
 	// cleared the gate or made the purchase — distributor-pays refuses to pay twice, so
 	// those seconds draw nothing here.
@@ -164,7 +164,7 @@ export async function computeMonth(input: {
 	// today's answer would pay out against a state that did not hold at the time. See
 	// the column's own note — the point-in-time stamp is the whole reason it exists.
 	//
-	// 🚨 **Split by `via_share_link`, because a viewer's own choices and what strangers
+	// 🚨 **Split by `via_share_link`, because a user's own choices and what strangers
 	// watched through their link are two different claims on the same pool.** Share-link time
 	// is attributed to the sharer — that is what makes it attributable at all — so without a
 	// boundary a link that went viral would dilute what the sharer's *own* watching pays the
@@ -172,13 +172,13 @@ export async function computeMonth(input: {
 	//
 	// The seconds themselves come from the read-side split: overlapping ranges across
 	// every tab and device share each second evenly, so this month holds at most one
-	// second per second of the viewer's real elapsed time, however many clients
+	// second per second of the user's real elapsed time, however many clients
 	// reported (`services/attention-ranges.ts`).
 	const attentionRows = await creditedSecondsByCreator(input.userId, start, end, [
 		eq(attentionEvents.publicAccess, true),
 	]);
 
-	/** The viewer's own watching, and what their links funded — each split within itself. */
+	/** The user's own watching, and what their links funded — each split within itself. */
 	const own = new Map<number, number>();
 	const shared = new Map<number, number>();
 	let totalOwn = 0;
@@ -192,7 +192,7 @@ export async function computeMonth(input: {
 		else totalOwn += seconds;
 	}
 
-	/** Everything this viewer's month credited, for the ledger's own `attentionSeconds`. */
+	/** Everything this user's month credited, for the ledger's own `attentionSeconds`. */
 	const attentionByCreator = new Map<number, number>();
 	for (const [creatorId, seconds] of own) {
 		attentionByCreator.set(creatorId, seconds);
@@ -258,7 +258,7 @@ export async function computeMonth(input: {
 	// 3. Distribute the Time Pool proportionally by attention, in two slices.
 	//
 	// 🚨 **The shared slice is a CEILING, never a reservation, and the difference is the whole
-	// design.** A viewer who shared nothing distributes 100% of their pool to the creators
+	// design.** A user who shared nothing distributes 100% of their pool to the creators
 	// they watched, exactly as before — the slice only comes into being when somebody actually
 	// watched through one of their links. Reserving it unconditionally would quietly cut every
 	// non-sharer's creators by a tenth to fund a feature they never used.
@@ -268,17 +268,17 @@ export async function computeMonth(input: {
 	// letting strangers command their whole pool — the bound is the point of having one.
 	//
 	// ⭐ **What happens to that leftover is settled: it falls to the remainder**, along with
-	// the whole pool of a viewer who streamed no Public Access at all (Parker, 2026-08-26;
+	// the whole pool of a user who streamed no Public Access at all (Parker, 2026-08-26;
 	// built 2026-08-29). `settle-cycle.ts` books it, by measuring what this computation
 	// distributed against the budget — so leaving money undistributed here is a decision about
 	// *creators* and never a decision to lose it.
 	const timePool = computeTimePoolAmount(input.anthersDollars);
 
-	// 3a. Stickers — the part of this viewer's Time Pool they directed themselves.
+	// 3a. Stickers — the part of this user's Time Pool they directed themselves.
 	//
 	// ⭐ **An OVERRIDE of the pool, never a second pool beside it** (Parker, 2026-09-04).
 	// Nothing was held back and nothing is being returned: what follows distributes by time
-	// only what the viewer did NOT direct, so a viewer who gave no Stickers ends the cycle in
+	// only what the user did NOT direct, so a user who gave no Stickers ends the cycle in
 	// exactly the position they were in before the feature existed.
 	//
 	// 🚨 **Read `amount` and never `removed_at`.** Taking a Sticker off the page returns no
@@ -313,7 +313,7 @@ export async function computeMonth(input: {
 	}
 
 	// ⚠️ **Floored at zero rather than trusted to fit.** The cap is checked when a Sticker is
-	// given and never afterwards, so a viewer who lowered their Badge mid-cycle can have
+	// given and never afterwards, so a user who lowered their Badge mid-cycle can have
 	// directed more than this cycle's pool now holds. The money was committed at the moment of
 	// giving and is not clawed back; what gives is the time-distributed remainder, which
 	// simply reaches zero.
@@ -387,12 +387,12 @@ async function distributeForAccount(acct: {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
-	// What the viewer gives Anthers this cycle — the held Badge's threshold on the
-	// Anthers ladder, read the same way every other Anthers-side reader takes it: MAX
+	// What the user gives Anthers this cycle — the held Badge's threshold on the
+	// Anthers ladder, read the same way every other Anthers-side user takes it: MAX
 	// through the holding join, the Anthers creator account identified by its handle
 	// (`anthersUserId`, 2026-10-04 — the retired shape identified the ladder by a $0
 	// rung that no longer exists). The old `accounts.anthers_support` column died with
-	// the split; the Badge IS the amount, and a viewer holds at most one Anthers rung
+	// the split; the Badge IS the amount, and a user holds at most one Anthers rung
 	// per cycle.
 	const anthersId = await anthersUserId();
 	const anthersHeld = await db
@@ -447,7 +447,7 @@ async function distributeForAccount(acct: {
 
 	// 4. Write the estimate.
 	for (const [creatorId, data] of distributions) {
-		// A creator the viewer never watched but did hand a Sticker to still needs a row —
+		// A creator the user never watched but did hand a Sticker to still needs a row —
 		// without `stickerAmount` in this guard their payment would be computed and dropped.
 		if (data.poolAmount.lte(0) && data.badgeAmount.lte(0) && data.stickerAmount.lte(0)) continue;
 		await db

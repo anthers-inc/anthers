@@ -39,14 +39,14 @@ describe("the cycle key", () => {
 
 	/**
 	 * The values a mid-boundary instant has to resolve to. `2026-10-01T02:00Z` is still 30
-	 * September in Denver, where this repository is written, so a reader using `getMonth()`
+	 * September in Denver, where this repository is written, so a user using `getMonth()`
 	 * answers September while Stripe has already renewed into October.
 	 *
 	 * ⚠️ **This test cannot catch that on its own, and the one below is what does.** `bun
 	 * test` runs with no `TZ` and behaves as UTC, so a local-time implementation satisfies
 	 * every assertion here — it was confirmed by writing one and watching this pass. **Any
 	 * date test in this repository has the same hole**: asserting a UTC answer under a UTC
-	 * runner asserts nothing about which reader the code used.
+	 * runner asserts nothing about which user the code used.
 	 */
 	it("reads UTC, never the machine's local time", () => {
 		expect(cycleKeyFor(new Date("2026-10-01T02:00:00Z"))).toBe("2026-10-01");
@@ -58,7 +58,7 @@ describe("the cycle key", () => {
 	/**
 	 * 🚨 **The assertion the four local-time copies actually fail**, and the only one in this
 	 * file that does. It drives one instant through four zones spanning the date line and
-	 * requires the answer not to move; a reader of local time disagrees with itself in at
+	 * requires the answer not to move; a user of local time disagrees with itself in at
 	 * least one of them, whatever zone the suite started in. Bun applies a change to
 	 * `process.env.TZ` to every `Date` built afterward, which is what makes this possible at
 	 * all — and the `finally` puts it back, because leaking a zone would silently re-time

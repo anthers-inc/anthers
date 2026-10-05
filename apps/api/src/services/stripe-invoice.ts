@@ -2,7 +2,7 @@
 /**
  * Reading a Stripe invoice the way Stripe actually shapes it.
  *
- * Two readers take an invoice apart — the subledger recording what was paid, and the day-exact
+ * Two users take an invoice apart — the subledger recording what was paid, and the day-exact
  * reduction spending what is owed against a renewal — and both need the same two answers: which
  * month the invoice pays for, and every one of its lines. Both answers have a plausible-looking
  * field that is wrong, and a hand-built test invoice cannot tell the difference, so they are read

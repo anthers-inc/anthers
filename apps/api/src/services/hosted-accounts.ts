@@ -234,7 +234,7 @@ export type HandleAvailability =
  *
  * `com.atproto.identity.resolveHandle` answers with a DID for a handle that exists and
  * refuses for one that does not, which makes "refused" the available case. That reads
- * backwards and is worth the comment rather than the reader deriving it.
+ * backwards and is worth the comment rather than the user deriving it.
  */
 export async function checkHandleAvailability(
 	name: string,

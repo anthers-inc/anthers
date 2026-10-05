@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A reader's filter by kind of content: Hide, Blur or Show for each row of the rating matrix,
+ * A user's filter by kind of content: Hide, Blur or Show for each row of the rating matrix,
  * whatever a Work's rating (Parker, 2026-09-18).
  *
  * 🚨 **Asserted as absences, like the rung filter in `adult-enforcement.test.ts`.** A filter that
@@ -9,8 +9,8 @@
  * fail the second.
  *
  * ⚠️ **An unanswered row counts as containing the content.** The filter is an allow-list: a Work is
- * listed for a reader hiding Violence only when its creator answered Violence *Not in It*, so a Work
- * released before the matrix existed, with no rows, is absent for that reader. The legacy fixture
+ * listed for a user hiding Violence only when its creator answered Violence *Not in It*, so a Work
+ * released before the matrix existed, with no rows, is absent for that user. The legacy fixture
  * here is that case.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -34,7 +34,7 @@ function req(path: string, options?: RequestInit) {
 
 const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `cfilt_c_${run}`;
-const readerName = `cfilt_r_${run}`;
+const userName = `cfilt_r_${run}`;
 
 /** Every row answered, none of it present, apart from what `over` marks. */
 const rows = (over: Record<string, string> = {}) => ({
@@ -55,9 +55,9 @@ const LEGACY = `Rated before the matrix ${run}`;
 const HORROR = `Graphic horror ${run}`;
 
 let creatorCookie: string;
-let readerCookie: string;
+let userCookie: string;
 let creatorId: number;
-let readerId: number;
+let userId: number;
 const madeWorkIds: number[] = [];
 const workByTitle = new Map<string, { id: number; publicId: number }>();
 
@@ -77,7 +77,7 @@ function preferences(cookie?: string) {
 	return req("/api/accounts/me/content-preferences", { headers });
 }
 
-function setPreferences(body: unknown, cookie = readerCookie) {
+function setPreferences(body: unknown, cookie = userCookie) {
 	return req("/api/accounts/me/content-preferences", {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
@@ -97,13 +97,13 @@ async function said(path: string, cookie?: string): Promise<string> {
 let creatorHandle = "";
 const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorHandle}`, cookie);
 
-describe("a reader's filter by kind of content", () => {
+describe("a user's filter by kind of content", () => {
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
-		({ cookie: readerCookie, id: readerId } = await signUp(readerName));
+		({ cookie: userCookie, id: userId } = await signUp(userName));
 
 		const fixtures = [
 			{ title: CARTOON, maturity: "general" as const, maturityRows: rows({ violence: "general" }) },
@@ -116,7 +116,7 @@ describe("a reader's filter by kind of content", () => {
 			madeWorkIds.push(row.id);
 			workByTitle.set(f.title, { id: row.id, publicId: row.publicId });
 		}
-		await db.insert(follows).values({ followerId: readerId, creatorId });
+		await db.insert(follows).values({ followerId: userId, creatorId });
 		const [project] = await db
 			.insert(projects)
 			.values({
@@ -133,14 +133,14 @@ describe("a reader's filter by kind of content", () => {
 
 	afterAll(async () => {
 		if (madeWorkIds.length > 0) await db.delete(works).where(inArray(works.id, madeWorkIds));
-		await purgeFixtureAccounts([creatorName, readerName]);
+		await purgeFixtureAccounts([creatorName, userName]);
 	});
 
 	describe("the setting", () => {
 		it("shows every kind of content by default, signed in or out", async () => {
-			// A note may drive a reader's own filter and never a platform default, so nothing is
-			// covered for what it contains until the reader asks.
-			for (const cookie of [undefined, readerCookie]) {
+			// A note may drive a user's own filter and never a platform default, so nothing is
+			// covered for what it contains until the user asks.
+			for (const cookie of [undefined, userCookie]) {
 				const prefs = await (await preferences(cookie)).json();
 				expect(prefs.notes).toEqual({
 					violence: "show",
@@ -156,7 +156,7 @@ describe("a reader's filter by kind of content", () => {
 		it("changes the rows it is given and leaves the others as they were", async () => {
 			expect((await setPreferences({ notes: { violence: "blur" } })).status).toBe(200);
 			expect((await setPreferences({ notes: { horror: "hide" } })).status).toBe(200);
-			const prefs = await (await preferences(readerCookie)).json();
+			const prefs = await (await preferences(userCookie)).json();
 			expect(prefs.notes).toMatchObject({ violence: "blur", horror: "hide", language: "show" });
 			// And the rungs are untouched by a change to a kind of content.
 			expect(prefs.mature).toBe("blur");
@@ -178,17 +178,17 @@ describe("a reader's filter by kind of content", () => {
 		});
 
 		it("keeps out a Work marked at any rung, even General, and keeps one marked Not in It", async () => {
-			const listed = await catalog(readerCookie);
+			const listed = await catalog(userCookie);
 			expect(listed).not.toContain(CARTOON);
 			expect(listed).toContain(GENTLE);
-			// A different kind of content is not what the reader hid.
+			// A different kind of content is not what the user hid.
 			expect(listed).toContain(HORROR);
 		});
 
 		it("🚨 keeps out a Work whose row nobody answered", async () => {
-			// The allow-list direction: a reader relying on the filter is not shown a Work nobody
+			// The allow-list direction: a user relying on the filter is not shown a Work nobody
 			// has said is free of what they hid.
-			expect(await catalog(readerCookie)).not.toContain(LEGACY);
+			expect(await catalog(userCookie)).not.toContain(LEGACY);
 		});
 
 		it("keeps them for everyone who did not ask", async () => {
@@ -207,22 +207,22 @@ describe("a reader's filter by kind of content", () => {
 
 		it("still opens a hidden Work from a direct link, because hiding is not an access rule", async () => {
 			const res = await req(`/api/content/works/${workByTitle.get(CARTOON)!.publicId}`, {
-				headers: { Origin: ORIGIN, Cookie: readerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			expect(res.status).toBe(200);
 		});
 
 		it("applies to the followed-creator feed", async () => {
-			const feed = await said("/api/accounts/me/feed", readerCookie);
+			const feed = await said("/api/accounts/me/feed", userCookie);
 			expect(feed).not.toContain(CARTOON);
 			expect(feed).toContain(GENTLE);
 		});
 
-		it("leaves out a project holding only Works the reader hid", async () => {
+		it("leaves out a project holding only Works the user hid", async () => {
 			// The project listing writes its condition in raw SQL over its own alias, which is the
 			// call most easily left reading the wrong column.
 			const path = `/api/content/projects?creator=${creatorHandle}`;
-			expect(await said(path, readerCookie)).not.toContain(`Violent-only project ${run}`);
+			expect(await said(path, userCookie)).not.toContain(`Violent-only project ${run}`);
 			expect(await said(path)).toContain(`Violent-only project ${run}`);
 		});
 	});
@@ -230,21 +230,21 @@ describe("a reader's filter by kind of content", () => {
 	describe("blurring", () => {
 		it("⭐ leaves a blurred Work listed, because a blur is not a hide", async () => {
 			expect((await setPreferences({ notes: { violence: "blur" } })).status).toBe(200);
-			const listed = await catalog(readerCookie);
+			const listed = await catalog(userCookie);
 			expect(listed).toContain(CARTOON);
 			expect(listed).toContain(LEGACY);
 			await setPreferences({ notes: { violence: "show" } });
 		});
 
-		it("hands a reader the rows the browser blurs by, on the Work and in the feed", async () => {
+		it("hands a user the rows the browser blurs by, on the Work and in the feed", async () => {
 			const res = await req(`/api/content/works/${workByTitle.get(CARTOON)!.publicId}`, {
-				headers: { Origin: ORIGIN, Cookie: readerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			const { work } = await res.json();
 			expect(work.maturityRows).toMatchObject({ violence: "general", horror: "none" });
 
 			const feed = await (
-				await req("/api/accounts/me/feed", { headers: { Origin: ORIGIN, Cookie: readerCookie } })
+				await req("/api/accounts/me/feed", { headers: { Origin: ORIGIN, Cookie: userCookie } })
 			).json();
 			const entry = feed.entries.find((e: { title: string }) => e.title === HORROR);
 			expect(entry.maturity).toBe("mature");

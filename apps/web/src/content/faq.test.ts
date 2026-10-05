@@ -97,7 +97,7 @@ describe("the FAQ pool", () => {
 		}
 	});
 
-	// 🚨 Public Access is a property of the CONTENT, never of a viewer's entitlement, so
+	// 🚨 Public Access is a property of the CONTENT, never of a user's entitlement, so
 	// supporting Anthers cannot open, unlock or get you any of it — it was already free to
 	// everyone, and what lifts is the cap on a free account's own streaming. The verbs are
 	// the tell, and they are what a well-meaning edit reaches for, because every other
@@ -117,7 +117,7 @@ describe("the FAQ pool", () => {
 	});
 
 	// 🚨 "No cut" beside a price, with no take-home number, is the wiki's *How Anthers Talks About Itself*'s single easiest way
-	// to turn a true claim into a false impression: a reader who meets *0% cut* next to
+	// to turn a true claim into a false impression: a user who meets *0% cut* next to
 	// *$20* concludes the creator receives $20. Both answers that pair them state the
 	// figure, and they must keep doing so — including when one is reworded, which is when
 	// a dollar amount is most likely to be dropped as clutter.
@@ -151,13 +151,13 @@ describe("the FAQ pool", () => {
 describe("links into the FAQ", () => {
 	// A question's id is its anchor, so a link held by another surface is a route reference
 	// nothing else can follow: it typechecks and lints while pointing at a question renamed
-	// out from under it, and lands a reader at the top of the page instead.
-	it("the Studio's note on rated Public Access opens the answer about reader controls", () => {
+	// out from under it, and lands a user at the top of the page instead.
+	it("the Studio's note on rated Public Access opens the answer about content controls", () => {
 		const [path, anchor] = RATED_PUBLIC_ACCESS_HELP.split("#");
 		expect(path).toBe("/faq");
 		const item = ALL_FAQ_ITEMS.find((i) => i.id === anchor);
 		expect(item).toBeDefined();
-		// The note says readers can hide Mature work and must opt in to Adult, so the answer it
+		// The note says users can hide Mature work and must opt in to Adult, so the answer it
 		// points at has to be the one that explains both.
 		const said = words(item as FAQItem);
 		expect(said).toContain("mature");

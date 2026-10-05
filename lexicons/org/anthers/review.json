@@ -5,7 +5,7 @@
 		"main": {
 			"type": "record",
 			"key": "tid",
-			"description": "A review of a work — whether the reviewer recommends it, and the words that explain why. It is a review rather than a rating because a verdict without reasons tells another reader nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and recommending one means nothing. It lives in the reviewer's own repository. Editing a review rewrites this record in place rather than writing a new one, so a link to it keeps working — which also means a reference to one exact version of a review is not something a consumer can rely on.",
+			"description": "A review of a work — whether the reviewer recommends it, and the words that explain why. It is a review rather than a rating because a verdict without reasons tells another user nothing about whether to trust it. A review attaches to a work and to nothing else: a post is an announcement, and recommending one means nothing. It lives in the reviewer's own repository. Editing a review rewrites this record in place rather than writing a new one, so a link to it keeps working — which also means a reference to one exact version of a review is not something a consumer can rely on.",
 			"record": {
 				"type": "object",
 				"required": ["subject", "verdict"],
@@ -16,7 +16,7 @@
 					},
 					"verdict": {
 						"type": "string",
-						"description": "Whether the reviewer recommends this work. Deliberately a verdict rather than a score on a scale: a star rating asks each person to convert a feeling into a number, which they do inconsistently and mostly by picking an extreme, and averaging the results treats ordinal answers as if the distance between them were equal. A yes-or-no leaves the nuance to the aggregate, where a proportion of readers recommending something is an honest statistic rather than an arithmetic mean of guesses. An OPEN SET, and a string rather than a boolean for exactly that reason: a boolean's type could never grow, while a middle verdict can be added here later if one is ever wanted. Anthers writes only the two listed today, and somebody who feels neither simply does not post a review.",
+						"description": "Whether the reviewer recommends this work. Deliberately a verdict rather than a score on a scale: a star rating asks each person to convert a feeling into a number, which they do inconsistently and mostly by picking an extreme, and averaging the results treats ordinal answers as if the distance between them were equal. A yes-or-no leaves the nuance to the aggregate, where a proportion of users recommending something is an honest statistic rather than an arithmetic mean of guesses. An OPEN SET, and a string rather than a boolean for exactly that reason: a boolean's type could never grow, while a middle verdict can be added here later if one is ever wanted. Anthers writes only the two listed today, and somebody who feels neither simply does not post a review.",
 						"knownValues": ["recommended", "not-recommended"],
 						"maxLength": 64
 					},

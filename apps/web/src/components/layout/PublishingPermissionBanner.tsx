@@ -45,7 +45,7 @@ export default function PublishingPermissionBanner() {
 		setError(null);
 		try {
 			// A creator restoring publishing lands on Studio settings, which says what happened. A
-			// reader comes back to the page they were on.
+			// user comes back to the page they were on.
 			await grantPublishing(publishing ? undefined : `${pathname}${search}`);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Couldn't ask for the permission.");

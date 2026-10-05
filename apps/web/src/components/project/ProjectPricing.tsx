@@ -7,7 +7,7 @@
  * `CheckoutElementsProvider`, an address block, a confirm button — nested inside the Work
  * page's tree. That shipped three live defects in one purchase: a `<form>` inside the
  * page's `<form>`-shaped tree (hydration error, undefined submit behavior), a session
- * POST fired on mount for every viewer who merely scrolled past a price, and a dead end
+ * POST fired on mount for every user who merely scrolled past a price, and a dead end
  * whenever the session refused. Parker's decision the same day: **every purchase goes
  * through the basket.** Checkout exists once now, embedded on `/basket`
  * (`BasketCheckout`) — this component quotes the price, offers the two doors into that

@@ -39,13 +39,13 @@ import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -469,11 +469,11 @@ describe("Payments not configured — every guarded route refuses", () => {
 		// A subscription and the held Badge beside it — what a supporter looks like. The
 		// cancel check reads the holding (the amount column died), so the fixture holds
 		// one or the route's "nothing to cancel" refusal fires instead of Stripe's.
-		const orgId = await ensureOrgLadder();
+		const anthersId = await ensureAnthersLadder();
 		const [rung] = await db
 			.select({ id: badges.id })
 			.from(badges)
-			.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, "6.00")))
+			.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, "6.00")))
 			.limit(1);
 		await db
 			.delete(userBadges)
@@ -481,7 +481,7 @@ describe("Payments not configured — every guarded route refuses", () => {
 				and(
 					eq(userBadges.userId, subscriberId),
 					eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
-					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 				),
 			);
 		await db.insert(userBadges).values({
@@ -522,7 +522,7 @@ describe("Payments not configured — every guarded route refuses", () => {
 				and(
 					eq(userBadges.userId, subscriberId),
 					eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
-					eq(badges.creatorId, orgId),
+					eq(badges.creatorId, anthersId),
 				),
 			);
 		expect(Number(stillHeld.held)).toBe(6);
@@ -969,7 +969,7 @@ describe("Webhook: customer.subscription.*", () => {
 
 	/** What the Anthers ladder says this subscriber holds, in dollars. */
 	async function heldOnOrgLadder(userId: number): Promise<number> {
-		const orgId = await ensureOrgLadder();
+		const anthersId = await ensureAnthersLadder();
 		const [held] = await db
 			.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
 			.from(userBadges)
@@ -978,7 +978,7 @@ describe("Webhook: customer.subscription.*", () => {
 				and(
 					eq(userBadges.userId, userId),
 					eq(userBadges.billingCycle, sql`to_char(now(), 'YYYY-MM-01')`),
-					eq(badges.creatorId, orgId),
+					eq(badges.creatorId, anthersId),
 				),
 			);
 		return Number(held?.held ?? 0);

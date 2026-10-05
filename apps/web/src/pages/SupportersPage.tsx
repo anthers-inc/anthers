@@ -9,7 +9,7 @@
  *
  * ⚠️ **The groups are deliberately UNLABELED and unnumbered.** Naming them would invent a
  * vocabulary of standing Anthers has not decided on, and it would collide with Badges, which
- * are a monthly level rather than a lifetime one. Order carries the meaning; if a reader
+ * are a monthly level rather than a lifetime one. Order carries the meaning; if a user
  * cannot tell which group is which, that is the page working.
  */
 

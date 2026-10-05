@@ -10,7 +10,7 @@ import DesktopSignIn from "../../studio/DesktopSignIn";
 
 /**
  * Handles the / route:
- * - The desktop app opens at the reader's chosen home — the feed by default, the
+ * - The desktop app opens at the user's chosen home — the feed by default, the
  *   Studio if they set it (see `desktopHome`)
  * - Authenticated users are redirected to /feed
  * - Unauthenticated users see the For Users page, which serves as the homepage
@@ -33,7 +33,7 @@ export default function RootRedirect() {
 	 *
 	 * It used to send every desktop launch to `/studio` unconditionally — the app was the
 	 * Studio and nothing else, even though the bundle has always carried the whole SPA.
-	 * Anthers Desktop is the whole platform now, so the default is the reader's feed and
+	 * Anthers Desktop is the whole platform now, so the default is the user's feed and
 	 * the Studio is a preference.
 	 *
 	 * 🚨 An unauthenticated desktop launch renders the sign-in handoff INLINE rather than

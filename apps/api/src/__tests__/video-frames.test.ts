@@ -11,7 +11,7 @@
  * ⚠️ **The ffmpeg cases run real ffmpeg against a video generated on the spot.** A fixture
  * checked into the repo would drift from what ffmpeg actually emits, and the thing most
  * worth proving here — that consecutive frames hash *differently* — cannot be proved with a
- * stub at all. A stubbed reader would happily return the same buffer twice, which is
+ * stub at all. A stubbed user would happily return the same buffer twice, which is
  * exactly the bug that would make video scanning look like it works while examining one
  * instant of every upload.
  */

@@ -134,7 +134,7 @@ function compare(published: unknown, current: unknown, path: string, out: string
 			continue;
 		}
 		if (key === "required") {
-			// Dropping a name from `required` makes a field optional, which every reader tolerates.
+			// Dropping a name from `required` makes a field optional, which every user tolerates.
 			const before = strings(value);
 			for (const name of strings(current.required)) {
 				if (!before.includes(name)) out.push(`${path}: \`${name}\` became required`);
@@ -157,7 +157,7 @@ function compare(published: unknown, current: unknown, path: string, out: string
 
 	for (const key of Object.keys(current)) {
 		if (key in published || isProse(key)) continue;
-		// New properties, defs, nullable fields and known values are all additions a reader
+		// New properties, defs, nullable fields and known values are all additions a user
 		// ignores; a new `required` list makes every field in it required.
 		if (key === "properties" || key === "defs" || key === "nullable" || key === "knownValues") {
 			continue;

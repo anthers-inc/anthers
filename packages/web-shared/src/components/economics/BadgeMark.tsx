@@ -46,7 +46,7 @@ import { BrandGlyph } from "../decor/BrandGlyph";
  * 1.18× down, so 0.8 is the factor that lands the glyph exactly on the box's width — the
  * binding dimension. Without it the glyph runs a quarter of its width into the stitching.
  *
- * The exact ratio is a property of whichever emoji font the viewer has, and the ones in
+ * The exact ratio is a property of whichever emoji font the user has, and the ones in
  * circulation sit between about 1.16 and 1.25 — so this errs a little small on macOS rather
  * than colliding with the edging anywhere.
  */

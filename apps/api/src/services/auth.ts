@@ -78,7 +78,7 @@ export async function validateSession(token: string) {
 				// A suspended account is gone as far as its holder is concerned: no session
 				// of it may authenticate, however fresh. `suspendAccount` deletes the rows
 				// outright, so this predicate is the backstop rather than the mechanism —
-				// the one fact every reader of a session agrees on, in case a token
+				// the one fact every user of a session agrees on, in case a token
 				// outlives the action that should have destroyed it. Session deletion is
 				// not content deletion: a session is a credential, and `deleteExpiredSessions`
 				// destroys them as routine hygiene.
@@ -270,14 +270,14 @@ export async function cleanupDesktopAuthRequests(): Promise<void> {
  * `QUEUES.PRUNE_CREDENTIALS` now.
  *
  * The count is returned rather than logged here so a test can assert on **rows removed**.
- * Asserting through a read would prove nothing: every reader already excludes what this
+ * Asserting through a read would prove nothing: every user already excludes what this
  * is supposed to delete, so the test would pass identically against a no-op.
  */
 export async function deleteExpiredSessions(): Promise<number> {
 	// 🚨 A session row is the only place Anthers holds an IP address, so this sweep is
 	// the one that destroys the network evidence a child-safety report is most likely
 	// to be asked for. Sessions of a held user survive their expiry — they are already
-	// dead to every reader, which filters on `expiresAt`, so keeping the row costs a
+	// dead to every user, which filters on `expiresAt`, so keeping the row costs a
 	// row and preserves the address.
 	const held = await allHeldSubjectIds("user");
 	const gone = await db

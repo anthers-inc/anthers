@@ -15,7 +15,7 @@
  * rather than failing it. That is what lets the retry budget be generous, which it should be:
  * an orphaned record is the failure this whole design is shaped around.
  *
- * ⚠️ **It is deliberately not specific to a creator's own records.** A reader unvoting or
+ * ⚠️ **It is deliberately not specific to a creator's own records.** A user unvoting or
  * unfollowing deletes a row outright too, and would strand its record exactly the same way. One
  * primitive means one delete path, and the delete path is the one that matters.
  */

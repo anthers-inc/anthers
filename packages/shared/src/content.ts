@@ -15,7 +15,7 @@
  *
  * The minimum is deliberately low, and it is not a quality filter: it's a blunt
  * instrument, and "lol" clears any threshold worth setting. The reason to require
- * text at all is that a written verdict gives a reader something to weigh and a
+ * text at all is that a written verdict gives a user something to weigh and a
  * moderator something to act on, where a bare thumb is unmoderatable by
  * construction. Raising this to chase quality would mostly punish the terse.
  */
@@ -36,7 +36,7 @@ export const REVIEW_MAX = 5000;
  *
  * ⭐ **It also gives Anthers one opinion primitive instead of two.** Everything
  * else here aggregates up and down votes; a second, differently-shaped way to
- * say "I liked this" is a thing every reader would have to learn twice.
+ * say "I liked this" is a thing every user would have to learn twice.
  *
  * ⚠️ **A string and not a boolean, and the reason is permanence.** A boolean's
  * type could never grow, and this is the record most likely to want a middle
@@ -85,16 +85,16 @@ export function recommendedPercent(recommended: number, total: number): number |
 /**
  * The windows a Recent review share may be read over.
  *
- * Named rather than milliseconds so the wire format is a word a reader sees ("past month")
+ * Named rather than milliseconds so the wire format is a word a user sees ("past month")
  * rather than a number nobody can check. `REVIEW_WINDOW_MS` is the matching duration for
  * the SQL `>=` comparison, and `reviewWindowSince` derives the cutoff timestamp from it —
  * both live here so the API and any client cannot come to disagree about what a window
  * means.
  *
- * ⭐ **Steam's shape, reader-selectable rather than fixed** (Parker, 2026-09-21): All-Time
+ * ⭐ **Steam's shape, user-selectable rather than fixed** (Parker, 2026-09-21): All-Time
  * is always shown beside the Recent share rather than replacing it, and the Recent window
- * is the reader's choice — Steam's fixed 30 days becomes *our* default because it is the
- * figure a reader coming from Steam already understands, not because a fixed one was ever
+ * is the user's choice — Steam's fixed 30 days becomes *our* default because it is the
+ * figure a user coming from Steam already understands, not because a fixed one was ever
  * settled. A work too young or too thinly reviewed for a window simply has no Recent share
  * for it: `recommendedPercent` returns null, and that null is what the UI renders around.
  */
@@ -138,7 +138,7 @@ export function isCommentSubjectType(value: string): value is CommentSubjectType
 
 /**
  * The Work types, and **the authority on the list** — not any table in any document. A type
- * says how a Work is handled: how its file is processed, which player or reader opens it, and
+ * says how a Work is handled: how its file is processed, which player or user opens it, and
  * how time spent with it is counted. Add a type here first. Every table keyed by `WorkType`
  * then fails to compile until it says what the new type does, which is the point: a type
  * missing from `CONSUMPTION` in `attention.ts` would earn its creator nothing, with no error
@@ -289,7 +289,7 @@ const ANTHERS_DOMAIN = "anthers.org";
  *
  * 🚨 **https only, and the check is here rather than trusted to the renderer.** React replaces a
  * `javascript:` URL in `src` with one that throws, but without this check that would be the only
- * thing stopping a creator's script from running as Anthers in every viewer's browser, and a
+ * thing stopping a creator's script from running as Anthers in every user's browser, and a
  * protection that important belongs in code Anthers owns. A plain `http:` build would be blocked
  * as mixed content on an https page anyway.
  *

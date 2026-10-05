@@ -2,7 +2,7 @@
 /**
  * What the nightly reconciling sweep asks to have synced.
  *
- * 🚨 **Its reader half is raw SQL, which nothing else checks.** A misspelled column or a subject
+ * 🚨 **Its user half is raw SQL, which nothing else checks.** A misspelled column or a subject
  * type left out of the `EXISTS` clauses typechecks, lints and passes every other suite, and then
  * finds nothing every night — which reads exactly like a network where every record is already
  * in place. So this runs the real queries against the real database and asserts on what they
@@ -37,8 +37,8 @@ purgeAccountsCreatedHere();
 const RUN = `rl${Date.now().toString(36)}`;
 /** The creator's identity, as the session's server issued it. */
 let DID = "";
-/** The reader's, likewise. */
-let READER_DID = "";
+/** The user's, likewise. */
+let USER_DID = "";
 
 const made = {
 	users: [] as number[],
@@ -69,8 +69,8 @@ async function user(
 }
 
 beforeAll(async () => {
-	const reader = await user("reader");
-	READER_DID = reader.atprotoDid;
+	const readerUser = await user("user");
+	USER_DID = readerUser.atprotoDid;
 	// Not hosted here: an identity Anthers holds no credential for.
 	const plain = await user("plain", { identity: "brought" });
 	const creator = await user("creator", { isCreator: true });
@@ -88,7 +88,7 @@ beforeAll(async () => {
 		const [row] = await db
 			.insert(comments)
 			.values({
-				userId: reader.id,
+				userId: readerUser.id,
 				subjectType: "work",
 				subjectId: listed.id,
 				body: "Worth the time.",
@@ -103,16 +103,16 @@ beforeAll(async () => {
 	await comment("unhostedComment", { userId: plain.id });
 	await comment("subjectUnlistedComment", { subjectId: unlisted.id });
 	await comment("alreadyWrittenComment", {
-		atprotoUri: `at://${READER_DID}/org.anthers.comment/x`,
+		atprotoUri: `at://${USER_DID}/org.anthers.comment/x`,
 	});
 
 	const [vote] = await db
 		.insert(votes)
-		.values({ userId: reader.id, subjectType: "work", subjectId: listed.id, direction: "up" })
+		.values({ userId: readerUser.id, subjectType: "work", subjectId: listed.id, direction: "up" })
 		.returning();
 	const [voteOnUnlisted] = await db
 		.insert(votes)
-		.values({ userId: reader.id, subjectType: "work", subjectId: unlisted.id, direction: "up" })
+		.values({ userId: readerUser.id, subjectType: "work", subjectId: unlisted.id, direction: "up" })
 		.returning();
 	made.votes.push(vote.id, voteOnUnlisted.id);
 	ids.waitingVote = vote.id;
@@ -120,14 +120,14 @@ beforeAll(async () => {
 
 	const [review] = await db
 		.insert(reviews)
-		.values({ userId: reader.id, workId: listed.id, verdict: "recommended", body: "Yes." })
+		.values({ userId: readerUser.id, workId: listed.id, verdict: "recommended", body: "Yes." })
 		.returning();
 	made.reviews.push(review.id);
 	ids.waitingReview = review.id;
 
 	const [follow] = await db
 		.insert(follows)
-		.values({ followerId: reader.id, creatorId: creator.id })
+		.values({ followerId: readerUser.id, creatorId: creator.id })
 		.returning();
 	made.follows.push(follow.id);
 	ids.waitingFollow = follow.id;
@@ -178,7 +178,7 @@ afterAll(async () => {
 	if (made.works.length) await db.delete(works).where(inArray(works.id, made.works));
 	// By DID rather than by owner: the account purge can run first and null `user_id`, which would
 	// leave this credential matching nothing.
-	await db.delete(hostedAccounts).where(inArray(hostedAccounts.did, [READER_DID, DID]));
+	await db.delete(hostedAccounts).where(inArray(hostedAccounts.did, [USER_DID, DID]));
 	if (made.users.length) await db.delete(users).where(inArray(users.id, made.users));
 });
 
@@ -209,9 +209,9 @@ describe("with every schema published", () => {
 		asked = await sweep();
 	});
 
-	// 🚨 The rule the reader half exists for: an interaction waiting on its subject's record is
+	// 🚨 The rule the user half exists for: an interaction waiting on its subject's record is
 	// found once the subject has one.
-	it("finds a reader's comment, vote, review and follow once their subjects can be named", () => {
+	it("finds a user's comment, vote, review and follow once their subjects can be named", () => {
 		expect(asked).toContain(`comment:${ids.waitingComment}`);
 		expect(asked).toContain(`vote:${ids.waitingVote}`);
 		expect(asked).toContain(`review:${ids.waitingReview}`);
@@ -245,10 +245,10 @@ describe("with every schema published", () => {
 describe("a record whose schema is unpublished", () => {
 	let asked: Set<string>;
 	beforeAll(async () => {
-		// ⚠️ **The draft is constructed now.** Every reader schema is genuinely published, so the
+		// ⚠️ **The draft is constructed now.** Every user schema is genuinely published, so the
 		// reconciler DOES pick these interactions up under the real set. What is still worth
 		// pinning is that a schema treated as a draft is never enqueued — asking is pure cost when
-		// the planner can only answer `lexicon_unpublished`. The four reader collections are made
+		// the planner can only answer `lexicon_unpublished`. The four user collections are made
 		// drafts by hand here; the creator collections and `work` stay published so the
 		// removal-finding half and the waiting-subject setup below still mean what they did.
 		setPublishedLexiconsForTesting(["org.anthers.work", "org.anthers.post", "org.anthers.project"]);

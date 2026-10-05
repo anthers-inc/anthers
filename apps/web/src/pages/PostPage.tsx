@@ -275,7 +275,7 @@ export default function PostPage() {
 				)}
 
 				{/* The Works this post is about. Each resolves on its OWN gates, so a post
-				    the reader can read may well link something they cannot open — which is
+				    the user can read may well link something they cannot open — which is
 				    the separation working, not a bug. */}
 				{linkedWorks.length > 0 && (
 					<section className="mb-8">

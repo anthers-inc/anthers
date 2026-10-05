@@ -20,7 +20,7 @@
  *
  * ⚠️ **Colors are fixed values rather than theme tokens, deliberately.** A badge is an
  * identity object that people collect across creators, and one that changed color with the
- * viewer's light/dark preference would not be the same badge twice. The frame around it is
+ * user's light/dark preference would not be the same badge twice. The frame around it is
  * still theme-aware; what a creator picked is not.
  */
 
@@ -35,7 +35,7 @@
  * identity out of it at all.
  *
  * ⚠️ **Not a token that follows the theme.** A badge is an identity object people collect
- * across creators; one whose edging changed with the viewer's light/dark preference would
+ * across creators; one whose edging changed with the user's light/dark preference would
  * not be the same badge twice.
  */
 export const BADGE_EDGE = "oklch(34% 0.05 55)";

@@ -15,7 +15,7 @@
  *   row ever written kept its `ip_address` and `user_agent`.
  *
  * 🚨 **The reason neither was caught is the reason these assertions are written the way
- * they are.** Every reader of `sessions` already filters on `expiresAt > now()`, so a
+ * they are.** Every user of `sessions` already filters on `expiresAt > now()`, so a
  * test that asks "can I still use this session?" passes identically against a working
  * cleanup and against no cleanup at all. It has to assert **rows removed**. Likewise the
  * storage sweep has no observable effect on any API response — nothing 404s differently
@@ -197,7 +197,7 @@ describe("expired credentials are actually deleted", () => {
 
 			const removed = await deleteExpiredSessions();
 
-			// Asserting the COUNT, not a read: every reader already filters on expiry, so a
+			// Asserting the COUNT, not a read: every user already filters on expiry, so a
 			// read-based assertion passes against a cleanup that does nothing at all.
 			expect(removed).toBeGreaterThan(0);
 

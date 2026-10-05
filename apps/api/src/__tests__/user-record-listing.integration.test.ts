@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A reader's comments, votes, reviews and follows, written into a repository Anthers hosts,
+ * A user's comments, votes, reviews and follows, written into a repository Anthers hosts,
  * against a real server.
  *
  * `atproto-record-plan.test.ts` proves the decisions and `record-sync.test.ts` proves the
- * ordering, both without a network. This proves what only a server can: that a reader's comment
- * ends up in **the reader's** repository naming the post's record by its real address, that a
+ * ordering, both without a network. This proves what only a server can: that a user's comment
+ * ends up in **the user's** repository naming the post's record by its real address, that a
  * hidden comment's record is still readable afterwards, and that withdrawing a vote takes the
  * record off the network rather than merely forgetting where it was.
  *
@@ -38,7 +38,7 @@ import {
 	syncFollowRecord,
 	syncReviewRecord,
 	syncVoteRecord,
-} from "../services/reader-record-listing.js";
+} from "../services/user-record-listing.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -115,19 +115,19 @@ async function readRecord(uri: string | null): Promise<Record<string, unknown> |
 }
 
 let creator: Account;
-let reader: Account;
+let user: Account;
 let postId = 0;
 let postUri = "";
 
-describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", () => {
-	it("sets up a creator and a reader, each with an identity on the server", async () => {
+describe.skipIf(!SERVICE)("a user's records in a repository Anthers hosts", () => {
+	it("sets up a creator and a user, each with an identity on the server", async () => {
 		creator = await hostedAccount("creator");
-		reader = await hostedAccount("reader");
+		user = await hostedAccount("user");
 	}, 60_000);
 
 	// 🚨 The compounding condition, end to end. A comment on a post with no record has nothing to
 	// name; once the post is listed, the same sync writes it.
-	it("waits for the post to have a record, then writes the comment into the READER's repository", async () => {
+	it("waits for the post to have a record, then writes the comment into the USER's repository", async () => {
 		const [post] = await db
 			.insert(posts)
 			.values({
@@ -143,7 +143,7 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 		const [comment] = await db
 			.insert(comments)
 			.values({
-				userId: reader.id,
+				userId: user.id,
 				subjectType: "post",
 				subjectId: postId,
 				body: "Worth the time.",
@@ -172,8 +172,8 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 			.from(comments)
 			.where(eq(comments.id, comment.id));
 
-		// In the reader's repository, not the creator's and not Anthers'.
-		expect(row.uri).toStartWith(`at://${reader.did}/${COMMENT_COLLECTION}/`);
+		// In the user's repository, not the creator's and not Anthers'.
+		expect(row.uri).toStartWith(`at://${user.did}/${COMMENT_COLLECTION}/`);
 		const record = await readRecord(row.uri);
 		expect(record?.subject).toEqual({ uri: postUri });
 		expect(record?.text).toBe("Worth the time.");
@@ -236,7 +236,7 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 	it("writes a vote, flips it in place, and takes it down when the vote is withdrawn", async () => {
 		const [vote] = await db
 			.insert(votes)
-			.values({ userId: reader.id, subjectType: "post", subjectId: postId, direction: "up" })
+			.values({ userId: user.id, subjectType: "post", subjectId: postId, direction: "up" })
 			.returning();
 		made.votes.push(vote.id);
 
@@ -261,7 +261,7 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 		await db.delete(votes).where(eq(votes.id, vote.id));
 		expect(
 			await removeAtprotoRecord({
-				ownerId: reader.id,
+				ownerId: user.id,
 				collection: VOTE_COLLECTION,
 				uri: cast.uri as string,
 			}),
@@ -276,7 +276,7 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 		const [review] = await db
 			.insert(reviews)
 			.values({
-				userId: reader.id,
+				userId: user.id,
 				workId: work.id,
 				verdict: "recommended",
 				body: "Carries itself.",
@@ -298,7 +298,7 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 	it("writes a follow naming the creator's identity, and takes it down on unfollow", async () => {
 		const [follow] = await db
 			.insert(follows)
-			.values({ followerId: reader.id, creatorId: creator.id })
+			.values({ followerId: user.id, creatorId: creator.id })
 			.returning();
 
 		expect((await syncFollowRecord(follow.id)).status).toBe("synced");
@@ -306,12 +306,12 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 			.select({ uri: follows.atprotoUri })
 			.from(follows)
 			.where(eq(follows.id, follow.id));
-		expect(row.uri).toStartWith(`at://${reader.did}/${FOLLOW_COLLECTION}/`);
+		expect(row.uri).toStartWith(`at://${user.did}/${FOLLOW_COLLECTION}/`);
 		expect((await readRecord(row.uri))?.subject).toBe(creator.did);
 
 		await db.delete(follows).where(eq(follows.id, follow.id));
 		await removeAtprotoRecord({
-			ownerId: reader.id,
+			ownerId: user.id,
 			collection: FOLLOW_COLLECTION,
 			uri: row.uri as string,
 		});
@@ -319,7 +319,7 @@ describe.skipIf(!SERVICE)("a reader's records in a repository Anthers hosts", ()
 	}, 60_000);
 
 	// 🚨 Other people's records survive the thing they were about.
-	it("leaves the reader's comment standing when the post it named goes back to a draft", async () => {
+	it("leaves the user's comment standing when the post it named goes back to a draft", async () => {
 		await db.update(posts).set({ isPublished: false }).where(eq(posts.id, postId));
 		await syncPostRecord(postId);
 		expect(await readRecord(postUri)).toBeNull();

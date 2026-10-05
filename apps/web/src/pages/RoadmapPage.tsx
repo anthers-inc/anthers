@@ -19,7 +19,7 @@
 //
 // **Everything renders at once — no tabs, no accordions, no lazy sections.** Two reasons,
 // and the second is the load-bearing one. A roadmap is skimmed, so hiding two thirds of it
-// behind a control makes the reader work to find out there is more. And
+// behind a control makes the user work to find out there is more. And
 // `marketing-copy.e2e.ts` reads this page's `body.textContent` and asserts that retired
 // claims are *absent* — a negative assertion that unrendered copy satisfies perfectly. Put
 // content behind a tab and the guard stops covering it, silently.
@@ -178,7 +178,7 @@ function GroupBlock({
  * 🚨 **The pill is what carries the tense, now that the descriptions are one line.** An
  * earlier draft ran a paragraph per goal plus a separate sentence saying where it actually
  * stood, which was honest and unreadable. The trade is that the section heading alone is
- * no longer allowed to be the only thing telling a reader that a goal is unbuilt — so
+ * no longer allowed to be the only thing telling a user that a goal is unbuilt — so
  * every card states its own status, adjacent to its own text, and `note` corrects the
  * cases where the pill is not enough on its own.
  */
@@ -239,7 +239,7 @@ function ShippedChip({ itemId }: { itemId: string }) {
  *
  * ⏳ **Inert today, by design.** `docHref` returns null for every page because the wiki is
  * not served from this site yet, so the chip names the page rather than linking to it. That
- * is more honest than hiding the button: it tells a reader the documentation exists and has
+ * is more honest than hiding the button: it tells a user the documentation exists and has
  * not been published, which is true, and which is itself a goal on this page. **A button
  * that navigated to a 404 would be the failure this avoids** — nothing typechecks a route
  * that does not exist.
@@ -284,7 +284,7 @@ function DocChip({ doc }: { doc: NonNullable<RoadmapItem["doc"]> }) {
  *
  * ⚠️ **Numbers are deliberately absent and their absence is stated** (Parker, 2026-09-03).
  * The ladder's rungs are not settled, and publishing a figure that will move is a choice
- * with a cost: a reader remembers the number and not the caveat beside it. So this section
+ * with a cost: a user remembers the number and not the caveat beside it. So this section
  * publishes the *mechanism*, which is the part that will still be true afterwards. The two
  * structural points on the ladder are described by what becomes possible at each rather
  * than by the account count that reaches it — the counts are anchored on a compensation
@@ -414,9 +414,8 @@ function Growth({ tint }: { tint: boolean }) {
 						</p>
 						<p>
 							<strong>There are two queues and they move independently.</strong> Accounts and
-							creators are bounded by different things, so you may be admitted as a reader while
-							still waiting as a creator, and the creator queue may be closed while the reader queue
-							moves.
+							creators are bounded by different things, so you may be admitted as a user while still
+							waiting as a creator, and the creator queue may be closed while the user queue moves.
 						</p>
 						<p>
 							<strong>Admissions are metered rather than released all at once.</strong> Opening a
@@ -487,7 +486,7 @@ function Closing({ tint }: { tint: boolean }) {
 					This page is written by hand rather than generated from anything, which means it can go
 					out of date without anything noticing. The source that runs Anthers is public, so the
 					fastest way to check a claim on this page is to go and read the thing it describes.
-					Priorities here are shaped by creators and readers rather than by investors, because there
+					Priorities here are shaped by creators and users rather than by investors, because there
 					are no investors.
 				</Lede>
 				<div className="mt-9 flex flex-wrap justify-center gap-3">

@@ -11,7 +11,7 @@
  * ⚠️ This module intentionally does not decide whether the caller is the contributor. The
  * route layer checks that; this layer trusts its caller to supply the right user id.
  *
- * Alongside the accept/reject flow, this module owns the **viewer overlay** (`creditsForViewer`)
+ * Alongside the accept/reject flow, this module owns the **user overlay** (`creditsForUser`)
  * and the credit-offered notification (`notifyCreditedAccounts`) — the two halves of showing
  * credits to people who were not in the room when they were written. The routes call both and
  * decide nothing.
@@ -296,18 +296,18 @@ export async function findRejectedCredit(
 	return null;
 }
 
-// ─── The viewer overlay ───────────────────────────────────────────────────────
+// ─── The user overlay ───────────────────────────────────────────────────────
 
 /**
- * One credit as a given viewer may see it.
+ * One credit as a given user may see it.
  *
  * The two flag fields are emitted by the overlay below and exist nowhere in storage:
  *
- * - `awaitingYourConfirmation` — the viewer IS the credited person and has not accepted yet.
+ * - `awaitingYourConfirmation` — the user IS the credited person and has not accepted yet.
  *   The front-end renders Accept/Decline controls from it. Only the named person's own
  *   serialization carries it, and the credit ships with its role and types intact because
  *   those are what they need to act.
- * - `awaitingContributorConfirmation` — the viewer is the Work's creator, looking at a
+ * - `awaitingContributorConfirmation` — the user is the Work's creator, looking at a
  *   credit that names somebody else and is not accepted yet. Only an owner-facing
  *   serialization carries it.
  *
@@ -315,7 +315,7 @@ export async function findRejectedCredit(
  * read: an accepted credit resolves to the account's name (display name or handle), and
  * an unaccepted one is withheld from everyone but the two parties above.
  */
-export type ViewerWorkCredit = WorkCredit & {
+export type UserWorkCredit = WorkCredit & {
 	awaitingYourConfirmation?: true;
 	awaitingContributorConfirmation?: true;
 };
@@ -331,13 +331,13 @@ interface OverlayWork {
 }
 
 /**
- * The credits a given viewer should see on a Work.
+ * The credits a given user should see on a Work.
  *
  * The published record already withholds an unaccepted `did`-naming credit (see
  * `creditToRecord`); this is the same rule on the API's own serialization, so a credit a
  * person has not confirmed does not render to strangers as fact. Three answers:
  *
- * - **Non-DID credits pass through untouched**, whatever the viewer.
+ * - **Non-DID credits pass through untouched**, whatever the user.
  * - **An accepted DID credit ships resolved** — `contributor` becomes the account's display
  *   name or handle, never a bare `did:` string. Acceptance requires a signed-in account
  *   whose identity IS the credited DID, so a `users` row always resolves; if one is ever
@@ -350,13 +350,13 @@ interface OverlayWork {
  * ⚠️ **Only queries when a Work's credits actually contain a DID string**, so the common
  * case — no credits, or none naming an identity — pays nothing.
  *
- * Like the rest of this module, it trusts its caller for who the viewer is: `viewerId` is
- * the signed-in account's id or null for a signed-out viewer.
+ * Like the rest of this module, it trusts its caller for who the user is: `userId` is
+ * the signed-in account's id or null for a signed-out user.
  */
-export async function creditsForViewer(
+export async function creditsForUser(
 	work: OverlayWork,
-	viewerId: number | null,
-): Promise<ViewerWorkCredit[]> {
+	userId: number | null,
+): Promise<UserWorkCredit[]> {
 	const credits = work.credits ?? [];
 	// The one DID-parse is `creditContributorIsDid`; nothing here re-derives it.
 	if (!credits.some((c) => creditContributorIsDid(c.contributor))) return credits;
@@ -366,7 +366,7 @@ export async function creditsForViewer(
 
 	// One read each for the acceptances and the accounts behind the DIDs, batched over the
 	// whole credits array — a Work naming five identities still pays two queries.
-	const [acceptedRows, accountRows, viewerRows] = await Promise.all([
+	const [acceptedRows, accountRows, userRows] = await Promise.all([
 		db
 			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
 			.from(creditAcceptances)
@@ -381,24 +381,20 @@ export async function creditsForViewer(
 			})
 			.from(users)
 			.where(inArray(users.atprotoDid, dids)),
-		// The named-person exception needs the viewer's own DID. A second users read rather
+		// The named-person exception needs the user's own DID. A second users read rather
 		// than a parameter, because the call sites hold a user id and nothing else.
-		viewerId != null
-			? db
-					.select({ atprotoDid: users.atprotoDid })
-					.from(users)
-					.where(eq(users.id, viewerId))
-					.limit(1)
+		userId != null
+			? db.select({ atprotoDid: users.atprotoDid }).from(users).where(eq(users.id, userId)).limit(1)
 			: Promise.resolve([] as { atprotoDid: string }[]),
 	]);
 	const accepted = new Set(acceptedRows.map((r) => `${r.contributorDid}|${r.role}`));
 	const nameForDid = new Map(
 		accountRows.map((r) => [r.atprotoDid, r.displayName?.trim() || r.handle]),
 	);
-	const viewerDid = viewerRows[0]?.atprotoDid ?? null;
-	const isCreator = viewerId != null && viewerId === work.creatorId;
+	const userDid = userRows[0]?.atprotoDid ?? null;
+	const isCreator = userId != null && userId === work.creatorId;
 
-	const visible: ViewerWorkCredit[] = [];
+	const visible: UserWorkCredit[] = [];
 	for (const credit of credits) {
 		if (!creditContributorIsDid(credit.contributor)) {
 			visible.push(credit);
@@ -410,17 +406,17 @@ export async function creditsForViewer(
 			// its own DID), so a miss is the invariant broken. Withheld rather than named: a
 			// bare `did:` string in public copy is exactly what this overlay exists to prevent.
 			if (name) visible.push({ ...credit, contributor: name });
-			else if (isCreator || viewerDid === credit.contributor) visible.push(credit);
+			else if (isCreator || userDid === credit.contributor) visible.push(credit);
 			continue;
 		}
-		if (viewerDid === credit.contributor) {
+		if (userDid === credit.contributor) {
 			visible.push({ ...credit, awaitingYourConfirmation: true });
 			continue;
 		}
 		if (isCreator) {
 			visible.push({ ...credit, awaitingContributorConfirmation: true });
 		}
-		// Everybody else — signed-out and third-party viewers alike — does not see the
+		// Everybody else — signed-out and third-party users alike — does not see the
 		// credit at all: an unconfirmed claim about a third party is not a liner note.
 	}
 	return visible;
@@ -437,13 +433,13 @@ export async function creditsForViewer(
  * data-destroying save, not a nicer read: the acceptance row keys on the DID, and the
  * stored DID replaced by a display name would stop matching it — the published record
  * would then withhold a credit the person had accepted, and an unrelated title edit
- * would be what destroyed the linkage. Resolution-to-name is the VIEWER overlay's job
- * (`creditsForViewer`), because the public Work page only renders.
+ * would be what destroyed the linkage. Resolution-to-name is the USER overlay's job
+ * (`creditsForUser`), because the public Work page only renders.
  *
  * The flags carry the only thing an owner cannot see from the raw rows alone: which
  * identity credits are still awaiting their contributor's word.
  */
-export async function creditsForOwner(work: OverlayWork): Promise<ViewerWorkCredit[]> {
+export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit[]> {
 	const credits = work.credits ?? [];
 	if (!credits.some((c) => creditContributorIsDid(c.contributor))) return credits;
 

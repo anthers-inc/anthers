@@ -18,7 +18,7 @@
 //
 // ⚠️ **The order in `PAGE_FAQS` is editorial and is not derived from anything.** An FAQ's
 // first question is the most important thing about it — it is the objection you believe is
-// standing between the reader and the button below it — so the sequence is written per
+// standing between the user and the button below it — so the sequence is written per
 // page rather than falling out of category order. Ordering by category instead would open
 // the signup page's FAQ with a question about the feed.
 //
@@ -244,13 +244,13 @@ export const FAQ_ITEMS = {
 	"creator-take-home": {
 		category: "Creators",
 		question: "How much do creators keep?",
-		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus what viewers direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets ${FREE_STORAGE_GIB} GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
+		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what users give Anthers, distributed by the time people spend with them, and paid out in full) plus what users direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets ${FREE_STORAGE_GIB} GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
 	},
 	"what-can-i-publish": {
 		category: "Creators",
 		question: "What kinds of content can I publish?",
 		answer:
-			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player/reader experiences.",
+			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player and reading experiences.",
 	},
 	// ⚠️ **Payout setup gates RELEASE, and this answer is the one that says so plainly.**
 	// The Creator Terms always claimed it; the code only started enforcing it on
@@ -382,7 +382,7 @@ export type FAQSurface = "users" | "creators" | "signup";
  * Which questions each page ends on, in the order it asks them.
  *
  * ⚠️ **Keep these short.** A page-level FAQ is the last objection standing between a
- * reader and the button under it, not a second copy of /faq — six or seven closed
+ * user and the button under it, not a second copy of /faq — six or seven closed
  * accordions read as a considered list, and fifteen read as a page that gave up
  * explaining itself. The link to /faq underneath is what makes the pruning safe.
  *

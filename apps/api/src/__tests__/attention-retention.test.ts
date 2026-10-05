@@ -55,13 +55,13 @@ async function signUp(username: string): Promise<string> {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `aret_creator_${id}`;
-const viewerAName = `aret_a_${id}`;
-const viewerBName = `aret_b_${id}`;
+const userAName = `aret_a_${id}`;
+const userBName = `aret_b_${id}`;
 
 let creator: string;
 let creatorId: number;
-let viewerAId: number;
-let viewerBId: number;
+let userAId: number;
+let userBId: number;
 let workId: number;
 
 /**
@@ -119,18 +119,18 @@ async function seedEvent(
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userAName}@example.com`}`, sql`${`${userBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
-	await signUp(viewerAName);
-	await signUp(viewerBName);
+	await signUp(userAName);
+	await signUp(userBName);
 	await db.execute(
 		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
 
 	creatorId = await idOf(creatorName);
-	viewerAId = await idOf(viewerAName);
-	viewerBId = await idOf(viewerBName);
+	userAId = await idOf(userAName);
+	userBId = await idOf(userBName);
 
 	const workRes = await post("/api/content/works", creator, {
 		type: "video",
@@ -139,14 +139,14 @@ beforeAll(async () => {
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;
 
-	// Two viewers on one day, one viewer twice on another (back-to-back, never
+	// Two users on one day, one user twice on another (back-to-back, never
 	// overlapping — same-person overlap is the split, not this fixture's subject),
 	// plus a null-Work visit ping — which is the row the COALESCE key exists for.
-	await seedEvent(viewerAId, OLD_DAY, "watch", 120);
-	await seedEvent(viewerBId, OLD_DAY, "watch", 45);
-	await seedEvent(viewerAId, OLDER_DAY, "watch", 30);
-	await seedEvent(viewerAId, OLDER_DAY, "watch", 10, workId, 30);
-	await seedEvent(viewerAId, OLD_DAY, "page_view", 0, null);
+	await seedEvent(userAId, OLD_DAY, "watch", 120);
+	await seedEvent(userBId, OLD_DAY, "watch", 45);
+	await seedEvent(userAId, OLDER_DAY, "watch", 30);
+	await seedEvent(userAId, OLDER_DAY, "watch", 10, workId, 30);
+	await seedEvent(userAId, OLD_DAY, "page_view", 0, null);
 }, DB_SETUP_TIMEOUT);
 
 describe("the rollup table cannot hold an identity", () => {
@@ -185,7 +185,7 @@ describe("pruning drops the people and keeps the totals", () => {
 
 		// And with them, any way to ask what a particular person watched.
 		const perPerson = await db.execute(sql`
-			SELECT count(*)::int AS n FROM attention_events WHERE user_id IN (${viewerAId}, ${viewerBId})
+			SELECT count(*)::int AS n FROM attention_events WHERE user_id IN (${userAId}, ${userBId})
 		`);
 		expect(Number((perPerson as unknown as { n: number }[])[0].n)).toBe(0);
 
@@ -199,14 +199,14 @@ describe("pruning drops the people and keeps the totals", () => {
 		expect(watchOld).toBeDefined();
 		expect(watchOld!.totalSeconds).toBe(165); // 120 + 45
 		expect(watchOld!.eventCount).toBe(2);
-		expect(watchOld!.uniqueViewers).toBe(2);
+		expect(watchOld!.uniqueUsers).toBe(2);
 
-		// Same viewer twice in a day is two events but ONE unique viewer — the figure
+		// Same user twice in a day is two events but ONE unique user — the figure
 		// would be meaningless if it just counted rows.
 		const watchOlder = daily.find((d) => d.day === OLDER_DAY && d.eventType === "watch");
 		expect(watchOlder!.totalSeconds).toBe(40);
 		expect(watchOlder!.eventCount).toBe(2);
-		expect(watchOlder!.uniqueViewers).toBe(1);
+		expect(watchOlder!.uniqueUsers).toBe(1);
 
 		// The null-Work visit ping rolled up too, rather than being dropped or crashing
 		// the ON CONFLICT — this is the row the COALESCE(work_id, -1) key is for.
@@ -220,7 +220,7 @@ describe("pruning drops the people and keeps the totals", () => {
 		// per-day transaction rolls back. This asserts the weaker-but-cheaper property
 		// that matters if that ever stops holding: re-running writes `excluded` rather
 		// than adding, so totals are re-derived instead of accumulated.
-		await seedEvent(viewerBId, OLD_DAY, "watch", 45);
+		await seedEvent(userBId, OLD_DAY, "watch", 45);
 		await pruneAttention({ retentionDays: 30 });
 
 		const rows = await db
@@ -238,7 +238,7 @@ describe("pruning drops the people and keeps the totals", () => {
 		// distribute-pool has not paid it out yet.
 		await db.execute(sql`
 			INSERT INTO attention_events (user_id, creator_id, work_id, event_type, duration_seconds)
-			VALUES (${viewerAId}, ${creatorId}, ${workId}, 'watch', 90)
+			VALUES (${userAId}, ${creatorId}, ${workId}, 'watch', 90)
 		`);
 
 		const result = await pruneAttention({ retentionDays: 30 });
@@ -271,17 +271,17 @@ describe("analytics survive the prune", () => {
 		expect(overview.events.views).toBe(1);
 	});
 
-	it("reports uniqueViewers over the raw window only, and says so", async () => {
+	it("reports uniqueUsers over the raw window only, and says so", async () => {
 		const overview = await (
 			await req("/api/integrations/analytics/overview?period=365", { headers: { Cookie: creator } })
 		).json();
 
-		// Only the one live row's viewer. Adding the rollup's daily distinct counts would
+		// Only the one live row's user. Adding the rollup's daily distinct counts would
 		// give a bigger number that double-counts anyone who came back on another day —
 		// and with the identities gone there is nothing left to deduplicate against. The
 		// window is named rather than the overstatement being made quietly.
-		expect(overview.uniqueViewers).toBe(1);
-		expect(overview.uniqueViewersWindowDays).toBeGreaterThan(0);
+		expect(overview.uniqueUsers).toBe(1);
+		expect(overview.uniqueUsersWindowDays).toBeGreaterThan(0);
 	});
 
 	it("merges a Work that straddles the boundary instead of listing it twice", async () => {

@@ -17,7 +17,7 @@
  *
  * ⚠️ **Content notes are never locked.** They carry no access consequence — nothing reads
  * them to decide who may reach a Work — so there is nothing for a lock to protect, and
- * locking them would take a creator's own warnings to their own readers out of their hands.
+ * locking them would take a creator's own warnings to their own users out of their hands.
  * Rating through the matrix keeps that: a creator may mark any row however they like, and
  * only the rating the rows add up to is held to the operator's.
  *

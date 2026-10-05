@@ -82,7 +82,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
  * exactly that reason — resolved as a signed-out visitor at every route that asks the
  * question rather than requiring an answer. That was survivable only while signing out
  * meant *more* access than signing in; the moment delivery requires an account, a
- * disagreement between the two readers becomes a bearer-authenticated request being told
+ * disagreement between the two users becomes a bearer-authenticated request being told
  * to log in. Two ways to read one session must not answer differently.
  *
  * The `c.get("user")` check first is not an optimization for its own sake: on a route that
@@ -128,7 +128,7 @@ export const requireVerified = createMiddleware<AuthEnv>(async (c, next) => {
  * Must be used AFTER requireAuth.
  *
  * Posting is creator-only as a matter of what Anthers is rather than as a default: creators
- * post and everyone else reacts (Parker, 2026-09-12). It is also what keeps a reader from
+ * post and everyone else reacts (Parker, 2026-09-12). It is also what keeps a user from
  * writing an `org.anthers.post` record under the creator permission set.
  */
 export const requireCreator = createMiddleware<AuthEnv>(async (c, next) => {

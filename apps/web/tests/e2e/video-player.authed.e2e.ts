@@ -94,7 +94,7 @@ test("the chrome is ours, not the browser's", async ({ page }) => {
 test("Space plays and pauses, and the page never gets the key", async ({ page }) => {
 	await openPlayer(page);
 
-	// Clicking the picture is how a viewer reaches the keymap: it plays AND focuses the
+	// Clicking the picture is how a user reaches the keymap: it plays AND focuses the
 	// player, which is what makes the shortcut work at all.
 	await page.locator("video").click();
 	await expect.poll(async () => (await videoState(page))?.paused).toBe(false);

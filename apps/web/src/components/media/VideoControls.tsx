@@ -11,7 +11,7 @@
  * ⚠️ **The settings panel is a plain positioned element, not a daisyUI `dropdown`.**
  * The canonical dropdown uses the popover API with CSS anchor positioning, which is not
  * yet everywhere — and this control has to work *inside the fullscreen element*, where a
- * mispositioned popover is not a cosmetic problem but a menu the viewer cannot reach.
+ * mispositioned popover is not a cosmetic problem but a menu the user cannot reach.
  */
 import {
 	ArrowsPointingInIcon,

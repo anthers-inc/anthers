@@ -11,17 +11,17 @@
  * ⭐ **The aggregate is a proportion and not an average**, because a review recommends a Work
  * or does not. `@anthers/shared/content` carries why, and it is the same reasoning that gives
  * Anthers one opinion primitive rather than two. It comes in two rows — **All Time** over every
- * review, and a **Recent** share over a reader-chosen window — so a Work that changed after
- * release can be seen to have changed its readers' minds. All Time is always the constant; the
+ * review, and a **Recent** share over a user-chosen window — so a Work that changed after
+ * release can be seen to have changed its users' minds. All Time is always the constant; the
  * Recent share simply has nothing to say (and says so) when its window holds too few reviews.
  *
  * ⭐ **The list sorts by helpfulness, not by when the review was written** (2026-09-12). What
- * a reader finds worth reading is what other readers found helpful, so the default is Helpful
+ * a user finds worth reading is what other users found helpful, so the default is Helpful
  * First with Newest First as the explicit alternative — neither is a re-fetch; both are this
  * payload read two ways. Helpfulness is the same vote a post or a comment takes, asked here as
  * "was this helpful?" — and it only ever *sorts*; one person's review counts once in either
  * share however many votes it drew. A new review's `1` is its author's own upvote — posting
- * something says the author thinks it worth reading, so `0` always means a reader said no.
+ * something says the author thinks it worth reading, so `0` always means a user said no.
  *
  * Bodies render as React text nodes, never as markup — the API stores plain text and nothing
  * here interprets it.
@@ -129,7 +129,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 
 	// The visible list: the filter narrows it, the sort orders it — both over the one
 	// payload so the two controls can never disagree about what was fetched. Newest first
-	// breaks a helpfulness tie, recency being the only other thing a reader can check.
+	// breaks a helpfulness tie, recency being the only other thing a user can check.
 	const shown = useMemo(() => {
 		if (!agg) return [];
 		const filtered =
@@ -159,7 +159,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 					</span>
 				)}
 				{/* The Recent share sits beside All Time rather than replacing it, so All Time is
-				    always the constant a reader can compare against. A window holding nothing is
+				    always the constant a user can compare against. A window holding nothing is
 				    stated as such — an absent row would read as a bug. */}
 				{agg.count > 0 && (
 					<span className="text-sm text-base-content/70 inline-flex items-center gap-1">
@@ -347,21 +347,21 @@ export default function WorkReviews({ workId }: { workId: number }) {
 												{new Date(review.createdAt).toLocaleDateString()}
 											</span>
 											{/* A review's score is its helpfulness: the same gesture as a
-											    comment's vote, asked of a reader's words rather than a
+											    comment's vote, asked of a user's words rather than a
 											    creator's thing. It orders the list and nothing else. */}
 											<VoteControl
 												subjectType="review"
 												subjectId={review.id}
 												score={review.score}
-												viewerVote={review.viewerVote}
+												userVote={review.userVote}
 												label={`${review.handle}'s review`}
-												onChange={({ score, viewerVote }) =>
+												onChange={({ score, userVote }) =>
 													setAgg((current) =>
 														current
 															? {
 																	...current,
 																	reviews: current.reviews.map((r) =>
-																		r.id === review.id ? { ...r, score, viewerVote } : r,
+																		r.id === review.id ? { ...r, score, userVote } : r,
 																	),
 																}
 															: current,

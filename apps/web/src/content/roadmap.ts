@@ -114,7 +114,7 @@ export const SHIPPED_SO_FAR = "Q3 2026";
  *
  * ⏳ Returns `null` today for every page, which is why the documentation buttons render as
  * inert chips rather than links. That is deliberate and visible: an inert chip naming a
- * real page tells a reader the documentation exists and has not been published, which is
+ * real page tells a user the documentation exists and has not been published, which is
  * true and is itself one of the goals on this page. **A button that navigated to a 404
  * would be the failure this avoids** — a route reference nothing can follow typechecks,
  * lints, and passes every test, which is how Connect's onboarding pointed at a Studio page
@@ -370,7 +370,7 @@ export const ROADMAP: RoadmapGroup[] = [
 	},
 	{
 		id: "audience",
-		label: "For Readers, Players & Viewers",
+		label: "For Users",
 		blurb:
 			"Finding work worth your time, spending time with it, and paying the people who made it.",
 		subgroups: [

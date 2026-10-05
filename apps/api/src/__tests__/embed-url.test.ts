@@ -8,7 +8,7 @@
  * reasons are in `embedUrlProblem`, and `packages/shared/src/embed-url.test.ts` walks the individual
  * schemes and hosts. This file proves the routes use the check: creating and editing both refuse,
  * with a message a creator can act on, and a bad address already in the database is handed to
- * neither the creator nor a viewer.
+ * neither the creator nor a user.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -40,11 +40,11 @@ function req(path: string, cookie: string, init: { method?: string; body?: unkno
 }
 
 let creator: { cookie: string; userId: number };
-let viewer: { cookie: string };
+let user: { cookie: string };
 
 beforeAll(async () => {
 	creator = await createAccount(`embed_creator_${id}`);
-	viewer = await createAccount(`embed_viewer_${id}`);
+	user = await createAccount(`embed_viewer_${id}`);
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
@@ -122,11 +122,11 @@ describe("a bad address already in the database", () => {
 		return (await res.json()).work.embedUrl;
 	}
 
-	it("is not handed to a viewer", async () => {
-		// The control first: a viewer who can play the good Work is given its address, so the
-		// empty answer below is the check and not a viewer who could never have had one.
-		expect(await embedFor(goodId, viewer.cookie)).toBe(GOOD);
-		expect(await embedFor(badId, viewer.cookie)).toBe("");
+	it("is not handed to a user", async () => {
+		// The control first: a user who can play the good Work is given its address, so the
+		// empty answer below is the check and not a user who could never have had one.
+		expect(await embedFor(goodId, user.cookie)).toBe(GOOD);
+		expect(await embedFor(badId, user.cookie)).toBe("");
 	});
 
 	it("is not handed to the creator either, whose Work page renders the same field", async () => {

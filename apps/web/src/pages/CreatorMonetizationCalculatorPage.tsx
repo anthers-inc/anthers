@@ -12,12 +12,12 @@ import { useMemo, useState } from "react";
 import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 
 // ---------------------------------------------------------------------------
-// Support-model economics. A viewer gives Anthers a monthly amount, which names their
+// Support-model economics. A user gives Anthers a monthly amount, which names their
 // Badge (Root $3 … Blossom $12). That amount splits into a Time Pool (a share of it, to
 // creators by time) and "Supports Anthers" (the remainder funding free access and
-// programs). Money to creators = the Time Pool + what a viewer gives directly to a
+// programs). Money to creators = the Time Pool + what a user gives directly to a
 // creator (any amount, no platform cut). The Time Pool is distributed
-// across the creators a viewer watches, in proportion to time (equal-time
+// across the creators a user watches, in proportion to time (equal-time
 // principle — a minute is a minute across every medium). There is no bandwidth term:
 // delivery costs $0 at any volume, so it appears on nobody's bill.
 //
@@ -31,12 +31,12 @@ const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 
 const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
 /**
- * A loose illustrative cap on what a viewer directs to creators, by Badge — **dollars a
+ * A loose illustrative cap on what a user directs to creators, by Badge — **dollars a
  * month**, and independent of what they give Anthers.
  *
  * 🚨 **Dollars, and a stray multiplier here overstated the whole page threefold once.**
  * When `thresholdForBadge` changed what its return value *meant*, everything downstream
- * kept multiplying by $3 and Blossom modeled a viewer directing **$36** rather than $12.
+ * kept multiplying by $3 and Blossom modeled a user directing **$36** rather than $12.
  * Nothing caught it, because a modeling coefficient is not a typed figure `econ:figures`
  * can see — so read what this returns rather than assuming its unit.
  */
@@ -65,7 +65,7 @@ function rate(n: number): string {
 const cnt = (n: number) => Math.round(n).toLocaleString("en-US");
 
 // ---------------------------------------------------------------------------
-// Section 1 — the conversion engine (one viewer)
+// Section 1 — the conversion engine (one user)
 // ---------------------------------------------------------------------------
 
 function ConversionEngine() {
@@ -109,7 +109,7 @@ function ConversionEngine() {
 		};
 	}, [badge, total, you, directedToYou]);
 
-	// Split bar over what the viewer gives Anthers.
+	// Split bar over what the user gives Anthers.
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
 		{
@@ -124,10 +124,10 @@ function ConversionEngine() {
 		<div className="card bg-base-100 border border-base-300">
 			<div className="card-body p-5 sm:p-6">
 				<h2 className="font-mono text-xs uppercase tracking-[0.14em] text-base-content/40">
-					1 · The conversion engine — one viewer
+					1 · The conversion engine — one user
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
-					Pick the Badge a viewer chose, then how they spend their month. Their Time Pool is split
+					Pick the Badge a user chose, then how they spend their month. Their Time Pool is split
 					across everyone they watch, by time; your slice of their time — plus anything they direct
 					to you — is what you take home from them. Anthers is a nonprofit—no profit-taking.
 				</p>
@@ -137,14 +137,14 @@ function ConversionEngine() {
 					<div className="space-y-5">
 						<div>
 							<div className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Viewer's Badge</span>
+								<span>User's Badge</span>
 								<span className="font-mono text-sm">
 									{usd0(m.price)}
 									<span className="text-base-content/40">/mo</span>
 								</span>
 							</div>
 							<SegControl
-								ariaLabel="Viewer's Badge"
+								ariaLabel="User's Badge"
 								value={badge}
 								onChange={setBadge}
 								options={BADGE_KEYS.map((b) => ({ value: b, label: badgeLabel(b) }))}
@@ -313,7 +313,7 @@ function ConversionEngine() {
 							    amount, and the sentence read "$6.00/mo. Of that, $9.00 reaches
 							    creators". Under the pre-2026-08-16 triple it read $21 of $6, which is
 							    absurd enough that nobody can have looked at it. */}
-							This viewer gives Anthers <b className="text-success">{usd2(m.price)}</b>/mo (
+							This user gives Anthers <b className="text-success">{usd2(m.price)}</b>/mo (
 							{badgeLabel(badge)}), of which <b>{usd2(m.tp)}</b> becomes Time Pool, and directs
 							about <b>{usd2(m.toCreatorsDirect)}</b> more straight to creators — so{" "}
 							<b>{usd2(m.toCreators)}</b> reaches creators in all and Anthers keeps <b>$0</b>. You
@@ -381,7 +381,7 @@ function ValueMatrix() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					The same hour of content pays wildly different amounts depending on who's watching. Each
-					cell is <b className="text-base-content">$ per view-hour</b> = that viewer's Time Pool ÷
+					cell is <b className="text-base-content">$ per view-hour</b> = that user's Time Pool ÷
 					their total monthly time. Rows are the paid Badges; edit the consumption columns to
 					explore.
 				</p>
@@ -751,14 +751,14 @@ export default function CreatorMonetizationCalculatorPage() {
 					title="How time with a creator becomes revenue"
 					lede={
 						<>
-							On Anthers, a viewer's <b className="text-base-content">Time Pool</b> — set by the
-							Badge they chose — is split across every creator they engage with,{" "}
+							On Anthers, your <b className="text-base-content">Time Pool</b> — set by the Badge you
+							chose — is split across every creator you engage with,{" "}
 							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
 							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
 							platform rate: it's worth a{" "}
-							<b className="text-base-content">slice of that viewer's Time Pool</b>, plus anything
-							they direct your way. This tool traces that conversion, from one viewer up to a
-							creator's monthly earnings.
+							<b className="text-base-content">slice of your Time Pool</b>, plus anything you direct
+							a creator's way. This tool traces that conversion, from one user up to a creator's
+							monthly earnings.
 						</>
 					}
 				/>
@@ -777,7 +777,7 @@ export default function CreatorMonetizationCalculatorPage() {
 							</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
-									A viewer gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
+									A user gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
 									Blossom). It splits into a <b>Time Pool</b> (${" "}
 									{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of every ${PUBLIC_ACCESS_PRICE}, to
 									creators by time) and <b>Supports Anthers</b> (the remainder, which funds free
@@ -787,8 +787,8 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}
 									<b>in proportion to time spent</b>. A creator who holds <code>s</code> = (their
-									minutes ÷ the viewer's total minutes) earns <code>s × Time Pool</code> from that
-									viewer, plus anything the viewer directs to them.
+									minutes ÷ the user's total minutes) earns <code>s × Time Pool</code> from that
+									user, plus anything the user directs to them.
 								</li>
 								<li>
 									<b>Equal-time principle:</b> a minute counts the same across all media types.

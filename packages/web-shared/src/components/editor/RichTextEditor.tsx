@@ -69,7 +69,7 @@ export default function RichTextEditor({
 	if (!editor) return null;
 
 	if (variant === "article") {
-		// No box around the page: the text sits where the reader's will, with the toolbar above
+		// No box around the page: the text sits where the user's will, with the toolbar above
 		// it and a frame only while the creator is pointing at it or typing.
 		return (
 			<div className="rounded-lg border border-transparent hover:border-base-300 focus-within:border-base-300">

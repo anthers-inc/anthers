@@ -195,7 +195,7 @@ export default function BasketPage() {
 			</div>
 			{/*
 			 * Only shown when it is actually non-zero — a "you saved $0.00" on a
-			 * single-item basket would teach the reader to ignore the line that
+			 * single-item basket would teach the user to ignore the line that
 			 * matters. Anthers keeps nothing either way, so the saving is not ours
 			 * to share: it is entirely the creator's, and the copy says so.
 			 */}

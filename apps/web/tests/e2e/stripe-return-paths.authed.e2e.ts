@@ -84,7 +84,7 @@ test("every Stripe return path is pinned here", () => {
 
 for (const [key, path] of Object.entries(STRIPE_RETURN_PATHS)) {
 	test(`Stripe's ${key} lands on a page that answers: ${path}`, async ({ page, context }) => {
-		// Signed in as the creator rather than the stored viewer: two of the three paths sit
+		// Signed in as the creator rather than the stored user: two of the three paths sit
 		// behind the Studio's creator gate, and signed out every route on this app renders the
 		// same marketing page — which would make all three assertions vacuous.
 		await signInAsCreator(context);

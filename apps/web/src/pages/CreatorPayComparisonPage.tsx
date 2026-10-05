@@ -24,8 +24,8 @@
 // and a creator would catch it. Where a rival wins (Steam below ~$1.15) or ties
 // (Bandcamp Friday), the row says so. Competitor rates checked 2026-08-03 and
 // perishable — re-check before publishing.
-//   • On streaming the creator earns their share of every viewer's Time Pool (half of
-//     what that viewer gives Anthers), the same rate for every medium (equal-time).
+//   • On streaming the creator earns their share of every user's Time Pool (half of
+//     what that user gives Anthers), the same rate for every medium (equal-time).
 //     Anthers profits $0.
 //
 // Positioning (important): streaming is a secondary financial benefit, not the
@@ -131,7 +131,7 @@ const REF_HR_PAY = money(timePoolFor(thresholdForBadge("sprout")) / REF_HOURS);
  * Two Public Access prices is the editorial choice, written as that rather than a bare 6
  * so it moves if the price does. ⚠️ /for-creators had the same constant and the unit
  * retirement broke it there — the multiplication was dropped and the count left behind,
- * so that page computed $2 while its own note still promised the reader $6.
+ * so that page computed $2 while its own note still promised the user $6.
  */
 const SEED_SPEND = PUBLIC_ACCESS_PRICE * 2;
 /** What a rival keeps of the same $6 after its headline cut, and its card cost. */

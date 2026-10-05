@@ -40,10 +40,10 @@ import {
 import { cardFee } from "@anthers/shared/fees";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
-import { ensureOrgLadder } from "./org-ladder-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
-await ensureOrgLadder();
+await ensureAnthersLadder();
 
 const req = (path: string) => app.fetch(new Request(`http://localhost${path}`));
 
@@ -63,7 +63,7 @@ describe("GET /api/subscriptions/anthers-ladder", () => {
 	let seeded: { name: string; threshold: number }[] = [];
 
 	beforeAll(async () => {
-		const orgId = await ensureOrgLadder();
+		const anthersId = await ensureAnthersLadder();
 		// The baseline reads the LISTED rungs — the same (threshold, label) agreement
 		// `loadAnthersLadder` filters by — rather than every row the account owns: an
 		// earlier suite's paid off-rung rung (billing find-or-creates an org-owned,
@@ -75,7 +75,7 @@ describe("GET /api/subscriptions/anthers-ladder", () => {
 			.from(badges)
 			.where(
 				and(
-					eq(badges.creatorId, orgId),
+					eq(badges.creatorId, anthersId),
 					inArray(
 						badges.threshold,
 						ANTHERS_BADGES.map((b) => b.threshold.toFixed(2)),
@@ -148,11 +148,11 @@ describe("GET /api/subscriptions/anthers-ladder", () => {
 		const { ensureAnthersBadges, loadAnthersLadder } = await import(
 			"../services/anthers-badges.js"
 		);
-		const orgId = await ensureOrgLadder();
+		const anthersId = await ensureAnthersLadder();
 		await db
 			.insert(badges)
 			.values({
-				creatorId: orgId,
+				creatorId: anthersId,
 				threshold: "24.00",
 				label: "$24.00",
 				description: "A rung created by billing at a threshold a subscription pays for.",
@@ -162,7 +162,7 @@ describe("GET /api/subscriptions/anthers-ladder", () => {
 		expect(ladder.rungs.find((r) => r.threshold === 24)).toBeUndefined();
 		expect(ladder.rungs.map((r) => r.threshold)).toEqual(ANTHERS_BADGES.map((b) => b.threshold));
 		// Re-seeding is idempotent and does not pull the paid rung in, either.
-		await ensureAnthersBadges(orgId);
+		await ensureAnthersBadges(anthersId);
 		const reseeded = await loadAnthersLadder();
 		expect(reseeded.rungs.find((r) => r.threshold === 24)).toBeUndefined();
 	});

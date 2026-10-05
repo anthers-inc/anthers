@@ -33,7 +33,7 @@
 // Guide (the wiki's *How Anthers Talks About Itself*): "0% cut" is now unconditionally true of EVERY creator transaction,
 // but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
 // of the price. Where a cut and a price appear together the take-home figure must
-// appear with them, or a reader concludes the creator gets the whole list price.
+// appear with them, or a user concludes the creator gets the whole list price.
 // "nonprofit", never "501(c)(3)", until the IRS determination letter lands.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
@@ -600,10 +600,10 @@ export default function ForCreatorsPage() {
 						across every creator they spend time with, so what reaches you is your share of their
 						month, not the whole figure. What they give you directly is separate, and carries no
 						platform cut. *A free account pays nothing; free access covers its small Time Pool, so
-						even a free viewer pays the creators they spend time with—up to{" "}
-						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which supporting Anthers
-						lifts. Delivery costs nothing on either side—no per-GiB charge, however much anyone
-						streams or downloads—and you get {FREE_STORAGE_GIB} GiB of free storage.
+						even a free user pays the creators they spend time with—up to {FREE_PUBLIC_ACCESS_HOURS}{" "}
+						hours of Public Access a month, which supporting Anthers lifts. Delivery costs nothing
+						on either side—no per-GiB charge, however much anyone streams or downloads—and you get{" "}
+						{FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>
@@ -798,7 +798,7 @@ export default function ForCreatorsPage() {
 			</Section>
 
 			{/* Questions — above the closing CTA, for the reason noted on /for-users: an FAQ
-			    answers what is still standing between a reader and the button, so it belongs
+			    answers what is still standing between a user and the button, so it belongs
 			    on the way there. This page argues the economics at length, so its questions
 			    lead with take-home and then cover what the argument never reaches — the
 			    setup, the one charge, and what publishing here commits you to. Shared with
@@ -916,7 +916,7 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
  *
  * 🚨 **A basis that disagrees with its own numbers is worse than no basis at all**, and
  * this page shipped one: a stray multiplier left behind by a rename made it compute a $2
- * scenario while every sentence around it said $6, including the note telling the reader
+ * scenario while every sentence around it said $6, including the note telling the user
  * rival figures were all-in take-home at the same $6. Nothing caught it, because a
  * scenario basis is arithmetic rather than a typed figure `econ:figures` can see.
  *

@@ -80,38 +80,38 @@ async function queue(cookie: string, filter: string) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `mod_creator_${id}`;
-const viewerAName = `mod_a_${id}`;
-const viewerBName = `mod_b_${id}`;
+const userAName = `mod_a_${id}`;
+const userBName = `mod_b_${id}`;
 const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 
 let creator: string;
 /** The admin session cookie every console request below is made with. */
 let admin: string;
 let operator: AdminFixture;
-let viewerA: string;
-let viewerB: string;
-/** viewerB's session token, sent as the desktop Studio would send it. */
-let viewerBToken: string;
+let userA: string;
+let userB: string;
+/** userB's session token, sent as the desktop Studio would send it. */
+let userBToken: string;
 let slug: string;
 let workId: number;
-/** viewerA's comment — the one we report and hide. */
+/** userA's comment — the one we report and hide. */
 let commentId: number;
-/** viewerB's comment — the control that must stay visible throughout. */
+/** userB's comment — the control that must stay visible throughout. */
 let otherCommentId: number;
 let ratingId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userAName}@example.com`}`, sql`${`${userBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
-	viewerA = await signUp(viewerAName);
-	await enablePayouts(viewerAName);
-	const b = await createAccount(viewerBName);
-	viewerB = b.cookie;
-	viewerBToken = b.token;
-	await enablePayouts(viewerBName);
+	userA = await signUp(userAName);
+	await enablePayouts(userAName);
+	const b = await createAccount(userBName);
+	userB = b.cookie;
+	userBToken = b.token;
+	await enablePayouts(userBName);
 	operator = await createAdminFixture("mod-operator");
 	admin = operator.cookie;
 	await db.execute(
@@ -148,20 +148,20 @@ beforeAll(async () => {
 	});
 	expect(release.status).toBe(200);
 
-	const c1 = await post(`/api/content/posts/${slug}/comments`, viewerA, {
+	const c1 = await post(`/api/content/posts/${slug}/comments`, userA, {
 		body: "buy cheap followers at example.com",
 	});
 	expect(c1.status).toBe(201);
 	commentId = (await c1.json()).comment.id;
 
-	const c2 = await post(`/api/content/posts/${slug}/comments`, viewerB, {
+	const c2 = await post(`/api/content/posts/${slug}/comments`, userB, {
 		body: "genuinely enjoyed this",
 	});
 	expect(c2.status).toBe(201);
 	otherCommentId = (await c2.json()).comment.id;
 
 	// Two reviews: 1 star from A (the one we'll hide), 5 stars from B.
-	const r1 = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+	const r1 = await post(`/api/content/works/${workId}/reviews`, userA, {
 		verdict: "not-recommended",
 		body: "did not work for me at all",
 	});
@@ -169,7 +169,7 @@ beforeAll(async () => {
 	ratingId = (await r1.json()).review.id;
 	expect(
 		(
-			await post(`/api/content/works/${workId}/reviews`, viewerB, {
+			await post(`/api/content/works/${workId}/reviews`, userB, {
 				verdict: "recommended",
 				body: "one of the best things I have played this year",
 			})
@@ -188,7 +188,7 @@ describe("Filing a report", () => {
 	});
 
 	it("rejects a reason outside the taxonomy", async () => {
-		const res = await post("/api/moderation/reports", viewerB, {
+		const res = await post("/api/moderation/reports", userB, {
 			subjectType: "comment",
 			subjectId: commentId,
 			reason: "i-just-disagree",
@@ -197,7 +197,7 @@ describe("Filing a report", () => {
 	});
 
 	it("rejects an unknown subject type", async () => {
-		const res = await post("/api/moderation/reports", viewerB, {
+		const res = await post("/api/moderation/reports", userB, {
 			subjectType: "post",
 			subjectId: 1,
 			reason: "spam",
@@ -206,7 +206,7 @@ describe("Filing a report", () => {
 	});
 
 	it("404s a subject that doesn't exist rather than queueing a report about nothing", async () => {
-		const res = await post("/api/moderation/reports", viewerB, {
+		const res = await post("/api/moderation/reports", userB, {
 			subjectType: "comment",
 			subjectId: 2_000_000_000,
 			reason: "spam",
@@ -215,7 +215,7 @@ describe("Filing a report", () => {
 	});
 
 	it("accepts a report from a signed-in user", async () => {
-		const res = await post("/api/moderation/reports", viewerB, {
+		const res = await post("/api/moderation/reports", userB, {
 			subjectType: "comment",
 			subjectId: commentId,
 			reason: "spam",
@@ -226,7 +226,7 @@ describe("Filing a report", () => {
 	});
 
 	it("is idempotent per reporter — re-reporting updates, it doesn't stack", async () => {
-		const res = await post("/api/moderation/reports", viewerB, {
+		const res = await post("/api/moderation/reports", userB, {
 			subjectType: "comment",
 			subjectId: commentId,
 			reason: "harassment",
@@ -254,7 +254,7 @@ describe("Filing a report", () => {
  * In `afterAll` rather than a closing test, so it runs whether the suite passed or bailed.
  */
 afterAll(async () => {
-	await purgeFixtureAccounts([creatorName, viewerAName, viewerBName]);
+	await purgeFixtureAccounts([creatorName, userAName, userBName]);
 });
 
 describe("Queue gating", () => {
@@ -263,12 +263,12 @@ describe("Queue gating", () => {
 	});
 
 	it("401s a signed-in Anthers account, whose session is not an admin session", async () => {
-		const res = await req("/api/admin/moderation", { headers: { Cookie: viewerB } });
+		const res = await req("/api/admin/moderation", { headers: { Cookie: userB } });
 		expect(res.status).toBe(401);
 	});
 
 	it("401s an Anthers account on the mutating routes too", async () => {
-		const res = await post("/api/admin/moderation/hide", viewerB, {
+		const res = await post("/api/admin/moderation/hide", userB, {
 			subjectType: "comment",
 			subjectId: commentId,
 			reason: "spam",
@@ -278,7 +278,7 @@ describe("Queue gating", () => {
 
 	it("404s a bearer credential — the surface isn't advertised", async () => {
 		const res = await req("/api/admin/moderation", {
-			headers: { Authorization: `Bearer ${viewerBToken}` },
+			headers: { Authorization: `Bearer ${userBToken}` },
 		});
 		expect(res.status).toBe(404);
 	});
@@ -292,7 +292,7 @@ describe("The operator queue", () => {
 		expect(entry?.excerpt).toContain("cheap followers");
 		expect(entry?.openReports).toBe(1);
 		expect(entry?.reasons).toContain("harassment");
-		expect(entry?.author?.handle).toBe(await handleOf(viewerAName));
+		expect(entry?.author?.handle).toBe(await handleOf(userAName));
 		// The queue names WHERE the item lives, and that is no longer always a post — so
 		// the context carries its kind. A comment on a post reads as one.
 		expect(entry?.context?.kind).toBe("post");
@@ -310,7 +310,7 @@ describe("The operator queue", () => {
 		const [reporter] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.email, `${viewerAName}@example.com`))
+			.where(eq(users.email, `${userAName}@example.com`))
 			.limit(1);
 		const [{ maxId }] = await db
 			.select({ maxId: sql<number>`coalesce(max(${comments.id}), 0)` })
@@ -415,7 +415,7 @@ describe("Hiding a comment", () => {
 	});
 
 	it("hides it from its own author too — hidden is hidden", async () => {
-		const res = await req(`/api/content/posts/${slug}/comments`, { headers: { Cookie: viewerA } });
+		const res = await req(`/api/content/posts/${slug}/comments`, { headers: { Cookie: userA } });
 		const ids = ((await res.json()).comments as { id: number }[]).map((c) => c.id);
 		expect(ids).not.toContain(commentId);
 	});
@@ -483,12 +483,12 @@ describe("Hiding a review", () => {
 	});
 
 	it("still shows the author their own verdict rather than lying about it", async () => {
-		const res = await req(`/api/content/works/${workId}/reviews`, { headers: { Cookie: viewerA } });
+		const res = await req(`/api/content/works/${workId}/reviews`, { headers: { Cookie: userA } });
 		expect((await res.json()).userVerdict).toBe("not-recommended");
 	});
 
 	it("cannot be resurrected by re-reviewing — the upsert only touches the verdict", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "came back to it and warmed up considerably",
 		});
@@ -547,13 +547,13 @@ describe("A report whose subject is gone", () => {
 		// its comments away) strands them. The queue hydrates from the content tables
 		// and drops orphans; the summary has to agree, or an operator sees a count
 		// they have no way to clear.
-		const doomed = await post(`/api/content/posts/${slug}/comments`, viewerB, {
+		const doomed = await post(`/api/content/posts/${slug}/comments`, userB, {
 			body: "about to be cascaded away",
 		});
 		const doomedId = (await doomed.json()).comment.id;
 		expect(
 			(
-				await post("/api/moderation/reports", viewerA, {
+				await post("/api/moderation/reports", userA, {
 					subjectType: "comment",
 					subjectId: doomedId,
 					reason: "spam",
@@ -588,7 +588,7 @@ describe("A report whose subject is gone", () => {
 
 describe("Dismissing a report", () => {
 	it("clears the queue entry without touching the content", async () => {
-		const filed = await post("/api/moderation/reports", viewerA, {
+		const filed = await post("/api/moderation/reports", userA, {
 			subjectType: "comment",
 			subjectId: otherCommentId,
 			reason: "other",

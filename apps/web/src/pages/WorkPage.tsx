@@ -82,7 +82,7 @@ export default function WorkPage() {
 	 */
 	const loadedKey = useRef<string | null>(null);
 
-	/** Re-read the Work — the access verdict changes under us when a viewer unlocks it. */
+	/** Re-read the Work — the access verdict changes under us when a user unlocks it. */
 	const refetch = useCallback(async () => {
 		if (!slug) return;
 		const res = await client.api.content.works[":id"].$get({
@@ -150,7 +150,7 @@ export default function WorkPage() {
 	const playerless = work != null && pageHoldsTheMeter(work.type);
 	/**
 	 * The allowance is gone *and* it applies here. Both halves matter: a spent allowance
-	 * says nothing about gated work the viewer cleared, work they bought, or their own
+	 * says nothing about gated work the user cleared, work they bought, or their own
 	 * catalog — none of which is Public Access, and none of which the meter touches.
 	 */
 	const spentOnThis =
@@ -206,13 +206,13 @@ export default function WorkPage() {
 		);
 	}
 
-	// The viewer's verdict. `Work` types both serializations' `access`, and this page is a
-	// reader's — the owner's own shape carries the editable rows instead, which read as no
+	// The user's verdict. `Work` types both serializations' `access`, and this page is a
+	// user's — the owner's own shape carries the editable rows instead, which read as no
 	// verdict at all here (`null`), the same absence the comment below already describes.
 	const access = isAccessResult(work.access) ? work.access : null;
 	const isOwner = isAuthenticated && user?.id === work.creatorId;
 	/**
-	 * Whether this viewer may open the Work.
+	 * Whether this user may open the Work.
 	 *
 	 * ⚠️ **No verdict is the owner's own shape, not a refusal.** The server answers a creator's own
 	 * Work with `serializeWork`, which carries no access verdict because a creator can always open
@@ -258,7 +258,7 @@ export default function WorkPage() {
 				}
 			/>
 
-			{/* A piece of writing's description is its standfirst, under the headline where a reader
+			{/* A piece of writing's description is its standfirst, under the headline where a user
 			    expects one; every other kind keeps it under the Work, below. */}
 			{isWriting(work.type) && <WorkDescription work={work} />}
 
@@ -328,7 +328,7 @@ export default function WorkPage() {
 			{!isWriting(work.type) && <WorkDescription work={work} />}
 
 			{/* The liner notes — who and what made it, public whether or not it is gated. A credit
-		    naming this viewer's own identity carries the confirm ask, and a decision re-reads
+		    naming this user's own identity carries the confirm ask, and a decision re-reads
 		    the Work so the credits settle from the server's own answer. */}
 			<WorkCredits work={work} onCreditDecided={refetch} />
 

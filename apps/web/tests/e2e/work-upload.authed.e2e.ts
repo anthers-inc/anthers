@@ -162,7 +162,7 @@ test("a video Work is made from its file and edited while the file uploads", asy
  * A comic and a book are each made from one PDF, the same way a video is made from its file.
  *
  * The Studio could not make an ebook at all until 2026-09-16, though everything downstream of the
- * upload — the rasterizer, the page route, the reader — already existed. What this walk proves is
+ * upload — the rasterizer, the page route, the user — already existed. What this walk proves is
  * the join: the kind is offered, the file goes up as a private asset, and arriving starts the
  * rendering. It runs for both kinds because they share that pipeline through `processingFor`, and
  * a kind that fell out of it would upload a file nothing ever renders. No worker runs here, so the

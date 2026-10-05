@@ -385,7 +385,7 @@ export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
  * 🚨 **A record, never a rendering.** § 5.2 of the Child Safety Reporting Policy makes it a policy commitment that
  * the operator surface shows the finding — the key, the Work, the uploader, the match
  * classification and the timestamps — and **never the material**. That is why there is
- * no thumbnail column, no excerpt, and no preview key here: building a viewer over this
+ * no thumbnail column, no excerpt, and no preview key here: building a user over this
  * table would take a policy amendment, not a migration. § 2258B conditions the
  * provider's immunity on minimizing how many people can see such depictions, and a
  * console that renders one widens that population every time somebody opens it.

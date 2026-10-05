@@ -120,7 +120,7 @@ export const purchases = pgTable(
 		 * `completed` status predicate does that, and still does); it encoded a
 		 * one-purchase-per-charge model that no longer holds.
 		 *
-		 * Every reader of this column was already written to expect several rows, or was
+		 * Every user of this column was already written to expect several rows, or was
 		 * corrected in the same change: the webhook completes **all** pending rows, and
 		 * `refunds.ts` settles **all** siblings because a refund with no `amount` returns
 		 * the whole charge.
@@ -210,7 +210,7 @@ export const disputes = pgTable(
 		 * Stripe's own dispute status vocabulary, stored verbatim:
 		 * `needs_response | under_review | won | lost | warning_needs_response |
 		 * warning_under_review | warning_closed | unchallengeable`. Never translated — the
-		 * admin list renders Stripe's word, and `outcome` below is what our own readers key on.
+		 * admin list renders Stripe's word, and `outcome` below is what our own users key on.
 		 */
 		status: text("status").notNull(),
 		/** The purchase this charge was, when it was one — null on a support charge. */
@@ -227,7 +227,7 @@ export const disputes = pgTable(
 		evidenceDueBy: timestamp("evidence_due_by", { withTimezone: true }),
 		/**
 		 * `won` or `lost` once Stripe closes the dispute, null until then. This is the column
-		 * our own readers key on rather than `status`, because it is ours: a `won` dispute is
+		 * our own users key on rather than `status`, because it is ours: a `won` dispute is
 		 * the money coming back (the purchase is restored), a `lost` one is it gone for good.
 		 */
 		outcome: text("outcome"),

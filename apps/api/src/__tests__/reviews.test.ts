@@ -71,7 +71,7 @@ interface ReviewList {
 		body: string;
 		handle: string;
 		score: number;
-		viewerVote: "up" | "down" | null;
+		userVote: "up" | "down" | null;
 	}[];
 }
 
@@ -85,25 +85,25 @@ const readReviews = async (cookie?: string): Promise<ReviewList> => {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `rv_creator_${id}`;
-const viewerAName = `rv_a_${id}`;
-const viewerBName = `rv_b_${id}`;
+const userAName = `rv_a_${id}`;
+const userBName = `rv_b_${id}`;
 const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 
 let creator: string;
-let viewerA: string;
-let _viewerB: string;
+let userA: string;
+let _userB: string;
 let workId: number;
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userAName}@example.com`}`, sql`${`${userBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
-	viewerA = await signUp(viewerAName);
-	await enablePayouts(viewerAName);
-	_viewerB = await signUp(viewerBName);
-	await enablePayouts(viewerBName);
+	userA = await signUp(userAName);
+	await enablePayouts(userAName);
+	_userB = await signUp(userBName);
+	await enablePayouts(userBName);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
@@ -131,14 +131,14 @@ beforeAll(async () => {
 
 describe("A verdict cannot be left without words", () => {
 	it("rejects a verdict with no body at all", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 		});
 		expect(res.status).toBe(400);
 	});
 
 	it("rejects a body that is only whitespace", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "        ",
 		});
@@ -146,7 +146,7 @@ describe("A verdict cannot be left without words", () => {
 	});
 
 	it("rejects a body under the minimum", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "x".repeat(REVIEW_MIN - 1),
 		});
@@ -154,7 +154,7 @@ describe("A verdict cannot be left without words", () => {
 	});
 
 	it("rejects a body over the maximum", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "x".repeat(REVIEW_MAX + 1),
 		});
@@ -162,7 +162,7 @@ describe("A verdict cannot be left without words", () => {
 	});
 
 	it("still rejects a verdict that is not one of ours", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "meh",
 			body: "a perfectly reasonable body",
 		});
@@ -170,7 +170,7 @@ describe("A verdict cannot be left without words", () => {
 	});
 
 	it("accepts a verdict with words, and publishes both", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "  the pacing is the thing — nothing overstays  ",
 		});
@@ -179,16 +179,16 @@ describe("A verdict cannot be left without words", () => {
 		const list = await readReviews();
 		expect(list.count).toBe(1);
 		expect(list.reviews).toHaveLength(1);
-		// Trimmed on the way in, so leading/trailing space never reaches a reader.
+		// Trimmed on the way in, so leading/trailing space never reaches a user.
 		expect(list.reviews[0].body).toBe("the pacing is the thing — nothing overstays");
 		expect(list.reviews[0].verdict).toBe("recommended");
-		expect(list.reviews[0].handle).toBe(await handleOf(viewerAName));
+		expect(list.reviews[0].handle).toBe(await handleOf(userAName));
 	});
 });
 
 describe("Editing a review", () => {
 	it("updates the verdict AND the text, not just the verdict", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "not-recommended",
 			body: "came back to it and it did not hold up",
 		});
@@ -202,7 +202,7 @@ describe("Editing a review", () => {
 	});
 
 	it("shows the author their own verdict and words so the form can pre-fill", async () => {
-		const list = await readReviews(viewerA);
+		const list = await readReviews(userA);
 		expect(list.userVerdict).toBe("not-recommended");
 		expect(list.userReview).toBe("came back to it and it did not hold up");
 	});
@@ -216,14 +216,14 @@ describe("Editing a review", () => {
 					eq(reviews.workId, workId),
 					eq(
 						reviews.userId,
-						sql`(SELECT id FROM users WHERE email = ${`${viewerAName}@example.com`})`,
+						sql`(SELECT id FROM users WHERE email = ${`${userAName}@example.com`})`,
 					),
 				),
 			)
 			.limit(1);
 		await db.update(reviews).set({ moderationStatus: "hidden" }).where(eq(reviews.id, row.id));
 
-		const res = await post(`/api/content/works/${workId}/reviews`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "actually I have changed my mind again",
 		});
@@ -244,10 +244,10 @@ describe("Editing a review", () => {
 describe("Reviews written before text was required", () => {
 	it("still render and still count, with an empty body", async () => {
 		// Insert the legacy shape directly — the API can no longer produce it.
-		const [viewer] = (await db.execute(
-			sql`SELECT id FROM users WHERE email = ${`${viewerBName}@example.com`}`,
+		const [user] = (await db.execute(
+			sql`SELECT id FROM users WHERE email = ${`${userBName}@example.com`}`,
 		)) as unknown as { id: number }[];
-		await db.insert(reviews).values({ userId: viewer.id, workId, verdict: "recommended" });
+		await db.insert(reviews).values({ userId: user.id, workId, verdict: "recommended" });
 
 		const list = await readReviews();
 		expect(list.count).toBe(1);
@@ -261,8 +261,8 @@ describe("Reviews written before text was required", () => {
 });
 
 describe("Helpfulness — reviews sort by it and are never weighted by it", () => {
-	it("carries a floored net and the viewer's own vote on every review", async () => {
-		// The viewerB review from the block above is the subject. Three fresh readers
+	it("carries a floored net and the user's own vote on every review", async () => {
+		// The userB review from the block above is the subject. Three fresh users
 		// vote on it: two up and one down lands it at 1, which the REVIEWER sees
 		// decomposed and everybody else sees as one number.
 		const reviewId = (await readReviews()).reviews[0].id;
@@ -286,20 +286,20 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		// Two up and one down is a net of 1. This review predates the author auto-upvote (the
 		// row was inserted directly above), so nothing else is in the tally.
 		expect(entry.score).toBe(1);
-		expect(entry.viewerVote).toBeNull();
+		expect(entry.userVote).toBeNull();
 		expect(entry).not.toHaveProperty("up");
 		expect(entry).not.toHaveProperty("down");
 
 		// A voter sees their own; the aggregate is untouched — 100% recommended from one
 		// review however many votes the review draws.
 		const asVoter = await readReviews(cookies[2]);
-		expect(asVoter.reviews[0].viewerVote).toBe("down");
+		expect(asVoter.reviews[0].userVote).toBe("down");
 		expect(asVoter.recommendedPercent).toBe(100);
 		expect(asVoter.count).toBe(1);
 
 		// The reviewer sees the figures behind it, as a commenter does on their own.
 		const own = await req(`/api/content/votes?subjectType=review&subjectId=${reviewId}`, {
-			headers: { Cookie: _viewerB },
+			headers: { Cookie: _userB },
 		});
 		expect(own.status).toBe(200);
 		const ownJson = await own.json();
@@ -312,8 +312,8 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		expect(await other.json()).not.toHaveProperty("up");
 	});
 
-	it("refuses a vote on a hidden review, which would be voting on something no reader can see", async () => {
-		// viewerA's review was hidden in the editing block above and is still there.
+	it("refuses a vote on a hidden review, which would be voting on something no user can see", async () => {
+		// userA's review was hidden in the editing block above and is still there.
 		const [hidden] = await db
 			.select({ id: reviews.id })
 			.from(reviews)
@@ -331,7 +331,7 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 
 describe("The reviewer's own upvote", () => {
 	// Reddit's rule, settled 2026-09-21: posting something says the author thinks it is
-	// worth reading, so a new review starts at 1 and a 0 always means a reader said no.
+	// worth reading, so a new review starts at 1 and a 0 always means a user said no.
 	it("starts a new review at 1, cast by its author", async () => {
 		const cookie = await signUp(`rv_auto_${id}`);
 		const res = await post(`/api/content/works/${workId}/reviews`, cookie, {
@@ -345,7 +345,7 @@ describe("The reviewer's own upvote", () => {
 		const entry = list.reviews.find((r) => r.id === reviewId)!;
 		expect(entry.score).toBe(1);
 		const asAuthor = await readReviews(cookie);
-		expect(asAuthor.reviews.find((r) => r.id === reviewId)!.viewerVote).toBe("up");
+		expect(asAuthor.reviews.find((r) => r.id === reviewId)!.userVote).toBe("up");
 	});
 
 	it("does not resurrect a withdrawn vote when the review is edited", async () => {
@@ -381,16 +381,16 @@ describe("The reviewer's own upvote", () => {
 });
 
 describe("The Recent share", () => {
-	// A reader-selectable window beside All Time (Parker, 2026-09-13): the same proportion
+	// A user-selectable window beside All Time (Parker, 2026-09-13): the same proportion
 	// over only the reviews inside it, or null rather than 0 when the window is empty.
 	it("computes over the chosen window and nowhere else", async () => {
-		// viewerB's review above is "recommended" and is the only one we move. Everything
+		// userB's review above is "recommended" and is the only one we move. Everything
 		// else on this Work was written this run and is recent by construction.
 		const [bRow] = await db
 			.select({ id: reviews.id })
 			.from(reviews)
 			.innerJoin(users, eq(reviews.userId, users.id))
-			.where(and(eq(reviews.workId, workId), eq(users.atprotoHandle, await handleOf(viewerBName))))
+			.where(and(eq(reviews.workId, workId), eq(users.atprotoHandle, await handleOf(userBName))))
 			.limit(1);
 		const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000); // outside the month
 		await db.update(reviews).set({ createdAt: old }).where(eq(reviews.id, bRow.id));
@@ -407,7 +407,7 @@ describe("The Recent share", () => {
 		};
 
 		// All Time unchanged — the move is a window matter, not a count matter: the
-		// visible set is viewerB (recommended) plus this block's two (1 of 2 recommended).
+		// visible set is userB (recommended) plus this block's two (1 of 2 recommended).
 		const all = await readReviews();
 		expect(all.count).toBe(3);
 		expect(all.recommendedPercent).toBe(67);

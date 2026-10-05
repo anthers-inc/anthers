@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The two rules a reader can check with their own eyes, and one they cannot.
+ * The two rules a user can check with their own eyes, and one they cannot.
  *
  * 🚨 **The rule under test is that the published score is the ranking key.** Parker,
  * 2026-09-04: *"there's nothing ranking stuff that the users can't see."* That is a claim
@@ -36,7 +36,7 @@ describe("what a vote adds up to", () => {
 		expect(netScore(tally(2, 9))).toBe(-7);
 	});
 
-	it("🚨 never orders two comments by a difference a reader cannot see", () => {
+	it("🚨 never orders two comments by a difference a user cannot see", () => {
 		// The ranking key IS the published number. Two comments that show the same score
 		// must be tied on score however far apart their true nets are — otherwise the order
 		// is decided by something nobody can observe.

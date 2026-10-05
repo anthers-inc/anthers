@@ -448,7 +448,7 @@ describe("Clearing a Work-less finding", () => {
 			source: "operator",
 			classification: "apparent-csam",
 			adminId: operatorId,
-			note: "reported by two readers",
+			note: "reported by two users",
 		});
 		await clearObjectQuarantine({
 			findingId: findingId!,
@@ -460,7 +460,7 @@ describe("Clearing a Work-less finding", () => {
 			.select({ note: mediaQuarantine.note, clearedNote: mediaQuarantine.clearedNote })
 			.from(mediaQuarantine)
 			.where(eq(mediaQuarantine.id, findingId!));
-		expect(row).toEqual({ note: "reported by two readers", clearedNote: "not a match" });
+		expect(row).toEqual({ note: "reported by two users", clearedNote: "not a match" });
 	});
 
 	it("🚨 refuses a finding id that matches nothing instead of reporting success", async () => {

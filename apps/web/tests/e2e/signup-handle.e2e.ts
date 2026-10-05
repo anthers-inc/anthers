@@ -9,7 +9,7 @@
  * doors it replaced had already drifted about terms and onboarding.
  *
  * 🚨 **Signing up starts with a handle rather than an address** (Parker, 2026-09-08), because
- * the records a *reader* writes belong in that reader's own repository — so an account with no
+ * the records a *user* writes belong in that user's own repository — so an account with no
  * identity could never write a follow or a comment, which makes it permanently lesser rather
  * than merely plainer. There is no address door at all: with hosting unconfigured the card
  * offers Bluesky alone.

@@ -33,7 +33,7 @@ export default function ProjectDownloads({
 }) {
 	if (assets.length === 0) return null;
 
-	// If the viewer can't access this Work, show a gated message instead of files.
+	// If the user can't access this Work, show a gated message instead of files.
 	if (!canAccess) {
 		return (
 			<div>

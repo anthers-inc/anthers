@@ -4,7 +4,7 @@
  * somebody's behalf apart from a Work's listing.
  *
  * `atproto-record-plan.ts` decides and carries out; `creator-record-listing.ts` and
- * `reader-record-listing.ts` read the rows. This is the part the six kinds share — plan, open a
+ * `user-record-listing.ts` read the rows. This is the part the six kinds share — plan, open a
  * repository only if the plan writes, carry it out, remember the address — so that the order of
  * those steps and what a failure means are decided once.
  *

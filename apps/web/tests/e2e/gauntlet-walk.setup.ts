@@ -3,10 +3,10 @@
  * Setup project for the User Gauntlet walk's OWN fixture instance: reset instance B
  * through its canonical script (`db:gauntlet --instance walk` — the same seeder instance
  * A's setup runs, pointed at the walk's own rows, never a reimplementation), sign the
- * walk's viewer in through the real sign-in route, and persist the resulting session as
+ * walk's user in through the real sign-in route, and persist the resulting session as
  * the storageState the gauntlet project runs under.
  *
- * Instance B is the walk's private copy of the fixture (`walk-creator` / `walk-viewer`
+ * Instance B is the walk's private copy of the fixture (`walk-creator` / `walk-walker`
  * accounts, `walk-gauntlet-` slugs — see `@anthers/db/gauntlet-walk`), so this setup and
  * the walk share a fixture with nobody: the `authed` project runs on instance A, whose
  * rows this never touches, which is why the two projects need no ordering between them.
@@ -25,17 +25,17 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { WALK_VIEWER_EMAIL } from "@anthers/db/gauntlet-walk";
+import { WALK_WALKER_EMAIL } from "@anthers/db/gauntlet-walk";
 import { expect, test as setup } from "@playwright/test";
 import { API_URL, emailedCode, WALK_AUTH_STATE_PATH, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
-setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
-	// Canonical fixture reset, for instance B. --ensure-viewer creates walk-viewer on
+setup("reset the walk's gauntlet fixture and sign its user in", async () => {
+	// Canonical fixture reset, for instance B. --ensure-walker creates walk-walker on
 	// first run and targets it thereafter, so the walk never touches the dev account
-	// or instance A's gauntlet_viewer.
-	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-viewer"], {
+	// or instance A's gauntlet_walker.
+	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-walker"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
@@ -43,7 +43,7 @@ setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
 	// resets the fixture again — which deletes the content items, and with them any media
 	// attached now — and then re-attaches it. Generating it here meant running ffmpeg twice
 	// per CI run and throwing the first result away. What this step must leave behind is the
-	// viewer, so the sign-in below has an account to authenticate.
+	// user, so the sign-in below has an account to authenticate.
 
 	// 🚨 The MEDIA FIXTURE (`db:media-fixture`) is deliberately NOT seeded here either —
 	// that is instance A's setup's job. It seeds creators (`media_fixture`, the gauntlet
@@ -56,13 +56,13 @@ setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
 	await fetch(`${API_URL}/api/auth/signin/start`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({ email: WALK_VIEWER_EMAIL }),
+		body: JSON.stringify({ email: WALK_WALKER_EMAIL }),
 	});
-	const code = await emailedCode(WALK_VIEWER_EMAIL);
+	const code = await emailedCode(WALK_WALKER_EMAIL);
 	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email: WALK_VIEWER_EMAIL, code }),
+		body: JSON.stringify({ email: WALK_WALKER_EMAIL, code }),
 	});
 	expect(res.ok, `sign-in failed: ${res.status} ${await res.text().catch(() => "")}`).toBe(true);
 
@@ -71,7 +71,7 @@ setup("reset the walk's gauntlet fixture and sign its viewer in", async () => {
 	expect(token, `no session cookie in Set-Cookie: "${setCookie}"`).toBeTruthy();
 
 	// The storage state, by hand (see the gotcha above): the session cookie for the API
-	// host, which is the whole of the viewer's state now that the pre-launch gate is gone.
+	// host, which is the whole of the user's state now that the pre-launch gate is gone.
 	const state = {
 		cookies: [
 			{

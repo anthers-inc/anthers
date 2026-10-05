@@ -105,13 +105,13 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 				? `/projects/${project.slug}`
 				: null;
 
-	// A shelf entry the viewer cannot currently open — saved free and later gated, or
+	// A shelf entry the user cannot currently open — saved free and later gated, or
 	// refunded. Stated rather than hidden: it is still theirs to see, just not to open.
 	const locked =
 		item.kind === "work" && isAccessResult(work?.access) && work.access.canAccess === false;
 
-	// A cover is covered here the same way a card covers it — the rung the reader blurs,
-	// and each kind of content they asked to cover. The shelf is not exempt: a reader who
+	// A cover is covered here the same way a card covers it — the rung the user blurs,
+	// and each kind of content they asked to cover. The shelf is not exempt: a user who
 	// blurs a rung or a kind expects it covered wherever it appears, their own shelf
 	// included. Projects carry no rating, so an album's cover renders as-is.
 	const { prefs } = useContentPreferences();

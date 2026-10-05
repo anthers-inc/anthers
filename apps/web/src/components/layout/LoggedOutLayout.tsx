@@ -61,7 +61,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	{
 		// Roadmap and Changelog live here rather than under About (Parker, 2026-10-03):
 		// they are the record of the thing being built, not what the organization is —
-		// and a reader looking for "what's next" is looking for development, not "About Us".
+		// and a user looking for "what's next" is looking for development, not "About Us".
 		title: "Development",
 		links: [
 			["Roadmap", "/roadmap"],
@@ -198,7 +198,7 @@ export default function LoggedOutLayout() {
 					    2026-08-17 and came out with this change, not on its own merits: the
 					    corner CTA now points at the same page under a clearer name, and a nav
 					    link and a button side by side going to one destination under two labels
-					    is a question for the reader with no useful answer. */}
+					    is a question for the user with no useful answer. */}
 					<ul className="translate-y-0.5 scale-105 menu menu-horizontal hidden gap-8 lg:flex">
 						<li>
 							<Link to="/">For Users</Link>
@@ -229,7 +229,7 @@ export default function LoggedOutLayout() {
 
 						🚨 **"Sign Up Free", and the word is doing real work** (2026-08-22). The
 						button leads to `/signup`, a page that also asks about supporting a
-						creator and supporting Anthers — so a bare "Sign Up" invites the reader to
+						creator and supporting Anthers — so a bare "Sign Up" invites the user to
 						assume the door has a price on it. It does not: creating an account costs
 						nothing. The claim is safe to make outright because the free tier is
 						free forever by charter rather than by pricing decision (the wiki's *How Anthers Talks About Itself*), and the

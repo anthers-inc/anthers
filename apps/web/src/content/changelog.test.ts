@@ -85,7 +85,7 @@ describe("the changelog versions and orders itself", () => {
 	});
 });
 
-describe("every entry is reader-facing", () => {
+describe("every entry is user-facing", () => {
 	it("gives every release a lede and at least one entry", () => {
 		for (const release of CHANGELOG) {
 			expect(`${release.version}: lede "${release.lede.slice(0, 20)}…" is non-empty`).toBe(
@@ -97,7 +97,7 @@ describe("every entry is reader-facing", () => {
 		}
 	});
 
-	it("keeps each entry under the length a reader skims, and non-empty", () => {
+	it("keeps each entry under the length a user skims, and non-empty", () => {
 		// Not enforced to a hard cap yet — the grouping judgment is the skill's, and a
 		// number picked before a second release exists would be a guess. What IS
 		// enforceable: no entry is a fragment, and none is a paragraph. The lede's cap

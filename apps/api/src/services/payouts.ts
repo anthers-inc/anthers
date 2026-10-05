@@ -5,7 +5,7 @@
  * 🚨 **This became an ENFORCEMENT gate on 2026-08-28, and it was four separate copies of
  * one predicate before that.** `routes/payments.ts` asked it twice to decide whether to
  * take money, and `routes/content.ts` asked it twice to decide whether a buyer sees a live
- * checkout — each spelling out `onboardingComplete && payoutsEnabled` inline. Four readers
+ * checkout — each spelling out `onboardingComplete && payoutsEnabled` inline. Four users
  * of one fact is how two of them quietly come to disagree, which this repo has now paid
  * for twice (a cookie-only `getOptionalUserId` beside a bearer-reading `requireAuth`, and
  * a private cookie-only copy in `routes/subscriptions.ts`). Releasing a Work is a fifth
@@ -36,7 +36,7 @@
  * 2026-09, a Dashboard-configured list rather than a constant — and not the "roughly 34" this
  * comment used to claim), so requiring it to publish shuts out creators in most of the world,
  * not merely creators who do not want money. That trade is now made deliberately rather than
- * by omission, and it is written down where a reader meets it — the Creator Terms, `/parents`,
+ * by omission, and it is written down where a user meets it — the Creator Terms, `/parents`,
  * the FAQ, and the release refusal below.
  */
 

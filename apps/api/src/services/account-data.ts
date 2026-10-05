@@ -84,7 +84,7 @@ export interface AccountExport {
  * archive here is kilobytes — a few hundred rows and no media bytes — and a job would
  * add a queue, a storage object, an expiring URL and a notification path the app does
  * not have (Privacy Policy marker 8). If exports ever grow past what a request can serve, that
- * is the moment to move it, and `notes` already tells the reader what isn't inlined.
+ * is the moment to move it, and `notes` already tells the user what isn't inlined.
  */
 export async function buildAccountExport(userId: number): Promise<AccountExport | null> {
 	const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);

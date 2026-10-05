@@ -9,7 +9,7 @@
  * at most one second, split evenly among whatever they were consuming in it —
  * in every tab and on every device.
  *
- * Every reader that used to `SUM(duration_seconds)` over `created_at` goes through
+ * Every user that used to `SUM(duration_seconds)` over `created_at` goes through
  * `creditedSeconds` or `creditedSecondsByCreator` instead, so the split is applied
  * once, identically, everywhere — the meter, parental controls, distribution, the
  * rollup, and analytics all answer the same question the same way.
@@ -69,7 +69,7 @@ async function rangesOverlapping(
 			and(
 				eq(attentionEvents.userId, userId),
 				// Zero-duration visit pings carry no time and no window; they are
-				// analytics, and no reader of *time* should see them.
+				// analytics, and no user of *time* should see them.
 				sql`${attentionEvents.durationSeconds} > 0`,
 				// Overlap: the range starts before the window ends and ends after it begins.
 				sql`${RANGE_START} < ${iso(windowEnd)}`,
@@ -154,7 +154,7 @@ export async function creditedSecondsByCreator(
  * devices), and only the split seconds are handed back. Because that happens
  * before the per-person rows are deleted, the anonymous survivor (`attention_daily`,
  * which has no `user_id` by design) stores already-correct totals and never needs a
- * viewer for anything but `unique_viewers`, which the caller counts distinctly.
+ * user for anything but `unique_viewers`, which the caller counts distinctly.
  */
 export async function creditedSecondsForRollup(
 	userId: number,
@@ -265,9 +265,9 @@ export async function visitPingsForRollup(
 }
 
 /**
- * Creator-facing analytics over RAW ranges: per-viewer split applied, then grouped
+ * Creator-facing analytics over RAW ranges: per-user split applied, then grouped
  * however the caller needs. Analytics aggregates across people, so the split's
- * overlap division — which is per account — is resolved viewer by viewer first,
+ * overlap division — which is per account — is resolved user by user first,
  * and only the credited remainders are combined. `groupBy` keys each credited row.
  *
  * Windows on when the time was spent (`started_at`), not when it was recorded.
@@ -276,7 +276,7 @@ export async function creatorAnalyticsRanges<K extends string>(
 	creatorId: number,
 	since: Date,
 	groupBy: (row: { creatorId: number; workId: number | null; eventType: string; day: string }) => K,
-): Promise<Array<{ key: K; totalSeconds: number; eventCount: number; viewers: Set<number> }>> {
+): Promise<Array<{ key: K; totalSeconds: number; eventCount: number; users: Set<number> }>> {
 	const rows = await db
 		.select({
 			id: attentionEvents.id,
@@ -293,24 +293,24 @@ export async function creatorAnalyticsRanges<K extends string>(
 		.from(attentionEvents)
 		.where(and(eq(attentionEvents.creatorId, creatorId), sql`${RANGE_END} > ${iso(since)}`));
 
-	// Group rows by viewer, split each viewer's ranges against their own, then fold
-	// into the caller's buckets. Splitting across viewers would divide seconds that
+	// Group rows by user, split each user's ranges against their own, then fold
+	// into the caller's buckets. Splitting across users would divide seconds that
 	// were never contested — two people can watch the same minute whole.
-	const byViewer = new Map<number, typeof rows>();
+	const byUser = new Map<number, typeof rows>();
 	for (const r of rows) {
-		const list = byViewer.get(r.userId) ?? [];
+		const list = byUser.get(r.userId) ?? [];
 		list.push(r);
-		byViewer.set(r.userId, list);
+		byUser.set(r.userId, list);
 	}
 
 	const nowMs = Date.now();
 	const groups = new Map<
 		K,
-		{ key: K; totalSeconds: number; eventCount: number; viewers: Set<number> }
+		{ key: K; totalSeconds: number; eventCount: number; users: Set<number> }
 	>();
-	for (const [viewerId, viewerRows] of byViewer) {
-		const credited = splitRows(viewerRows, since, new Date(nowMs));
-		for (const row of viewerRows) {
+	for (const [userId, userRows] of byUser) {
+		const credited = splitRows(userRows, since, new Date(nowMs));
+		for (const row of userRows) {
 			const seconds = credited.get(row.id) ?? 0;
 			const day = (
 				row.startedAt ?? new Date(row.createdAt.getTime() - (row.durationSeconds ?? 0) * 1_000)
@@ -327,11 +327,11 @@ export async function creatorAnalyticsRanges<K extends string>(
 				key,
 				totalSeconds: 0,
 				eventCount: 0,
-				viewers: new Set<number>(),
+				users: new Set<number>(),
 			};
 			held.totalSeconds += seconds;
 			held.eventCount += 1;
-			held.viewers.add(viewerId);
+			held.users.add(userId);
 			groups.set(key, held);
 		}
 	}

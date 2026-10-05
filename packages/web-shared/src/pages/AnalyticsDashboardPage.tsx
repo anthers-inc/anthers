@@ -118,8 +118,8 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
 				<div className="stat-figure text-accent">
 					<UsersIcon className="w-6 h-6" />
 				</div>
-				<div className="stat-title text-xs">Unique Viewers</div>
-				<div className="stat-value text-lg">{formatNumber(overview.uniqueViewers)}</div>
+				<div className="stat-title text-xs">Unique Users</div>
+				<div className="stat-value text-lg">{formatNumber(overview.uniqueUsers)}</div>
 			</div>
 			<div className="stat bg-base-200 rounded-lg p-4">
 				<div className="stat-figure text-info">
@@ -217,7 +217,7 @@ function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] 
 		return (
 			<EmptyState
 				title="No content activity yet"
-				description="Analytics will appear here once viewers interact with your content."
+				description="Analytics will appear here once users interact with your content."
 			/>
 		);
 	}

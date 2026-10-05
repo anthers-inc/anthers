@@ -796,7 +796,7 @@ export async function applyDirectedSupport(
 		// rungs rather than sitting beside them**, the same rule the picker's POST
 		// enforces and the one the dissolved Anthers special path carried. Without the
 		// delete, a webhook after a re-price stacks the new rung beside the old one and
-		// every MAX-reading surface reports the higher — a viewer who lowered from $12
+		// every MAX-reading surface reports the higher — a user who lowered from $12
 		// to $3 would keep reading $12 the moment the cycle turned, with no error
 		// anywhere. The unique key makes the re-delivered webhook idempotent; this makes
 		// a *changed* subscription honest.

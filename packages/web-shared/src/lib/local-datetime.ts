@@ -2,7 +2,7 @@
 /**
  * Converting between a stored instant and the value an `<input type="datetime-local">` holds.
  *
- * The input speaks the viewer's local clock with no zone and no seconds, and the API stores an
+ * The input speaks the user's local clock with no zone and no seconds, and the API stores an
  * instant, so a schedule typed as "9:00" has to become 9:00 wherever the person typing it is.
  * Both scheduling controls — a post's publish time and a Work's release time — go through here,
  * so the two cannot disagree about what a typed time means.

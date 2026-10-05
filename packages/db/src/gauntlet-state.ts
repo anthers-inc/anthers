@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Deterministic state hops for the User Gauntlet — the harness's way to place the viewer
+ * Deterministic state hops for the User Gauntlet — the harness's way to place the user
  * on an exact rung of the staircase without walking a billing flow.
  *
  * Why this exists: the support model made billing real. Changing what a user gives Anthers
@@ -8,22 +8,22 @@
  * without Stripe configured and needs a running `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
  * hops the *billing* facts here, at the same rows the webhooks would have written:
- * the viewer's `billing_accounts` row and a completed `purchases` row. Under the Badge
+ * the user's `billing_accounts` row and a completed `purchases` row. Under the Badge
  * model the **amounts are `user_badges` holdings**, which is what the `--give` hop
  * writes; the two amount columns the old `accounts` table carried are gone.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
  *
  * Usage (flags compose; each is applied only when passed):
- *   bun run db:gauntlet:state --user gauntlet_viewer --anthers-support 3   # $3/mo to Anthers
- *   bun run db:gauntlet:state --user gauntlet_viewer --support-budget 6        # $6 of budget
- *   bun run db:gauntlet:state --user gauntlet_viewer --give 2               # $2 to the creator
- *   bun run db:gauntlet:state --user gauntlet_viewer --purchase gauntlet-paid-download
- *   bun run db:gauntlet:state --user gauntlet_viewer --watched-minutes 570
+ *   bun run db:gauntlet:state --user gauntlet_walker --anthers-support 3   # $3/mo to Anthers
+ *   bun run db:gauntlet:state --user gauntlet_walker --support-budget 6        # $6 of budget
+ *   bun run db:gauntlet:state --user gauntlet_walker --give 2               # $2 to the creator
+ *   bun run db:gauntlet:state --user gauntlet_walker --purchase gauntlet-paid-download
+ *   bun run db:gauntlet:state --user gauntlet_walker --watched-minutes 570
  *   bun run db:gauntlet:state --instance walk …                             # the walk's instance
  *
- * The viewer defaults to `DEV_ACCOUNT_USERNAME`, mirroring `seed-gauntlet.ts`; the harness
+ * The walker defaults to `DEV_ACCOUNT_USERNAME`, mirroring `seed-gauntlet.ts`; the harness
  * always passes `--user` explicitly; walk mode (`--instance walk`) falls back to
- * `walk-viewer` instead. Everything here is scoped to the instance's gauntlet
+ * `walk-walker` instead. Everything here is scoped to the instance's gauntlet
  * fixture — the creator is the instance's, and `--purchase` accepts only the instance's
  * slugs.
  *
@@ -38,14 +38,14 @@ import {
 	DOWNLOAD_PRICE,
 	GAUNTLET_CREATOR_USERNAME,
 	GAUNTLET_SLUG_PREFIX,
-	GAUNTLET_VIEWER_USERNAME,
+	GAUNTLET_WALKER_USERNAME,
 } from "./gauntlet.js";
 import {
 	anthersUserIdOfSession,
 	applyAnthersSupport,
 	applySupportBudget,
 } from "./gauntlet-support.js";
-import { WALK_CREATOR_USERNAME, WALK_SLUG_PREFIX, WALK_VIEWER_USERNAME } from "./gauntlet-walk.js";
+import { WALK_CREATOR_USERNAME, WALK_SLUG_PREFIX, WALK_WALKER_USERNAME } from "./gauntlet-walk.js";
 import {
 	attentionEvents,
 	badges,
@@ -67,21 +67,21 @@ const TAG = "[gauntlet-state]";
  */
 interface Instance {
 	creatorUsername: string;
-	/** The default viewer when neither `--user` nor the dev account is in play. */
-	viewerFallbackUsername: string;
+	/** The default walker when neither `--user` nor the dev account is in play. */
+	userFallbackUsername: string;
 	/** The slug prefix `--purchase` accepts — the instance's own Works only. */
 	slugPrefix: string;
 }
 
 const INSTANCE_A: Instance = {
 	creatorUsername: GAUNTLET_CREATOR_USERNAME,
-	viewerFallbackUsername: GAUNTLET_VIEWER_USERNAME,
+	userFallbackUsername: GAUNTLET_WALKER_USERNAME,
 	slugPrefix: GAUNTLET_SLUG_PREFIX,
 };
 
 const INSTANCE_WALK: Instance = {
 	creatorUsername: WALK_CREATOR_USERNAME,
-	viewerFallbackUsername: WALK_VIEWER_USERNAME,
+	userFallbackUsername: WALK_WALKER_USERNAME,
 	slugPrefix: WALK_SLUG_PREFIX,
 };
 
@@ -184,15 +184,13 @@ async function main(): Promise<void> {
 
 	const inst = resolveInstance();
 
-	// The instance's own viewer is the fallback: `--user` still wins, and with neither
-	// `--user` nor the dev account set, walk mode falls back to `walk-viewer`
-	// rather than instance A's viewer.
-	const viewerUsername =
-		flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim() || inst.viewerFallbackUsername;
+	// The instance's own walker is the fallback: `--user` still wins, and with neither
+	// `--user` nor the dev account set, walk mode falls back to `walk-walker`
+	// rather than instance A's user.
+	const walkerUsername =
+		flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim() || inst.userFallbackUsername;
 	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
-	const viewerId = await userIdByHandle(
-		await resolveAccountHandle(apiUrl, viewerUsername, "Viewer"),
-	);
+	const userId = await userIdByHandle(await resolveAccountHandle(apiUrl, walkerUsername, "User"));
 	const creatorId = await userIdByHandle(
 		await resolveAccountHandle(apiUrl, inst.creatorUsername, "Gauntlet creator"),
 	);
@@ -211,7 +209,7 @@ async function main(): Promise<void> {
 	 *
 	 * 🚨 Writes rows rather than a total, because there is no total to write: the budget
 	 * is **derived** from the events every time it is read. A hop that set some cached
-	 * figure would place the viewer in a state the app cannot actually produce, and would
+	 * figure would place the user in a state the app cannot actually produce, and would
 	 * pass whether or not the derivation worked.
 	 */
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
@@ -222,10 +220,10 @@ async function main(): Promise<void> {
 	// the directed balance the Badge picker draws against (see `applySupportBudget`).
 	if (anthersSupport !== undefined || supportBudget !== undefined) {
 		if (anthersSupport !== undefined) {
-			await applyAnthersSupport(viewerId, anthersSupport.toFixed(2));
+			await applyAnthersSupport(userId, anthersSupport.toFixed(2));
 		}
 		if (supportBudget !== undefined) {
-			await applySupportBudget(viewerId, supportBudget.toFixed(2));
+			await applySupportBudget(userId, supportBudget.toFixed(2));
 		}
 	}
 
@@ -233,7 +231,7 @@ async function main(): Promise<void> {
 	if (watchedMinutes !== undefined) {
 		await db
 			.delete(attentionEvents)
-			.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
+			.where(and(eq(attentionEvents.userId, userId), eq(attentionEvents.publicAccess, true)));
 
 		if (watchedMinutes > 0) {
 			// 🚨 The walk STARTS at the current cycle's first instant and runs FORWARD,
@@ -255,13 +253,13 @@ async function main(): Promise<void> {
 				const startedAt = new Date(start);
 				const endedAt = new Date(start + durationSeconds * 1_000);
 				rows.push({
-					userId: viewerId,
+					userId: userId,
 					creatorId,
 					eventType: "watch",
 					durationSeconds,
 					startedAt,
 					endedAt,
-					clientId: `gauntlet-${viewerId}-${rows.length}`,
+					clientId: `gauntlet-${userId}-${rows.length}`,
 					publicAccess: true,
 				});
 				left -= durationSeconds;
@@ -282,9 +280,9 @@ async function main(): Promise<void> {
 	// and creates it if the fixture ladder has no row there yet — the gauntlet is a
 	// dev-only fixture and may not depend on the seed scripts having run.
 	//
-	// 🚨 **The hop REPLACES the viewer's holding on this creator, it does not add one.**
+	// 🚨 **The hop REPLACES the user's holding on this creator, it does not add one.**
 	// The walk the e2e drives is cumulative — $3, then the gap states, then $6, upward —
-	// and a viewer holds ONE Badge per issuer per cycle, the highest they have reached.
+	// and a user holds ONE Badge per issuer per cycle, the highest they have reached.
 	// A hop that inserted beside the existing holding would stack rungs ($3 + $4.50 +
 	// $6 …) against the cycle's budget until the picker's affordability check refused
 	// the next step — a fixture drifting away from what the model can produce, which is
@@ -309,15 +307,15 @@ async function main(): Promise<void> {
 				})
 				.returning({ id: badges.id });
 		}
-		// Scoped through the ladder's badge ids for the same reason `resetViewer` does it:
+		// Scoped through the ladder's badge ids for the same reason `resetWalker` does it:
 		// the holding carries the badge, and the issuer is reachable through it.
 		await db
 			.delete(userBadges)
 			.where(
-				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
+				sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${creatorId})`,
 			);
 		await db.insert(userBadges).values({
-			userId: viewerId,
+			userId: userId,
 			badgeId: badge.id,
 			billingCycle: cycle,
 		});
@@ -340,7 +338,7 @@ async function main(): Promise<void> {
 			.limit(1);
 		if (!work) throw new Error(`Work "${purchaseSlug}" not found. Run \`make gauntlet-reset\`.`);
 
-		const syntheticPi = `pi_gauntlet_hop_${viewerId}_${purchaseSlug}`;
+		const syntheticPi = `pi_gauntlet_hop_${userId}_${purchaseSlug}`;
 		const [existing] = await db
 			.select({ id: purchases.id })
 			.from(purchases)
@@ -348,7 +346,7 @@ async function main(): Promise<void> {
 			.limit(1);
 		if (!existing) {
 			await db.insert(purchases).values({
-				buyerId: viewerId,
+				buyerId: userId,
 				workId: work.id,
 				type: "digital",
 				amount: DOWNLOAD_PRICE,
@@ -374,7 +372,7 @@ async function main(): Promise<void> {
 		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 		.where(
 			and(
-				eq(userBadges.userId, viewerId),
+				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, currentBillingCycle()),
 				sql`${badges.creatorId} = ${anthersId}`,
 			),
@@ -383,9 +381,9 @@ async function main(): Promise<void> {
 	const [acct] = await db
 		.select({ directedBudget: billingAccounts.directedBudget })
 		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, viewerId))
+		.where(eq(billingAccounts.userId, userId))
 		.limit(1);
-	// The viewer's holdings on the gauntlet creator this cycle, summed through the
+	// The user's holdings on the gauntlet creator this cycle, summed through the
 	// badge thresholds — the number the old allocation row's `amount` used to carry.
 	const [alloc] = await db
 		.select({ amount: sql<string>`COALESCE(SUM(${badges.threshold}), 0)` })
@@ -393,7 +391,7 @@ async function main(): Promise<void> {
 		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 		.where(
 			and(
-				eq(userBadges.userId, viewerId),
+				eq(userBadges.userId, userId),
 				eq(badges.creatorId, creatorId),
 				eq(userBadges.billingCycle, currentBillingCycle()),
 			),
@@ -405,10 +403,10 @@ async function main(): Promise<void> {
 	const [watched] = await db
 		.select({ total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int` })
 		.from(attentionEvents)
-		.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
+		.where(and(eq(attentionEvents.userId, userId), eq(attentionEvents.publicAccess, true)));
 	const watchedSeconds = Number(watched?.total ?? 0);
 	console.log(
-		`${TAG} ${viewerUsername}: $${support.toFixed(2)}/mo to Anthers (${badgeLabel(
+		`${TAG} ${walkerUsername}: $${support.toFixed(2)}/mo to Anthers (${badgeLabel(
 			heldBadgeName(support),
 		)}) · budget $${Number(acct?.directedBudget ?? 0).toFixed(2)} · given $${Number(
 			alloc?.amount ?? 0,
