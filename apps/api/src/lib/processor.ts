@@ -40,6 +40,20 @@ export async function createConnectAccount(
 	return (await getStripe()?.accounts.create(params)) ?? null;
 }
 
+/**
+ * Mirrors `stripe.accounts.retrieve` — the connected account's live state, read by the
+ * reconcile-on-read path (the settings-page GET): when our `stripe_accounts` row
+ * disagrees with Stripe, Stripe is what the row should say. Returns null when payments
+ * are unconfigured; callers keep their 503 / skip behavior.
+ */
+export async function retrieveConnectAccount(accountId: string): Promise<Stripe.Account | null> {
+	return (
+		(await getStripe()
+			?.accounts.retrieve(accountId)
+			.catch(() => null)) ?? null
+	);
+}
+
 /** Mirrors `stripe.accountLinks.create` — the hosted onboarding flow for an account. */
 export async function createAccountOnboardingLink(
 	params: Stripe.AccountLinkCreateParams,
