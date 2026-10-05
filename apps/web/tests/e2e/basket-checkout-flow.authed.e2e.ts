@@ -265,11 +265,11 @@ test.describe("the basket purchase flow", () => {
 	});
 
 	test("the basket reads in two columns on desktop and stacks on mobile", async ({ page }) => {
-		// 🚨 **Two columns is the second checkout's layout decision (2026-10-03)**: the
-		// checkout in one column (the only column with buttons on it), items and receipt
-		// in the other; below `lg` it stacks to one column reading items → receipt →
-		// checkout. Asserted by computed layout rather than class strings, so a Tailwind
-		// class that silently loses cannot pass.
+		// 🚨 **Two columns is the second checkout's layout decision (2026-10-03), flipped
+		// 2026-10-04**: the CHECKOUT (form) column sits LEFT on desktop, items and
+		// receipt on the right; below `lg` it stacks to one column reading items →
+		// receipt → checkout. Asserted by computed layout rather than class strings, so
+		// a Tailwind class that silently loses cannot pass.
 		await seedBasket(page);
 		await expectReceiptWithQuote(page);
 		// The receipt lives in the items column; visible here means the columns exist.
@@ -278,17 +278,17 @@ test.describe("the basket purchase flow", () => {
 		await expect(page.getByTestId("basket-items")).toBeVisible();
 
 		// Desktop (the project default, 1280×720): the two columns sit side by side —
-		// the checkout column's left edge is at or right of the items column's RIGHT
-		// edge, on the same rows.
+		// the checkout column is LEFT, so its RIGHT edge is at or left of the items
+		// column's left edge, on the same rows.
 		const desktop = async () => {
 			const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
 			const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
 			expect(itemsBox).not.toBeNull();
 			expect(checkoutBox).not.toBeNull();
 			expect(
-				checkoutBox!.x,
-				"the checkout column must sit beside (not above) the items column on desktop",
-			).toBeGreaterThanOrEqual(itemsBox!.x + itemsBox!.width - 1);
+				checkoutBox!.x + checkoutBox!.width,
+				"the checkout column must sit beside (not above) the items column on desktop, on its LEFT",
+			).toBeLessThanOrEqual(itemsBox!.x + 1);
 		};
 		await desktop();
 
@@ -317,6 +317,27 @@ test.describe("the basket purchase flow", () => {
 		// Back to desktop for the next test in the serial run.
 		await page.setViewportSize({ width: 1280, height: 720 });
 		await desktop();
+	});
+
+	test("the receipt separates what the buyer pays from what the creator receives", async ({
+		page,
+	}) => {
+		// 2026-10-04: the card fee is not the buyer's to pay, so its line lives in the
+		// creator's section — after "You pay", directly above the receives line — and
+		// never between Subtotal and the buyer's total.
+		await seedBasket(page);
+		await expectReceiptWithQuote(page);
+		const receipt = page.getByTestId("basket-receipt");
+		await expect(receipt.getByText("Subtotal")).toBeVisible();
+		await expect(receipt.getByText("You pay")).toBeVisible();
+		await expect(receipt.getByText("Card processing")).toBeVisible();
+		await expect(receipt.getByTestId("basket-creator-earns")).toBeVisible();
+		// Vertical order inside the receipt: the buyer's total above the fee line.
+		const payBox = await receipt.getByText("You pay").boundingBox();
+		const feeBox = await receipt.getByText("Card processing").boundingBox();
+		const earnsBox = await receipt.getByTestId("basket-creator-earns").boundingBox();
+		expect(payBox!.y, '"You pay" must sit above the creator section').toBeLessThan(feeBox!.y);
+		expect(feeBox!.y, "the fee line must sit above the receives line").toBeLessThan(earnsBox!.y);
 	});
 
 	test("the checkout page's forms are siblings, never ancestors of each other", async ({

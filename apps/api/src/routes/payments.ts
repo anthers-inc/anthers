@@ -261,14 +261,14 @@ function purchaseSession(params: {
 		// the embedded Payment Element offers whatever the account's payment-method
 		// configuration enables. Found at the live cutover (2026-10-03), where every
 		// checkout failed while the sandbox — an older API version — accepted the same
-		// parameter happily. ⚠️ WHAT THIS MEANS: the buyer-facing list (Card, Bank, Cash
-		// App Pay, Klarna, Amazon Pay, Link) can only be changed in the Dashboard's
-		// payment-method settings — there is no code-side control (Parker, 2026-10-03).
+		// parameter happily.
 		//
-		// TODO(Dashboard): the account-wide configuration (pmc_1T9K9l3WJAPZ8pU64cUUNUAv)
-		// enables card, link, cashapp, klarna, amazon_pay, affirm, apple_pay. Narrowing
-		// what buyers are offered is a Dashboard action on that configuration; no code
-		// change exists or is wanted.
+		// Card-only is a DEPLOYMENT SETTING (Parker, 2026-10-04: strip the built-in
+		// Stripe payment options, cards only, to simplify checkout): the "Card only"
+		// configuration (pmc_1UMxLl3WJAPZ8pU6EaCMNJie, card on, everything else off)
+		// exists on the account and `STRIPE_PAYMENT_METHOD_CONFIGURATION` carries its id
+		// in the deploy spec. The account-wide Default configuration stays as it is, so
+		// a deployment without the variable keeps working — narrowed, not broken.
 		//
 		// The one code-side lever the types DO support on this API version:
 		// `payment_method_configuration` — and ONLY when `STRIPE_PAYMENT_METHOD_CONFIGURATION`

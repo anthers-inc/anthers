@@ -1232,18 +1232,18 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
 	// CI has none and skips this silently. Its blocks are already checked the same way.
 	const pub = findPublicWiki();
 	if ("path" in pub) {
-		// The task board scans only when --wiki is requested (2026-10-02). Under the
-		// location publish boundary every public task note is published copy, so the
-		// scan is right to cover them — but the board is an audit trail carrying retired
-		// vocabulary by design, and the 100-or-so hits that follow are an accepted
-		// backlog (Parker, 2026-10-02) that the exporter's task-publishing slice owns.
-		// Leaving them in the default scan turns every pre-push `make verify` red on
-		// copy nobody is about to publish, which is the "guard people route around"
-		// failure this file already knows. The publishing gate is `make wiki-figures
-		// CHECK=1`, which runs with --wiki and sees the board.
+		// The task board scans only when --wiki is requested (2026-10-02). The board's
+		// LIVE notes — Active and Future — are published copy under the location rule and
+		// stay in the scan; a Done note is history, and history is exempt twice over: it
+		// is an audit trail that carries retired vocabulary BY DESIGN (naming the era's
+		// words is what those records are for — a sweep task saying "Seed" is recording
+		// what was true), and it will never be edited forward, so a strike there would
+		// rewrite the record rather than the copy a reader acts on (Parker, 2026-10-04).
+		// The Done archive's status lives in the folder, the same way the sweep reads it.
 		const scanTasks = process.argv.includes("--wiki");
 		for await (const path of markdownFiles(pub.path)) {
 			const file = relative(pub.path, path);
+			if (file.startsWith("00-09 Metafiles/01 Tasks/Done/")) continue;
 			if (file.startsWith("00-09 Metafiles/01 Tasks/") && !scanTasks) continue;
 			if (await unpublished(file)) continue;
 			out.push({ root: pub.path, file: `[wiki] ${file}` });
