@@ -41,10 +41,11 @@ export async function createConnectAccount(
 }
 
 /**
- * Mirrors `stripe.accounts.retrieve` — the connected account's live state, read by the
- * reconcile-on-read path (the settings-page GET): when our `stripe_accounts` row
- * disagrees with Stripe, Stripe is what the row should say. Returns null when payments
- * are unconfigured; callers keep their 503 / skip behavior.
+ * Mirrors `stripe.accounts.retrieve` — the connected account's live state, read by
+ * `GET /stripe/onboard` (the reconcile-on-read self-heal, and the `?detail` shape the
+ * Studio Payments tab renders): when our `stripe_accounts` row disagrees with Stripe,
+ * Stripe is what the row should say. Returns null when payments are unconfigured; callers
+ * keep their 503 / skip behavior.
  */
 export async function retrieveConnectAccount(accountId: string): Promise<Stripe.Account | null> {
 	return (
@@ -56,8 +57,10 @@ export async function retrieveConnectAccount(accountId: string): Promise<Stripe.
 
 /**
  * Mirrors `stripe.balance.retrieve` reading the connected account's own balance — the
- * account target rides the request options' `stripeAccount` (a read ON the account's
- * behalf, made from the platform's signing key), which its Payments tab renders.
+ * account target rides the REQUEST OPTIONS' `stripeAccount` (a read on the account's
+ * behalf, made from the platform's signing key), not the params object, which the SDK's
+ * `BalanceRetrieveParams` does not carry. Its value is what the Studio Payments tab renders
+ * as the Stripe balance card.
  */
 export async function retrieveConnectBalance(
 	accountId: string,

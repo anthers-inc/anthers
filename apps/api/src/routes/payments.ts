@@ -628,6 +628,12 @@ const paymentRoutes = new Hono()
 				type: "express",
 				email: user.email ?? undefined,
 				capabilities: { transfers: { requested: true } },
+				// Creator-chosen payouts (the 2026-09-14 decision) mean NO schedule until the
+				// creator picks one; Stripe's Express default is daily, which would silently
+				// enroll every creator here into an automatic payout posture Anthers did not
+				// choose. Set at creation because the parameter is otherwise not ours to
+				// change later — the Express Dashboard is where the creator adjusts it.
+				settings: { payouts: { schedule: { interval: "manual" } } },
 				metadata: { userId: String(user.id) },
 			});
 			// Null only when payments are unconfigured, which the guard above already refused.

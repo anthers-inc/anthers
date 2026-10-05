@@ -103,11 +103,17 @@ function fakeStripe() {
 			);
 		};
 
+	let lastCreateParams: { settings?: unknown } | null = null;
 	const client = {
 		// Real crypto, on purpose — see the file header.
 		webhooks: real.webhooks,
 		accounts: {
-			create: record("accounts.create", () => ({ id: `acct_${uid()}` })),
+			create: record("accounts.create", (params: { settings?: unknown }) => {
+				// The creation params are recorded so a test can assert on what Anthers asked
+				// Stripe for — the payout schedule's manual interval among them.
+				lastCreateParams = params;
+				return { id: `acct_${uid()}` };
+			}),
 			// The reconcile-on-read path (GET /stripe/onboard) retrieves the connected
 			// account live; a test sets `responses["accounts.retrieve"]` to shape what it
 			// sees. The default is an onboarded account — the stranded-row case needs the
@@ -202,6 +208,8 @@ function fakeStripe() {
 		client,
 		calls,
 		responses,
+		/** The params of the last `accounts.create`, for asserting what Anthers asked Stripe for. */
+		lastAccountCreate: () => lastCreateParams,
 		callsTo: (method: string) => calls.filter((c) => c.method === method),
 		lastCall: (method: string) => calls.filter((c) => c.method === method).at(-1),
 		reset: () => {
@@ -1020,6 +1028,26 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 
 	beforeAll(async () => {
 		({ cookie: reconCookie, id: reconId } = await signUp(reconName));
+	});
+
+	it("asks Stripe for a manual payout schedule at account creation — the decided posture, not Stripe's daily default", async () => {
+		// Creator-chosen payouts (2026-09-14) mean no schedule until the creator picks one;
+		// Stripe's Express default is daily, and the first live onboarding came out of that
+		// flow enrolled in it. The create call's `settings` is where the default is refused.
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+
+		const res = await req("/api/payments/stripe/onboard", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: reconCookie },
+		});
+		expect(res.status).toBe(200);
+
+		const schedule = (
+			fake.lastAccountCreate() as {
+				settings?: { payouts?: { schedule?: { interval?: string } } };
+			} | null
+		)?.settings?.payouts?.schedule;
+		expect(schedule).toEqual({ interval: "manual" });
 	});
 
 	it("self-heals a row the webhook's delivery missed — the incident's exact shape", async () => {
