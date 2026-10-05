@@ -46,6 +46,7 @@ import { PAYOUT_REVIEW_WINDOW_DAYS } from "@anthers/shared/constants";
 import { MODERATION_NOTE_MAX, type ModerationActionType } from "@anthers/shared/moderation";
 import Decimal from "decimal.js";
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import type Stripe from "stripe";
 
 /** A creator's payout standing, and enough of it to say what is missing. */
 export interface PayoutStanding {
@@ -89,6 +90,32 @@ export async function payoutStanding(userId: number): Promise<PayoutStanding> {
 /** The short form, for callers that only need the verdict. */
 export async function canBePaid(userId: number): Promise<boolean> {
 	return (await payoutStanding(userId)).ready;
+}
+
+// ── The stripe_accounts flag derivation ──────────────────────────────────────
+
+/**
+ * The three `stripe_accounts` flags, derived from a Stripe Account object the way the
+ * `account.updated` webhook has always written them — one derivation, used by both
+ * writers.
+ *
+ * The webhook was the row's only writer until 2026-10, when a missed delivery stranded
+ * two live onboardings: the row stayed all-false, the settings page read "incomplete",
+ * the release gate refused, and nothing anywhere told Stripe's truth. The remedy is a
+ * reconcile-on-read in `GET /stripe/onboard`, and it must reuse THIS derivation rather
+ * than re-deriving beside it — two derivations of one predicate is exactly the
+ * four-copies drift this module exists to prevent (see the header above).
+ *
+ * `details_submitted && charges_enabled` — submitting the form is not the same as Stripe
+ * having approved the account; treating it as such would route a destination charge at
+ * an account that cannot receive it.
+ */
+export function stripeFlagPatchFromAccount(acct: Stripe.Account) {
+	return {
+		chargesEnabled: acct.charges_enabled,
+		payoutsEnabled: acct.payouts_enabled,
+		onboardingComplete: acct.details_submitted && acct.charges_enabled,
+	};
 }
 
 // ── The suspension payout hold ───────────────────────────────────────────────

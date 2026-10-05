@@ -108,6 +108,17 @@ function fakeStripe() {
 		webhooks: real.webhooks,
 		accounts: {
 			create: record("accounts.create", () => ({ id: `acct_${uid()}` })),
+			// The reconcile-on-read path (GET /stripe/onboard) retrieves the connected
+			// account live; a test sets `responses["accounts.retrieve"]` to shape what it
+			// sees. The default is an onboarded account — the stranded-row case needs the
+			// row to disagree with Stripe.
+			retrieve: record("accounts.retrieve", (id: string) => ({
+				id,
+				object: "account",
+				charges_enabled: true,
+				payouts_enabled: true,
+				details_submitted: true,
+			})),
 		},
 		accountLinks: {
 			create: record("accountLinks.create", () => ({ url: "https://connect.stripe.test/onboard" })),
@@ -285,6 +296,8 @@ const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `pay_creator_${run}`;
 const buyerName = `pay_buyer_${run}`;
 const subscriberName = `pay_sub_${run}`;
+/** Owns the reconcile-on-read tests' separate `stripe_accounts` row (UNIQUE user). */
+const reconName = `pay_recon_${run}`;
 
 let fake: Fake;
 let realClient: Stripe | null;
@@ -329,10 +342,17 @@ const FOR_SALE = [{ threshold: 0, allow: true, price: PRICE }];
  */
 const ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 
-beforeAll(async () => {
-	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${subscriberName}@example.com`}`], sql`, `)})`,
+/** Pre-clean stale fixture users (a previous failed run's leftovers); `afterAll` mirrors it. */
+const userCleanup = () =>
+	db.execute(
+		sql`DELETE FROM users WHERE email IN (${sql.join(
+			[creatorName, buyerName, subscriberName, reconName].map((n) => sql`${`${n}@example.com`}`),
+			sql`, `,
+		)})`,
 	);
+
+beforeAll(async () => {
+	await userCleanup();
 
 	realClient = getStripe();
 	fake = fakeStripe();
@@ -376,9 +396,7 @@ afterAll(async () => {
 	setStripeClient(realClient);
 	if (previousWebhookSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
 	else process.env.STRIPE_WEBHOOK_SECRET = previousWebhookSecret;
-	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`, sql`${`${subscriberName}@example.com`}`], sql`, `)})`,
-	);
+	await userCleanup();
 });
 
 /** Run a block with payments unconfigured, restoring the fake afterwards. */
@@ -949,6 +967,99 @@ describe("Webhook: account.updated", () => {
 			.from(stripeAccounts)
 			.where(eq(stripeAccounts.stripeAccountId, acctId));
 		expect(row.onboardingComplete).toBe(false);
+	});
+});
+
+describe("GET /stripe/onboard — reconcile on read", () => {
+	/**
+	 * The missed-webhook self-heal. Two live onboardings were stranded with all-false
+	 * rows when `account.updated` deliveries were missed; the GET route now asks Stripe
+	 * when the row says incomplete and syncs it through the webhook's own derivation.
+	 * These tests own a separate user so shared fixture rows are left untouched —
+	 * `stripe_accounts.user_id` is UNIQUE and the suite's other sections rely on theirs.
+	 */
+	let reconCookie: string;
+	let reconId: number;
+
+	async function strandedRow() {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		const acctId = `acct_${uid()}`;
+		await db.insert(stripeAccounts).values({ userId: reconId, stripeAccountId: acctId });
+		return acctId;
+	}
+
+	beforeAll(async () => {
+		({ cookie: reconCookie, id: reconId } = await signUp(reconName));
+	});
+
+	it("self-heals a row the webhook's delivery missed — the incident's exact shape", async () => {
+		const acctId = await strandedRow();
+
+		const res = await req("/api/payments/stripe/onboard", { headers: { Cookie: reconCookie } });
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		// Stripe's truth is what the creator is told, not the stale row's.
+		expect(body.hasAccount).toBe(true);
+		expect(body.onboardingComplete).toBe(true);
+		expect(body.chargesEnabled).toBe(true);
+		expect(body.payoutsEnabled).toBe(true);
+
+		// The row was written too, so every other reader — the release gate, the
+		// settings card — now agrees with Stripe without another live read.
+		const [row] = await db
+			.select()
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.stripeAccountId, acctId));
+		expect(row.onboardingComplete).toBe(true);
+		expect(row.chargesEnabled).toBe(true);
+		expect(row.payoutsEnabled).toBe(true);
+		expect(fake.callsTo("accounts.retrieve")).toHaveLength(1);
+	});
+
+	it("keeps a genuinely incomplete account at false — reconcile copies Stripe, it never decides", async () => {
+		const acctId = await strandedRow();
+		fake.responses["accounts.retrieve"] = {
+			id: acctId,
+			object: "account",
+			charges_enabled: false,
+			payouts_enabled: false,
+			details_submitted: true,
+		};
+		try {
+			const res = await req("/api/payments/stripe/onboard", {
+				headers: { Cookie: reconCookie },
+			});
+			const body = await res.json();
+			expect(body.onboardingComplete).toBe(false);
+
+			// The row still synced to Stripe's current (false) state — a later true
+			// arrives by the same path. The gate's verdict is Stripe's own.
+			const [row] = await db
+				.select()
+				.from(stripeAccounts)
+				.where(eq(stripeAccounts.stripeAccountId, acctId));
+			expect(row.onboardingComplete).toBe(false);
+			expect(row.chargesEnabled).toBe(false);
+		} finally {
+			delete fake.responses["accounts.retrieve"];
+		}
+	});
+
+	it("costs no Stripe read when the row already agrees with Stripe", async () => {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		await db.insert(stripeAccounts).values({
+			userId: reconId,
+			stripeAccountId: `acct_${uid()}`,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+		const before = fake.callsTo("accounts.retrieve").length;
+
+		const res = await req("/api/payments/stripe/onboard", { headers: { Cookie: reconCookie } });
+		const body = await res.json();
+		expect(body.onboardingComplete).toBe(true);
+		expect(fake.callsTo("accounts.retrieve")).toHaveLength(before);
 	});
 });
 

@@ -50,6 +50,7 @@ import {
 	createConnectAccount,
 	listCheckoutSessions,
 	paymentsConfigured,
+	retrieveConnectAccount,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
@@ -60,6 +61,7 @@ import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
+import { stripeFlagPatchFromAccount } from "../services/payouts.js";
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
@@ -493,6 +495,37 @@ const paymentRoutes = new Hono()
 				payoutsEnabled: false,
 				onboardingComplete: false,
 			});
+		}
+
+		/**
+		 * Reconcile-on-read: the `account.updated` webhook is the row's primary writer, and
+		 * a missed delivery leaves the row all-false while Stripe's truth is all-true —
+		 * which stranded both live onboardings so far (the settings page reads
+		 * "incomplete", the release gate refuses, and nothing tells Stripe's side). When a
+		 * row exists but onboarding is not complete, ask Stripe directly and sync the row
+		 * exactly as the webhook would have — through the flag derivation in
+		 * `services/payouts.ts`, which the webhook now shares, so the two cannot drift.
+		 *
+		 * The live read is gated to the not-complete case so a known-good row costs no
+		 * Stripe call on every settings-page load; it is the standing self-heal for a whole
+		 * missed-delivery class, replacing the manual re-delivery workaround.
+		 */
+		if (!account.onboardingComplete) {
+			const acct = await retrieveConnectAccount(account.stripeAccountId);
+			if (acct?.details_submitted) {
+				const patch = stripeFlagPatchFromAccount(acct);
+				await db
+					.update(stripeAccounts)
+					.set({ ...patch, updatedAt: new Date() })
+					.where(eq(stripeAccounts.stripeAccountId, account.stripeAccountId));
+				return c.json({
+					hasAccount: true,
+					stripeAccountId: account.stripeAccountId,
+					chargesEnabled: patch.chargesEnabled,
+					payoutsEnabled: patch.payoutsEnabled,
+					onboardingComplete: patch.onboardingComplete,
+				});
+			}
 		}
 
 		return c.json({
@@ -1307,15 +1340,12 @@ const paymentRoutes = new Hono()
 				if (disputeRow) await reverseNettingForWonDispute(disputeRow.id, new Date());
 			}
 		} else if (event.type === "account.updated") {
+			// The flags come from the shared derivation in `services/payouts.ts`, so this
+			// writer and the reconcile-on-read in the GET route cannot drift apart.
 			const acct = event.data.object as Stripe.Account;
 			await db
 				.update(stripeAccounts)
-				.set({
-					chargesEnabled: acct.charges_enabled,
-					payoutsEnabled: acct.payouts_enabled,
-					onboardingComplete: acct.details_submitted && acct.charges_enabled,
-					updatedAt: new Date(),
-				})
+				.set({ ...stripeFlagPatchFromAccount(acct), updatedAt: new Date() })
 				.where(eq(stripeAccounts.stripeAccountId, acct.id));
 		} else if (
 			event.type === "customer.subscription.created" ||
