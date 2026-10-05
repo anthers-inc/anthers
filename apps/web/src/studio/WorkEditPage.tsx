@@ -1234,8 +1234,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 								Anthers never has to ask you for an ID. Anthers takes no cut, so all of it comes to
 								you. One honest limit: Stripe's setup reaches only the countries Stripe supports for
 								a platform like ours, so if yours is not among them it cannot be completed yet.{" "}
-								<Link to={studioUrl("/settings")} className="link">
-									Set it up in Studio settings
+								<Link to={studioUrl("/payments")} className="link">
+									Set it up in the Studio's Payments tab
 								</Link>
 								, and save anything you've changed here before you go.
 							</span>

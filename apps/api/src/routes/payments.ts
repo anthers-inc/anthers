@@ -45,12 +45,14 @@ import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
 import {
+	createAccountLoginLink,
 	createAccountOnboardingLink,
 	createCheckoutSession,
 	createConnectAccount,
 	listCheckoutSessions,
 	paymentsConfigured,
 	retrieveConnectAccount,
+	retrieveConnectBalance,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
@@ -494,36 +496,99 @@ const paymentRoutes = new Hono()
 				chargesEnabled: false,
 				payoutsEnabled: false,
 				onboardingComplete: false,
+				// An account that does not exist has also not submitted anything.
+				detailsSubmitted: false,
 			});
 		}
 
 		/**
 		 * Reconcile-on-read: the `account.updated` webhook is the row's primary writer, and
 		 * a missed delivery leaves the row all-false while Stripe's truth is all-true —
-		 * which stranded both live onboardings so far (the settings page reads
-		 * "incomplete", the release gate refuses, and nothing tells Stripe's side). When a
-		 * row exists but onboarding is not complete, ask Stripe directly and sync the row
-		 * exactly as the webhook would have — through the flag derivation in
-		 * `services/payouts.ts`, which the webhook now shares, so the two cannot drift.
+		 * which stranded both live onboardings so far. When a row exists but onboarding is
+		 * not complete, ask Stripe directly and sync the row exactly as the webhook would
+		 * have — through the flag derivation in `services/payouts.ts`, which the webhook now
+		 * shares, so the two cannot drift.
 		 *
-		 * The live read is gated to the not-complete case so a known-good row costs no
-		 * Stripe call on every settings-page load; it is the standing self-heal for a whole
-		 * missed-delivery class, replacing the manual re-delivery workaround.
+		 * The reconcile IS a Stripe read, and the detail view (the Studio Payments tab, next
+		 * block) needs the same read for its requirements/schedule/balance display, so the two
+		 * share one retrieval: a reconcile already paid for is a detail view for free, and the
+		 * detail view is what justifies the read on the tab (no poller pays it).
 		 */
+		let liveAcct: Stripe.Account | null = null;
 		if (!account.onboardingComplete) {
-			const acct = await retrieveConnectAccount(account.stripeAccountId);
-			if (acct?.details_submitted) {
-				const patch = stripeFlagPatchFromAccount(acct);
+			liveAcct = await retrieveConnectAccount(account.stripeAccountId);
+			if (liveAcct?.details_submitted) {
+				const patch = stripeFlagPatchFromAccount(liveAcct);
 				await db
 					.update(stripeAccounts)
 					.set({ ...patch, updatedAt: new Date() })
 					.where(eq(stripeAccounts.stripeAccountId, account.stripeAccountId));
+				// The row object above is stale the moment the patch writes; respond from the
+				// patch so the creator is told Stripe's truth this load, not the pre-sync row.
+				// ⚠️ The detail view is NOT preempted by this: a tab load that reconciles is
+				// the one load that most needs the full shape, so detail falls through.
+				if (c.req.query("detail") !== "1") {
+					return c.json({
+						hasAccount: true,
+						stripeAccountId: account.stripeAccountId,
+						chargesEnabled: patch.chargesEnabled,
+						payoutsEnabled: patch.payoutsEnabled,
+						onboardingComplete: patch.onboardingComplete,
+						detailsSubmitted: liveAcct.details_submitted,
+					});
+				}
+			}
+		}
+
+		/**
+		 * The fuller view the Studio Payments tab renders, when it asks. `?detail` costs one
+		 * more Stripe read (`accounts.retrieve` on a complete account, which the reconcile
+		 * above may have just done), and every lightweight poller (`usePayoutsReady`, the
+		 * settings summary card, the worklist) reads the cheap base shape without it.
+		 */
+		if (c.req.query("detail") === "1") {
+			if (!liveAcct) liveAcct = await retrieveConnectAccount(account.stripeAccountId);
+			if (liveAcct) {
+				// The bank account carrying the payout: a debit card may ride alongside in
+				// `external_accounts`, so the default flag is what names the payout account
+				// and the first bank entry stands in when Stripe has not marked one.
+				const ext = Array.isArray(liveAcct.external_accounts?.data)
+					? liveAcct.external_accounts.data.find((e) => e.object === "bank_account")
+					: undefined;
+				const balance = await retrieveConnectBalance(account.stripeAccountId);
 				return c.json({
 					hasAccount: true,
 					stripeAccountId: account.stripeAccountId,
-					chargesEnabled: patch.chargesEnabled,
-					payoutsEnabled: patch.payoutsEnabled,
-					onboardingComplete: patch.onboardingComplete,
+					chargesEnabled: liveAcct.charges_enabled,
+					payoutsEnabled: liveAcct.payouts_enabled,
+					onboardingComplete: liveAcct.details_submitted && liveAcct.charges_enabled,
+					/** Stripe's own view of what is missing — the "what" the refusal message promises. */
+					requirements: {
+						currentlyDue: liveAcct.requirements?.currently_due ?? [],
+						pastDue: liveAcct.requirements?.past_due ?? [],
+						pendingVerification: liveAcct.requirements?.pending_verification ?? [],
+						disabledReason: liveAcct.requirements?.disabled_reason ?? null,
+					},
+					/** `interval: "manual"` is the decided default posture (the 2026-09-14 decision). */
+					schedule: liveAcct.settings?.payouts?.schedule ?? null,
+					externalAccount: ext
+						? { bankName: ext.bank_name ?? null, last4: ext.last4 ?? null }
+						: null,
+					/**
+					 * The connected account's own balance, in the currency's minor units; null when
+					 * Stripe does not answer (unconfigured, or a transient read failure).
+					 */
+					balance:
+						balance == null
+							? null
+							: {
+									available: balance.available.map((b) => ({
+										amount: b.amount,
+										currency: b.currency,
+									})),
+									pending: balance.pending.map((b) => ({ amount: b.amount, currency: b.currency })),
+								},
+					detailsSubmitted: liveAcct.details_submitted,
 				});
 			}
 		}
@@ -534,6 +599,9 @@ const paymentRoutes = new Hono()
 			chargesEnabled: account.chargesEnabled,
 			payoutsEnabled: account.payoutsEnabled,
 			onboardingComplete: account.onboardingComplete,
+			// The base shape answers from the row the webhook keeps; where the reconcile above
+			// already asked Stripe this load, Stripe's answer is the fresher one.
+			detailsSubmitted: liveAcct?.details_submitted ?? account.onboardingComplete,
 		});
 	})
 
@@ -586,6 +654,24 @@ const paymentRoutes = new Hono()
 
 		if (!link?.url) return c.json({ error: "Payments are not configured." }, 503);
 		return c.json({ url: link.url });
+	})
+	// ── The Express Dashboard door ───────────────────────────────────────────
+	.post("/stripe/dashboard-link", requireAuth, async (c) => {
+		const user = c.get("user");
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
+
+		const [account] = await db
+			.select()
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, user.id))
+			.limit(1);
+		if (!account) {
+			return c.json({ error: "Connect a Stripe account first." }, 409);
+		}
+
+		const url = await createAccountLoginLink(account.stripeAccountId);
+		if (!url) return c.json({ error: "Payments are not configured." }, 503);
+		return c.json({ url });
 	})
 
 	// ── Quote (accurate fee preview, no charge) ──────────────────────────────

@@ -42,6 +42,7 @@ const WorkEditPage = lazy(() => import("./studio/WorkEditPage"));
 // component remains so re-enabling is a one-line change when the lane ships.
 // const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
 const StudioSettingsPage = lazy(() => import("@anthers/web-shared/StudioSettingsPage"));
+const StudioPaymentsPage = lazy(() => import("@anthers/web-shared/StudioPaymentsPage"));
 
 /**
  * The creator gate and a suspense boundary, wrapped once for every /studio route. The Studio's
@@ -383,6 +384,7 @@ export default function App() {
 					    games as draft Projects. */}
 						{/* <Route path="import" element={<ImportPage />} /> */}
 						<Route path="settings" element={<StudioSettingsPage />} />
+						<Route path="payments" element={<StudioPaymentsPage />} />
 					</Route>
 
 					{/* Creator site routes. `/@name` is a person, `/name` is a page, and the two

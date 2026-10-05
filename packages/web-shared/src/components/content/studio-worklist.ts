@@ -132,7 +132,7 @@ export function buildWorklist({
 			message:
 				"Your payout setup is not finished, and nothing can be released until it is — including anything you are giving away.",
 			action: "Finish payout setup",
-			href: "/studio/settings",
+			href: "/studio/payments",
 			severity: "blocking",
 		});
 	}

@@ -57,7 +57,8 @@
 		"./CatalogPage": "./src/pages/CatalogPage.tsx",
 		"./ImportPage": "./src/pages/ImportPage.tsx",
 		"./AnalyticsDashboardPage": "./src/pages/AnalyticsDashboardPage.tsx",
-		"./StudioSettingsPage": "./src/pages/StudioSettingsPage.tsx"
+		"./StudioSettingsPage": "./src/pages/StudioSettingsPage.tsx",
+		"./StudioPaymentsPage": "./src/pages/StudioPaymentsPage.tsx"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

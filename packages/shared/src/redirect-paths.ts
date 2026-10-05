@@ -34,19 +34,21 @@ export const STRIPE_RETURN_PATHS = {
 	/**
 	 * A creator who has finished Connect onboarding.
 	 *
-	 * `/studio/settings` rather than a page of its own: the payout section already lives
-	 * there, already reads `?stripe=`, and a second page would be a second copy of the same
-	 * three states. `complete` is the value `StudioSettingsPage` was written to read — the
-	 * old URL said `onboarded=1`, which nothing anywhere has ever looked at.
+	 * The Payments tab (`/studio/payments`) owns payout setup now, and a creator returning
+	 * from the hosted flow lands where the thing they just finished lives. The page reads
+	 * the `stripe` query parameter this value carries, a contract with the API rather than
+	 * a local detail: it is the acknowledgment that the flow ended, read beside the live
+	 * account state the tab fetches. The former value pointed at the settings page, where
+	 * the payout section lived until the tab took it over.
 	 */
-	connectReturn: "/studio/settings?stripe=complete",
+	connectReturn: "/studio/payments?stripe=complete",
 	/**
 	 * A creator whose onboarding link expired before they finished.
 	 *
 	 * Stripe fetches this when the link it issued is stale, so the page has to offer a way to
-	 * start again rather than merely explaining. The settings section does.
+	 * start again rather than merely explaining. The Payments tab does.
 	 */
-	connectRefresh: "/studio/settings?stripe=refresh",
+	connectRefresh: "/studio/payments?stripe=refresh",
 	/** Somebody leaving the Stripe billing portal, back to their own subscription. */
 	billingPortalReturn: "/subscription",
 	/**

@@ -119,6 +119,12 @@ function fakeStripe() {
 				payouts_enabled: true,
 				details_submitted: true,
 			})),
+			// The Express Dashboard door (POST /stripe/dashboard-link).
+			createLoginLink: record("accounts.createLoginLink", () => ({
+				object: "login_link",
+				url: "https://connect.stripe.test/dashboard",
+				created: 1_800_000_000,
+			})),
 		},
 		accountLinks: {
 			create: record("accountLinks.create", () => ({ url: "https://connect.stripe.test/onboard" })),
@@ -179,6 +185,16 @@ function fakeStripe() {
 					url: "https://billing.stripe.test/session",
 				})),
 			},
+		},
+		balance: {
+			// A connected account's balance read (`?detail=1`); a test sets
+			// `responses["balance.retrieve"]` to shape what the tab sees.
+			retrieve: record("balance.retrieve", () => ({
+				object: "balance",
+				available: [{ amount: 0, currency: "usd" }],
+				pending: [{ amount: 0, currency: "usd" }],
+				livemode: false,
+			})),
 		},
 	} as unknown as Stripe;
 
@@ -988,6 +1004,20 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 		return acctId;
 	}
 
+	/** A row already in agreement with Stripe — the case no reconcile is needed for. */
+	async function knownGoodRow() {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		const acctId = `acct_${uid()}`;
+		await db.insert(stripeAccounts).values({
+			userId: reconId,
+			stripeAccountId: acctId,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+		return acctId;
+	}
+
 	beforeAll(async () => {
 		({ cookie: reconCookie, id: reconId } = await signUp(reconName));
 	});
@@ -1060,6 +1090,121 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 		const body = await res.json();
 		expect(body.onboardingComplete).toBe(true);
 		expect(fake.callsTo("accounts.retrieve")).toHaveLength(before);
+	});
+
+	/**
+	 * The detail shape: Stripe's requirements, the payout schedule and bank, and the
+	 * connected account's balance — the fuller view the Studio Payments tab renders.
+	 */
+	it("returns Stripe's requirements, schedule, bank and balance at ?detail=1", async () => {
+		const acctId = await knownGoodRow();
+		fake.responses["accounts.retrieve"] = {
+			id: acctId,
+			object: "account",
+			charges_enabled: true,
+			payouts_enabled: true,
+			details_submitted: true,
+			requirements: {
+				currently_due: ["individual.address.line1"],
+				past_due: [],
+				pending_verification: ["individual.dob.year"],
+				disabled_reason: null,
+			},
+			settings: { payouts: { schedule: { interval: "manual" } } },
+			external_accounts: {
+				object: "list",
+				data: [{ object: "bank_account", bank_name: "STRIPE TEST BANK", last4: "6789" }],
+			},
+		};
+		fake.responses["balance.retrieve"] = {
+			object: "balance",
+			available: [{ amount: 1234, currency: "usd" }],
+			pending: [{ amount: 500, currency: "usd" }],
+			livemode: false,
+		};
+		try {
+			const res = await req("/api/payments/stripe/onboard?detail=1", {
+				headers: { Cookie: reconCookie },
+			});
+			const body = await res.json();
+			expect(body.hasAccount).toBe(true);
+			expect(body.chargesEnabled).toBe(true);
+			expect(body.requirements.currentlyDue).toEqual(["individual.address.line1"]);
+			expect(body.requirements.pendingVerification).toEqual(["individual.dob.year"]);
+			expect(body.schedule).toEqual({ interval: "manual" });
+			expect(body.externalAccount).toEqual({ bankName: "STRIPE TEST BANK", last4: "6789" });
+			expect(body.balance.available[0]).toEqual({ amount: 1234, currency: "usd" });
+			expect(body.balance.pending[0]).toEqual({ amount: 500, currency: "usd" });
+			// The read that ran was FOR this account, at detail only.
+			expect(fake.lastCall("accounts.retrieve")?.args[0]).toBe(acctId);
+		} finally {
+			delete fake.responses["accounts.retrieve"];
+			delete fake.responses["balance.retrieve"];
+		}
+	});
+
+	it("returns a pending account's requirements at detail, without deciding anything", async () => {
+		// `details_submitted` true and everything else false: the waiting window, in
+		// Stripe's own words — the shape that tells the tab to render "Waiting on Stripe"
+		// rather than offering a link the creator has already used.
+		const acctId = await strandedRow();
+		fake.responses["accounts.retrieve"] = {
+			id: acctId,
+			object: "account",
+			charges_enabled: false,
+			payouts_enabled: false,
+			details_submitted: true,
+			requirements: {
+				currently_due: ["external_account"],
+				past_due: [],
+				pending_verification: [],
+				disabled_reason: null,
+			},
+		};
+		try {
+			const res = await req("/api/payments/stripe/onboard?detail=1", {
+				headers: { Cookie: reconCookie },
+			});
+			const body = await res.json();
+			expect(body.chargesEnabled).toBe(false);
+			expect(body.detailsSubmitted).toBe(true);
+			expect(body.requirements.currentlyDue).toEqual(["external_account"]);
+		} finally {
+			delete fake.responses["accounts.retrieve"];
+		}
+	});
+
+	it("gives a creator with no account the not-connected shape at detail", async () => {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+
+		const res = await req("/api/payments/stripe/onboard?detail=1", {
+			headers: { Cookie: reconCookie },
+		});
+		const body = await res.json();
+		expect(body.hasAccount).toBe(false);
+		expect(body.detailsSubmitted).toBe(false);
+	});
+
+	it("returns a Stripe Express Dashboard login link for a connected creator", async () => {
+		await knownGoodRow();
+
+		const res = await req("/api/payments/stripe/dashboard-link", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: reconCookie },
+		});
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.url).toContain("connect.stripe.test/dashboard");
+	});
+
+	it("refuses the Dashboard door to a creator with no connected account", async () => {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+
+		const res = await req("/api/payments/stripe/dashboard-link", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: reconCookie },
+		});
+		expect(res.status).toBe(409);
 	});
 });
 
