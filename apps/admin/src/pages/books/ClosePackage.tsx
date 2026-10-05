@@ -560,12 +560,12 @@ export default function ClosePackage() {
 						<section>
 							<SectionHeading>Posting the Export</SectionHeading>
 							<p className="text-sm text-base-content/70">
-								Download CSV produces a journal-import file — one row per entry line, with the
-								date, description, account, debit, credit and memo columns. The books live in
-								Wave, where a person posts the entry by hand (Accounting → Transactions → Add
-								journal entry); the CSV serves as the schedule of record rather than a file Wave
-								imports. An account name must already exist in Wave's chart of accounts before
-								you type the line — it cannot create one, so add any missing account first.
+								Download CSV produces a journal-import file — one row per entry line, with the date,
+								description, account, debit, credit and memo columns. The books live in Wave, where
+								a person posts the entry by hand (Accounting → Transactions → Add journal entry);
+								the CSV serves as the schedule of record rather than a file Wave imports. An account
+								name must already exist in Wave's chart of accounts before you type the line — it
+								cannot create one, so add any missing account first.
 							</p>
 						</section>
 					</div>
