@@ -336,6 +336,9 @@ function LoggedInLayoutInner() {
 										<Link to="/changelog" className="link link-hover">
 											Changelog
 										</Link>
+										<Link to="/issues" className="link link-hover">
+											Report an Issue
+										</Link>
 									</nav>
 									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 										<h6 className="footer-title text-xs">About</h6>

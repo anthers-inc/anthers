@@ -45,6 +45,10 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 		],
 	},
 	{
+		title: "Issues",
+		items: [{ to: "/issues", label: "Issue Reports" }],
+	},
+	{
 		title: "Books",
 		items: [
 			{ to: "/books/sales-tax", label: "Sales-Tax Worksheet" },

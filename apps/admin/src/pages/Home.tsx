@@ -177,6 +177,7 @@ export default function Home() {
 	const appeals = useAdminData<{ appeals: unknown[] }>("/api/admin/rating-appeals");
 	const quarantine = useAdminData<{ summary: { openFindings: number } }>("/api/admin/quarantine");
 	const abuse = useAdminData<{ reports: unknown[] }>("/api/admin/abuse-reports");
+	const issues = useAdminData<{ reports: unknown[] }>("/api/admin/issue-reports");
 	const dmca = useAdminData<{
 		summary: { received: number; counterNoticed: number };
 	}>("/api/admin/dmca");
@@ -311,6 +312,11 @@ export default function Home() {
 						count={abuse.data?.reports.length ?? null}
 					/>
 					<AttentionCard to="/legal/dmca" title="DMCA Notices in Progress" count={dmcaOpen} />
+					<AttentionCard
+						to="/issues"
+						title="Open Issue Reports"
+						count={issues.data?.reports.length ?? null}
+					/>
 					<AttentionCard
 						to="/moderation"
 						title="Open Reports"

@@ -66,6 +66,7 @@ import {
 	takeDownWork,
 } from "../services/dmca.js";
 import { sendRightsRequestAnswerEmail } from "../services/email.js";
+import { ingestIssueReport, loadIssueQueue } from "../services/issue-reports.js";
 import {
 	describeSubject,
 	liftHold,
@@ -195,6 +196,11 @@ const quarantineSchema = z.object({
 const closeAbuseSchema = z.object({
 	reportId: z.number().int().positive(),
 	outcome: z.enum(["resolved", "dismissed"]),
+});
+
+/** Marking an issue report ingested — the queue's one action. */
+const ingestIssueSchema = z.object({
+	issueId: z.number().int().positive(),
 });
 
 /** Which report to ask about. The two intakes are separate tables, so ids collide. */
@@ -1038,6 +1044,24 @@ const adminRoutes = new Hono<AdminEnv>()
 		const closed = await closeAbuseReport({ reportId, adminId: admin.id, outcome });
 		if (!closed) return c.json({ error: "No open report with that id" }, 404);
 		return c.json({ closed: true, outcome });
+	})
+
+	// ── Issue reports — defect reports about Anthers itself ────────────────────
+	// The Issue Reports page's queue. Deliberately separate from the abuse queue
+	// above: that is statutory notice-and-action, this is plain bug intake with no
+	// mail behind it. The one action is marking a report ingested — the row is a
+	// report item, and the work item lives in the project's task tracker.
+	.get("/issue-reports", async (c) => {
+		const includeIngested = c.req.query("ingested") === "1";
+		return c.json({ reports: await loadIssueQueue({ includeIngested }) });
+	})
+
+	.post("/issue-reports/ingest", zValidator("json", ingestIssueSchema, invalidBody), async (c) => {
+		const admin = c.get("admin");
+		const { issueId } = c.req.valid("json");
+		const ingested = await ingestIssueReport({ issueId, adminId: admin.id });
+		if (!ingested) return c.json({ error: "No open report with that id" }, 404);
+		return c.json({ ingested: true });
 	})
 
 	// ── Did the alert actually arrive? ──────────────────────────────────────────
