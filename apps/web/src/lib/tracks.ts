@@ -7,7 +7,7 @@
  *
  * That field is the *delivery endpoint* for the Work — `/api/content/works/:id/audio` —
  * which re-resolves access on every request and redirects to a short-lived signed URL. The
- * API sets it to null for a viewer who cannot reach the track, so null carries the whole
+ * API sets it to null for a user who cannot reach the track, so null carries the whole
  * locked state and there is no second flag beside it that could disagree. A queue built
  * from these is safe to sit on: every play goes back through the check.
  *
@@ -26,7 +26,7 @@ export interface TrackCreator {
 	displayName?: string | null;
 }
 
-/** The Work shape these read — the serialized viewer form, with an optional creator. */
+/** The Work shape these read — the serialized user form, with an optional creator. */
 type WorkWithCreator = Work & {
 	creator?: { handle?: string | null; displayName?: string | null } | null;
 };

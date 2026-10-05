@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Replies, through the routes a reader actually uses: writing one, reading a thread, and the
+ * Replies, through the routes a user actually uses: writing one, reading a thread, and the
  * three surfaces that used to assume a comment's subject was always a post.
  *
  * 🚨 **A reply's `subject_id` is a COMMENT's id, and reading it as a post's is the bug this

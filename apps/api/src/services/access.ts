@@ -14,14 +14,14 @@
  * to this Work's creator this cycle**. `threshold: 0` is the baseline — everyone — and is
  * not a gate at all.
  *
- * A viewer *qualifies* for a row when they meet its threshold. Among the rows they
+ * A user *qualifies* for a row when they meet its threshold. Among the rows they
  * qualify for AND that are allowed, the cheapest price wins. price 0 = free; a positive
  * price = a one-time purchase that unlocks the Work's enabled delivery (stream and/or
  * download — one price unlocks both). No qualifying allowed row is a hard gate. Works
  * ship "free but fully locked" (baseline row, allow=false).
  *
  * 🚨 **ONE table, and a second one must never come back.** A platform-side gate reading
- * the viewer's own Badge stratifies the commons — better public content behind a higher
+ * the user's own Badge stratifies the commons — better public content behind a higher
  * Badge, beside worse public content that is actually free — which is a class-of-citizen
  * problem inside the one part of the platform that exists in order not to have one. A
  * Work is gated by its creator or it is **Public Access**: ungated, streaming, free to
@@ -34,7 +34,7 @@
  * name a second creator, so gating on another creator's support level (the seed of collabs
  * and bundles) is a shape the model leaves room for rather than one it resolves today.
  *
- * Resolution reads two viewer facts — per-creator dollars this cycle and prior purchases —
+ * Resolution reads two user facts — per-creator dollars this cycle and prior purchases —
  * which `buildAccessContext` loads once so a batch (a Catalog page) resolves without an N+1.
  *
  * Note a gate need not sit on a Badge. Thresholds are amounts, not Badge identities, so a
@@ -112,7 +112,7 @@ export interface AccessibleWork {
 	/**
 	 * The Work's type, one of `WORK_TYPES` in `@anthers/shared/content`.
 	 *
-	 * Read only by the **parental** rules, which are the one viewer-side restriction that
+	 * Read only by the **parental** rules, which are the one user-side restriction that
 	 * cares what something *is* rather than what it costs or who made it. Nothing else in this
 	 * resolver has ever needed the type, and adding it here rather than passing it alongside
 	 * keeps a Work one argument.
@@ -120,15 +120,15 @@ export interface AccessibleWork {
 	type: string;
 }
 
-/** Viewer facts needed to resolve access, loaded once and reused across a batch of Works. */
+/** User facts needed to resolve access, loaded once and reused across a batch of Works. */
 export interface AccessContext {
 	userId: number | null;
-	/** creatorId → monthly dollars the viewer has directed at that creator this cycle */
+	/** creatorId → monthly dollars the user has directed at that creator this cycle */
 	supportByCreator: Map<number, number>;
-	/** Work ids the viewer has a completed purchase for */
+	/** Work ids the user has a completed purchase for */
 	purchasedWorkIds: Set<number>;
 	/**
-	 * May this viewer reach Works rated `adult`? The AND of the account-level opt-in and a
+	 * May this user reach Works rated `adult`? The AND of the account-level opt-in and a
 	 * one-time adulthood verification — `services/content-preferences.ts` owns both.
 	 *
 	 * 🚨 **False for a signed-out visitor, always, and that is a property of the model
@@ -147,7 +147,7 @@ export interface AccessContext {
 	 * it is what makes "a share link is a locator and never an entitlement" a property of the
 	 * code rather than a rule somebody has to keep obeying. Every refusal above that line —
 	 * quarantine, takedown, **Adult**, the gates, a price — runs on the ordinary rules against
-	 * a null viewer, so a link can carry nothing but free work out.
+	 * a null user, so a link can carry nothing but free work out.
 	 *
 	 * ⚠️ **Only consulted when `userId` is null.** A share link followed by somebody who has
 	 * an account does nothing at all: they resolve on their own standing and spend their own
@@ -159,7 +159,7 @@ export interface AccessContext {
 	/**
 	 * A guardian's controls on this account — see `@anthers/shared/parental-controls`.
 	 *
-	 * 🚨 **Sits on the VIEWER and never on the Work**, which is what makes it safe to put in a
+	 * 🚨 **Sits on the USER and never on the Work**, which is what makes it safe to put in a
 	 * resolver that a whole Catalog page runs through. A blocked creator is not less rated and
 	 * a limited household's Work is not less free; what changes is what reaches one account, so
 	 * no answer here can leak into anybody else's catalog.
@@ -203,9 +203,9 @@ export const PREVIEW_VIEWER_ID = -1;
 export function buildPreviewContext(opts: {
 	/** Whose ladder is being previewed — the creator's own. */
 	creatorId: number;
-	/** Monthly $ the imagined viewer gives that creator, or null for "signed out". */
+	/** Monthly $ the imagined user gives that creator, or null for "signed out". */
 	given: number | null;
-	/** Whether the imagined viewer has bought the Work outright. */
+	/** Whether the imagined user has bought the Work outright. */
 	owned: boolean;
 	/** Works the `owned` toggle applies to. */
 	workIds: number[];
@@ -213,24 +213,24 @@ export function buildPreviewContext(opts: {
 	const signedOut = opts.given === null;
 	return {
 		userId: signedOut ? null : PREVIEW_VIEWER_ID,
-		// A signed-out viewer has given nobody anything and owns nothing — both maps stay
+		// A signed-out user has given nobody anything and owns nothing — both maps stay
 		// empty rather than being special-cased in the resolver.
 		supportByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.given ?? 0]]),
 		purchasedWorkIds: !signedOut && opts.owned ? new Set(opts.workIds) : new Set(),
-		// The imagined signed-in viewer has opted in and verified; the signed-out one cannot
+		// The imagined signed-in user has opted in and verified; the signed-out one cannot
 		// have, because there is no account to hold the setting.
 		//
 		// (see below for the parental note)
 		// ⭐ **Not a shortcut — it is what keeps the preview answering the question it was
 		// asked.** A preview exists to show a creator their own access ladder at $N given,
-		// and an imagined viewer with no opt-in would answer `adult_gated` at every rung,
+		// and an imagined user with no opt-in would answer `adult_gated` at every rung,
 		// telling them nothing about the ladder they came to look at. The signed-out case
 		// still shows the invisibility correctly, which is where a creator actually needs to
 		// see it. This stays inside the "a preview can only ever SUBTRACT access" rule
 		// because it is applied to the creator's own Works, and the creator already reaches
 		// them by the owner branch.
 		adultAccess: !signedOut,
-		// A preview asks what a viewer with a given standing would see, and arriving by a
+		// A preview asks what a user with a given standing would see, and arriving by a
 		// share link is not a standing — it is how somebody got here. Nothing to imagine.
 		sharedBy: null,
 		// Likewise: a creator previewing their ladder is asking about their gates, and
@@ -255,9 +255,9 @@ export type AccessReason =
 	| "blocked_type";
 
 /**
- * One way a denied viewer could open this Work, stated in the gate's own terms.
+ * One way a denied user could open this Work, stated in the gate's own terms.
  *
- * `moreNeeded` is the point of this type: the UI must be able to say what the viewer
+ * `moreNeeded` is the point of this type: the UI must be able to say what the user
  * still needs, not what the gate abstractly requires, and it must not compute that
  * itself. The client used to derive its own label from the threshold and got it wrong —
  * naming the highest Badge at-or-below the gate, which by definition does *not* clear a
@@ -266,14 +266,14 @@ export type AccessReason =
 export interface UnlockRoute {
 	/** Monthly dollars this gate requires. */
 	threshold: number;
-	/** Dollars the viewer still has to add — the marginal ask. */
+	/** Dollars the user still has to add — the marginal ask. */
 	moreNeeded: number;
 	/** `threshold` rendered as a money string. */
 	price: string;
 	/**
 	 * The Badge sitting EXACTLY at this threshold, or null when the gate sits between
 	 * Badges (which is legal — a gate needn't sit on a Badge). Never the nearest Badge:
-	 * naming one the viewer would still be short of is the bug this type exists to kill.
+	 * naming one the user would still be short of is the bug this type exists to kill.
 	 *
 	 * ⚠️ **Always null today.** It was populated from `ANTHERS_BADGES` for the Anthers
 	 * route, and that route is retired; a creator's own Badges are their rows, not carried
@@ -302,13 +302,13 @@ export interface UnlockOffer {
 }
 
 export interface AccessResult {
-	/** May the viewer consume the Work now? */
+	/** May the user consume the Work now? */
 	canAccess: boolean;
 	reason: AccessReason;
 	/**
-	 * Present only when the viewer is shut out by a gate (`gated`), and only for routes
+	 * Present only when the user is shut out by a gate (`gated`), and only for routes
 	 * that genuinely open the Work. Absent for purchase (ProjectPricing owns that) and,
-	 * necessarily, for a logged-out viewer, whose standing we don't know.
+	 * necessarily, for a logged-out user, whose standing we don't know.
 	 */
 	unlock?: UnlockOffer;
 	/** Accessible to everyone at no cost. */
@@ -317,7 +317,7 @@ export interface AccessResult {
 	requiresPurchase: boolean;
 	/** Minimum price to unlock via purchase (money string), or null when free/gated. */
 	price: string | null;
-	/** Viewer qualifies via an allowed access row (a gate), even if a price still applies. */
+	/** User qualifies via an allowed access row (a gate), even if a price still applies. */
 	isEntitled: boolean;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
@@ -336,13 +336,13 @@ function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-/** An allowed row the viewer qualifies for: its numeric price and whether it's a baseline (everyone) row. */
+/** An allowed row the user qualifies for: its numeric price and whether it's a baseline (everyone) row. */
 interface Offer {
 	price: number;
 	baseline: boolean;
 }
 
-/** The allowed rows a viewer giving `given` a month to this creator qualifies for. */
+/** The allowed rows a user giving `given` a month to this creator qualifies for. */
 function offersFor(rows: AccessRow[], given: number): Offer[] {
 	const offers: Offer[] = [];
 	for (const row of rows) {
@@ -355,7 +355,7 @@ function offersFor(rows: AccessRow[], given: number): Offer[] {
 }
 
 /**
- * The cheapest rung in one table that would actually OPEN the Work for this viewer.
+ * The cheapest rung in one table that would actually OPEN the Work for this user.
  *
  * "Actually open" is the whole subtlety: only a row that is both allowed **and free**
  * qualifies. An allowed row carrying a price doesn't become access when you reach its
@@ -388,7 +388,7 @@ export function unlockRoute(
 }
 
 /**
- * Resolve access for a single Work against an already-loaded viewer context.
+ * Resolve access for a single Work against an already-loaded user context.
  * Pure and synchronous, so a Catalog page resolves a batch cheaply — and so access
  * semantics are exhaustively testable without a browser.
  *
@@ -396,11 +396,11 @@ export function unlockRoute(
  * it implements is public (the wiki's *Gating a Work*); what follows is the machinery,
  * and each line of it has been got wrong at least once.
  *
- * - **A viewer qualifies for a row by meeting its threshold, and among the allowed rows
+ * - **A user qualifies for a row by meeting its threshold, and among the allowed rows
  *   they qualify for, the CHEAPEST price wins.** Zero means free; above zero means a
  *   one-time purchase unlocking the Work's enabled delivery. No qualifying allowed row is
  *   a hard gate. **Each table is cumulative** — a row allowed at $3 is visible at $3 and above.
- * - 🚨 **Resolution reads the THRESHOLD of the viewer's held Badge, never the Badge's
+ * - 🚨 **Resolution reads the THRESHOLD of the user's held Badge, never the Badge's
  *   name or list position.** Under discrete picks the two are the same number — a
  *   holding's dollars are its Badge's threshold by construction — which is what retired
  *   the old hazard of collapsing a raw amount onto the nearest named rung. The
@@ -441,7 +441,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	}
 
 	// A DMCA takedown stops delivery to EVERYONE — the creator, buyers, and entitled
-	// viewers — before any other rule is considered. Continuing to serve infringing
+	// users — before any other rule is considered. Continuing to serve infringing
 	// bytes to buyers is continuing to infringe, which is the precise distinction from
 	// `withdrawn` (which deliberately keeps serving buyers). This is checked first so
 	// every delivery route that calls `resolveAccess` gets the denial for free, and no
@@ -477,7 +477,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	//
 	// **Above the purchase check on purpose, and it is the only rule here besides the two
 	// denials above that outranks a receipt.** A purchase outlives everything on Anthers, so
-	// this needs a reason: the viewer bought this while opted in and has since opted out, and
+	// this needs a reason: the user bought this while opted in and has since opted out, and
 	// what they are being refused is something they asked not to be shown. That is honoring
 	// their setting rather than taking their purchase away — nothing is lost, the Work
 	// returns the moment they turn it back on, and a purchase that overrode the setting would
@@ -539,7 +539,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		 * cover, duration, and the verdict itself — and what requires an account is
 		 * **delivery**. A signed-out visitor still learns that this Work is free to everyone,
 		 * which is what makes the page worth sharing and worth unfurling; they simply are not
-		 * handed the bytes. `serializeWorkForViewer` reads `canAccess` for the deliverable and
+		 * handed the bytes. `serializeWorkForUser` reads `canAccess` for the deliverable and
 		 * `isFree` for the Public Access badge, so both halves of that sentence land.
 		 *
 		 * **`payment_required` and `gated` are deliberately left alone below and above.**
@@ -551,7 +551,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		//
 		// ⚠️ **The share-link exception is this one clause, and it is placed here rather than
 		// anywhere earlier for a reason that is worth stating.** Everything above still runs
-		// against a null viewer, so a link can only ever emerge from *this* branch — the one
+		// against a null user, so a link can only ever emerge from *this* branch — the one
 		// reached exclusively by work that is free to everyone. Gated work never gets here
 		// (no qualifying allowed row), priced work never gets here, and Adult work is refused
 		// two checks above because a share context carries no opt-in and cannot be given one.
@@ -583,8 +583,8 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 }
 
 /**
- * Load the viewer facts needed to resolve access. Pass the Work ids in view to
- * scope the purchase lookup; omit for "all of the viewer's purchases".
+ * Load the user facts needed to resolve access. Pass the Work ids in view to
+ * scope the purchase lookup; omit for "all of the user's purchases".
  */
 export async function buildAccessContext(
 	userId: number | null,
@@ -606,7 +606,7 @@ export async function buildAccessContext(
 			// here rather than left to a default so the closed answer is visible at the one
 			// place the logged-out context is built.
 			adultAccess: false,
-			// Set by `viewerFor` in routes/content.ts when a request carries a live
+			// Set by `requesterFor` in routes/content.ts when a request carries a live
 			// share token. Null here because this is the ordinary logged-out context, and a
 			// default that guessed otherwise would hand out an allowance nobody offered.
 			sharedBy: opts.sharedBy ?? null,
@@ -621,10 +621,10 @@ export async function buildAccessContext(
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
 
-	// What this viewer gives each creator this cycle: the threshold of the single Badge
+	// What this user gives each creator this cycle: the threshold of the single Badge
 	// they hold from that creator. A holding is a discrete pick of a named Badge (one row
 	// per user, badge and cycle), and the model holds at most one badge per issuer per
-	// cycle — so "what this viewer gives this creator" is one threshold, 0/absent when
+	// cycle — so "what this user gives this creator" is one threshold, 0/absent when
 	// nothing is held, rather than a sum of rows. The MAX is belt-and-braces: it enforces
 	// that shape in the query itself, so two holdings from one issuer in one cycle (which
 	// the unique index permits, being keyed on the badge) can never double-count — the

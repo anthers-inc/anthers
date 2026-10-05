@@ -9,7 +9,7 @@
 // ⚠️ **The heading is generic and lives here, not on the pages.** Each page had its own
 // eyebrow, title and lede introducing its FAQ — three pieces of bespoke copy saying the
 // same thing in three voices, which is work to write, work to keep true, and worth
-// nothing to a reader who can already see a stack of questions. One heading, used
+// nothing to a user who can already see a stack of questions. One heading, used
 // everywhere. A page that wants to say something particular can still say it above this;
 // none of them needs to.
 
@@ -17,7 +17,8 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2 } from "@anthers/web-shared/decor/sections";
 import { Link } from "@anthers/web-shared/router";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
-import { type FAQItem, type FAQSurface, faqFor } from "../../content/faq";
+import { type FAQItem, type FAQSurface, faqFor, interpolatePrice } from "../../content/faq";
+import { useAnthersLadder } from "../../lib/anthers-ladder";
 
 /**
  * One question.
@@ -31,6 +32,11 @@ import { type FAQItem, type FAQSurface, faqFor } from "../../content/faq";
  * element browsers still disagree about.
  */
 export function FAQAccordion({ item, open = false }: { item: FAQItem; open?: boolean }) {
+	// The seeded entry price, for the answers that quote it — the `[public-access-price]`
+	// placeholder in the pool resolves here, so the value is the rows' and the copy stays
+	// static (what `faq.test.ts` checks shapes against).
+	const { publicAccessPrice } = useAnthersLadder();
+	const answer = interpolatePrice(item.answer, publicAccessPrice);
 	return (
 		<details
 			open={open}
@@ -41,7 +47,7 @@ export function FAQAccordion({ item, open = false }: { item: FAQItem; open?: boo
 				<ChevronDownIcon className="h-4 w-4 shrink-0 text-primary/60 transition-transform duration-200 group-open:rotate-180" />
 			</summary>
 			<div className="space-y-2 px-5 pb-5 text-sm leading-relaxed text-base-content/70">
-				{typeof item.answer === "string" ? <p>{item.answer}</p> : item.answer}
+				{typeof answer === "string" ? <p>{answer}</p> : answer}
 			</div>
 		</details>
 	);
@@ -51,7 +57,7 @@ export function FAQAccordion({ item, open = false }: { item: FAQItem; open?: boo
  * The questions one page carries, plus the way out to the rest of them.
  *
  * 🚨 **The link to /faq is not decoration.** A page-level FAQ is a pruned selection —
- * six of twenty-odd questions — and the pruning is only honest if the reader whose
+ * six of twenty-odd questions — and the pruning is only honest if the user whose
  * question was cut has somewhere to go. Dropping the link would turn a considered
  * shortlist into a page that appears to have answered everything it intends to.
  */

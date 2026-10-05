@@ -22,10 +22,10 @@ import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 purgeAccountsCreatedHere();
 
 const id = crypto.randomUUID().slice(0, 8);
-const readerName = `shelf_r_${id}`;
+const userName = `shelf_r_${id}`;
 
 let cookie = "";
-let readerId = 0;
+let userId = 0;
 
 async function shelf(): Promise<{
 	items: { sortOrder: number }[];
@@ -40,29 +40,29 @@ async function shelf(): Promise<{
 }
 
 beforeAll(async () => {
-	const account = await createAccount(readerName);
+	const account = await createAccount(userName);
 	cookie = account.cookie;
 	const [row] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.email, `${readerName}@example.com`));
-	readerId = row.id;
+		.where(eq(users.email, `${userName}@example.com`));
+	userId = row.id;
 
 	// One more entry than the shelf holds, saved in order 1..N.
 	await db.execute(sql`
 		INSERT INTO projects (creator_id, slug, title)
-		SELECT ${readerId}, 'shelf-' || ${id} || '-' || n, 'Shelf ' || n
+		SELECT ${userId}, 'shelf-' || ${id} || '-' || n, 'Shelf ' || n
 		FROM generate_series(1, ${SHELF_LIMIT + 1}) AS n
 	`);
 	await db.execute(sql`
 		INSERT INTO library_items (user_id, project_id, sort_order)
-		SELECT ${readerId}, p.id, split_part(p.slug, '-', 3)::int
+		SELECT ${userId}, p.id, split_part(p.slug, '-', 3)::int
 		FROM projects p WHERE p.slug LIKE ${`shelf-${id}-%`}
 	`);
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	await db.execute(sql`DELETE FROM library_items WHERE user_id = ${readerId}`);
+	await db.execute(sql`DELETE FROM library_items WHERE user_id = ${userId}`);
 	await db.execute(sql`DELETE FROM projects WHERE slug LIKE ${`shelf-${id}-%`}`);
 });
 
@@ -79,7 +79,7 @@ describe("a shelf past the limit", () => {
 
 	it("says nothing was cut once the shelf fits", async () => {
 		await db.execute(
-			sql`DELETE FROM library_items WHERE user_id = ${readerId} AND sort_order = ${SHELF_LIMIT + 1}`,
+			sql`DELETE FROM library_items WHERE user_id = ${userId} AND sort_order = ${SHELF_LIMIT + 1}`,
 		);
 		const { items, truncated } = await shelf();
 		expect(truncated).toBe(false);

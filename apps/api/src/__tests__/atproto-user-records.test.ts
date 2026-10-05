@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Mapping a reader's rows onto the records they own.
+ * Mapping a user's rows onto the records they own.
  *
  * ⭐ The load-bearing assertion is that each produced record passes the Lexicon's OWN
  * validator, generated from the JSON in `lexicons/`. Asserting field by field against a
@@ -27,7 +27,7 @@ import {
 	unpublishableReviewReason,
 	unpublishableVoteReason,
 	voteToRecord,
-} from "../services/atproto-reader-records.js";
+} from "../services/atproto-user-records.js";
 
 const WORK_URI = "at://did:plc:z72i7hdynmk6r22z27h6tvur/org.anthers.work/3lbk2vqf7yk2a";
 const COMMENT_URI = "at://did:plc:z72i7hdynmk6r22z27h6tvur/org.anthers.comment/3lbk4mzq2rc2h";

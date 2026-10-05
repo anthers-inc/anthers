@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 const PDS_URL = "https://anthers.test";
 
-// Set before the module is imported: every reader is a function called at use, but the tests
+// Set before the module is imported: every user is a function called at use, but the tests
 // below assume the door is open, and a suffix derived from an unset variable is empty.
 //
 // 🚨 **Put back afterwards, because `bun test` runs every file in one process.** Left set,

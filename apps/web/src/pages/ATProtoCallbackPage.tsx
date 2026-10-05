@@ -104,7 +104,7 @@ export default function ATProtoCallbackPage() {
 		// button to give it is — an apology page would say something went wrong and offer nothing.
 		//
 		// ⚠️ **Unless the round trip named somewhere else.** The banner asks from whatever page the
-		// person was on, and a reader has no Studio to land in, so they go back where they were and
+		// person was on, and a user has no Studio to land in, so they go back where they were and
 		// the banner there says whether it worked.
 		if (success === "publishing" || success === "publish_declined") {
 			refreshUser().then(() => {

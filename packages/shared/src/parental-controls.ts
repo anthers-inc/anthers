@@ -3,7 +3,7 @@
  * Parental controls — the policy half, pure and with no I/O, the same split as
  * `public-access.ts` and `resolveAccessSync`.
  *
- * 🚨 **A guardian's controls sit on the VIEWER, never on the Work**, and every rule here
+ * 🚨 **A guardian's controls sit on the USER, never on the Work**, and every rule here
  * follows from that. Nothing a guardian sets changes what a Work *is*: a blocked creator is
  * not less rated, a Work past a daily limit is not less free, and a censored word was never
  * part of any classification. What changes is what reaches one account. Encoding any of it as
@@ -69,7 +69,7 @@ export interface ParentalPolicy {
 	 * the Adult opt-in that decides whether the account reaches the rung at all.
 	 *
 	 * 🚨 **Two switches, not one, and they are worth locking independently.** The scale runs
-	 * `general · mature · adult`, and a reader who wants difficult work unblurred has said
+	 * `general · mature · adult`, and a user who wants difficult work unblurred has said
 	 * nothing about whether they want explicit work at all — so a guardian may reasonably
 	 * unblur Mature for a sixteen-year-old while leaving Adult off. The lock covers the six
 	 * content notes for the same reason: allowing intense horror and blurring substance use is

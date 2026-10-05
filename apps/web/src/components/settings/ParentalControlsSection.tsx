@@ -284,7 +284,7 @@ export default function ParentalControlsSection() {
 						/>
 						<span className="text-sm">
 							<strong>Lock the content settings.</strong> Mature and Adult are separate switches and
-							both are locked together — a reader who wants difficult work unblurred hasn't said
+							both are locked together — a user who wants difficult work unblurred hasn't said
 							anything about explicit work, so it's worth setting them before you lock.
 						</span>
 					</label>

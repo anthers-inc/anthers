@@ -12,9 +12,9 @@
  * production. `censorHtml` parses first and only touches text.
  *
  * ⚠️ **It is a display transformation and nothing else.** Nothing censored here is censored
- * anywhere else: the stored Work is untouched, other readers see the original, and turning the
+ * anywhere else: the stored Work is untouched, other users see the original, and turning the
  * setting off restores everything immediately. That is the same rule the maturity veil follows,
- * and for the same reason — a reader's preference must never become a fact about somebody
+ * and for the same reason — a user's preference must never become a fact about somebody
  * else's work.
  */
 import { censorText } from "@anthers/shared/parental-controls";
@@ -24,7 +24,7 @@ import { apiFetch } from "./rpc";
 
 const LanguageFilterContext = createContext(false);
 
-/** Whether this reader has asked for softened language. */
+/** Whether this user has asked for softened language. */
 export function useLanguageFilter(): boolean {
 	return useContext(LanguageFilterContext);
 }
@@ -33,7 +33,7 @@ export function useLanguageFilter(): boolean {
  * Reads the account's parental controls once and shares the one flag every surface needs.
  *
  * Defaults to **off** while it loads and on any failure, which is the right direction for a
- * *display* preference: a reader briefly seeing the original words is a smaller wrong than a
+ * *display* preference: a user briefly seeing the original words is a smaller wrong than a
  * page that flickers, and nothing here is a safety control. The controls that actually protect
  * somebody are enforced server-side and cannot be affected by this request failing.
  */
@@ -49,7 +49,7 @@ export function LanguageFilterProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		if (isLoading || !isAuthenticated) {
-			// A signed-out reader has no controls to read. Off is not a fallback here, it is
+			// A signed-out user has no controls to read. Off is not a fallback here, it is
 			// the correct answer.
 			setOn(false);
 			return;
@@ -94,13 +94,13 @@ export function censorHtml(html: string): string {
 		return doc.body.innerHTML;
 	} catch {
 		// A parser failure must not blank the page. Returning the original is the honest
-		// fallback: the reader sees what was written, which is what they would have seen with
+		// fallback: the user sees what was written, which is what they would have seen with
 		// the setting off.
 		return html;
 	}
 }
 
-/** `censorText` when the reader asked for it, and the original otherwise. */
+/** `censorText` when the user asked for it, and the original otherwise. */
 export function useCensored(text: string | null | undefined): string {
 	const on = useLanguageFilter();
 	if (!text) return text ?? "";

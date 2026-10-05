@@ -10,7 +10,7 @@
 // The page is sequenced as TWO products, not three ways: direct creator support first
 // (monthly giving + purchases, no platform cut — the wedge), the Anthers commons second
 // (what goes to Anthers funds free public content via the Time Pool and lifts the
-// viewer's own Public Access limit).
+// user's own Public Access limit).
 //
 // 🚨 **The creator ask leads and Public Access follows it, and reordering that back is a
 // product decision rather than a layout one.** Support for Anthers buys Public Access and
@@ -38,7 +38,6 @@
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
 // Both are motion-safe — a visitor who prefers reduced motion sees neither.
 
-import { PUBLIC_ACCESS_PRICE, thresholdForBadge } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -49,6 +48,7 @@ import { BADGE_LADDER, BadgeMark, PurchaseExample } from "@anthers/web-shared/ec
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import { FAQBlock } from "../components/ui/FAQ";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -56,6 +56,11 @@ const serif = { fontFamily: FONTS.fraunces };
 const ctaMotion = "transition duration-200 motion-safe:hover:-translate-y-0.5";
 
 export default function ForUsersPage() {
+	// The seeded ladder, for the prices this page quotes the reader: the entry price and
+	// the pool a fan's support sets. Constants stand in until the fetch lands; what is
+	// quoted is a claim about the ladder, so the rows own it.
+	const { rungs, publicAccessPrice } = useAnthersLadder();
+
 	return (
 		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>
 			{/* Hero — fades up on load in three staggered beats. */}
@@ -96,7 +101,7 @@ export default function ForUsersPage() {
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
 							{/* 🚨 /signup is the one signup door, so this button goes nowhere else. It is
-							    where a reader picks a handle or brings their Bluesky identity, and it puts the
+							    where a user picks a handle or brings their Bluesky identity, and it puts the
 							    creator picker in front of a new account, which is the thing this page leads
 							    with. The sentence below has to stay true of what that page asks for. */}
 							<Link to="/signup" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
@@ -157,9 +162,8 @@ export default function ForUsersPage() {
 									<li>Increase the pool of money distributed to creators you spend time with</li>
 									<li>Fund Anthers' free public access and charitable programs for all</li>
 								</ul>
-								${PUBLIC_ACCESS_PRICE} a month also lifts your monthly Public Access limit, so you
-								can watch, read, listen and play as much as you like. As you give more, you'll grow
-								your
+								${publicAccessPrice} a month also lifts your monthly Public Access limit, so you can
+								watch, read, listen and play as much as you like. As you give more, you'll grow your
 								<strong className="font-semibold text-base-content/85"> Anthers Badge</strong>, from
 								Root all the way to Blossom — a mark of what your giving does, not a key to
 								anything. Nothing on Anthers is ever gated behind it.
@@ -257,7 +261,7 @@ export default function ForUsersPage() {
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 						If you want more time than that, or simply want to hold the gates open for everyone
-						else, ${PUBLIC_ACCESS_PRICE} a month to Anthers lifts that limit for as long as you keep
+						else, ${publicAccessPrice} a month to Anthers lifts that limit for as long as you keep
 						it up—and every dollar of it funds the free public content everyone enjoys, because
 						creators earn from the{" "}
 						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
@@ -274,7 +278,7 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								On most of the internet, advertisers own the roads and make you the product. Here, a
-								free viewer still pays the creators they watch—their small Time Pool is covered as
+								free user still pays the creators they watch—their small Time Pool is covered as
 								free access, from a pool that everything given to Anthers supports. By sharing the
 								load together, mountains diffuse into pebbles—and we all get a healthier internet
 								for it.
@@ -288,7 +292,7 @@ export default function ForUsersPage() {
 							</h3>
 							<ul className="flex flex-col gap-2.5 text-sm">
 								<FreeItem yes>
-									Public Access with no monthly limit, from ${PUBLIC_ACCESS_PRICE} a month.
+									Public Access with no monthly limit, from ${publicAccessPrice} a month.
 								</FreeItem>
 								<FreeItem yes>
 									A bigger Time Pool, so the same hour of your time pays the creator more.
@@ -298,9 +302,13 @@ export default function ForUsersPage() {
 								</FreeItem>
 							</ul>
 							<p className="mt-4 border-t border-base-content/10 pt-3 text-xs leading-relaxed text-base-content/55">
-								The Badges run ${thresholdForBadge("root")} to ${thresholdForBadge("blossom")} a
-								month, and "+" beyond. Supporting Anthers is separate from supporting a creator
-								directly—one keeps the commons free, the other reaches a creator in full.
+								{/* The ladder's range is a claim about the seeded rungs, so it reads the
+								    rows — bottom rung through top — rather than the constants. A not-yet-
+								    seeded answer renders nothing rather than a made-up range. */}
+								{rungs.length > 0 &&
+									`The Badges run $${rungs[0].threshold} to $${rungs[rungs.length - 1].threshold} a month, and "+" beyond. `}
+								Supporting Anthers is separate from supporting a creator directly—one keeps the
+								commons free, the other reaches a creator in full.
 							</p>
 						</Card>
 					</Reveal>
@@ -336,7 +344,7 @@ export default function ForUsersPage() {
 			</Section>
 
 			{/* Questions — before the closing CTA rather than after it, deliberately. An FAQ
-			    is the last set of objections standing between a reader and the button, so it
+			    is the last set of objections standing between a user and the button, so it
 			    belongs on the way to the button; putting it below would make the accordions
 			    the final thing on the page and leave the CTA stranded above them. The
 			    questions themselves live in `content/faq.tsx` and are shared with /faq. */}
@@ -373,7 +381,7 @@ export default function ForUsersPage() {
 						 *
 						 * ⚠️ Deliberately says nothing about the Adult rung. It is invisible by default,
 						 * and a general marketing page naming it would undo that for a caveat almost no
-						 * reader here needs. The fact is disclosed where somebody actually meets it: the
+						 * user here needs. The fact is disclosed where somebody actually meets it: the
 						 * Settings panel opens the card field at the moment they opt in, and `/parents`
 						 * spells out the whole check.
 						 */}

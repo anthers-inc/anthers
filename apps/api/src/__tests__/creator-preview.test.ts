@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Creator preview: seeing your own gating the way a reader sees it.
+ * Creator preview: seeing your own gating the way a user sees it.
  *
  * 🚨 **The property that makes this safe is that a preview can only ever SUBTRACT.** It
  * applies only to Works the requester created — who already sees everything of theirs — so
@@ -90,7 +90,7 @@ async function makeWork(title: string, access: unknown): Promise<number> {
  * ⚠️ `access` is optional in the return type on purpose, because the endpoint genuinely
  * returns two shapes: an **owner** gets `serializeWork` — full media keys, the editable
  * access table, and no `access` verdict, since an owner never needed one — and everybody
- * else gets `serializeWorkForViewer`. Asking for a preview is what moves a creator from
+ * else gets `serializeWorkForUser`. Asking for a preview is what moves a creator from
  * the first shape to the second, which is the whole mechanism.
  */
 async function view(workId: number, cookie: string, query = "") {
@@ -98,7 +98,7 @@ async function view(workId: number, cookie: string, query = "") {
 	expect(res.status).toBe(200);
 	return (await res.json()).work as {
 		/**
-		 * The viewer shape carries the resolved verdict here. The owner shape carries the
+		 * The user shape carries the resolved verdict here. The owner shape carries the
 		 * editable access table under the same key — one key, two shapes, and a preview is
 		 * what moves a creator across (see the one owner-shape assertion below, which reads
 		 * it through a cast for exactly that reason).
@@ -143,7 +143,7 @@ describe("creator preview", () => {
 
 	it("without a preview, a creator gets the owner shape and nothing changes", async () => {
 		const work = await view(gatedId, creatorCookie);
-		// No verdict at all — an owner is not a viewer, and this is the shape the Studio
+		// No verdict at all — an owner is not a user, and this is the shape the Studio
 		// edits against. If a preview ever started leaking into the default response, this
 		// is the assertion that would notice: the owner shape's `access` is the editable
 		// table (an array), never a resolved verdict.
@@ -154,7 +154,7 @@ describe("creator preview", () => {
 	it("previewing signed-out shows the gate as a stranger meets it", async () => {
 		const work = await view(gatedId, creatorCookie, "?previewAs=out");
 		expect(work.access?.canAccess).toBe(false);
-		// `login_required` rather than `gated`: a signed-out viewer's first problem is that
+		// `login_required` rather than `gated`: a signed-out user's first problem is that
 		// nobody knows who they are. Getting this distinction from the real resolver rather
 		// than inventing it in the preview is the whole point of substituting the context.
 		expect(work.access?.reason).toBe("login_required");
@@ -170,7 +170,7 @@ describe("creator preview", () => {
 
 	it("the deliverable is withheld in a locked preview, exactly as it would be", async () => {
 		// Not merely a different `canAccess` flag: the creator should see the locked page
-		// their reader sees, media URLs and all. A preview that reported "locked" while
+		// their user sees, media URLs and all. A preview that reported "locked" while
 		// still handing over the payload would be lying about the thing it exists to show.
 		const work = await view(gatedId, creatorCookie, "?previewAs=0");
 		expect(work.access?.canAccess).toBe(false);

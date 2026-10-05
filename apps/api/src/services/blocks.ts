@@ -24,7 +24,7 @@
  *
  * 3. **The block is never announced, and we do not claim it is concealed.** Nothing
  *    here returns "you have been blocked", and no endpoint reports who blocked whom.
- *    A blocked viewer gets the same 404 a nonexistent user gets, which is the least
+ *    A blocked user gets the same 404 a nonexistent user gets, which is the least
  *    informative answer available. Complete concealment is not achievable — a
  *    determined blocked user can infer a block from the disappearance — and
  *    asserting it would be a protection claimed rather than held.
@@ -68,39 +68,39 @@ export async function isBlocked(a: number, b: number): Promise<boolean> {
 }
 
 /**
- * Every user id `viewer` cannot meet — those they blocked and those who blocked them,
+ * Every user id `user` cannot meet — those they blocked and those who blocked them,
  * as one set.
  *
  * For list surfaces that already hold their rows in memory (the creator listing, the
  * comment thread). `notBlockedBy` is the SQL-side equivalent for queries that filter
  * before a LIMIT.
  */
-export async function blockedUserIds(viewer: number | null): Promise<Set<number>> {
-	if (viewer == null) return new Set();
+export async function blockedUserIds(user: number | null): Promise<Set<number>> {
+	if (user == null) return new Set();
 	const rows = await db
 		.select({ blockerId: userBlocks.blockerId, blockedId: userBlocks.blockedId })
 		.from(userBlocks)
-		.where(or(eq(userBlocks.blockerId, viewer), eq(userBlocks.blockedId, viewer)));
+		.where(or(eq(userBlocks.blockerId, user), eq(userBlocks.blockedId, user)));
 	const out = new Set<number>();
-	for (const r of rows) out.add(r.blockerId === viewer ? r.blockedId : r.blockerId);
+	for (const r of rows) out.add(r.blockerId === user ? r.blockedId : r.blockerId);
 	return out;
 }
 
 /**
- * A SQL predicate excluding rows whose `userColumn` names anyone `viewer` cannot meet.
+ * A SQL predicate excluding rows whose `userColumn` names anyone `user` cannot meet.
  *
- * Returns `undefined` for a signed-out viewer so callers can drop it into an `and()`
+ * Returns `undefined` for a signed-out user so callers can drop it into an `and()`
  * without branching — there is no block relationship to enforce without an identity.
  * Written as a NOT EXISTS over both directions rather than a fetched id list so the
  * filter applies *before* any LIMIT: filtering a page after the fact silently returns
  * short pages, which is the same defect the moderation queue's orphan filter had.
  */
-export function notBlockedBy(viewer: number | null, userColumn: SQL | unknown): SQL | undefined {
-	if (viewer == null) return undefined;
+export function notBlockedBy(user: number | null, userColumn: SQL | unknown): SQL | undefined {
+	if (user == null) return undefined;
 	return sql`NOT EXISTS (
 		SELECT 1 FROM user_blocks ub
-		WHERE (ub.blocker_id = ${viewer} AND ub.blocked_id = ${userColumn})
-		   OR (ub.blocked_id = ${viewer} AND ub.blocker_id = ${userColumn})
+		WHERE (ub.blocker_id = ${user} AND ub.blocked_id = ${userColumn})
+		   OR (ub.blocked_id = ${user} AND ub.blocker_id = ${userColumn})
 	)`;
 }
 

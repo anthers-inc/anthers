@@ -58,7 +58,7 @@ function req(path: string, options?: RequestInit) {
 
 const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `adenf_c_${run}`;
-const readerName = `adenf_r_${run}`;
+const userName = `adenf_r_${run}`;
 const grownName = `adenf_g_${run}`;
 
 /** Behind a $3 Badge and free at that rung — a legal shape for Adult work. */
@@ -70,7 +70,7 @@ const BEHIND_A_BADGE = [
 const OPEN_TO_EVERYONE = [{ threshold: 0, allow: true, price: "0" }];
 
 let creatorCookie: string;
-let readerCookie: string;
+let userCookie: string;
 let grownCookie: string;
 let creatorId: number;
 let grownId: number;
@@ -114,10 +114,10 @@ describe("what an Adult rating costs", () => {
 
 	beforeAll(async () => {
 		await db.execute(
-			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${readerName}@example.com`}`, sql`${`${grownName}@example.com`}`], sql`, `)})`,
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userName}@example.com`}`, sql`${`${grownName}@example.com`}`], sql`, `)})`,
 		);
 		({ cookie: creatorCookie, id: creatorId } = await signUp(creatorName));
-		({ cookie: readerCookie } = await signUp(readerName));
+		({ cookie: userCookie } = await signUp(userName));
 		({ cookie: grownCookie, id: grownId } = await signUp(grownName));
 
 		// The grown account has opted in and verified. Written directly rather than through
@@ -134,7 +134,7 @@ describe("what an Adult rating costs", () => {
 				adultVerifiedAt: new Date(),
 				adultVerifiedMethod: "card_funding",
 				// ⚠️ Set explicitly, because the column's own default is `hide` and this
-				// suite is about what an opted-in reader can REACH rather than about what
+				// suite is about what an opted-in user can REACH rather than about what
 				// they asked to be shown. The enable route sets this for real people; a
 				// fixture writing the row directly has to do the same or it would be
 				// testing the display preference by accident.
@@ -171,7 +171,7 @@ describe("what an Adult rating costs", () => {
 	// orphan these rows instead of removing them.
 	afterAll(async () => {
 		if (madeWorkIds.length > 0) await db.delete(works).where(inArray(works.id, madeWorkIds));
-		await purgeFixtureAccounts([creatorName, readerName, grownName]);
+		await purgeFixtureAccounts([creatorName, userName, grownName]);
 	});
 
 	describe("the resolver, which is where entitlement is decided and nothing else may decide it", () => {
@@ -212,7 +212,7 @@ describe("what an Adult rating costs", () => {
 
 		it("🚨 refuses it even to somebody who bought it, once they opt back out", () => {
 			// A purchase outlives everything on Anthers, so this outranking a receipt needs
-			// a reason: what the viewer is being refused is something they asked not to be
+			// a reason: what the user is being refused is something they asked not to be
 			// shown, and it returns the moment they turn the setting back on. A purchase
 			// that overrode the setting would make the setting mean "except for things you
 			// already own", which nobody would expect it to.
@@ -304,7 +304,7 @@ describe("what an Adult rating costs", () => {
 		it("🚨 earns the Time Pool for a verified adult, exactly as any other rung would", async () => {
 			// The point of the whole change, asserted where it actually happens. The
 			// `public_access` stamp reads `access.isFree`, so an Adult Work that is free to
-			// a verified reader carries the flag and that reader's own Time Pool reaches its
+			// a verified user carries the flag and that user's own Time Pool reaches its
 			// creator. Excluding it was silently redirecting an adult's support to the
 			// remainder rather than to the creators they watched.
 			const free: AccessibleWork = {
@@ -332,7 +332,7 @@ describe("what an Adult rating costs", () => {
 			expect(verified.isFree).toBe(true);
 			expect(verified.reason).toBe("free");
 
-			// And for a reader who cannot reach it, nothing is credited at all: they are
+			// And for a user who cannot reach it, nothing is credited at all: they are
 			// denied before any of that, so no seconds accrue against the Work.
 			const shutOut = resolveAccessSync(free, {
 				userId: 7,
@@ -360,7 +360,7 @@ describe("what an Adult rating costs", () => {
 		it("is absent for a signed-in account that has not opted in", async () => {
 			// Parker, 2026-08-28, settling the *Content Standards* page's open question on the non-feed surfaces:
 			// one rule for everyone without the opt-in, rather than an interstitial.
-			const titles = await catalogTitles(readerCookie);
+			const titles = await catalogTitles(userCookie);
 			expect(titles).toContain(MATURE_TITLE);
 			expect(titles).not.toContain(ADULT_TITLE);
 		});
@@ -389,7 +389,7 @@ describe("what an Adult rating costs", () => {
 
 		it("404s for a signed-in account that has not opted in", async () => {
 			const res = await req(`/api/content/works/${adultWork.publicId}`, {
-				headers: { Origin: ORIGIN, Cookie: readerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			expect(res.status).toBe(404);
 		});
@@ -418,10 +418,10 @@ describe("what an Adult rating costs", () => {
 				.set({ maturity: "a-rung-from-the-future" })
 				.where(eq(works.id, oddball.id));
 
-			// Absent for a signed-out visitor, for a signed-in reader, and — unlike Adult —
+			// Absent for a signed-out visitor, for a signed-in user, and — unlike Adult —
 			// even for a verified adult, because the value is in no allow-list at all.
 			expect(await catalogTitles()).not.toContain(`Oddball ${run}`);
-			expect(await catalogTitles(readerCookie)).not.toContain(`Oddball ${run}`);
+			expect(await catalogTitles(userCookie)).not.toContain(`Oddball ${run}`);
 			expect(await catalogTitles(grownCookie)).not.toContain(`Oddball ${run}`);
 			// Its creator still sees their own, so a bad value never silently eats somebody's
 			// Catalog without them being able to find it.
@@ -444,7 +444,7 @@ describe("what an Adult rating costs", () => {
 		// bookmarked it or was sent a link to it. Asserted as absences, like the rest of this file.
 		const token = `adenf-share-${run}`;
 		const controlToken = `adenf-share-mature-${run}`;
-		let readerId: number;
+		let userId: number;
 
 		/** Every title a response mentions, wherever in the payload it sits. */
 		async function titlesIn(path: string, cookie?: string): Promise<string> {
@@ -455,17 +455,17 @@ describe("what an Adult rating costs", () => {
 		}
 
 		beforeAll(async () => {
-			const [reader] = await db
+			const [user] = await db
 				.select({ id: users.id })
 				.from(users)
-				.where(eq(users.email, `${readerName}@example.com`));
-			readerId = reader.id;
+				.where(eq(users.email, `${userName}@example.com`));
+			userId = user.id;
 			await db.insert(shareLinks).values([
 				{ token, workId: adultWork.id, sharerId: grownId },
 				{ token: controlToken, workId: matureWork.id, sharerId: grownId },
 			]);
 			await db.insert(libraryItems).values([
-				{ userId: readerId, workId: adultWork.id },
+				{ userId: userId, workId: adultWork.id },
 				{ userId: grownId, workId: adultWork.id },
 			]);
 			// Bookmarks name posts only now — the Work/creator columns died with the dead
@@ -495,8 +495,8 @@ describe("what an Adult rating costs", () => {
 			expect(mature.status).toBe(200);
 		});
 
-		it("leaves it off the shelf of a reader who has not opted in, and on a verified one's", async () => {
-			expect(await titlesIn("/api/content/library", readerCookie)).not.toContain(ADULT_TITLE);
+		it("leaves it off the shelf of a user who has not opted in, and on a verified one's", async () => {
+			expect(await titlesIn("/api/content/library", userCookie)).not.toContain(ADULT_TITLE);
 			expect(await titlesIn("/api/content/library", grownCookie)).toContain(ADULT_TITLE);
 		});
 
@@ -505,7 +505,7 @@ describe("what an Adult rating costs", () => {
 			// died with the dead-columns sweep — so a bookmark can no longer name an Adult
 			// Work at all, and the page can only leak a post's own title.
 			const res = await req("/api/content/bookmarks", {
-				headers: { Origin: ORIGIN, Cookie: readerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			const body = (await res.json()) as { bookmarks: unknown[] };
 			expect(JSON.stringify(body)).not.toContain(ADULT_TITLE);
@@ -515,15 +515,15 @@ describe("what an Adult rating costs", () => {
 			const project = `Adult-only project ${run}`;
 			const path = `/api/content/projects?creator=${await handleOf(creatorName)}`;
 			expect(await titlesIn(path)).not.toContain(project);
-			expect(await titlesIn(path, readerCookie)).not.toContain(project);
+			expect(await titlesIn(path, userCookie)).not.toContain(project);
 			expect(await titlesIn(path, grownCookie)).toContain(project);
 			expect(await titlesIn(path, creatorCookie)).toContain(project);
 		});
 	});
 
-	describe("the reader's own controls", () => {
-		/** Set one rung's display preference for the reader who has not opted in. */
-		function setDisplay(body: Record<string, string>, cookie = readerCookie) {
+	describe("the user's own controls", () => {
+		/** Set one rung's display preference for the user who has not opted in. */
+		function setDisplay(body: Record<string, string>, cookie = userCookie) {
 			return req("/api/accounts/me/content-preferences", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
@@ -535,7 +535,7 @@ describe("what an Adult rating costs", () => {
 			// 🚨 The default that makes the rung mean something, and it has to hold for a
 			// signed-out visitor who has no row to read it from. A default resolved from the
 			// column rather than in code would be right for accounts and silently absent for
-			// everybody else — which is the half that matters, since most readers meeting
+			// everybody else — which is the half that matters, since most users meeting
 			// Mature work for the first time are not signed in.
 			const out = await (
 				await req("/api/accounts/me/content-preferences", {
@@ -546,7 +546,7 @@ describe("what an Adult rating costs", () => {
 
 			const inn = await (
 				await req("/api/accounts/me/content-preferences", {
-					headers: { Origin: ORIGIN, Cookie: readerCookie },
+					headers: { Origin: ORIGIN, Cookie: userCookie },
 				})
 			).json();
 			expect(inn.mature).toBe("blur");
@@ -559,45 +559,45 @@ describe("what an Adult rating costs", () => {
 			// removed rows, Mature would carry an access consequence, which is exactly what
 			// The wiki's *The Rating Standard* says it must never do.
 			expect((await setDisplay({ mature: "blur" })).status).toBe(200);
-			expect(await catalogTitles(readerCookie)).toContain(MATURE_TITLE);
+			expect(await catalogTitles(userCookie)).toContain(MATURE_TITLE);
 		});
 
-		it("removes it from listings when the reader asks to hide the rung", async () => {
+		it("removes it from listings when the user asks to hide the rung", async () => {
 			expect((await setDisplay({ mature: "hide" })).status).toBe(200);
-			expect(await catalogTitles(readerCookie)).not.toContain(MATURE_TITLE);
+			expect(await catalogTitles(userCookie)).not.toContain(MATURE_TITLE);
 		});
 
 		it("🚨 still lets a hidden Work be opened by a direct link", async () => {
 			// What separates hiding from opting out, and the reason `hide` is never an
-			// access rule. The reader asked to keep the rung out of what they browse, not
+			// access rule. The user asked to keep the rung out of what they browse, not
 			// to be refused something they deliberately went to.
 			const res = await req(`/api/content/works/${matureWork.publicId}`, {
-				headers: { Origin: ORIGIN, Cookie: readerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			expect(res.status).toBe(200);
 		});
 
 		it("⚠️ never hides a creator's own work from them, whatever they asked for", async () => {
-			// The reader is filtering what they browse, not deleting their own Catalog.
+			// The user is filtering what they browse, not deleting their own Catalog.
 			expect((await setDisplay({ mature: "hide" }, creatorCookie)).status).toBe(200);
 			expect(await catalogTitles(creatorCookie)).toContain(MATURE_TITLE);
 			await setDisplay({ mature: "blur" }, creatorCookie);
 		});
 
 		it("keeps the two rungs on separate controls", async () => {
-			// 🚨 The separation is the design rather than the layout: a reader who wants
+			// 🚨 The separation is the design rather than the layout: a user who wants
 			// difficult work unblurred has said nothing about whether they want explicit
 			// work at all, and one control covering both would make them say it. Moving
 			// Mature must leave Adult exactly where it was.
 			const before = await (
 				await req("/api/accounts/me/content-preferences", {
-					headers: { Origin: ORIGIN, Cookie: readerCookie },
+					headers: { Origin: ORIGIN, Cookie: userCookie },
 				})
 			).json();
 			expect((await setDisplay({ mature: "show" })).status).toBe(200);
 			const after = await (
 				await req("/api/accounts/me/content-preferences", {
-					headers: { Origin: ORIGIN, Cookie: readerCookie },
+					headers: { Origin: ORIGIN, Cookie: userCookie },
 				})
 			).json();
 			expect(after.mature).toBe("show");
@@ -606,16 +606,16 @@ describe("what an Adult rating costs", () => {
 			await setDisplay({ mature: "blur" });
 		});
 
-		it("does not let a display preference reach Adult work the reader may not have", async () => {
+		it("does not let a display preference reach Adult work the user may not have", async () => {
 			// ⚠️ Two different reasons produce the same absence and only one of them is an
-			// access rule. Setting Adult to `show` is the reader asking; being allowed to
-			// reach it is the platform answering, and the second is not the first. A reader
+			// access rule. Setting Adult to `show` is the user asking; being allowed to
+			// reach it is the platform answering, and the second is not the first. A user
 			// who has not verified sees nothing however they set this.
 			expect((await setDisplay({ adult: "show" })).status).toBe(200);
-			expect(await catalogTitles(readerCookie)).not.toContain(ADULT_TITLE);
+			expect(await catalogTitles(userCookie)).not.toContain(ADULT_TITLE);
 
 			const res = await req(`/api/content/works/${adultWork.publicId}`, {
-				headers: { Origin: ORIGIN, Cookie: readerCookie },
+				headers: { Origin: ORIGIN, Cookie: userCookie },
 			});
 			expect(res.status).toBe(404);
 		});
@@ -635,7 +635,7 @@ describe("what an Adult rating costs", () => {
 	});
 
 	describe("what it does NOT cost the creator", () => {
-		it("⭐ resolves identically to the same Work rated Mature, once the reader is verified", () => {
+		it("⭐ resolves identically to the same Work rated Mature, once the user is verified", () => {
 			// **The clearest statement of what the rung is.** Past the verification gate,
 			// an Adult Work and a Mature Work with the same access table give the same
 			// answer — same reason, same price, same free-ness. Anything that made the two
@@ -669,7 +669,7 @@ describe("what an Adult rating costs", () => {
 			expect(asAdult).toEqual(asMature);
 		});
 
-		it("🚨 and diverges only for a reader who has not verified", () => {
+		it("🚨 and diverges only for a user who has not verified", () => {
 			// The one difference there is meant to be, stated beside the sameness above so
 			// neither can drift without the other noticing.
 			const base = {

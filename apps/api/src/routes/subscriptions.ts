@@ -91,7 +91,7 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
-import { anthersUserId } from "../services/anthers-badges.js";
+import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds } from "../services/attention-ranges.js";
 import {
 	ensureAnthersProduct,
@@ -126,7 +126,7 @@ import { recordReductions } from "../services/support-reductions.js";
  *
  * ⚠️ **Two docblocks on one declaration is a shape worth noticing**, because this
  * declaration carried a stale second one for months: the compiler takes the nearest and
- * the reader takes the first, so a rewrite placed above an old block leaves both live and
+ * the user takes the first, so a rewrite placed above an old block leaves both live and
  * only one of them read.
  */
 const MAX_ANTHERS_SUPPORT = 300;
@@ -177,7 +177,7 @@ async function stickerCycleFor(
 	userId: number,
 ): Promise<{ billingCycle: string; allowance: number } | null> {
 	// The Anthers side reads the held Badge on the Anthers ladder; the period rides the
-	// billing row. A viewer with no billing row has no period to key from and no holdings
+	// billing row. A user with no billing row has no period to key from and no holdings
 	// to draw against — null, as the callers already treat it.
 	const [acct] = await db
 		.select({ periodStart: billingAccounts.currentPeriodStart })
@@ -188,10 +188,10 @@ async function stickerCycleFor(
 	const start = acct.periodStart ?? new Date();
 	// 🚨 **The same key `distribute-pool` writes, computed by the same function** — which it
 	// was not until 2026-09-16, and the divergence was invisible precisely because both
-	// were local-time readers and therefore always agreed.
+	// were local-time users and therefore always agreed.
 	//
 	// Anchoring every account to the 1st made that unsafe: `period_start` became exactly
-	// midnight UTC on the 1st, which is the one input a local-time reader gets wrong by a
+	// midnight UTC on the 1st, which is the one input a local-time user gets wrong by a
 	// whole month in any zone behind UTC, for every account, every cycle. A Sticker would
 	// then be recorded against a cycle the pool job never pays — money a supporter aimed at
 	// a creator, reaching nobody. Never build this key by hand.
@@ -227,11 +227,11 @@ async function stickersDirectedIn(userId: number, billingCycle: string): Promise
 }
 
 /**
- * The creator of a Work or post a reader can see, or null when there is nothing public there.
+ * The creator of a Work or post a user can see, or null when there is nothing public there.
  *
  * ⚠️ **Only something already in front of people can carry a Sticker.** A private Work, a
  * draft post, a Work taken down or quarantined — none of them was put there by somebody set
- * up to be paid, and a Sticker on one would direct money at a subject no reader could have
+ * up to be paid, and a Sticker on one would direct money at a subject no user could have
  * found. Answered as absent rather than refused, so a guessed id learns nothing.
  */
 async function publicCreatorOf(kind: "work" | "post", id: number): Promise<number | null> {
@@ -386,7 +386,7 @@ async function ensureAccount(userId: number) {
  * directed items add up to is Stripe-side truth about what was *paid for*, and a number
  * derived at read time from a subscription fetch would answer a request Stripe has not
  * validated and cost a round trip on every pick. The held-over rule on decreases lives in
- * that write, so every reader of this figure shares one answer.
+ * that write, so every user of this figure shares one answer.
  */
 async function directedBudgetFor(userId: number): Promise<number> {
 	const [acct] = await db
@@ -427,11 +427,11 @@ interface WorkEligibility {
 	creatorId: number | null;
 	/** Event types this Work can earn — empty means it earns nothing. */
 	earns: Set<AttentionEventType>;
-	/** Whether the claiming viewer may actually consume it. */
+	/** Whether the claiming user may actually consume it. */
 	accessible: boolean;
 	/**
 	 * Whether this Work is **Public Access** — ungated, streaming, free to everyone — so
-	 * its seconds draw a free account's monthly allowance. Gated work the viewer cleared,
+	 * its seconds draw a free account's monthly allowance. Gated work the user cleared,
 	 * work they bought, and their own catalog are all excluded by this being false.
 	 */
 	publicAccess: boolean;
@@ -451,7 +451,7 @@ interface WorkEligibility {
  */
 async function loadWorkEligibility(
 	workIds: number[],
-	viewerId: number | null,
+	userId: number | null,
 	sharedBy: number | null = null,
 ): Promise<Map<number, WorkEligibility>> {
 	const byId = new Map<number, WorkEligibility>();
@@ -460,7 +460,7 @@ async function loadWorkEligibility(
 	const workRows = await db.select().from(works).where(inArray(works.id, workIds));
 	if (workRows.length === 0) return byId;
 
-	const ctx = await buildAccessContext(viewerId, {
+	const ctx = await buildAccessContext(userId, {
 		workIds: workRows.map((w) => w.id),
 		sharedBy,
 	});
@@ -487,7 +487,7 @@ async function loadWorkEligibility(
 				work.streamEnabled &&
 				work.visibility === "released" &&
 				// ⚠️ **A creator sharing their OWN Work earns nothing from it**, which the owner
-				// branch cannot say here: a share context has a null viewer, so `owner` never
+				// branch cannot say here: a share context has a null user, so `owner` never
 				// fires and `isFree` comes back true. Without this the sharer's Time Pool would
 				// pay the sharer, which is the same refusal `resolveAccessSync` makes for a
 				// creator watching their own catalog — a pool is for buying the commons from
@@ -500,7 +500,7 @@ async function loadWorkEligibility(
 	return byId;
 }
 
-// ── The attributable viewer ──────────────────────────────────────────────────
+// ── The attributable user ──────────────────────────────────────────────────
 
 /**
  * Who these seconds belong to — an account, or the **sharer** whose link a stranger followed.
@@ -530,7 +530,7 @@ async function attributionFor(
  * A session, **or** a live share link. See the note on `POST /attention` for why this
  * endpoint wants an *attributable* caller rather than a logged-in one.
  */
-const requireAttributableViewer = createMiddleware(async (c, next) => {
+const requireAttributableUser = createMiddleware(async (c, next) => {
 	const token = c.req.query("share");
 	if (token && (await resolveShareToken(token))) return next();
 	return requireAuth(c, next);
@@ -540,7 +540,7 @@ const requireAttributableViewer = createMiddleware(async (c, next) => {
  * The relay budget in the ordinary meter's shape.
  *
  * The players read `remainingSeconds` and `allowed` to draw a countdown and a wall, and a
- * share-link recipient needs both for exactly the same reason a signed-in viewer does. Giving
+ * share-link recipient needs both for exactly the same reason a signed-in user does. Giving
  * them a second shape would mean a second branch in every player for a difference they should
  * never see — what ran out is *time on this link*, and the copy says so.
  */
@@ -563,6 +563,29 @@ const subscriptionRoutes = new Hono()
 	// here. ⚠️ Phase C should note the path change: `/subscriptions/badges` →
 	// `/subscriptions/anthers-badges`.
 	.get("/anthers-badges", (c) => c.json({ badges: BADGE_VIEWS }))
+
+	// ── The seeded ladder, as the database states it ─────────────────────────
+	//
+	// ⭐ **The rows are the source of truth now that they exist** (Parker, 2026-10-03:
+	// "there's no reason to pin `PUBLIC_ACCESS_PRICE` as a doc constant. Go look at the
+	// code — or now the database — and read whatever value is actually there."). The
+	// constants (`ANTHERS_BADGES`, `PUBLIC_ACCESS_PRICE`) remain the seeding's INPUT and
+	// the billing validators' floor, but the copy surfaces — the signup matrix, the
+	// marketing pages, the FAQ, the meter notice — read the seeded value through here so
+	// a change made in the database reaches the copy the next fetch, the way
+	// `econ:figures` already delivers every other published figure from code.
+	//
+	// 🚨 **Refuses rather than falls back when the ladder is unseeded** (503): a placeholder
+	// constant answering in its place would publish the old values past the point they were
+	// retired — the exact drift this endpoint exists to prevent. The signup page's loader
+	// treats the refusal as "figures unknown" and keeps the page usable.
+	.get("/anthers-ladder", async (c) => {
+		const { rungs, publicAccessPrice } = await loadAnthersLadder();
+		if (rungs.length === 0 || publicAccessPrice === null) {
+			return c.json({ error: "The Anthers Badge ladder has not been seeded." }, 503);
+		}
+		return c.json({ rungs, publicAccessPrice });
+	})
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	// ── Public Access meter ──────────────────────────────────────────────────
@@ -1103,21 +1126,21 @@ const subscriptionRoutes = new Hono()
 
 	// ── Time (Attention) Events ──────────────────────────────────────────────
 	/**
-	 * 🚨 **`requireAuth` became `requireAttributableViewer` on 2026-08-28, and the name is the
+	 * 🚨 **`requireAuth` became `requireAttributableUser` on 2026-08-28, and the name is the
 	 * whole argument.** This endpoint is where time turns into money, so what it has always
 	 * needed is not a *logged-in* caller but an *attributable* one — somebody a creator can be
 	 * paid on behalf of. An account is the ordinary way to be that. A **share link** is the
-	 * other way: the viewer is a stranger we deliberately did not ask to sign up, and the time
+	 * other way: the user is a stranger we deliberately did not ask to sign up, and the time
 	 * is attributed to whoever shared the link, who does have an account.
 	 *
 	 * ⚠️ **Which is also why the exception cannot leak into access.** The rows written below
 	 * carry the sharer's `user_id` and `via_share_link: true`; the *entitlement* question was
-	 * already answered by `resolveAccessSync` against a null viewer, so nothing a link carries
+	 * already answered by `resolveAccessSync` against a null user, so nothing a link carries
 	 * can open gated or Adult work. See `services/share-links.ts`.
 	 */
 	.post(
 		"/attention",
-		requireAttributableViewer,
+		requireAttributableUser,
 		zValidator(
 			"query",
 			z.object({
@@ -1217,7 +1240,7 @@ const subscriptionRoutes = new Hono()
 			//      consumption, so it cannot be consumed by the public.
 			//   3. The claimed creator really is the Work's creator — otherwise the
 			//      attribution is simply forged.
-			//   4. The Work's type earns this event type, and the viewer can actually
+			//   4. The Work's type earns this event type, and the user can actually
 			//      access it.
 			const eligibility = await loadWorkEligibility(
 				[
@@ -1319,7 +1342,7 @@ const subscriptionRoutes = new Hono()
 		// Ranges split on read: the person's real seconds, never more than elapsed time.
 		// Overlap, not containment — a range straddling the cycle's edge contributes
 		// its in-window share, which the split clips. Goes through the same helper as
-		// every other reader, so "time spent" means one thing everywhere.
+		// every other user, so "time spent" means one thing everywhere.
 		const [totalSeconds, eventRows] = await Promise.all([
 			creditedSeconds(user.id, cycleFrom, cycleTo),
 			db
@@ -1549,7 +1572,7 @@ const subscriptionRoutes = new Hono()
 
 		// The Anthers creator account, so its rungs can be excluded from the directed
 		// budget's arithmetic — see `allocated` below for why.
-		const org = await anthersUserId();
+		const anthers = await anthersUserId();
 
 		const result = await db
 			.select({
@@ -1568,12 +1591,12 @@ const subscriptionRoutes = new Hono()
 		// not "allocated" against it.** `directedBudget` is written from the charge's
 		// creator-destination items (`directedSupportFromSub` filters to
 		// `creatorId !== anthersId` — every destination is a user id now, so the exclusion
-		// is by the Anthers account's id), so the money the viewer holds on Anthers' own
+		// is by the Anthers account's id), so the money the user holds on Anthers' own
 		// ladder draws from the subscription's Anthers line and never from this budget.
 		// Summing it here would double-count the same charge and quietly shrink the picker
-		// until a mid-ladder walk ran out of "budget" the viewer had paid for.
+		// until a mid-ladder walk ran out of "budget" the user had paid for.
 		const allocated = result
-			.filter((r) => r.badge.creatorId !== org)
+			.filter((r) => r.badge.creatorId !== anthers)
 			.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
 
 		return c.json({
@@ -1635,7 +1658,7 @@ const subscriptionRoutes = new Hono()
 
 			// The Anthers creator account, for the allocation check's exclusion — see the comment
 			// beside `currentAllocated` below.
-			const org = await anthersUserId();
+			const anthers = await anthersUserId();
 
 			// The Badge itself: its threshold is the amount this pick directs, and the
 			// route never takes a number from the request — the pick names the rung.
@@ -1649,7 +1672,7 @@ const subscriptionRoutes = new Hono()
 			// changed (signup and the dashboard's Anthers side) — routing it through the
 			// directed picker would draw it from the creator budget, which is the same
 			// conflation the allocation check excludes the Anthers account from.
-			if (badge.creatorId === org) {
+			if (badge.creatorId === anthers) {
 				return c.json(
 					{ error: "Anthers' own Badges are chosen with your Anthers amount, not a creator pick" },
 					400,
@@ -1657,7 +1680,7 @@ const subscriptionRoutes = new Hono()
 			}
 			const amountNum = Number(badge.threshold);
 
-			// Current month: a holding locks — a viewer may move up this cycle, never down.
+			// Current month: a holding locks — a user may move up this cycle, never down.
 			if (cycle === currentCycle) {
 				const [existing] = await db
 					.select({ threshold: badges.threshold })
@@ -1685,7 +1708,7 @@ const subscriptionRoutes = new Hono()
 			// budget** — the same exclusion `/my-badges` GET applies, for the same reason:
 			// the budget is the charge's creator-destination items, and money held on
 			// Anthers' own ladder draws from the subscription's Anthers line. Counting it
-			// here would let an Anthers Badge shrink a budget the viewer paid separately for.
+			// here would let an Anthers Badge shrink a budget the user paid separately for.
 			const [currentAllocated] = await db
 				.select({
 					total: sql<string>`COALESCE(SUM(${badges.threshold}), 0)`,
@@ -1697,7 +1720,7 @@ const subscriptionRoutes = new Hono()
 						eq(userBadges.userId, user.id),
 						eq(userBadges.billingCycle, cycle),
 						sql`${badges.creatorId} != ${badge.creatorId}`,
-						sql`${badges.creatorId} != ${org}`,
+						sql`${badges.creatorId} != ${anthers}`,
 					),
 				);
 
@@ -1708,12 +1731,12 @@ const subscriptionRoutes = new Hono()
 
 			// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
 			// rungs rather than sitting beside them.** The "cannot reduce" check above
-			// already assumes the shape (a viewer raising $3 → $6 has ONE holding, at $6),
+			// already assumes the shape (a user raising $3 → $6 has ONE holding, at $6),
 			// and the access/distribution reads enforce it defensively with MAX(threshold).
 			// An insert that left the old rung beside the new one would overstate the
 			// allocation against the cycle's budget — the e2e walk hit exactly that, ending
 			// a $3 → $21 climb holding $39 of rungs — while reading right only because
-			// every reader takes the max. Delete the issuer's other holdings for this
+			// every user takes the max. Delete the issuer's other holdings for this
 			// cycle, then upsert the picked one.
 			await db
 				.delete(userBadges)
@@ -1786,12 +1809,12 @@ const subscriptionRoutes = new Hono()
 			z.object({
 				// 🚨 Monthly DOLLARS (migration `0041`) — what is given to this creator. It was
 				// `/^\d+$/` (digits only) until 2026-08-16 on the reasoning that a fractional
-				// gate was one no viewer could exactly meet, since Seeds were indivisible. The
+				// gate was one no user could exactly meet, since Seeds were indivisible. The
 				// unit went and so did the reasoning: refusing "9.50" now rejects the levels a
 				// creator is most likely to set. Cents, because that is what can be charged.
 				// 🚨 And floored at Stripe's minimum, because a Badge level is a level of
 				// monthly support somebody has to be able to fund. `directed[].amount` refuses
-				// anything between zero and that floor, so a $0.25 Badge is a rung no viewer
+				// anything between zero and that floor, so a $0.25 Badge is a rung no user
 				// can climb — the creator would find out through a supporter failing rather
 				// than through their own editor.
 				//
@@ -2124,7 +2147,7 @@ const subscriptionRoutes = new Hono()
 	 * ⚠️ **Public, and it publishes art and a count rather than who gave what.** A Sticker
 	 * is a visible gesture, so the page has to show it — but pairing a name with a sum is
 	 * a statement about somebody's finances, exactly as the supporters page reasons. The
-	 * viewer's own Stickers come back identified, because you may take back only your own.
+	 * user's own Stickers come back identified, because you may take back only your own.
 	 *
 	 * 🚨 **Removed Stickers are excluded here and nowhere else.** Removal is display-only;
 	 * `stickersDirectedIn` still counts them against the giver's allowance and the creator
@@ -2136,7 +2159,7 @@ const subscriptionRoutes = new Hono()
 		if (!STICKER_SUBJECTS.includes(subjectType as StickerSubject) || !Number.isInteger(subjectId)) {
 			return c.json({ error: "Bad subject" }, 400);
 		}
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 		const rows = await db
 			.select({ id: stickers.id, artKey: stickers.artKey, giverId: stickers.giverId })
 			.from(stickers)
@@ -2156,7 +2179,7 @@ const subscriptionRoutes = new Hono()
 			const key = row.artKey ?? "";
 			const entry = byArt.get(key) ?? { artKey: key, count: 0, mine: [] };
 			entry.count++;
-			if (viewerId && row.giverId === viewerId) entry.mine.push(row.id);
+			if (userId && row.giverId === userId) entry.mine.push(row.id);
 			byArt.set(key, entry);
 		}
 		return c.json({ stickers: [...byArt.values()] });
@@ -2286,7 +2309,7 @@ const subscriptionRoutes = new Hono()
 			});
 		}
 
-		// What the viewer gives Anthers (point-in-time) and what they hold from this creator.
+		// What the user gives Anthers (point-in-time) and what they hold from this creator.
 		const anthersSupport = await heldAnthersBadgeAmount(currentUserId);
 		const badge = heldBadgeName(anthersSupport);
 		const cycle = currentCycleKey();
@@ -2305,7 +2328,7 @@ const subscriptionRoutes = new Hono()
 
 		const badgeAmount = holding?.threshold ?? "0.00";
 
-		// Every Badge is a dollar threshold against what the viewer gives its issuer this
+		// Every Badge is a dollar threshold against what the user gives its issuer this
 		// cycle — same comparison, and no conversion between units anywhere: the holding's
 		// dollars are the Badge's threshold by construction, which is what removed the
 		// reinterpretation hazard the retired `gate_type` enum used to encode.

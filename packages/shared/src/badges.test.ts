@@ -161,18 +161,6 @@ describe("gates are thresholds, and need not sit on a Badge", () => {
 });
 
 describe("thresholdForBadge returns a threshold", () => {
-	test("Anthers' Badges report their monthly cost", () => {
-		// RETIREMENT TRIGGER: delete this pin when the seeded-rows migration lands
-		// (the ladder becomes ordinary `badges` rows rather than these constants) —
-		// the seeded values are then covered by the suites that read the table
-		// (distribute-pool, the meter suites), and a constant re-proving itself is
-		// a placeholder guard outliving its placeholder. See the wiki's
-		// *What Deserves a Standing Test*.
-		expect(thresholdForBadge("free")).toBe(0);
-		expect(thresholdForBadge("root")).toBe(3);
-		expect(thresholdForBadge("blossom")).toBe(12);
-	});
-
 	test("it agrees with the Badge set rather than a hardcoded ladder", () => {
 		for (const b of ANTHERS_BADGES) {
 			expect(thresholdForBadge(b.name as "root"), b.name).toBe(b.threshold);
@@ -240,7 +228,7 @@ describe("amountLabel — the one place an amount is written for a human", () =>
 	});
 
 	// Same normalization as everything else that reads an amount: it goes through `cents`,
-	// so a negative floors and sub-cent precision drops rather than reaching a reader.
+	// so a negative floors and sub-cent precision drops rather than reaching a user.
 	test("it normalizes rather than trusting its input", () => {
 		expect(amountLabel(-5)).toBe("$0");
 		expect(amountLabel(null)).toBe("$0");

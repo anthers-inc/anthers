@@ -121,13 +121,13 @@ test("a creator who denies the publishing permission is warned until they give i
 	await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
 });
 
-test("a reader whose permission lapsed cannot follow until they give it, and comes back to the page", async ({
+test("a user whose permission lapsed cannot follow until they give it, and comes back to the page", async ({
 	page,
 }) => {
 	const { did, password } = await signUpWithBluesky(page, "pr");
 
 	// Somebody to follow, and a lapse: the stored grant narrowed to identity alone, which is where
-	// a permission withdrawn at the reader's own server leaves it. The creator is addressed by the
+	// a permission withdrawn at the user's own server leaves it. The creator is addressed by the
 	// handle the seed prints — an account holds no username, so building the URL from the requested
 	// name would 404 on the underscores this spec stamps in.
 	const creator = `prc${Date.now().toString(36)}`;
@@ -154,7 +154,7 @@ test("a reader whose permission lapsed cannot follow until they give it, and com
 	await atConsent(page, password);
 	await page.getByRole("button", { name: "Authorize", exact: true }).click();
 
-	// Back where they were rather than in a Studio a reader does not have.
+	// Back where they were rather than in a Studio a user does not have.
 	await expect(page).toHaveURL(new RegExp(`${creatorUrl}$`), { timeout: 15_000 });
 	await page.waitForLoadState("networkidle");
 	await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);

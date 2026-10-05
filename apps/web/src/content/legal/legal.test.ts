@@ -38,7 +38,7 @@ describe("published legal documents", () => {
 		// These were an abridgement of a vault specification until 2026-09-02, and that
 		// specification carried `NOT YET BUILT` markers, a DO-NOT-PUBLISH banner and a
 		// "Notes for us" section. The vault copies are gone and this file is canonical, so
-		// nothing should reintroduce any of it — a reader meeting a marker is being told we
+		// nothing should reintroduce any of it — a user meeting a marker is being told we
 		// knew the document was untrue and published it anyway.
 		for (const doc of Object.values(LEGAL_DOCUMENTS)) {
 			const text = doc.blocks.join("\n");
@@ -51,7 +51,7 @@ describe("published legal documents", () => {
 
 	it("🚨 promises no storage exemption for Public Access work", () => {
 		/*
-		 * A retired promise is worse in an instrument than anywhere else, because a reader
+		 * A retired promise is worse in an instrument than anywhere else, because a user
 		 * can act on it and then hold us to it.
 		 *
 		 * The Creator Terms told creators that "anything you release as Public Access does

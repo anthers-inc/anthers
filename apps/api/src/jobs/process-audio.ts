@@ -207,7 +207,7 @@ export async function processAudio(data: ProcessAudioData) {
 		// MP3 is PRIVATE and delivery goes through the access-checked audio endpoint
 		// (`GET /posts/:slug/audio/:contentId`), the same shape video uses for HLS. This
 		// used to be public: a bare CDN URL that played, handed out in the post JSON, so
-		// gated audio was retrievable by an anonymous viewer.
+		// gated audio was retrievable by an anonymous user.
 		const outputKey = `creators/${item.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
 		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");

@@ -69,7 +69,7 @@ import { applyReductionsToInvoice } from "../services/support-reductions.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the Work, confirm it's
- * purchasable by this viewer, and compute the fee breakdown — so both endpoints
+ * purchasable by this user, and compute the fee breakdown — so both endpoints
  * quote identical numbers. Returns an error shape (with an HTTP status) or the
  * resolved Work + amount + fees.
  *
@@ -261,14 +261,14 @@ function purchaseSession(params: {
 		// the embedded Payment Element offers whatever the account's payment-method
 		// configuration enables. Found at the live cutover (2026-10-03), where every
 		// checkout failed while the sandbox — an older API version — accepted the same
-		// parameter happily. ⚠️ WHAT THIS MEANS: the buyer-facing list (Card, Bank, Cash
-		// App Pay, Klarna, Amazon Pay, Link) can only be changed in the Dashboard's
-		// payment-method settings — there is no code-side control (Parker, 2026-10-03).
+		// parameter happily.
 		//
-		// TODO(Dashboard): the account-wide configuration (pmc_1T9K9l3WJAPZ8pU64cUUNUAv)
-		// enables card, link, cashapp, klarna, amazon_pay, affirm, apple_pay. Narrowing
-		// what buyers are offered is a Dashboard action on that configuration; no code
-		// change exists or is wanted.
+		// Card-only is a DEPLOYMENT SETTING (Parker, 2026-10-04: strip the built-in
+		// Stripe payment options, cards only, to simplify checkout): the "Card only"
+		// configuration (pmc_1UMxLl3WJAPZ8pU6EaCMNJie, card on, everything else off)
+		// exists on the account and `STRIPE_PAYMENT_METHOD_CONFIGURATION` carries its id
+		// in the deploy spec. The account-wide Default configuration stays as it is, so
+		// a deployment without the variable keeps working — narrowed, not broken.
 		//
 		// The one code-side lever the types DO support on this API version:
 		// `payment_method_configuration` — and ONLY when `STRIPE_PAYMENT_METHOD_CONFIGURATION`
@@ -679,7 +679,7 @@ const paymentRoutes = new Hono()
 	/**
 	 * The signed-in buyer's server-side basket.
 	 *
-	 * 🚨 **These routes are the basket's only writers and readers, and `resolveBasket` is
+	 * 🚨 **These routes are the basket's only writers and users, and `resolveBasket` is
 	 * never bypassed.** The table holds ids and nothing more; quote and checkout re-resolve
 	 * exactly what the client-supplied list used to be re-resolved against — so a row that
 	 * fell out of purchasability (withdrawn, already owned, moved behind a higher gate,
@@ -860,7 +860,7 @@ const paymentRoutes = new Hono()
 		 *
 		 * 🚨 The per-item money is apportioned, not recomputed. `calculateFees` on a $1
 		 * item would attach a fresh $0.30 to it, so the rows would sum to far more than
-		 * was charged and every downstream reader — earnings, the tax remittance record,
+		 * was charged and every downstream user — earnings, the tax remittance record,
 		 * refunds — would be wrong. The fee is split **pro-rata by item value**, with the
 		 * last row absorbing the rounding remainder so the parts sum to the whole exactly.
 		 */

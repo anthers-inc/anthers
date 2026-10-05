@@ -228,7 +228,7 @@ function LoggedInLayoutInner() {
 
 						{/* Each mode's own nav, and never both: the Studio's places used to be tabs
 						    under a second header inside this layout, beside a sidebar still offering
-						    Feed, Library and Discover. Each nav is named, so a reader (and a spec) can
+						    Feed, Library and Discover. Each nav is named, so a user (and a spec) can
 						    tell which one is on screen. */}
 						{studio ? (
 							<nav aria-label="Studio" className="p-3 flex flex-col gap-0.5">
@@ -335,6 +335,9 @@ function LoggedInLayoutInner() {
 										</Link>
 										<Link to="/changelog" className="link link-hover">
 											Changelog
+										</Link>
+										<Link to="/issues" className="link link-hover">
+											Report an Issue
 										</Link>
 									</nav>
 									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">

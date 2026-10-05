@@ -20,7 +20,7 @@ import {
 
 const HOUR = 3600;
 
-/** A limited viewer with `remaining` seconds left. */
+/** A limited user with `remaining` seconds left. */
 function limited(remaining: number): PublicAccessBudget {
 	return {
 		unlimited: false,
@@ -55,7 +55,7 @@ describe("when the meter speaks", () => {
 
 	test("never speaks to someone who has unlimited access", () => {
 		// 🚨 The central claim of the model: the Public Access price removes the limit, and
-		// nothing above it buys more. A countdown shown to such a viewer would be stating a
+		// nothing above it buys more. A countdown shown to such a user would be stating a
 		// limit that does not exist.
 		expect(shouldWarn(UNLIMITED)).toBe(false);
 	});

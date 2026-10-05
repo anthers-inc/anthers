@@ -143,11 +143,11 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 		// 🚨 The rollup happens per ACCOUNT, because the split it applies is a property
 		// of one person's overlapping ranges — their own tabs and devices sharing each
 		// second evenly. Summing raw durations across people never overlaps in a way
-		// the split is about; summing ONE person does. So the day's viewers are
+		// the split is about; summing ONE person does. So the day's users are
 		// enumerated, each split against themselves, and contributions are accumulated
 		// per (creator, Work, event type) — while `unique_viewers` still counts people,
 		// not their seconds.
-		const viewers = await db
+		const users = await db
 			.select({ userId: attentionEvents.userId })
 			.from(attentionEvents)
 			.where(sql`${RANGE_START_DAY} = ${day}`)
@@ -165,7 +165,7 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 					eventType: string;
 					eventCount: number;
 					totalSeconds: number;
-					viewers: Set<number>;
+					users: Set<number>;
 				}
 			>();
 			const tally = (g: {
@@ -181,7 +181,7 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 				if (held) {
 					held.totalSeconds += g.seconds;
 					held.eventCount += g.events;
-					held.viewers.add(g.userId);
+					held.users.add(g.userId);
 				} else {
 					groups.set(key, {
 						creatorId: g.creatorId,
@@ -189,13 +189,13 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 						eventType: g.eventType,
 						eventCount: g.events,
 						totalSeconds: g.seconds,
-						viewers: new Set([g.userId]),
+						users: new Set([g.userId]),
 					});
 				}
 			};
 
-			for (const { userId } of viewers) {
-				// Timed ranges, split against this viewer's own other ranges for the day.
+			for (const { userId } of users) {
+				// Timed ranges, split against this user's own other ranges for the day.
 				// Each returned group is one row per range, so a group's rows are counted
 				// as the events they were.
 				for (const g of await creditedSecondsForRollup(userId, dayStartUtc, dayEndUtc)) {
@@ -218,7 +218,7 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 						(creator_id, work_id, day, event_type, event_count, total_seconds, unique_viewers)
 					VALUES (
 						${g.creatorId}, ${g.workId}, ${day}, ${g.eventType}, ${g.eventCount},
-						${Math.round(g.totalSeconds)}, ${g.viewers.size}
+						${Math.round(g.totalSeconds)}, ${g.users.size}
 					)
 					ON CONFLICT (creator_id, COALESCE(work_id, -1), day, event_type) DO UPDATE SET
 						event_count = excluded.event_count,

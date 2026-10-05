@@ -11,7 +11,7 @@
  * ⚠️ **Two clauses here described mechanisms that are gone, until 2026-08-19.** It said a
  * self-hosting creator "pays a flat fee instead" — `SELF_HOST_FEE` has been **`0`** since
  * 2026-08-12, so there is no fee to pay instead of anything. And it said "delivery is
- * viewer-funded", which stopped being true when Cloudflare R2 made delivery **free at any
+ * user-funded", which stopped being true when Cloudflare R2 made delivery **free at any
  * volume**: nobody funds it, because it costs nothing. Neither left a wrong figure behind
  * — a retired mechanism leaves prose with nothing underneath, which is exactly what the
  * figures guard cannot see.
@@ -148,7 +148,7 @@ export async function calculateCrfSubsidies() {
 		const storageBytes = Number(storageResult?.total ?? 0);
 
 		// Creator cost = storage beyond the free 50 GiB + half again on top (or a flat
-		// self-host fee). Delivery is viewer-funded, so it is not part of this cost.
+		// self-host fee). Delivery is user-funded, so it is not part of this cost.
 		const hostingCost = estimateStorageCost({
 			storageBytes,
 			isSelfHosting: creator.isSelfHosting ?? false,

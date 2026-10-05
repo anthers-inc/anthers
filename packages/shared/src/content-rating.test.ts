@@ -135,12 +135,12 @@ describe("which rungs Anthers accepts", () => {
 	it("accepts every rung on the scale", () => {
 		// ⚠️ This asserts the switch's CURRENT position, and it is meant to fail when the
 		// position changes — that is what makes opening or closing a rung a deliberate act
-		// with a reader rather than a constant somebody edited in passing. It failed when
+		// with a user rather than a constant somebody edited in passing. It failed when
 		// Adult was added, which is the mechanism working.
 		//
 		// ⭐ Adult went on this list only once every fence it needs was real: the invisibility
 		// to anyone who has not opted in, the adulthood verification behind the opt-in, and the
-		// reader's own controls. **If a rung is ever added here again, that is the bar.** A price
+		// user's own controls. **If a rung is ever added here again, that is the bar.** A price
 		// or a Public Access exclusion is not a fence, and neither is a property of the rating.
 		expect([...ACCEPTED_MATURITY_RATINGS]).toEqual(["general", "mature", "adult"]);
 		for (const choice of MATURITY_CHOICES) expect(isRatingAccepted(choice.value)).toBe(true);
@@ -290,7 +290,7 @@ describe("content notes", () => {
 	});
 
 	it("returns them in one canonical order whatever order they arrive in", () => {
-		// The notes render as a list a reader scans, and a set that reorders itself between
+		// The notes render as a list a user scans, and a set that reorders itself between
 		// saves reads as a change that was not made.
 		const forward = normalizeContentNotes(["violence", "language"]);
 		const backward = normalizeContentNotes(["language", "violence"]);
@@ -401,7 +401,7 @@ describe("the light grid, for writing, books, music and other audio", () => {
 		expect(gridFor(null)).toBe("visual");
 	});
 
-	it("asks about the same kinds of content as the visual grid, so a reader's filter reads both", () => {
+	it("asks about the same kinds of content as the visual grid, so a user's filter reads both", () => {
 		for (const row of RATING_ROWS) {
 			expect(row.rungs.light.general, row.note).not.toBeNull();
 			expect(row.rungs.light.mature, row.note).not.toBeNull();

@@ -642,7 +642,7 @@ function MyNoticeCard({ notice, attestation }: { notice: MyNotice; attestation: 
  * not declined.
  *
  * ⚠️ The honest caveat is rendered on the page rather than kept in a comment: at
- * launch volumes these numbers are close to naming someone, and a reader deserves
+ * launch volumes these numbers are close to naming someone, and a user deserves
  * to know that before drawing a conclusion from "1".
  */
 function TransparencySection({ counts }: { counts: DmcaCounts | null }) {

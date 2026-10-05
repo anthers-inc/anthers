@@ -27,7 +27,7 @@
  *
  *   • **Short life** — ten minutes.
  *   • **Single live code per address**, replaced on re-request. Three codes in a mailbox
- *     means the newest works and the rest are dead, which is what a reader expects.
+ *     means the newest works and the rest are dead, which is what a user expects.
  *   • **Attempt cap** — five wrong guesses spend the row, so the code cannot be walked.
  *   • **Send throttle** — one code per address per interval, so "always return 200"
  *     cannot be turned into a mail-bomb aimed at anyone whose address is known.
@@ -263,7 +263,7 @@ export type CodeCheck = { ok: true; email: string } | { ok: false; reason: CodeF
  *
  * A correct code deletes the row rather than marking it consumed. There is nothing to
  * learn from a spent code afterwards, and a row that no longer exists cannot be replayed
- * by a bug in a later reader.
+ * by a bug in a later user.
  */
 export async function checkSignupCode(
 	rawEmail: string,

@@ -38,7 +38,7 @@ interface Props {
 
 /**
  * 🚨 The last sentence is the one that matters: this door **cannot** create an account, and
- * saying so is what keeps it distinct from the signup door on `/signup`. A reader who
+ * saying so is what keeps it distinct from the signup door on `/signup`. A user who
  * assumed otherwise would find out at the end of a round trip through another website.
  */
 const COPY = {

@@ -187,7 +187,7 @@ function getFrontendUrl(c: { req: { url: string } }): string {
  * nothing and asking for less would cost them the feature.
  *
  * ⚠️ **A creator is recognized by their account, which means resolving the handle first.** The
- * alternative was asking every reader for permission to write Work listings they will never
+ * alternative was asking every user for permission to write Work listings they will never
  * have, which is the kind of over-ask a platform arguing for minimal permissions cannot make.
  * The resolution is one the SDK performs anyway a moment later.
  */
@@ -196,7 +196,7 @@ async function scopeForFlow(intent: AppState["intent"], subject: string): Promis
 	if (intent === "signup") return scopeFor({ email: true });
 	// An explicit ask, from somebody who went looking for it.
 	// Giving the permission again asks for what the account holds, as a sign-in does: the creator
-	// tier only for a creator, so a reader restoring their comments is not asked about publishing.
+	// tier only for a creator, so a user restoring their comments is not asked about publishing.
 	if (intent === "publish") return scopeFor({ creator: await isCreatorIdentity(subject) });
 	return scopeFor({ creator: await isCreatorIdentity(subject) });
 }
@@ -289,7 +289,7 @@ const atprotoRoutes = new Hono()
 			);
 		}
 		if (intent === "publish") {
-			// The switch gates asking for the creator tier. A reader giving back the permission for
+			// The switch gates asking for the creator tier. A user giving back the permission for
 			// their comments, reviews, votes and follows is never behind it.
 			if (!atprotoPublishEnabled() && (await isCreatorAccount(userId as number))) {
 				return c.json({ error: "Publishing to your own repository isn't open yet." }, 403);

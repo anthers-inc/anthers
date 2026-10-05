@@ -258,7 +258,7 @@ test("an anonymous scratch basket survives sign-in — the merge, then the scrat
 	if (!workX) throw new Error("the walk Work was not created");
 
 	// ⚠️ **A genuinely anonymous browser, not the project's page.** The `authed` project
-	// stamps every page with the gauntlet viewer's storageState, so the page fixture is
+	// stamps every page with the gauntlet user's storageState, so the page fixture is
 	// never signed out and the scratch mode would never run. The scratch is walked in a
 	// fresh, empty context, and the merge is signed in THROUGH THAT BROWSER's UI.
 	const anon = await browser.newContext({

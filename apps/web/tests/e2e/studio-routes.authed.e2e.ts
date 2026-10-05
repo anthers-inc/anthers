@@ -14,7 +14,7 @@
  *
  * What they pin:
  *
- *   - **That `/studio` resolves to the Studio at all.** The gauntlet viewer is NOT a
+ *   - **That `/studio` resolves to the Studio at all.** The gauntlet user is NOT a
  *     creator, so the creator gate redirects them to `/settings`; that redirect is the
  *     observable proof the Studio route matched, because any other match renders
  *     something that is not the Studio.
@@ -146,7 +146,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 });
 
 test("an account without creator mode has no Studio to switch to", async ({ page }) => {
-	// The gauntlet viewer is not a creator. The switch is the only way into the Studio from the
+	// The gauntlet user is not a creator. The switch is the only way into the Studio from the
 	// sidebar, so its absence is also the absence of a door they would be turned back from.
 	await page.goto("/feed");
 	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();

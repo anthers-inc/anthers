@@ -18,7 +18,7 @@ import StudioRedirect from "./components/ui/StudioRedirect";
  * 2026-08-11 and now a SECTION of this app rather than a separate origin.
  *
  * LAZY, and that is the whole reason this is tolerable: these pages drag in the
- * authoring stack (TipTap) which a reader browsing the site must never
+ * authoring stack (TipTap) which a user browsing the site must never
  * download. `React.lazy` keeps them in their own chunks, fetched on first navigation
  * into /studio. (ffmpeg.wasm was the heaviest of them until 2026-08-17, when the
  * browser encoder was removed — see work-media.tsx.)
@@ -70,7 +70,7 @@ function StudioLayout() {
  *
  * 🚨 So DON'T add a static page import here — that is the mistake this comment exists to
  * prevent, and it is invisible until someone measures. The cost of getting it wrong is
- * paid by every reader on every visit; the cost of `lazy` is one spinner on first
+ * paid by every user on every visit; the cost of `lazy` is one spinner on first
  * navigation to that route.
  */
 const AboutPage = lazy(() => import("./pages/AboutPage"));
@@ -100,6 +100,7 @@ const ProjectPage = lazy(() => import("./pages/ProjectPage"));
 const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
+const IssueReportsPage = lazy(() => import("./pages/IssueReportsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
@@ -260,7 +261,7 @@ export default function App() {
 					/>
 					{/*
 					 * Deliberately NOT a ProtectedRoute. A basket is a scratchpad in
-					 * localStorage, so a logged-out reader can fill one and is asked to log
+					 * localStorage, so a logged-out user can fill one and is asked to log
 					 * in at the point of payment — where the ask is motivated — rather than
 					 * at the point of browsing, where it is a wall.
 					 */}
@@ -332,6 +333,11 @@ export default function App() {
 					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 					<Route path="/changelog" element={<ChangelogPage />} />
+					{/* Defect reports about the site itself — separate intake from /abuse above,
+					    which is statutory notice-and-action. Both links live in the footer's
+					    Development column, and neither page names the other's process except to
+					    hand the reporter across where it clearly belongs there. */}
+					<Route path="/issues" element={<IssueReportsPage />} />
 
 					{/* Resource tools / calculators — public, work logged-in or out. */}
 					<Route element={<MeadowDecorLayout />}>

@@ -87,7 +87,7 @@ let operatorId: number;
 /** The same account's session, for the operator routes. */
 let operatorCookie: string;
 
-/** Locked and priced: the only way in is a purchase, which is the viewer under test. */
+/** Locked and priced: the only way in is a purchase, which is the user under test. */
 const SOLD = { access: [{ threshold: 0, allow: true, price: "5.00" }] };
 
 /**

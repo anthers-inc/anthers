@@ -13,7 +13,7 @@
  * There is no bandwidth line — streaming and downloads are unlimited and free.
  */
 
-import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
+import { timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { EarningsBasis } from "@anthers/web-shared/economics/EarningsBasis";
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -32,6 +32,7 @@ import type {
 	PoolDistribution,
 } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -269,6 +270,11 @@ function initials(row: CreatorRow): string {
 
 export default function SubscriptionPage() {
 	const [searchParams] = useSearchParams();
+
+	// The seeded ladder, for what this page quotes: the InfoTip's claim about what a
+	// fan's support funds, and the comparison that names the price lifting the Public
+	// Access limit. The constants stand in until the fetch lands.
+	const { publicAccessPrice } = useAnthersLadder();
 
 	// Account + Badge + earnings
 	const [account, setAccount] = useState<Account | null>(null);
@@ -663,7 +669,7 @@ export default function SubscriptionPage() {
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your support for Anthers funds
 					<InfoTip
-						text={`What you give Anthers funds the Time Pool ($${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${PUBLIC_ACCESS_PRICE} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
+						text={`What you give Anthers funds the Time Pool ($${timePoolFor(publicAccessPrice).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${publicAccessPrice} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -683,11 +689,16 @@ export default function SubscriptionPage() {
 					 * person on the page for whom it is false. Public Access is capped monthly
 					 * until the Public Access price to Anthers lifts it; downloads are unlimited either
 					 * way, which is why the sub-label sits under both branches.
+					 *
+					 * 🚨 The comparison reads the SEEDED ladder — the price lifting the limit is a
+					 * ladder claim, the same one every other surface quotes. The card is rendered
+					 * for the $0 rung too and must not read as "unlimited" until the fetched
+					 * value agrees.
 					 */}
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Public Access</div>
 						<div className="text-lg font-bold">
-							{badgeView.price >= PUBLIC_ACCESS_PRICE
+							{badgeView.price >= publicAccessPrice
 								? "Unlimited"
 								: `${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`}
 						</div>

@@ -96,7 +96,7 @@ async function creditedTo(userId: number, creatorId: number): Promise<number> {
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 const LOCKED = [{ threshold: 0, allow: false, price: "0" }];
 
-let viewer: { cookie: string; id: number };
+let user: { cookie: string; id: number };
 let creator: { cookie: string; id: number };
 let bystander: { cookie: string; id: number };
 
@@ -111,7 +111,7 @@ let privateWorkId: number;
 
 beforeAll(async () => {
 	const stamp = Date.now().toString(36);
-	viewer = await signUp(`eligviewer${stamp}`);
+	user = await signUp(`eligviewer${stamp}`);
 	creator = await signUp(`eligcreator${stamp}`);
 	bystander = await signUp(`eligbystander${stamp}`);
 
@@ -155,69 +155,69 @@ beforeAll(async () => {
 
 describe("attention eligibility is decided server-side", () => {
 	it("credits time against a Work whose type earns it", async () => {
-		const before = await creditedTo(viewer.id, creator.id);
-		const body = await claim(viewer.cookie, [
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "watch", durationSeconds: 30, workId: videoWorkId },
 			{ creatorId: creator.id, eventType: "read", durationSeconds: 20, workId: textWorkId },
 		]);
 		expect(body.recorded).toBe(2);
 		expect(body.ineligible).toBe(0);
-		expect(await creditedTo(viewer.id, creator.id)).toBe(before + 50);
+		expect(await creditedTo(user.id, creator.id)).toBe(before + 50);
 	});
 
 	it("refuses an event type the Work's own type doesn't earn", async () => {
 		// A text Work has no video, so "watch" against it is not a real observation.
-		const before = await creditedTo(viewer.id, creator.id);
-		const body = await claim(viewer.cookie, [
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "watch", durationSeconds: 60, workId: textWorkId },
 		]);
 		expect(body.ineligible).toBe(1);
-		expect(await creditedTo(viewer.id, creator.id)).toBe(before);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
 	});
 
 	it("refuses time credited to someone who isn't the Work's creator", async () => {
 		// Straightforward attribution forgery: real Work, right type, wrong payee.
-		const before = await creditedTo(viewer.id, bystander.id);
-		const body = await claim(viewer.cookie, [
+		const before = await creditedTo(user.id, bystander.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: bystander.id, eventType: "watch", durationSeconds: 60, workId: videoWorkId },
 		]);
 		expect(body.ineligible).toBe(1);
-		expect(await creditedTo(viewer.id, bystander.id)).toBe(before);
+		expect(await creditedTo(user.id, bystander.id)).toBe(before);
 	});
 
-	it("refuses time against a Work the viewer can't access", async () => {
-		const before = await creditedTo(viewer.id, creator.id);
-		const body = await claim(viewer.cookie, [
+	it("refuses time against a Work the user can't access", async () => {
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "watch", durationSeconds: 60, workId: lockedWorkId },
 		]);
 		expect(body.ineligible).toBe(1);
-		expect(await creditedTo(viewer.id, creator.id)).toBe(before);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
 	});
 
 	it("refuses time against a Work that hasn't been released", async () => {
-		// Private staging is not public consumption. The Work is free and the viewer would
+		// Private staging is not public consumption. The Work is free and the user would
 		// clear its gate — being unreleased is the whole reason this is refused.
-		const before = await creditedTo(viewer.id, creator.id);
-		const body = await claim(viewer.cookie, [
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "watch", durationSeconds: 60, workId: privateWorkId },
 		]);
 		expect(body.ineligible).toBe(1);
-		expect(await creditedTo(viewer.id, creator.id)).toBe(before);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
 	});
 
 	it("refuses time with no Work context at all", async () => {
 		// A claim naming no Work is connective tissue by definition — a post, a profile,
 		// discovery. This is the shape a naive forged request takes.
-		const before = await creditedTo(viewer.id, creator.id);
-		const body = await claim(viewer.cookie, [
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "watch", durationSeconds: 60 },
 		]);
 		expect(body.ineligible).toBe(1);
-		expect(await creditedTo(viewer.id, creator.id)).toBe(before);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
 	});
 
 	it("refuses time against a Work that doesn't exist", async () => {
-		const body = await claim(viewer.cookie, [
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "watch", durationSeconds: 60, workId: 2_000_000_000 },
 		]);
 		expect(body.ineligible).toBe(1);
@@ -226,13 +226,13 @@ describe("attention eligibility is decided server-side", () => {
 	it("still records zero-duration visit pings, with or without a Work", async () => {
 		// These carry no time so they cannot over-credit, and they are deliberately the
 		// analytics signal for surfaces that earn nothing. Dropping them would lose that.
-		const before = await creditedTo(viewer.id, creator.id);
-		const body = await claim(viewer.cookie, [
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
 			{ creatorId: creator.id, eventType: "page_view", durationSeconds: 0 },
 			{ creatorId: creator.id, eventType: "page_view", durationSeconds: 0, workId: videoWorkId },
 		]);
 		expect(body.recorded).toBe(2);
 		expect(body.ineligible).toBe(0);
-		expect(await creditedTo(viewer.id, creator.id)).toBe(before);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
 	});
 });

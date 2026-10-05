@@ -12,7 +12,7 @@
  * A **Post** is an announcement — rich text, links and body-embedded images, and nothing
  * else. It may *reference* Works (`post_work_refs`), which renders as a card and gives the
  * Work its posting history in return, but **that reference is inert: it confers no access
- * whatsoever.** A Post may freely link a Work its reader cannot open. Projects are
+ * whatsoever.** A Post may freely link a Work its user cannot open. Projects are
  * Projects that group Works and Posts via many-to-many joins.
  *
  * Both are addressed by a durable numeric `publicId`; the canonical URLs are
@@ -147,7 +147,7 @@ import {
 import {
 	acceptCredit,
 	creditsForOwner,
-	creditsForViewer,
+	creditsForUser,
 	findRejectedCredit,
 	notifyCreditedAccounts,
 	rejectCredit,
@@ -208,7 +208,7 @@ import { releaseRefusal } from "../services/work-release.js";
  * the reviews endpoint, and the rating aggregate embedded in post detail. Every public
  * count of either is derived from those. ⚠️ **The comment thread is the exception**: it
  * reads hidden rows too, because a removed comment with replies beneath it is drawn as
- * a gap, and `listComments` builds that gap from the id, subject and time alone. Deliberately NOT applied to a viewer's own `userRating` —
+ * a gap, and `listComments` builds that gap from the id, subject and time alone. Deliberately NOT applied to a user's own `userRating` —
  * the star they see should be the star they actually submitted, and re-rating
  * only overwrites the score, so a hidden rating stays hidden.
  */
@@ -252,13 +252,13 @@ function tooManyVotesFrom(userId: number): boolean {
 /**
  * Whether there is something there to react to.
  *
- * ⚠️ **A hidden comment is not reactable**, because a reader cannot see it — accepting a
+ * ⚠️ **A hidden comment is not reactable**, because a user cannot see it — accepting a
  * vote on one would let a caller both discover that it exists and move a score nobody
  * can read. Moderation state is checked here for the same reason every public read checks
  * it, and forgetting it is the quiet version of the same bug.
  */
 /**
- * Whether this viewer authored the thing being reacted to.
+ * Whether this user authored the thing being reacted to.
  *
  * ⭐ **Authorship, not the post's creator.** A creator seeing the breakdown on *their own*
  * post is what Parker asked for (2026-09-04: *"the creator should have full
@@ -273,16 +273,16 @@ function tooManyVotesFrom(userId: number): boolean {
 async function ownsSubject(
 	subjectType: VoteSubject,
 	subjectId: number,
-	viewerId: number | null,
+	userId: number | null,
 ): Promise<boolean> {
-	if (viewerId === null) return false;
+	if (userId === null) return false;
 	if (subjectType === "comment") {
 		const [row] = await db
 			.select({ userId: comments.userId })
 			.from(comments)
 			.where(eq(comments.id, subjectId))
 			.limit(1);
-		return row?.userId === viewerId;
+		return row?.userId === userId;
 	}
 	if (subjectType === "review") {
 		// The reviewer is the subject's author: they see the raw counts exactly as a
@@ -292,14 +292,14 @@ async function ownsSubject(
 			.from(reviews)
 			.where(eq(reviews.id, subjectId))
 			.limit(1);
-		return row?.userId === viewerId;
+		return row?.userId === userId;
 	}
 	const [row] = await db
 		.select({ creatorId: posts.creatorId })
 		.from(posts)
 		.where(eq(posts.id, subjectId))
 		.limit(1);
-	return row?.creatorId === viewerId;
+	return row?.creatorId === userId;
 }
 
 async function votableExists(subjectType: VoteSubject, subjectId: number): Promise<boolean> {
@@ -332,7 +332,7 @@ async function votableExists(subjectType: VoteSubject, subjectId: number): Promi
  *
  * A Work is reviewed, never voted on — its aggregate is the reviews' verdicts, so a
  * second opinion channel on the same subject would be two answers to one question. A
- * review, by contrast, is a person's statement rather than a thing, and other readers
+ * review, by contrast, is a person's statement rather than a thing, and other users
  * mark it helpful the same way they vote a comment up: one vote record, one gesture.
  * Helpfulness *sorts* the review list and never weights the aggregate — see
  * `recommendedPercent` in `@anthers/shared/content`.
@@ -361,7 +361,7 @@ const voteSchema = voteTargetSchema.extend({
  *
  * ⭐ **Reddit's rule, applied uniformly** (Parker, 2026-09-21): writing something at all is
  * the author saying it is worth reading, so it starts at 1 rather than 0, and a net of 0
- * then always means at least one reader moved it down rather than ambiguity between "nobody
+ * then always means at least one user moved it down rather than ambiguity between "nobody
  * voted" and "the one voter went home". The row is an ordinary vote — same unique index,
  * same record sync — so withdrawing it or flipping it to down is just the vote route.
  *
@@ -389,7 +389,7 @@ const REJECTED_CREDIT_REFUSAL = {
 } as const;
 
 /**
- * The upvote and downvote totals for a set of subjects, plus the viewer’s own vote.
+ * The upvote and downvote totals for a set of subjects, plus the user’s own vote.
  *
  * ⭐ **Aggregated on read rather than kept in a counter column.** A denormalized count is
  * two writes that can disagree, and the disagreement is invisible — a score drifting from
@@ -404,7 +404,7 @@ const REJECTED_CREDIT_REFUSAL = {
 async function voteTallies(
 	subjectType: VoteSubject,
 	subjectIds: number[],
-	viewerId: number | null,
+	userId: number | null,
 ): Promise<{ tallies: Map<number, VoteTally>; mine: Map<number, VoteDirection> }> {
 	const tallies = new Map<number, VoteTally>();
 	const mine = new Map<number, VoteDirection>();
@@ -423,13 +423,13 @@ async function voteTallies(
 		.groupBy(votes.subjectId);
 	for (const r of rows) tallies.set(r.subjectId, { up: r.up, down: r.down });
 
-	// A signed-out reader has no vote to show, and asking for one costs a query that
+	// A signed-out user has no vote to show, and asking for one costs a query that
 	// can only come back empty.
-	if (viewerId !== null) {
+	if (userId !== null) {
 		const own = await db
 			.select({ subjectId: votes.subjectId, direction: votes.direction })
 			.from(votes)
-			.where(and(scope, eq(votes.userId, viewerId)));
+			.where(and(scope, eq(votes.userId, userId)));
 		for (const r of own) {
 			if (isVoteDirection(r.direction)) mine.set(r.subjectId, r.direction);
 		}
@@ -453,7 +453,7 @@ async function voteTallies(
 async function listComments(
 	subjectType: CommentSubjectType,
 	subjectId: number,
-	viewerId: number | null = null,
+	userId: number | null = null,
 ) {
 	const ids = await threadCommentIds({ subjectType, subjectId });
 	if (ids.length === 0) return [];
@@ -470,7 +470,7 @@ async function listComments(
 			.where(inArray(comments.id, ids)),
 		// A blocked pair does not meet in a thread, in either direction. This is the densest
 		// contact surface in the app; `shapeThread` takes the blocked author's replies with them.
-		blockedUserIds(viewerId),
+		blockedUserIds(userId),
 	]);
 
 	// A suspended author's comments go dark with the rest of their account. They render
@@ -497,7 +497,7 @@ async function listComments(
 				(r.comment.userId == null || !suspendedAuthors.has(r.comment.userId)),
 		)
 		.map((r) => r.comment.id);
-	const { tallies, mine } = await voteTallies("comment", visibleIds, viewerId);
+	const { tallies, mine } = await voteTallies("comment", visibleIds, userId);
 
 	const nodes = rows.map((r) => {
 		const visible =
@@ -510,7 +510,7 @@ async function listComments(
 			subjectId: r.comment.subjectId,
 			createdAt: r.comment.createdAt,
 			// A removed comment has no score to show, so it ranks as nothing rather than by
-			// votes a reader cannot see.
+			// votes a user cannot see.
 			score: visible ? commentScore(tallies.get(r.comment.id) ?? NO_VOTES) : 0,
 			visible,
 			blocked: r.comment.userId !== null && blocked.has(r.comment.userId),
@@ -541,7 +541,7 @@ async function listComments(
 			handle: r.handle,
 			avatar: r.avatar,
 			// 🚨 Says only WHO, never WHY. A moderation removal is the `removed` entry above;
-			// this flag means the author left. Conflating the two would have us telling readers
+			// this flag means the author left. Conflating the two would have us telling users
 			// a user deleted something they didn't.
 			deletedByAuthor: r.comment.userId === null,
 			/**
@@ -562,17 +562,15 @@ async function listComments(
 			 * carry the keys at all — a client cannot render, cache or leak a field that is
 			 * not there.
 			 */
-			...(viewerId !== null && r.comment.userId === viewerId
-				? { up: tally.up, down: tally.down }
-				: {}),
+			...(userId !== null && r.comment.userId === userId ? { up: tally.up, down: tally.down } : {}),
 			/**
 			 * ⚠️ A THIRD state, and it is neither of the other two. A removed comment arrives
 			 * as a gap with no text; `deletedByAuthor` is an author who left. This one is still
-			 * here, still readable, and folded because readers pushed it down.
+			 * here, still readable, and folded because users pushed it down.
 			 */
 			collapsed: isCollapsed(tally),
-			/** What this viewer did, so the control can show itself as pressed. */
-			viewerVote: mine.get(r.comment.id) ?? null,
+			/** What this user did, so the control can show itself as pressed. */
+			userVote: mine.get(r.comment.id) ?? null,
 		};
 	});
 }
@@ -580,10 +578,10 @@ async function listComments(
 /**
  * Why this person may not reply to this comment under this post, or null when they may.
  *
- * 🚨 **Every refusal is the same 404**, because the reasons are ones a reader must not be able
+ * 🚨 **Every refusal is the same 404**, because the reasons are ones a user must not be able
  * to tell apart. A comment that is removed, one under a different post and one written by
  * somebody in a blocked pair all look like a comment that does not exist, which is what the
- * thread already shows this reader.
+ * thread already shows this user.
  *
  * - **The comment must be visible.** A removed comment is not something anybody can answer, for
  *   the same reason it cannot be voted on.
@@ -760,7 +758,7 @@ const MONEY = /^\d+(\.\d{1,2})?$/;
 
 /**
  * One row shape for the Work's one access table: a monthly-dollar threshold, an allow
- * flag, and a price. The threshold is what the viewer has given this Work's creator
+ * flag, and a price. The threshold is what the user has given this Work's creator
  * this cycle, and there is exactly one such table.
  *
  * 🚨 **Cents, not integers, and this is a justification that inverted under its own
@@ -784,7 +782,7 @@ const accessRowSchema = z.object({
 				message: "Threshold must be a whole number of cents",
 			},
 		)
-		// 🚨 A threshold is a level of monthly support a viewer must be giving, and a level
+		// 🚨 A threshold is a level of monthly support a user must be giving, and a level
 		// nobody can fund is a rung nobody can climb — `directed[].amount` refuses anything
 		// between zero and Stripe's minimum, so a $0.25 gate is unreachable by construction.
 		// The baseline row sits at 0 and must stay legal, which is why this is the "$0 or at
@@ -1010,7 +1008,7 @@ const createCommentSchema = z.object({
 /**
  * A review: a verdict AND written text. The minimum is deliberately low — it's a
  * blunt instrument and "lol" clears it either way. The point of requiring text
- * isn't to filter by length, it's that a written verdict gives a reader something
+ * isn't to filter by length, it's that a written verdict gives a user something
  * to weigh and a moderator something to act on, where a bare verdict is
  * unmoderatable by construction. Plain text, no markup, so no sanitizer.
  *
@@ -1452,7 +1450,7 @@ async function setPostWorkRefs(postId: number, workIds: number[]): Promise<boole
  * Where a Work's media should be delivered from. When set, a completed transcode's
  * stored URL is rewritten to the matching access-checked endpoint — signed HLS for
  * video, a signed redirect for audio — instead of a raw CDN URL. Stored media is
- * private, so the raw URL 403s; the endpoints are how an entitled viewer actually
+ * private, so the raw URL 403s; the endpoints are how an entitled user actually
  * plays it. Null in local dev, where /content serves everything unsigned.
  *
  * The post slug used to be part of this, because delivery was reached *through* a post
@@ -1493,18 +1491,18 @@ function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
 }
 
 /**
- * A transcode row as a *viewer* may see it.
+ * A transcode row as a *user* may see it.
  *
  * `hlsManifestUrl` and `outputFileUrl` point at the deliverable, so they follow the
- * same rule as `sourceKey` and asset files: handed out only when the viewer has
+ * same rule as `sourceKey` and asset files: handed out only when the user has
  * access. Everything else — status, progress, ETA, error, waveform — stays, so a
  * locked post still renders "Processing…" instead of an empty frame.
  *
- * For a viewer who *does* have access the URLs are rewritten to the access-checked
+ * For a user who *does* have access the URLs are rewritten to the access-checked
  * delivery routes. That rewrite is not a nicety: stored media is private, so a raw
  * CDN URL would 403 even for someone entitled to it.
  */
-function viewerTranscoding(
+function userTranscoding(
 	job: TranscodingJobRow | null,
 	canAccess: boolean,
 	delivery: DeliveryCtx | null,
@@ -1564,10 +1562,10 @@ function parseNumericId(raw: string): number | null {
 /**
  * A creator's **preview** request, if they made one.
  *
- * `?previewAs=out` for signed-out, `?previewAs=<amount>` for a viewer giving that much a
+ * `?previewAs=out` for signed-out, `?previewAs=<amount>` for a user giving that much a
  * month, plus
  * `?previewOwned=1` for one who bought it outright. Absent or malformed → null, and the
- * viewer sees the truth, which is the only safe way for this to fail.
+ * user sees the truth, which is the only safe way for this to fail.
  */
 /**
  * The preview parameters, declared for the RPC client.
@@ -1583,7 +1581,7 @@ const previewQuerySchema = z.object({
 	previewOwned: z.string().optional(),
 	/**
 	 * A **share link** token. Declared here so the RPC client can send it; it is read by
-	 * `viewerFor`, which refuses a token naming a different Work.
+	 * `requesterFor`, which refuses a token naming a different Work.
 	 */
 	share: z.string().optional(),
 });
@@ -1599,7 +1597,7 @@ function previewRequest(c: {
 }): { given: number | null; owned: boolean } | null {
 	// 🚨 `?previewAs=` gives an EMPTY STRING, not undefined — and `Number("")` is **0**,
 	// which passes every range check below. So the obvious `raw == null` guard alone reads
-	// a blank parameter as "preview as a viewer giving nothing" and quietly locks a
+	// a blank parameter as "preview as a user giving nothing" and quietly locks a
 	// creator out of their own page. Second time this exact trap has bitten; the first was
 	// `Number(localStorage.getItem(...))` defaulting the remembered volume to silence.
 	// Treat empty as absent, always.
@@ -1626,13 +1624,13 @@ function previewRequest(c: {
  */
 function contextFor(
 	work: { id: number; creatorId: number | null },
-	viewerId: number | null,
+	userId: number | null,
 	real: AccessContext,
 	preview: { given: number | null; owned: boolean } | null,
 ): AccessContext {
-	if (!preview || viewerId == null || work.creatorId !== viewerId) return real;
+	if (!preview || userId == null || work.creatorId !== userId) return real;
 	return buildPreviewContext({
-		creatorId: viewerId,
+		creatorId: userId,
 		given: preview.given,
 		owned: preview.owned,
 		workIds: [work.id],
@@ -1645,7 +1643,7 @@ function contextFor(
  * 🚨 **The exception is narrow by construction, and this is the only door it opens.** A
  * request that presents neither is refused here, before any work is done. A request that
  * presents a token is let *through the door* and then meets `resolveAccessSync` exactly like
- * everybody else, where a null viewer carrying `sharedBy` can emerge only from the branch
+ * everybody else, where a null user carrying `sharedBy` can emerge only from the branch
  * reached by universally-free work. So this middleware decides *whether we will talk to you*;
  * it decides nothing about what you may have.
  *
@@ -1654,7 +1652,7 @@ function contextFor(
  * still be refused gated and Adult work by the resolver, but they would be drawing the
  * sharer's budget across a catalog the sharer never shared.
  */
-const requireViewerOrShareLink = createMiddleware(async (c, next) => {
+const requireUserOrShareLink = createMiddleware(async (c, next) => {
 	const workId = parseNumericId(c.req.param("id") ?? "");
 	if (workId != null) {
 		const token = c.req.query("share");
@@ -1678,7 +1676,7 @@ const requireViewerOrShareLink = createMiddleware(async (c, next) => {
  * way to consume on somebody else's meter while signed in, and (worse) a way around the
  * recipient's own Adult opt-in.
  */
-async function viewerFor(
+async function requesterFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	workId: number,
 ): Promise<{ userId: number | null; sharedBy: number | null }> {
@@ -1693,7 +1691,7 @@ async function viewerFor(
 }
 
 /**
- * Resolve the calling viewer's access to one Work.
+ * Resolve the calling user's access to one Work.
  *
  * Every delivery endpoint goes through here, which is the point: access is re-resolved
  * live, per request, against the Work's own gates. Nothing is inherited from a post, a
@@ -1704,7 +1702,7 @@ async function workAccessFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 ): Promise<AccessResultLike> {
-	const { userId, sharedBy } = await viewerFor(c, work.id);
+	const { userId, sharedBy } = await requesterFor(c, work.id);
 	const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 	return resolveAccessSync(work as AccessibleWork, ctx);
 }
@@ -1721,7 +1719,7 @@ async function workAccessFor(
  * resolves a batch without an N+1, and this needs a query.
  *
  * So it sits here, at the two endpoints that actually hand over media, and only for
- * Public Access work: a gated Work the viewer cleared, one they bought, and their own
+ * Public Access work: a gated Work the user cleared, one they bought, and their own
  * catalog are all `isFree: false` and never reach the meter.
  *
  * ⚠️ **A share-link view is metered against the SHARER's separate share-link budget**, not
@@ -1742,7 +1740,7 @@ async function publicAccessGate(
 	// purchase — or a creator's own work is not Public Access and draws nothing.
 	if (!(access.isFree && work.streamEnabled)) return null;
 
-	const { userId, sharedBy } = await viewerFor(c, work.id);
+	const { userId, sharedBy } = await requesterFor(c, work.id);
 
 	if (sharedBy != null) {
 		const shared = await loadShareLinkBudget(sharedBy);
@@ -1778,7 +1776,7 @@ async function publicAccessGate(
  *
  * 🚨 **A third gate, at the same choke point and for a third reason**, and the three are
  * deliberately not merged. Access says *may you consume this Work* (a property of the Work and
- * the viewer's standing). The Public Access meter says *have you spent the commons' allowance*
+ * the user's standing). The Public Access meter says *have you spent the commons' allowance*
  * (a property of the account and the commons). This says *has this household run out of time
  * today* — a property of the account and nothing else, which applies to work that was bought,
  * gated and cleared, or free alike. Collapsing any two of them would make one of the three
@@ -1792,11 +1790,11 @@ async function publicAccessGate(
  * Returns null when delivery may proceed, or the 403 body when the window is spent.
  */
 async function parentalTimeGate(
-	viewerId: number | null,
+	userId: number | null,
 	work: WorkRow,
 ): Promise<{ error: string; code: string; window: LimitWindow } | null> {
-	if (viewerId == null) return null;
-	const policy = await parentalPolicyFor(viewerId);
+	if (userId == null) return null;
+	const policy = await parentalPolicyFor(userId);
 	if (!policy.enabled) return null;
 
 	const subject = { creatorId: work.creatorId, workType: work.type };
@@ -1812,7 +1810,7 @@ async function parentalTimeGate(
 		return null;
 	}
 
-	const window = spentWindow(policy, await consumedSeconds(viewerId, subject), cap);
+	const window = spentWindow(policy, await consumedSeconds(userId, subject), cap);
 	if (!window) return null;
 	return {
 		error:
@@ -1825,23 +1823,23 @@ async function parentalTimeGate(
 }
 
 /**
- * Serialize a Work for a viewer, withholding the deliverable when they lack access.
+ * Serialize a Work for a user, withholding the deliverable when they lack access.
  *
  * The split is the load-bearing part. Everything a *listing* needs — title, type,
  * thumbnail, duration, dates, the access verdict itself — is always present, so a locked
  * Work still renders a proper card with a working unlock prompt. Everything that IS the
  * deliverable — source key, embed URL, asset files, playable media URLs — is handed out
- * only on access. A denied viewer gets no pointer at the payload at all: not a signed
+ * only on access. A denied user gets no pointer at the payload at all: not a signed
  * one, not an expired one, none.
  */
-async function serializeWorkForViewer(
+async function serializeWorkForUser(
 	work: WorkRow,
 	workAssets: AssetRow[],
 	job: TranscodingJobRow | null,
 	access: AccessResultLike,
 	delivery: DeliveryCtx | null,
 	/**
-	 * Whether this viewer has spent their monthly Public Access allowance.
+	 * Whether this user has spent their monthly Public Access allowance.
 	 *
 	 * 🚨 **Required, not optional, and that is the point.** Video and audio are metered at
 	 * their own delivery endpoints, which a text Work and a browser game do not have —
@@ -1852,18 +1850,18 @@ async function serializeWorkForViewer(
 	 */
 	allowanceSpent: boolean,
 	/**
-	 * Who is asking to see this Work, or null for a signed-out viewer.
+	 * Who is asking to see this Work, or null for a signed-out user.
 	 *
 	 * 🚨 **Required, not optional, for the same reason as `allowanceSpent`.** The credits
-	 * pass through the viewer overlay (`creditsForViewer`), which withholds an unaccepted
+	 * pass through the user overlay (`creditsForUser`), which withholds an unaccepted
 	 * `did`-naming credit from everybody except the person it names and this Work's creator.
 	 * An optional parameter would default to "nobody" — which is the signed-out answer and
-	 * therefore safe for a third-party viewer, but silently WRONG for the two parties who
+	 * therefore safe for a third-party user, but silently WRONG for the two parties who
 	 * must see the credit: the credited person would have no way to discover a pending
 	 * credit, and the creator's own page would hide what they just saved. Every call site
 	 * has to decide who is asking, and the compiler is what makes them.
 	 */
-	viewerId: number | null,
+	userId: number | null,
 	/**
 	 * How many pages an ebook has, or 0.
 	 *
@@ -1880,7 +1878,7 @@ async function serializeWorkForViewer(
 	 * missed allowance check serves the commons free forever, which is a defect; a missed time
 	 * check on a listing serves a card to somebody who cannot open the Work anyway, because
 	 * the four delivery routes and this branch both refuse independently. The default is
-	 * therefore the safe one at every call site that has no viewer to ask about — a Catalog
+	 * therefore the safe one at every call site that has no user to ask about — a Catalog
 	 * page, a project shelf, a post's references.
 	 */
 	timeLimited = false,
@@ -1932,20 +1930,20 @@ async function serializeWorkForViewer(
 		// The rating and its notes travel with the blurb rather than with the payload, and
 		// have to: a warning that only appears once you already have the thing is not a
 		// warning. `maturitySource` stays behind — who set the rating is between the
-		// creator and an operator, and a viewer able to read it could tell a corrected Work
+		// creator and an operator, and a user able to read it could tell a corrected Work
 		// from a self-declared one.
 		maturity: work.maturity,
 		maturityNotes: work.maturityNotes ?? [],
-		// The matrix too, so a reader's own filter can blur by kind of content in the browser. It
-		// restates the notes plus which rows are Not in It, so it tells a reader nothing the notes
+		// The matrix too, so a user's own filter can blur by kind of content in the browser. It
+		// restates the notes plus which rows are Not in It, so it tells a user nothing the notes
 		// do not, except that a creator said something is absent.
 		maturityRows: work.maturityRows ?? {},
 		originallyReleased: work.originallyReleased,
 		// The creator's provenance table — public liner notes, ungated like the description,
 		// EXCEPT where a credit names an on-network identity that has not accepted: the
-		// overlay (`creditsForViewer`) withholds that from everyone but the named person and
+		// overlay (`creditsForUser`) withholds that from everyone but the named person and
 		// the creator, and resolves an accepted one to a handle rather than a bare DID.
-		credits: await creditsForViewer(work, viewerId),
+		credits: await creditsForUser(work, userId),
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 		isPinned: work.isPinned,
@@ -1990,7 +1988,7 @@ async function serializeWorkForViewer(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
-		transcoding: await viewerTranscoding(job, canAccess, delivery),
+		transcoding: await userTranscoding(job, canAccess, delivery),
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -2002,7 +2000,7 @@ async function serializeWorkForViewer(
 		 * the access table, and a creator-facing toggle would invite the question "what
 		 * happens if I turn it off but leave it ungated?" — which has no answer.
 		 *
-		 * Note this is a fact about the WORK and says nothing about whether a given viewer
+		 * Note this is a fact about the WORK and says nothing about whether a given user
 		 * may watch more of it this month. That is the account-level meter, which is
 		 * deliberately not expressed here — see `publicAccessGate`.
 		 */
@@ -2011,7 +2009,7 @@ async function serializeWorkForViewer(
 }
 
 /**
- * Whether this viewer has spent their monthly Public Access allowance.
+ * Whether this user has spent their monthly Public Access allowance.
  *
  * One read per request, not per Work: the allowance belongs to the **account**, so a
  * page listing forty Works asks once. That is the same reason the meter could never live
@@ -2019,7 +2017,7 @@ async function serializeWorkForViewer(
  * resolves without an N+1.
  *
  * 🚨 **This docstring is where the anonymous-viewing rationale was written down**, and it
- * is worth saying so rather than quietly deleting it. It read: *"A logged-out viewer is
+ * is worth saying so rather than quietly deleting it. It read: *"A logged-out user is
  * never spent: the server hands anonymous callers the full allowance on purpose, because
  * anonymous streaming of the commons is the shop window."* Nobody decided that. It was a
  * plausible-sounding sentence invented to explain a missing `requireAuth`, and from here it
@@ -2027,21 +2025,21 @@ async function serializeWorkForViewer(
  * policy because it was written in the voice of one. **A comment explaining why the code is
  * right is not evidence that anybody chose it.**
  *
- * A signed-out viewer now has no allowance at all, so this reports them spent — which no
+ * A signed-out user now has no allowance at all, so this reports them spent — which no
  * longer decides anything, because `resolveAccessSync` has already refused them the
  * deliverable by then.
  */
 async function allowanceSpent(
-	viewerId: number | null,
+	userId: number | null,
 	sharedBy: number | null = null,
 ): Promise<boolean> {
 	// A share-link view draws the sharer's separate relay budget, never their ten hours and
 	// never nothing. Same split as `publicAccessGate` and for the same reason — the two
 	// budgets bound different things.
-	if (viewerId == null && sharedBy != null) {
+	if (userId == null && sharedBy != null) {
 		return !(await loadShareLinkBudget(sharedBy)).allowed;
 	}
-	const budget = await loadPublicAccessBudget(viewerId);
+	const budget = await loadPublicAccessBudget(userId);
 	return !budget.allowed;
 }
 
@@ -2053,7 +2051,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	worksById: Map<number, WorkRow>;
 	assetsByWork: Map<number, AssetRow[]>;
 	jobByWork: Map<number, TranscodingJobRow>;
-	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForViewer`. */
+	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForUser`. */
 	pagesByWork: Map<number, number>;
 }> {
 	const worksById = new Map<number, WorkRow>();
@@ -2092,15 +2090,15 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 }
 
 /**
- * The Works a post references, each resolved against the viewer's own standing.
+ * The Works a post references, each resolved against the user's own standing.
  *
  * Note what is NOT happening here: the post contributes nothing to access. Each Work is
  * resolved on its own gates, so one post can carry a free Work and a locked one side by
- * side, and a post the viewer can read may link a Work they cannot open.
+ * side, and a post the user can read may link a Work they cannot open.
  */
 async function loadPostWorks(
 	postId: number,
-	viewerId: number | null,
+	userId: number | null,
 	delivery: DeliveryCtx | null = null,
 ) {
 	const refs = await db
@@ -2113,8 +2111,8 @@ async function loadPostWorks(
 	const workIds = refs.map((r) => r.workId);
 	const { worksById, assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(workIds);
 	const [ctx, spent] = await Promise.all([
-		buildAccessContext(viewerId, { workIds }),
-		allowanceSpent(viewerId),
+		buildAccessContext(userId, { workIds }),
+		allowanceSpent(userId),
 	]);
 
 	const serialized = await Promise.all(
@@ -2124,7 +2122,7 @@ async function loadPostWorks(
 			// 🚨 A post announcing an Adult Work does not announce it to somebody who has
 			// not opted in. The reference is dropped rather than serialized as locked,
 			// because the invisibility rule covers the title and cover art and a locked
-			// card is made of both. `ctx` already carries the viewer's adult access, so
+			// card is made of both. `ctx` already carries the user's adult access, so
 			// this costs no extra query — and reading it from the same context the access
 			// verdict comes from is what keeps the two from disagreeing.
 			if (
@@ -2136,14 +2134,14 @@ async function loadPostWorks(
 			}
 			return {
 				position: ref.position,
-				work: await serializeWorkForViewer(
+				work: await serializeWorkForUser(
 					work,
 					assetsByWork.get(work.id) ?? [],
 					jobByWork.get(work.id) ?? null,
 					resolveAccessSync(work as AccessibleWork, ctx),
 					delivery,
 					spent,
-					viewerId,
+					userId,
 					pagesByWork.get(work.id) ?? 0,
 				),
 			};
@@ -2211,7 +2209,7 @@ function deliveryCtx(share: string | null = null): DeliveryCtx | null {
 }
 
 /**
- * Lifetime of a signed media URL. Must exceed a viewer's watch/listen time, since the
+ * Lifetime of a signed media URL. Must exceed a user's watch/listen time, since the
  * URL is handed out once and used for the whole of a VOD playback.
  */
 const SIGNED_MEDIA_TTL_SECONDS = 6 * 60 * 60;
@@ -2513,17 +2511,17 @@ const contentRoutes = new Hono()
 
 		// An unpublished post (draft / scheduled / unpublished) is visible only to its creator —
 		// the permalink 404s for everyone else, matching how drafts are hidden from feeds.
-		const viewerId = await getOptionalUserId(c);
-		if (!post.isPublished && viewerId !== post.creatorId) {
+		const userId = await getOptionalUserId(c);
+		if (!post.isPublished && userId !== post.creatorId) {
 			return c.json({ error: "Post not found" }, 404);
 		}
 
 		// A suspended author's permalink reads as absent for the same reason a hidden
 		// entity's does: the account's presence stops being served, and the ordinary
-		// 404 is the least informative answer the reader already renders.
+		// 404 is the least informative answer the user already renders.
 		if (
 			post.creatorId != null &&
-			viewerId !== post.creatorId &&
+			userId !== post.creatorId &&
 			(await isSuspendedAccount(post.creatorId))
 		) {
 			return c.json({ error: "Post not found" }, 404);
@@ -2559,15 +2557,15 @@ const contentRoutes = new Hono()
 
 		// A post has no gates of its own: it is an announcement, and announcements are for
 		// the audience. Each Work it links resolves on its OWN gates, so this page can show
-		// a readable post alongside a Work the viewer cannot open — which is exactly the
+		// a readable post alongside a Work the user cannot open — which is exactly the
 		// separation the model is for, and why there is no post-level `access` any more.
-		const linkedWorks = await loadPostWorks(post.id, viewerId, deliveryCtx());
+		const linkedWorks = await loadPostWorks(post.id, userId, deliveryCtx());
 
 		// Transparent edit history — every content edit is logged with a timestamp, and it
-		// carries no viewer predicate **on purpose** (settled 2026-08-09).
+		// carries no user predicate **on purpose** (settled 2026-08-09).
 		//
 		// It used to want one. Before migration `0010` a post carried its own gates, so a
-		// viewer denied the body still got the full timestamped list of what changed and
+		// user denied the body still got the full timestamped list of what changed and
 		// when — the shape of gated content, leaked by a query nobody had thought about.
 		// The Catalog separation dissolved that rather than fixing it: a post is an
 		// announcement and has no gates at all, so there is no hidden body here whose
@@ -2576,7 +2574,7 @@ const contentRoutes = new Hono()
 		//
 		// **This is load-bearing for whoever adds an edit log to a Work.** A Work IS
 		// gated, and the same query written against it would recreate the original leak
-		// exactly — so it needs the viewer predicate this one doesn't.
+		// exactly — so it needs the user predicate this one doesn't.
 		const edits = await db
 			.select({
 				editedAt: postEdits.editedAt,
@@ -2751,7 +2749,7 @@ const contentRoutes = new Hono()
 	// 🚨 **A Work takes no comments and no votes; a review is the only feedback it accepts**
 	// (Parker, 2026-09-13), so that Anthers has one coherent feedback model: posts and the
 	// comments on them are voted on, Works are reviewed. `comments.subject_type` still
-	// accepts `work` because rows written before that rule exist, and the readers that
+	// accepts `work` because rows written before that rule exist, and the users that
 	// moderate or delete comments still handle them.
 
 	.get("/posts/:slug/comments", async (c) => {
@@ -2799,7 +2797,7 @@ const contentRoutes = new Hono()
 			await authorUpvote("comment", comment.id, user.id);
 
 			// The record goes in the commenter's own repository, once the post has a record for it
-			// to name — see `reader-record-listing.ts` for what happens while it does not.
+			// to name — see `user-record-listing.ts` for what happens while it does not.
 			void queueRecordSync("comment", comment.id);
 
 			return c.json({ comment: { ...comment, handle: user.handle } }, 201);
@@ -2819,22 +2817,22 @@ const contentRoutes = new Hono()
 	 *
 	 * ⭐ **A separate read rather than a field on the Work and post payloads.** Those
 	 * responses come back through `serializeWork` down several branches — owner, preview,
-	 * gated viewer — and threading a score through every one of them would put the same
+	 * gated user — and threading a score through every one of them would put the same
 	 * three lines in four places for a control that can ask for itself. A comment thread
 	 * still gets its scores inline, because the list already fetches them in one grouped
 	 * query and a request per comment would not be a trade at all.
 	 */
 	.get("/votes", zValidator("query", voteQuerySchema), async (c) => {
 		const { subjectType, subjectId } = c.req.valid("query");
-		const viewerId = await getOptionalUserId(c);
-		const { tallies, mine } = await voteTallies(subjectType, [subjectId], viewerId);
+		const userId = await getOptionalUserId(c);
+		const { tallies, mine } = await voteTallies(subjectType, [subjectId], userId);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
 		// The author sees what it is made of; everybody else sees the one number.
-		const owner = await ownsSubject(subjectType, subjectId, viewerId);
+		const owner = await ownsSubject(subjectType, subjectId, userId);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerVote: mine.get(subjectId) ?? null,
+			userVote: mine.get(subjectId) ?? null,
 			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
@@ -2886,7 +2884,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerVote: direction,
+			userVote: direction,
 			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
@@ -2923,14 +2921,14 @@ const contentRoutes = new Hono()
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
-			viewerVote: null,
+			userVote: null,
 			...(owner ? { up: tally.up, down: tally.down } : {}),
 		});
 	})
 
 	// ── Reviews (Works only) ───────────────────────────────────────────────────
 	//
-	// A review is "a reader's verdict on a work" (the wiki's *How Anthers Talks About Itself*), and reviews are floor-level
+	// A review is "a user's verdict on a work" (the wiki's *How Anthers Talks About Itself*), and reviews are floor-level
 	// moderation because "a creator moderating reviews of their own work is the conflict
 	// reviews exist to avoid" (the wiki's *Moderation & Reporting*). Both are about works, so unlike comments this is
 	// NOT polymorphic — reviewing an announcement is a category error.
@@ -2955,7 +2953,7 @@ const contentRoutes = new Hono()
 
 			// The aggregate is deliberately NOT filtered by blocks, unlike the review list
 			// below. A score is a fact about the Work, not about who is reading it: making it
-			// viewer-dependent would mean two people see different reviews for the same thing,
+			// user-dependent would mean two people see different reviews for the same thing,
 			// and it would let one user move a creator's public average by blocking a
 			// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
 			// over nine listed reviews — which is already true of a hidden review, and is the right
@@ -2984,7 +2982,7 @@ const contentRoutes = new Hono()
 						),
 				})
 				.from(reviews)
-				// Suspension joins `visibleReview` here because it is viewer-independent —
+				// Suspension joins `visibleReview` here because it is user-independent —
 				// exactly the property the aggregate's no-block carve-out rests on, so the
 				// two rules never ask the same number to disagree with itself.
 				.where(
@@ -3020,7 +3018,7 @@ const contentRoutes = new Hono()
 						notBlockedBy(currentUserId, reviews.userId),
 						// A suspended reviewer's words go with the rest of their account;
 						// listed beside the block filter because both answer "who may meet
-						// the reader here". The automated-test account is hidden here on
+						// the user here". The automated-test account is hidden here on
 						// the same listing rule.
 						notSuspendedAccount(reviews.userId),
 						notTestAccount(reviews.userId),
@@ -3028,7 +3026,7 @@ const contentRoutes = new Hono()
 				);
 
 			// Each review's helpfulness, in the same grouped read a comment thread uses. The
-			// viewer's own votes ride along so the buttons open in the right state.
+			// user's own votes ride along so the buttons open in the right state.
 			const reviewIds = reviewRows.map((r) => r.id);
 			const { tallies, mine } = await voteTallies("review", reviewIds, currentUserId);
 
@@ -3036,7 +3034,7 @@ const contentRoutes = new Hono()
 			let userReview: string | null = null;
 			if (currentUserId) {
 				// Deliberately unfiltered by moderation status: the verdict and words a
-				// viewer submitted shouldn't silently change under them. Their review
+				// user submitted shouldn't silently change under them. Their review
 				// simply stops counting and stops appearing to everyone else.
 				const [row] = await db
 					.select({ verdict: reviews.verdict, body: reviews.body })
@@ -3071,7 +3069,7 @@ const contentRoutes = new Hono()
 						// and they see their own raw counts the same way — `ownsSubject` already
 						// treats a review's author as its owner.
 						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
-						viewerVote: mine.get(r.id) ?? null,
+						userVote: mine.get(r.id) ?? null,
 					}))
 					.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
 			});
@@ -3148,7 +3146,7 @@ const contentRoutes = new Hono()
 	 * directly underneath the platform's one conversion event.
 	 *
 	 * ⚠️ **The middleware is the guard; it is not the only one.** `resolveAccessSync` refuses
-	 * a null viewer independently, which is what covers text, games, images and software —
+	 * a null user independently, which is what covers text, games, images and software —
 	 * their deliverable rides inside `GET /works/:id` and passes no route of its own. Neither
 	 * check is redundant: remove the middleware and these four leak, remove the resolver rule
 	 * and the other four types do.
@@ -3161,9 +3159,9 @@ const contentRoutes = new Hono()
 	 *
 	 * ── Access-checked asset download ─────────────────────────────────────────────
 	 * Assets belong to a Work, and the Work carries the gate. No post is involved: an
-	 * entitled viewer can download from the Catalog whether or not anything was announced.
+	 * entitled user can download from the Catalog whether or not anything was announced.
 	 */
-	.post("/works/:id/assets/:assetId/download", requireViewerOrShareLink, async (c) => {
+	.post("/works/:id/assets/:assetId/download", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3217,11 +3215,11 @@ const contentRoutes = new Hono()
 		// Serialized exactly as Work detail does — same helper, same rule. That matters:
 		// this route is a second way to reach the same rows, so anything Work detail
 		// withholds has to be withheld here too or the poller becomes the side channel
-		// around it. Status still flows to a denied viewer; only the payload URLs don't.
+		// around it. Status still flows to a denied user; only the payload URLs don't.
 		const access = await workAccessFor(c, work);
 		return c.json({
 			jobs: await Promise.all(
-				jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+				jobs.map((job) => userTranscoding(job, access.canAccess, deliveryCtx())),
 			),
 		});
 	})
@@ -3231,13 +3229,13 @@ const contentRoutes = new Hono()
 	// so this is the only way to reach it: access is re-checked here on every request,
 	// then we redirect to a short-lived signed CDN URL. A redirect rather than a proxy so
 	// range requests (seeking) go straight to the CDN instead of through the API.
-	.get("/works/:id/audio", requireViewerOrShareLink, async (c) => {
+	.get("/works/:id/audio", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
-		// 402, not 403: the viewer is not forbidden, they have spent a monthly allowance
+		// 402, not 403: the user is not forbidden, they have spent a monthly allowance
 		// that the Public Access price removes. The status code is the difference between "you may not"
 		// and "you may, and here is how".
 		const metered = await publicAccessGate(c, work, access);
@@ -3260,7 +3258,7 @@ const contentRoutes = new Hono()
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
 		// no-store so the 302 (which carries a signed URL, and is access-dependent) is
-		// never cached by a proxy and replayed at a viewer who shouldn't have it.
+		// never cached by a proxy and replayed at a user who shouldn't have it.
 		c.header("Cache-Control", "no-store");
 		return c.redirect(url, 302);
 	})
@@ -3271,7 +3269,7 @@ const contentRoutes = new Hono()
 	// through a check, rather than as a single file whose URL is the whole book. Same shape
 	// as the audio route above — re-resolve access, meter the commons, redirect to a
 	// short-lived signed URL.
-	.get("/works/:id/pages/:page", requireViewerOrShareLink, async (c) => {
+	.get("/works/:id/pages/:page", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3280,7 +3278,7 @@ const contentRoutes = new Hono()
 
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
-		// 402, not 403: the reader is not forbidden, they have spent a monthly allowance
+		// 402, not 403: the user is not forbidden, they have spent a monthly allowance
 		// that the Public Access price removes. Reading the commons draws it exactly as watching does —
 		// the equal-time principle is about what a minute IS, not about which medium.
 		const metered = await publicAccessGate(c, work, access);
@@ -3308,10 +3306,10 @@ const contentRoutes = new Hono()
 	})
 
 	// ── Panels (comic page regions) ──────────────────────────────────────────────
-	// The panel geometry for a Work, for the reader's panel mode and the Studio's
+	// The panel geometry for a Work, for the user's panel mode and the Studio's
 	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
 	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
-	.get("/works/:id/panels", requireViewerOrShareLink, async (c) => {
+	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -3454,8 +3452,8 @@ const contentRoutes = new Hono()
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
 	// short-lived signed CDN URLs. Segments are always private, so EVERY accessible Work
-	// (free or gated) is pointed here by serializeWorkForViewer; this check is the gate.
-	.get("/works/:id/hls/:file", requireViewerOrShareLink, async (c) => {
+	// (free or gated) is pointed here by serializeWorkForUser; this check is the gate.
+	.get("/works/:id/hls/:file", requireUserOrShareLink, async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.
 		if (!/^[A-Za-z0-9_.-]+\.m3u8$/.test(file)) return c.json({ error: "Not found" }, 404);
@@ -3510,9 +3508,9 @@ const contentRoutes = new Hono()
 		// 🚨 **A recipient's token rides onto the variant URLs, or a shared video never starts.**
 		// hls.js requests each variant exactly as the master lists it, and somebody watching by
 		// share link has no session to fall back on, so a variant URL without the token is a 401
-		// while the page and the master playlist both look fine. Carried only when the viewer
+		// while the page and the master playlist both look fine. Carried only when the user
 		// really arrived by the link, the same rule the Work page applies.
-		const { sharedBy } = await viewerFor(c, workId);
+		const { sharedBy } = await requesterFor(c, workId);
 		const rewritten = await rewriteHlsPlaylist(new TextDecoder().decode(bytes), {
 			isMaster: file === "master.m3u8",
 			prefixKey,
@@ -3683,9 +3681,9 @@ const contentRoutes = new Hono()
 	 * One Work — the Catalog's public detail endpoint, and the owner's editor payload.
 	 *
 	 * Deliberately one route serving both. The owner gets the full row (including the
-	 * access tables they edit); everyone else gets the viewer serialization, which withholds
+	 * access tables they edit); everyone else gets the user serialization, which withholds
 	 * the deliverable unless their access resolves. Two routes would mean two places for
-	 * "what may this viewer see?" to drift apart, and the whole point of this layer is that
+	 * "what may this user see?" to drift apart, and the whole point of this layer is that
 	 * the question has one answer.
 	 *
 	 * A `private` Work 404s for everyone but its creator — not 403, because the existence
@@ -3695,8 +3693,8 @@ const contentRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const viewerId = await getOptionalUserId(c);
-		const isOwner = viewerId != null && viewerId === work.creatorId;
+		const userId = await getOptionalUserId(c);
+		const isOwner = userId != null && userId === work.creatorId;
 		if (work.visibility !== "released" && !isOwner) {
 			// A withdrawn Work is out of public circulation but still owed to the people
 			// who bought it — that is the whole point of the state, so this is the one
@@ -3704,7 +3702,7 @@ const contentRoutes = new Hono()
 			// `private` still 404s for everyone else: it was never anyone's to buy.
 			const stillOwed =
 				work.visibility === "withdrawn" &&
-				viewerId != null &&
+				userId != null &&
 				(
 					await db
 						.select({ id: purchases.id })
@@ -3712,7 +3710,7 @@ const contentRoutes = new Hono()
 						.where(
 							and(
 								eq(purchases.workId, work.id),
-								eq(purchases.buyerId, viewerId),
+								eq(purchases.buyerId, userId),
 								eq(purchases.status, "completed"),
 							),
 						)
@@ -3733,7 +3731,7 @@ const contentRoutes = new Hono()
 		// reaches their own Work whatever their setting says, and this must not become the
 		// reason somebody cannot see a thing they made.
 		if (!isOwner && requiresAdultVerification(work.maturity)) {
-			const { access } = await adultVisibility(viewerId);
+			const { access } = await adultVisibility(userId);
 			if (!access.canReach) return c.json({ error: "Work not found" }, 404);
 		}
 
@@ -3744,7 +3742,7 @@ const contentRoutes = new Hono()
 		if (!isOwner && work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
 			const stillOwned =
 				work.visibility === "withdrawn" ||
-				(viewerId != null &&
+				(userId != null &&
 					(
 						await db
 							.select({ id: purchases.id })
@@ -3752,7 +3750,7 @@ const contentRoutes = new Hono()
 							.where(
 								and(
 									eq(purchases.workId, work.id),
-									eq(purchases.buyerId, viewerId),
+									eq(purchases.buyerId, userId),
 									eq(purchases.status, "completed"),
 								),
 							)
@@ -3778,7 +3776,7 @@ const contentRoutes = new Hono()
 		 * A creator's own Work comes back through `serializeWork`, the owner-facing shape:
 		 * full media keys, the editable access table, and **no `access` verdict at all**,
 		 * because an owner has never needed one. That is exactly what a preview is asking
-		 * for, so a preview request falls through to the viewer path below rather than
+		 * for, so a preview request falls through to the user path below rather than
 		 * being applied here — which is why `contextFor` can substitute a context and get
 		 * a real answer out of the real resolver.
 		 *
@@ -3800,10 +3798,10 @@ const contentRoutes = new Hono()
 			.execute();
 
 		// A share link rides in on the query string and is resolved here, at the one route a
-		// recipient actually lands on. `viewerFor` refuses a token that names a different
+		// recipient actually lands on. `requesterFor` refuses a token that names a different
 		// Work, and a signed-in caller ignores tokens entirely.
-		const { sharedBy } = await viewerFor(c, work.id);
-		const ctx = await buildAccessContext(viewerId, { workIds: [work.id], sharedBy });
+		const { sharedBy } = await requesterFor(c, work.id);
+		const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
 		const [creator] = work.creatorId
 			? await db
@@ -3827,9 +3825,9 @@ const contentRoutes = new Hono()
 		const creatorHasStripe = work.creatorId ? await canBePaid(work.creatorId) : false;
 
 		// This endpoint does not go through `loadWorkBundles`, so the page count is counted
-		// here. It is the ONE page a reader actually opens a book from, and leaving it on
+		// here. It is the ONE page a user actually opens a book from, and leaving it on
 		// the parameter default would have reported every ebook as zero pages — with no
-		// error, and a reader that renders nothing.
+		// error, and a user that renders nothing.
 		const [pageRow] = await db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(workPages)
@@ -3837,22 +3835,22 @@ const contentRoutes = new Hono()
 
 		return c.json({
 			work: {
-				...(await serializeWorkForViewer(
+				...(await serializeWorkForUser(
 					work,
 					workAssets,
 					jobRows[0] ?? null,
 					resolveAccessSync(
 						work as AccessibleWork,
-						contextFor(work, viewerId, ctx, previewRequest(c)),
+						contextFor(work, userId, ctx, previewRequest(c)),
 					),
 					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
-					await allowanceSpent(viewerId, sharedBy),
-					viewerId,
+					await allowanceSpent(userId, sharedBy),
+					userId,
 					pageRow?.count ?? 0,
-					// The one page a reader actually opens a text Work, a game or an image
+					// The one page a user actually opens a text Work, a game or an image
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
-					(await parentalTimeGate(viewerId, work)) !== null,
+					(await parentalTimeGate(userId, work)) !== null,
 				)),
 				creator,
 				creatorHasStripe,
@@ -3982,7 +3980,7 @@ const contentRoutes = new Hono()
 	/**
 	 * Works anyone can open — released, streamable, and free to everyone.
 	 *
-	 * The predicate is deliberately the **viewer-independent** one: a Work qualifies when
+	 * The predicate is deliberately the **user-independent** one: a Work qualifies when
 	 * one of its access rows opens it at threshold 0 for no money, which is exactly what a
 	 * signed-out visitor having given nothing resolves `free` against in `resolveAccessSync`.
 	 * It asks only "is anything in the way", so it needs no opinion about *which* gate
@@ -3997,7 +3995,7 @@ const contentRoutes = new Hono()
 	 */
 	.get("/open-works", async (c) => {
 		const limit = Math.min(24, Math.max(1, Number(c.req.query("limit") ?? 12)));
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 
 		/** True when this access table has a row opening the Work to everyone, for free. */
 		const openToEveryone = (column: SQL | unknown) => sql`EXISTS (
@@ -4016,23 +4014,23 @@ const contentRoutes = new Hono()
 					eq(works.visibility, "released"),
 					eq(works.streamEnabled, true),
 					openToEveryone(works.access),
-					notBlockedBy(viewerId, works.creatorId),
+					notBlockedBy(userId, works.creatorId),
 					// Suspended accounts are out of the commons entirely, beside the block
-					// filter a reader already sees here.
+					// filter a user already sees here.
 					notSuspendedAccount(works.creatorId),
 					// So is the automated-test account — hidden from the commons by
 					// handle, not by anything done to the account itself.
 					notTestAccount(works.creatorId),
 					// 🚨 **Load-bearing here, not belt-and-braces.** Adult work MAY be Public
 					// Access since 2026-08-28, so this listing genuinely holds rows that must
-					// not reach a reader who has not opted in and verified. It was the
+					// not reach a user who has not opted in and verified. It was the
 					// redundant half of a two-rule guard until the paywall was retired; it is
 					// now the only rule standing between the commons and an unverified
 					// visitor.
-					(await adultVisibility(viewerId)).hidden,
+					(await adultVisibility(userId)).hidden,
 					// A guardian's blocks hide as well as refuse — a shelf of cards a child
 					// cannot click is an advertisement, not a protection.
-					(await parentalVisibility(viewerId)).hidden,
+					(await parentalVisibility(userId)).hidden,
 				),
 			)
 			.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -4074,11 +4072,11 @@ const contentRoutes = new Hono()
 				? await accountByHandle(resolution.redirectToHandle)
 				: undefined);
 		if (!account) return c.json({ error: "Creator not found" }, 404);
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 		// A suspended creator's Catalog is gone with the rest of their presence — the
 		// same 404 an unknown handle returns, from the route that already treats hidden
 		// as absent.
-		if (viewerId !== account.id && (await isSuspendedAccount(account.id))) {
+		if (userId !== account.id && (await isSuspendedAccount(account.id))) {
 			return c.json({ error: "Creator not found" }, 404);
 		}
 		const creator = {
@@ -4089,15 +4087,15 @@ const contentRoutes = new Hono()
 
 		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
 		// A creator browsing their own Catalog sees drafts too; nobody else does.
-		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
+		if (userId !== creator.id) conditions.push(eq(works.visibility, "released"));
 		if (type) conditions.push(eq(works.type, type));
 		// 🚨 A creator profile is one of the non-feed surfaces the wiki's *Content Standards* left open, and it is
-		// settled: a reader who has not opted in meets nothing at all rather than an
+		// settled: a user who has not opted in meets nothing at all rather than an
 		// interstitial. The accepted cost is that this Catalog is silently incomplete for
 		// them — the alternative was announcing the existence and usually the title of work
 		// the rung specifically does not give an existence to.
-		const adultHidden = (await adultVisibility(viewerId)).hidden;
-		const parentalHidden = (await parentalVisibility(viewerId)).hidden;
+		const adultHidden = (await adultVisibility(userId)).hidden;
+		const parentalHidden = (await parentalVisibility(userId)).hidden;
 		if (adultHidden) conditions.push(adultHidden);
 		// A guardian's blocks hide as well as refuse — a shelf of cards a child cannot
 		// click is an advertisement, not a protection.
@@ -4120,8 +4118,8 @@ const contentRoutes = new Hono()
 		const ids = rows.map((r) => r.id);
 		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(ids);
 		const [ctx, catalogSpent] = await Promise.all([
-			buildAccessContext(viewerId, { workIds: ids }),
-			allowanceSpent(viewerId),
+			buildAccessContext(userId, { workIds: ids }),
+			allowanceSpent(userId),
 		]);
 		await Promise.all(rows.map(resolveWorkThumbnail));
 
@@ -4129,14 +4127,14 @@ const contentRoutes = new Hono()
 			creator,
 			works: await Promise.all(
 				rows.map((w) =>
-					serializeWorkForViewer(
+					serializeWorkForUser(
 						w,
 						assetsByWork.get(w.id) ?? [],
 						jobByWork.get(w.id) ?? null,
-						resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
+						resolveAccessSync(w as AccessibleWork, contextFor(w, userId, ctx, preview)),
 						deliveryCtx(),
 						catalogSpent,
-						viewerId,
+						userId,
 						pagesByWork.get(w.id) ?? 0,
 					),
 				),
@@ -4305,7 +4303,7 @@ const contentRoutes = new Hono()
 		// 🚨 **Scheduling a release asks the conditions only the creator can fix, and asks them
 		// now.** The sweep that releases a scheduled Work runs with nobody at the screen, so a
 		// schedule that could only ever be refused should be refused here, where the answer has a
-		// reader. What resolves on its own — the file arriving, processing, the scan — is exactly
+		// user. What resolves on its own — the file arriving, processing, the scan — is exactly
 		// what a schedule is for waiting on, so it is not asked. Only a CHANGE to the schedule is
 		// checked, so a Work waiting past its time on processing stays editable.
 		const scheduleSent = data.scheduledReleaseAt;
@@ -4749,25 +4747,25 @@ const contentRoutes = new Hono()
 			conditions.push(notTestAccount(projects.creatorId) as SQL);
 		}
 
-		// 🚨 **A project whose released Works are all ones the viewer may not see is absent too.**
+		// 🚨 **A project whose released Works are all ones the user may not see is absent too.**
 		// A project carries no rating of its own, but its title and cover describe what is in
 		// it, so a project holding only Adult work would otherwise announce that work's existence
 		// to somebody who has not opted in — the thing the rung withholds. A project with no
 		// released Works at all is still listed, since there is nothing in it to disclose.
-		const listingViewerId = await getOptionalUserId(c);
-		const [{ prefs: viewerPrefs }, { policy: viewerPolicy }] = await Promise.all([
-			adultVisibility(listingViewerId),
-			parentalVisibility(listingViewerId),
+		const listingUserId = await getOptionalUserId(c);
+		const [{ prefs: userPrefs }, { policy: userPolicy }] = await Promise.all([
+			adultVisibility(listingUserId),
+			parentalVisibility(listingUserId),
 		]);
 		const memberVisible = and(
 			maturityHiddenFrom(
-				viewerPrefs,
-				listingViewerId,
+				userPrefs,
+				listingUserId,
 				sql`w.creator_id`,
 				sql`w.maturity`,
 				sql`w.maturity_rows`,
 			),
-			parentalHiddenFrom(viewerPolicy, listingViewerId, sql`w.creator_id`, sql`w.type`),
+			parentalHiddenFrom(userPolicy, listingUserId, sql`w.creator_id`, sql`w.type`),
 		);
 		conditions.push(sql`(
 			NOT EXISTS (
@@ -4812,21 +4810,21 @@ const contentRoutes = new Hono()
 			conditions.push(containsWork(anyAccessRow(sql`(r->>'threshold')::numeric > 0`)));
 
 			// "Show locked content" is OFF by default, so a gated browse shows only what
-			// this viewer can actually open. That needs the access rules in SQL rather
+			// this user can actually open. That needs the access rules in SQL rather
 			// than the usual `resolveAccessSync` pass, because filtering in memory would
-			// run AFTER `LIMIT 100` and silently return fewer rows to some viewers than
+			// run AFTER `LIMIT 100` and silently return fewer rows to some users than
 			// others — a filter whose result depends on who is asking is exactly the kind
 			// that has to be part of the query.
 			//
-			// Signed-out viewers are exempt: everything gated is locked to them, so the
+			// Signed-out users are exempt: everything gated is locked to them, so the
 			// filter would empty the list every time and read as a broken page rather than
 			// as a filter doing its job. "Hide what I can't open" only means something
 			// once there is something you can.
-			const viewerId = await getOptionalUserId(c);
-			if (showLocked !== "true" && viewerId != null) {
-				const ctx = await buildAccessContext(viewerId);
-				// The access table compares against what the viewer gives *that Work's creator*,
-				// a different number per row, so the viewer's allocations travel as a jsonb map
+			const userId = await getOptionalUserId(c);
+			if (showLocked !== "true" && userId != null) {
+				const ctx = await buildAccessContext(userId);
+				// The access table compares against what the user gives *that Work's creator*,
+				// a different number per row, so the user's allocations travel as a jsonb map
 				// keyed by creator id and are looked up per row.
 				const seedMap = JSON.stringify(Object.fromEntries(ctx.supportByCreator));
 				// Coerced explicitly because the ids are inlined rather than bound: they
@@ -4835,7 +4833,7 @@ const contentRoutes = new Hono()
 				const purchased = [...ctx.purchasedWorkIds].map(Number).filter(Number.isInteger);
 				conditions.push(
 					containsWork(sql`(
-						${viewerId} = w.creator_id
+						${userId} = w.creator_id
 						OR w.id = ANY(${sql.raw(`ARRAY[${purchased.length ? purchased.join(",") : ""}]::int[]`)})
 						OR EXISTS (
 							SELECT 1 FROM jsonb_array_elements(COALESCE(w.access, '[]'::jsonb)) r
@@ -4869,7 +4867,7 @@ const contentRoutes = new Hono()
 		}
 
 		// Duration bands differ by medium — half an hour is a long track and a short film —
-		// so they are read against the media type the viewer has already selected, and
+		// so they are read against the media type the user has already selected, and
 		// ignored without one rather than guessing which scale was meant.
 		// `null` upper bound means unbounded — not a sentinel, because `duration_seconds`
 		// is int4 and any "very large" stand-in either overflows the column type or
@@ -4989,7 +4987,7 @@ const contentRoutes = new Hono()
 
 	.get("/projects/:slug", async (c) => {
 		const { slug } = c.req.param();
-		const viewerId = await getOptionalUserId(c);
+		const userId = await getOptionalUserId(c);
 
 		const result = await db
 			.select({
@@ -5005,7 +5003,7 @@ const contentRoutes = new Hono()
 					eq(projects.slug, slug),
 					// A suspended creator's Project page reads as not found — the listing's
 					// filter is the route's WHERE so the answer never depends on which
-					// surface was asked. Viewer-independent, so the owner's own row drops
+					// surface was asked. User-independent, so the owner's own row drops
 					// too; a suspended account cannot sign in to reach it anyway.
 					notSuspendedAccount(projects.creatorId),
 					// The automated-test account's Project page reads as not found the
@@ -5037,7 +5035,7 @@ const contentRoutes = new Hono()
 					// members', so a draft added to a project leaked its title, slug and
 					// thumbnail to anyone holding the project URL. Metadata only — post detail
 					// already 404'd and the delivery routes re-resolve — but a leak all the same.
-					viewerId === row.project.creatorId ? undefined : eq(posts.isPublished, true),
+					userId === row.project.creatorId ? undefined : eq(posts.isPublished, true),
 				),
 			)
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
@@ -5052,13 +5050,13 @@ const contentRoutes = new Hono()
 				and(
 					eq(projectItems.projectId, row.project.id),
 					// A creator browsing their own project sees drafts; nobody else does.
-					viewerId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
+					userId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
 					// A project is a listing like any other, so an Adult member is absent
 					// from it rather than present and locked.
-					(await adultVisibility(viewerId)).hidden,
+					(await adultVisibility(userId)).hidden,
 					// A guardian's blocks hide as well as refuse — a shelf of cards a child
 					// cannot click is an advertisement, not a protection.
-					(await parentalVisibility(viewerId)).hidden,
+					(await parentalVisibility(userId)).hidden,
 				),
 			)
 			.orderBy(asc(projectItems.sortOrder));
@@ -5066,8 +5064,8 @@ const contentRoutes = new Hono()
 		const memberWorkIds = itemRows.map((r) => r.work.id);
 		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(memberWorkIds);
 		const [workCtx, projectSpent] = await Promise.all([
-			buildAccessContext(viewerId, { workIds: memberWorkIds }),
-			allowanceSpent(viewerId),
+			buildAccessContext(userId, { workIds: memberWorkIds }),
+			allowanceSpent(userId),
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
@@ -5082,17 +5080,17 @@ const contentRoutes = new Hono()
 				works: await Promise.all(
 					itemRows.map(async (m) => ({
 						sortOrder: m.sortOrder,
-						...(await serializeWorkForViewer(
+						...(await serializeWorkForUser(
 							m.work,
 							assetsByWork.get(m.work.id) ?? [],
 							jobByWork.get(m.work.id) ?? null,
 							resolveAccessSync(
 								m.work as AccessibleWork,
-								contextFor(m.work, viewerId, workCtx, previewRequest(c)),
+								contextFor(m.work, userId, workCtx, previewRequest(c)),
 							),
 							deliveryCtx(),
 							projectSpent,
-							viewerId,
+							userId,
 							pagesByWork.get(m.work.id) ?? 0,
 						)),
 					})),
@@ -5719,7 +5717,7 @@ const contentRoutes = new Hono()
 		const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
 		const projectIds = rows.map((r) => r.projectId).filter((id): id is number => id != null);
 
-		// 🚨 A shelf is a listing like any other, so a Work the reader may not see is absent from
+		// 🚨 A shelf is a listing like any other, so a Work the user may not see is absent from
 		// it rather than present and locked — including one they saved or bought before it was
 		// corrected into Adult, or before a guardian blocked it. The entry itself survives in
 		// `library_items` and comes back if they opt in or the block lifts.
@@ -5777,7 +5775,7 @@ const contentRoutes = new Hono()
 							inArray(projectItems.projectId, projectIds),
 							eq(works.visibility, "released"),
 							// Counted the way the Project page lists them, so a saved album never
-							// claims a track the reader will not find inside it.
+							// claims a track the user will not find inside it.
 							adultHidden,
 							parentalHidden,
 						),
@@ -5816,7 +5814,7 @@ const contentRoutes = new Hono()
 								// Derived from `purchases` on every read, never stamped on the row —
 								// so a refund releases the entry with nothing to keep in step.
 								purchased: permanent.has(w.id),
-								work: await serializeWorkForViewer(
+								work: await serializeWorkForUser(
 									w,
 									assetsByWork.get(w.id) ?? [],
 									jobByWork.get(w.id) ?? null,

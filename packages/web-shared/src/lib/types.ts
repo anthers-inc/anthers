@@ -55,7 +55,7 @@ export interface Creator {
 
 /**
  * One row of a post's access table — the SAME shape for both tables (migration `0007`).
- * `threshold` is **monthly dollars**: what the viewer gives Anthers for the Anthers table,
+ * `threshold` is **monthly dollars**: what the user gives Anthers for the Anthers table,
  * what they direct at this creator for the creator table. 0 = everyone.
  *
  * ⚠️ The column is `numeric` and the resolver compares dollars **to the cent**. A comment
@@ -81,9 +81,9 @@ export type WorkCreditType = "created" | "licensed" | "ai";
  * overlay emits and no database stores.
  *
  * **Serialization rules for an identity credit** (a contributor that is a `did:` string in
- * storage): on the viewer-facing path, one that has been accepted by the person it names
+ * storage): on the user-facing path, one that has been accepted by the person it names
  * ships with `contributor` resolved to their display name or handle — never a bare `did:`
- * string — and one that has not is withheld from every viewer except the two it belongs to.
+ * string — and one that has not is withheld from every user except the two it belongs to.
  * The owner-facing path (the Studio load and create/PATCH responses) is the deliberate
  * exception: the edit form sends `contributor` back verbatim on save, so it always keeps
  * the stored identity — resolving it to a name there would overwrite the DID on the next
@@ -94,8 +94,8 @@ export interface WorkCredit {
 	contributor: string;
 	types: WorkCreditType[];
 	/**
-	 * Present only when this credit names the viewer's own identity and awaits their
-	 * confirmation. The viewer-facing serialization emits it so the front-end can render
+	 * Present only when this credit names the user's own identity and awaits their
+	 * confirmation. The user-facing serialization emits it so the front-end can render
 	 * Accept/Decline controls; the credit ships with role and types intact because those
 	 * are what the named person needs to act. Never stored.
 	 */
@@ -110,7 +110,7 @@ export interface WorkCredit {
 }
 
 /**
- * One way a denied viewer could open a post. `moreNeeded` is the marginal ask — what
+ * One way a denied user could open a post. `moreNeeded` is the marginal ask — what
  * they still have to add — and it is computed server-side on purpose: the UI naming its
  * own Badge from a threshold is what produced a button offering a Badge that could not
  * clear the gate it sat above. `badge` is the Badge sitting EXACTLY at `threshold`, or
@@ -143,11 +143,11 @@ export interface UnlockOffer {
 }
 
 /**
- * Resolved access for a post + viewer (see api services/access.ts).
+ * Resolved access for a post + user (see api services/access.ts).
  *
  * ⚠️ **`reason` is a hand-written mirror of the server's `AccessReason`, and it was three
  * values behind it** until 2026-08-28: `takedown`, `quarantined` and `adult_gated` all
- * reach a viewer in production and none of them existed here. Nothing broke, because every
+ * reach a user in production and none of them existed here. Nothing broke, because every
  * consumer treats an unrecognized reason as "locked" and falling closed is the safe
  * direction — but a union that omits arrivable values makes every exhaustiveness check on
  * it a lie, which is a bad thing to be one refactor away from relying on. Adding a reason
@@ -177,13 +177,13 @@ export interface AccessResult {
 }
 
 /**
- * Which serialization a `Work["access"]` holds: the viewer's verdict, or the creator's
+ * Which serialization a `Work["access"]` holds: the user's verdict, or the creator's
  * editable rows.
  *
  * `Work` is the ONE type for both serializations the server sends, so its `access` is a
  * union and this is the honest way to tell the halves apart — an array is the creator's
  * table (the owner shape, which the Studio edits) and an object is the resolver's verdict
- * (the viewer shape, which every reading surface consumes). Inline `Array.isArray` checks
+ * (the user shape, which every reading surface consumes). Inline `Array.isArray` checks
  * blur the two again; reading through these keeps each call site saying which page it is.
  */
 export function isAccessResult(
@@ -192,7 +192,7 @@ export function isAccessResult(
 	return !!access && !Array.isArray(access);
 }
 
-/** The creator's editable access rows, or null when this serialization is a viewer's. */
+/** The creator's editable access rows, or null when this serialization is a user's. */
 export function accessRowsOf(
 	access: AccessResult | AccessRow[] | null | undefined,
 ): AccessRow[] | null {
@@ -225,7 +225,7 @@ export interface TranscodingJob {
 	errorMessage: string | null;
 	hlsManifestUrl: string | null;
 	/**
-	 * The audio-only rendition of a video (`audio.m3u8`), serialized on the viewer
+	 * The audio-only rendition of a video (`audio.m3u8`), serialized on the user
 	 * shape only, and only when the rendition exists — the Podcast-This affordance
 	 * keys on its presence.
 	 */
@@ -262,9 +262,9 @@ export type WorkVisibility = "private" | "released" | "withdrawn";
  * gated, purchased and consumed with no Post ever existing. Posts merely reference it.
  *
  * Two shapes come back from the API. The creator's own Catalog returns everything,
- * including the access tables they edit. A viewer-facing response returns the same
+ * including the access tables they edit. A user-facing response returns the same
  * identity and metadata but blanks the media payload unless `access.canAccess` — a denied
- * viewer gets no pointer at the deliverable at all.
+ * user gets no pointer at the deliverable at all.
  */
 export interface Work {
 	id: number;
@@ -276,7 +276,7 @@ export interface Work {
 	description?: string | null;
 	thumbnail: string | null;
 
-	// Media payload — blanked (empty) by the API when the viewer lacks access.
+	// Media payload — blanked (empty) by the API when the user lacks access.
 	sourceKey: string | null;
 	embedUrl: string | null;
 	durationSeconds: number | null;
@@ -286,7 +286,7 @@ export interface Work {
 	/**
 	 * The song's words, for `type: "music"` — plain text, untimestamped, newline-separated.
 	 *
-	 * Gated exactly like `body`: a denied viewer gets `""`, because a gated track's words
+	 * Gated exactly like `body`: a denied user gets `""`, because a gated track's words
 	 * are part of what the support or purchase buys. The public blurb that survives a gate is
 	 * `description`.
 	 */
@@ -296,7 +296,7 @@ export interface Work {
 	 * How many pages an ebook has, or 0.
 	 *
 	 * ⚠️ Present even when the Work is locked — a locked book can say "48 pages", the same
-	 * way a locked video reports its duration. What a denied viewer never gets is a
+	 * way a locked video reports its duration. What a denied user never gets is a
 	 * pointer at any page; those are served one at a time from `/works/:id/pages/:n`.
 	 */
 	pageCount?: number;
@@ -322,13 +322,13 @@ export interface Work {
 	maturity?: MaturityRating;
 	maturityNotes?: ContentNote[];
 	/**
-	 * The rating matrix as its creator marked it; absent rows are unanswered. On the reader's
-	 * shape as well as the owner's, because a reader's own filter covers by kind of content.
+	 * The rating matrix as its creator marked it; absent rows are unanswered. On the user's
+	 * shape as well as the owner's, because a user's own filter covers by kind of content.
 	 */
 	maturityRows?: MaturityRows;
 	/**
-	 * Whether an operator set the rating. **Creator-facing only** — the viewer serialization
-	 * withholds it, because a viewer able to read it could tell a corrected Work from a
+	 * Whether an operator set the rating. **Creator-facing only** — the user serialization
+	 * withholds it, because a user able to read it could tell a corrected Work from a
 	 * self-declared one. What it tells the creator is that lowering it takes an appeal.
 	 */
 	maturityLocked?: boolean;
@@ -336,7 +336,7 @@ export interface Work {
 	originallyReleased?: string | null;
 	/**
 	 * The credits — who or what made which part of it, as public liner notes. Ungated for
-	 * every viewer; null/absent means none were asserted, which renders as nothing. A
+	 * every user; null/absent means none were asserted, which renders as nothing. A
 	 * credit naming an on-network identity follows the serialization rules on `WorkCredit`:
 	 * accepted ones resolve to a name, unaccepted ones reach only the person named and the
 	 * Work's creator.
@@ -345,7 +345,7 @@ export interface Work {
 
 	// Delivery & access. ONE field name, two shapes, matching what the server sends on
 	// each serialization: the OWNER's shape carries the editable access table, and the
-	// VIEWER's carries the resolver's verdict. `accessOf` (below) tells them apart — never
+	// USER's carries the resolver's verdict. `accessOf` (below) tells them apart — never
 	// test the value's shape inline, or the two serializations blur together again.
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
@@ -353,7 +353,7 @@ export interface Work {
 	/**
 	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
 	 * access table, never stored and never a creator-set flag: a Work with nothing on it
-	 * IS Public Access. Says nothing about whether *this viewer* has monthly allowance
+	 * IS Public Access. Says nothing about whether *this user* has monthly allowance
 	 * left, which is an account-level meter and a separate call.
 	 */
 	publicAccess?: boolean;
@@ -382,7 +382,7 @@ export interface Work {
  *
  * Deliberately thin: the reference carries no access and no state of its own, so there is
  * nothing here but a position and the Work, each resolved on its own gates. A post the
- * reader can read may well link a Work they cannot open.
+ * user can read may well link a Work they cannot open.
  */
 export interface PostWorkRef {
 	position: number;
@@ -518,7 +518,7 @@ export interface ProjectPost {
 	/**
 	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
 	 * access table, never stored and never a creator-set flag: a Work with nothing on it
-	 * IS Public Access. Says nothing about whether *this viewer* has monthly allowance
+	 * IS Public Access. Says nothing about whether *this user* has monthly allowance
 	 * left, which is an account-level meter and a separate call.
 	 */
 	publicAccess?: boolean;
@@ -545,7 +545,7 @@ export interface Project {
 	posts?: ProjectPost[];
 	/**
 	 * Ordered member Works (detail endpoint) — a full `Work` each, with `access` resolved
-	 * for this viewer, plus the membership's own `sortOrder`.
+	 * for this user, plus the membership's own `sortOrder`.
 	 *
 	 * 🚨 **The API has always sent these and nothing could read them**, because this field
 	 * did not exist: `GET /projects/:slug` serializes `project.works[]` in full, and
@@ -561,7 +561,7 @@ export interface Project {
  *
  * Membership carries nothing else, and that is the model rather than an omission: a
  * Project is a shelf, so a reference that carried gates or a price would be the Project
- * owning the Work. Access here is the Work's own, resolved for this viewer.
+ * owning the Work. Access here is the Work's own, resolved for this user.
  */
 export interface ProjectWork extends Work {
 	sortOrder: number;
@@ -601,12 +601,12 @@ export interface Comment {
 	 *
 	 * 🚨 **The raw counts are not sent and must not be reconstructed here.** One number is
 	 * the whole contract — a dislike does visible work by pulling this down, and a pile-on
-	 * gets no counter to run up. It is also the ranking key, so what a reader sees is what
+	 * gets no counter to run up. It is also the ranking key, so what a user sees is what
 	 * ordered the thread.
 	 */
 	score: number;
 	/**
-	 * What the score is made of — present ONLY on a comment this viewer wrote.
+	 * What the score is made of — present ONLY on a comment this user wrote.
 	 *
 	 * ⭐ An author gets the exact figures on their own words; everybody else gets the net.
 	 * ⚠️ **Absent rather than null for everyone else**, which is why these are optional: the
@@ -616,7 +616,7 @@ export interface Comment {
 	up?: number;
 	down?: number;
 	/**
-	 * Pushed below the collapse threshold by readers.
+	 * Pushed below the collapse threshold by users.
 	 *
 	 * ⚠️ **A third state, and never to be drawn like the other two.** A moderation removal
 	 * arrives as a `RemovedComment` with nothing in it, and a tombstone is an author who
@@ -624,8 +624,8 @@ export interface Comment {
 	 * moderator, and the UI has to say so.
 	 */
 	collapsed: boolean;
-	/** What this viewer did: `up`, `down`, or nothing yet. */
-	viewerVote: "up" | "down" | null;
+	/** What this user did: `up`, `down`, or nothing yet. */
+	userVote: "up" | "down" | null;
 }
 
 /**
@@ -658,7 +658,7 @@ export interface Review {
 	handle: string;
 	avatar: string | null;
 	/**
-	 * Readers' judgment of this review, as a net floored at zero.
+	 * Users' judgment of this review, as a net floored at zero.
 	 *
 	 * ⭐ **Helpfulness sorts and never weights.** This moves a review up the list; it has
 	 * no effect on the recommended share, where every visible review still counts once.
@@ -666,8 +666,8 @@ export interface Review {
 	 * counts the way a commenter does, through the vote read.
 	 */
 	score: number;
-	/** What this viewer did to this review: `up`, `down`, or nothing yet. */
-	viewerVote: "up" | "down" | null;
+	/** What this user did to this review: `up`, `down`, or nothing yet. */
+	userVote: "up" | "down" | null;
 }
 
 export interface ReviewAggregate {
@@ -682,7 +682,7 @@ export interface ReviewAggregate {
 	recommended: number;
 	count: number;
 	/**
-	 * The same share over the reviews from a recent window — the reader's choice of week,
+	 * The same share over the reviews from a recent window — the user's choice of week,
 	 * month or year (default month). `recommendedPercent` is null when the window holds
 	 * too few reviews to mean anything, distinguishable from All-Time's null.
 	 */
@@ -692,9 +692,9 @@ export interface ReviewAggregate {
 		recommended: number;
 		count: number;
 	};
-	/** The viewer's own verdict, shown even if their review is hidden. */
+	/** The user's own verdict, shown even if their review is hidden. */
 	userVerdict: string | null;
-	/** The viewer's own review text, so the form can open pre-filled for an edit. */
+	/** The user's own review text, so the form can open pre-filled for an edit. */
 	userReview: string | null;
 	/**
 	 * Newest first from the server. The client's two sorts — Helpful by default and
@@ -893,7 +893,7 @@ export interface CreatorEarnings {
 }
 
 /**
- * One Badge this viewer holds, this cycle — a discrete pick of a creator's rung.
+ * One Badge this user holds, this cycle — a discrete pick of a creator's rung.
  *
  * The holding names the Badge; its dollars are the Badge's threshold by construction,
  * which is why there is no amount field. `art*` are ids into `@anthers/shared/badge-art`
@@ -916,7 +916,7 @@ export interface BadgeHolding {
 	};
 }
 
-/** Response of GET /subscriptions/my-badges — the viewer's holdings plus the budget they ride in. */
+/** Response of GET /subscriptions/my-badges — the user's holdings plus the budget they ride in. */
 export interface BadgeHoldingsResponse {
 	badges: BadgeHolding[];
 	budget: string;
@@ -1016,7 +1016,7 @@ export interface AnalyticsOverview {
 		listens: number;
 	};
 	totalDurationHours: number;
-	uniqueViewers: number;
+	uniqueUsers: number;
 	contentCounts: {
 		projects: number;
 		posts: number;

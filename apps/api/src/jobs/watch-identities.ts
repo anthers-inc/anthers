@@ -176,7 +176,7 @@ export function describeFinding(finding: IdentityFinding): { subject: string; ht
  * 🚨 **Written after the first two live alerts said nothing useful.** Both reported the handle
  * and the server as unchanged — correctly — while the rotation keys had been replaced, which
  * is the change that decides who controls the identity and whether a recovery is still
- * possible at all. The reader of this mail has ninety seconds and one question: *can I still
+ * possible at all. The user of this mail has ninety seconds and one question: *can I still
  * fix this?*
  *
  * ⚠️ **A key that merely moved is still a change.** Order is authority — a key can only undo

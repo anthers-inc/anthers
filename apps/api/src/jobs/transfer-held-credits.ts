@@ -52,7 +52,7 @@
  * transfer row with amount "0.00" and **no Stripe call** — a no-op transfer is a movement
  * of nothing, and the books should not record a movement that never happened. The row's
  * transfer id carries a `tr_local_zerosum_` prefix, so it can never collide with a real
- * Stripe id and a reader (or a future reversal build) can tell them apart on sight.
+ * Stripe id and a user (or a future reversal build) can tell them apart on sight.
  * Marking the set covered is what keeps the next run from re-reading it. A sum that is
  * negative is the monthly-support reversal half's input — a credit the reversal build
  * (`markInvoiceMoneyReturned` and the correction credits) has already written — and is

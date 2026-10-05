@@ -75,7 +75,7 @@ export function sortSupporters(entries: SupporterEntry[]): SupporterEntry[] {
 /**
  * The smallest group Anthers will publish as its own band.
  *
- * ⭐ **A band of one names an amount.** With unlabeled groups a reader cannot read a figure
+ * ⭐ **A band of one names an amount.** With unlabeled groups a user cannot read a figure
  * off the page — unless a group holds a single person, at which point their bracket is
  * exactly identified and the anonymity the bands provide has failed for the one person most
  * exposed by it. Groups below this are merged downward before rendering.

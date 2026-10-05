@@ -51,7 +51,7 @@ export type { GauntletPost, GauntletReason, StaircaseState } from "./gauntlet.js
 export { BADGE_RUNGS, BADGE_WALK, DOWNLOAD_PRICE, EXPECTED_STAIRCASE } from "./gauntlet.js";
 
 /**
- * Instance B's account names — the walk's own creator and viewer.
+ * Instance B's account names — the walk's own creator and user.
  *
  * 🚨 **Handle-safe on purpose, and the shape costs a small naming departure from instance
  * A.** An account's handle is a domain label a reference PDS caps at 18 characters
@@ -59,7 +59,7 @@ export { BADGE_RUNGS, BADGE_WALK, DOWNLOAD_PRICE, EXPECTED_STAIRCASE } from "./g
  * cannot be a handle name, and `localHandleName`'s fallback for a name no handle can
  * carry is a GENERATED name, which would make the walk's fixture non-idempotent: every
  * reset would mint a fresh creator under a new random handle instead of finding its own.
- * `walk-creator` and `walk-viewer` are short, dashed and stable, so the seeder resolves
+ * `walk-creator` and `walk-walker` are short, dashed and stable, so the seeder resolves
  * them through `localHandleName` unchanged and every lookup — the seeder's on re-run,
  * the state hopper's, the spec's `gauntletHandle` — lands on the same account every
  * time. The `walk-` prefix carries the instance-B mark the underscore spelling would
@@ -69,12 +69,12 @@ export const WALK_CREATOR_USERNAME = "walk-creator";
 export const WALK_CREATOR_EMAIL = "walk-creator@example.test";
 
 /**
- * Instance B's viewer, created on demand by `seed-gauntlet.ts --instance walk
- * --ensure-viewer` — the walk's own harness account, reset freely without ever touching
- * instance A's `gauntlet_viewer`. Signing in is the emailed code, as everywhere.
+ * Instance B's user, created on demand by `seed-gauntlet.ts --instance walk
+ * --ensure-walker` — the walk's own harness account, reset freely without ever touching
+ * instance A's `gauntlet_walker`. Signing in is the emailed code, as everywhere.
  */
-export const WALK_VIEWER_USERNAME = "walk-viewer";
-export const WALK_VIEWER_EMAIL = "walk-viewer@example.test";
+export const WALK_WALKER_USERNAME = "walk-walker";
+export const WALK_WALKER_EMAIL = "walk-walker@example.test";
 
 /**
  * Instance B's slug prefix, sitting OUTSIDE instance A's `like` delete pattern — see the

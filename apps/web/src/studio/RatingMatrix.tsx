@@ -11,7 +11,7 @@
  * go and find. A rung a row never reaches is shown and not offered.
  *
  * ⭐ ***Not in it* is an answer, and an unanswered row is not.** Parker kept the column because it
- * helps a reader who does not mind rated work but has one thing they want to avoid: a row
+ * helps a user who does not mind rated work but has one thing they want to avoid: a row
  * marked *Not in it* is a statement their own filter can rely on. So the matrix never fills a row
  * on the creator's behalf, and the Work stays unrated until every row has been answered.
  */
@@ -63,9 +63,9 @@ export default function RatingMatrix({
 	return (
 		<div className="flex flex-col gap-3">
 			<p className="text-xs text-base-content/60">
-				{INTRO[grid]} A Work's rating can change how it's shown to a reader, or whether it's shown
-				at all, depending on their settings and whether they've verified through a payment that
-				they're 18 or older.
+				{INTRO[grid]} A Work's rating can change how it's shown to a user, or whether it's shown at
+				all, depending on their settings and whether they've verified through a payment that they're
+				18 or older.
 			</p>
 
 			{/* Wider than a phone, so it scrolls sideways there rather than squeezing each cell's

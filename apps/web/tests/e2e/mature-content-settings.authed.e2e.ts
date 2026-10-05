@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The reader's own controls over what they meet, walked in a browser.
+ * The user's own controls over what they meet, walked in a browser.
  *
  * 🚨 **A preference with no surface is a preference nobody has**, which is the failure this
  * spec is shaped against and the same one `data-rights.authed.e2e.ts` was written for. The
@@ -29,7 +29,7 @@ test("the two rungs have separate controls, and Mature blurs by default", async 
 	const section = page.locator(".card").filter({ hasText: "What you meet before you choose" });
 	await expect(section, "no mature-content controls on the settings page").toBeVisible();
 
-	// 🚨 The separation is the design rather than the layout: a reader who wants difficult
+	// 🚨 The separation is the design rather than the layout: a user who wants difficult
 	// work unblurred has said nothing about whether they want explicit work at all, so the
 	// page has to name both rungs rather than offering one switch over "adult content".
 	await expect(section).toContainText("Mature");

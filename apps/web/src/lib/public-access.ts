@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Public Access meter, browser side — what a viewer has left, and who knows it.
+ * The Public Access meter, browser side — what a user has left, and who knows it.
  *
  * The API has told us this all along and nothing listened. `GET /subscriptions/public-access`
  * answers on demand, and **every attention write returns the budget after the batch** —
  * which is the interesting one, because it means a countdown needs no polling of its own.
- * A viewer watching video is already talking to the server every 30 seconds; the budget
+ * A user watching video is already talking to the server every 30 seconds; the budget
  * rides back on those replies for free.
  *
  * So this is a module-level store rather than a hook that fetches. Three reasons, and
@@ -20,7 +20,7 @@
  *      every player subscribes to turns "you have run out" into an ordinary render
  *      instead of something that has to be discovered by failing a request.
  *
- * 🚨 **An anonymous viewer has no allowance, so there is no meter to render them.** They
+ * 🚨 **An anonymous user has no allowance, so there is no meter to render them.** They
  * cannot consume a Work at all — delivery requires an account (the public wiki's *What Is Free, and What Is Gated*) — so a budget
  * would be a countdown on something that never starts. `useMeteredBudget` returns null when
  * signed out, and what a signed-out visitor sees in place of a player is the invitation to
@@ -113,7 +113,7 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
 }
 
 /**
- * The budget **only when it actually applies to this viewer** — signed in, and limited.
+ * The budget **only when it actually applies to this user** — signed in, and limited.
  *
  * Null covers three genuinely different situations that all mean *do not render a
  * meter*: not signed in (not metered at all), not yet known, and unlimited (gives Anthers
@@ -122,10 +122,10 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
  * end.
  *
  * ⚠️ **The `unlimited` clause here is redundant today, and that is recorded rather than
- * hidden.** Sabotage-testing found that removing it changes nothing: an unlimited viewer's
+ * hidden.** Sabotage-testing found that removing it changes nothing: an unlimited user's
  * budget carries `allowed: true` and a null remainder, so `shouldWarn` suppresses the
  * countdown and the players never read `spent`. It is kept because it states the
- * *semantic* boundary — an unlimited viewer is not a metered viewer — and because the
+ * *semantic* boundary — an unlimited user is not a metered user — and because the
  * players use the returned budget directly to render the wall. The property it stands
  * for is enforced, and pinned, in `shouldWarn`; do not mistake this line for the guard.
  */
@@ -150,7 +150,7 @@ export function describeRemaining(seconds: number): string {
  * When to start saying anything at all.
  *
  * An hour, because the point is to warn *before* the stop rather than to nag: at ten
- * hours a month, an hour left is roughly a last sitting. Below this the viewer is told
+ * hours a month, an hour left is roughly a last sitting. Below this the user is told
  * where they stand; above it the meter stays out of the way, which is the difference
  * between a limit that is honest and a limit that is loud.
  */
@@ -162,7 +162,7 @@ export function shouldWarn(budget: PublicAccessBudget | null): boolean {
 	return budget.remainingSeconds <= LOW_BUDGET_SECONDS;
 }
 
-// ── The anonymous viewer ─────────────────────────────────────────────────────
+// ── The anonymous user ─────────────────────────────────────────────────────
 //
 // 🚨 **A local tally of anonymous viewing time used to live here, and it is gone with the
 // model it served (2026-08-28).** `ANON_PROMPT_SECONDS`, `recordAnonymousSeconds`,

@@ -7,7 +7,7 @@
  * `CheckoutElementsProvider`, an address block, a confirm button — nested inside the Work
  * page's tree. That shipped three live defects in one purchase: a `<form>` inside the
  * page's `<form>`-shaped tree (hydration error, undefined submit behavior), a session
- * POST fired on mount for every viewer who merely scrolled past a price, and a dead end
+ * POST fired on mount for every user who merely scrolled past a price, and a dead end
  * whenever the session refused. Parker's decision the same day: **every purchase goes
  * through the basket.** Checkout exists once now, embedded on `/basket`
  * (`BasketCheckout`) — this component quotes the price, offers the two doors into that
@@ -95,69 +95,69 @@ export default function ProjectPricing({
 	};
 
 	return (
-		<div>
-			<h2 className="text-xl font-bold mb-4">Pricing</h2>
-
-			<div className="flex items-baseline gap-2 mb-3">
-				<p className="text-2xl font-bold">${price.toFixed(2)}</p>
-			</div>
-
-			{access.canAccess ? (
-				<div className="badge badge-success badge-lg gap-1">Owned</div>
-			) : !access.requiresPurchase ? (
-				<div className="p-3 bg-base-200 rounded-lg">
-					<p className="text-sm text-base-content/60">Sign in to purchase this post.</p>
+		/* The purchase panel: one composed card, paired beside the locked preview on a wide
+		   display (`WorkPage`'s grid stretches it to the preview's height; on a phone it
+		   stacks). The price is the panel's headline — the row breakdown sits under it on
+		   its own quiet ground, and the two doors into the basket anchor the bottom. */
+		<div className="card bg-base-200 border border-base-300 h-full">
+			<div className="card-body p-5 gap-4 flex flex-col items-start text-start">
+				<div>
+					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1">
+						Pricing
+					</h2>
+					{/* The listed price arrives as a string in dollars — no client-side money
+					    arithmetic happens here; `toFixed(2)` formats, it never computes. */}
+					<p className="text-3xl font-bold leading-none tabular-nums">${price.toFixed(2)}</p>
 				</div>
-			) : !creatorHasStripe ? (
-				<div className="p-3 bg-base-200 rounded-lg">
+
+				{access.canAccess ? (
+					<div className="badge badge-success badge-lg gap-1">Owned</div>
+				) : !access.requiresPurchase ? (
+					<p className="text-sm text-base-content/60">Sign in to purchase this Work.</p>
+				) : !creatorHasStripe ? (
 					<p className="text-sm text-base-content/60">
 						Payments not available yet—the creator hasn't connected Stripe.
 					</p>
-				</div>
-			) : (
-				<div className="space-y-3">
-					{quote ? (
-						<div className="text-sm space-y-1">
-							<div className="flex justify-between">
-								<span>Listed price</span>
-								<span className="tabular-nums">${quote.amount}</span>
+				) : (
+					<>
+						{quote ? (
+							/* The composition of the price, on its own quiet ground. The listed
+							   price is the headline above, so the rows start at the card fee. */
+							<dl className="w-full rounded-lg bg-base-100 p-3 text-sm space-y-1.5">
+								<div className="flex justify-between text-base-content/60">
+									<dt>
+										Card processing <span className="text-xs">at cost</span>
+									</dt>
+									<dd className="tabular-nums">−${quote.processingFee}</dd>
+								</div>
+								<div className="flex justify-between text-base-content/60">
+									<dt>Sales tax</dt>
+									<dd className="text-xs">calculated at checkout</dd>
+								</div>
+								<div className="flex justify-between font-semibold border-t border-base-300 pt-1.5">
+									<dt>You pay</dt>
+									<dd className="tabular-nums">${quote.buyerTotal ?? quote.amount} + tax</dd>
+								</div>
+							</dl>
+						) : quoteError ? (
+							<div className="alert alert-warning text-sm">
+								<span>{quoteError}</span>
 							</div>
-							<div className="flex justify-between text-base-content/60">
-								<span>
-									Card processing <span className="text-xs">at cost</span>
-								</span>
-								<span className="tabular-nums">−${quote.processingFee}</span>
-							</div>
-							<div className="flex justify-between text-base-content/60">
-								<span>Sales tax</span>
-								<span className="text-xs">calculated at checkout</span>
-							</div>
-							<div className="flex justify-between font-semibold">
-								<span>You pay</span>
-								<span className="tabular-nums">${quote.buyerTotal ?? quote.amount} + tax</span>
-							</div>
-						</div>
-					) : quoteError ? (
-						<div className="alert alert-warning text-sm">
-							<span>{quoteError}</span>
-						</div>
-					) : (
-						// Skeleton for the quote box only — the two buttons below are live the
-						// whole time, because neither needs the quote: the price is `access.price`,
-						// and nothing the quote would say changes whether buying is possible.
-						<div className="skeleton h-24 w-full" aria-hidden="true" />
-					)}
+						) : (
+							// Skeleton for the quote box only — the two buttons below are live the
+							// whole time, because neither needs the quote: the price is
+							// `access.price`, and nothing the quote would say changes whether
+							// buying is possible.
+							<div className="skeleton h-24 w-full" aria-hidden="true" />
+						)}
 
-					<div className="flex flex-wrap items-center gap-2">
-						<BuyNow {...basketProps} />
-						<AddToBasket {...basketProps} />
-					</div>
-					<p className="text-xs text-base-content/50">
-						Sales tax is calculated from your billing address at checkout — the rate varies by
-						location, and Anthers sells to US billing addresses at launch.
-					</p>
-				</div>
-			)}
+						<div className="grid gap-2 w-full mt-auto">
+							<BuyNow {...basketProps} />
+							<AddToBasket {...basketProps} />
+						</div>
+					</>
+				)}
+			</div>
 		</div>
 	);
 }

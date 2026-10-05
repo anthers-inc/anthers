@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The unlock offer a gated Work reports — what the viewer still needs, and what to call it.
+ * The unlock offer a gated Work reports — what the user still needs, and what to call it.
  *
  * This exists because the UI used to work it out itself, and got it wrong in a way no test
  * could see: it labeled the unlock button with `rankForSeeds(threshold)`, which returns the
@@ -14,7 +14,7 @@
  * deliberately gate at levels no Badge occupies. It is the same failure mode `badgeRank()`
  * had: correct only by accident of a consecutive ladder, and failing toward OVER-claiming.
  *
- * 🚨 **Half of this file used to drive the Anthers side**, gating on the viewer's Badge.
+ * 🚨 **Half of this file used to drive the Anthers side**, gating on the user's Badge.
  * There is one destination — the creator's own ladder — so the same
  * assertions run against the creator's ladder. The Badge-naming tests survive on
  * `unlockRoute` directly, which still takes an issuer's Badge set — that is the seam a
@@ -30,11 +30,11 @@ import {
 } from "../services/access";
 
 const CREATOR = 700;
-const VIEWER = 701;
+const USER = 701;
 
 function ctx(givenAmount = 0): AccessContext {
 	return {
-		userId: VIEWER,
+		userId: USER,
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR, givenAmount]] : []),
 		purchasedWorkIds: new Set(),
 		adultAccess: true,
@@ -62,9 +62,9 @@ function gatedAt(threshold: number, price = "0"): AccessibleWork {
 }
 
 describe("unlock offer — the marginal ask", () => {
-	it("reports what the viewer still needs, not what the gate requires", () => {
+	it("reports what the user still needs, not what the gate requires", () => {
 		// Holding 1, gate at 3 → the ask is TWO more, not three. The distinction is the
-		// entire user-facing point: a viewer reads what they must add from here.
+		// entire user-facing point: a user reads what they must add from here.
 		const got = resolveAccessSync(gatedAt(3), ctx(1));
 		expect(got.reason).toBe("gated");
 		expect(got.unlock?.creator?.threshold).toBe(3);
@@ -90,7 +90,7 @@ describe("unlock offer — the marginal ask", () => {
 		expect(got.unlock?.creator?.moreNeeded).toBeCloseTo(2.5, 10);
 	});
 
-	it("counts from zero for a viewer holding nothing", () => {
+	it("counts from zero for a user holding nothing", () => {
 		expect(resolveAccessSync(gatedAt(2), ctx(0)).unlock?.creator?.moreNeeded).toBe(2);
 	});
 });
@@ -98,7 +98,7 @@ describe("unlock offer — the marginal ask", () => {
 describe("unlock offer — there is no Anthers route any more", () => {
 	/**
 	 * The behavioral half of the one-destination rule, and the reason it is asserted
-	 * rather than left to the type system: a viewer's Badge must not open a Work, and a
+	 * rather than left to the type system: a user's Badge must not open a Work, and a
 	 * Work must not advertise a Badge as a way in. Giving Anthers $12 —
 	 * the top Badge — changes nothing about a creator-gated Work.
 	 */
@@ -110,7 +110,7 @@ describe("unlock offer — there is no Anthers route any more", () => {
 		expect(got.unlock?.creator?.threshold).toBe(2);
 	});
 
-	it("resolution reads what was given to THIS creator, and nothing else about the viewer", () => {
+	it("resolution reads what was given to THIS creator, and nothing else about the user", () => {
 		// Money given to a different creator does not travel. This is the property that used
 		// to be shared with the Anthers table and is now the only one there is.
 		const other = new Map([[CREATOR + 1, 99]]);
@@ -158,7 +158,7 @@ describe("unlock offer — naming a Badge", () => {
 
 describe("unlock offer — routes that would not actually open the Work", () => {
 	it("offers no route when the only allowed row carries a price", () => {
-		// Reaching the threshold would leave the viewer at "payment_required", not access.
+		// Reaching the threshold would leave the user at "payment_required", not access.
 		// Offering it as an unlock route would promise something climbing can't deliver.
 		const got = resolveAccessSync(gatedAt(3, "5.00"), ctx(0));
 		expect(got.reason).toBe("gated");
@@ -187,7 +187,7 @@ describe("unlock offer — routes that would not actually open the Work", () => 
 });
 
 describe("unlock offer — when it is absent", () => {
-	it("is absent for a viewer who already has access", () => {
+	it("is absent for a user who already has access", () => {
 		const free: AccessibleWork = {
 			id: 5,
 			creatorId: CREATOR,
@@ -205,7 +205,7 @@ describe("unlock offer — when it is absent", () => {
 		expect(got.unlock).toBeUndefined();
 	});
 
-	it("is absent for a logged-out viewer, whose standing we don't know", () => {
+	it("is absent for a logged-out user, whose standing we don't know", () => {
 		const anon: AccessContext = {
 			userId: null,
 			supportByCreator: new Map(),

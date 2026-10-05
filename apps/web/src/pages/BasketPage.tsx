@@ -15,16 +15,18 @@
  * that derives its own totals stops reconciling the moment a dial moves, which is the
  * failure this codebase has already had twice.
  *
- * **Two columns, from the second live checkout (2026-10-03).** Checkout on the left —
- * the only column with buttons on it; the items and the receipt on the right, so the
- * buyer reads what they're buying beside where they pay for it. The checkout's column
- * never re-renders the checkout's input state: the work ids handed down are derived once
- * per basket content (`useMemo` — see `BasketCheckout`'s header for why that identity
- * was load-bearing), and totals reporting up only re-renders the receipt. Below `lg` the
- * grid stacks to one column in reading order: items, breakdown, checkout — you read
- * what you're buying before you pay for it. On desktop the two columns sit side by side
- * (`lg:grid-cols-2`), which is why the checkout renders FIRST in the JSX (it owns the
- * page's only form) and sits visually right via `lg:order-2`.
+ * **Two columns, from the second live checkout (2026-10-03), flipped by Parker the next
+ * day (2026-10-04): the form belongs LEFT and the pricing right.** Checkout on the
+ * left — the column the buyer fills out, the only one with buttons on it; the items
+ * and the receipt on the right, so the buyer reads what they're buying beside where
+ * they pay for it. The checkout's column never re-renders the checkout's input state:
+ * the work ids handed down are derived once per basket content (`useMemo` — see
+ * `BasketCheckout`'s header for why that identity was load-bearing), and totals
+ * reporting up only re-renders the receipt. Below `lg` the grid stacks to one column
+ * in reading order: items, breakdown, checkout — you read what you're buying before
+ * you pay for it. On desktop the two columns sit side by side (`lg:grid-cols-2`),
+ * which is why the checkout renders FIRST in the JSX (it owns the page's only form)
+ * and now sits left (`lg:order-1`), the items column right.
  */
 
 import { useAuth } from "@anthers/web-shared/auth";
@@ -133,11 +135,15 @@ export default function BasketPage() {
 
 	const taxResolved = sessionTotals?.buyerTotal != null;
 
-	// The receipt, in two states of the same set of numbers. From the quote: subtotal
-	// and the at-cost card fee, with tax named as coming. From the session (once the
-	// billing address resolved the rate): the real tax and the tax-inclusive total —
-	// `sessionTotals`' dollars, formatted, never recomputed here. One figure set the
-	// buyer reads top to bottom, in any column they find it in.
+	// The receipt, in two states of the same set of numbers, in two SECTIONS that never
+	// mix their statements (Parker, 2026-10-04). First "what the buyer pays": subtotal,
+	// sales tax, the tax-inclusive total. Then, apart, "what the creator receives":
+	// the at-cost card fee taken out of the price (never the buyer's to pay) and the
+	// earnings line it produces. From the quote: subtotal and the at-cost card fee,
+	// with tax named as coming. From the session (once the billing address resolved the
+	// rate): the real tax and the tax-inclusive total — `sessionTotals`' dollars,
+	// formatted, never recomputed here. One figure set the buyer reads top to bottom,
+	// in whichever column they find it in.
 	const receipt = quote ? (
 		<>
 			<div className="rounded-lg border border-base-300 p-4 text-sm" data-testid="basket-receipt">
@@ -145,19 +151,14 @@ export default function BasketPage() {
 					<span>Subtotal</span>
 					<span className="tabular-nums">${quote.subtotal}</span>
 				</div>
-				<div className="flex justify-between py-1 text-base-content/60">
-					<span>
-						Card processing{" "}
-						<span className="text-xs">at cost — taken from the price, not added to it</span>
-					</span>
-					<span className="tabular-nums">−${quote.processingFee}</span>
-				</div>
 				{taxResolved ? (
 					<div className="flex justify-between py-1 text-base-content/60">
 						<span>
 							Sales tax <span className="text-xs">from your address</span>
 						</span>
-						<span className="tabular-nums">+${(sessionTotals?.tax ?? 0).toFixed(2)}</span>
+						<span className="tabular-nums" data-testid="basket-tax">
+							+${(sessionTotals?.tax ?? 0).toFixed(2)}
+						</span>
 					</div>
 				) : (
 					<div className="flex justify-between py-1 text-base-content/60">
@@ -173,14 +174,28 @@ export default function BasketPage() {
 							: `$${quote.subtotal} + tax`}
 					</span>
 				</div>
-				<div className="mt-1 flex justify-between text-success">
-					<span>{creator} receives</span>
-					<span className="tabular-nums">${quote.creatorEarnings}</span>
+				<div className="mt-3 border-t border-base-300 pt-2">
+					{/* The creator's half of the statement — deliberately its own section under
+					    its own rule, because the card fee is the price's cost, not the buyer's.
+					    It is taken OUT of what the creator receives, so it leads that line. */}
+					<div className="flex justify-between py-1 text-base-content/60">
+						<span>
+							Card processing{" "}
+							<span className="text-xs">at cost — taken from the price, not added to it</span>
+						</span>
+						<span className="tabular-nums">−${quote.processingFee}</span>
+					</div>
+					<div className="flex justify-between font-semibold text-success">
+						<span>{creator} receives</span>
+						<span className="tabular-nums" data-testid="basket-creator-earns">
+							${quote.creatorEarnings}
+						</span>
+					</div>
 				</div>
 			</div>
 			{/*
 			 * Only shown when it is actually non-zero — a "you saved $0.00" on a
-			 * single-item basket would teach the reader to ignore the line that
+			 * single-item basket would teach the user to ignore the line that
 			 * matters. Anthers keeps nothing either way, so the saving is not ours
 			 * to share: it is entirely the creator's, and the copy says so.
 			 */}
@@ -258,11 +273,12 @@ export default function BasketPage() {
 			) : quote ? (
 				/*
 				 * The two columns. DOM order is checkout first (its form is the page's only
-				 * one), visually right at `lg`; on mobile the flex column reads items →
-				 * receipt → checkout, in that DOM order via the `order` utilities.
+				 * one), and since 2026-10-04 that column sits LEFT on desktop (`lg:order-1`)
+				 * with the items column right (`lg:order-2`); on mobile the flex column
+				 * reads items → receipt → checkout via the `order` utilities.
 				 */
 				<div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:gap-12">
-					<section className="order-3 lg:order-2" data-testid="basket-checkout-column">
+					<section className="order-3 lg:order-1" data-testid="basket-checkout-column">
 						{user ? (
 							<BasketCheckout
 								workIds={workIds}
@@ -283,7 +299,7 @@ export default function BasketPage() {
 							</Link>
 						)}
 					</section>
-					<aside className="order-1 lg:order-1 space-y-4" data-testid="basket-items-column">
+					<aside className="order-1 lg:order-2 space-y-4" data-testid="basket-items-column">
 						{itemsList}
 						{receipt}
 					</aside>

@@ -40,7 +40,7 @@ export interface SignupStep {
  *
  * The Bluesky step appears only for somebody who came through that door, and the payment
  * step only when there is something to pay. A rail listing steps that will never happen
- * tells a reader the flow is longer than it is, which is the opposite of the point.
+ * tells a user the flow is longer than it is, which is the opposite of the point.
  */
 export function signupSteps(input: {
 	bluesky: "done" | "current" | "todo" | null;
@@ -73,7 +73,7 @@ function StepMark({ index, state }: { index: number; state: SignupStep["state"] 
 /**
  * The shared page shell: the rail, a heading, and whatever the step itself needs.
  *
- * `max-w-lg` matches `/welcome`, which is the narrower of the two and the one a reader
+ * `max-w-lg` matches `/welcome`, which is the narrower of the two and the one a user
  * meets second — a flow that widens halfway through reads as two pages again.
  */
 export default function SignupSteps({

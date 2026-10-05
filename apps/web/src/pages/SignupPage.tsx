@@ -23,7 +23,7 @@
 // shape /about used for its governance facts. The Bluesky door was a divider and a second
 // button under the email field, which made it read as an afterthought rather than as the
 // other half of one choice. And the two paragraphs describing where a monthly amount can
-// point are now buttons that scroll to the section that asks for it, so a reader does not
+// point are now buttons that scroll to the section that asks for it, so a user does not
 // have to hold a description in their head for two screens before meeting its control.
 //
 // 🚨 **Signing up moved to the TOP on 2026-08-22, and it moved for a reason about how the
@@ -141,6 +141,7 @@ import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
 import { FAQBlock } from "../components/ui/FAQ";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
@@ -153,10 +154,19 @@ import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
  * which is exactly why it must not be transcribed here. See its note in `constants.ts`.
  */
 
-/** Where support for Anthers goes, at the worst case of it alone on the charge. */
-const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
-/** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
-const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
+/**
+ * How a lone directed amount — a fan backing a creator and nothing else on their charge —
+ * itemizes, at the worst case.
+ *
+ * 🚨 **Constant-derived, deliberately** — these are the splits of the DIRECTED DEFAULT, a
+ * charge the commit site builds (`directed` below), and the "one list, one total" rule
+ * binds every displayed dollar to the dollar charged (`signup-total.test.ts` carries the
+ * incident that paid for it). The Public Access price and the directed default happen to
+ * be one number today; they are different facts, and only the ladder claim — what removes
+ * the streaming limit — moved to the rows.
+ */
+const CREATOR_WORST_CASE_FEE = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
+const CREATOR_WORST_CASE_NET = PUBLIC_ACCESS_PRICE - CREATOR_WORST_CASE_FEE;
 
 /**
  * What the free creator allowance holds, in hours of video — **derived, never typed.**
@@ -179,7 +189,7 @@ const FREE_VIDEO_HOURS = Math.floor(FREE_STORAGE_GIB / storedGibPerSourceHour("1
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
 const HANDFUL = 6;
 
-/** Work types, in the shape a reader recognizes. Keys are `works.type` values. */
+/** Work types, in the shape a user recognizes. Keys are `works.type` values. */
 const MEDIUMS = [
 	{ key: "game", label: "Games" },
 	{ key: "video", label: "Video" },
@@ -325,16 +335,16 @@ function SupportBreakdown({
 	 */
 	sizers?: { segments: Segment[]; note: string }[];
 	/**
-	 * What the reader PAYS, when that is not the sum of the segments.
+	 * What the user PAYS, when that is not the sum of the segments.
 	 *
 	 * 🚨 **Only Free needs this, and only because its segments describe money that is not
-	 * the reader's.** A free account still pays creators through the Time Pool — Anthers
+	 * the user's.** A free account still pays creators through the Time Pool — Anthers
 	 * funds the pot on its behalf — so the bar has something true to draw while the amount
 	 * charged is $0. Everywhere else the sum IS the total and this stays unset.
 	 *
 	 * ⚠️ Do not reach for this to "fix" a paying breakdown that does not add up. The
 	 * derivation below exists because a hardcoded total silently disagreed with the bar
-	 * above it; an override used anywhere the reader is actually being charged reopens
+	 * above it; an override used anywhere the user is actually being charged reopens
 	 * exactly that hole.
 	 */
 	total?: number;
@@ -350,7 +360,7 @@ function SupportBreakdown({
 			    `flexGrow: 0` does not make a slice disappear — its `$0` label still claims
 			    min-content width — so Free's two empty lines rendered as a squashed "$0$0"
 			    jammed against the right edge. The legend still lists them, which is where a
-			    reader learns those lines exist and are zero. */}
+			    user learns those lines exist and are zero. */}
 			<div className="flex h-11 overflow-hidden rounded-xl border border-base-content/10">
 				{segments
 					.filter((s) => s.amount > 0)
@@ -415,13 +425,22 @@ function SupportBreakdown({
  * inline, the sizer would have been a third copy of copy that already existed twice, and
  * the sizer is the copy nobody proofreads.
  *
- * ⚠️ Free's segments describe money that is real but is not the reader's: Anthers funds a
+ * ⚠️ Free's segments describe money that is real but is not the user's: Anthers funds a
  * Time Pool pot on a free account's behalf, so creators are genuinely paid for that
  * account's time. They are the SAME three lines a paid rung draws, so the two readings are
  * directly comparable — and the zeroes are true, since a free account contributes nothing
  * to the remainder and has no card to process.
+ *
+ * ⚠️ **The entry price travels in as `entryPrice`** rather than being read from a constant
+ * here: the note's "$3 a month lifts your monthly limit" is a claim about the seeded ladder
+ * (the bottom rung is what removes the limit), so it reads the rows through the caller's
+ * store — with the fallback standing until the fetch lands. The per-segment money math
+ * (`timePoolFor`, `cardFeeDisplay`) stays a function of the AMOUNT, which is the chosen
+ * dollars and not a quoted figure. The rest of the ladder display — the matrix columns,
+ * the cards, the choice resolution — is the charge picker's own display and stays
+ * constant-derived with it, by the same "one list, one total" rule.
  */
-function anthersReading(amount: number): { segments: Segment[]; note: string } {
+function anthersReading(amount: number, entryPrice: number): { segments: Segment[]; note: string } {
 	if (amount > 0) {
 		return {
 			segments: [
@@ -444,7 +463,7 @@ function anthersReading(amount: number): { segments: Segment[]; note: string } {
 					desc: "card & processing, at cost, paid to the processor",
 				},
 			],
-			note: `${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
+			note: `${money(entryPrice)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
 		};
 	}
 	return {
@@ -496,6 +515,12 @@ function SegmentLegendRow({ segment }: { segment: Segment }) {
  *
  * 🚨 Derived from `BADGE_ORDER`, never written out. A rung added to `ANTHERS_BADGES` has to
  * grow the matrix a column, the card list a card and the echo a sizer without being told.
+ *
+ * 🚨 **Constant-derived even after the rows migration, deliberately.** This array is the
+ * charge picker's display: a column's price is the amount pressing it commits, and the
+ * "one list, one total" rule (`signup-total.test.ts`) binds every displayed dollar to the
+ * dollar charged. Quoted CLAIMS about the ladder — the reading note, the GoFurther pitch —
+ * are the part that reads the seeded rows.
  */
 export const RUNG_AMOUNTS = BADGE_ORDER.map(thresholdForBadge);
 
@@ -582,7 +607,7 @@ const PERK_ROWS: PerkRow[] = [
 		// 2026-09-04). The row above is paid out by the time you spend *except* for whatever
 		// you hand out yourself. 🚨 **Never write this as "held back" or "goes back into the
 		// pool"** — that describes a separate pot that reverts, which is one more concept than
-		// a reader needs and is not what the money does.
+		// a user needs and is not what the money does.
 		// ⚠️ The two figures still OVERLAP, the second being part of the first, and the copy
 		// has to say so or the matrix reads as money appearing twice.
 		desc: "Part of the Time Pool above, which you can hand out yourself on a like or a comment instead of leaving it to be paid out by time.",
@@ -671,7 +696,7 @@ function changedNote(row: PerkRow, amount: number, previous: number | null): str
  * The lowest rung carrying a perk at all — the one card where its description earns space.
  *
  * ⚠️ Repeating what a Sticker Budget *is* on all four paid cards is how a five-card list
- * becomes a wall. Said once, where the perk first appears, and after that the reader is
+ * becomes a wall. Said once, where the perk first appears, and after that the user is
  * looking at a figure they have already had explained.
  */
 function firstRungCarrying(row: PerkRow): number {
@@ -697,7 +722,7 @@ function firstRungCarrying(row: PerkRow): number {
  * anyway: equal columns, whatever length the words happen to be.
  *
  * ⚠️ **In `rem`, not `px`, so it tracks the table it is derived from.** The table's minimum
- * is in `rem` and grows with the reader's font size; a pixel breakpoint would keep promising
+ * is in `rem` and grows with the user's font size; a pixel breakpoint would keep promising
  * room a larger font had already spent. 🚨 Change the table's `min-w` or the page's padding
  * and this number is wrong.
  *
@@ -738,7 +763,7 @@ interface LadderProps {
  *
  * 🚨 **A comparison rather than a panel that swaps** (Parker, 2026-08-24). Showing one
  * rung's perks at a time made the section a thing you operate in order to learn what you
- * are choosing between; a reader deciding between Sprout and Petal had to press each one
+ * are choosing between; a user deciding between Sprout and Petal had to press each one
  * and hold the difference in their head. It also made the page grow and shrink under the
  * control being pressed, which took three sets of invisible sizers to hold still. Saying
  * everything always is the better fix for both, and it is why neither layout below hides
@@ -858,7 +883,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 	return (
 		// ⚠️ `overflow-x-auto` is a backstop rather than the plan — `MATRIX_QUERY` is what
 		// keeps this layout to windows it fits in. It stays because "fits" is computed from a
-		// declared minimum, and a reader with a very large font can still land a pixel short.
+		// declared minimum, and a user with a very large font can still land a pixel short.
 		//
 		// 🚨 **`relative` is what would keep such a scroll INSIDE this box.** Every rung's
 		// radio is `sr-only`, which is `position: absolute` — and an absolutely positioned
@@ -989,7 +1014,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
  *
  * 🚨 **Marginal rather than complete, which is the only way five cards beat one table**
  * (Parker, 2026-08-24). Repeating all seven perks on all five cards is the matrix again,
- * stacked, at five times the length — and a reader scrolling it cannot see the difference
+ * stacked, at five times the length — and a user scrolling it cannot see the difference
  * between two rungs at all, which is the one thing they came here to find. So each card
  * answers "what does this one add", and `marginalRows` derives that from the same `cell`
  * functions the table reads, so a card cannot quietly stop agreeing with the table.
@@ -1257,7 +1282,10 @@ function CreatorFinder({
 			{/* ⚠️ This said "how much each creator gets is a question for once your account
 			    exists — right now it's just who", which the echo below it contradicts: a
 			    pick adds a real priced line. The page still asks *whether* rather than *how
-			    much*, so name the starting amount and say where it is changed. */}
+			    much*, so name the starting amount and say where it is changed. 🚨 The starting
+			    amount is the DIRECTED DEFAULT — a charge the commit site builds, so it stays
+			    constant-derived (see `CREATOR_WORST_CASE_*` above) rather than reading the
+			    ladder. */}
 			<p className="mt-4 text-center text-xs text-base-content/45">
 				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each — their lowest Badge,
 				which you can change for a higher one whenever you like once your account exists.
@@ -1315,7 +1343,7 @@ const ANTHERS_ECHO_SIZERS = RUNG_AMOUNTS.filter((amount) => amount > 0).map(anth
  * first.** The two support lines were deliberately ordered to match the steps above them on
  * 2026-08-17, and this row is the exception because it is not only the Anthers answer — it is
  * the account, which exists before either step is asked. Free carries no `key`, since the one
- * thing a reader cannot remove is having an account.
+ * thing a user cannot remove is having an account.
  */
 function accountLineFor(amount: number): PickLine {
 	if (amount > 0) return anthersLineFor(amount);
@@ -1455,7 +1483,7 @@ function SectionEcho({
  *
  * ⚠️ Every line is a thing you get, including the bounded one. *"10 hours a month"* is
  * written as an inclusion rather than as a restriction, because it is one — and because a
- * reader who meets it as a warning reads the whole list as a trial.
+ * user who meets it as a warning reads the whole list as a trial.
  */
 function FreeInclusions() {
 	const items: { icon: typeof PlayCircleIcon; label: string; sub: string }[] = [
@@ -1526,7 +1554,7 @@ function FreeInclusions() {
  *
  * ⚠️ **It scrolls rather than navigates**, because the section it names is on this page —
  * a `<Link to="#…">` would be a router navigation to the same route and would leave the
- * reader where they were. `scroll-mt` on the target is what keeps the heading clear of
+ * user where they were. `scroll-mt` on the target is what keeps the heading clear of
  * the sticky header.
  */
 function GoFurtherCard({
@@ -1571,8 +1599,8 @@ function GoFurtherCard({
  * Which way in the signup card is currently offering.
  *
  * 🚨 **Signing up starts with a handle, not with an address** (Parker, 2026-09-08). The AT
- * Protocol work is first-class rather than optional, and the records a *reader* writes —
- * follows, comments, reviews, votes — belong in that reader’s own repository. An account
+ * Protocol work is first-class rather than optional, and the records a *user* writes —
+ * follows, comments, reviews, votes — belong in that user’s own repository. An account
  * with no identity could never write any of them, which makes it permanently second-class
  * rather than merely plainer. So everybody gets one: either Anthers issues it or you bring the
  * one you have. The address is asked for afterwards, at `/finish`, once we know whether a
@@ -1618,7 +1646,7 @@ function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
 /**
  * Every note this visitor can meet without leaving the page — the card's own sizers.
  *
- * ⚠️ Both of the things that swap the note are reachable from where the reader is standing:
+ * ⚠️ Both of the things that swap the note are reachable from where the user is standing:
  * the Anthers ladder is most of a page below and the door tabs are an inch above, and neither
  * may resize the card. `signedIn` is the one input that cannot change while the page is up,
  * so it narrows the set rather than joining it.
@@ -1659,7 +1687,7 @@ function signupNoteSizers(signedIn: boolean): string[] {
  *
  * Both instances read the same field state, so typing in one fills the other; only the
  * inputs' `id`s differ, which is why `idPrefix` exists. `door` is shared for the same reason:
- * a reader who picks Bluesky at the top and scrolls to the bottom should find the card they
+ * a user who picks Bluesky at the top and scrolls to the bottom should find the card they
  * chose, not the one they didn't.
  *
  * ⚠️ **The tabs make Bluesky the other half of one choice rather than an afterthought.** They
@@ -1825,7 +1853,7 @@ function SignupForm({
 	 *
 	 * ⚠️ **The panel is a field and a button, and nothing else** (Parker, 2026-08-24). It
 	 * carried a paragraph explaining the round trip, which made the Bluesky tab twice the
-	 * height of the other — so switching tabs resized the card under the reader. What
+	 * height of the other — so switching tabs resized the card under the user. What
 	 * survives of that explanation is the one-line `note` below the button.
 	 *
 	 * 🚨 **One of the three promises survives, and it is in the `note` under the button.**
@@ -1940,7 +1968,7 @@ function SignupForm({
 
 	return (
 		// 🚨 `data-signup` exists because the page deliberately carries TWO of these, with the
-		// same button label — which is right for a reader (it is the same act) and ambiguous
+		// same button label — which is right for a user (it is the same act) and ambiguous
 		// for anything selecting by role and name. This is the seam that disambiguates them
 		// without inventing two different labels for one action.
 		//
@@ -1967,7 +1995,7 @@ function SignupForm({
 			    trademark, so the tab behind it carries the whole selected state. */}
 			{/* The strip's own height, held while it is not yet known whether there is one. Without
 			    this the card grows by a tab's worth the moment the answer lands, which moves the
-			    whole page under a reader — the defect the panel heights are all managed for. */}
+			    whole page under the user — the defect the panel heights are all managed for. */}
 			{!doorsAnswered && !signedIn && (
 				<div aria-hidden="true" className="h-[3.0625rem] border-b border-base-300 bg-base-300/30" />
 			)}
@@ -2019,7 +2047,7 @@ function SignupForm({
 				{success && <p className="mt-3 text-sm text-success">{success}</p>}
 				{note && (
 					// Stacked over an invisible copy of every other note this card can show, so
-					// nothing the reader does elsewhere on the page resizes it. See `signupNote`.
+					// nothing the user does elsewhere on the page resizes it. See `signupNote`.
 					<div className="mt-3 grid">
 						{noteSizers?.map((alt) => (
 							<p
@@ -2182,6 +2210,17 @@ export default function SignupPage() {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const signedIn = !!user;
+
+	/**
+	 * The seeded ladder, for every quoted CLAIM in this page's copy — the reading notes'
+	 * entry price, the "Back Anthers" pitch's price and pool — with the constants as the
+	 * until-fetched fallback. The charge-side figures (the directed default and the
+	 * displays that itemize it) stay constant-derived: the "one list, one total" rule
+	 * binds what a user is charged to one source, and a display that mirrors the charge
+	 * follows the charge rather than the rows. See `signup-total.test.ts` for the incident
+	 * that paid for it.
+	 */
+	const ladder = useAnthersLadder();
 
 	/**
 	 * Where to hand the visitor back to once this is over, if they came from somewhere.
@@ -2409,8 +2448,10 @@ export default function SignupPage() {
 
 	/**
 	 * The breakdown the chosen rung reads as — see `anthersReading` for the other one.
+	 * The entry price is the seeded ladder's: the note claims the price that lifts the
+	 * limit, which is the bottom rung the rows state.
 	 */
-	const anthersBreakdown = anthersReading(anthersAmount);
+	const anthersBreakdown = anthersReading(anthersAmount, ladder.publicAccessPrice);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
@@ -2442,7 +2483,7 @@ export default function SignupPage() {
 	 * one row — which is the single exception to the rule that this list reads in the order
 	 * the page asks. The rule itself stands: the two support lines were the other way round
 	 * until 2026-08-17, and a summary ordered differently from the steps above it makes a
-	 * reader re-derive which line came from which choice.
+	 * user re-derive which line came from which choice.
 	 */
 	const summaryLines: PickLine[] = useMemo(
 		() => [accountLineFor(anthersAmount), ...creatorLines],
@@ -2791,7 +2832,7 @@ export default function SignupPage() {
 						    levels to whatever rungs they like. Naming a floor describes a mechanism
 						    the unit retirement removed.
 						    ⭐ Each card is now a door into the section that asks for it, rather than a
-						    description a reader has to hold in their head while scrolling past two more
+						    description a user has to hold in their head while scrolling past two more
 						    screens to find the control it described. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
@@ -2809,9 +2850,10 @@ export default function SignupPage() {
 									now.
 								</GoFurtherCard>
 								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
-									Just {money(PUBLIC_ACCESS_PRICE)}/month takes the monthly limit off Public Access
-									usage, and it lifts your automatic support for creators from{" "}
-									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(PUBLIC_ACCESS_PRICE))}/month.
+									Just {money(ladder.publicAccessPrice)}/month takes the monthly limit off Public
+									Access usage, and it lifts your automatic support for creators from{" "}
+									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(ladder.publicAccessPrice))}
+									/month.
 									<br></br>
 									<br></br>
 									Your Anthers Badge also funds free access for small users and creators and other
@@ -2838,13 +2880,13 @@ export default function SignupPage() {
 							segments={[
 								{
 									tone: "pool",
-									amount: CREATOR_NET,
+									amount: CREATOR_WORST_CASE_NET,
 									label: "Straight to the creator",
 									desc: "recurring support, and it clears whichever of their levels it reaches",
 								},
 								{
 									tone: "pay",
-									amount: ANTHERS_PAYMENTS,
+									amount: CREATOR_WORST_CASE_FEE,
 									label: "Payments",
 									desc: "card & processing, at cost, paid to the processor",
 								},
@@ -2908,7 +2950,13 @@ export default function SignupPage() {
 							segments={anthersBreakdown.segments}
 							note={anthersBreakdown.note}
 							// The reading it is NOT showing, so the panel is as tall as either one.
-							sizers={[anthersReading(anthersAmount > 0 ? 0 : PUBLIC_ACCESS_PRICE)]}
+							// The entry price is the seeded ladder's, for the note copy quotes.
+							sizers={[
+								anthersReading(
+									anthersAmount > 0 ? 0 : ladder.publicAccessPrice,
+									ladder.publicAccessPrice,
+								),
+							]}
 						/>
 						{/* ⚠️ One empty state now, because there is one way to be empty: Free. This
 						    carried a second line for "hasn't chosen yet", which stopped being
@@ -2960,7 +3008,7 @@ export default function SignupPage() {
 					    sits on /for-users and /for-creators. Those are pages somebody reads and
 					    then acts on, so their FAQ goes above the closing CTA. This page's
 					    control is at the TOP — a visitor can join from the first screen and
-					    never scroll — so everything below the summary is for the reader who did
+					    never scroll — so everything below the summary is for the user who did
 					    scroll, and is still deciding. Their remaining doubts belong at the end
 					    of that scroll rather than in front of a button they have already passed
 					    twice.

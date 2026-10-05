@@ -18,7 +18,7 @@
 import type { QuarantineObjectKind } from "../quarantine.js";
 
 /**
- * Display chrome — the imagery a viewer is meant to see *before* they have access:
+ * Display chrome — the imagery a user is meant to see *before* they have access:
  * avatars, headers, covers, thumbnails, gallery shots, inline post images.
  * Nothing here is ever a gated deliverable, which is the entire test for membership.
  */
@@ -36,7 +36,7 @@ export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
 /**
  * The stored ACL for an uploaded media type. Fails closed: anything not explicitly
  * listed as display chrome — including `null`, `undefined`, and any string a client
- * invents — is private, and reaches viewers only through an access-checked endpoint
+ * invents — is private, and reaches users only through an access-checked endpoint
  * that signs per request.
  */
 export function aclForMediaType(mediaType: string | null | undefined): "public" | "private" {

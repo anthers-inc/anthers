@@ -201,7 +201,7 @@ const publishedProjectCount = sql<number>`(SELECT count(*)::int FROM projects WH
  * The two display settings, both optional so one can be changed without restating the other.
  *
  * ⚠️ **Two fields rather than one, matching the two columns and the two controls.** The rungs
- * are settled separately on purpose: a reader who wants difficult work unblurred has said
+ * are settled separately on purpose: a user who wants difficult work unblurred has said
  * nothing about whether they want explicit work at all.
  */
 const displaySchema = z.enum(["hide", "blur", "show"]);
@@ -257,7 +257,7 @@ const parentalUpdateSchema = z.object({
 /**
  * What every route refused by a guardian's maturity lock says.
  *
- * 🚨 **One sentence for three routes, because a reader must not be able to tell them apart.**
+ * 🚨 **One sentence for three routes, because a user must not be able to tell them apart.**
  * The display settings, the card check and the Adult opt-in are all frozen by the same switch,
  * and a differently worded refusal on one of them would tell whoever is testing the lock which
  * door is worth pushing on. It names the pin rather than a remedy, because the remedy is a
@@ -480,7 +480,7 @@ const accountRoutes = new Hono()
 		// `?kind=posts` or `?kind=releases` for someone who wants one or the other.
 		const kind = c.req.query("kind") ?? "all";
 
-		// The two viewer-side listing conditions the Works half composes, loaded once rather
+		// The two user-side listing conditions the Works half composes, loaded once rather
 		// than awaited inside the query builder. `adultVisibility` is the allow-list every
 		// other listing uses; it replaced a narrower `adultHiddenFrom` on 2026-08-29 that
 		// emitted `maturity <> 'adult'` and so admitted any rung it had not been told about.
@@ -524,7 +524,7 @@ const accountRoutes = new Hono()
 								// The feed is a listing, and a release by a followed creator is
 								// no exception to the invisibility rule — following somebody is
 								// not the opt-in, and it is not a reason to be shown a rung the
-								// reader asked to hide either.
+								// user asked to hide either.
 								maturity.hidden,
 								// Nor is following an exemption from a guardian's blocks.
 								parental.hidden,
@@ -588,7 +588,7 @@ const accountRoutes = new Hono()
 					// Thumbnails are public by design — they are the preview a locked Work is
 					// supposed to show.
 					thumbnail: w.thumbnail,
-					// The rating travels with the card, because the card is where a reader's
+					// The rating travels with the card, because the card is where a user's
 					// Blur covers the thumbnail. Without it every release here showed uncovered.
 					maturity: w.maturity,
 					maturityNotes: w.maturityNotes ?? [],
@@ -694,7 +694,7 @@ const accountRoutes = new Hono()
 		// profile that used to load and now 404s is inferrable. What Anthers holds is
 		// that it never *says* so, and offers no surface reporting who blocked whom.
 		// A suspended profile is the identical answer for a different rule — the
-		// account has gone dark, and the ordinary not-found is all the reader gets.
+		// account has gone dark, and the ordinary not-found is all the user gets.
 		if (
 			!account ||
 			(currentUserId != null && (await isBlocked(currentUserId, account.id))) ||
@@ -1026,12 +1026,12 @@ const accountRoutes = new Hono()
 		return c.json(await disableAdultAccess(sessionUser.id));
 	})
 
-	// ── What the reader has asked to meet ────────────────────────────────────
+	// ── What the user has asked to meet ────────────────────────────────────
 	// The per-rung Hide / Blur / Show settings. Readable signed-out, because the defaults
 	// are what a signed-out visitor gets and the client has to know them to apply the
 	// Mature blur to somebody who has never had an account.
 	//
-	// 🚨 **These change what the READER meets and reach nobody else.** A Work somebody
+	// 🚨 **These change what the USER meets and reach nobody else.** A Work somebody
 	// blurred stays listed for everyone else, stays searchable, stays earning, and is never
 	// demoted. The wiki's *Content Standards* is explicit that this is not platform-side suppression.
 
@@ -1081,8 +1081,8 @@ const accountRoutes = new Hono()
 	)
 
 	.get("/me/content-preferences", async (c) => {
-		const viewerId = await getOptionalUserId(c);
-		return c.json(await contentPreferencesFor(viewerId));
+		const userId = await getOptionalUserId(c);
+		return c.json(await contentPreferencesFor(userId));
 	})
 
 	.patch(

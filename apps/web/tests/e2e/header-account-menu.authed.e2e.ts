@@ -52,17 +52,17 @@ test("the header avatar opens the account menu", async ({ page }) => {
 	await expect(profile, "the account menu would not close again").toBeHidden();
 });
 
-test("Profile in the account menu reaches the viewer's own page", async ({ page }) => {
+test("Profile in the account menu reaches the user's own page", async ({ page }) => {
 	await page.goto("/feed");
 
 	await header(page).getByRole("button", { name: "Your account" }).click();
 	const profile = header(page).getByRole("link", { name: "Profile" });
 
 	// Assert the destination the link actually carries rather than a hardcoded handle:
-	// the gauntlet viewer's username is fixture state, and duplicating it here would make
+	// the gauntlet user's username is fixture state, and duplicating it here would make
 	// this spec fail for a reason that has nothing to do with the header.
 	const href = await profile.getAttribute("href");
-	expect(href, "Profile pointed at onboarding, so the viewer has no handle").not.toBe("/welcome");
+	expect(href, "Profile pointed at onboarding, so the user has no handle").not.toBe("/welcome");
 
 	await profile.click();
 	await expect(page).toHaveURL(new RegExp(`${href}$`));

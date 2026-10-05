@@ -74,7 +74,7 @@ import { notify } from "./notifications.js";
 import { queueRecordSync } from "./record-sync.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 
-/** Whether an account is suspended right now. The one predicate every reader shares. */
+/** Whether an account is suspended right now. The one predicate every user shares. */
 export function isAccountSuspended(row: {
 	suspendedAt: Date | null;
 	suspendedUntil: Date | null;
@@ -564,7 +564,7 @@ export async function dismissReports(input: {
  *    account suspended" and the log answers everything an appeal would ask.
  * 2. **Sessions are destroyed.** A suspended account cannot act — validation refuses
  *    a living session and sign-in refuses a new one — so the tokens are deleted
- *    outright; leaving them would make the refusal one check per reader rather than
+ *    outright; leaving them would make the refusal one check per user rather than
  *    one fact. Deleting sessions is not deleting content: a session is a credential,
  *    and `deleteExpiredSessions` already destroys them as routine hygiene.
  * 3. **The decision is appended** as a `suspend` row naming the admin who decided
@@ -582,7 +582,7 @@ export async function dismissReports(input: {
  *   Removal Works* already says Anthers does not have. Reinstatement therefore
  *   rebuilds nothing.
  * - **The account's Works and purchases are untouched at this layer.** Their pages
- *   stop serving because every reader filters on the account's state; a buyer's
+ *   stop serving because every user filters on the account's state; a buyer's
  *   existing Library access survives, because what you buy stays yours. Any final
  *   disposition of the catalog belongs to repeat-infringer termination, which is
  *   built on this state and not part of it.
@@ -902,7 +902,7 @@ export const QUEUE_LIMIT = 100;
  * `reported` — the queue proper: anything with an open report, most-reported first.
  * `comments` / `reviews` — recent activity, so an operator can act on something
  *   nobody reported. Reviews carry words and a report control, so the queue is fed
- *   by readers; browse stays because acting before anyone complains is still worth
+ *   by users; browse stays because acting before anyone complains is still worth
  *   being able to do.
  * `people` — reported accounts only. Unlike the two above, this is NOT a browse over
  *   recent rows: "every account, newest first" is a user directory, not a moderation

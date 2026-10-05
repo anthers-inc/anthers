@@ -53,7 +53,7 @@ if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 // put `project-works` ahead of the fixture-owning suites. Seeded here — after the
 // session exists (the CI container path above included, since this runs either way) and
 // before the first test file loads — the ladder is a property of the session rather than
-// a side-effect of suite order. `ensureOrgLadder` in the fixtures still runs: re-checking
+// a side-effect of suite order. `ensureAnthersLadder` in the fixtures still runs: re-checking
 // is one indexed SELECT, and a suite's `purgeAccountsCreatedHere` can take the owner away
 // (the ladder cascades with it), which is the re-check's documented reason to exist.
 {
@@ -65,17 +65,17 @@ if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 	// The stand-in takes the reserved "anthers" name on the session's suffix — brought,
 	// like the production account it stands in for — so the handle-based lookups
 	// (`anthersUserId`) find it exactly as they find the real `@anthers.org`.
-	const ORG_EMAIL = "seed_org_ladder@example.com";
+	const ANTHERS_LADDER_EMAIL = "seed_org_ladder@example.com";
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.email, ORG_EMAIL))
+		.where(eq(users.email, ANTHERS_LADDER_EMAIL))
 		.limit(1);
 	if (existing) {
 		await ensureAnthersBadges(existing.id);
 	} else {
 		const account = await createAccount("anthers", {
-			email: ORG_EMAIL,
+			email: ANTHERS_LADDER_EMAIL,
 			emailVerified: true,
 			identity: "brought",
 			bypassReserved: true,

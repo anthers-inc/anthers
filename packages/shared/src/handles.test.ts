@@ -76,7 +76,7 @@ describe("handleSyntaxProblem", () => {
 		expect(handleSyntaxProblem("Alice")).toContain("letters, numbers and hyphens");
 	});
 
-	// 🚨 The message is what a reader sees under the field, in a region held at two lines. A
+	// 🚨 The message is what a user sees under the field, in a region held at two lines. A
 	// longer one grows the panel and moves the button out from under the pointer.
 	it("keeps every message inside two lines at 390px", () => {
 		const problems = [

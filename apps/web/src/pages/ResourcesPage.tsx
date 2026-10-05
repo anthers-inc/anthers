@@ -60,7 +60,7 @@ const CALCULATORS: ResourceCard[] = [
 		to: "/resources/creator-monetization",
 		title: "Creator Monetization Calculator",
 		blurb:
-			"How time with a creator becomes revenue under the Time Pool + support model — from one viewer up to a creator's monthly earnings.",
+			"How time with a creator becomes revenue under the Time Pool + support model — from one user up to a creator's monthly earnings.",
 		tag: "Economics",
 		icon: BanknotesIcon,
 	},

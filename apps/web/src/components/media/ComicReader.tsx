@@ -25,9 +25,9 @@ import TransportButton from "./transport/TransportButton";
 
 /** How the pages are laid out. Spread is two-up, the way a printed book opens. */
 type Layout = "single" | "spread";
-type ReaderMode = "page" | "panel";
+type ViewMode = "page" | "panel";
 
-/** Where a reader got to, per Work, so reopening a chapter resumes rather than restarts. */
+/** Where a user got to, per Work, so reopening a chapter resumes rather than restarts. */
 const PROGRESS_KEY = "anthers_reading_progress";
 const PANEL_PROGRESS_KEY = "anthers_panel_progress";
 
@@ -55,7 +55,7 @@ function writeProgress(workId: number, page: number) {
 		map[String(workId)] = page;
 		localStorage.setItem(PROGRESS_KEY, JSON.stringify(map));
 	} catch {
-		/* Storage disabled — the reader simply always opens at page one. */
+		/* Storage disabled — the user simply always opens at page one. */
 	}
 }
 
@@ -94,11 +94,11 @@ export default function ComicReader({
 	apiBase: string;
 	title: string;
 	/**
-	 * The **share link** this reader was reached by, if any.
+	 * The **share link** this user was reached by, if any.
 	 *
 	 * 🚨 It has to ride on the URL rather than in a header: these are `<img src>` values, and
 	 * an `<img>` issues its own request with nothing the page can attach to it. Without the
-	 * token a share-link recipient would get a reader full of broken images and no
+	 * token a share-link recipient would get a user full of broken images and no
 	 * explanation — the dead-player failure the whole meter design exists to avoid.
 	 */
 	shareToken?: string | null;
@@ -107,7 +107,7 @@ export default function ComicReader({
 	const [page, setPage] = useState(() => Math.min(readProgress(workId), Math.max(pageCount, 1)));
 	const [layout, setLayout] = useState<Layout>("single");
 	const [fullscreen, setFullscreen] = useState(false);
-	const [mode, setMode] = useState<ReaderMode>("page");
+	const [mode, setMode] = useState<ViewMode>("page");
 	const [panelPages, setPanelPages] = useState<PanelPage[] | null>(null);
 	const [panelZoom, setPanelZoom] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -192,7 +192,7 @@ export default function ComicReader({
 	// Restore the saved panel position when panel geometry first arrives — once, not on
 	// every render. The initial values come from the `useState` initializer above, so they
 	// are the mount-time snapshot; an effect that re-ran on later renders would re-restore
-	// after every navigation, fighting the click the reader just took.
+	// after every navigation, fighting the click the user just took.
 	const didRestorePanels = useRef(false);
 	const restorePage = initialPanel.page;
 	const restorePanel = initialPanel.panel;
@@ -305,10 +305,10 @@ export default function ComicReader({
 	return (
 		<section
 			ref={containerRef}
-			// biome-ignore lint/a11y/noNoninteractiveTabindex: the container IS the reader — focusable, carrying the keymap, and the element fullscreen is requested on. The controls inside it are ordinary named buttons.
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: the container IS the comic reader — focusable, carrying the keymap, and the element fullscreen is requested on. The controls inside it are ordinary named buttons.
 			tabIndex={0}
 			onKeyDown={onKeyDown}
-			aria-label={`Reader: ${title}`}
+			aria-label={`Comic reader: ${title}`}
 			className="overflow-hidden rounded-lg bg-neutral focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 		>
 			<div
@@ -328,7 +328,7 @@ export default function ComicReader({
 					))
 				) : currentPanelPage && currentPanel ? (
 					<div className="relative flex h-[80vh] w-full items-center justify-center">
-						{/* Full page ghosted behind the panel so the reader keeps context. */}
+						{/* Full page ghosted behind the panel so the user keeps context. */}
 						<img
 							src={pageUrl(currentPanelPage.pageNumber)}
 							alt={`${title}, page ${currentPanelPage.pageNumber}`}

@@ -63,7 +63,7 @@ function useThread(): ThreadState {
  *
  * 🚨 A tombstone — `handle` null — is an author who deleted their account, and the comment
  * stayed so the thread still reads. Says only WHO, never WHY: a removal by moderation is a
- * `RemovedComment` and is drawn as one, and conflating them would tell readers a user deleted
+ * `RemovedComment` and is drawn as one, and conflating them would tell users a user deleted
  * something they did not.
  */
 function authorOf(comment: Comment): string {
@@ -116,7 +116,7 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 				json: { body: text, replyTo },
 			});
 			// A refusal means the comment went while the reply was being written — removed, or
-			// out of this reader's view. Reloading shows the thread as it now stands.
+			// out of this user's view. Reloading shows the thread as it now stands.
 			await fetchComments();
 			if (res.ok) setReplyingTo(null);
 			return res.ok;
@@ -227,11 +227,11 @@ function countReplies(id: number, repliesTo: (id: number) => ThreadComment[]): n
  *
  * 🚨 **Collapsed is neither removed nor deleted, and it must not be drawn like either.** A
  * removal is a gap with no text, and a tombstone is an author who left. This is a comment
- * readers pushed below the threshold: it is still here, it says why it is folded, and anyone
+ * users pushed below the threshold: it is still here, it says why it is folded, and anyone
  * can open it. Drawing it like a removal would have Anthers telling people a moderator acted
  * when the crowd did. Folding it folds its replies with it, the way a closed branch does.
  *
- * ⭐ **Opening it is per-reader and not remembered.** Unfolding is a decision about this
+ * ⭐ **Opening it is per-user and not remembered.** Unfolding is a decision about this
  * comment right now, not a setting — and a "show me collapsed comments" preference is a
  * different feature with a different argument behind it.
  */
@@ -360,7 +360,7 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 						subjectType="comment"
 						subjectId={comment.id}
 						score={comment.score}
-						viewerVote={comment.viewerVote}
+						userVote={comment.userVote}
 						up={comment.up}
 						down={comment.down}
 						label={`${author}'s ${noun}`}

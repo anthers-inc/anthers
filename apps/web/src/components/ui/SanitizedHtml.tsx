@@ -9,7 +9,7 @@ import { censorHtml, useLanguageFilter } from "@anthers/web-shared/language-filt
  *
  * ⚠️ **The language filter is applied here and only here for HTML**, because this is the one
  * component that renders it. Applying it at the API would rewrite what is stored and what
- * every other reader sees; applying it in each page would be five places to forget. Note it
+ * every other user sees; applying it in each page would be five places to forget. Note it
  * runs on markup that is *already* sanitized, so it is a text transformation rather than a
  * second security boundary — `censorHtml` parses so it can leave tags and URLs alone, not
  * because this input is untrusted.

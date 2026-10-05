@@ -3,9 +3,9 @@
  * Remembering a hosted account's session so the writer does not log in again for every write.
  *
  * ⭐ **Why this module exists.** The reference PDS limits `com.atproto.server.createSession`
- * to thirty in five minutes and three hundred a day per account, and a busy reader's pooled
+ * to thirty in five minutes and three hundred a day per account, and a busy user's pooled
  * writes (votes, comments, follows, posts) each opened a fresh login before this column
- * existed — a reader could exhaust their OWN login budget doing nothing unusual. The writes
+ * existed — a user could exhaust their OWN login budget doing nothing unusual. The writes
  * themselves carry an access token and are not the limited call, so the fix is to keep the
  * first session's `accessJwt`/`refreshJwt` and renew it with
  * `com.atproto.server.refreshSession`, which is likewise unlimited. A fresh `createSession`

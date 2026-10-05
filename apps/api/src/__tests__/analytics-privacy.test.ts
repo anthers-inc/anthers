@@ -22,7 +22,7 @@
  *
  * So the assertion is deliberately NOT "the queries group by workId". That would
  * restate the implementation and agree with it forever. It is: **two identified
- * viewers generate attention, the creator reads every analytics surface, and nothing
+ * users generate attention, the creator reads every analytics surface, and nothing
  * that comes back can be traced to either of them** — which stays true as a test of a
  * new field nobody has written yet.
  */
@@ -63,13 +63,13 @@ async function signUp(username: string): Promise<string> {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `apriv_creator_${id}`;
-const viewerAName = `apriv_watcher_alpha_${id}`;
-const viewerBName = `apriv_watcher_beta_${id}`;
+const userAName = `apriv_watcher_alpha_${id}`;
+const userBName = `apriv_watcher_beta_${id}`;
 
 let creator: string;
 let creatorId: number;
-let viewerAId: number;
-let viewerBId: number;
+let userAId: number;
+let userBId: number;
 let workId: number;
 
 /** Every analytics surface a creator can read. If a fourth appears, it belongs here. */
@@ -84,7 +84,7 @@ const ANALYTICS_ROUTES = [
  *
  * The identity check below is a *shape* assertion rather than a value one, because a
  * value scan only finds what it already knows to look for. A creator-facing payload
- * that grew a `viewers: [...]` array would slip past a search for one username the
+ * that grew a `users: [...]` array would slip past a search for one username the
  * moment the field held a display name, an avatar URL, or an id.
  */
 function allKeys(value: unknown, out: string[] = []): string[] {
@@ -101,14 +101,14 @@ function allKeys(value: unknown, out: string[] = []): string[] {
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${viewerAName}@example.com`}`, sql`${`${viewerBName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userAName}@example.com`}`, sql`${`${userBName}@example.com`}`], sql`, `)})`,
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
-	const viewerA = await signUp(viewerAName);
-	await enablePayouts(viewerAName);
-	const viewerB = await signUp(viewerBName);
-	await enablePayouts(viewerBName);
+	const userA = await signUp(userAName);
+	await enablePayouts(userAName);
+	const userB = await signUp(userBName);
+	await enablePayouts(userBName);
 	await db.execute(
 		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
@@ -121,8 +121,8 @@ beforeAll(async () => {
 		return row.id;
 	};
 	creatorId = await idOf(creatorName);
-	viewerAId = await idOf(viewerAName);
-	viewerBId = await idOf(viewerBName);
+	userAId = await idOf(userAName);
+	userBId = await idOf(userBName);
 
 	const workRes = await post("/api/content/works", creator, {
 		type: "video",
@@ -148,12 +148,12 @@ beforeAll(async () => {
 	});
 	expect(release.status).toBe(200);
 
-	// Two DIFFERENT viewers, with different amounts of time, so a leak would have
-	// something to distinguish. One viewer would let a per-user figure masquerade as
+	// Two DIFFERENT users, with different amounts of time, so a leak would have
+	// something to distinguish. One user would let a per-user figure masquerade as
 	// a total.
 	for (const [cookie, seconds] of [
-		[viewerA, 120],
-		[viewerB, 45],
+		[userA, 120],
+		[userB, 45],
 	] as const) {
 		const now = Date.now();
 		const res = await post("/api/subscriptions/attention", cookie, {
@@ -173,37 +173,37 @@ beforeAll(async () => {
 	}
 }, DB_SETUP_TIMEOUT);
 
-describe("creator analytics never expose per-viewer identity", () => {
-	it("names no viewer in any analytics response", async () => {
+describe("creator analytics never expose per-user identity", () => {
+	it("names no user in any analytics response", async () => {
 		for (const route of ANALYTICS_ROUTES) {
 			const res = await req(route, { headers: { Cookie: creator } });
 			expect(res.status).toBe(200);
 			const body = await res.json();
 			const serialized = JSON.stringify(body);
 
-			// Neither viewer's username, nor their ids under any key name.
-			expect(serialized).not.toContain(viewerAName);
-			expect(serialized).not.toContain(viewerBName);
+			// Neither user's username, nor their ids under any key name.
+			expect(serialized).not.toContain(userAName);
+			expect(serialized).not.toContain(userBName);
 			expect(serialized).not.toContain("watcher_alpha");
 			expect(serialized).not.toContain("watcher_beta");
 		}
 	});
 
-	it("carries no viewer-identifying FIELD, whatever it might be called", async () => {
+	it("carries no user-identifying FIELD, whatever it might be called", async () => {
 		for (const route of ANALYTICS_ROUTES) {
 			const res = await req(route, { headers: { Cookie: creator } });
 			const keys = allKeys(await res.json());
 
 			// The allowlist is an explicit set rather than a looser pattern, so adding a
-			// viewer-ish field is a deliberate edit here with a reason attached — this
-			// assertion has already caught one addition (`uniqueViewersWindowDays`, added
+			// user-ish field is a deliberate edit here with a reason attached — this
+			// assertion has already caught one addition (`uniqueUsersWindowDays`, added
 			// with the retention rollup), which is the behavior wanted.
 			//
-			//   `uniqueViewers`           — a COUNT. How many, never who. A creator knowing
+			//   `uniqueUsers`           — a COUNT. How many, never who. A creator knowing
 			//                               two people watched reveals nothing about either.
-			//   `uniqueViewersWindowDays` — how far back that count reaches, in days. A
+			//   `uniqueUsersWindowDays` — how far back that count reaches, in days. A
 			//                               property of the query, not of any person.
-			const COUNTS_NOT_IDENTITIES = new Set(["uniqueViewers", "uniqueViewersWindowDays"]);
+			const COUNTS_NOT_IDENTITIES = new Set(["uniqueUsers", "uniqueUsersWindowDays"]);
 
 			const identityish = keys.filter(
 				(k) =>
@@ -220,7 +220,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		const overview = await (
 			await req(ANALYTICS_ROUTES[0], { headers: { Cookie: creator } })
 		).json();
-		expect(overview.uniqueViewers).toBe(2);
+		expect(overview.uniqueUsers).toBe(2);
 		expect(overview.events.watches).toBe(2);
 		// 120 + 45 seconds as hours, which the overview rounds to two places. The exact
 		// figure is asserted below off `/content`, where it arrives unrounded.
@@ -231,7 +231,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 			(r) => r.id === workId,
 		);
 		expect(row).toBeDefined();
-		// Per-WORK totals are the aggregation axis the policy names, and both viewers'
+		// Per-WORK totals are the aggregation axis the policy names, and both users'
 		// time is summed into one figure.
 		expect(row!.totalDuration).toBe(165);
 	});
@@ -248,12 +248,12 @@ describe("creator analytics never expose per-viewer identity", () => {
 		);
 
 		const overview = await (await req(ANALYTICS_ROUTES[0], { headers: { Cookie: other } })).json();
-		expect(overview.uniqueViewers).toBe(0);
+		expect(overview.uniqueUsers).toBe(0);
 		expect(overview.events.total).toBe(0);
 		expect(overview.totalDurationHours).toBe(0);
 	});
 
-	it("the viewer ids ARE in the table — this is a read-time property, not an absence of data", async () => {
+	it("the user ids ARE in the table — this is a read-time property, not an absence of data", async () => {
 		// Worth pinning explicitly, because it is what makes the promise a real one and
 		// what makes it fragile. `attention_events.user_id` exists and is populated —
 		// the Time Pool cannot pay by attention without it, and the clamp cannot bound
@@ -265,7 +265,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 		// and the tests above became vacuous — they would pass against an empty table.
 		const [row] = await db.execute(
 			sql`SELECT count(*)::int AS n FROM attention_events
-			    WHERE creator_id = ${creatorId} AND user_id IN (${viewerAId}, ${viewerBId})`,
+			    WHERE creator_id = ${creatorId} AND user_id IN (${userAId}, ${userBId})`,
 		);
 		expect(Number((row as { n: number }).n)).toBe(2);
 	});

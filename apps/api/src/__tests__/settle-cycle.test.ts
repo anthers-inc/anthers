@@ -38,11 +38,11 @@ import app from "../index";
 import { distributePool } from "../jobs/distribute-pool";
 import { settleCycle } from "../jobs/settle-cycle";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureOrgLadder } from "./org-ladder-fixture";
 
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 /** A month far enough out that it cannot collide with fixture or dev data. */
@@ -110,11 +110,11 @@ async function makeSupporter(today = 12) {
  * amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string, cycle: string): Promise<void> {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -122,7 +122,7 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the settlement suite holds.",
@@ -135,7 +135,7 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, cycle),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	if (Number(threshold) > 0) {

@@ -3,7 +3,7 @@
  * Posting is for creators.
  *
  * Creators post and everyone else reacts (Parker, 2026-09-12), and a published post writes an
- * `org.anthers.post` record under the creator permission set — so a reader who could post
+ * `org.anthers.post` record under the creator permission set — so a user who could post
  * would be writing a creator's record into their own repository. Three paths put a post in
  * front of people and each is refused here for somebody who is not a creator: creating one,
  * publishing or scheduling one through an edit, and the scheduled sweep that publishes with
@@ -36,7 +36,7 @@ const ORIGIN = "http://localhost:3000";
 const id = crypto.randomUUID().slice(0, 8);
 const makerName = `cop_maker_${id}`;
 const leaverName = `cop_leaver_${id}`;
-const readerName = `cop_reader_${id}`;
+const userName = `cop_reader_${id}`;
 
 let sent: { name: string; data: Record<string, unknown> }[] = [];
 let sendSpy: ReturnType<typeof spyOn>;
@@ -78,15 +78,15 @@ function recordSyncs(): Record<string, unknown>[] {
 
 let maker: { cookie: string; id: number };
 let leaver: { cookie: string; id: number };
-let reader: { cookie: string; id: number };
+let user: { cookie: string; id: number };
 
 beforeAll(async () => {
 	await db.execute(
-		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${leaverName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)})`,
+		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${leaverName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)})`,
 	);
 	maker = await signUp(makerName);
 	leaver = await signUp(leaverName);
-	reader = await signUp(readerName);
+	user = await signUp(userName);
 	// Both start fully set up, so creator mode is the only thing this suite takes away.
 	await enablePayoutsFor(maker.id);
 	await enablePayoutsFor(leaver.id);
@@ -102,33 +102,30 @@ afterAll(async () => {
 	// A departing account's posts are kept as tombstones for the threads under them, so the
 	// account purge would leave these behind.
 	await db.execute(
-		sql`DELETE FROM posts WHERE creator_id IN (SELECT id FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${leaverName}@example.com`}`, sql`${`${readerName}@example.com`}`], sql`, `)}))`,
+		sql`DELETE FROM posts WHERE creator_id IN (SELECT id FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${leaverName}@example.com`}`, sql`${`${userName}@example.com`}`], sql`, `)}))`,
 	);
 });
 
 describe("creating a post", () => {
 	it("refuses somebody who is not a creator, writes nothing and asks for no record", async () => {
 		sent = [];
-		const res = await call("POST", "/api/content/posts", reader.cookie, {
-			title: "A reader's post",
-			slug: `cop-reader-${id}`,
+		const res = await call("POST", "/api/content/posts", user.cookie, {
+			title: "A user's post",
+			slug: `cop-user-${id}`,
 			isPublished: true,
 		});
 		expect(res.status).toBe(403);
 		expect((await res.json()).code).toBe("creator_required");
 
-		const rows = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(eq(posts.creatorId, reader.id));
+		const rows = await db.select({ id: posts.id }).from(posts).where(eq(posts.creatorId, user.id));
 		expect(rows).toEqual([]);
 		expect(recordSyncs()).toEqual([]);
 	});
 
-	it("refuses a reader's draft too, since a draft is a post waiting to go live", async () => {
-		const res = await call("POST", "/api/content/posts", reader.cookie, {
-			title: "A reader's draft",
-			slug: `cop-reader-draft-${id}`,
+	it("refuses a user's draft too, since a draft is a post waiting to go live", async () => {
+		const res = await call("POST", "/api/content/posts", user.cookie, {
+			title: "A user's draft",
+			slug: `cop-user-draft-${id}`,
 			isPublished: false,
 		});
 		expect(res.status).toBe(403);

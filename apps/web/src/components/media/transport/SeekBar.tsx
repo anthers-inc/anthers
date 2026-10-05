@@ -4,7 +4,7 @@
  *
  * What is shared is the *interaction* — drag, click-to-seek, arrow keys, the focus ring,
  * the hover time bubble — and what differs is only what gets painted underneath. Video
- * paints a rail with a buffered band; audio paints its FFmpeg waveform; a reader could
+ * paints a rail with a buffered band; audio paints its FFmpeg waveform; a user could
  * paint page ticks. Passing that in as `track` is the whole reason this is one component
  * instead of three that behave subtly differently.
  *

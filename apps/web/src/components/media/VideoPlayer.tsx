@@ -6,7 +6,7 @@
  * The three things this file has always had to get right are unchanged and are the
  * reason it is not just a `<video>` tag:
  *
- *   1. **Delivery is refused with a 402**, not a 403, when a viewer's monthly Public
+ *   1. **Delivery is refused with a 402**, not a 403, when a user's monthly Public
  *      Access allowance is spent — and a media element cannot report a status code, so
  *      the player decides from the *budget* rather than from the failure.
  *   2. **Attention credits on playback**, visible tab or not, keyed on the Work.
@@ -43,11 +43,11 @@ interface VideoPlayerProps {
 	 */
 	attention?: { creatorId: number | null; workId: number | null };
 	/**
-	 * Whether this Work draws the viewer's Public Access allowance — i.e. it is ungated,
+	 * Whether this Work draws the user's Public Access allowance — i.e. it is ungated,
 	 * streaming and free to everyone. Comes straight from the serialized Work.
 	 *
 	 * Omitted or false means the meter is irrelevant here and never renders: gated work
-	 * the viewer cleared, work they bought, and their own catalog are all reached
+	 * the user cleared, work they bought, and their own catalog are all reached
 	 * without spending an allowance, so metering them would bill somebody twice.
 	 */
 	publicAccess?: boolean;
@@ -163,7 +163,7 @@ export default function VideoPlayer({
 		const onPlaying = () => setIsPlaying(true);
 		const onTimeUpdate = () => {
 			setPosition(video.currentTime);
-			// Buffered ahead of the playhead, which is the only part a viewer can see the
+			// Buffered ahead of the playhead, which is the only part a user can see the
 			// benefit of. `buffered` is a list of ranges after a seek, so ask for the one
 			// the playhead is actually in rather than assuming a single range from zero.
 			const ranges = video.buffered;
@@ -314,7 +314,7 @@ export default function VideoPlayer({
 	}, [src, autoPlay]);
 
 	// Stop what is already playing the moment the allowance goes. Without this the
-	// buffered tail keeps running under the wall — which credits attention the viewer is
+	// buffered tail keeps running under the wall — which credits attention the user is
 	// no longer entitled to spend, and looks like the limit did not apply.
 	useEffect(() => {
 		if (spent) videoRef.current?.pause();
@@ -379,7 +379,7 @@ export default function VideoPlayer({
 	}, []);
 
 	// Controls hide after a moment of stillness, but only while playing — a paused player
-	// keeps them, because a viewer who paused is looking for a control.
+	// keeps them, because a user who paused is looking for a control.
 	const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const wakeControls = useCallback(() => {
 		setControlsVisible(true);

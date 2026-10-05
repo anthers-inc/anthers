@@ -14,7 +14,7 @@
  * hours of a month were keyed to the month that had already ended at Stripe. "The 1st" has to
  * be the 1st *somewhere specific* once every account in the world renews on it, and Stripe
  * schedules in UTC, so that is the somewhere. Never reach for `getFullYear`/`getMonth` here —
- * they are the local-time readers this module exists to replace.
+ * they are the local-time users this module exists to replace.
  */
 import Decimal from "decimal.js";
 

@@ -15,10 +15,10 @@
  * Three decisions are frozen here.
  *
  * 1. **The rating decides access, and it is the highest row of one matrix.** A Work carries
- *    exactly one `MaturityRating`, and that single value is what a viewer filter reads and
+ *    exactly one `MaturityRating`, and that single value is what a user filter reads and
  *    what the Adult rung attaches to. A creator declares it by marking each kind of content in
  *    `RATING_ROWS`, and the rows marked at a rung are the Work's notes. A note carries no access
- *    consequence of its own — 🚨 **a note may be read by a reader's own filter and may never
+ *    consequence of its own — 🚨 **a note may be read by a user's own filter and may never
  *    drive a platform default**, so the most one can cost a creator is a blur shown to
  *    somebody who asked to be warned about exactly that.
  *
@@ -106,7 +106,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
 		label: "Mature",
 		// ⚠️ Says nothing about the blur, which is a deliberate omission rather than a
 		// stale one. Mature work does blur by default — see `DEFAULT_MATURITY_DISPLAY`
-		// below, and the reader filters in `services/content-preferences.ts` — but a hint
+		// below, and the user filters in `services/content-preferences.ts` — but a hint
 		// is what a creator reads while choosing a rating, and leading with the
 		// consequence invites them to pick the rung by its cost rather than by what the
 		// work is. The consequence is published where it can be read whole: the wiki's
@@ -149,7 +149,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * so that branch can be exercised whichever way the switch happens to be set.
  *
  * ⭐ **`adult` is on this list because every fence it needs is real** — the invisibility to
- * anyone who has not opted in, the adulthood verification behind the opt-in, and the reader's
+ * anyone who has not opted in, the adulthood verification behind the opt-in, and the user's
  * own controls, which a guardian can lock. Opening it before those existed would have opened a
  * rung with none of them, which is precisely the failure the *Content Standards* page's
  * deferral principle names. **If a rung is ever added here again, that is the bar**: the
@@ -158,7 +158,7 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * they cost Adult creators income while keeping nobody out whom verification does not.
  *
  * A constant rather than configuration, deliberately: both inputs are judgments that deserve
- * a commit and a reader, not an environment variable somebody can flip without one.
+ * a commit and a user, not an environment variable somebody can flip without one.
  */
 export const ACCEPTED_MATURITY_RATINGS: readonly DeclarableMaturity[] = [
 	"general",
@@ -263,15 +263,15 @@ export function maturityLabel(value: string): string {
 }
 
 /**
- * What a reader has asked to meet at a given rung.
+ * What a user has asked to meet at a given rung.
  *
  * - `hide` — the Work is absent from listings entirely. Still reachable by a direct link if
- *   the reader has access to it, which is what separates this from the Adult opt-in.
- * - `blur` — the Work is listed, with its cover obscured behind a label until the reader
+ *   the user has access to it, which is what separates this from the Adult opt-in.
+ * - `blur` — the Work is listed, with its cover obscured behind a label until the user
  *   chooses to see it. Friction and a warning rather than suppression.
  * - `show` — no treatment at all.
  *
- * 🚨 **This is the reader deciding what they meet, and it is never platform-side
+ * 🚨 **This is the user deciding what they meet, and it is never platform-side
  * suppression.** The pattern is Reddit's, and the wiki's *Content Standards* is explicit about the distinction:
  * the platform picks the default and makes the choice explicit, rather than deciding what
  * anybody sees. A Work is not demoted, delisted for others, or paid less because somebody
@@ -286,17 +286,17 @@ export function isMaturityDisplay(value: string): value is MaturityDisplay {
 }
 
 /**
- * What a reader meets before they have said anything.
+ * What a user meets before they have said anything.
  *
  * 🚨 **Mature blurs for everybody, signed in or out**, which is the default that makes the
  * rung mean something: the Work stays listed, searchable, reachable and earning, and what a
- * reader meets before choosing is a blurred cover and a label. That is friction and a
+ * user meets before choosing is a blurred cover and a label. That is friction and a
  * warning rather than suppression, and it is why Mature can honestly be described as
  * carrying no access consequence.
  *
  * **Adult defaults to `hide`**, but the default is not what keeps Adult work away from
  * somebody — the account-level opt-in and the adulthood verification do that, in
- * `services/content-preferences.ts`, and a reader who has not cleared both never has a Work
+ * `services/content-preferences.ts`, and a user who has not cleared both never has a Work
  * to apply this to. This is the preference that applies *after* they have.
  */
 export const DEFAULT_MATURITY_DISPLAY: Record<DeclarableMaturity, MaturityDisplay> = {
@@ -354,9 +354,9 @@ export type RowLevel = "none" | DeclarableMaturity;
  *   the fact that music ratings are really just 'explicit or not'"*, and only sexual content
  *   reaches Adult.
  *
- * ⭐ **Both grids ask about the same six kinds of content**, because a reader's filter reads them.
+ * ⭐ **Both grids ask about the same six kinds of content**, because a user's filter reads them.
  * A grid that skipped a row would leave the filter to treat the missing answer either as present,
- * hiding every song from a reader who hides horror, or as *Not in It*, which nobody said. So the
+ * hiding every song from a user who hides horror, or as *Not in It*, which nobody said. So the
  * grids differ only in which answers each row offers and where each begins, and they store the
  * same values: *In It* is `general` and *Explicit* is `mature`.
  */
@@ -588,7 +588,7 @@ export function ratingFromRows(rows: MaturityRows): DeclarableMaturity | null {
  *
  * 🚨 **A rated Work has every row answered, with no exceptions** (Parker, 2026-09-18). *Not in
  * It* exists so that General means only a General-acceptable form of the content rather than
- * also "none of it", and a reader's filter relies on that. So release asks this rather than
+ * also "none of it", and a user's filter relies on that. So release asks this rather than
  * whether `maturity` holds a value: a rating assigned any other way (before the matrix existed,
  * or written straight into the database) is not a declaration the rows can stand behind. An
  * operator's correction sets the rating over the rows and does not answer them.
@@ -606,10 +606,10 @@ export function notesFromRows(rows: MaturityRows): ContentNote[] {
 }
 
 /**
- * Whether a Work may contain a kind of content, as a reader's filter reads it: yes, unless its
+ * Whether a Work may contain a kind of content, as a user's filter reads it: yes, unless its
  * creator answered that row *Not in It*.
  *
- * 🚨 **An unanswered row counts as containing it.** A reader who hides a kind of content relies on
+ * 🚨 **An unanswered row counts as containing it.** A user who hides a kind of content relies on
  * the filter, so it must not let through a Work nobody has said is free of it, which is the same
  * allow-list direction `maturityHiddenFrom` takes with the rungs. Release requires every row
  * answered, so this reaches only a Work released before the matrix existed, and the Dashboard tells
@@ -619,14 +619,14 @@ export function mayContain(rows: MaturityRows | null | undefined, note: ContentN
 	return rows?.[note] !== "none";
 }
 
-/** How a reader has asked to meet each kind of content, whatever a Work's rating. */
+/** How a user has asked to meet each kind of content, whatever a Work's rating. */
 export type NoteDisplays = Record<ContentNote, MaturityDisplay>;
 
 /**
- * What a reader meets for each kind of content before they have said anything: Show.
+ * What a user meets for each kind of content before they have said anything: Show.
  *
  * ⭐ **Show rather than the Mature rung's Blur, because a note is not a rung.** A note may be read
- * by a reader's own filter and may never drive a platform default (the wiki's *The Rating
+ * by a user's own filter and may never drive a platform default (the wiki's *The Rating
  * Standard*), and a default that covered a Work for what it contains would be exactly that.
  */
 export const DEFAULT_NOTE_DISPLAY: MaturityDisplay = "show";
@@ -658,7 +658,7 @@ export function contentNoteLabel(value: string): string {
 /**
  * Keep only notes this build knows, in the canonical order.
  *
- * Order matters because the notes are rendered as a list a reader scans, and a set that
+ * Order matters because the notes are rendered as a list a user scans, and a set that
  * reorders itself between saves reads as a change that was not made. Unknown values are
  * dropped rather than kept, since a note nothing can label is a note nobody can read.
  */

@@ -4,12 +4,12 @@
  * made on. `WorkUploadPage` makes the Work from its file and lands here; returning to a Work from
  * anywhere in the Studio lands here too.
  *
- * ⭐ **The page is the Work as a reader sees it, with what they see editable in place** (Parker,
+ * ⭐ **The page is the Work as a user sees it, with what they see editable in place** (Parker,
  * 2026-09-17: *"the edit page should feel more like the public page, rather than just being an
  * isolated form where the creator can't get a feel for how the work will look"*). The title, the
  * dates, the rating, the Work itself, its cover, its lyrics, its description and its downloads
- * sit where a reader meets them, drawn by the same parts the public page is drawn with
- * (`components/work/WorkLayout.tsx`). Everything a reader never sees (delivery, the rating's
+ * sit where a user meets them, drawn by the same parts the public page is drawn with
+ * (`components/work/WorkLayout.tsx`). Everything a user never sees (delivery, the rating's
  * controls, access and release) is gathered below under a heading that says so. That shared
  * layout is why this page lives in `apps/web` rather than beside the other Studio pages in
  * `@anthers/web-shared`: the players belong to this app.
@@ -628,7 +628,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// row asserts nothing. Also the creator's to fix: save locks nothing, but release does.
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
 	/**
-	 * Whether the Work itself can be shown as a reader sees it: its file is here, and whatever
+	 * Whether the Work itself can be shown as a user sees it: its file is here, and whatever
 	 * processing it needs has finished. Until then the file section stands in for it, with the
 	 * upload's or the processing's progress.
 	 */
@@ -639,8 +639,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		(type === "image" || current.transcoding?.status === "completed");
 
 	/**
-	 * The Work as the reader's page would draw it: the saved row, with the creator named as a
-	 * reader sees them. The fields being edited are drawn by the controls in their slots, so
+	 * The Work as the user's page would draw it: the saved row, with the creator named as a
+	 * user sees them. The fields being edited are drawn by the controls in their slots, so
 	 * what the parts read from here is only what the page does not edit in place.
 	 */
 	const asRead: WorkDetail = {
@@ -669,8 +669,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			 * Lyrics — plain text, untimestamped, under the player where a listener reads them.
 			 *
 			 * The help text says the gate covers them on purpose. Lyrics ride with the payload
-			 * (`serializeWorkForViewer` blanks them alongside the audio), and a creator who
-			 * assumed the opposite would only find out from a reader. The escape hatch is stated
+			 * (`serializeWorkForUser` blanks them alongside the audio), and a creator who
+			 * assumed the opposite would only find out from a user. The escape hatch is stated
 			 * too: Description stays visible when locked.
 			 */
 			<section className={WORK_LYRICS_CLASS}>
@@ -719,7 +719,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	return (
 		<WorkColumn type={type}>
-			{/* What this page is, and the way to see it exactly as a reader does. The reader's view
+			{/* What this page is, and the way to see it exactly as a user does. The user's view
 			    shows what is saved, which is why it says so while anything is not. */}
 			<div className="flex flex-wrap items-center gap-2">
 				<h1 className="text-sm font-semibold">Edit {typeLabel(type)}</h1>
@@ -729,7 +729,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					{current.visibility === "released" ? "Released" : "Private"}
 				</span>
 				<span className="text-xs text-base-content/60">
-					Laid out as a reader sees it. Change what they see in place, and everything else below.
+					Laid out as a user sees it. Change what they see in place, and everything else below.
 				</span>
 				<Link
 					to={`${workUrl(current)}?previewAs=out`}
@@ -737,14 +737,14 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					title={dirty ? "Shows what's saved, so save first to see your changes there" : undefined}
 				>
 					<EyeIcon className="size-4" />
-					Preview as a reader
+					Preview as User
 				</Link>
 			</div>
 
 			<WorkHeader
 				work={asRead}
 				title={
-					// A text area rather than an input, because a title wraps where a reader sees it
+					// A text area rather than an input, because a title wraps where a user sees it
 					// and an input cannot. It grows to its content, and Enter is refused, since a
 					// title is one line that happens to be long.
 					<textarea
@@ -973,7 +973,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				</section>
 			)}
 
-			{/* ── What a reader never sees ── */}
+			{/* ── What a user never sees ── */}
 			<section
 				aria-labelledby="work-settings-heading"
 				className="rounded-box border border-base-300 bg-base-200/40 p-5 flex flex-col gap-4"
@@ -1033,7 +1033,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							This Work is rated {maturityLabel(storedMaturity)} today, but not every row is
 							answered. Answering every row replaces that with the rating the rows add up to.
 							{current.visibility === "released" &&
-								" Until then, readers who hide a kind of content won't see it."}
+								" Until then, users who hide a kind of content won't see it."}
 						</p>
 					)}
 					{maturityLocked && (
@@ -1294,7 +1294,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 }
 
 /**
- * The Original Release Date, where a reader sees "First released": the creator's claim about
+ * The Original Release Date, where a user sees "First released": the creator's claim about
  * when the work first came out anywhere, beside the date Anthers records it releasing here.
  */
 function OriginalReleaseDate({
@@ -1330,7 +1330,7 @@ function OriginalReleaseDate({
 }
 
 /**
- * The rating where a reader meets it, above the Work. A reader sees nothing for a General Work,
+ * The rating where a user meets it, above the Work. A user sees nothing for a General Work,
  * so the creator's version always says what the rating is, and says so loudly while there is
  * none, since nothing can be released until there is.
  */
@@ -1372,9 +1372,7 @@ function RatingLine({
 				<span className="text-base-content/60">{notes.map(contentNoteLabel).join(" · ")}</span>
 			)}
 			{maturity === "general" && (
-				<span className="text-xs text-base-content/50">
-					Readers see no rating on a General Work.
-				</span>
+				<span className="text-xs text-base-content/50">Users see no rating on a General Work.</span>
 			)}
 			{change}
 		</div>
@@ -1546,10 +1544,10 @@ function CreditsSection({
 	return (
 		<div className="flex flex-col gap-3">
 			<p className="text-xs text-base-content/50">
-				Who and what made this — readers see these as liner notes on the Work. A Created credit
-				names who; Licensed and AI credits may stay anonymous. An AI credit never names the model —
-				a tool owns nothing. A Work needs at least one credit naming a human creator before it can
-				be released.
+				Who and what made this — users see these as liner notes on the Work. A Created credit names
+				who; Licensed and AI credits may stay anonymous. An AI credit never names the model — a tool
+				owns nothing. A Work needs at least one credit naming a human creator before it can be
+				released.
 			</p>
 			{rows.length === 0 && (
 				<p className="text-xs text-warning">

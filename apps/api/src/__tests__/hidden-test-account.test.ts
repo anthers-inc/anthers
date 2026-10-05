@@ -31,7 +31,7 @@ purgeAccountsCreatedHere();
 const RUN = crypto.randomUUID().slice(0, 8);
 const hiddenName = `hta_hidden_${RUN}`;
 const otherName = `hta_other_${RUN}`;
-const readerName = `hta_reader_${RUN}`;
+const userName = `hta_reader_${RUN}`;
 
 function req(path: string, options?: RequestInit) {
 	return app.fetch(new Request(`http://localhost${path}`, options));
@@ -40,7 +40,7 @@ function req(path: string, options?: RequestInit) {
 let hiddenId = 0;
 let otherId = 0;
 let hiddenCookie = "";
-let readerCookie = "";
+let userCookie = "";
 let workIds: number[] = [];
 let projectIds: number[] = [];
 let postIds: number[] = [];
@@ -61,15 +61,15 @@ describe("The automated-test account — hidden from listings, nothing else", ()
 			await db.delete(users).where(eq(users.id, squatter.id));
 		}
 
-		const [hidden, other, reader] = await Promise.all([
+		const [hidden, other, user] = await Promise.all([
 			createAccount(hiddenName),
 			createAccount(otherName),
-			createAccount(readerName),
+			createAccount(userName),
 		]);
 		hiddenId = hidden.user.id;
 		otherId = other.user.id;
 		hiddenCookie = hidden.cookie;
-		readerCookie = reader.cookie;
+		userCookie = user.cookie;
 
 		await db.update(users).set({ isCreator: true }).where(eq(users.id, hiddenId));
 		await db.update(users).set({ isCreator: true }).where(eq(users.id, otherId));
@@ -144,13 +144,13 @@ describe("The automated-test account — hidden from listings, nothing else", ()
 			.returning({ id: projects.id });
 		projectIds = madeProjects.map((p) => p.id);
 
-		// The reader follows both creators, so the follow list and the feed's followed-id
+		// The user follows both creators, so the follow list and the feed's followed-id
 		// list hold one row per fixture to be kept or dropped.
 		const madeFollows = await db
 			.insert(follows)
 			.values([
-				{ followerId: reader.user.id, creatorId: hiddenId },
-				{ followerId: reader.user.id, creatorId: otherId },
+				{ followerId: user.user.id, creatorId: hiddenId },
+				{ followerId: user.user.id, creatorId: otherId },
 			])
 			.returning({ id: follows.id });
 		followIds = madeFollows.map((f) => f.id);
@@ -216,7 +216,7 @@ describe("The automated-test account — hidden from listings, nothing else", ()
 
 	it("drops the account from a follower's following list while the visible fixture stays", async () => {
 		const res = await req("/api/accounts/me/following", {
-			headers: { Cookie: readerCookie },
+			headers: { Cookie: userCookie },
 		});
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { users: { id: number }[] };
@@ -226,7 +226,7 @@ describe("The automated-test account — hidden from listings, nothing else", ()
 
 	it("drops the account from the follower feed's followed creators while the visible fixture stays", async () => {
 		const res = await req("/api/accounts/me/feed", {
-			headers: { Cookie: readerCookie },
+			headers: { Cookie: userCookie },
 		});
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { posts: { creatorId: number | null }[] };

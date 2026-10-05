@@ -15,12 +15,12 @@
  * but did not enjoy. Both directions are published as records; what Anthers shows is the net
  * below, and a creator sees the raw counts.
  *
- * 🚨 **Everything that decides an order is a number the reader can see** (Parker,
+ * 🚨 **Everything that decides an order is a number the user can see** (Parker,
  * 2026-09-04: *"there's nothing ranking stuff that the users can't see"*). That is why
  * `commentScore` is what sorts as well as what renders. Sorting on the *true* net while
  * showing the floored one would order two comments that both display `0` by a difference
  * nobody can observe — invisible ranking, arrived at by accident, in the exact range where
- * a reader most wants to know what happened.
+ * a user most wants to know what happened.
  *
  * ⚠️ **So the floor is a display rule and the true net is still needed.** `netScore` is what
  * the collapse threshold and moderation read, and it goes negative. Storing or sorting the
@@ -52,7 +52,7 @@ export interface VoteTally {
  *
  * Internal to ranking, collapsing and moderation — never published on its own, because a
  * negative number published beside a comment is the pile-on scoreboard the floor exists to
- * withhold. The one place a reader meets it is on a comment that has already collapsed,
+ * withhold. The one place a user meets it is on a comment that has already collapsed,
  * where it is the stated reason rather than a running tally.
  */
 export function netScore(t: VoteTally): number {
@@ -87,8 +87,8 @@ export const COLLAPSE_NET_THRESHOLD = -5;
  * Whether a comment folds away, given its tally.
  *
  * ⚠️ **Collapsed is neither hidden nor deleted, and the three must never look alike.** A
- * moderation removal is `moderation_status` and never reaches a reader at all; a tombstone
- * is an author who left. This is a comment the readers pushed down, it stays in the thread,
+ * moderation removal is `moderation_status` and never reaches a user at all; a tombstone
+ * is an author who left. This is a comment the users pushed down, it stays in the thread,
  * it says why, and anyone can open it. Conflating it with either of the others would have
  * Anthers telling people a moderator acted when the crowd did.
  */

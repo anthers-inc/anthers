@@ -82,7 +82,7 @@ export default function WorkPage() {
 	 */
 	const loadedKey = useRef<string | null>(null);
 
-	/** Re-read the Work — the access verdict changes under us when a viewer unlocks it. */
+	/** Re-read the Work — the access verdict changes under us when a user unlocks it. */
 	const refetch = useCallback(async () => {
 		if (!slug) return;
 		const res = await client.api.content.works[":id"].$get({
@@ -150,7 +150,7 @@ export default function WorkPage() {
 	const playerless = work != null && pageHoldsTheMeter(work.type);
 	/**
 	 * The allowance is gone *and* it applies here. Both halves matter: a spent allowance
-	 * says nothing about gated work the viewer cleared, work they bought, or their own
+	 * says nothing about gated work the user cleared, work they bought, or their own
 	 * catalog — none of which is Public Access, and none of which the meter touches.
 	 */
 	const spentOnThis =
@@ -206,13 +206,13 @@ export default function WorkPage() {
 		);
 	}
 
-	// The viewer's verdict. `Work` types both serializations' `access`, and this page is a
-	// reader's — the owner's own shape carries the editable rows instead, which read as no
+	// The user's verdict. `Work` types both serializations' `access`, and this page is a
+	// user's — the owner's own shape carries the editable rows instead, which read as no
 	// verdict at all here (`null`), the same absence the comment below already describes.
 	const access = isAccessResult(work.access) ? work.access : null;
 	const isOwner = isAuthenticated && user?.id === work.creatorId;
 	/**
-	 * Whether this viewer may open the Work.
+	 * Whether this user may open the Work.
 	 *
 	 * ⚠️ **No verdict is the owner's own shape, not a refusal.** The server answers a creator's own
 	 * Work with `serializeWork`, which carries no access verdict because a creator can always open
@@ -258,7 +258,7 @@ export default function WorkPage() {
 				}
 			/>
 
-			{/* A piece of writing's description is its standfirst, under the headline where a reader
+			{/* A piece of writing's description is its standfirst, under the headline where a user
 			    expects one; every other kind keeps it under the Work, below. */}
 			{isWriting(work.type) && <WorkDescription work={work} />}
 
@@ -271,38 +271,52 @@ export default function WorkPage() {
 						    missing is an account for the time to be attributed to. So the cover
 						    stays unblurred and un-padlocked here, and the card underneath asks
 						    for the account instead. See `presentsAsLocked`. */}
-						{presentsAsLocked(access) ? (
-							<LockedCover
-								thumbnail={work.thumbnail}
-								className="aspect-video rounded-lg"
-								lockedBy={access ? lockedByBadge(access, creatorName) : null}
-							/>
-						) : (
-							work.thumbnail && (
-								<img
-									src={work.thumbnail}
-									alt=""
-									className="aspect-video w-full rounded-lg object-cover"
-								/>
-							)
-						)}
-						{access &&
-							(access.requiresPurchase ? (
-								/* Every purchase goes through the basket (Parker, 2026-10-03): the
-								   pricing card offers the two doors into it and nothing about a
-								   card lives on this page. */
-								<ProjectPricing
-									workId={work.id}
-									slug={work.slug ?? ""}
-									access={access}
-									title={work.title ?? "Untitled"}
-									creatorHandle={work.creator?.handle ?? ""}
+						{/* The locked preview and the purchase decision are one composition: a
+						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
+						    Demand's buy panel) — the blurred cover left, the price card right,
+						    both cards' edges aligned. They stack below `sm` with the cover
+						    first. Everything else on the page stays full-width; only this
+						    pairing is two-up. */}
+						{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
+						    the row's height lets `aspect-video` derive its WIDTH from that
+						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
+						    aspect ratio silently outranks the track. An explicit width breaks
+						    the derive-back and the cover sizes to its column. Found by
+						    measuring, invisible in the DOM string. */}
+						<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+							{presentsAsLocked(access) ? (
+								<LockedCover
 									thumbnail={work.thumbnail}
-									creatorHasStripe={work.creatorHasStripe ?? false}
+									className="aspect-video w-full rounded-lg"
+									lockedBy={access ? lockedByBadge(access, creatorName) : null}
 								/>
 							) : (
-								<InlineUnlock post={work} access={access} />
-							))}
+								work.thumbnail && (
+									<img
+										src={work.thumbnail}
+										alt=""
+										className="aspect-video w-full rounded-lg object-cover"
+									/>
+								)
+							)}
+							{access &&
+								(access.requiresPurchase ? (
+									/* Every purchase goes through the basket (Parker, 2026-10-03): the
+									   pricing card offers the two doors into it and nothing about a
+									   card lives on this page. */
+									<ProjectPricing
+										workId={work.id}
+										slug={work.slug ?? ""}
+										access={access}
+										title={work.title ?? "Untitled"}
+										creatorHandle={work.creator?.handle ?? ""}
+										thumbnail={work.thumbnail}
+										creatorHasStripe={work.creatorHasStripe ?? false}
+									/>
+								) : (
+									<InlineUnlock post={work} access={access} />
+								))}
+						</div>
 					</div>
 				) : spentOnThis ? (
 					// The server withheld the deliverable because the allowance is gone, so
@@ -328,7 +342,7 @@ export default function WorkPage() {
 			{!isWriting(work.type) && <WorkDescription work={work} />}
 
 			{/* The liner notes — who and what made it, public whether or not it is gated. A credit
-		    naming this viewer's own identity carries the confirm ask, and a decision re-reads
+		    naming this user's own identity carries the confirm ask, and a decision re-reads
 		    the Work so the credits settle from the server's own answer. */}
 			<WorkCredits work={work} onCreditDecided={refetch} />
 

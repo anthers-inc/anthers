@@ -349,7 +349,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 
 		// 3b. The audio-only rendition, beside the variants — one more pass over the same
 		// source, so a video can be listened to as a podcast without its picture. Its
-		// presence is what `viewerTranscoding` serializes as `audioManifestUrl`. A silent
+		// presence is what `userTranscoding` serializes as `audioManifestUrl`. A silent
 		// source has nothing to demux, so it ships no rendition and the master says so.
 		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
 		if (hasAudio) await ffmpegAudioHls(localPath, outputDir);

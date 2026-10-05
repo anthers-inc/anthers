@@ -11,7 +11,7 @@ import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import { expect, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
-const READER = "[aria-label='Reader: A comic that really turns']";
+const READER = "[aria-label='Comic reader: A comic that really turns']";
 
 test.describe.configure({ mode: "serial" });
 
@@ -69,7 +69,7 @@ test("a reload restores the saved panel position", async ({ page }) => {
 	await expect(await panelIndicator(page)).toContainText("Panel 2 of 4 · Page 1");
 
 	await page.reload();
-	// The reader enters page mode by default on a reload; panel mode is a per-session
+	// The user enters page mode by default on a reload; panel mode is a per-session
 	// choice. Flip back in, and the saved panel is where it returns to.
 	await page.getByRole("button", { name: "Panel mode" }).click();
 	await expect(await panelIndicator(page)).toContainText("Panel 2 of 4 · Page 1");

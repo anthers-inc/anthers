@@ -422,7 +422,7 @@ describe("the migration fork gate", () => {
 		expect(res.exitCode).toBe(1);
 		expect(res.target).toBeNull();
 		// The message names the repair, not only the fault, because the wrong repair
-		// (renumbering) is what production's journal reader turns into a silent skip.
+		// (renumbering) is what production's journal user turns into a silent skip.
 		expect(res.stdout).toContain("another migration landed on origin/main since you forked");
 		expect(res.stdout).toContain("bun run db:generate");
 		expect(res.stdout).toContain("Never renumber");

@@ -13,7 +13,7 @@
  *   - **Gated.** The listener explicitly chose a track they cannot reach. The bar keeps
  *     the track selected and offers the way in, rather than skipping to something they did
  *     not ask for.
- *   - **Allowance spent.** The track is free and stays free; the viewer's monthly Public
+ *   - **Allowance spent.** The track is free and stays free; the user's monthly Public
  *     Access hours ran out. 🚨 The copy has to put it that way round — "you've used your
  *     hours", never "this is locked" — or the commons reads as stratified again, which is
  *     the thing the binary model exists to prevent.

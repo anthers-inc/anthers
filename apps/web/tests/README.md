@@ -52,7 +52,7 @@ Two kinds of spec live here, split into Playwright projects:
   backend behind the static preview by design.
 - **`gauntlet`** — the User Gauntlet walk (`user-gauntlet.e2e.ts`): authenticated,
   serial, and stateful. Its `setup` dependency resets the fixture through
-  `db:gauntlet --ensure-viewer` and signs `gauntlet_viewer` in for real,
+  `db:gauntlet --ensure-walker` and signs `gauntlet_walker` in for real,
   persisting the session as `tests/e2e/.auth/` storageState. It asserts every
   cell of the expected-access staircase from `@anthers/db/gauntlet` after every
   transition, with **strict** error tracking (`trackErrorsStrict` — no `/api/`

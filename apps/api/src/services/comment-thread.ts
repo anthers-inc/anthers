@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Replies — finding a thread, finding what a reply is ultimately about, and putting a thread
- * in the order a reader sees it.
+ * in the order a user sees it.
  *
  * ⭐ **A reply is a comment whose subject is another comment.** It is stored as
  * `subject_type = 'comment'` with the replied-to comment's id as `subject_id`, which is the same
@@ -45,7 +45,7 @@ function idList(ids: number[]): SQL {
  *
  * ⚠️ **Hidden rows are included on purpose.** A reply under a removed comment is still a reply
  * somebody wrote, and a walk that stopped at the removed one would lose everything beneath it.
- * Deciding what a reader may see is `shapeThread`'s job, not this query's.
+ * Deciding what a user may see is `shapeThread`'s job, not this query's.
  *
  * `UNION` rather than `UNION ALL`, so a cycle — which no route can write, since a reply's
  * subject has to exist first — ends the walk rather than running it forever.
@@ -153,23 +153,23 @@ export interface ThreadNode {
 	subjectType: string;
 	subjectId: number;
 	createdAt: Date;
-	/** The published score, the same number the reader sees. */
+	/** The published score, the same number the user sees. */
 	score: number;
 	/** Not removed by moderation. */
 	visible: boolean;
-	/** Written by somebody this viewer and the author cannot meet, in either direction. */
+	/** Written by somebody this user and the author cannot meet, in either direction. */
 	blocked: boolean;
 }
 
 /**
- * One entry in a thread as a reader receives it: a comment, or the place a removed one was.
+ * One entry in a thread as a user receives it: a comment, or the place a removed one was.
  */
 export type ThreadEntry<T extends ThreadNode> =
 	| { kind: "comment"; node: T }
 	| { kind: "removed"; node: T };
 
 /**
- * A thread in the order a reader sees it: every comment followed by its replies, depth first.
+ * A thread in the order a user sees it: every comment followed by its replies, depth first.
  *
  * 🚨 **A removed comment is kept only as the place its replies hang from.** It becomes a
  * `removed` entry when something beneath it is still shown, so the replies group under the gap
@@ -182,7 +182,7 @@ export type ThreadEntry<T extends ThreadNode> =
  * instead would be a placeholder that states the block, which nothing on Anthers does.
  *
  * ⭐ **Ordered by the number on screen, then by time**, which is the rule the flat thread
- * followed: nothing ranks a comment that the reader cannot see. The tiebreak runs in opposite
+ * followed: nothing ranks a comment that the user cannot see. The tiebreak runs in opposite
  * directions at the two levels. The comments on a post put the newest first, while the replies
  * to a comment put the oldest first, because a reply is read after what it answers and a
  * conversation printed newest-first reads backwards.
@@ -216,7 +216,7 @@ export function shapeThread<T extends ThreadNode>(root: ThreadRoot, nodes: T[]):
 			(child) => !child.blocked,
 		);
 
-	// Every comment a reader could reach, parents before children, so walking it backwards
+	// Every comment a user could reach, parents before children, so walking it backwards
 	// settles each comment's replies before the comment itself.
 	const reachable: T[] = [];
 	const pending = [...childrenOf(null)];

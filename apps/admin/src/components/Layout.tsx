@@ -37,7 +37,17 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 			{ to: "/moderation/people", label: "People" },
 		],
 	},
-	{ title: "Infrastructure", items: [{ to: "/infrastructure", label: "Jobs and Services" }] },
+	{
+		title: "Infrastructure",
+		items: [
+			{ to: "/infrastructure", label: "Jobs and Services" },
+			{ to: "/infrastructure/atproto", label: "ATProto Records" },
+		],
+	},
+	{
+		title: "Issues",
+		items: [{ to: "/issues", label: "Issue Reports" }],
+	},
 	{
 		title: "Books",
 		items: [

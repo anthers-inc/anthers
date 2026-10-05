@@ -5,7 +5,7 @@
  * The old `accounts` table carried both facts as columns — the user's monthly Anthers
  * amount and the directed support total — and the split (2026-10-03) deleted them; under
  * the Badge model the amounts are `user_badges` holdings. These two helpers are the
- * hops' replacement shapes, and each docblock names the production readers that resolve
+ * hops' replacement shapes, and each docblock names the production users that resolve
  * from the shape it writes.
  *
  * 🚨 Dev-fixture only — both writes are reached through `gauntlet-state.ts`, which asserts
@@ -27,8 +27,8 @@ function cycleKey(): string {
  * under the Badge model the only honest place for the amount.** The old hop wrote the
  * accounts table's Anthers-Support column, which fed `heldAnthersBadgeAmount` and
  * `publicAccessBudget`; that column died with the split, and the issuer pass re-pointed
- * both readers at exactly this shape — the holder's row on the Anthers ladder, threshold
- * resolved through the badge. The re-pointed readers are `services/access.ts` and
+ * both users at exactly this shape — the holder's row on the Anthers ladder, threshold
+ * resolved through the badge. The re-pointed users are `services/access.ts` and
  * `services/public-access.ts`, and the account is found by its handle —
  * `anthersUserIdOfSession` below, the session-side twin of the API's `anthersUserId`.
  *
@@ -45,23 +45,23 @@ function cycleKey(): string {
  * cycle — the picker's own replace-not-stack rule), so hopping down is honest: $12 → $3
  * reads as $3, never as $15.
  */
-export async function applyAnthersSupport(viewerId: number, dollars: string): Promise<void> {
-	const org = await anthersUserIdOfSession();
+export async function applyAnthersSupport(userId: number, dollars: string): Promise<void> {
+	const anthers = await anthersUserIdOfSession();
 	// Free is the absence of a holding (the 2026-10-03 reversal), not a rung at $0: the
-	// $0 hop clears the viewer's Anthers holdings and writes nothing, which is the same
+	// $0 hop clears the user's Anthers holdings and writes nothing, which is the same
 	// shape a canceled subscription leaves.
 	if (Number(dollars) === 0) {
 		await db
 			.delete(userBadges)
 			.where(
-				sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+				sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
 			);
 		return;
 	}
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, org), eq(badges.threshold, dollars)))
+		.where(and(eq(badges.creatorId, anthers), eq(badges.threshold, dollars)))
 		.limit(1);
 	if (!rung) {
 		throw new Error(
@@ -71,10 +71,10 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
 	await db
 		.delete(userBadges)
 		.where(
-			sql`${userBadges.userId} = ${viewerId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${org})`,
+			sql`${userBadges.userId} = ${userId} AND ${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthers})`,
 		);
 	await db.insert(userBadges).values({
-		userId: viewerId,
+		userId: userId,
 		badgeId: rung.id,
 		billingCycle: cycleKey(),
 	});
@@ -96,11 +96,11 @@ export async function applyAnthersSupport(viewerId: number, dollars: string): Pr
  * freshly created dev user has no `billing_accounts` row (the table is lazily created),
  * so the upsert is the hop, not an update behind a lookup.
  */
-export async function applySupportBudget(viewerId: number, dollars: string): Promise<void> {
+export async function applySupportBudget(userId: number, dollars: string): Promise<void> {
 	await db
 		.insert(billingAccounts)
 		.values({
-			userId: viewerId,
+			userId: userId,
 			directedBudget: dollars,
 			isActive: true,
 		})

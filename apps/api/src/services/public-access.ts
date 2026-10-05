@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Public Access meter's database half — reading how much of the commons a viewer has
+ * The Public Access meter's database half — reading how much of the commons a user has
  * watched this month, and deciding whether they may watch more.
  *
  * The **policy** is `@anthers/shared/public-access`, which is pure and knows nothing about
@@ -14,7 +14,7 @@
  *   1. `resolveAccessSync` is pure and synchronous precisely so a Catalog page can resolve
  *      a batch of Works without an N+1. A per-Work database read would destroy that.
  *   2. **The meter is not a property of the Work.** `resolveAccess` answers "may this
- *      viewer consume this Work", which for Public Access is unconditionally yes — the
+ *      user consume this Work", which for Public Access is unconditionally yes — the
  *      Work is free to everyone, and it stays free to everyone. What runs out is the
  *      *account's* monthly allowance. Encoding it as a Work-level denial is how the
  *      commons quietly becomes stratified again, which is the thing this rule
@@ -56,12 +56,12 @@ function monthEnd(now: Date = new Date()): Date {
 }
 
 /**
- * Public Access seconds this viewer has watched in the current calendar month.
+ * Public Access seconds this user has watched in the current calendar month.
  *
  * Ranges split on read: overlapping ranges across every tab and device share each
  * second evenly, so the meter can never be charged more than one second per second
  * of real time. Reads the stamped `public_access` flag rather than joining to
- * `works` and re-deciding — see the column's own note. A viewer with no attention
+ * `works` and re-deciding — see the column's own note. A user with no attention
  * rows amounts to zero.
  */
 export async function publicAccessSecondsThisMonth(
@@ -74,7 +74,7 @@ export async function publicAccessSecondsThisMonth(
 }
 
 /**
- * A viewer's standing against the meter right now.
+ * A user's standing against the meter right now.
  *
  * 🚨 **A signed-out caller has no allowance, and this returned the full one until
  * 2026-08-28.** The old answer was `publicAccessBudget(0, 0)` — ten hours, nothing spent —

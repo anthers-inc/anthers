@@ -42,8 +42,8 @@ const run = crypto.randomUUID().slice(0, 8);
 /** The full grant, spelled the way an authorization server answers it. */
 const GRANTED = `atproto ${USER_SCOPE_EXPANDED} ${CREATOR_SCOPE_EXPANDED}`;
 
-/** The reader tier alone, which is what a reader is asked for. */
-const READER_GRANT = `atproto ${USER_SCOPE_EXPANDED}`;
+/** The user tier alone, which is what a user is asked for. */
+const USER_GRANT = `atproto ${USER_SCOPE_EXPANDED}`;
 
 interface Creator {
 	id: number;
@@ -290,20 +290,20 @@ describe("noticing a grant taken back somewhere else", () => {
 	});
 });
 
-describe("a reader's comments, reviews, votes and follows", () => {
-	let reader: Creator;
-	let hostedReader: Creator;
+describe("a user's comments, reviews, votes and follows", () => {
+	let user: Creator;
+	let hostedUser: Creator;
 	let postId = 0;
 	let postSlug = "";
 
-	async function makeReader(tag: string, identity: "hosted" | "brought"): Promise<Creator> {
+	async function makeUser(tag: string, identity: "hosted" | "brought"): Promise<Creator> {
 		const account = await createAccount(`perm_${tag}_${run}`, { identity });
 		return { id: account.userId as number, cookie: account.cookie, did: account.did as string };
 	}
 
 	beforeAll(async () => {
-		reader = await makeReader("reader", "brought");
-		hostedReader = await makeReader("hreader", "hosted");
+		user = await makeUser("user", "brought");
+		hostedUser = await makeUser("huser", "hosted");
 		// Something to react to: a post by the creator who holds every grant.
 		const res = await call("POST", "/api/content/posts", granted.cookie, {
 			title: `Perm thread ${run}`,
@@ -316,21 +316,21 @@ describe("a reader's comments, reviews, votes and follows", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	beforeEach(async () => {
-		await holdGrant(reader.did, reader.id, "atproto");
+		await holdGrant(user.did, user.id, "atproto");
 	});
 
 	afterAll(async () => {
-		await db.delete(atprotoSessions).where(eq(atprotoSessions.did, reader.did));
+		await db.delete(atprotoSessions).where(eq(atprotoSessions.did, user.did));
 	});
 
 	it("refuses a comment, a vote and a follow, and writes none of them", async () => {
-		const comment = await call("POST", `/api/content/posts/${postSlug}/comments`, reader.cookie, {
+		const comment = await call("POST", `/api/content/posts/${postSlug}/comments`, user.cookie, {
 			body: "Lovely",
 		});
 		expect(comment.status).toBe(409);
 		expect((await comment.json()).code).toBe("interaction_permission_required");
 
-		const vote = await call("PUT", "/api/content/votes", reader.cookie, {
+		const vote = await call("PUT", "/api/content/votes", user.cookie, {
 			subjectType: "post",
 			subjectId: postId,
 			direction: "up",
@@ -344,17 +344,17 @@ describe("a reader's comments, reviews, votes and follows", () => {
 		const follow = await call(
 			"POST",
 			`/api/accounts/users/${creatorRow.handle}/follow`,
-			reader.cookie,
+			user.cookie,
 		);
 		expect(follow.status).toBe(409);
-		const kept = await db.select().from(follows).where(eq(follows.followerId, reader.id));
+		const kept = await db.select().from(follows).where(eq(follows.followerId, user.id));
 		expect(kept).toHaveLength(0);
 	});
 
 	it("refuses a review", async () => {
 		const workId = await stage(granted.id);
 		await db.update(works).set({ visibility: "released" }).where(eq(works.id, workId));
-		const res = await call("POST", `/api/content/works/${workId}/reviews`, reader.cookie, {
+		const res = await call("POST", `/api/content/works/${workId}/reviews`, user.cookie, {
 			verdict: "recommended",
 			body: "A thoughtful and generous piece of work.",
 		});
@@ -362,48 +362,48 @@ describe("a reader's comments, reviews, votes and follows", () => {
 		expect((await res.json()).code).toBe("interaction_permission_required");
 	});
 
-	it("lets a reader take a vote back, which removes a record rather than creating one", async () => {
-		await holdGrant(reader.did, reader.id, READER_GRANT);
-		const cast = await call("PUT", "/api/content/votes", reader.cookie, {
+	it("lets a user take a vote back, which removes a record rather than creating one", async () => {
+		await holdGrant(user.did, user.id, USER_GRANT);
+		const cast = await call("PUT", "/api/content/votes", user.cookie, {
 			subjectType: "post",
 			subjectId: postId,
 			direction: "up",
 		});
 		expect(cast.status).toBe(200);
 
-		await holdGrant(reader.did, reader.id, "atproto");
-		const withdrawn = await call("DELETE", "/api/content/votes", reader.cookie, {
+		await holdGrant(user.did, user.id, "atproto");
+		const withdrawn = await call("DELETE", "/api/content/votes", user.cookie, {
 			subjectType: "post",
 			subjectId: postId,
 		});
 		expect(withdrawn.status).toBe(200);
 	});
 
-	it("accepts all of it once the reader tier is granted, with no creator tier needed", async () => {
-		await holdGrant(reader.did, reader.id, READER_GRANT);
-		expect(await interactionPermissionRefusal(reader.id)).toBeNull();
-		const comment = await call("POST", `/api/content/posts/${postSlug}/comments`, reader.cookie, {
+	it("accepts all of it once the user tier is granted, with no creator tier needed", async () => {
+		await holdGrant(user.did, user.id, USER_GRANT);
+		expect(await interactionPermissionRefusal(user.id)).toBeNull();
+		const comment = await call("POST", `/api/content/posts/${postSlug}/comments`, user.cookie, {
 			body: "Lovely",
 		});
 		expect(comment.status).toBe(201);
 	});
 
 	it("never refuses an identity Anthers hosts", async () => {
-		expect(await interactionPermissionRefusal(hostedReader.id)).toBeNull();
+		expect(await interactionPermissionRefusal(hostedUser.id)).toBeNull();
 	});
 
-	// ⚠️ Asking readers is not behind the switch that gates asking creators to publish.
-	it("refuses a reader whatever the publishing switch says, since the reader tier can always be given", async () => {
+	// ⚠️ Asking users is not behind the switch that gates asking creators to publish.
+	it("refuses a user whatever the publishing switch says, since the user tier can always be given", async () => {
 		delete process.env.ATPROTO_PUBLISH_ENABLED;
-		const refusal = await interactionPermissionRefusal(reader.id);
+		const refusal = await interactionPermissionRefusal(user.id);
 		expect(refusal?.body.code).toBe("interaction_permission_required");
 	});
 
 	it("reports each tier on its own in the state the banner reads", async () => {
-		const state = await publishingStateFor(reader.id);
+		const state = await publishingStateFor(user.id);
 		expect(state.interactions).toBe("ungranted");
-		await holdGrant(reader.did, reader.id, READER_GRANT);
-		expect((await publishingStateFor(reader.id)).interactions).toBe("granted");
+		await holdGrant(user.did, user.id, USER_GRANT);
+		expect((await publishingStateFor(user.id)).interactions).toBe("granted");
 		expect((await publishingStateFor(granted.id)).interactions).toBe("granted");
 	});
 });

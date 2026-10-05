@@ -33,7 +33,7 @@
 // Guide (the wiki's *How Anthers Talks About Itself*): "0% cut" is now unconditionally true of EVERY creator transaction,
 // but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
 // of the price. Where a cut and a price appear together the take-home figure must
-// appear with them, or a reader concludes the creator gets the whole list price.
+// appear with them, or a user concludes the creator gets the whole list price.
 // "nonprofit", never "501(c)(3)", until the IRS determination letter lands.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
@@ -85,6 +85,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { FAQBlock } from "../components/ui/FAQ";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -93,6 +94,11 @@ const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();
+	// The seeded ladder, for the claims this page quotes a creator: what a fan's support
+	// for Anthers sets (the entry price, the Time Pool share of it) and the modeled
+	// scenario two Public Access prices wide. The constants stand in until the fetch
+	// lands; the figures are ladder claims, so the rows own them.
+	const { publicAccessPrice } = useAnthersLadder();
 	// /signup is the one signup door since 2026-10-02 — /subscribe is now only a
 	// redirect to it (the old URL is in circulation in marketing surfaces), and a hop
 	// through a redirect is not better than a direct link.
@@ -505,8 +511,8 @@ export default function ForCreatorsPage() {
 							That:
 							<ul>
 								<li>
-									puts {fmtMoney(timePoolFor(PUBLIC_ACCESS_PRICE))} of every{" "}
-									{fmtMoney(PUBLIC_ACCESS_PRICE)} into that fan's{" "}
+									puts {fmtMoney(timePoolFor(publicAccessPrice))} of every{" "}
+									{fmtMoney(publicAccessPrice)} into that fan's{" "}
 									<strong className="font-semibold text-base-content/85">Time Pool</strong>, split
 									across the creators they spend time with, by time
 								</li>
@@ -519,7 +525,7 @@ export default function ForCreatorsPage() {
 									or anyone's
 								</li>
 							</ul>
-							{fmtMoney(PUBLIC_ACCESS_PRICE)} a month also lifts their own Public Access limit, so
+							{fmtMoney(publicAccessPrice)} a month also lifts their own Public Access limit, so
 							they can spend as much time with your free work as they like. Whatever is left over
 							funds free access and the charitable programs—not Anthers' pocket. Anthers is a
 							nonprofit: no investors, no profit-taking.
@@ -600,10 +606,10 @@ export default function ForCreatorsPage() {
 						across every creator they spend time with, so what reaches you is your share of their
 						month, not the whole figure. What they give you directly is separate, and carries no
 						platform cut. *A free account pays nothing; free access covers its small Time Pool, so
-						even a free viewer pays the creators they spend time with—up to{" "}
-						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which supporting Anthers
-						lifts. Delivery costs nothing on either side—no per-GiB charge, however much anyone
-						streams or downloads—and you get {FREE_STORAGE_GIB} GiB of free storage.
+						even a free user pays the creators they spend time with—up to {FREE_PUBLIC_ACCESS_HOURS}{" "}
+						hours of Public Access a month, which supporting Anthers lifts. Delivery costs nothing
+						on either side—no per-GiB charge, however much anyone streams or downloads—and you get{" "}
+						{FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>
@@ -798,7 +804,7 @@ export default function ForCreatorsPage() {
 			</Section>
 
 			{/* Questions — above the closing CTA, for the reason noted on /for-users: an FAQ
-			    answers what is still standing between a reader and the button, so it belongs
+			    answers what is still standing between a user and the button, so it belongs
 			    on the way there. This page argues the economics at length, so its questions
 			    lead with take-home and then cover what the argument never reaches — the
 			    setup, the one charge, and what publishing here commits you to. Shared with
@@ -916,12 +922,18 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
  *
  * 🚨 **A basis that disagrees with its own numbers is worse than no basis at all**, and
  * this page shipped one: a stray multiplier left behind by a rename made it compute a $2
- * scenario while every sentence around it said $6, including the note telling the reader
+ * scenario while every sentence around it said $6, including the note telling the user
  * rival figures were all-in take-home at the same $6. Nothing caught it, because a
  * scenario basis is arithmetic rather than a typed figure `econ:figures` can see.
  *
  * Two Public Access prices is the editorial choice, so it is written as that rather than
  * as a bare 6 — the figure moves if the price does.
+ *
+ * ⚠️ **Constant-derived after the rows migration, deliberately**: the whole MATRIX —
+ * scenario, rival rows, receipts — is one modeled arrangement whose parts must agree with
+ * each other (the incident above), and re-deriving only this page's basis from the fetched
+ * rows would split the scenario's arithmetic from its own note mid-page. The direct
+ * quotes of the ladder (the pool a fan's support sets) are the part that reads the rows.
  */
 const SUPPORT_SPEND = PUBLIC_ACCESS_PRICE * 2;
 const BADGE_SPEND = SUPPORT_SPEND;

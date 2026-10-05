@@ -17,7 +17,7 @@
  * ⚠️ **A guardian's settings never leave this account.** Nothing here writes a rating, a note
  * or an access row, and nothing here is readable by anybody but the account holder — which is
  * what keeps one household's controls out of everybody else's catalog. The controls sit on
- * the viewer, never on the Work.
+ * the user, never on the Work.
  */
 
 import { db } from "@anthers/db/client";
@@ -217,7 +217,7 @@ function daysAgo(now: Date, days: number): Date {
  * the site all evening with the limit untouched.
  *
  * ⚠️ **Every attention row counts, `public_access` or not.** The Public Access meter is about
- * what the *commons* owes a viewer; this is about how long somebody has been consuming, and an
+ * what the *commons* owes a user; this is about how long somebody has been consuming, and an
  * hour of a Work their parent bought them is an hour either way. Filtering on the flag here
  * would let a household's whole limit be bypassed by anything that was paid for.
  */
@@ -272,7 +272,7 @@ export async function consumedSeconds(
  */
 export function parentalHiddenFrom(
 	policy: ParentalPolicy,
-	viewerId: number | null,
+	userId: number | null,
 	creatorColumn: SQL | unknown = works.creatorId,
 	typeColumn: SQL | unknown = works.type,
 ): SQL | undefined {
@@ -330,15 +330,15 @@ export function parentalHiddenFrom(
 
 	if (conditions.length === 0) return undefined;
 	const all = sql.join(conditions, sql` AND `);
-	if (viewerId == null) return sql`(${all})`;
-	return sql`((${all}) OR ${creatorColumn} = ${viewerId})`;
+	if (userId == null) return sql`(${all})`;
+	return sql`((${all}) OR ${creatorColumn} = ${userId})`;
 }
 
 /** The policy and the listing condition that follows, in one step. */
-export async function parentalVisibility(viewerId: number | null): Promise<{
+export async function parentalVisibility(userId: number | null): Promise<{
 	policy: ParentalPolicy;
 	hidden: SQL | undefined;
 }> {
-	const policy = await parentalPolicyFor(viewerId);
-	return { policy, hidden: parentalHiddenFrom(policy, viewerId) };
+	const policy = await parentalPolicyFor(userId);
+	return { policy, hidden: parentalHiddenFrom(policy, userId) };
 }

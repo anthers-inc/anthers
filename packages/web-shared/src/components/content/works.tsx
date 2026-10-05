@@ -36,7 +36,7 @@ export { type AccessState, accessState } from "./work-state";
  * ⭐ **Text is labeled Writing**, the word the creator profile's tab already uses and one that
  * covers an essay, a story and a poem alike. It is written on the Work's own page rather than
  * uploaded, and it reads as an article, which is what tells it apart from a post (Parker,
- * 2026-09-11: the two should differ for the reader, not only in a label).
+ * 2026-09-11: the two should differ for the user, not only in a label).
  */
 export const LIBRARY_TYPE_OPTIONS: { value: ContentType; label: string }[] = [
 	{ value: "text", label: "Writing" },
@@ -189,7 +189,7 @@ export function AccessBadge({ item }: { item: Work }) {
  * ⭐ **`general` renders nothing, deliberately.** Almost everything on Anthers is General,
  * so a badge on all of it would say nothing and would make Mature read as a mark against a
  * work rather than as information about it. What earns a badge is the answer that changes
- * what a reader is walking into, plus the *absence* of an answer — which a creator has to
+ * what a user is walking into, plus the *absence* of an answer — which a creator has to
  * see, because it is what is holding their release.
  */
 export function MaturityBadge({ work }: { work: Work }) {

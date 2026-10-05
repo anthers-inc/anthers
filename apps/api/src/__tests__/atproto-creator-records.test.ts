@@ -2,7 +2,7 @@
 /**
  * Mapping a creator's posts and projects onto their records.
  *
- * ⭐ As with the reader's records, the load-bearing assertion is that what comes out passes
+ * ⭐ As with the user's records, the load-bearing assertion is that what comes out passes
  * the Lexicon's own validator rather than a restatement of the mapper's formula.
  */
 import { describe, expect, it } from "bun:test";

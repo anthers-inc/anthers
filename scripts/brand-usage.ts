@@ -32,8 +32,8 @@ const probe = args.includes("--probe");
  * ⚠️ **Recursive on purpose, because the counters are three levels down.** The
  * live shape is `monthly.usage.service`, and a flattener that walked two levels
  * found nothing at all — which the probe reported as "no counter moved", the exact
- * answer a working saving would produce. A reader that can miss its target and
- * still print a confident sentence is worse than no reader.
+ * answer a working saving would produce. A user that can miss its target and
+ * still print a confident sentence is worse than no user.
  */
 function counters(node: unknown, prefix = ""): Record<string, number> {
 	if (!node || typeof node !== "object") return {};

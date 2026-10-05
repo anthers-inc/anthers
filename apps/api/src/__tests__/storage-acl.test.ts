@@ -21,7 +21,7 @@ import { resolveStorageConfig } from "../services/storage/config";
 
 describe("upload ACL allowlist", () => {
 	it("publishes display chrome", () => {
-		// The imagery a viewer is meant to see before they have access. Enumerated
+		// The imagery a user is meant to see before they have access. Enumerated
 		// rather than looped over the set, so deleting an entry fails a test instead
 		// of quietly shrinking both sides of the assertion.
 		for (const type of [

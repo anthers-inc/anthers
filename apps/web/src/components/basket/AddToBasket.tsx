@@ -37,7 +37,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 	 * Adding is exactly what makes `inBasket` true, so the component swaps branches on the
 	 * same tick the message is set — and the first version put this warning in the branch
 	 * that had just stopped rendering. It set state on a view that immediately unmounted:
-	 * the basket was correctly replaced and the reader was told nothing, which is the one
+	 * the basket was correctly replaced and the user was told nothing, which is the one
 	 * outcome worse than refusing the add. (Same family as the signup ceremony's
 	 * auth-context bug: a view that changes shape in response to the very action whose
 	 * result it needs to report.) Verified in a browser, because nothing about it fails.
@@ -69,7 +69,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 		<div className="space-y-2">
 			<button
 				type="button"
-				className="btn btn-outline btn-sm"
+				className="btn btn-outline btn-sm w-full"
 				onClick={() => {
 					// `add` is async in server mode (the answer carries the creator clash) and
 					// sync in scratch mode; `Promise` handles both, and the only thing read
@@ -91,10 +91,6 @@ export default function AddToBasket(props: AddToBasketProps) {
 				<ShoppingBagIcon className="w-4 h-4" /> Add to basket
 			</button>
 			{notice}
-			<p className="text-xs text-base-content/50">
-				Buying several things from {props.creatorHandle} together sends them more: the card fee is
-				charged once per purchase, not once per item.
-			</p>
 		</div>
 	);
 }

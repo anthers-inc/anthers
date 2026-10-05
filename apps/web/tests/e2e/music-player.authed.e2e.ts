@@ -13,7 +13,7 @@
  *      Garnet has no equivalent for (it indexes a filesystem: what it lists, it can play),
  *      so nothing about it is ported and nothing but a test protects it.
  *
- *   🚨 **The gate reaches the words.** A denied viewer gets no lyrics, because a gated
+ *   🚨 **The gate reaches the words.** A denied user gets no lyrics, because a gated
  *      track's lyrics are as much the deliverable as its audio. The API-level assertion
  *      lives in `delivery-access.test.ts`; this one proves the browser never renders them.
  *
@@ -35,7 +35,7 @@ import { expect, test } from "./fixtures";
  * This read `/projects/${slug}` until 2026-09-03 and rendered the right album anyway: the old
  * root-level `/:username/:slug` catch-all matched it with the username "projects", and
  * `ProjectPage` fetches by slug alone, so nothing needed the first segment to be real. Handles
- * carry an `@` now, that path 404s, and this is the URL a reader actually has.
+ * carry an `@` now, that path 404s, and this is the URL a user actually has.
  */
 const ALBUM_URL = creatorProjectUrl(MEDIA_FIXTURE_USERNAME, MEDIA_FIXTURE_PROJECT.slug);
 const BAR = "[data-testid=player-bar]";

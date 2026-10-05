@@ -13,14 +13,14 @@
  * moves. What makes this one survivable is that the client's version rests on a single
  * property of the resolver, and this file is that property:
  *
- * 🚨 **For a viewer who has given nothing, bought nothing and owns nothing, freeness is decided by
+ * 🚨 **For a user who has given nothing, bought nothing and owns nothing, freeness is decided by
  * the baseline row alone** — allowed, at price 0. Nothing above threshold 0 can make a
  * Work free to a stranger, and nothing else can take it away.
  *
  * That is deliberately NOT a restatement of `accessState`'s code. It is a claim about
  * `resolveAccessSync`, exhaustive over the access tables a creator can actually build, and
  * it fails the moment the resolver stops honoring it — which is the moment the Studio
- * badge would start lying about what readers can open.
+ * badge would start lying about what users can open.
  *
  * Verified by sabotage before being committed, and the numbers are measured, not guessed:
  * dropping the `amountMeets` check from `offersFor` fails 6; ignoring the `allow` flag fails
@@ -40,7 +40,7 @@ import {
 const CREATOR_ID = 700;
 const STRANGER_ID = 701;
 
-/** A signed-in viewer who has given nothing to anyone and bought nothing. */
+/** A signed-in user who has given nothing to anyone and bought nothing. */
 const stranger: AccessContext = {
 	userId: STRANGER_ID,
 	supportByCreator: new Map(),
@@ -255,7 +255,7 @@ describe("the properties the badge's individual states rest on", () => {
 	 * is invisible to all twelve of those tables — verified: that sabotage passed 30/30
 	 * before this test was added, and fails here.
 	 */
-	it("clearing a rung makes a viewer entitled, not the Work free", () => {
+	it("clearing a rung makes a user entitled, not the Work free", () => {
 		const generous: AccessContext = {
 			userId: STRANGER_ID,
 			supportByCreator: new Map([[CREATOR_ID, 5]]),
@@ -270,7 +270,7 @@ describe("the properties the badge's individual states rest on", () => {
 		expect(resolved.reason).toBe("entitled");
 		expect(resolved.isFree).toBe(false);
 		// …and the stranger's view of the same Work is unchanged, which is what makes the
-		// creator's badge a statement about the Work rather than about one viewer.
+		// creator's badge a statement about the Work rather than about one user.
 		expect(resolveAccessSync(work(rows), stranger).isFree).toBe(false);
 	});
 });

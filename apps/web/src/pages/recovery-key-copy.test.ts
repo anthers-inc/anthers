@@ -83,7 +83,7 @@ describe("what the recovery key card must tell somebody", () => {
 });
 
 /**
- * Something the card must not imply, and what a reader would wrongly conclude.
+ * Something the card must not imply, and what a user would wrongly conclude.
  *
  * 🚨 **Every one of these would be a comforting sentence and a false one.** The temptation is
  * real, because the honest version of this card is alarming and the obvious edit is to

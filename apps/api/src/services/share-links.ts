@@ -16,12 +16,12 @@
  * module hands out nothing else.
  *
  * ⚠️ **So "ungated work only" is enforced by construction, not by a check anybody has to
- * remember to write.** A share context resolves with a **null viewer** carrying `sharedBy`,
+ * remember to write.** A share context resolves with a **null user** carrying `sharedBy`,
  * and `sharedBy` is read at exactly one line of `resolveAccessSync` — the branch where access
  * would otherwise be granted to free work. Everything above that line still runs on the
  * ordinary rules:
  *
- *   - a **gated** Work has no qualifying allowed row for a null viewer → `login_required`;
+ *   - a **gated** Work has no qualifying allowed row for a null user → `login_required`;
  *   - a **priced** Work → `payment_required`;
  *   - an **Adult** Work → `adult_gated`, because a share context carries no opt-in and can
  *     never be given one. That is the stronger property the wiki's *Rating Standard* asks for: Adult work is
@@ -94,7 +94,7 @@ export function isShareable(work: {
 	if (!work.streamEnabled) return false;
 	// Universally free: the baseline row allowed at $0. The same shape `resolveAccessSync`
 	// calls `isFree`, checked here against the rows the Work carries rather than by building a
-	// context, because there is no viewer yet to build one for.
+	// context, because there is no user yet to build one for.
 	const baseline = (work.access ?? []).find((r) => Number(r.threshold) === 0);
 	return baseline?.allow === true && Number(baseline.price) <= 0;
 }

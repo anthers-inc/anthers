@@ -4,7 +4,7 @@
  *
  * 🚨 **The numbers are the subject.** The reference PDS limits `createSession` to thirty in
  * five minutes and three hundred a day per account, and before `sealed_session` existed every
- * write opened one — a busy reader's pooled writes exhausted their OWN login budget, after
+ * write opened one — a busy user's pooled writes exhausted their OWN login budget, after
  * which everything they did failed `node_unreachable`. Each case below asserts how many times
  * a spy fetch was asked for a session endpoint, over a fake node that answers them, using the
  * real database the same way the other suites do.
@@ -170,7 +170,7 @@ async function storedSession(
 }
 
 describe("the hosted session store", () => {
-	// 🚨 The case the whole change exists for: a busy reader's writes must share one login.
+	// 🚨 The case the whole change exists for: a busy user's writes must share one login.
 	it("spends ONE createSession on a burst of opens for one account", async () => {
 		const { userId } = await hostedCreator("burst");
 		const pair = freshPair("burst");

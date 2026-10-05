@@ -9,7 +9,7 @@
 // nobody has adopted, an "Independent Board" with "authority to override operational
 // decisions", and a Reports & Compliance card promising an annual Form 990, Impact
 // Report and independent audit. None of it was a lie about the future and all of it was
-// a claim about the present, so a reader met a governed organization and would have
+// a claim about the present, so a user met a governed organization and would have
 // found one person.
 //
 // That is the same shape as *"where a document claims an absence, that absence needs a
@@ -24,7 +24,7 @@
 // phrase to slip past it: the phrase is a proxy for the claim, and a guard covers a
 // phrasing rather than a claim (the lesson `RETIRED_COPY` paid for when its ATProto
 // rule sailed straight past *"an open, distributed network"*). If this fails on wording
-// you believe is honest, the question to ask is what a reader would conclude, not
+// you believe is honest, the question to ask is what a user would conclude, not
 // whether the regex was fair.
 //
 // Scoped to this one page on purpose. `RETIRED_COPY` in `scripts/econ-figures.ts` was
@@ -106,11 +106,11 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 		// when Parker's call moved the wiki's *How Anthers Talks About Itself* off *"say nothing about federal status at all"*.
 		// The page now states the intention to file, and the § What Anthers Is two-column
 		// split (what binds us NOW / what recognition ADDS) is what makes that safe: it
-		// partitions present from future on the page itself rather than leaving a reader to
+		// partitions present from future on the page itself rather than leaving a user to
 		// work out which column a sentence belongs in.
 		//
 		// So what is forbidden is the **present tense**, in every form that would let a
-		// reader conclude we hold the status or have asked for it. The Form 1023 has not
+		// user conclude we hold the status or have asked for it. The Form 1023 has not
 		// been filed. Note "another charitable organization" is fine and describes where the
 		// assets go, not what we are; and the positive assertion below pins the future
 		// framing, so a re-tensing breaks two tests rather than none.
@@ -135,7 +135,7 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 	{
 		claim: "money given to Anthers is deductible today",
 		// The half of the old row that did NOT relax. Deductibility is the claim with a
-		// cash consequence for the reader, so only the future form survives, and it is
+		// cash consequence for the user, so only the future form survives, and it is
 		// paired with its own correction — see the co-presence assertion below.
 		phrases: [
 			"is tax-deductible",
@@ -186,7 +186,7 @@ describe("/about describes the organization as it is", () => {
 	});
 
 	// 🚨 The co-presence rule, same shape as "free forever" beside the monthly limit: a
-	// reader who meets "donations become tax-deductible" without the correction beside it
+	// user who meets "donations become tax-deductible" without the correction beside it
 	// will hear that theirs is, and that one has a cash consequence. Conditional on the
 	// mention, because deleting the deductibility line entirely is a legitimate edit —
 	// what is not legitimate is keeping it and dropping the sentence that dates it.

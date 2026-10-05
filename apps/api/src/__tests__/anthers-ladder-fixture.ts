@@ -4,10 +4,10 @@
  * `db:dev-account` seeds one — owned by a fixture account created for the purpose.
  *
  * Why this exists: the accounts split (2026-10-03) deleted the amount columns the old
- * fixtures wrote, and every Anthers-side read now resolves the viewer's holding on the
+ * fixtures wrote, and every Anthers-side read now resolves the user's holding on the
  * Anthers ladder — which no test session seeds, because that seeding runs in a dev session's
  * `db:seed` (`ensure-dev-account`), not in a test session. A suite that "gives $N to
- * Anthers" awaits {@link ensureOrgLadder} before writing holdings; every suite shares the
+ * Anthers" awaits {@link ensureAnthersLadder} before writing holdings; every suite shares the
  * one ladder, and `ensureAnthersBadges` is idempotent on (creator, threshold), so repeat
  * calls cost one upsert pass.
  *
@@ -30,7 +30,7 @@ import { eq } from "drizzle-orm";
 import { ensureAnthersBadges } from "../services/anthers-badges";
 import { createAccount } from "./account-fixture";
 
-const ORG_EMAIL = "seed_org_ladder@example.com";
+const ANTHERS_LADDER_EMAIL = "seed_org_ladder@example.com";
 
 /**
  * Ensure the Anthers ladder exists in this session, and return the owner's user id.
@@ -38,11 +38,11 @@ const ORG_EMAIL = "seed_org_ladder@example.com";
  * Idempotent; safe to await from every suite's `beforeAll`. Sequential-file execution
  * (see `cleanup.ts`) is what makes "the session shares one ladder" honest.
  */
-export async function ensureOrgLadder(): Promise<number> {
+export async function ensureAnthersLadder(): Promise<number> {
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.email, ORG_EMAIL))
+		.where(eq(users.email, ANTHERS_LADDER_EMAIL))
 		.limit(1);
 	if (existing) {
 		await ensureAnthersBadges(existing.id);
@@ -53,7 +53,7 @@ export async function ensureOrgLadder(): Promise<number> {
 	// placeholder DID is anywhere in the file. Brought, with the reserved-name exception —
 	// the name IS the official one the reservation exists to protect (see the module note).
 	const account = await createAccount("anthers", {
-		email: ORG_EMAIL,
+		email: ANTHERS_LADDER_EMAIL,
 		emailVerified: true,
 		identity: "brought",
 		bypassReserved: true,

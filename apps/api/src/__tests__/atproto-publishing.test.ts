@@ -12,7 +12,7 @@
  * authorization replaces the last — which means a sign-in that asked for identity alone would
  * discard a publishing permission the creator had already granted, and the first sign of it
  * would be a listing that stopped updating. So a creator's sign-in carries their permission
- * through, *and* a reader's still asks for nothing beyond identity. Asking everybody would
+ * through, *and* a user's still asks for nothing beyond identity. Asking everybody would
  * make the first test pass and is why the second one is here.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -239,8 +239,8 @@ describe("what the client is allowed to ask for", () => {
 		const credit = await loadPermissionSet("creditConfirmation");
 		expect([...credit.action].sort()).toEqual(["create", "delete"]);
 
-		// The reader tier is spread across two permission sets: the original reader records and the
-		// credit-confirmation set that lets Anthers publish an acceptance in the reader's repo.
+		// The user tier is spread across two permission sets: the original user records and the
+		// credit-confirmation set that lets Anthers publish an acceptance in the user's repo.
 		const userCollections = user.collection;
 		const creditCollections = credit.collection;
 		const creatorCollections = creator.collection;
@@ -265,7 +265,7 @@ describe("asking for the permission", () => {
 		);
 		expect(res.status).toBe(200);
 		expect(lastAuthorize?.input).toBe(did("sub"));
-		// Both sets, the reader's alongside the creator's, because one request replaces the last.
+		// Both sets, the user's alongside the creator's, because one request replaces the last.
 		expect(lastAuthorize?.options.scope).toBe(
 			`atproto ${[...USER_SCOPES, ...CREATOR_SCOPES].join(" ")}`,
 		);
@@ -283,11 +283,11 @@ describe("asking for the permission", () => {
 		expect(lastAuthorize?.options.scope).toContain(CREATOR_SCOPE);
 	});
 
-	// ⚠️ And the other half: a reader is never asked for permission over a kind of record they
+	// ⚠️ And the other half: a user is never asked for permission over a kind of record they
 	// will never write. Asking everybody would be the easy way to make the test above pass.
-	// A reader's own records are Anthers working, so every reader is asked for them — and never
+	// A user's own records are Anthers working, so every user is asked for them — and never
 	// for the creator set, over records they will not make.
-	it("asks a reader for their own records and not for the creator permission", async () => {
+	it("asks a user for their own records and not for the creator permission", async () => {
 		const user = await makeUser("read", { isCreator: false });
 		await seedSession(did("read"), user.id);
 
@@ -311,10 +311,10 @@ describe("asking for the permission", () => {
 		expect((await startAuth({ intent: "login" })).status).toBe(400);
 	});
 
-	// A reader giving back the permission for their comments, reviews, votes and follows. The
-	// switch gates asking creators to publish and nothing else, and a reader is asked only for the
-	// reader tier.
-	it("asks a reader for the reader tier alone, whatever the publishing switch says", async () => {
+	// A user giving back the permission for their comments, reviews, votes and follows. The
+	// switch gates asking creators to publish and nothing else, and a user is asked only for the
+	// user tier.
+	it("asks a user for the user tier alone, whatever the publishing switch says", async () => {
 		const user = await makeUser("rgrant", { isCreator: false });
 		const token = await createSession(user.id, undefined, undefined);
 		delete process.env.ATPROTO_PUBLISH_ENABLED;
@@ -403,8 +403,8 @@ describe("coming back from the consent screen", () => {
 		expect(login.searchParams.get("error")).toBeTruthy();
 	});
 
-	// ⚠️ Judged against the creator tier, every reader's answer would read as a decline.
-	it("records a reader's grant of the reader tier as given, and sends them back where they were", async () => {
+	// ⚠️ Judged against the creator tier, every user's answer would read as a decline.
+	it("records a user's grant of the user tier as given, and sends them back where they were", async () => {
 		const user = await makeUser("rback", { isCreator: false });
 		await seedSession(did("rback"), user.id);
 

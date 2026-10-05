@@ -28,12 +28,12 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "../services/sticker-void";
 import { createAccount } from "./account-fixture";
+import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { ensureOrgLadder } from "./org-ladder-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
-await ensureOrgLadder();
+await ensureAnthersLadder();
 purgeAccountsCreatedHere();
 
 const RUN = crypto.randomUUID().slice(0, 8);
@@ -55,11 +55,11 @@ async function signUp(username: string) {
  * suite's stand-in for the amount write the webhooks made.
  */
 async function holdOrgRung(userId: number, threshold: string, cycle: string): Promise<void> {
-	const orgId = await ensureOrgLadder();
+	const anthersId = await ensureAnthersLadder();
 	const [rung] = await db
 		.select({ id: badges.id })
 		.from(badges)
-		.where(and(eq(badges.creatorId, orgId), eq(badges.threshold, threshold)))
+		.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, threshold)))
 		.limit(1);
 	const badge =
 		rung ??
@@ -67,7 +67,7 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
 			await db
 				.insert(badges)
 				.values({
-					creatorId: orgId,
+					creatorId: anthersId,
 					threshold,
 					label: `$${threshold}`,
 					description: "A fixture rung the void suite holds.",
@@ -80,7 +80,7 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
 			and(
 				eq(userBadges.userId, userId),
 				eq(userBadges.billingCycle, cycle),
-				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${orgId})`,
+				sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${anthersId})`,
 			),
 		);
 	if (Number(threshold) > 0) {

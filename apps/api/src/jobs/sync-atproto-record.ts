@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Bring the record for one row into line with the row — a creator's post or project, or a
- * reader's comment, review, vote or follow.
+ * user's comment, review, vote or follow.
  *
  * 🚨 **A job rather than part of the request, and the reason is which failure is acceptable.**
  * Writing a record is a call to another server. Doing it inside the request would make posting a
@@ -19,14 +19,14 @@
  */
 
 import { syncPostRecord, syncProjectRecord } from "../services/creator-record-listing.js";
+import type { RecordSyncKind, RecordSyncResult } from "../services/record-sync.js";
+import { isOrdinary } from "../services/repo-writer.js";
 import {
 	syncCommentRecord,
 	syncFollowRecord,
 	syncReviewRecord,
 	syncVoteRecord,
-} from "../services/reader-record-listing.js";
-import type { RecordSyncKind, RecordSyncResult } from "../services/record-sync.js";
-import { isOrdinary } from "../services/repo-writer.js";
+} from "../services/user-record-listing.js";
 
 export interface SyncAtprotoRecordData {
 	kind: RecordSyncKind;

@@ -42,8 +42,31 @@
 // 5. **Money figures are interpolated, never typed** — `bun run econ:figures --check`
 //    scans this directory and a typed figure fails the build.
 
-import { FREE_STORAGE_GIB, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import { FREE_STORAGE_GIB } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+
+/**
+ * The seeded entry price, carried as a placeholder the renderer resolves — see
+ * {@link interpolatePriceFor}. The blurb text is static (what `roadmap.test.ts` checks
+ * shapes against); the price is the seeded ladder's.
+ */
+export const PRICE_TOKEN = "[public-access-price]" as const;
+
+/**
+ * Put the seeded entry price into a blurb's placeholder, at render.
+ *
+ * ⚠️ Unresolved tokens are a defect, not a fallback: a card rendering the literal
+ * `[public-access-price]` has skipped the interpolation, and no blurb carries it by
+ * accident.
+ */
+export function interpolatePriceFor(text: string, publicAccessPrice: number): string {
+	return text.replaceAll(
+		PRICE_TOKEN,
+		Number.isInteger(publicAccessPrice)
+			? `$${publicAccessPrice}`
+			: `$${publicAccessPrice.toFixed(2)}`,
+	);
+}
 
 /** Where a goal stands. Rendered as a pill on the card, so every card carries its tense. */
 export type Bucket = "launched" | "active" | "planned";
@@ -114,7 +137,7 @@ export const SHIPPED_SO_FAR = "Q3 2026";
  *
  * ⏳ Returns `null` today for every page, which is why the documentation buttons render as
  * inert chips rather than links. That is deliberate and visible: an inert chip naming a
- * real page tells a reader the documentation exists and has not been published, which is
+ * real page tells a user the documentation exists and has not been published, which is
  * true and is itself one of the goals on this page. **A button that navigated to a 404
  * would be the failure this avoids** — a route reference nothing can follow typechecks,
  * lints, and passes every test, which is how Connect's onboarding pointed at a Studio page
@@ -370,7 +393,7 @@ export const ROADMAP: RoadmapGroup[] = [
 	},
 	{
 		id: "audience",
-		label: "For Readers, Players & Viewers",
+		label: "For Users",
 		blurb:
 			"Finding work worth your time, spending time with it, and paying the people who made it.",
 		subgroups: [
@@ -506,7 +529,7 @@ export const ROADMAP: RoadmapGroup[] = [
 					{
 						id: "public-access",
 						title: "Public Access",
-						blurb: `Ungated streaming work is free to everybody. Every account gets ${FREE_PUBLIC_ACCESS_HOURS} hours a month forever, and $${PUBLIC_ACCESS_PRICE} removes the limit.`,
+						blurb: `Ungated streaming work is free to everybody. Every account gets ${FREE_PUBLIC_ACCESS_HOURS} hours a month forever, and ${PRICE_TOKEN} removes the limit.`,
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "11.02", title: "What Is Free, and What Is Gated" },

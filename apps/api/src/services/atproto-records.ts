@@ -177,7 +177,7 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
 }
 
 /**
- * What a stranger would find. Reuses the real resolver with a viewer who gives nobody
+ * What a stranger would find. Reuses the real resolver with a user who gives nobody
  * anything and owns nothing, rather than re-deriving "is this free" from the access rows —
  * a second implementation of a gate rule is a second implementation free to disagree with
  * the first, and this one would disagree in public.

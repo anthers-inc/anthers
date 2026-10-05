@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What the reader has asked to meet, on the client side: the Hide / Blur / Show settings for each
+ * What the user has asked to meet, on the client side: the Hide / Blur / Show settings for each
  * rung and for each kind of content, and the veil that applies the blur.
  *
  * 🚨 **The blur is the client's job and the hide is the server's, and the split is not
  * arbitrary.** A hidden Work must not be in the response at all — the whole point is that it
  * is absent — so hiding is a `WHERE` clause in `services/content-preferences.ts`. A blurred
- * Work *is* in the response, listed and reachable, with its cover covered until the reader
+ * Work *is* in the response, listed and reachable, with its cover covered until the user
  * chooses to look. Doing the blur here rather than server-side is what keeps that true: the
  * Work, its title and its rating all arrive, and only the picture waits.
  *
@@ -39,7 +39,7 @@ export interface ContentPreferences {
 }
 
 /**
- * What a reader gets before anything has loaded, and what a signed-out visitor gets forever.
+ * What a user gets before anything has loaded, and what a signed-out visitor gets forever.
  *
  * 🚨 **Mature blurs here, not just on the server.** This value is what renders during the
  * fetch, so a default of `show` would flash every Mature cover unblurred on first paint and
@@ -63,7 +63,7 @@ const PreferencesContext = createContext<{
 });
 
 /**
- * Loads the reader's preferences once and shares them.
+ * Loads the user's preferences once and shares them.
  *
  * A context rather than a hook per card, because a Catalog page renders dozens of covers and
  * each one needs the same answer — and because the settings page has to be able to push a
@@ -99,7 +99,7 @@ export function useContentPreferences() {
 	return useContext(PreferencesContext);
 }
 
-/** How a Work of this rating should be presented to this reader. */
+/** How a Work of this rating should be presented to this user. */
 export function displayFor(prefs: ContentPreferences, maturity?: string | null): MaturityDisplay {
 	if (maturity === "mature") return prefs.mature;
 	// Anything this build does not recognize is treated as the most restricted rung it
@@ -112,18 +112,18 @@ export function displayFor(prefs: ContentPreferences, maturity?: string | null):
 }
 
 /**
- * Why a Work's cover is covered for this reader, or null when nothing covers it.
+ * Why a Work's cover is covered for this user, or null when nothing covers it.
  *
- * `byRung` is the reader's setting for the Work's rating; `byNotes` is every kind of content they
+ * `byRung` is the user's setting for the Work's rating; `byNotes` is every kind of content they
  * asked to cover that the Work may contain, in the matrix's order, which is what the veil names.
  *
- * 🚨 **A kind of content the reader HIDES covers the Work wherever it still appears.** The server
+ * 🚨 **A kind of content the user HIDES covers the Work wherever it still appears.** The server
  * keeps it out of every listing, so a card only meets one where no listing filtered it, such as
- * the reader's own Work, and a reader who asked never to see a kind of content is not shown it
+ * the user's own Work, and a user who asked never to see a kind of content is not shown it
  * uncovered there. A hidden rung keeps its own behavior, which `displayFor` decides.
  *
  * ⚠️ **A row nobody answered counts as present** (`mayContain`), the same rule the listings use, so
- * a Work released before the matrix existed is covered for a reader who blurs any kind of content.
+ * a Work released before the matrix existed is covered for a user who blurs any kind of content.
  */
 export function coverFor(
 	prefs: ContentPreferences,
@@ -137,13 +137,13 @@ export function coverFor(
 }
 
 /**
- * A cover the reader has asked to have covered, with a click to reveal.
+ * A cover the user has asked to have covered, with a click to reveal.
  *
  * ⭐ **The label names the rating and the notes**, because a veil that says only "hidden"
- * makes the reader uncover it to find out whether they wanted to — which defeats the point. A
+ * makes the user uncover it to find out whether they wanted to — which defeats the point. A
  * Work covered only for a kind of content it holds names that kind instead, through `because`,
- * since its rating is not what the reader asked about.
- * The reveal is per card and not remembered: a reader who uncovered one Work has not asked
+ * since its rating is not what the user asked about.
+ * The reveal is per card and not remembered: a user who uncovered one Work has not asked
  * to uncover the next one, and persisting it would quietly turn their Blur into a Show.
  */
 export function MaturityVeil({

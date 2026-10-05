@@ -144,7 +144,7 @@ describe("Parental controls", () => {
 	 *
 	 * ⚠️ **`display: null` is the case that matters and it is the ordinary one.** The Adult
 	 * column is empty until somebody sets it and reads back as `hide` from the default, so
-	 * opting in writes a real `blur` over it — the escalation. A reader who typed `hide`
+	 * opting in writes a real `blur` over it — the escalation. A user who typed `hide`
 	 * themselves keeps it, which is why the two are seeded separately.
 	 */
 	async function alreadyVerified(display: string | null) {
@@ -462,7 +462,7 @@ describe("Parental controls", () => {
 	});
 
 	it("🚨 counts time against work the account PAID for, not only the commons", async () => {
-		// The Public Access meter asks what the commons owes a viewer; this asks how long
+		// The Public Access meter asks what the commons owes a user; this asks how long
 		// somebody has been consuming. Filtering on `public_access` here would let a whole
 		// household limit be bypassed by anything that was bought.
 		await reset();

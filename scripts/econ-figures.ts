@@ -431,10 +431,10 @@ function renderBadgePublicMarkdown(): string {
 }
 
 /**
- * What each rung of Anthers' own ladder carries, for a public reader.
+ * What each rung of Anthers' own ladder carries, for a public user.
  *
  * 🚨 **Three of these columns are LIVE and the storage floor is COMMITTED AND UNBUILT**, and
- * the table says so rather than leaving it to a footnote, because a reader scanning rows would
+ * the table says so rather than leaving it to a footnote, because a user scanning rows would
  * otherwise take the whole thing as a description of today. Free viewing, the Time Pool and
  * Stickers ship; the storage floor and purchase preservation do not.
  *
@@ -516,7 +516,7 @@ function renderReceiptMarkdown(): string {
 		// The rate a buyer actually pays is resolved by Stripe Tax from their billing
 		// address at the charge, so the sample receipt can only illustrate: a US average,
 		// named as one, with the copy saying the real rate varies by location. Saying
-		// "6.5%" flat would charge every reader the same illustrative figure the checkout
+		// "6.5%" flat would charge every user the same illustrative figure the checkout
 		// no longer charges.
 		pad(
 			`Sales tax (illustrative ${(ILLUSTRATIVE_SALES_TAX_RATE * 100).toFixed(1)}% — the real rate varies by location, calculated at checkout)`,
@@ -539,7 +539,7 @@ function renderReceiptMarkdown(): string {
  * split these rows. Both the exemption and the document it fed are gone.
  *
  * ⭐ **`allowRetired` on a public block is a contradiction, and it is the signal to watch
- * for.** The exemption licenses a deliberately historical sentence for a reader who was
+ * for.** The exemption licenses a deliberately historical sentence for a user who was
  * there. A public document has no such license — it states what is true and deletes what is
  * not — so a public block needing the exemption is a public block carrying somebody else's
  * changelog. **Reach for a public renderer rather than an exemption.**
@@ -640,10 +640,10 @@ function renderSelfSufficiencyMarkdown(): string {
 	// 25% at 6, 14% at 9" one line below the words "$6.59 a month" — every figure correct and
 	// every one of them reading as a count of the retired $3 Seed. The mix has been keyed in
 	// dollars since 2026-08-16; nothing was wrong but the notation, which is the only part a
-	// reader sees.
+	// user sees.
 	//
 	// Only the rungs carrying a whole percent: the mix spans ten and printing a rung at "0%"
-	// would teach the reader it stops there, which is the opposite of true.
+	// would teach the user it stops there, which is the opposite of true.
 	const mix = Object.entries(PAYING_BADGE_MIX)
 		.filter(([, share]) => Number(share) >= 0.01)
 		.map(([amount, share]) => `${(Number(share) * 100).toFixed(0)}% at $${amount}`)
@@ -687,7 +687,7 @@ function renderSelfSufficiencyMarkdown(): string {
  * creator, no "we", no markers. It fed a private research document until 2026-09-02 and was
  * written in the first person plural; when that document was published the prose had to
  * change, which is the fourth time a renderer's audience has moved underneath it. Write
- * every renderer as though a reader will meet it, because eventually one does.
+ * every renderer as though a user will meet it, because eventually one does.
  */
 function renderTakeHomeMarkdown(): string {
 	const rows = takeHomeComparison();
@@ -860,7 +860,7 @@ function renderEdBandMarkdown(): string {
 function renderCreatorSegmentsMarkdown(): string {
 	const s = creatorSegments();
 	return [
-		`The modeled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a viewer's hours are a free variable while their contribution is fixed by what they give, so a per-hour rate is an emergent ratio nobody is paid at.`,
+		`The modeled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a user's hours are a free variable while their contribution is fixed by what they give, so a per-hour rate is an emergent ratio nobody is paid at.`,
 		"",
 		table(
 			["Segment", "Creators", "Attention", "Catalog", "Time Pool /mo", "Storage /mo", "Net /mo"],
@@ -904,7 +904,7 @@ function renderFreePotMarkdown(): string {
 			]),
 		),
 		"",
-		`The pot is the single dial that sets **free-access cost per account**: cost is \`free accounts × this number\`, headcount times a policy figure, with no behavioral guess underneath it. Raising it sends more money to the creators a free viewer spends time with, and raises the share of payers needed to fund that — which is the whole of the trade. The shipped $${shipped?.pot} was chosen on an **asymmetry rather than a forecast**: it is a standing obligation to every free account, so raising it later is easy and climbing down from it in public is not.`,
+		`The pot is the single dial that sets **free-access cost per account**: cost is \`free accounts × this number\`, headcount times a policy figure, with no behavioral guess underneath it. Raising it sends more money to the creators a free user spends time with, and raises the share of payers needed to fund that — which is the whole of the trade. The shipped $${shipped?.pot} was chosen on an **asymmetry rather than a forecast**: it is a standing obligation to every free account, so raising it later is easy and climbing down from it in public is not.`,
 	].join("\n");
 }
 
@@ -912,10 +912,10 @@ function renderFreePotMarkdown(): string {
  * The user case studies' Anthers side, for `11.05`.
  *
  * 🚨 **This block exists because the page lied about itself.** Its second paragraph told
- * a reader that every Anthers figure on it was generated from the platform's own code —
+ * a user that every Anthers figure on it was generated from the platform's own code —
  * on a page whose whole argument is that Anthers can be checked — and every one of them
  * had been typed by hand. They were *correct*, which is the part that makes this the
- * dangerous kind of wrong: nothing looked broken, and the sentence a reader would rely
+ * dangerous kind of wrong: nothing looked broken, and the sentence a user would rely
  * on to trust the rest was the one that was false.
  *
  * Only the Anthers column is rendered. What an incumbent charges is dated research, and
@@ -982,7 +982,7 @@ function renderUserCasesMarkdown(): string {
  * This is the arithmetic a creator has to see before deciding whether to move, and it is
  * the one that gets assumed backwards: **the pot is set by headcount, not by watching.**
  * More viewing does not grow it; it divides the same money further. Generated because
- * the page told readers it was, and was not.
+ * the page told users it was, and was not.
  */
 function renderTimePoolPerThousandMarkdown(): string {
 	const p = timePoolPerThousand();
@@ -1003,7 +1003,7 @@ function renderTimePoolPerThousandMarkdown(): string {
 			],
 		),
 		"",
-		`That is the entire pot, **however much anybody watches** — it is set by how many accounts exist and what they give, and attention only decides how it is divided. At this paying share **free accounts fund ${p.freeSharePct} of it**, which makes a free viewer a paying viewer that Anthers pays for.`,
+		`That is the entire pot, **however much anybody watches** — it is set by how many accounts exist and what they give, and attention only decides how it is divided. At this paying share **free accounts fund ${p.freeSharePct} of it**, which makes a free user a paying user that Anthers pays for.`,
 	].join("\n");
 }
 
@@ -1177,7 +1177,7 @@ const BLOCKS: Block[] = [
  * the model supports — and they had drifted exactly as the README did, for exactly the
  * same reason: outside the scan, so nothing looked. The demo seeder carried a `pwyw` pricing
  * type and a work blurb promising pay-what-you-want, for a mechanism that has never
- * existed; the gauntlet printed a viewer's support as a Seed count. One sweep, then this
+ * existed; the gauntlet printed a user's support as a Seed count. One sweep, then this
  * line, so it is the last time.
  *
  * Cheap to include because the scan blanks comments first: the schema identifiers that
@@ -1232,18 +1232,18 @@ async function docFiles(): Promise<{ root: string; file: string }[]> {
 	// CI has none and skips this silently. Its blocks are already checked the same way.
 	const pub = findPublicWiki();
 	if ("path" in pub) {
-		// The task board scans only when --wiki is requested (2026-10-02). Under the
-		// location publish boundary every public task note is published copy, so the
-		// scan is right to cover them — but the board is an audit trail carrying retired
-		// vocabulary by design, and the 100-or-so hits that follow are an accepted
-		// backlog (Parker, 2026-10-02) that the exporter's task-publishing slice owns.
-		// Leaving them in the default scan turns every pre-push `make verify` red on
-		// copy nobody is about to publish, which is the "guard people route around"
-		// failure this file already knows. The publishing gate is `make wiki-figures
-		// CHECK=1`, which runs with --wiki and sees the board.
+		// The task board scans only when --wiki is requested (2026-10-02). The board's
+		// LIVE notes — Active and Future — are published copy under the location rule and
+		// stay in the scan; a Done note is history, and history is exempt twice over: it
+		// is an audit trail that carries retired vocabulary BY DESIGN (naming the era's
+		// words is what those records are for — a sweep task saying "Seed" is recording
+		// what was true), and it will never be edited forward, so a strike there would
+		// rewrite the record rather than the copy a reader acts on (Parker, 2026-10-04).
+		// The Done archive's status lives in the folder, the same way the sweep reads it.
 		const scanTasks = process.argv.includes("--wiki");
 		for await (const path of markdownFiles(pub.path)) {
 			const file = relative(pub.path, path);
+			if (file.startsWith("00-09 Metafiles/01 Tasks/Done/")) continue;
 			if (file.startsWith("00-09 Metafiles/01 Tasks/") && !scanTasks) continue;
 			if (await unpublished(file)) continue;
 			out.push({ root: pub.path, file: `[wiki] ${file}` });
@@ -1278,7 +1278,7 @@ async function unpublished(file: string): Promise<boolean> {
 	// Never served: kept back by location, which is the vault's opt-out mechanism — for
 	// documents directly and for tasks via the mirrored board inside it (2026-10-02).
 	if (file.startsWith("Internal Wiki/")) return true;
-	// Agent instructions. Written for whoever is working on Anthers, not for a reader.
+	// Agent instructions. Written for whoever is working on Anthers, not for a user.
 	// `CLAUDE.md` sits at the root where reference pages sit, and is machinery: it exists
 	// only so the harness auto-loads something that routes to the Agents Hub.
 	if (file.startsWith("90-99 Agents/") || file === "CLAUDE.md") return true;
@@ -1472,7 +1472,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// feature invites "write it as coming" — the tense rule the cart and self-hosting
 		// both get — and this one does not get it: PWYW is written as **absent**. So the
 		// guard is permanent rather than a placeholder to delete once the feature lands,
-		// which is what a reader would otherwise reasonably assume from `why` alone.
+		// which is what a user would otherwise reasonably assume from `why` alone.
 		// Recorded in the vault at `31.02 Direct Creator Purchases` and `the wiki's *How Anthers Talks About Itself* § Prices`;
 		// the itch.io import consequence is in `62.01 § 5.1` (a PWYW game imports as a
 		// draft with no price set, rather than a number the creator never chose).
@@ -1502,8 +1502,8 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// The organization's own name for itself, and the one place a copy error becomes a
 		// factual error: **there is one legal person and it is `Anthers, Inc.`** (the wiki's *How Anthers Talks About Itself*,
 		// retired 2026-08-05). Writing "supported by a non-profit foundation" invents a
-		// second organization for the reader to track, and does it two sentences before the
-		// page names the actual corporation — so the reader is left with two entities and no
+		// second organization for the user to track, and does it two sentences before the
+		// page names the actual corporation — so the user is left with two entities and no
 		// way to tell which is which.
 		//
 		// 🚨 The narrowing is the whole rule: a foundation belonging to SOMEONE ELSE is fine
@@ -1699,7 +1699,7 @@ function publishedFigures(): Map<string, string[]> {
  * Blank every comment, preserving newlines so line numbers stay true.
  *
  * These pages carry long doc comments that explain the model in figures — developer
- * prose no reader ever sees, and flagging it would only push us toward worse
+ * prose no user ever sees, and flagging it would only push us toward worse
  * comments. There is deliberately no TypeScript parse here: a real lexer would have
  * to know that the apostrophe in JSX text like `Anthers' cut` is not a string
  * delimiter, and mis-reading that fails in the wrong direction. Blanking only ever
@@ -1828,7 +1828,7 @@ async function* markdownFiles(dir: string): AsyncGenerator<string> {
  * region is **full** of published figures — that is its entire job — and the sentences its
  * renderers emit name retired mechanisms on purpose ("a *Bandwidth* column sat here until
  * 2026-08-12"). Scanning either would report the generator against itself, and teach the
- * reader to annotate correct output rather than fix incorrect prose. HTML comments go for
+ * user to annotate correct output rather than fix incorrect prose. HTML comments go for
  * the same reason `withoutComments` blanks `//` ones: an `econ:allow` reason is written
  * there, and `allowance()` finds an annotation above a line by asking whether that line is
  * blank *once comments are gone but not before*.
@@ -2127,7 +2127,7 @@ if (retired.length > 0) {
 	// The list holds two kinds now — a mechanism the code no longer has, and a word we
 	// no longer use for one it does — so the header names neither and the per-hit `why`
 	// carries the difference. Saying "a charge that no longer exists" over a vocabulary
-	// hit sends the reader looking for a number to update, which is the wrong move.
+	// hit sends the user looking for a number to update, which is the wrong move.
 	console.error("\nThis copy uses something we have retired:\n");
 	for (const r of retired) console.error(`  ${r}`);
 	console.error(
@@ -2142,7 +2142,7 @@ if (exempt.length > 0) {
 	// "file(s) … from the app scan" until 2026-08-17, when `allowRetired` started pushing
 	// generated BLOCKS onto the same list — so every line it printed was mislabelled as a
 	// file and attributed to a scan it never went through. A guard that misreports its own
-	// exemptions is teaching the reader to skim them.
+	// exemptions is teaching the user to skim them.
 	console.log(`\necon-figures: ${exempt.length} exemption(s), each with a stated reason:`);
 	for (const e of exempt) console.log(`  ${e}`);
 	console.log("");

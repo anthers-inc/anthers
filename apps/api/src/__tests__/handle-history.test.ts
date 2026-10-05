@@ -2,7 +2,7 @@
 /**
  * A handle that moved keeps reaching the person who held it, for a while.
  *
- * The whole redirect mechanism has one writer pair and one reader, and this suite is the
+ * The whole redirect mechanism has one writer pair and one reader of it, and this suite is the
  * only thing that exercises them together: `findUserByAtprotoDid` (a sign-in that finds a
  * DID under a new handle) and `recordHandleChange` (a swap the hub made itself) each write
  * a `handle_history` row, and `GET /users/:handle` falls through to it only when the live
