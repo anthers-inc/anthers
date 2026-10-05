@@ -141,6 +141,7 @@ import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
 import { FAQBlock } from "../components/ui/FAQ";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
@@ -153,10 +154,19 @@ import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
  * which is exactly why it must not be transcribed here. See its note in `constants.ts`.
  */
 
-/** Where support for Anthers goes, at the worst case of it alone on the charge. */
-const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
-/** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
-const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
+/**
+ * How a lone directed amount — a fan backing a creator and nothing else on their charge —
+ * itemizes, at the worst case.
+ *
+ * 🚨 **Constant-derived, deliberately** — these are the splits of the DIRECTED DEFAULT, a
+ * charge the commit site builds (`directed` below), and the "one list, one total" rule
+ * binds every displayed dollar to the dollar charged (`signup-total.test.ts` carries the
+ * incident that paid for it). The Public Access price and the directed default happen to
+ * be one number today; they are different facts, and only the ladder claim — what removes
+ * the streaming limit — moved to the rows.
+ */
+const CREATOR_WORST_CASE_FEE = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
+const CREATOR_WORST_CASE_NET = PUBLIC_ACCESS_PRICE - CREATOR_WORST_CASE_FEE;
 
 /**
  * What the free creator allowance holds, in hours of video — **derived, never typed.**
@@ -420,8 +430,17 @@ function SupportBreakdown({
  * account's time. They are the SAME three lines a paid rung draws, so the two readings are
  * directly comparable — and the zeroes are true, since a free account contributes nothing
  * to the remainder and has no card to process.
+ *
+ * ⚠️ **The entry price travels in as `entryPrice`** rather than being read from a constant
+ * here: the note's "$3 a month lifts your monthly limit" is a claim about the seeded ladder
+ * (the bottom rung is what removes the limit), so it reads the rows through the caller's
+ * store — with the fallback standing until the fetch lands. The per-segment money math
+ * (`timePoolFor`, `cardFeeDisplay`) stays a function of the AMOUNT, which is the chosen
+ * dollars and not a quoted figure. The rest of the ladder display — the matrix columns,
+ * the cards, the choice resolution — is the charge picker's own display and stays
+ * constant-derived with it, by the same "one list, one total" rule.
  */
-function anthersReading(amount: number): { segments: Segment[]; note: string } {
+function anthersReading(amount: number, entryPrice: number): { segments: Segment[]; note: string } {
 	if (amount > 0) {
 		return {
 			segments: [
@@ -444,7 +463,7 @@ function anthersReading(amount: number): { segments: Segment[]; note: string } {
 					desc: "card & processing, at cost, paid to the processor",
 				},
 			],
-			note: `${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
+			note: `${money(entryPrice)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
 		};
 	}
 	return {
@@ -496,6 +515,12 @@ function SegmentLegendRow({ segment }: { segment: Segment }) {
  *
  * 🚨 Derived from `BADGE_ORDER`, never written out. A rung added to `ANTHERS_BADGES` has to
  * grow the matrix a column, the card list a card and the echo a sizer without being told.
+ *
+ * 🚨 **Constant-derived even after the rows migration, deliberately.** This array is the
+ * charge picker's display: a column's price is the amount pressing it commits, and the
+ * "one list, one total" rule (`signup-total.test.ts`) binds every displayed dollar to the
+ * dollar charged. Quoted CLAIMS about the ladder — the reading note, the GoFurther pitch —
+ * are the part that reads the seeded rows.
  */
 export const RUNG_AMOUNTS = BADGE_ORDER.map(thresholdForBadge);
 
@@ -1257,7 +1282,10 @@ function CreatorFinder({
 			{/* ⚠️ This said "how much each creator gets is a question for once your account
 			    exists — right now it's just who", which the echo below it contradicts: a
 			    pick adds a real priced line. The page still asks *whether* rather than *how
-			    much*, so name the starting amount and say where it is changed. */}
+			    much*, so name the starting amount and say where it is changed. 🚨 The starting
+			    amount is the DIRECTED DEFAULT — a charge the commit site builds, so it stays
+			    constant-derived (see `CREATOR_WORST_CASE_*` above) rather than reading the
+			    ladder. */}
 			<p className="mt-4 text-center text-xs text-base-content/45">
 				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each — their lowest Badge,
 				which you can change for a higher one whenever you like once your account exists.
@@ -2184,6 +2212,17 @@ export default function SignupPage() {
 	const signedIn = !!user;
 
 	/**
+	 * The seeded ladder, for every quoted CLAIM in this page's copy — the reading notes'
+	 * entry price, the "Back Anthers" pitch's price and pool — with the constants as the
+	 * until-fetched fallback. The charge-side figures (the directed default and the
+	 * displays that itemize it) stay constant-derived: the "one list, one total" rule
+	 * binds what a user is charged to one source, and a display that mirrors the charge
+	 * follows the charge rather than the rows. See `signup-total.test.ts` for the incident
+	 * that paid for it.
+	 */
+	const ladder = useAnthersLadder();
+
+	/**
 	 * Where to hand the visitor back to once this is over, if they came from somewhere.
 	 *
 	 * Set by the gated-post unlock modal, which is the case that matters: someone who
@@ -2409,8 +2448,10 @@ export default function SignupPage() {
 
 	/**
 	 * The breakdown the chosen rung reads as — see `anthersReading` for the other one.
+	 * The entry price is the seeded ladder's: the note claims the price that lifts the
+	 * limit, which is the bottom rung the rows state.
 	 */
-	const anthersBreakdown = anthersReading(anthersAmount);
+	const anthersBreakdown = anthersReading(anthersAmount, ladder.publicAccessPrice);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
@@ -2809,9 +2850,10 @@ export default function SignupPage() {
 									now.
 								</GoFurtherCard>
 								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
-									Just {money(PUBLIC_ACCESS_PRICE)}/month takes the monthly limit off Public Access
-									usage, and it lifts your automatic support for creators from{" "}
-									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(PUBLIC_ACCESS_PRICE))}/month.
+									Just {money(ladder.publicAccessPrice)}/month takes the monthly limit off Public
+									Access usage, and it lifts your automatic support for creators from{" "}
+									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(ladder.publicAccessPrice))}
+									/month.
 									<br></br>
 									<br></br>
 									Your Anthers Badge also funds free access for small users and creators and other
@@ -2838,13 +2880,13 @@ export default function SignupPage() {
 							segments={[
 								{
 									tone: "pool",
-									amount: CREATOR_NET,
+									amount: CREATOR_WORST_CASE_NET,
 									label: "Straight to the creator",
 									desc: "recurring support, and it clears whichever of their levels it reaches",
 								},
 								{
 									tone: "pay",
-									amount: ANTHERS_PAYMENTS,
+									amount: CREATOR_WORST_CASE_FEE,
 									label: "Payments",
 									desc: "card & processing, at cost, paid to the processor",
 								},
@@ -2908,7 +2950,13 @@ export default function SignupPage() {
 							segments={anthersBreakdown.segments}
 							note={anthersBreakdown.note}
 							// The reading it is NOT showing, so the panel is as tall as either one.
-							sizers={[anthersReading(anthersAmount > 0 ? 0 : PUBLIC_ACCESS_PRICE)]}
+							// The entry price is the seeded ladder's, for the note copy quotes.
+							sizers={[
+								anthersReading(
+									anthersAmount > 0 ? 0 : ladder.publicAccessPrice,
+									ladder.publicAccessPrice,
+								),
+							]}
 						/>
 						{/* ⚠️ One empty state now, because there is one way to be empty: Free. This
 						    carried a second line for "hasn't chosen yet", which stopped being

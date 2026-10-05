@@ -55,6 +55,7 @@ import { SALE_TABLE } from "@anthers/shared/figures";
 import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
+import { useAnthersLadder } from "../lib/anthers-ladder";
 
 // ─── Comparison data ─────────────────────────────────────────────────────────
 
@@ -316,6 +317,10 @@ const PLATFORMS: Platform[] = [
 export default function CreatorPayComparisonPage() {
 	const [platformId, setPlatformId] = useState(PLATFORMS[0].id);
 	const platform = PLATFORMS.find((p) => p.id === platformId) ?? PLATFORMS[0];
+	// The seeded ladder, for the entry-price claims the closing notes quote (what a fan's
+	// support for Anthers sets). The module-scope scenario figures above stay
+	// constant-derived — a modeled arrangement whose parts must agree with each other.
+	const ladder = useAnthersLadder();
 
 	return (
 		// `min-w-0 w-full` breaks the flex-column min-content cascade — without
@@ -384,17 +389,17 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">monthly amount</b> a fan chooses. They give it
 					straight to creators (no platform cut) and point some at{" "}
 					<b className="text-base-content/70">Anthers</b>; that half splits into a Time Pool ({" "}
-					{money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every ${PUBLIC_ACCESS_PRICE}, distributed to
-					the creators they watch by time) and <b className="text-base-content/70">the remainder</b>{" "}
-					that funds free access and the creator programs. On a direct sale Anthers takes nothing at
-					all; the only deduction from the listed price is the at-cost card processing, paid to the
-					processor.
+					{money(timePoolFor(ladder.publicAccessPrice))} of every ${ladder.publicAccessPrice},
+					distributed to the creators they watch by time) and{" "}
+					<b className="text-base-content/70">the remainder</b> that funds free access and the
+					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
+					the listed price is the at-cost card processing, paid to the processor.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
 					their monthly time, the same rate for every medium (equal-time). Every $
-					{PUBLIC_ACCESS_PRICE} to Anthers adds ${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of
-					Time Pool —{" "}
+					{ladder.publicAccessPrice} to Anthers adds $
+					{timePoolFor(ladder.publicAccessPrice).toFixed(2)} of Time Pool —{" "}
 					{PAID_POOLS.map(
 						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
 					).join(" · ")}

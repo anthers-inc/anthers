@@ -111,6 +111,20 @@ describe("the roadmap is shaped the way the page renders it", () => {
 		expect(ids.length).toBe(new Set(ids).size);
 	});
 
+	// 🚨 The seeded-rows migration (2026-10-04): a blurb quoting the entry price carries
+	// the RENDER-time placeholder, never a typed figure the ladder's rows could drift
+	// from — and the page resolves it, so an unresolved token in rendered copy is a page
+	// that skipped interpolation.
+	it("quotes the entry price through the render-time placeholder, never typed", () => {
+		for (const { where, item } of located()) {
+			// A typed dollar figure immediately before "removes the limit" is the shape
+			// that drifts from the rows; the placeholder's slot is a bracketed token, which
+			// the digits-class regex cannot match. A blurb that never quotes the price has
+			// no hit at all, which is the normal case.
+			expect(item.blurb, where).not.toMatch(/\$\d+(?:\.\d{2})? removes the limit/);
+		}
+	});
+
 	it("groups every goal under a subgroup, and every group under at least two of them", () => {
 		// Parker's call: four major groups, each with subgroups within it. A group that
 		// collapses to one subgroup has stopped being a group and become a long list.

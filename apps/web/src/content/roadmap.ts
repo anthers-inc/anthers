@@ -42,8 +42,31 @@
 // 5. **Money figures are interpolated, never typed** — `bun run econ:figures --check`
 //    scans this directory and a typed figure fails the build.
 
-import { FREE_STORAGE_GIB, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import { FREE_STORAGE_GIB } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+
+/**
+ * The seeded entry price, carried as a placeholder the renderer resolves — see
+ * {@link interpolatePriceFor}. The blurb text is static (what `roadmap.test.ts` checks
+ * shapes against); the price is the seeded ladder's.
+ */
+export const PRICE_TOKEN = "[public-access-price]" as const;
+
+/**
+ * Put the seeded entry price into a blurb's placeholder, at render.
+ *
+ * ⚠️ Unresolved tokens are a defect, not a fallback: a card rendering the literal
+ * `[public-access-price]` has skipped the interpolation, and no blurb carries it by
+ * accident.
+ */
+export function interpolatePriceFor(text: string, publicAccessPrice: number): string {
+	return text.replaceAll(
+		PRICE_TOKEN,
+		Number.isInteger(publicAccessPrice)
+			? `$${publicAccessPrice}`
+			: `$${publicAccessPrice.toFixed(2)}`,
+	);
+}
 
 /** Where a goal stands. Rendered as a pill on the card, so every card carries its tense. */
 export type Bucket = "launched" | "active" | "planned";
@@ -506,7 +529,7 @@ export const ROADMAP: RoadmapGroup[] = [
 					{
 						id: "public-access",
 						title: "Public Access",
-						blurb: `Ungated streaming work is free to everybody. Every account gets ${FREE_PUBLIC_ACCESS_HOURS} hours a month forever, and $${PUBLIC_ACCESS_PRICE} removes the limit.`,
+						blurb: `Ungated streaming work is free to everybody. Every account gets ${FREE_PUBLIC_ACCESS_HOURS} hours a month forever, and ${PRICE_TOKEN} removes the limit.`,
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "11.02", title: "What Is Free, and What Is Gated" },
