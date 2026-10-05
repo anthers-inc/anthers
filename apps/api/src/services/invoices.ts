@@ -2,8 +2,9 @@
 /**
  * Recording what Anthers actually collected — the subledger the books are closed from.
  *
- * ⭐ **Anthers' own tables are the subledger and QuickBooks Online is the general ledger**
- * (Parker, 2026-09-15). Nothing syncs transaction by transaction; the admin app produces a
+ * ⭐ **Anthers' own tables are the subledger and the books in Wave are the general ledger**
+ * (Parker, 2026-09-15; Wave since 2026-10-04). Nothing syncs transaction by transaction; the
+ * admin app produces a
  * monthly close package of about eight journal lines and reads its schedules from here. So an
  * invoice row carries every figure that entry needs, recorded when it was true.
  *

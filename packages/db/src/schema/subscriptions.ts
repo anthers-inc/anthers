@@ -349,8 +349,9 @@ export const supportReductions = pgTable(
 /**
  * Every charge Anthers makes, as the books' subledger.
  *
- * ⭐ **Anthers' own tables are the subledger and QuickBooks Online is the general ledger**
- * (Parker, 2026-09-15). Nothing syncs transaction by transaction: the admin app produces a
+ * ⭐ **Anthers' own tables are the subledger and the books in Wave are the general ledger**
+ * (Parker, 2026-09-15; Wave since 2026-10-04). Nothing syncs transaction by transaction: the
+ * admin app produces a
  * monthly close package of about eight journal lines, and the schedules behind it are read
  * from here. So this row has to carry every figure that entry needs — what reached Stripe
  * clearing, the processing expense, the tax payable, and the split between money owed to
