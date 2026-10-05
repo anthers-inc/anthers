@@ -192,7 +192,7 @@ function ReleaseBlock({ release, first }: { release: ChangelogRelease; first: bo
 						className="shrink-0 text-xs font-medium text-primary link link-hover"
 						rel="noreferrer"
 					>
-						Every change, unedited
+						See on GitHub
 					</a>
 				</div>
 
@@ -231,21 +231,20 @@ function ReleaseBlock({ release, first }: { release: ChangelogRelease; first: bo
 }
 
 /**
- * The closing echo of the roadmap's own "Hold us to this" — this page is the checkable
- * half of that promise: every release's full list is public on the tag, and the roadmap
- * links both ways.
+ * The page's close. It offers the raw list rather than daring anybody to check it: the
+ * full commit list is on every tag's release, and the roadmap carries what a release
+ * finished.
  */
 function Closing({ tint }: { tint: boolean }) {
 	return (
 		<Section tint={tint}>
 			<Reveal>
 				<Eyebrow>Built in the open</Eyebrow>
-				<H2>Hold us to this</H2>
+				<H2>Everything, out where you can find it</H2>
 				<Lede>
-					The changelog is checkable rather than asserted. Every release's full list is public on
-					the tag it shipped under, the source is public, and where a change finished a goal on the
-					roadmap the two pages link to each other — so a claim here can be read against the thing
-					it claims.
+					Anthers is open-source, and every change lands in public: each release's full commit list
+					is on its tag, this changelog is written on top of it, and the roadmap names the goals a
+					release finished. If you ever want what is behind an entry, it is one click away.
 				</Lede>
 				<div className="mt-9 flex flex-wrap justify-center gap-3">
 					<a
