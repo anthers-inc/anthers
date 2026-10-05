@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The monthly close package: one settled month's journal entry, the schedules behind it, the
- * two reconciliation controls, and the CSV export a person posts into QuickBooks Online.
+ * two reconciliation controls, and the CSV export a person posts into the books — Wave since
+ * 2026-10-04 (the bookkeeping decision), where the person posts the entry by hand.
  *
  * The entry is what a person checks line by line before posting, so it reads first and the
  * schedules — the audit trail an accountant asks for — sit behind disclosures. Debits and
@@ -121,8 +122,8 @@ function defaultPeriodKey(): string {
 	return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** The QuickBooks Online journal-import CSV: Date, Description, Account, Debits, Credits, Memo. */
-function qboCsv(pkg: ClosePackage): string {
+/** The journal-import CSV: Date, Description, Account, Debits, Credits, Memo. */
+function journalCsv(pkg: ClosePackage): string {
 	const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
 	// The posting date is the settlement date — the month's books close when it settles.
 	const date = pkg.period.settledAt.slice(0, 10);
@@ -209,7 +210,7 @@ export default function ClosePackage() {
 
 	function downloadCsv() {
 		if (!data) return;
-		const blob = new Blob([qboCsv(data)], { type: "text/csv" });
+		const blob = new Blob([journalCsv(data)], { type: "text/csv" });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement("a");
 		a.href = url;
@@ -222,7 +223,7 @@ export default function ClosePackage() {
 		<div>
 			<PageHeader
 				title="Monthly Close Package"
-				description="One settled month as a journal entry, the schedules behind every figure, and the reconciliation controls. The export posts into QuickBooks Online by hand — nothing writes to its API."
+				description="One settled month as a journal entry, the schedules behind every figure, and the reconciliation controls. The export posts into the books — Wave — by hand; nothing writes to its API."
 				onRefresh={reload}
 				loading={loading}
 			/>
@@ -559,11 +560,12 @@ export default function ClosePackage() {
 						<section>
 							<SectionHeading>Posting the Export</SectionHeading>
 							<p className="text-sm text-base-content/70">
-								Download CSV produces the QuickBooks Online journal-import file — one row per entry
-								line, with the date, description, account, debit, credit and memo columns its
-								importer reads (Settings → Import Data → Journal Entries). An account name must
-								already exist in QuickBooks Online's chart of accounts before the line imports — the
-								CSV cannot create it, so add any missing account first and import again.
+								Download CSV produces a journal-import file — one row per entry line, with the
+								date, description, account, debit, credit and memo columns. The books live in
+								Wave, where a person posts the entry by hand (Accounting → Transactions → Add
+								journal entry); the CSV serves as the schedule of record rather than a file Wave
+								imports. An account name must already exist in Wave's chart of accounts before
+								you type the line — it cannot create one, so add any missing account first.
 							</p>
 						</section>
 					</div>

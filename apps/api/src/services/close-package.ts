@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The monthly close package — the Books section's third tool, and the reason the subledger
- * exists (the bookkeeping decision, 2026-09-15): Anthers' own database is the subledger,
- * QuickBooks Online is the general ledger, and what passes between them each month is one
- * summary journal entry plus the schedules that tie every figure back to the invoices,
- * purchases, settlements and refunds that produced it. Nothing here writes to QuickBooks
- * Online through any API — the export is a CSV a person posts by hand, deliberately.
+ * exists (the bookkeeping decision, 2026-09-15, reversed to Wave 2026-10-04): Anthers' own
+ * database is the subledger, the books in Wave are the general ledger, and what passes between
+ * them each month is one summary journal entry plus the schedules that tie every figure back
+ * to the invoices, purchases, settlements and refunds that produced it. Nothing here writes to
+ * any bookkeeping system through an API — the export is a CSV a person posts by hand,
+ * deliberately.
  *
  * 🚨 **The defect this package exists to prevent, in the decision's own terms:** booking
  * creators' money as Anthers' own revenue or spending. Creator-directed support and Work
@@ -245,8 +246,8 @@ const BOUNDARY_NOTES = [
 	"Creator-directed support and Work purchases are a liability to the creator and never touch the profit and loss; Badge money is program-service revenue; Time Pool distributions are a program-service expense.",
 	"The 14-day transfer to a creator's balance, the payout-fee recharge and chargeback handling are not built yet, from the 2026-09-14 decision on collecting and paying out — those lines are shown at zero and the omission closes when those jobs land.",
 	"Paused renewals were charged on the card but credit nobody while the suspension stands; they enter the books when reinstatement re-keys them to paid, so their tax appears on the sales-tax worksheet before it appears here.",
-	"An account name must already exist in QuickBooks Online's chart of accounts before the line imports — the CSV cannot create it.",
-	"Nothing in this package writes to QuickBooks Online through any API, deliberately: the export is a CSV a person posts by hand (Settings → Import Data → Journal Entries).",
+	"An account name must already exist in the books' chart of accounts in Wave before the line is posted — Wave cannot create it from an import.",
+	"Nothing in this package writes to the books in Wave through any API, deliberately: the export is a CSV a person posts by hand (Accounting → Transactions → Add journal entry).",
 ] as const;
 
 /**

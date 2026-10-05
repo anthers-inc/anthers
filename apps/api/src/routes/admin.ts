@@ -479,7 +479,7 @@ const adminRoutes = new Hono<AdminEnv>()
 
 	// The third Books tool: the monthly close package. One settled month's journal
 	// entry, the schedules behind it, and the two reconciliation controls — a
-	// person posts the export into QuickBooks Online by hand; nothing writes to
+	// person posts the export into the books in Wave by hand; nothing writes to
 	// any API. An unsettled month is refused rather than estimated.
 	.get("/books/close-package", async (c) => {
 		const result = await closePackage(c.req.query("period") ?? "");
