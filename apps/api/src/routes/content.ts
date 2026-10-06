@@ -4687,7 +4687,13 @@ const contentRoutes = new Hono()
 	.get("/projects", async (c) => {
 		const mine = c.req.query("mine");
 		const creator = c.req.query("creator");
-		const search = c.req.query("search");
+		// A whitespace-only search or price (a bare space from the filter box, a number
+		// input's intermediate state) is a truthy string but matches nothing sensible:
+		// `search` becomes a like('% %') over every row and a blank `min_price` fails
+		// the ::numeric cast with a 500. Trimmed to nothing so the falsy checks below
+		// treat them as absent — the browser bug that sends them is fixed at the inputs
+		// as well, but the API declines garbage rather than guessing what it meant.
+		const search = c.req.query("search")?.trim() || undefined;
 		// Discover's sidebar has always sent these; until now the handler read none of
 		// them, so every filter control on the page did nothing while looking like it
 		// worked. They key on the project's **Works**, because a project is a collection
@@ -4696,8 +4702,8 @@ const contentRoutes = new Hono()
 		const tag = c.req.query("tag");
 		const pricing = c.req.query("pricing");
 		const sort = c.req.query("sort") ?? "newest";
-		const minPrice = c.req.query("min_price");
-		const maxPrice = c.req.query("max_price");
+		const minPrice = c.req.query("min_price")?.trim() || undefined;
+		const maxPrice = c.req.query("max_price")?.trim() || undefined;
 		const platform = c.req.query("platform");
 		const duration = c.req.query("duration");
 		const showLocked = c.req.query("show_locked");
