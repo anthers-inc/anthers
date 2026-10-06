@@ -214,8 +214,11 @@ test.describe("the basket purchase flow", () => {
 
 		// The quote's fee breakdown prices the purchase, from the server. The Work page's
 		// price card still says "calculated at checkout" — it is a price display without
-		// an address form, so nothing resolves there; the basket's receipt is where tax
-		// reads "from your address", and that copy is asserted in the basket tests.
+		// an address form, so nothing resolves there; the basket's Payment card is where
+		// tax reads "calculated from your address", asserted in the basket tests. The
+		// card fee line reads the same here as on the basket (2026-10-06 moved it into
+		// the receives figure's tooltip on /basket; the Work page's price card keeps
+		// its own).
 		await expect(page.getByText("Card processing")).toBeVisible();
 		await expect(page.getByText("calculated at checkout")).toBeVisible();
 	});
@@ -319,25 +322,29 @@ test.describe("the basket purchase flow", () => {
 		await desktop();
 	});
 
-	test("the receipt separates what the buyer pays from what the creator receives", async ({
-		page,
-	}) => {
-		// 2026-10-04: the card fee is not the buyer's to pay, so its line lives in the
-		// creator's section — after "You pay", directly above the receives line — and
-		// never between Subtotal and the buyer's total.
+	test("the pricing reads as two cards: Payment beside Basket", async ({ page }) => {
+		// 2026-10-06 (Parker): the receipt became two cards — Payment (the buyer's
+		// statement: subtotal, tax, total) and Basket (the items grouped by creator,
+		// the receives headline on top). The card fee's own line is gone from the
+		// page: it is the receives figure's tooltip material, the price's cost and
+		// never a line the buyer could read as theirs to pay.
 		await seedBasket(page);
 		await expectReceiptWithQuote(page);
 		const receipt = page.getByTestId("basket-receipt");
+		const basket = page.getByTestId("basket-card");
 		await expect(receipt.getByText("Subtotal")).toBeVisible();
-		await expect(receipt.getByText("You pay")).toBeVisible();
-		await expect(receipt.getByText("Card processing")).toBeVisible();
-		await expect(receipt.getByTestId("basket-creator-earns")).toBeVisible();
-		// Vertical order inside the receipt: the buyer's total above the fee line.
-		const payBox = await receipt.getByText("You pay").boundingBox();
-		const feeBox = await receipt.getByText("Card processing").boundingBox();
-		const earnsBox = await receipt.getByTestId("basket-creator-earns").boundingBox();
-		expect(payBox!.y, '"You pay" must sit above the creator section').toBeLessThan(feeBox!.y);
-		expect(feeBox!.y, "the fee line must sit above the receives line").toBeLessThan(earnsBox!.y);
+		await expect(receipt.getByText("Sales Tax")).toBeVisible();
+		await expect(receipt.getByText("Total", { exact: true })).toBeVisible();
+		await expect(basket.getByTestId("basket-creator-earns")).toBeVisible();
+		await expect(basket.getByText("receives", { exact: true })).toBeVisible();
+		await expect(basket.getByTestId("basket-items")).toBeVisible();
+		// Vertical order in the right column: the Payment card ABOVE the Basket card —
+		// what you pay first, then the detail of what you're buying and who receives it.
+		const basketBox = await basket.boundingBox();
+		const receiptBox = await receipt.boundingBox();
+		expect(receiptBox!.y, "the Payment card must sit above the Basket card").toBeLessThan(
+			basketBox!.y,
+		);
 	});
 
 	test("the checkout page's forms are siblings, never ancestors of each other", async ({

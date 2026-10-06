@@ -40,9 +40,11 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getStripe } from "../../lib/stripe";
 import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import { formatAddress } from "../payments/UsBillingAddressForm";
 import {
 	mayConfirm,
 	sessionTotals,
+	sessionTotalsFrom,
 	useSessionBillingAddress,
 } from "../payments/useSessionBillingAddress";
 
@@ -51,12 +53,21 @@ interface BasketCheckoutProps {
 	/** Server-quoted subtotal, shown until the session's real total resolves. */
 	buyerTotal: string;
 	/**
-	 * The session's own totals, reported up as they resolve — the tax-inclusive total
-	 * and the tax, nulls before the address lands. The receipt beside the checkout
-	 * renders from the quote before they exist and from them once they do, so the
-	 * buyer reads one set of numbers that grows rather than two sets that disagree.
+	 * The session's own totals, reported up as they resolve — the tax-inclusive total,
+	 * the tax, the rate's percentage and the address it resolved from, nulls before the
+	 * address lands. The receipt beside the checkout renders from the quote before they
+	 * exist and from them once they do, so the buyer reads one set of numbers that grows
+	 * rather than two sets that disagree.
 	 */
-	onTotals?: (totals: { buyerTotal: number | null; tax: number | null } | null) => void;
+	onTotals?: (
+		totals: {
+			buyerTotal: number | null;
+			tax: number | null;
+			discount: number | null;
+			taxPercentage: number | null;
+			addressSummary: string | null;
+		} | null,
+	) => void;
 	onComplete: () => void;
 }
 
@@ -86,25 +97,44 @@ function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<BasketCheckoutP
 		checkoutState.type === "success"
 			? (checkoutState.checkout.total?.total?.minorUnitsAmount ?? null)
 			: null;
+	// The exclusive tax, in CENTS — `sessionTotalsFrom` below is the one converter, and
+	// its docblock carries why both figures go through it rather than being derived here.
 	const taxAmounts =
 		checkoutState.type === "success" ? (checkoutState.checkout.taxAmounts ?? null) : null;
+	// Any discount the session carries (`discountAmounts` — one promotion code at most,
+	// so this is one line or none). The Payment card reads it as its own row.
+	const discountCents =
+		checkoutState.type === "success"
+			? (checkoutState.checkout.discountAmounts?.[0]?.minorUnitsAmount ?? null)
+			: null;
+	// The resolved rate's percentage and the address it was derived from — what the
+	// Payment card's Sales Tax tooltip names as the derivation (Parker, 2026-10-06).
+	// `percentage` is absent on a flat-amount rate; the address read is the typed one
+	// the hook records as accepted, formatted here so the report needs no second channel.
+	const taxPercentage =
+		checkoutState.type === "success"
+			? (checkoutState.checkout.taxAmounts?.find((t) => !t.inclusive)?.percentage ??
+				checkoutState.checkout.taxAmounts?.[0]?.percentage ??
+				null)
+			: null;
+	const acceptedAddress = billing.acceptedAddress;
 	const onTotalsStable = useRef(onTotals).current;
 	useEffect(() => {
 		if (!onTotalsStable) return;
-		// Same read as below — one derivation, reported, not two that can drift.
-		onTotalsStable(
-			totalCents == null
-				? null
-				: {
-						buyerTotal: totalCents / 100,
-						tax:
-							taxAmounts?.find((t) => !t.inclusive)?.minorUnitsAmount ??
-							taxAmounts?.[0]?.minorUnitsAmount ??
-							null,
-					},
-		);
+		// Same read as below — one derivation, reported, not two that can drift. 🚨 The
+		// tax rides `sessionTotalsFrom` too rather than being derived here: the first pass
+		// reported it raw in CENTS while the total was divided, so a $0.48 tax rendered
+		// "+$48.00" on the live checkout (2026-10-06). One converter, both figures.
+		const reported = sessionTotalsFrom(totalCents, taxAmounts);
+		const withContext = {
+			...reported,
+			discount: discountCents == null ? null : discountCents / 100,
+			taxPercentage,
+			addressSummary: acceptedAddress ? formatAddress(acceptedAddress) : null,
+		};
+		onTotalsStable(withContext);
 		return () => onTotalsStable(null);
-	}, [onTotalsStable, totalCents, taxAmounts]);
+	}, [onTotalsStable, totalCents, taxAmounts, discountCents, taxPercentage, acceptedAddress]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -281,7 +311,23 @@ export default function BasketCheckout(props: BasketCheckoutProps) {
 		return fetching ? <div className="skeleton h-64 w-full" aria-hidden="true" /> : null;
 	}
 	return (
-		<CheckoutElementsProvider stripe={getStripe()} options={{ clientSecret: secret }}>
+		<CheckoutElementsProvider
+			stripe={getStripe()}
+			options={{
+				clientSecret: secret,
+				// 🚨 **Link's save consent is NEVER offered, and that is load-bearing.** The
+				// Payment Element's default (`auto`, Stripe-decided) shows "Save my
+				// information for faster checkout" with an email + MOBILE NUMBER sub-form —
+				// and the checkbox arrives CHECKED. A buyer who ignores it left the phone
+				// field empty and Stripe held `canConfirm` false forever: the fully-filled
+				// form with a greyed Pay button (2026-10-06). `never` removes the block —
+				// Link saved-payment-methods are a future decision, and Anthers' checkout
+				// asks for exactly what the charge needs.
+				elementsOptions: {
+					savedPaymentMethod: { enableSave: "never", enableRedisplay: "never" },
+				},
+			}}
+		>
 			<CheckoutForm
 				buyerTotal={props.buyerTotal}
 				onTotals={props.onTotals}

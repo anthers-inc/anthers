@@ -63,21 +63,28 @@ describe("the basket page's two-column layout", () => {
 		expect(source).toContain('data-testid="basket-items"');
 	});
 
-	it("splits the receipt into the buyer's section and the creator's section", () => {
-		// 2026-10-04: the card fee is not the buyer's to pay — it comes out of the
-		// price. Its line must sit INSIDE the creator's section (after the "You pay"
-		// divider, before the receives line), and never between Subtotal and You pay.
-		// Anchored on the JSX text nodes with surrounding punctuation so comments and
-		// prose cannot satisfy them (the word "receives" itself appears in commentary).
-		const payIdx = source.indexOf(">You pay</span>");
-		const feeIdx = source.indexOf("Card processing");
-		const receivesIdx = source.indexOf('data-testid="basket-creator-earns"');
+	it("splits the pricing into a Payment card and a Basket card (2026-10-06)", () => {
+		// 2026-10-06 (Parker): the receipt became TWO cards in the right column —
+		// Payment (subtotal + Sales Tax − discounts = Total) and Basket (the items
+		// grouped by creator, the receives headline at the top of the group). The card
+		// fee belongs to NEITHER card's buyer-facing total: it is the price's cost,
+		// named in the receives line's tooltip. Asserted on the JSX text nodes with
+		// surrounding punctuation so commentary cannot satisfy them.
+		expect(source).toContain("Payment");
+		expect(source).toContain('data-testid="basket-card"');
+		const paymentIdx = source.indexOf('data-testid="basket-receipt"');
+		const cardIdx = source.indexOf('data-testid="basket-card"');
+		// The tax line, by contrast, belongs to the Payment card — before its Total.
 		const taxIdx = source.indexOf("sessionTotals?.tax ?? 0");
-		expect(payIdx).toBeGreaterThan(-1);
-		expect(feeIdx).toBeGreaterThan(payIdx);
-		expect(receivesIdx).toBeGreaterThan(feeIdx);
-		// The tax line, by contrast, belongs to the buyer's half — before "You pay".
+		const totalIdx = source.indexOf('data-testid="basket-total"');
+		const earnsIdx = source.indexOf("quote.creatorEarnings");
+		expect(paymentIdx).toBeGreaterThan(-1);
+		expect(cardIdx).toBeGreaterThan(-1);
 		expect(taxIdx).toBeGreaterThan(-1);
-		expect(taxIdx).toBeLessThan(payIdx);
+		expect(taxIdx).toBeLessThan(totalIdx);
+		// The receives figure headlines the Basket card's creator group.
+		expect(earnsIdx).toBeGreaterThan(cardIdx);
+		// The card fee's own line is gone from the page — it is tooltip material now.
+		expect(source).not.toContain("Card processing");
 	});
 });
