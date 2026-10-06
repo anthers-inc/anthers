@@ -246,11 +246,28 @@ function purchaseSession(params: {
 	destination: string;
 	/** The creator's earnings in cents — the fixed, location-independent transfer. */
 	transferAmountCents: number;
+	/**
+	 * The buyer's account email, put on the session as its Customer's address. None of the
+	 * purchase surfaces collect an email (the address form is name-and-address), so without
+	 * this the session held none and Stripe's `canConfirm` stayed false forever — the
+	 * greyed-out Pay button Parker found on the live checkout (2026-10-06). See below.
+	 */
+	customerEmail: string;
 	metadata: Record<string, string>;
 }): Stripe.Checkout.SessionCreateParams {
 	return {
 		mode: "payment",
 		ui_mode: "elements",
+		// 🚨 **The email is what confirms the session.** Stripe requires a valid customer
+		// email before a session may be confirmed — `canConfirm` stays false without one —
+		// and none of the purchase surfaces collect one: no Contact Details Element, no
+		// email field on the address form, and no `customer_email` here. Every buyer is a
+		// verified account (`requireVerified`), so the email is already held, already
+		// proven, and simply belongs on the session — the receipt and the Customer record
+		// both want it anyway. Found as the disabled Pay button (2026-10-06): all three
+		// address fields resolved a real tax, the card was filled, and the button never
+		// un-greyed.
+		customer_email: params.customerEmail,
 		// The buyer's billing address is what tax resolves from, and it is required in full
 		// because local tax is address-level rather than state-level — the same full street
 		// address the return worksheets and the threshold forecast later read off the row.
@@ -282,6 +299,20 @@ function purchaseSession(params: {
 		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
 			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
 			: {}),
+		// 🚨 **No payment-method saves are offered on this flow.** Anthers never stores a
+		// card for reuse (`setup_future_usage` is nowhere in this route), so the session
+		// does not ask to save — and Checkout attaches `allow_redisplay_filters` whenever
+		// `customer_creation: "always"` is set, which makes Stripe.js render Link's
+		// consent block ("Save my information for faster checkout", an email + MOBILE
+		// NUMBER sub-form, checkbox checked by default). A buyer who ignores the block
+		// left the phone field empty and Stripe held `canConfirm` false forever: the
+		// fully-filled form with a greyed Pay button (2026-10-06, live payment_method
+		// collection blocked all day; the client-side `savedPaymentMethod.enableSave:
+		// "never"` below removes the sub-form from its side too).
+		saved_payment_method_options: {
+			payment_method_save: "disabled",
+			payment_method_remove: "disabled",
+		},
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {
@@ -756,6 +787,7 @@ const paymentRoutes = new Hono()
 				lineItems: [workLineItem(work, totalCents, taxCode)],
 				destination: creatorAccount.stripeAccountId,
 				transferAmountCents: transferCents,
+				customerEmail: user.email,
 				metadata: {
 					kind: "direct_purchase",
 					workId: String(work.id),
@@ -893,13 +925,31 @@ const paymentRoutes = new Hono()
 			new Decimal(0),
 		);
 
+		// 🚨 The per-line fee shares are APPORTIONED, not recomputed — the same split the
+		// purchase rows are written with: pro-rata by item value, the last line absorbing
+		// the rounding remainder, so the parts always reconstruct the whole exactly. A
+		// simple per-line `times(...).div(...)` rounds each line independently and a
+		// three-evenly-split $0.59 fee summed to $0.60 (found by this suite).
+		let allocatedFee = new Decimal(0);
+		const lineFees = q.items.map((i, idx) => {
+			if (idx === q.items.length - 1) return q.fees.processingFee.minus(allocatedFee);
+			const share = q.fees.processingFee.times(i.amount).dividedBy(q.subtotal).toDecimalPlaces(2);
+			allocatedFee = allocatedFee.plus(share);
+			return share;
+		});
+
 		return c.json({
-			items: q.items.map((i) => ({
+			items: q.items.map((i, idx) => ({
 				workId: i.work.id,
 				slug: i.work.slug,
 				title: i.work.title,
 				type: i.work.type,
 				thumbnail: i.work.thumbnail,
+				// This line's own share of the basket's ONE card fee — pro-rata by value,
+				// the same apportionment the purchase rows are written with. The receipt's
+				// creator group reads it, so the receives line's tooltip can name what was
+				// taken out of this creator's part of the basket.
+				processingFee: lineFees[idx].toFixed(2),
 				price: i.amount.toFixed(2),
 			})),
 			subtotal: q.subtotal.toFixed(2),
@@ -969,6 +1019,7 @@ const paymentRoutes = new Hono()
 				// The whole basket's earnings, on the sum — the fixed $0.30 is per charge,
 				// which is the entire point of the basket.
 				transferAmountCents: Math.round(q.fees.creatorEarnings.toNumber() * 100),
+				customerEmail: user.email,
 				metadata: {
 					kind: "direct_purchase_basket",
 					workIds: q.items.map((i) => i.work.id).join(","),

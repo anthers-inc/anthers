@@ -180,10 +180,14 @@ export function useSessionBillingAddress(
 }
 
 /**
- * What the session's own totals say once the address is on it — the tax-inclusive total
- * and the tax figure, read from the session object `useCheckoutElements()` re-renders
- * with. Null before the address resolves: the session has not resolved a rate yet, and a
- * guessed figure is the flat-rate charge this flow exists to retire.
+ * Convert a session's raw figures into dollars — the ONE place cents become money.
+ *
+ * 🚨 **Both figures convert here or nowhere.** The first pass divided the total in place
+ * and left the tax raw in cents, so a $0.48 tax rendered "+$48.00" on the live checkout
+ * (2026-10-06) beside a correct "Pay $10.48" — two derivations of the same payload, one
+ * of them 100× wrong. `sessionTotals` (the session-object entry) and BasketCheckout's
+ * totals effect (the same figures read straight off the checkout object) both route
+ * through this.
  *
  * 🚨 **Rendered from `minorUnitsAmount`, NEVER from `amount`.** `StripeCheckoutAmount` is
  * `{ minorUnitsAmount, amount }` where `amount` is a FORMATTED string in the session's
@@ -191,21 +195,32 @@ export function useSessionBillingAddress(
  * `Number(...)` on the string. `Number("$10.80")` is `NaN`, which is exactly the "Pay $NaN"
  * the live checkout shipped on 2026-10-03: the fakes in the test suites return bare
  * numeric strings, so no suite caught that Stripe's real payload is currency-formatted.
- * `minorUnitsAmount` is the plain integer of cents — unambiguous, symbol-free — so it is
- * converted here, once, and the callers receive a number of dollars they can format.
+ * `minorUnitsAmount` is the plain integer of cents — unambiguous, symbol-free.
  */
-export function sessionTotals(
-	session: Pick<StripeCheckoutSession, "total" | "taxAmounts"> | null,
+export function sessionTotalsFrom(
+	totalCents: number | null | undefined,
+	taxAmounts: Array<{ inclusive: boolean; minorUnitsAmount: number }> | null | undefined,
 ): { buyerTotal: number | null; tax: number | null } {
-	if (!session) return { buyerTotal: null, tax: null };
-	const totalCents = session.total?.total?.minorUnitsAmount;
 	if (totalCents == null) return { buyerTotal: null, tax: null };
 	// Exclusive tax is what US prices carry (the session builds its line items
 	// `tax_behavior: "exclusive"`), so the tax the buyer adds on top is the exclusive
 	// figure. Inclusive tax is inside the price already and adds nothing.
 	const taxCents =
-		session.taxAmounts?.find((t) => !t.inclusive)?.minorUnitsAmount ??
-		session.taxAmounts?.[0]?.minorUnitsAmount ??
+		taxAmounts?.find((t) => !t.inclusive)?.minorUnitsAmount ??
+		taxAmounts?.[0]?.minorUnitsAmount ??
 		null;
 	return { buyerTotal: totalCents / 100, tax: taxCents == null ? null : taxCents / 100 };
+}
+
+/**
+ * What the session's own totals say once the address is on it — the tax-inclusive total
+ * and the tax figure, read from the session object `useCheckoutElements()` re-renders
+ * with. Null before the address resolves: the session has not resolved a rate yet, and a
+ * guessed figure is the flat-rate charge this flow exists to retire.
+ */
+export function sessionTotals(
+	session: Pick<StripeCheckoutSession, "total" | "taxAmounts"> | null,
+): { buyerTotal: number | null; tax: number | null } {
+	if (!session) return { buyerTotal: null, tax: null };
+	return sessionTotalsFrom(session.total?.total?.minorUnitsAmount, session.taxAmounts);
 }

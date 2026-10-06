@@ -1515,6 +1515,11 @@ describe("Basket checkout — one charge, one card fee", () => {
 			expect(line.price_data.unit_amount).toBe(333);
 		}
 
+		// 🚨 The buyer's email is ON the session — the buyer is a verified account, no
+		// surface collects an email, and Stripe refuses to confirm a session without a
+		// customer email (`canConfirm` stays false, the greyed Pay button, 2026-10-06).
+		expect(params.customer_email).toBe(`${buyerName}@example.com`);
+
 		// The transfer is the whole basket's earnings, on the sum — the fixed $0.30 is per
 		// charge, which is the entire point of the basket.
 		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
@@ -1603,6 +1608,15 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(new Decimal(body.creatorGains).greaterThan(0)).toBe(true);
 		expect(new Decimal(body.feeSeparately).greaterThan(new Decimal(body.processingFee))).toBe(true);
 		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+
+		// Each line carries its own share of the ONE fee (the Basket card's receives
+		// tooltip names it), and the shares sum to the whole — apportioned, never
+		// recomputed per item.
+		const shares = body.items.reduce(
+			(acc: Decimal, i: { processingFee: string }) => acc.plus(new Decimal(i.processingFee)),
+			new Decimal(0),
+		);
+		expect(shares.toFixed(2)).toBe(body.processingFee);
 	});
 
 	it("refuses an empty basket", async () => {
@@ -1667,6 +1681,9 @@ describe("Checkout — session construction under automatic tax", () => {
 		const created = fake.lastCall("checkout.sessions.create");
 		const params = created?.args[0] as Stripe.Checkout.SessionCreateParams;
 		expect(params.line_items).toHaveLength(1);
+		// The buyer's email rides the session — Stripe requires one to confirm, and no
+		// purchase surface collects one (same defect the basket path fixed, 2026-10-06).
+		expect(params.customer_email).toBe(`${buyerName}@example.com`);
 		// The PaymentIntent's metadata — where the route carries the purchase facts — is
 		// nested under `payment_intent_data`, not at the top level.
 		expect(
