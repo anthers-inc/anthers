@@ -40,6 +40,8 @@ import {
 	transcodingJobs,
 	users,
 	votes,
+	webBuildFiles,
+	webBuilds,
 	workPages,
 	workPanels,
 	works,
@@ -1062,6 +1064,10 @@ const projectsId = sql`${sql.identifier("projects")}.${sql.identifier("id")}`;
 type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
+type WebBuildRow = typeof webBuilds.$inferSelect;
+type WebBuildFileRow = typeof webBuildFiles.$inferSelect;
+/** One browser build plus its files, the shape the owner-facing serializer carries. */
+type WebBuildWithFiles = WebBuildRow & { files: WebBuildFileRow[] };
 
 /**
  * Drop internal-only keys from metadata before it reaches a client.
@@ -1166,6 +1172,8 @@ async function serializeWork(
 	job: TranscodingJobRow | null = null,
 	/** The server holding the creator's identity, which their own records are read from. */
 	pdsUrl: string | null = null,
+	/** The Work's browser builds, owner-facing. Loaded by `loadWorkBundles`; empty when unset. */
+	webBuildsList: WebBuildWithFiles[] = [],
 ) {
 	return {
 		id: item.id,
@@ -1213,6 +1221,7 @@ async function serializeWork(
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
 		assets: workAssets,
+		webBuilds: webBuildsList,
 		transcoding: job,
 		/**
 		 * The Work's listing on the network while it has one, and where its creator can read that
@@ -2053,14 +2062,19 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	jobByWork: Map<number, TranscodingJobRow>;
 	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForUser`. */
 	pagesByWork: Map<number, number>;
+	/** Browser builds per Work, with their file rows. Owner-facing payload; see `serializeWork`. */
+	buildsByWork: Map<number, WebBuildWithFiles[]>;
 }> {
 	const worksById = new Map<number, WorkRow>();
 	const assetsByWork = new Map<number, AssetRow[]>();
 	const jobByWork = new Map<number, TranscodingJobRow>();
 	const pagesByWork = new Map<number, number>();
-	if (workIds.length === 0) return { worksById, assetsByWork, jobByWork, pagesByWork };
+	const buildsByWork = new Map<number, WebBuildWithFiles[]>();
+	if (workIds.length === 0) {
+		return { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork };
+	}
 
-	const [workRows, assetRows, jobRows, pageRows] = await Promise.all([
+	const [workRows, assetRows, jobRows, pageRows, buildRows, buildFileRows] = await Promise.all([
 		db.select().from(works).where(inArray(works.id, workIds)),
 		db.select().from(assets).where(inArray(assets.workId, workIds)),
 		db
@@ -2073,6 +2087,12 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 			.from(workPages)
 			.where(inArray(workPages.workId, workIds))
 			.groupBy(workPages.workId),
+		db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
+		db
+			.select({ file: webBuildFiles, workId: webBuilds.workId })
+			.from(webBuildFiles)
+			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+			.where(inArray(webBuilds.workId, workIds)),
 	]);
 	for (const p of pageRows) pagesByWork.set(p.workId, p.count);
 
@@ -2086,7 +2106,18 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	for (const j of jobRows) {
 		if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
 	}
-	return { worksById, assetsByWork, jobByWork, pagesByWork };
+	const filesByBuild = new Map<number, (typeof webBuildFiles.$inferSelect)[]>();
+	for (const { file } of buildFileRows) {
+		const list = filesByBuild.get(file.buildId) ?? [];
+		list.push(file);
+		filesByBuild.set(file.buildId, list);
+	}
+	for (const b of buildRows) {
+		const list = buildsByWork.get(b.workId) ?? [];
+		list.push({ ...b, files: filesByBuild.get(b.id) ?? [] });
+		buildsByWork.set(b.workId, list);
+	}
+	return { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork };
 }
 
 /**
@@ -3646,14 +3677,32 @@ const contentRoutes = new Hono()
 		if (items.length === 0) return c.json({ works: [] });
 
 		const ids = items.map((i) => i.id);
-		const [assetRows, jobRows] = await Promise.all([
+		const [assetRows, jobRows, buildRows, buildFileRows] = await Promise.all([
 			db.select().from(assets).where(inArray(assets.workId, ids)),
 			db
 				.select()
 				.from(transcodingJobs)
 				.where(inArray(transcodingJobs.workId, ids))
 				.orderBy(desc(transcodingJobs.createdAt)),
+			db.select().from(webBuilds).where(inArray(webBuilds.workId, ids)),
+			db
+				.select({ file: webBuildFiles })
+				.from(webBuildFiles)
+				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+				.where(inArray(webBuilds.workId, ids)),
 		]);
+		const filesByBuild = new Map<number, WebBuildFileRow[]>();
+		for (const { file } of buildFileRows) {
+			const list = filesByBuild.get(file.buildId) ?? [];
+			list.push(file);
+			filesByBuild.set(file.buildId, list);
+		}
+		const buildsByWork = new Map<number, WebBuildWithFiles[]>();
+		for (const b of buildRows) {
+			const list = buildsByWork.get(b.workId) ?? [];
+			list.push({ ...b, files: filesByBuild.get(b.id) ?? [] });
+			buildsByWork.set(b.workId, list);
+		}
 
 		const assetsByWork = new Map<number, AssetRow[]>();
 		for (const a of assetRows) {
@@ -3671,7 +3720,13 @@ const contentRoutes = new Hono()
 		return c.json({
 			works: await Promise.all(
 				items.map((i) =>
-					serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null, pdsUrl),
+					serializeWork(
+						i,
+						assetsByWork.get(i.id) ?? [],
+						jobByWork.get(i.id) ?? null,
+						pdsUrl,
+						buildsByWork.get(i.id) ?? [],
+					),
 				),
 			),
 		});
@@ -3759,14 +3814,30 @@ const contentRoutes = new Hono()
 			if (!stillOwned) return c.json({ error: "Work not found" }, 404);
 		}
 
-		const [workAssets, jobRows] = await Promise.all([
+		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, work.id)),
 			db
 				.select()
 				.from(transcodingJobs)
 				.where(eq(transcodingJobs.workId, work.id))
 				.orderBy(desc(transcodingJobs.createdAt)),
+			db.select().from(webBuilds).where(eq(webBuilds.workId, work.id)),
+			db
+				.select({ file: webBuildFiles })
+				.from(webBuildFiles)
+				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+				.where(eq(webBuilds.workId, work.id)),
 		]);
+		const filesByBuild = new Map<number, WebBuildFileRow[]>();
+		for (const { file } of buildFileRows) {
+			const list = filesByBuild.get(file.buildId) ?? [];
+			list.push(file);
+			filesByBuild.set(file.buildId, list);
+		}
+		const webBuildsList: WebBuildWithFiles[] = buildRows.map((b) => ({
+			...b,
+			files: filesByBuild.get(b.id) ?? [],
+		}));
 
 		await resolveWorkThumbnail(work);
 
@@ -3787,7 +3858,7 @@ const contentRoutes = new Hono()
 		if (isOwner && previewRequest(c) === null) {
 			const pdsUrl = await pdsUrlOf(work.creatorId);
 			return c.json({
-				work: await serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl),
+				work: await serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl, webBuildsList),
 			});
 		}
 
@@ -4418,19 +4489,37 @@ const contentRoutes = new Hono()
 		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
-		const [workAssets, jobRows] = await Promise.all([
+		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, id)),
 			db
 				.select()
 				.from(transcodingJobs)
 				.where(eq(transcodingJobs.workId, id))
 				.orderBy(desc(transcodingJobs.createdAt)),
+			db.select().from(webBuilds).where(eq(webBuilds.workId, id)),
+			db
+				.select({ file: webBuildFiles })
+				.from(webBuildFiles)
+				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+				.where(eq(webBuilds.workId, id)),
 		]);
+		const filesByBuild = new Map<number, WebBuildFileRow[]>();
+		for (const { file } of buildFileRows) {
+			const list = filesByBuild.get(file.buildId) ?? [];
+			list.push(file);
+			filesByBuild.set(file.buildId, list);
+		}
 
 		await resolveWorkThumbnail(updated);
 		const pdsUrl = await pdsUrlOf(updated.creatorId);
 		return c.json({
-			work: await serializeWork(updated, workAssets, jobRows[0] ?? null, pdsUrl),
+			work: await serializeWork(
+				updated,
+				workAssets,
+				jobRows[0] ?? null,
+				pdsUrl,
+				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
+			),
 		});
 	})
 

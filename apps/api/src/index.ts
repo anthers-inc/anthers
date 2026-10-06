@@ -22,6 +22,7 @@ import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
+import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
@@ -74,6 +75,11 @@ const app = new Hono()
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/moderation", moderationRoutes)
 	.route("/api/dmca", dmcaRoutes)
+	// The browser-build routes live on their own mount rather than under /api/content:
+	// two routers at one mount path merge at runtime but not in the typed RPC client, so
+	// `client.api.content.works[":id"].web-build…` does not type. A distinct prefix keeps
+	// the client honest; the routes still address /works/:id inside it.
+	.route("/api/web-builds", webBuildRoutes)
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 
