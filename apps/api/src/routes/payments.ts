@@ -275,27 +275,20 @@ function purchaseSession(params: {
 		// A Customer is created for every buyer, so the address and email survive the
 		// session and are readable at completion.
 		customer_creation: "always",
-		// 🚨 Payment methods on this session shape are DASHBOARD-governed by default: this
-		// live API version removed `payment_method_types` from Checkout Session creation
-		// (the live account rejects the session with "payment_method_types is no longer
-		// supported… Payment methods are now managed from your Dashboard settings"), so
-		// the embedded Payment Element offers whatever the account's payment-method
-		// configuration enables. Found at the live cutover (2026-10-03), where every
-		// checkout failed while the sandbox — an older API version — accepted the same
-		// parameter happily.
-		//
-		// Card-only is a DEPLOYMENT SETTING (Parker, 2026-10-04: strip the built-in
-		// Stripe payment options, cards only, to simplify checkout): the "Card only"
-		// configuration (pmc_1UMxLl3WJAPZ8pU6EaCMNJie, card on, everything else off)
-		// exists on the account and `STRIPE_PAYMENT_METHOD_CONFIGURATION` carries its id
-		// in the deploy spec. The account-wide Default configuration stays as it is, so
-		// a deployment without the variable keeps working — narrowed, not broken.
+		// 🚨 Card-only is the account-wide Default configuration (Parker, 2026-10-06:
+		// the Dashboard's Default narrowed to card and nothing else, matching the
+		// buyer-facing decision rather than overriding it per deployment). No
+		// configuration parameter is sent, and no deployment carries
+		// `STRIPE_PAYMENT_METHOD_CONFIGURATION` — the Dashboard governs what every
+		// session offers, which is the shape this API version is built around. The
+		// env lever below is kept for a genuinely per-deployment override — a named
+		// config used some places and not others — but nothing names one today.
 		//
 		// The one code-side lever the types DO support on this API version:
 		// `payment_method_configuration` — and ONLY when `STRIPE_PAYMENT_METHOD_CONFIGURATION`
 		// is set. Unset by default, the Dashboard's account-wide configuration
-		// (pmc_1T9K9l3WJAPZ8pU64cUUNUAv) governs what every session offers; setting the
-		// env names a configuration to override that default per deployment.
+		// governs what every session offers; setting the env names a configuration to
+		// override that default per deployment.
 		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
 			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
 			: {}),
