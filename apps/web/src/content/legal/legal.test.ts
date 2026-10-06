@@ -140,6 +140,49 @@ describe("published legal documents", () => {
 		expect(text).toContain("Audio is not covered");
 	});
 
+	it("🚨 discloses the transient cross-Work cookie limitation on anthers.run", () => {
+		/*
+		 * Serving a creator's browser build ourselves means every file of it goes through
+		 * the access-checked route — and it means creator code runs on a site Anthers
+		 * operates, which is a disclosure obligation even though the session never
+		 * crosses there.
+		 *
+		 * 🚨 **This test exists because the disclosure must not ride on the policy's own
+		 * revision cycle.** Parker folded the duty into the web-build hosting task
+		 * (2026-10-06) for exactly the reason the Centre went unnamed for three days: a
+		 * disclosure that waits on somebody remembering is a disclosure that does not
+		 * happen. Until the Public Suffix List entry for `anthers.run` files and
+		 * propagates, creator code on one Work's subdomain can set a `.anthers.run`
+		 * cookie readable by another Work's build — a tracking vector between Works, not
+		 * an account or save boundary — and the policy has to say so for as long as it
+		 * is true.
+		 *
+		 * ⚠️ **Removing this assertion is closing the limitation, not tidying the test.**
+		 * When the entry propagates and the limitation is gone, the disclosure changes in
+		 * the same commit that can prove it; until then these sentences stay.
+		 */
+		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
+		expect(text).toContain("anthers.run");
+		expect(text).toContain("tracking vector between Works");
+		expect(text).toContain("session never reaches `anthers.run`");
+	});
+
+	it("🚨 keeps the permanent facts of the anthers.run boundary beside the temporary one", () => {
+		/*
+		 * The disclosure above must never be the only thing the policy says about
+		 * `anthers.run`, for the reason the test above it under-claims too: a reader
+		 * deciding whether to play a build needs the limitation AND the facts that hold
+		 * regardless of it. Session isolation, per-Work saves and per-request access
+		 * checks are properties of the design rather than of a PSL entry, so they hold
+		 * today and hold after it propagates. If the serving design ever changes such
+		 * that one of these stops being true, the change fails here before it ships.
+		 */
+		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
+		expect(text).toContain("never sent to a different site");
+		expect(text).toContain("its own subdomain and therefore its own storage");
+		expect(text).toContain("signed, per-request check");
+	});
+
 	it("🚨 tells users and creators that child sexual abuse material is reported", () => {
 		/*
 		 * Reporting is a federal duty, and the terms are where a person is told the rules they
