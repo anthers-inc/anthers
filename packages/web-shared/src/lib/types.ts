@@ -215,6 +215,32 @@ export interface Asset {
 	createdAt: string;
 }
 
+export interface WebBuildFile {
+	id: number;
+	buildId: number;
+	/** The file's path within the build, exactly as the build resolves it. */
+	path: string;
+	/** Storage key — never a URL, and never handed to a viewer by this shape. */
+	storageKey: string;
+	fileSize: number | null;
+	mimeType: string | null;
+	createdAt: string;
+}
+
+export interface WebBuild {
+	id: number;
+	workId: number;
+	/** The creator's own label telling two uploads apart. */
+	label: string;
+	/** The file the build loads first, relative to the build root — `index.html` for a Godot export. */
+	entryPath: string;
+	/** Whether the Work page frames this build; exactly one per Work. */
+	isPrimary: boolean;
+	files: WebBuildFile[];
+	createdAt: string;
+	updatedAt: string;
+}
+
 export interface TranscodingJob {
 	id: number;
 	workId: number;
@@ -366,6 +392,12 @@ export interface Work {
 	downloadCount?: number;
 
 	assets: Asset[];
+	/**
+	 * The Work's browser builds — the owner-facing shape only. A build is one multi-file
+	 * unit the Work page will frame; delivery itself is the hosting task's remaining half,
+	 * so nothing here reaches a viewer yet.
+	 */
+	webBuilds?: WebBuild[];
 	transcoding: TranscodingJob | null;
 	createdAt?: string;
 	updatedAt?: string;

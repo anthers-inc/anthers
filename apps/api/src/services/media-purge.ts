@@ -19,8 +19,8 @@
  * that refused to delete is a deletion request we did not honor.
  */
 
-import { assets, db, transcodingJobs, works } from "@anthers/db";
-import { and, inArray } from "drizzle-orm";
+import { assets, db, transcodingJobs, webBuilds, works } from "@anthers/db";
+import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
 
@@ -73,6 +73,46 @@ function keysForWork(
 	};
 }
 
+/**
+ * A Work's browser-build prefixes, read from the build rows — full keys under the Work's
+ * creator's prefix, exactly as the upload route minted them: `creators/{id}/web-builds/{buildId}/`.
+ * Which `isKeyUnder` accepts, so the owner filter in `keysForWork` would pass them; they are
+ * added past it in the caller because the creator here is read from the Work row itself.
+ *
+ * The single-file shape of this module means a Work delete asks here rather than assembling
+ * build keys itself, so nothing has to remember the prefix shape in two places.
+ */
+async function webBuildPrefixesForWorks(workIds: number[]): Promise<string[]> {
+	const rows = await db
+		.select({ id: webBuilds.id, creatorId: works.creatorId })
+		.from(webBuilds)
+		.innerJoin(works, eq(webBuilds.workId, works.id))
+		.where(inArray(webBuilds.workId, workIds));
+	return rows.map((r) => `creators/${r.creatorId}/${webBuildPrefix(r.id)}`);
+}
+
+/** Add many Works' browser-build prefixes to a collection (the account-erase shape). */
+async function addWebBuildPrefixes(collected: CollectedMedia, workIds: number[]): Promise<void> {
+	for (const prefix of await webBuildPrefixesForWorks(workIds)) {
+		collected.prefixes.add(prefix);
+	}
+}
+
+/**
+ * The storage prefix all of one build's files live under — the shape every upload key and
+ * every purge sweep resolves against. **Kept here on the one-enumeration rule**: the route
+ * that mints keys and the sweeps that delete them both import it, so a prefix change is a
+ * one-file edit and the two can never disagree.
+ *
+ * ⚠️ **This function exists to be imported, and exporting it from a service is the shape
+ * rather than a mistake** — `keysForWork` stays private because a caller says WHAT is going
+ * away, but the prefix builder is the other half of that bargain: the key-minting side may
+ * not re-derive the shape either.
+ */
+export function webBuildPrefix(buildId: number): string {
+	return `web-builds/${buildId}/`;
+}
+
 function collectRawKeysForWork(
 	item: WorkRow,
 	workAssets: AssetRow[],
@@ -107,6 +147,14 @@ export async function purgeWorkMedia(
 	jobRows: TranscodingJobRow[],
 ): Promise<void> {
 	const { keys, prefixes } = keysForWork(item, workAssets, jobRows);
+	// A browser build is swept by prefix — one whole `web-builds/{buildId}/` prefix per
+	// build — rather than file by file, because the number of files a real engine export
+	// carries makes enumerating keys the wrong shape and a missed file an ungated copy of
+	// the game left behind. The build rows themselves cascade in the database; this is
+	// their storage half.
+	for (const prefix of await webBuildPrefixesForWorks([item.id])) {
+		prefixes.add(prefix);
+	}
 	await sweep(keys, prefixes, "work delete");
 }
 
@@ -143,6 +191,7 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			.from(transcodingJobs)
 			.where(and(inArray(transcodingJobs.workId, workIds))),
 	]);
+	await addWebBuildPrefixes({ keys, prefixes }, workIds);
 
 	for (const w of workRows) {
 		const forThis = keysForWork(

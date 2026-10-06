@@ -566,6 +566,73 @@ export const assets = pgTable(
 	(table) => [index("idx_assets_work").on(table.workId)],
 );
 
+// node — the multi-file browser build of a game or software Work, owned by the Work's
+// creator. Cascades with the Work. This is the record side of Anthers hosting a browser
+// build itself; the delivery route that serves its files through the access-checked
+// route is the sibling task's remaining half, and nothing here exposes a public door —
+// every file lands in the private bucket, exactly like a Work's other game assets.
+export const webBuilds = pgTable(
+	"web_builds",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** Creator's own label; how they tell two uploads of the same build apart. */
+		label: text("label").notNull().default(""),
+		/**
+		 * Path of the file the build loads first, relative to the build root —
+		 * `index.html` for a Godot export. The entry point is a build's identity: the
+		 * Work page frames exactly this file, and everything else resolves relative
+		 * to it.
+		 */
+		entryPath: text("entry_path").notNull(),
+		/** Whether the Work page frames this build. Exactly one per Work, enforced in code. */
+		isPrimary: boolean("is_primary").notNull().default(false),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_web_builds_work").on(table.workId),
+		/**
+		 * At most one primary build per Work, enforced in the database: a partial
+		 * unique index over the rows that claim primary. `isPrimary: false` rows are
+		 * never in this index, so ordinary builds stay unlimited; flipping primary
+		 * without clearing the old one fails here rather than in a race.
+		 */
+		uniqueIndex("uq_web_build_primary").on(table.workId, table.isPrimary).where(sql`is_primary`),
+	],
+);
+
+/**
+ * One file of a browser build, keyed under the build's own prefix —
+ * `creators/{id}/web-builds/{buildId}/{path}`. The per-file row is what makes
+ * "every file resolves against the one prefix" enforceable: the delivery route
+ * reads exactly these paths and nothing outside them escapes the access check.
+ */
+// node — same reasoning as `webBuilds`, its parent: the creator's build content record.
+export const webBuildFiles = pgTable(
+	"web_build_files",
+	{
+		id: serial("id").primaryKey(),
+		buildId: integer("build_id")
+			.notNull()
+			.references(() => webBuilds.id, { onDelete: "cascade" }),
+		/**
+		 * The file's path within the build, exactly as the build resolves it —
+		 * `index.js`, `engines/godot.wasm`, `AudioWorkletProcessor.js`. Relative, no
+		 * leading slash, no `..` and no `.` segments, which the route layer refuses.
+		 */
+		path: text("path").notNull(),
+		/** Storage key. Carried rather than derived: the path is the build's, the key is ours. */
+		storageKey: text("storage_key").notNull(),
+		fileSize: bigint("file_size", { mode: "number" }).default(0),
+		mimeType: text("mime_type").default(""),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_web_build_files").on(table.buildId, table.path)],
+);
+
 /**
  * The pages of a **comic** or an **ebook** Work — a comic, a graphic novel, a prose book — one row per
  * rendered page, in order.

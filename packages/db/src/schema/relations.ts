@@ -15,6 +15,8 @@ import {
 	projects,
 	reviews,
 	transcodingJobs,
+	webBuildFiles,
+	webBuilds,
 	works,
 } from "./content.js";
 import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
@@ -140,6 +142,7 @@ export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
 export const worksRelations = relations(works, ({ one, many }) => ({
 	creator: one(users, { fields: [works.creatorId], references: [users.id] }),
 	assets: many(assets),
+	webBuilds: many(webBuilds),
 	transcodingJobs: many(transcodingJobs),
 	postRefs: many(postWorkRefs), // where this Work has been posted
 	projectItems: many(projectItems), // Projects this Work belongs to
@@ -157,6 +160,15 @@ export const postWorkRefsRelations = relations(postWorkRefs, ({ one }) => ({
 
 export const assetsRelations = relations(assets, ({ one }) => ({
 	work: one(works, { fields: [assets.workId], references: [works.id] }),
+}));
+
+export const webBuildsRelations = relations(webBuilds, ({ one, many }) => ({
+	work: one(works, { fields: [webBuilds.workId], references: [works.id] }),
+	files: many(webBuildFiles),
+}));
+
+export const webBuildFilesRelations = relations(webBuildFiles, ({ one }) => ({
+	build: one(webBuilds, { fields: [webBuildFiles.buildId], references: [webBuilds.id] }),
 }));
 
 export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({

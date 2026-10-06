@@ -67,6 +67,7 @@ import {
 } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
+import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
 	fileRules,
 	isFileWorkType,
@@ -362,6 +363,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			assets: fresh.assets,
 			transcoding: fresh.transcoding,
 			pageCount: fresh.pageCount,
+			webBuilds: fresh.webBuilds,
 		}));
 		if (!thumbnailTouched.current && fresh.thumbnail) {
 			setThumbnailUrl(fresh.thumbnail);
@@ -806,13 +808,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						</>
 					))}
 				{/* A game or software's embedded build: the address it runs from, and the build
-				    running from it once saved. */}
-				{isBuildType(type) && (
-					<>
-						{details.slot}
-						{current.embedUrl && <WorkDeliverable work={asRead} />}
-					</>
-				)}
+				    running from it once saved. A hosted browser build renders nothing here yet —
+				    delivery is the hosting task's remaining half, so its section below carries
+				    the files without framing them. */}
+				{isBuildType(type) && details.slot}
 
 				{/* A piece of writing is its body, written here in the typography it is read in. */}
 				{writing && (
@@ -971,6 +970,14 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						</label>
 					</form>
 				</section>
+			)}
+
+			{/* A game or software's own hosted browser build: the multi-file unit Anthers
+			    stores under the Work, and will frame once hosted delivery ships (nothing
+			    frames it yet — see the WebBuildSection note). onChanged re-reads the Work so
+			    a completed build appears without a reload. */}
+			{isBuildType(type) && (
+				<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
 			)}
 
 			{/* ── What a user never sees ── */}
