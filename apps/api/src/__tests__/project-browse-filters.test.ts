@@ -207,6 +207,23 @@ describe("project browse filters", () => {
 		);
 	});
 
+	it("declines a whitespace-only search or price instead of erroring on it", async () => {
+		// The defect this pins: a bare space in the filter box is a truthy string, so
+		// `search=+` reached the query as like('% %') and a blank `min_price` failed the
+		// ::numeric cast with a 500 — Parker hit exactly that from the browser. The
+		// inputs trim their own values too, but the API declines garbage rather than
+		// trusting the client. A space must behave as no filter at all, every way it
+		// can arrive, and the assertions below answer both with the unfiltered listing.
+		const unfiltered = [...mine.values()].sort();
+		expect((await listSlugs("search= ")).sort()).toEqual(unfiltered);
+		expect((await listSlugs("min_price=")).sort()).toEqual(unfiltered);
+		expect((await listSlugs("min_price=%20")).sort()).toEqual(unfiltered);
+		expect((await listSlugs("max_price=%20")).sort()).toEqual(unfiltered);
+		expect((await listSlugs("search=%20&min_price=%20&max_price=%20")).sort()).toEqual(unfiltered);
+		// The 200 above is the assertion's spine: these were a 500 through the
+		// ::numeric cast and a like() over every row before the trim landed.
+	});
+
 	it("filters by the platform of a downloadable build", async () => {
 		expect(await listSlugs("platform=linux")).toEqual([mine.get("game")!]);
 		expect(await listSlugs("platform=windows")).toEqual([]);

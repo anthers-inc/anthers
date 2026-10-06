@@ -27,6 +27,19 @@ import { useId } from "react";
 // Shared constants
 // ---------------------------------------------------------------------------
 
+/**
+ * A `type="number"` input exposes its intermediate states as `value` while it
+ * is being typed — a bare space, a trailing `1 `, `1.0.0` — and each of those
+ * went straight into the URL, where a blank `min_price` failed the API's
+ * `::numeric` cast with a 500. Only a well-formed non-negative decimal (or the
+ * empty string, which clears the filter) passes through.
+ */
+function sanitizePriceInput(raw: string): string {
+	const t = raw.trim();
+	if (!t) return "";
+	return /^(\d+(\.\d*)?|\.\d+)$/.test(t) ? t : "";
+}
+
 export const CONTENT_TYPES = [
 	{ id: "", label: "All", icon: CubeTransparentIcon },
 	{ id: "game", label: "Games", icon: PuzzlePieceIcon },
@@ -245,7 +258,9 @@ export default function ContentFilterSections({
 									min="0"
 									step="0.01"
 									value={minPrice}
-									onChange={(e) => onUpdateParams({ min_price: e.target.value })}
+									onChange={(e) =>
+										onUpdateParams({ min_price: sanitizePriceInput(e.target.value) })
+									}
 								/>
 							</div>
 							<span className="text-xs text-base-content/30">&ndash;</span>
@@ -257,7 +272,9 @@ export default function ContentFilterSections({
 									min="0"
 									step="0.01"
 									value={maxPrice}
-									onChange={(e) => onUpdateParams({ max_price: e.target.value })}
+									onChange={(e) =>
+										onUpdateParams({ max_price: sanitizePriceInput(e.target.value) })
+									}
 								/>
 							</div>
 						</div>

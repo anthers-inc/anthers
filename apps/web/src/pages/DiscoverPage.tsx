@@ -241,7 +241,7 @@ export default function DiscoverPage() {
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
-		updateParams({ search: searchInput });
+		updateParams({ search: searchInput.trim() });
 	};
 
 	const renderBrowseContent = () => (
