@@ -395,8 +395,9 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		const allowanceGiBEach = coveredGiB;
 		const fullCost = seg.storageGiB * STORAGE_PER_GIB_MONTH;
 		const allowanceCost = Math.min(seg.storageGiB, coveredGiB) * STORAGE_PER_GIB_MONTH;
-		const paidByCreator =
-			seg.free ? 0 : Math.max(0, seg.storageGiB - coveredGiB) * STORAGE_PER_GIB_MONTH;
+		const paidByCreator = seg.free
+			? 0
+			: Math.max(0, seg.storageGiB - coveredGiB) * STORAGE_PER_GIB_MONTH;
 		const chargeEach = 0;
 		if (seg.free) {
 			freeStorageSubsidy += fullCost * count;

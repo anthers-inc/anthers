@@ -10,10 +10,8 @@
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
 import {
-	AFF_INFRA_RATE,
 	BADGE_ORDER,
 	cardFeeDisplay,
-	FREE_STORAGE_GIB,
 	PUBLIC_ACCESS_PRICE,
 	SELF_HOST_FEE,
 	STORAGE_LADDER_GIB,
@@ -390,7 +388,9 @@ describe("estimateStorageCost — and the self-hosting branch that inverted unno
 			estimateStorageCost({ storageBytes: STORAGE_LADDER_GIB.free * GIB_BYTES }).total.toNumber(),
 		).toBe(0);
 		// Root's allowance is 50: bytes up to it bill nothing.
-		expect(estimateStorageCost({ storageBytes: 50 * GIB_BYTES, anthersDollars: 3 }).total.toNumber()).toBe(0);
+		expect(
+			estimateStorageCost({ storageBytes: 50 * GIB_BYTES, anthersDollars: 3 }).total.toNumber(),
+		).toBe(0);
 		// 100 GiB past Root's allowance at R2's rate, to the cent.
 		const over = estimateStorageCost({ storageBytes: 150 * GIB_BYTES, anthersDollars: 3 });
 		expect(over.topUpEligible).toBe(true);

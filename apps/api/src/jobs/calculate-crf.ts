@@ -131,7 +131,12 @@ export async function calculateCrfSubsidies() {
 			})
 			.from(userBadges)
 			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-			.where(inArray(userBadges.userId, creators.map((c) => c.id)))
+			.where(
+				inArray(
+					userBadges.userId,
+					creators.map((c) => c.id),
+				),
+			)
 			.groupBy(userBadges.userId);
 		for (const row of heldRows) heldAnthersSupport.set(row.userId, Number(row.given ?? 0));
 	}
