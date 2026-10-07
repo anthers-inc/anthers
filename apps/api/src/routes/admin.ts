@@ -66,6 +66,14 @@ import {
 	takeDownWork,
 } from "../services/dmca.js";
 import { sendRightsRequestAnswerEmail } from "../services/email.js";
+import {
+	addPhase,
+	deletePhase,
+	loadPlan,
+	nextPhaseNumber,
+	updatePhase,
+	updatePlanSettings,
+} from "../services/financial-plan.js";
 import { ingestIssueReport, loadIssueQueue } from "../services/issue-reports.js";
 import {
 	describeSubject,
@@ -225,6 +233,34 @@ const clearObjectQuarantineSchema = z.object({
 const clearQuarantineSchema = z.object({
 	workId: z.number().int().positive(),
 	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+});
+
+// ── Financial plan (the admin console's planning tool) ──────────────────────
+// Writes accept inputs only; the computed ledger is derived at read time, never
+// stored. Per-phase share overrides are nullable: null clears back to settings.
+const planPhaseEditSchema = z.object({
+	label: z.string().trim().min(1).max(120).optional(),
+	accounts: z.number().int().min(1).max(1_000_000_000).optional(),
+	payingShare: z.number().min(0).max(1).optional(),
+	staff: z.number().min(0).optional(),
+	tooling: z.number().min(0).optional(),
+	services: z.number().min(0).optional(),
+	adminBudgetShare: z.number().min(0).max(1).nullable().optional(),
+	fundShare: z.number().min(0).max(1).nullable().optional(),
+});
+const planPhaseCreateSchema = z.object({
+	label: z.string().trim().min(1).max(120),
+	accounts: z.number().int().min(1).max(1_000_000_000),
+	payingShare: z.number().min(0).max(1),
+	staff: z.number().min(0),
+	tooling: z.number().min(0),
+	services: z.number().min(0),
+	adminBudgetShare: z.number().min(0).max(1).nullable().optional(),
+	fundShare: z.number().min(0).max(1).nullable().optional(),
+});
+const planSettingsSchema = z.object({
+	adminBudgetShare: z.number().min(0).max(1).optional(),
+	fundShare: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -485,6 +521,55 @@ const adminRoutes = new Hono<AdminEnv>()
 		const result = await closePackage(c.req.query("period") ?? "");
 		if (!result.ok) return c.json({ error: result.error, code: result.code }, 400);
 		return c.json(result.package);
+	})
+
+	// ── Financial plan ──────────────────────────────────────────────────────
+	// The planning tool's CRUD. Reads return inputs plus the computed ledger beside
+	// them (`planLedger`, at read time — outputs are never stored); writes accept
+	// inputs only. Every route answers after requireAdminSession like the rest;
+	// the writes are mutations gated by the origin check in adminHostOnly.
+	.get("/financial-plan", async (c) => {
+		return c.json(await loadPlan());
+	})
+	.put(
+		"/financial-plan/settings",
+		zValidator("json", planSettingsSchema, invalidBody),
+		async (c) => {
+			return c.json(await updatePlanSettings(c.req.valid("json")));
+		},
+	)
+	.put(
+		"/financial-plan/phases/:id",
+		zValidator("json", planPhaseEditSchema, invalidBody),
+		async (c) => {
+			const updated = await updatePhase(Number(c.req.param("id")), c.req.valid("json"));
+			if (!updated) return c.json({ error: "No such phase." }, 404);
+			return c.json(updated);
+		},
+	)
+	.post(
+		"/financial-plan/phases",
+		zValidator("json", planPhaseCreateSchema, invalidBody),
+		async (c) => {
+			const body = c.req.valid("json");
+			const created = await addPhase({
+				phase: await nextPhaseNumber(),
+				label: body.label,
+				accounts: body.accounts,
+				payingShare: body.payingShare,
+				staff: body.staff,
+				tooling: body.tooling,
+				services: body.services,
+				adminBudgetShare: body.adminBudgetShare ?? null,
+				fundShare: body.fundShare ?? null,
+			});
+			return c.json(created, 201);
+		},
+	)
+	.delete("/financial-plan/phases/:id", async (c) => {
+		const ok = await deletePhase(Number(c.req.param("id")));
+		if (!ok) return c.json({ error: "No such phase." }, 404);
+		return c.json({ ok: true });
 	})
 
 	// ── Deadlines ────────────────────────────────────────────────────────────

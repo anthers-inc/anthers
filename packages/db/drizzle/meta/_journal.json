@@ -855,6 +855,13 @@
       "when": 1791351605328,
       "tag": "0121_salty_the_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1791415516724,
+      "tag": "0122_slippery_blindfold",
+      "breakpoints": true
     }
   ]
 }
