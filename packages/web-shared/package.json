@@ -35,6 +35,7 @@
 		"./economics/TakeHome": "./src/components/economics/TakeHome.tsx",
 		"./media/TranscodingStatus": "./src/components/media/TranscodingStatus.tsx",
 		"./content/works": "./src/components/content/works.tsx",
+		"./content/HostedEmbed": "./src/components/content/HostedEmbed.tsx",
 		"./content/work-media": "./src/components/content/work-media.tsx",
 		"./content/WorkWebBuildSection": "./src/components/content/WorkWebBuildSection.tsx",
 		"./content/work-state": "./src/components/content/work-state.ts",

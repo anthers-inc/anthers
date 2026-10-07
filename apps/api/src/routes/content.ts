@@ -108,6 +108,7 @@ import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
+import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import {
@@ -1891,6 +1892,15 @@ async function serializeWorkForUser(
 	 * page, a project shelf, a post's references.
 	 */
 	timeLimited = false,
+	/**
+	 * Whether the Work carries a completed primary browser build — loaded with the
+	 * Work by `loadWorkBundles`'s builds map, never queried per Work here (this function
+	 * serializes batches; a per-Work lookup would be an N+1 on every Catalog page).
+	 *
+	 * Sets `webPlayable`, which gates the play button the same way `embedUrl`'s validity
+	 * gates the external embed. The build's files ride nowhere in this payload.
+	 */
+	hasPrimaryBuild = false,
 ) {
 	const canAccess = access.canAccess;
 
@@ -1978,6 +1988,13 @@ async function serializeWorkForUser(
 		// still never reaches the iframe: the address is refused here as well as on the way in.
 		// `embedUrlProblem` in `@anthers/shared/content` carries the reasons.
 		embedUrl: deliverable && !embedUrlProblem(work.embedUrl ?? "") ? work.embedUrl : "",
+		// 🚨 **A hosted build rides on the same `deliverable` verdict as every other
+		// medium.** True means the Work page may press its play button — which then mints
+		// the per-session play address by its own checked call, exactly the shape the
+		// audio route leaves to the player (withhold the URL, enforce at the endpoint).
+		// The build's files themselves are never in this payload: they resolve against
+		// the delivery origin's allowlist, where only the token speaks.
+		webPlayable: deliverable && hasPrimaryBuild,
 		// 🚨 Lyrics ride WITH the payload, not with the blurb. A gated track's words are as
 		// much the deliverable as its audio, and the two failure directions are not
 		// symmetric: a creator who wants them public can put them in `description`, which
@@ -2140,7 +2157,8 @@ async function loadPostWorks(
 	if (refs.length === 0) return [];
 
 	const workIds = refs.map((r) => r.workId);
-	const { worksById, assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(workIds);
+	const { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork } =
+		await loadWorkBundles(workIds);
 	const [ctx, spent] = await Promise.all([
 		buildAccessContext(userId, { workIds }),
 		allowanceSpent(userId),
@@ -2174,6 +2192,7 @@ async function loadPostWorks(
 					spent,
 					userId,
 					pagesByWork.get(work.id) ?? 0,
+					(buildsByWork.get(work.id) ?? []).some((b) => b.isPrimary),
 				),
 			};
 		}),
@@ -3336,6 +3355,61 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
+	// ── Browser-build delivery: mint the play address (access-checked) ──────────
+	//
+	// A hosted build's files answer on the Work's delivery origin, where the Anthers
+	// session never arrives — so the entitlement is this route's answer: signed, per
+	// request, minted at a moment the same gate ladder the audio and page routes ran was
+	// just checked. *How a File Reaches You*'s rule, carried to creator code; the delivery
+	// module (`routes/build-delivery.ts`) is the serve half.
+	.get("/works/:id/play", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// The meter and the household limit are checked at the MINT, on the same reasoning
+		// as the HLS playlist: the delivery origin never calls back to the API per file,
+		// so this route is the last point at which the commons can be declined. Refusing
+		// here is what stops a play session continuing.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		// The primary build is what "play" means; a non-primary variant is registered
+		// storage, not the Work's playable state.
+		const [build] = await db
+			.select({ id: webBuilds.id, entryPath: webBuilds.entryPath })
+			.from(webBuilds)
+			.where(and(eq(webBuilds.workId, work.id), eq(webBuilds.isPrimary, true)))
+			.limit(1);
+		if (!build) return c.json({ error: "This Work has no hosted build." }, 404);
+
+		const host = buildDeliveryHost(work.publicId, process.env, new URL(c.req.url).host);
+		if (!host) {
+			// A public deployment without a delivery origin configured is OFF, not weakened:
+			// the feature refuses rather than serving from a host that shares ancestry with
+			// the session cookie. A checkout answers on its own origin instead.
+			return c.json({ error: "Hosted build delivery is not configured." }, 501);
+		}
+		const token = mintPlayToken(work.id, PLAY_TOKEN_TTL_SECONDS);
+		// The token is the path PREFIX, so the build's own relative references — the wasm,
+		// the pck, the worklets — resolve underneath it with no HTML rewriting.
+		//
+		// Scheme: a per-Work host (suffix set) is a real or portless-CA'd https origin in
+		// every environment that names one — https always. A checkout serving on its own
+		// host takes the request's own scheme, because dev's http localhost would otherwise
+		// mint a mixed-content iframe that never loads.
+		const suffixSet = Boolean(process.env.BUILD_ORIGIN_SUFFIX?.trim());
+		const scheme = suffixSet ? "https" : new URL(c.req.url).protocol.replace(":", "");
+		const src = `${scheme}://${host}/build/${token}/${build.entryPath}`;
+		// no-store: the answer carries an entitlement and is access-dependent — the same
+		// reasoning the audio route's 302 carries.
+		c.header("Cache-Control", "no-store");
+		return c.json({ src, expiresIn: PLAY_TOKEN_TTL_SECONDS });
+	})
+
 	// ── Panels (comic page regions) ──────────────────────────────────────────────
 	// The panel geometry for a Work, for the user's panel mode and the Studio's
 	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
@@ -3922,6 +3996,16 @@ const contentRoutes = new Hono()
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
 					(await parentalTimeGate(userId, work)) !== null,
+					// The Work's own detail page — the one place a play button renders, so
+					// this is the one lookup this endpoint owes (it does not go through
+					// loadWorkBundles; see the page-count note above for the same shape).
+					(
+						await db
+							.select({ id: webBuilds.id })
+							.from(webBuilds)
+							.where(and(eq(webBuilds.workId, work.id), eq(webBuilds.isPrimary, true)))
+							.limit(1)
+					).length > 0,
 				)),
 				creator,
 				creatorHasStripe,
@@ -4187,7 +4271,7 @@ const contentRoutes = new Hono()
 		if (rows.length === 0) return c.json({ creator, works: [] });
 
 		const ids = rows.map((r) => r.id);
-		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(ids);
+		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } = await loadWorkBundles(ids);
 		const [ctx, catalogSpent] = await Promise.all([
 			buildAccessContext(userId, { workIds: ids }),
 			allowanceSpent(userId),
@@ -4207,6 +4291,7 @@ const contentRoutes = new Hono()
 						catalogSpent,
 						userId,
 						pagesByWork.get(w.id) ?? 0,
+						(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 					),
 				),
 			),
@@ -5157,7 +5242,8 @@ const contentRoutes = new Hono()
 			.orderBy(asc(projectItems.sortOrder));
 
 		const memberWorkIds = itemRows.map((r) => r.work.id);
-		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(memberWorkIds);
+		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } =
+			await loadWorkBundles(memberWorkIds);
 		const [workCtx, projectSpent] = await Promise.all([
 			buildAccessContext(userId, { workIds: memberWorkIds }),
 			allowanceSpent(userId),
@@ -5187,6 +5273,7 @@ const contentRoutes = new Hono()
 							projectSpent,
 							userId,
 							pagesByWork.get(m.work.id) ?? 0,
+							(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
 						)),
 					})),
 				),
@@ -5879,7 +5966,7 @@ const contentRoutes = new Hono()
 			: [];
 		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
 
-		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(workIds);
+		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } = await loadWorkBundles(workIds);
 		const [ctx, spent, permanent] = await Promise.all([
 			buildAccessContext(user.id, { workIds }),
 			allowanceSpent(user.id),
@@ -5918,6 +6005,7 @@ const contentRoutes = new Hono()
 									spent,
 									user.id,
 									pagesByWork.get(w.id) ?? 0,
+									(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 								),
 							};
 						}

@@ -15,6 +15,7 @@ import { accountRoutes } from "./routes/accounts.js";
 import { adminRoutes } from "./routes/admin.js";
 import { atprotoRoutes } from "./routes/atproto.js";
 import { authRoutes } from "./routes/auth.js";
+import { createBuildDeliveryRoutes, isBuildDeliveryRequest } from "./routes/build-delivery.js";
 import { contentRoutes } from "./routes/content.js";
 import { createDevBuildRoutes } from "./routes/dev-build.js";
 import { dmcaRoutes } from "./routes/dmca.js";
@@ -40,6 +41,14 @@ const app = new Hono()
 	.use("/api/dev/build/*", async (c, next) => {
 		await next();
 		c.res.headers.delete("X-Frame-Options");
+	})
+	// The same for the production delivery routes: the Work page frames the entry URL,
+	// which answers on the Work's delivery host — a different origin from the page by
+	// design. Host-scoped by the same guard the routes themselves refuse on, so the
+	// header comes off nowhere else.
+	.use("/build/*", async (c, next) => {
+		await next();
+		if (isBuildDeliveryRequest(c.req.url)) c.res.headers.delete("X-Frame-Options");
 	})
 	.use(secureHeaders({ crossOriginResourcePolicy: "cross-origin" }))
 	.use(
@@ -80,6 +89,11 @@ const app = new Hono()
 	// `client.api.content.works[":id"].web-build…` does not type. A distinct prefix keeps
 	// the client honest; the routes still address /works/:id inside it.
 	.route("/api/web-builds", webBuildRoutes)
+	// Build delivery — the file half. Mounted unconditionally in DEV; in production the
+	// routes answer only on a delivery host (the host guard in the module), and the
+	// mount itself goes in only when `BUILD_ORIGIN_SUFFIX` names one. Refuses closed in
+	// both directions, the same shape `admin-host.ts` runs.
+	.route("/build", createBuildDeliveryRoutes())
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 
