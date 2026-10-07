@@ -322,15 +322,20 @@ export async function creatorProductTaxCode(creatorId: number): Promise<string> 
 }
 
 /**
- * One rung's tax code: the most-taxable perk the creator tagged it with, or — where the
- * rung carries no tagged perk — the code its gates imply.
+ * One rung's tax code — the most-taxable thing the rung actually delivers, with access
+ * IN the comparison rather than beneath it (Parker, 2026-10-07, exercising it on a real
+ * creator account).
  *
- * 🚨 **A rung that clears a gate ALWAYS codes as the streamed subscription, whatever its
- * perks say** — access is the thing the supporter receives, and gates are data rather
- * than a tag, so a rung cannot be talked out of it by mis-tagging. A perk-carrying,
- * gate-carrying rung still codes streamed: access outranks the goods beside it, which is
- * the most-taxable-kind ordering applied with the gate read as the top kind. A rung with
- * neither gate nor perk is a donation.
+ * 🚨 **A rung that opens a gate on ANY of the creator's Works delivers access, and the
+ * streamed-subscription code enters the comparison on that fact alone** — gates are data
+ * rather than a tag, so the rung cannot be talked out of it by mis-tagging, and a
+ * "recognition" tag can never put a gratuity code on a line whose supporters genuinely
+ * receive gated access (that was the understatement the tags-first draft allowed). The
+ * ordering across the pool: a physical good, service or community tag outranks access;
+ * access outranks recognition; and a rung with no gate and no tag is a donation. The gate
+ * read is over `works.access` rows (a row with `allow: true` whose threshold the rung's
+ * dollar amount meets is a gate it opens), which is the comparison `resolveAccessSync`
+ * itself makes, read in TypeScript rather than re-derived as a jsonb predicate.
  */
 export async function taxCodeForBadge(badgeId: number): Promise<string> {
 	const [badge] = await db
@@ -344,7 +349,6 @@ export async function taxCodeForBadge(badgeId: number): Promise<string> {
 		.from(badgePerks)
 		.where(eq(badgePerks.badgeId, badgeId));
 	const tagged = mostTaxablePerkKind(perkRows.map((r) => r.kind));
-	if (tagged) return tagged.taxCode;
 	// No tagged perk: does this rung's dollar amount open any gate on the creator's own
 	// Works? A gate row with `allow: true` whose threshold the rung meets is a gate it
 	// opens — the comparison `resolveAccessSync` itself makes, read in TypeScript rather
@@ -357,7 +361,17 @@ export async function taxCodeForBadge(badgeId: number): Promise<string> {
 	const opensAGate = rows.some((r) =>
 		(r.access ?? []).some((row) => row.allow && held >= row.threshold),
 	);
-	return opensAGate ? STREAMED_SUBSCRIPTION_TAX_CODE : DONATION_TAX_CODE;
+
+	// 🚨 Access sits IN the most-taxable comparison, not beneath it (Parker, 2026-10-07,
+	// who will exercise this on a real creator account): a goods or service tag outranks
+	// the access beside it, but a GRATUITY tag does not — access is a real taxable
+	// delivery, and a "recognition" tag must never understate a line whose supporters
+	// genuinely receive gated access.
+	if (opensAGate) {
+		if (tagged && tagged.id !== "recognition") return tagged.taxCode;
+		return STREAMED_SUBSCRIPTION_TAX_CODE;
+	}
+	return tagged ? tagged.taxCode : DONATION_TAX_CODE;
 }
 
 /**

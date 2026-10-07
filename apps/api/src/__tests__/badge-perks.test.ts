@@ -115,7 +115,7 @@ describe("badge perks", () => {
 		expect(await taxCodeForBadge(badgeId)).toBe("txcd_20030000");
 	});
 
-	it("🚨 codes a gate-clearing, perk-free rung as the streamed subscription", async () => {
+	it("🚨 codes a gate-clearing rung as the streamed subscription — access outranks a gratuity tag", async () => {
 		// The previous test left perks on this rung; this one is about the NO-perk read.
 		await putPerks([]);
 		const work = await insertWork({
@@ -130,14 +130,13 @@ describe("badge perks", () => {
 		try {
 			await giveWorkAFile(work.id);
 			expect(await taxCodeForBadge(badgeId)).toBe(STREAMED_SUBSCRIPTION_TAX_CODE);
-			// 🚨 And a TAGGED perk outranks the gate read: the most-taxable-kind ordering is
-			// applied to tags first, so a rung clearing a gate AND tagged recognition codes
-			// as recognition. This is the posture decision the docblock records — a tag is
-			// the creator affirming what the rung carries extra to access, and recognition
-			// (a gratuity-like good) is the lesser sale beside access that is already
-			// charged on the gate's own terms.
+			// 🚨 And access outranks a gratuity tag: the same rung, tagged recognition, still
+			// codes as the streamed subscription, because its supporters genuinely receive
+			// gated access and a name-in-credits must not understate that (Parker's
+			// access-weighted reading, 2026-10-07). A goods or service tag would outrank
+			// the access; a gratuity does not.
 			await putPerks([{ kind: "recognition", label: "Name in credits" }]);
-			expect(await taxCodeForBadge(badgeId)).toBe("txcd_90000001");
+			expect(await taxCodeForBadge(badgeId)).toBe(STREAMED_SUBSCRIPTION_TAX_CODE);
 		} finally {
 			await db.delete(works).where(eq(works.id, work.id));
 		}

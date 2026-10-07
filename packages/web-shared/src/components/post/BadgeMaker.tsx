@@ -344,33 +344,45 @@ function PerkEditor({
 				// Keyed on the row's own stable key (minted when the row was added) — the
 				// index reorders badly on a remove, and a kind+label pair collides when two
 				// perks of one kind share a label.
-				<div key={perk.key} className="mb-2 flex flex-wrap items-center gap-1">
-					<select
-						className="select select-bordered select-xs w-40"
-						value={String(perk.kind)}
-						onChange={(e) => update(i, { kind: e.target.value })}
-					>
-						{BADGE_PERK_KINDS.map((k) => (
-							<option key={k.id} value={k.id}>
-								{k.label}
-							</option>
-						))}
-					</select>
-					<input
-						type="text"
-						className="input input-bordered input-xs flex-1 min-w-40"
-						value={perk.label}
-						onChange={(e) => update(i, { label: e.target.value })}
-						placeholder="What supporters get, in your words"
-					/>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs btn-square text-error"
-						onClick={() => remove(i)}
-						title="Remove perk"
-					>
-						<TrashIcon className="w-3.5 h-3.5" />
-					</button>
+				<div key={perk.key} className="mb-2 flex flex-col gap-0.5">
+					<div className="flex flex-wrap items-center gap-1">
+						<select
+							className="select select-bordered select-xs w-40"
+							value={String(perk.kind)}
+							onChange={(e) => update(i, { kind: e.target.value })}
+						>
+							{BADGE_PERK_KINDS.map((k) => (
+								<option key={k.id} value={k.id}>
+									{k.label}
+								</option>
+							))}
+						</select>
+						<input
+							type="text"
+							className="input input-bordered input-xs flex-1 min-w-40"
+							value={perk.label}
+							onChange={(e) => update(i, { label: e.target.value })}
+							placeholder="What supporters get, in your words"
+						/>
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs btn-square text-error"
+							onClick={() => remove(i)}
+							title="Remove perk"
+						>
+							<TrashIcon className="w-3.5 h-3.5" />
+						</button>
+					</div>
+					{/* 🚨 THE GUIDED HALF (Parker, 2026-10-07): each row's own kind carries its
+					    friendly explanation right beneath it, so a creator changing a row's
+					    category reads what that category means at the moment they change it —
+					    not a single line describing whichever row was touched last. What the
+					    line says is the kind's friendly text, never tax vocabulary. */}
+					{BADGE_PERK_KINDS.find((k) => k.id === String(perk.kind)) && (
+						<p className="text-[11px] text-base-content/50 pl-1">
+							{BADGE_PERK_KINDS.find((k) => k.id === String(perk.kind))?.friendly}
+						</p>
+					)}
 				</div>
 			))}
 			{perks.length < 10 && (
@@ -386,11 +398,6 @@ function PerkEditor({
 						</option>
 					))}
 				</select>
-			)}
-			{perks.length > 0 && (
-				<p className="mt-1 text-[11px] text-base-content/50">
-					{BADGE_PERK_KINDS.find((k) => k.id === String(perks[perks.length - 1]?.kind))?.friendly}
-				</p>
 			)}
 			<p className="mt-1 text-[11px] text-base-content/50">
 				Not sure which applies? Write to support@anthers.org.
