@@ -78,6 +78,7 @@ const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
 const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
 const ChangelogPage = lazy(() => import("./pages/ChangelogPage"));
+const StatusPage = lazy(() => import("./pages/StatusPage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
 const CompareItchPage = lazy(() => import("./pages/CompareItchPage"));
 const CreatorMonetizationCalculatorPage = lazy(
@@ -334,6 +335,7 @@ export default function App() {
 					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 					<Route path="/changelog" element={<ChangelogPage />} />
+					<Route path="/status" element={<StatusPage />} />
 					{/* Defect reports about the site itself — separate intake from /abuse above,
 					    which is statutory notice-and-action. Both links live in the footer's
 					    Development column, and neither page names the other's process except to

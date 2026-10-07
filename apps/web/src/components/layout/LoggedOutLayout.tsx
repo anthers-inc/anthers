@@ -66,6 +66,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		links: [
 			["Roadmap", "/roadmap"],
 			["Changelog", "/changelog"],
+			["Status", "/status"],
 			["Report an Issue", "/issues"],
 		],
 	},
