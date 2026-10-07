@@ -347,3 +347,125 @@ export function pollenDataUri(color: string, opacityScale = 1): string {
 		`<svg xmlns="http://www.w3.org/2000/svg" width="${T}" height="${T}" viewBox="0 0 ${T} ${T}">${c}</svg>`,
 	);
 }
+
+// ─── email decor ───
+
+/**
+ * Compact variants for **email**, where the site's tiles do not fit: Gmail clips
+ * message HTML at roughly 102 KB and counts a data URI at its full encoded size,
+ * so `vineTileDataUri` (74 KB) and `grassFloorDataUri` (324 KB raw) cannot travel
+ * in a message. These draw the same brand assets — the same grass tufts, blooms
+ * and harmonics wandering — at email scale: narrower tiles, fewer elements, the
+ * calm wave. The rendered result is the site's meadow at a quieter volume, not a
+ * different decoration.
+ *
+ * An email consumer (`apps/api`'s `email.ts`) composes these into its shell as
+ * `background-image` styles and inline `<img>` tags. A data URI makes **no
+ * off-origin request** — the rule Anthers' email is held to — which is exactly
+ * why the decor travels inline rather than from the CDN, everything here stays a
+ * committed string builder with no build-time fetch, and the payload budget
+ * (each builder well under 10 KB encoded) is part of the contract these carry.
+ * SVG does not render in Outlook, whose reader sees the plain card the decor
+ * sits behind — decoration may vanish, content may not.
+ */
+
+/** Colors the email decor needs, matching the light Meadow palette's roles. */
+export type EmailDecorColors = {
+	stem: string;
+	flower: string;
+	core: string;
+	grass: string;
+	casing: string;
+};
+
+/**
+ * A short, calm climbing vine as a vertically-tileable data URI for an email's
+ * edge column — {@link vineTileDataUri}'s job at a size email can carry: one
+ * strand, `H` short (default 640), five leaves and two blooms. Same harmonic
+ * wandering, same dainty leaves, same solid wildflowers.
+ */
+export function emailVineTileDataUri(c: { stem: string; flower: string }, H = 640): string {
+	const W = 90;
+	const wave: VineWave = [
+		[1, 18, 0],
+		[3, 6, 1.3],
+	];
+	const xAt = (y: number) =>
+		45 + wave.reduce((sum, [f, a, p]) => sum + a * Math.sin((2 * Math.PI * f * y) / H + p), 0);
+	// A longer sample step than the page vine's: at email scale a 10-unit step is
+	// indistinguishable from a 16-unit one on a 52px-wide column, and the `d` string
+	// is the tile's biggest single cost.
+	let stem = "";
+	for (let y = 0; y <= H; y += 16) stem += `${y === 0 ? "M" : "L"}${xAt(y).toFixed(0)} ${y} `;
+	let foliage = `<path d="${stem.trim()}" stroke="${c.stem}" stroke-width="1.3" fill="none" stroke-linecap="round"/>`;
+	let i = 0;
+	for (let y = 60; y < H - 40; y += 110) {
+		const x = xAt(y);
+		const right = i % 2 === 0;
+		foliage += `<path d="${leafD(14)}" transform="translate(${x.toFixed(0)} ${y}) rotate(${right ? -26 : 206})" stroke="${c.stem}" stroke-width="1.15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+		i++;
+	}
+	let flowers = "";
+	for (const [bi, y, off] of [
+		["bloom-tulip", 200, 8],
+		["bloom-tulip", 470, -7],
+	] as const) {
+		flowers += iconGroup(bi, { x: xAt(y) + off, y, size: 15, color: c.flower });
+	}
+	return uri(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><g opacity="0.55">${foliage}</g>${flowers}</svg>`,
+	);
+}
+
+/**
+ * A shallow grassy band with a couple of blooms for an email's floor —
+ * {@link grassFloorDataUri}'s job at a size email can carry: one sparse row of
+ * tufts around `H` 54, their bases anchored below the clip edge, and two
+ * five-petal blooms on it. Tiles horizontally (`repeat-x`).
+ */
+export function emailGrassFloorDataUri(c: {
+	grass: string;
+	flower: string;
+	core: string;
+	/** the bees' amber; defaults to `core`, which it usually equals */
+	bee?: string;
+}): string {
+	const W = 360;
+	const H = 54;
+	// Email-scale budget, counted: two clumps and one band of grass (the tuft paths
+	// are fixed-size regardless of display scale, so kind — not size — is the cost),
+	// one bloom on a stem, two bees. Encoded, the tile lands around 9 KB; the test
+	// pins the ceiling.
+	const tufts = [
+		["grass-clump", 34, 30],
+		["grass-band", 178, 32],
+		["grass-clump", 322, 30],
+	] as const;
+	let grass = "";
+	for (const [name, x, size] of tufts) {
+		grass += `<g opacity="0.8">${iconGroup(name, { x, y: H + 8, size, color: c.grass, anchor: "bottom" })}</g>`;
+	}
+	// Two blooms on swaying stems, drawn the way the big floor draws its flower pops
+	// (`bloomFilled` on a quadratic stem) rather than floating loose — floating blobs
+	// read as scattered dots at email scale.
+	const bloomOnStem = (x: number, h: number, sway: number, s: number) =>
+		`<g opacity="0.9"><path d="M${x} ${H} Q ${(x + sway).toFixed(1)} ${(H - h * 0.5).toFixed(1)} ${(x + sway * 0.6).toFixed(1)} ${(H - h).toFixed(1)}" fill="none" stroke="${c.grass}" stroke-width="1.5" stroke-linecap="round"/>${bloomFilled(+(x + sway * 0.6).toFixed(1), +(H - h).toFixed(1), c.flower, c.core, s)}</g>`;
+	const flowers = bloomOnStem(70, 22, 7, 1.0);
+	// A couple of bees drifting above the grass, riding the tile itself — an email
+	// shell cannot position an overlay (`position:absolute` is stripped by mail
+	// clients), so the bees travel in the floor rather than over it, as
+	// `<MeadowFloor>`'s do in React.
+	const bee = (
+		x: number,
+		y: number,
+		name: "bee" | "bee-flying",
+		size: number,
+		rot: number,
+		op: number,
+	) =>
+		`<g opacity="${op.toFixed(2)}">${iconGroup(name, { x, y, size, color: c.bee ?? c.core, rotate: rot })}</g>`;
+	const bees = bee(128, 16, "bee-flying", 13, -8, 0.85) + bee(262, 20, "bee", 10, 0, 0.75);
+	return uri(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${grass}${flowers}${bees}</svg>`,
+	);
+}

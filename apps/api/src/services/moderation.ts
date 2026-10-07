@@ -68,7 +68,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
-import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
+import { abuseAlertsEnabled, escapeHtml, sendAbuseAlert } from "./email.js";
 import { resumePausedRenewals } from "./invoices.js";
 import { notify } from "./notifications.js";
 import { queueRecordSync } from "./record-sync.js";
@@ -328,15 +328,6 @@ export async function runEscalationSweep(): Promise<number> {
 	let sent = 0;
 	for (const id of ids) if (await escalateReport(id)) sent++;
 	return sent;
-}
-
-/** Minimal entity escaping — the reporter's text is untrusted and goes into an email. */
-function escapeHtml(value: string): string {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;");
 }
 
 /**

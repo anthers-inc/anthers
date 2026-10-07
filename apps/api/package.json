@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@anthers/db": "workspace:*",
+		"@anthers/brand": "workspace:*",
 		"@anthers/shared": "workspace:*",
 		"@atproto/jwk-jose": "0.2.4",
 		"@atproto/oauth-client": "0.8.3",

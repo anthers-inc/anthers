@@ -55,7 +55,12 @@ import {
 	gatherDeadlines,
 	longDeadlineDate,
 } from "../services/deadlines.js";
-import { escapeHtml, sendDeadlineReminderEmail, terminalSecondLegLine } from "../services/email.js";
+import {
+	EMAIL_LINK_COLOR,
+	escapeHtml,
+	sendDeadlineReminderEmail,
+	terminalSecondLegLine,
+} from "../services/email.js";
 
 /** The lead days per kind, as the module docblock states them. */
 export const ARRIVAL_HORIZON_DAYS = 45;
@@ -172,7 +177,7 @@ function emailBodyFor(item: DeadlineItem, kind: string, now: Date): string {
 	const adminUrl = process.env.ADMIN_URL?.trim().replace(/\/+$/, "");
 	if (item.actUrl && adminUrl) {
 		lines.push(
-			`<p style="margin:0 0 22px;"><a href="${escapeHtml(adminUrl + item.actUrl)}" style="color:#7c3aed;">Open it in the admin app</a> to act on it.</p>`,
+			`<p style="margin:0 0 22px;"><a href="${escapeHtml(adminUrl + item.actUrl)}" style="color:${EMAIL_LINK_COLOR};">Open it in the admin app</a> to act on it.</p>`,
 		);
 	} else if (item.actUrl) {
 		lines.push(

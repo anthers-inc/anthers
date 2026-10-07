@@ -71,6 +71,7 @@ icons.bee;                                    // { viewBox, inner } — build yo
 - **Recolor inline (React):** `dangerouslySetInnerHTML={{ __html: icons.bee.inner }}` inside an `<svg fill="currentColor">`, then set color with `text-*`.
 - **Recolor without inlining:** `iconDataUri(name)` as a CSS `mask-image` on a `<span>` with `background-color: currentColor` — the icon's alpha is the mask, so it takes whatever color you give it.
 - **Compose into a generated SVG background** (the tiled vines, the meadow floor): splice `iconGroup(...)` into the SVG string. `decor.ts` builds on this.
+- **Email decor**: `emailVineTileDataUri` / `emailGrassFloorDataUri` are the compact variants email HTML can carry — each a few KB encoded against Gmail's ~102 KB clip, and no off-origin request when embedded, which is the rule Anthers' email is held to. The page-scale builders are far too large for a message. `packages/brand/src/email-decor.test.ts` pins those budgets.
 
 
 # The logo
