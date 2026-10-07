@@ -600,6 +600,26 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     steps:
+      # 🚨 The gate on the release notes, ahead of anything else. Every released version
+      # must have an entry in `apps/web/src/content/release-notes.ts`, so the notes ride
+      # the version bump's PR: the promote carries the version, its entry and its
+      # deployment together, and a promote without its notes cannot deploy. This runs
+      # first so the failure costs the least — one audit, before any build or deploy.
+      # Script: scripts/release-notes-audit.ts (its test stubs git and drives every
+      # branch, including the ones a green deploy never reaches).
+      - uses: oven-sh/setup-bun@v2
+        # No bun-version ON PURPOSE — setup-bun reads `packageManager` from package.json,
+        # matching every other workflow so they cannot drift onto different runtimes.
+      - name: Audit the release notes against the tags
+        run: |
+          # A sparse checkout is enough: the script reads one module and asks the
+          # remote for its tags, so nothing here needs a full clone or bun install.
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}"
+          git fetch -q --depth=1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+          bun run scripts/release-notes-audit.ts
+
       - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
@@ -677,15 +697,16 @@ jobs:
       # just deployed, so the tag and the footer cannot disagree. It runs only after the
       # verify step above, so a tag exists only for a build that is live and verified.
       #
-      # 🚨 This is the canonical home of each version — the changelist job diffs between
-      # consecutive tags, so a deploy this step skips leaves a release with no name and a
-      # changelist with no boundary. If the tag already exists (a re-run of a green deploy
-      # run, a re-promote of the same commit), this is a no-op rather than a failure: the
-      # tag that exists is correct by definition, because it names this commit.
+      # 🚨 This is the canonical home of each version — the release-notes job diffs
+      # between consecutive tags, so a deploy this step skips leaves a release with no
+      # name and release notes with no boundary. If the tag already exists (a re-run of
+      # a green deploy run, a re-promote of the same commit), this is a no-op rather
+      # than a failure: the tag that exists is correct by definition, because it names
+      # this commit.
       - uses: actions/checkout@v4
         with:
           # The tag step reads the version constant and the commit being tagged; the
-          # changelist step reads every commit back to the previous calver tag, so
+          # release-notes step reads every commit back to the previous calver tag, so
           # the fetch carries full history and tags rather than a single commit.
           fetch-depth: 0
           fetch-tags: true
@@ -712,13 +733,13 @@ jobs:
           git tag -a "v${VERSION}" -m "Anthers ${VERSION}" "$GITHUB_SHA"
           git push origin "refs/tags/v${VERSION}"
           echo "::notice::Tagged ${GITHUB_SHA:0:7} as v${VERSION} ✓"
-      - name: Publish the changelist as the release
-        # The raw changelist — every change between this tag and the previous one,
-        # one line per squash commit, unedited — as the GitHub release on the tag
-        # the step above just applied. The logic lives in scripts/release-changelist.sh
-        # so it is testable; its test stubs git and gh and drives every branch,
-        # including the ones a green deploy can never reach.
+      - name: Publish the release notes
+        # The raw release notes — every change between this tag and the previous one,
+        # one line per squash commit, unedited — as the GitHub release on the tag the
+        # step above just applied. The logic lives in scripts/release-notes.sh so it is
+        # testable; its test stubs git and gh and drives every branch, including the
+        # ones a green deploy can never reach.
         env:
           GH_TOKEN: ${{ github.token }}
           BEFORE: ${{ github.event.before }}
-        run: bash scripts/release-changelist.sh
+        run: bash scripts/release-notes.sh

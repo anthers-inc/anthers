@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The public changelog. Content lives in `content/changelog.ts`; this file only
-// renders it.
+// The public release notes. Content lives in `content/release-notes.ts`; this file
+// only renders it.
 //
-// There are two layers, and the page is honest about both. The **raw changelist** —
-// every change between two tags, one line each — is published unedited as the GitHub
-// release on each version's tag, and this page links to it beside every release. This
-// page is the **user-facing pass** over that list: the changes grouped into arcs
+// There are two layers, and the page is honest about both. The **raw release notes** —
+// every change between two tags, one line each — are published unedited as the GitHub
+// release on each version's tag, and this page links to them beside every release. This
+// page is the **reader-facing pass** over that list: the changes grouped into arcs
 // rather than commits, filtered of what a user cannot see (test machinery,
 // contributor tooling, internal rewrites), and translated into what a user or a
 // creator can now do that they could not before. No entry here adds anything the
@@ -21,7 +21,7 @@
 // station that must not gain fields the exporter would have to reproduce.
 //
 // **Everything renders at once — no tabs, no accordions, no lazy sections**, for the
-// same reasons as the roadmap page beside it: a changelog is skimmed, and
+// same reasons as the roadmap page beside it: release notes are skimmed, and
 // `marketing-copy.e2e.ts` reads this page's `body.textContent` and asserts that
 // retired claims are *absent* — a negative assertion that unrendered copy satisfies
 // perfectly.
@@ -32,7 +32,7 @@ import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
-import { CHANGELOG, type ChangelogRelease } from "../content/changelog";
+import { RELEASE_NOTES, type ReleaseNotesEntry } from "../content/release-notes";
 import { allItems } from "../content/roadmap";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -56,30 +56,32 @@ const MONTH_NAMES = [
 ] as const;
 
 /** One month of releases. Derived from the entries' `date`s; nothing is stored. */
-export interface ChangelogMonth {
+export interface ReleaseNotesMonth {
 	/** The `YYYY-MM` the releases shipped in, cut from each entry's ISO `date`. */
 	key: string;
 	/** The month as the heading names it, e.g. "October 2026". */
 	label: string;
-	/** Every release that shipped in the month, newest first, in `CHANGELOG`'s own order. */
-	releases: ChangelogRelease[];
+	/** Every release that shipped in the month, newest first, in `RELEASE_NOTES`'s own order. */
+	releases: ReleaseNotesEntry[];
 }
 
 /**
- * The changelog grouped by month, newest first. Folds over the entries in order of
- * first appearance — `CHANGELOG` is newest first, so both the months and the releases
+ * The release notes grouped by month, newest first. Folds over the entries in order of
+ * first appearance — `RELEASE_NOTES` is newest first, so both the months and the releases
  * inside each come out newest first without sorting. The month is the month of the
  * entry's `date`, not of its calver version: a `####.##.5` numbered for one month can
  * ship early in the next, and a user's question is when it shipped — the divider
  * carries the version beside the date either way.
  *
- * Exported for `changelog-grouping.test.ts`, which pins the grouping's shape, rather
+ * Exported for `release-notes-grouping.test.ts`, which pins the grouping's shape, rather
  * than because anything else renders it.
  */
-export function groupedByMonth(entries: readonly ChangelogRelease[] = CHANGELOG): ChangelogMonth[] {
-	const months: ChangelogMonth[] = [];
+export function groupedByMonth(
+	entries: readonly ReleaseNotesEntry[] = RELEASE_NOTES,
+): ReleaseNotesMonth[] {
+	const months: ReleaseNotesMonth[] = [];
 	for (const release of entries) {
-		// An entry's `date` is ISO `YYYY-MM-DD` (pinned by `changelog.test.ts`), so the
+		// An entry's `date` is ISO `YYYY-MM-DD` (pinned by `release-notes.test.ts`), so the
 		// month is the first seven characters — no `Date` parsing, and no timezone to
 		// drag a month edge across.
 		const key = release.date.slice(0, 7);
@@ -94,8 +96,8 @@ export function groupedByMonth(entries: readonly ChangelogRelease[] = CHANGELOG)
 	return months;
 }
 
-export default function ChangelogPage() {
-	// `/changelog#<version>` scrolls to that release, which is how the roadmap's card
+export default function ReleaseNotesPage() {
+	// `/release-notes#<version>` scrolls to that release, which is how the roadmap's card
 	// for a launched item links to the version that shipped it. Scrolled by hand
 	// because the router does not follow a fragment on navigation, and a browser's
 	// own jump happens before this renders.
@@ -124,7 +126,7 @@ function Hero() {
 				<Reveal>
 					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
 					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-						Changelog
+						Release Notes
 					</p>
 					<h1 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
 						What actually shipped
@@ -145,7 +147,7 @@ function Hero() {
 }
 
 /** One month: the month heading, then every release that shipped in it under a divider of its own. */
-function MonthSection({ month, tint }: { month: ChangelogMonth; tint: boolean }) {
+function MonthSection({ month, tint }: { month: ReleaseNotesMonth; tint: boolean }) {
 	const count = month.releases.length;
 
 	return (
@@ -168,14 +170,14 @@ function MonthSection({ month, tint }: { month: ChangelogMonth; tint: boolean })
 
 /**
  * One release inside its month, opening with the divider that names it — the version
- * and date over a rule, with the raw list at the rule's end — followed by the arcs that
- * release shipped. `first` only sets the spacing: the month heading already separates
+ * and date over a rule, with the raw release on GitHub at the rule's end — followed by
+ * the arcs that release shipped. `first` only sets the spacing: the month heading already separates
  * the first release from what is above it.
  *
- * `id` carries the `/changelog#<version>` anchor the roadmap's launched cards link
+ * `id` carries the `/release-notes#<version>` anchor the roadmap's launched cards link
  * back to; `scroll-mt-24` keeps the divider clear of the sticky header when it lands.
  */
-function ReleaseBlock({ release, first }: { release: ChangelogRelease; first: boolean }) {
+function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: boolean }) {
 	const items = allItems();
 
 	return (
@@ -231,7 +233,7 @@ function ReleaseBlock({ release, first }: { release: ChangelogRelease; first: bo
 }
 
 /**
- * The page's close. It offers the raw list rather than daring anybody to check it: the
+ * The page's close. It offers the raw release rather than daring anybody to check it: the
  * full commit list is on every tag's release, and the roadmap carries what a release
  * finished.
  */
@@ -243,8 +245,8 @@ function Closing({ tint }: { tint: boolean }) {
 				<H2>Everything, out where you can find it</H2>
 				<Lede>
 					Anthers is open-source, and every change lands in public: each release's full commit list
-					is on its tag, this changelog is written on top of it, and the roadmap names the goals a
-					release finished. If you ever want what is behind an entry, it is one click away.
+					is on its tag, these release notes are written on top of it, and the roadmap names the
+					goals a release finished. If you ever want what is behind an entry, it is one click away.
 				</Lede>
 				<div className="mt-9 flex flex-wrap justify-center gap-3">
 					<a

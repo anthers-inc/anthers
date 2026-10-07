@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The public changelog — one entry per calver release, newest first, each written by
-// the public-pass layer rather than copied from anything mechanical.
+// The public release notes — one entry per calver release, newest first, each written
+// by the public-pass layer rather than copied from anything mechanical.
 //
 // ⏳ **This file is a way station, exactly like `roadmap.ts` beside it.** The settled
 // direction (Parker, 2026-09-03) is that content moves into the public vault and reaches
@@ -11,28 +11,28 @@
 //
 // The two layers, and the boundary between them:
 //
-// - The **raw changelist** — every squash commit between two tags, one line each, exact
-//   and unedited — is generated at promote time and published as the GitHub release on
-//   the tag (`scripts/release-changelist.sh`). It is the audit trail. **Never edit it
-//   to match this file, and never derive this file from it mechanically** — the pass
-//   is a person's judgment, which is the point of having one.
-// - **This module is that judgment's output**: the user-facing entries, grouped into
+// - The **raw release notes** — every change between two tags, one line per squash
+//   commit, exact and unedited — are generated at promote time and published as the
+//   GitHub release on the tag (`scripts/release-notes.sh`). They are the audit trail.
+//   **Never edit them to match this file, and never derive this file from them
+//   mechanically** — the pass is a person's judgment, which is the point of having one.
+// - **This module is that judgment's output**: the reader-facing entries, grouped into
 //   arcs rather than commits, filtered of what a user cannot see (test machinery,
 //   contributor tooling, internal rewrites), in Anthers' public voice.
 //
 // # The rules an entry has to follow
 //
 // 1. 🚨 **An entry names what a user or a creator can see, do, or be affected by.**
-//    Contributor-facing mechanics are filtered on purpose: a changelog that lists
-//    pre-push hooks trains a user to skim. Doubtful things go in with honest scope,
-//    because silent omission is the page's failure mode — the raw list stays one click
-//    away on the release.
+//    Contributor-facing mechanics are filtered on purpose: a release-notes page that
+//    lists pre-push hooks trains a user to skim. Doubtful things go in with honest
+//    scope, because silent omission is the page's failure mode — the raw list stays one
+//    click away on the release.
 // 2. **Group commits into arcs, one entry per arc.** The three Books tools are one
 //    compliance story, not three rows. Order arcs by user weight, most consequential
 //    first.
-// 3. **Past tense, plain declarative.** The changelog's whole subject is the past, and
-//    it is the one page where describing a shipped thing plainly is the honest mode.
-//    Nothing here announces; an entry that sells is an entry to rewrite.
+// 3. **Past tense, plain declarative.** The page's whole subject is the past, and it is
+//    the one page where describing a shipped thing plainly is the honest mode. Nothing
+//    here announces; an entry that sells is an entry to rewrite.
 // 4. 🚨 **A roadmap reference is earned by shipping, not by adjacency.** `roadmapIds`
 //    names the roadmap items this release moved to `launched`, and the page links each
 //    entry to `/roadmap#goal-<id>` — the two-way link is the point of this page. Most
@@ -47,13 +47,22 @@
 // 6. **The voice is the vault's public voice** — `82.01 How Anthers Talks About Itself`
 //    in `Anthers-Wiki/80-89 Development/82 Brand/` governs claims and vocabulary
 //    (Work, Post, Library, Badge, gate, Public Access, Review, time). The pass is
-//    captured as the `anthers-changelog-pass` skill, which walks the whole procedure.
+//    captured as the `anthers-release-notes` skill, which walks the whole procedure.
+//
+// # Where an entry is written
+//
+// 🚨 **The entry rides the version bump's PR, before the promote.** `release-notes-audit.ts`
+// runs as the first step of CI's deploy job and refuses a release whose version has no
+// entry here, so a promote without its notes cannot deploy. `scripts/promote.ts` composes
+// the new entry (and backfills any the audit finds missing — silently dropped releases are
+// the page's failure mode) onto the bump branch, so the version, its entry, and its
+// deployment all arrive together.
 
 /**
  * One release. `lede` is the one-sentence frame under the version heading; each bullet
  * in `entries` is one arc, named by what it did for a user or a creator.
  */
-export interface ChangelogRelease {
+export interface ReleaseNotesEntry {
 	/** The calver version, matching the git tag the deploy job applies (`2026.10.0`). */
 	version: string;
 	/** The release date, ISO `YYYY-MM-DD`. */
@@ -70,7 +79,7 @@ export interface ChangelogRelease {
  * Every release, newest first. A new release lands at the top with its entry written by
  * the public-pass skill — never pasted from the GitHub release.
  */
-export const CHANGELOG: ChangelogRelease[] = [
+export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
 		version: "2026.10.9",
 		date: "2026-10-04",
@@ -128,9 +137,9 @@ export const CHANGELOG: ChangelogRelease[] = [
 	{
 		version: "2026.10.3",
 		date: "2026-10-03",
-		lede: "A quiet release: the changelog page learned to group by month, and the Badge model landed.",
+		lede: "A quiet release: the release notes learned to group by month, and the Badge model landed.",
 		entries: [
-			"This changelog groups by month, with each numbered release named on a divider inside it, so a month's releases read together.",
+			"The release notes group by month, with each numbered release named on a divider inside it, so a month's releases read together.",
 			"The Badge model landed in the database: a level of support somebody gives a creator, set in dollars at any amount, stored rather than recomputed from giving history.",
 		],
 	},
@@ -156,13 +165,13 @@ export const CHANGELOG: ChangelogRelease[] = [
 			"The signup page is /signup now; the old /subscribe address redirects there, and nothing in the flow calls itself a subscription, because nothing on Anthers is one.",
 			"The public reporting page lives at /abuse, and it stopped describing itself as only for illegal content. A person reporting spam or harassment without an account could already use that form, and the page now says so.",
 			"Reports of a security issue have a dedicated security@anthers.org address, stated where a researcher would look for it.",
-			"This changelog exists, and every release's full commit list is published on the tag it shipped under, generated by the deploy job itself.",
+			"The release notes exist, and every release's full commit list is published on the tag it shipped under, generated by the deploy job itself.",
 		],
 	},
 	{
 		version: "2026.10.0",
 		date: "2026-10-02",
-		lede: "The changes that landed between opening this changelog and the first calver tag.",
+		lede: "The changes that landed between opening the release notes and the first calver tag.",
 		entries: [
 			"An emailed code is now the only way to sign in. No account holds a password, and nothing accepts one — sign-in, recovery and verification all run through the code Anthers emails.",
 			"A profile's address is its handle. The separate Anthers username is gone, so a person is found at the handle they already own — an Anthers one, or a Bluesky one they brought — and a handle that changes keeps routing for ninety days while it settles.",

@@ -911,8 +911,8 @@ export const ROADMAP: RoadmapGroup[] = [
 						note: "Decided and not built. This page is hand-written today.",
 					},
 					{
-						id: "changelog",
-						title: "A Changelog",
+						id: "release-notes",
+						title: "Release Notes",
 						blurb:
 							"What actually shipped, and when, so progress is checkable rather than asserted.",
 						bucket: "launched",

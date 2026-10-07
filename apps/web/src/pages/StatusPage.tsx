@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The public status page. No content module sits behind it — unlike /roadmap and
-// /changelog, whose content is authored and exported from the wiki, this page renders a
+// /release-notes, whose content is authored and exported from the wiki, this page renders a
 // live answer: GET /api/status, polled on a slow interval. The vault's own rule is why
 // the page lives here rather than in the wiki: a real-time status page is exactly what
 // that rule hands to the app. And a live answer means nothing for the exporter to carry,
@@ -9,7 +9,7 @@
 // about "operational" is the one sentence on Anthers nobody should have to take on faith.
 //
 // **Everything renders at once — no tabs, no accordions, no lazy sections**, the same
-// rule the roadmap and changelog pages carry: a status page in an incident is skimmed,
+// rule the roadmap and release-notes pages carry: a status page in an incident is skimmed,
 // and hiding half of it behind a control is how a reader misses the line that mattered.
 //
 // **The page says what the data can support and no more.** The outside view's row renders
@@ -193,8 +193,8 @@ export default function StatusPage() {
 							roadmap
 						</Link>{" "}
 						and the{" "}
-						<Link to="/changelog" className="link">
-							changelog
+						<Link to="/release-notes" className="link">
+							release notes
 						</Link>{" "}
 						say what is being built and what has shipped.
 					</p>

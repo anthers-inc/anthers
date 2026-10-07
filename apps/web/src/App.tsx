@@ -2,7 +2,7 @@
 
 import { handleFromParam } from "@anthers/web-shared/profile";
 import { lazy, useEffect } from "react";
-import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
 import PublicShell from "./components/layout/PublicShell";
@@ -60,6 +60,17 @@ function StudioLayout() {
 }
 
 /**
+ * The /changelog → /release-notes redirect. `Navigate` alone would drop the fragment,
+ * which is the part a deep link carries — the roadmap's launched cards linked
+ * `/changelog#<version>` during the page's first week — so the hash is read and
+ * carried across explicitly.
+ */
+function RedirectReleaseNotes() {
+	const hash = useLocation().hash;
+	return <Navigate to={`/release-notes${hash}`} replace />;
+}
+
+/**
  * Every route page is LAZY. Only the homepage is not, and it is reached through
  * `RootRedirect`, which imports `ForUsersPage` statically because it IS the first paint.
  *
@@ -77,7 +88,7 @@ function StudioLayout() {
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
 const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
-const ChangelogPage = lazy(() => import("./pages/ChangelogPage"));
+const ReleaseNotesPage = lazy(() => import("./pages/ReleaseNotesPage"));
 const StatusPage = lazy(() => import("./pages/StatusPage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
 const CompareItchPage = lazy(() => import("./pages/CompareItchPage"));
@@ -341,7 +352,12 @@ export default function App() {
 					    guess still lands somewhere rather than on a 404. */}
 					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
-					<Route path="/changelog" element={<ChangelogPage />} />
+					<Route path="/release-notes" element={<ReleaseNotesPage />} />
+					{/* /changelog is kept as a redirect because the URL is in circulation —
+					    the roadmap's launched cards linked to it for the page's first week,
+					    and the fragment carries across so a deep link to a version still
+					    scrolls to it. */}
+					<Route path="/changelog" element={<RedirectReleaseNotes />} />
 					<Route path="/status" element={<StatusPage />} />
 					{/* Defect reports about the site itself — separate intake from /abuse above,
 					    which is statutory notice-and-action. Both links live in the footer's

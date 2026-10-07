@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
-        spec-diff spec-apply deploy-status promote-version resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
+        spec-diff spec-apply deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
 
 # ─── OS detection ───
@@ -345,6 +345,12 @@ deploy-status: ## Assert the live deployment's commit matches release (DOCTL_CON
 # printed next steps carry the rest of the promote flow, including the tag CI applies.
 promote-version: ## Compute and commit the next calver version into APP_VERSION
 	bun run scripts/promote-version.ts
+
+# The promote's gate, run as CI's deploy job's first step: every released version
+# must have an entry in apps/web/src/content/release-notes.ts. Run by hand with the
+# /promote command, which backfills what this names before the bump's PR merges.
+release-notes-audit: ## Assert every released version has release-notes entry
+	bun run scripts/release-notes-audit.ts
 
 # One resource snapshot of the live App Platform app, appended to resource_snapshots — the
 # trend behind the admin console's Resources section. A local operator script by design:

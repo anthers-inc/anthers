@@ -77,8 +77,8 @@ export default function IssueReportsPage() {
 						roadmap
 					</Link>
 					, and when a fix ships it is announced on the{" "}
-					<Link to="/changelog" className="link">
-						changelog
+					<Link to="/release-notes" className="link">
+						release notes
 					</Link>
 					, so what changed and when is public either way.
 				</p>

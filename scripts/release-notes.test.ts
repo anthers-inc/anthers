@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The release changelist, and the one mistake it must never make.
+ * The raw release notes, and the one mistake they must never make.
  *
- * 🚨 **A changelist that claims the wrong range is worse than none.** The list is the
+ * 🚨 **Release notes that claim the wrong range are worse than none.** The list is the
  * audit trail of what a deploy changed — the public-pass skill edits upward from it,
  * never replaces it, and a release record that includes work shipped in an earlier
  * release (or silently drops the boundary of the first) poisons every layer above it.
@@ -24,7 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
 
-const SCRIPT = join(import.meta.dir, "release-changelist.sh");
+const SCRIPT = join(import.meta.dir, "release-notes.sh");
 
 /** The committed constant the checkout carries — the awk the script runs reads this. */
 const VERSION_FILE = "packages/shared/src/version.ts";
@@ -37,7 +37,7 @@ interface GhAnswers {
 
 /** The fixture checkout the script runs against: real git, real commits, real tags. */
 async function fixtureCheckout(): Promise<{ dir: string; baseSha: string; headSha: string }> {
-	const dir = mkdtempSync(join(tmpdir(), "changelist-checkout-"));
+	const dir = mkdtempSync(join(tmpdir(), "release-notes-checkout-"));
 	const git = async (...args: string[]) => (await $`git -C ${dir} ${args}`.text()).trim();
 	await git("init", "--initial-branch=main");
 	await git("config", "user.email", "test@example.com");
@@ -87,7 +87,7 @@ async function runScript(opts: {
 	tags?: string[];
 	releaseExists?: boolean;
 }): Promise<{ exitCode: number; stdout: string; stderr: string; recorded: string }> {
-	const binDir = join(tmpdir(), `changelist-bin-${Date.now()}-${Math.random()}`);
+	const binDir = join(tmpdir(), `release-notes-bin-${Date.now()}-${Math.random()}`);
 	mkdirSync(binDir);
 	const recorded = join(binDir, "recorded.txt");
 	writeFileSync(recorded, "");
@@ -116,7 +116,7 @@ async function runScript(opts: {
 	return { exitCode, stdout, stderr, recorded: readFileSync(recorded, "utf8") };
 }
 
-describe("release-changelist.sh", () => {
+describe("release-notes.sh", () => {
 	it("falls back to the before-SHA when no previous calver tag exists, and reports the range it diffed", async () => {
 		const { dir, baseSha } = await fixtureCheckout();
 		// First release: no v* tag in the fixture, so the script must fall back to
@@ -159,7 +159,7 @@ describe("release-changelist.sh", () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 
-	it("fails on an empty changelist — a release that changed nothing", async () => {
+	it("fails on empty notes — a release that changed nothing", async () => {
 		const { dir, headSha } = await fixtureCheckout();
 		// A before-SHA pointing at HEAD itself makes the range empty.
 		const { exitCode, stdout } = await runScript({ dir, before: headSha });
@@ -172,7 +172,7 @@ describe("release-changelist.sh", () => {
 		const { dir, baseSha } = await fixtureCheckout();
 		// Add a true two-parent merge commit on top, the pre-squash style the first
 		// real batch carried, and confirm its subject never reaches the list. The
-		// changelist lives in release-body.md, not stdout — assert on the file.
+		// the notes live in release-body.md, not stdout — assert on the file.
 		await $`git -C ${dir} checkout -q -b feature`;
 		await $`git -C ${dir} commit --allow-empty -q -m "Merged feature change (#12)"`;
 		await $`git -C ${dir} checkout -q main`;
