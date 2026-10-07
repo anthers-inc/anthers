@@ -33,17 +33,23 @@
  */
 
 import { db } from "@anthers/db/client";
-import { invoiceLines, invoices, purchases, receiptSends, stripeAccounts, users } from "@anthers/db/schema";
+import {
+	invoiceLines,
+	type invoices,
+	type purchases,
+	receiptSends,
+	stripeAccounts,
+	users,
+} from "@anthers/db/schema";
 import Decimal from "decimal.js";
 import { eq, inArray } from "drizzle-orm";
-import type Stripe from "stripe";
 import {
 	type ReceiptLine,
+	type SendResult,
 	sendCreatorRefundReceiptEmail,
 	sendCreatorSaleReceiptEmail,
 	sendPurchaseReceiptEmail,
 	sendRefundReceiptEmail,
-	type SendResult,
 	sendSupportReceiptEmail,
 } from "./email.js";
 
@@ -121,13 +127,16 @@ async function emailOf(userId: number | null): Promise<string | null> {
 	return row?.email ?? null;
 }
 
+type PurchaseRow = typeof purchases.$inferSelect;
+type InvoiceRow = typeof invoices.$inferSelect;
+
 /** A receipt line from a purchase row, using the snapshot columns — never the live catalog. */
-function lineOf(row: typeof purchases.$inferSelect): ReceiptLine {
+function lineOf(row: PurchaseRow): ReceiptLine {
 	return { description: row.workTitle ?? `Work #${row.workId ?? "unknown"}`, amount: row.amount };
 }
 
 /** The sums a purchase or refund receipt's closing rows show, off the rows themselves. */
-function sumsOf(rows: (typeof purchases.$inferSelect)[]) {
+function sumsOf(rows: PurchaseRow[]) {
 	const tax = rows.reduce((acc, r) => acc.plus(new Decimal(r.salesTax)), new Decimal(0));
 	const total = rows.reduce(
 		(acc, r) => acc.plus(new Decimal(r.amount).plus(new Decimal(r.salesTax))),
@@ -135,8 +144,6 @@ function sumsOf(rows: (typeof purchases.$inferSelect)[]) {
 	);
 	return { tax: tax.toFixed(2), total: total.toFixed(2) };
 }
-
-type PurchaseRows = (typeof purchases.$inferSelect)[];
 
 /**
  * Receipts for a completed purchase: the buyer's itemized receipt, and — when the buyer
@@ -150,7 +157,7 @@ type PurchaseRows = (typeof purchases.$inferSelect)[];
  * The dedupe key names the recipient, so the buyer's receipt and the creator's are two
  * rows and two emails, and a redelivered event is neither.
  */
-export async function sendPurchaseReceipts(rows: PurchaseRows): Promise<void> {
+export async function sendPurchaseReceipts(rows: PurchaseRow[]): Promise<void> {
 	if (rows.length === 0) return;
 	const intentId = rows[0].stripePaymentIntentId;
 	const date = rows[0].updatedAt;
@@ -226,12 +233,13 @@ export async function sendPurchaseReceipts(rows: PurchaseRows): Promise<void> {
  * the routes ever sees. A route refund and the Stripe event that action provokes build
  * the same key from the same refund id, so the mail goes once.
  */
-export async function sendRefundReceipts(rows: PurchaseRows): Promise<void> {
+export async function sendRefundReceipts(rows: PurchaseRow[]): Promise<void> {
 	if (rows.length === 0) return;
 	const row = rows[0];
 	const date = row.refundedAt ?? row.updatedAt;
 	const { tax, total } = sumsOf(rows);
-	const negated = (s: string) => (new Decimal(s).isZero() ? s : new Decimal(s).negated().toFixed(2));
+	const negated = (s: string) =>
+		new Decimal(s).isZero() ? s : new Decimal(s).negated().toFixed(2);
 	const negTax = negated(tax);
 	const negTotal = negated(total);
 
@@ -308,9 +316,7 @@ export async function sendRefundReceipts(rows: PurchaseRows): Promise<void> {
  * and when nothing was directed the itemization says that in words rather than showing
  * an empty table.
  */
-export async function sendSupportReceipt(
-	invoiceRow: typeof invoices.$inferSelect,
-): Promise<void> {
+export async function sendSupportReceipt(invoiceRow: InvoiceRow): Promise<void> {
 	const buyerEmail = await emailOf(invoiceRow.userId);
 	if (!buyerEmail) return;
 
@@ -325,10 +331,12 @@ export async function sendSupportReceipt(
 	const creatorIds = lines.filter((l) => l.creatorId != null).map((l) => l.creatorId as number);
 	const names = creatorIds.length
 		? new Map(
-				(await db
-					.select({ id: users.id, name: users.displayName, handle: users.atprotoHandle })
-					.from(users)
-					.where(inArray(users.id, creatorIds))).map((u) => [u.id, u.name ?? u.handle ?? "a creator"]),
+				(
+					await db
+						.select({ id: users.id, name: users.displayName, handle: users.atprotoHandle })
+						.from(users)
+						.where(inArray(users.id, creatorIds))
+				).map((u) => [u.id, u.name ?? u.handle ?? "a creator"]),
 			)
 		: new Map<number, string>();
 	const receiptLines: ReceiptLine[] = lines

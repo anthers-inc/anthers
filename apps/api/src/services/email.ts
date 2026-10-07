@@ -774,7 +774,11 @@ export async function sendCreatorSaleReceiptEmail(args: {
 		<p style="margin:0 0 18px;">After the card processor's at-cost fee, <strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> is on its way to your connected account.</p>
 		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of the sale's price.</p>`,
 	);
-	return sendEmail({ to: args.to, subject: `A sale on your work: ${usd(args.earnings)} to you`, html });
+	return sendEmail({
+		to: args.to,
+		subject: `A sale on your work: ${usd(args.earnings)} to you`,
+		html,
+	});
 }
 
 /**

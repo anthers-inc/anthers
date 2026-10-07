@@ -25,7 +25,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { invoiceLines, invoices, purchases, receiptSends, stripeAccounts, works } from "@anthers/db/schema";
+import {
+	invoiceLines,
+	invoices,
+	purchases,
+	receiptSends,
+	stripeAccounts,
+	works,
+} from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { sendPurchaseReceipts, sendRefundReceipts, sendSupportReceipt } from "../services/receipts";
 import { createAccount } from "./account-fixture";
@@ -164,9 +171,8 @@ describe("Receipts: purchases", () => {
 
 	it("a basket is one receipt per recipient with every Work on it, not one email per Work", async () => {
 		const intentId = `pi_rcp_${run}_basket`;
-		const secondWorkId = (
-			await insertWork({ creatorId, type: "game", title: "Basket item two" })
-		).id;
+		const secondWorkId = (await insertWork({ creatorId, type: "game", title: "Basket item two" }))
+			.id;
 		createdWorkIds.push(secondWorkId);
 		await completedPurchase({ buyerId, creatorId, workId, intentId, title: "Basket item one" });
 		await completedPurchase({
@@ -188,9 +194,8 @@ describe("Receipts: purchases", () => {
 
 	it("a self-purchase mails the buyer only — the creator copy of your own money back to you is the same email's job", async () => {
 		const intentId = `pi_rcp_${run}_self`;
-		const ownWorkId = (
-			await insertWork({ creatorId: buyerId, type: "game", title: "My own work" })
-		).id;
+		const ownWorkId = (await insertWork({ creatorId: buyerId, type: "game", title: "My own work" }))
+			.id;
 		createdWorkIds.push(ownWorkId);
 		await completedPurchase({ buyerId, creatorId: buyerId, workId: ownWorkId, intentId });
 
@@ -308,7 +313,9 @@ describe("Receipts: monthly support", () => {
 				paidAt: new Date(),
 			})
 			.returning();
-		await db.insert(invoiceLines).values({ invoiceId: invoiceRow.id, creatorId: null, amount: "3.00" });
+		await db
+			.insert(invoiceLines)
+			.values({ invoiceId: invoiceRow.id, creatorId: null, amount: "3.00" });
 
 		await sendSupportReceipt(invoiceRow);
 		expect(await receiptRows(`invoice:in_rcp_${run}_detached:buyer:null`)).toHaveLength(0);

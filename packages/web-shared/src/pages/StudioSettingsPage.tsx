@@ -333,7 +333,7 @@ function CreatorReceiptEmailsSection() {
 					</div>
 				)}
 				<div>
-					<button className="btn btn-sm btn-outline" onClick={toggle} disabled={busy}>
+					<button type="button" className="btn btn-sm btn-outline" onClick={toggle} disabled={busy}>
 						{enabled ? "Turn off" : "Turn on"}
 					</button>
 				</div>

@@ -37,18 +37,30 @@ import { purchases, receiptSends, users } from "@anthers/db/schema";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import {
+	type ReceiptLine,
 	sendPurchaseReceiptEmail,
 	sendRefundReceiptEmail,
-	type ReceiptLine,
 } from "../apps/api/src/services/email";
 import { bwsSecrets } from "./bws";
 
 const TAG = "[receipt-replay]";
 
-const { values } = parseArgs({
+const parsed = parseArgs({
 	options: { intent: { type: "string" }, refund: { type: "string" } },
 	strict: false,
 });
+// `strict: false` widens every value to `string | boolean`; narrow it by hand, because
+// the guards below compare these against literal strings and a boolean would be a
+// `reference` that latches wrongly.
+const intentValue = typeof parsed.values.intent === "string" ? parsed.values.intent : undefined;
+const refundValue = typeof parsed.values.refund === "string" ? parsed.values.refund : undefined;
+
+const intentId = intentValue ?? refundValue;
+const what: "purchase" | "refund" = intentValue ? "purchase" : "refund";
+if (!intentId || (intentValue && refundValue)) {
+	console.error(`${TAG} pass exactly one of INTENT=pi_… or REFUND=re_… — see the header.`);
+	process.exit(64);
+}
 
 // 🚨 **The key is fetched from Bitwarden's prod project at run time** — never an env the
 // caller sets, never a value on a command line. Resend's keys carry no self-describing
@@ -56,33 +68,36 @@ const { values } = parseArgs({
 // production role's project, which `bwsSecrets("prod")` is the only door to.
 const resendKey = (await bwsSecrets("prod")).get("RESEND_API_KEY") ?? "";
 if (!resendKey) {
-	console.error(`${TAG} the prod project holds no RESEND_API_KEY — is bws authenticated (DOCTL_CONTEXT / BWS access)?`);
+	console.error(
+		`${TAG} the prod project holds no RESEND_API_KEY — is bws authenticated (DOCTL_CONTEXT / BWS access)?`,
+	);
 	process.exit(2);
 }
 process.env.RESEND_API_KEY = resendKey;
-
-const intentId = values.intent ?? values.refund;
-const what: "purchase" | "refund" = values.intent ? "purchase" : "refund";
-if (!intentId || (values.intent && values.refund)) {
-	console.error(`${TAG} pass exactly one of INTENT=pi_… or REFUND=re_… — see the header.`);
-	process.exit(64);
-}
 
 // This module runs inside `make prod-db CMD=` — the production session the Makefile
 // injects DATABASE_URL into. A dev database would carry no such row; the lookup below
 // is the check that the right database was reached, and it fails closed.
 const rows = await db.select().from(purchases).where(eq(purchases.stripePaymentIntentId, intentId));
 if (rows.length === 0) {
-	console.error(`${TAG} no purchase rows carry ${intentId} — wrong id, or this is not the production database.`);
+	console.error(
+		`${TAG} no purchase rows carry ${intentId} — wrong id, or this is not the production database.`,
+	);
 	process.exit(1);
 }
 
 const buyerId = rows[0].buyerId;
 if (buyerId == null) {
-	console.error(`${TAG} the purchase's buyer is detached (account deleted); there is nobody to mail.`);
+	console.error(
+		`${TAG} the purchase's buyer is detached (account deleted); there is nobody to mail.`,
+	);
 	process.exit(1);
 }
-const [buyerUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, buyerId)).limit(1);
+const [buyerUser] = await db
+	.select({ email: users.email })
+	.from(users)
+	.where(eq(users.id, buyerId))
+	.limit(1);
 if (!buyerUser) {
 	console.error(`${TAG} buyer ${buyerId} no longer exists; there is nobody to mail.`);
 	process.exit(1);
@@ -100,10 +115,15 @@ const total = rows.reduce(
 	(acc, r) => acc.plus(new Decimal(r.amount).plus(new Decimal(r.salesTax))),
 	new Decimal(0),
 );
-const whatDate = what === "refund" ? (rows[0].refundedAt ?? rows[0].updatedAt) : (rows[0].updatedAt ?? rows[0].createdAt);
+const whatDate =
+	what === "refund"
+		? (rows[0].refundedAt ?? rows[0].updatedAt)
+		: (rows[0].updatedAt ?? rows[0].createdAt);
 const refundRef = rows[0].stripeRefundId;
 if (what === "refund" && !refundRef) {
-	console.error(`${TAG} the row carries no settle-time Stripe refund id — nothing honest to reference or latch on.`);
+	console.error(
+		`${TAG} the row carries no settle-time Stripe refund id — nothing honest to reference or latch on.`,
+	);
 	process.exit(1);
 }
 const reference = what === "refund" ? refundRef! : intentId;
@@ -118,7 +138,9 @@ const [latch] = await db
 	.onConflictDoNothing({ target: receiptSends.dedupeKey })
 	.returning({ id: receiptSends.id });
 if (!latch) {
-	console.log(`${TAG} a receipt for this transaction was already sent (its receipt_sends row exists) — nothing to do.`);
+	console.log(
+		`${TAG} a receipt for this transaction was already sent (its receipt_sends row exists) — nothing to do.`,
+	);
 	process.exit(0);
 }
 
@@ -143,8 +165,14 @@ const result =
 			});
 
 if (!result.sent) {
-	console.error(`${TAG} the send did not go (receipt_sends row ${latch.id} records it as unsent) — read the [email] log lines above.`);
+	console.error(
+		`${TAG} the send did not go (receipt_sends row ${latch.id} records it as unsent) — read the [email] log lines above.`,
+	);
 	process.exit(1);
 }
-console.log(`${TAG} receipt sent to ${buyerEmail} (${what}, $${total.toFixed(2)}) — provider id ${result.messageId ?? "none"}`);
-console.log(`${TAG} run inside \`make prod-db CMD="bun run scripts/receipt-replay.ts …"\` with \`bws run --\` — see the Makefile target.`);
+console.log(
+	`${TAG} receipt sent to ${buyerEmail} (${what}, $${total.toFixed(2)}) — provider id ${result.messageId ?? "none"}`,
+);
+console.log(
+	`${TAG} run inside \`make prod-db CMD="bun run scripts/receipt-replay.ts …"\` with \`bws run --\` — see the Makefile target.`,
+);

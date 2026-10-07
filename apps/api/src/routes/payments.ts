@@ -64,8 +64,12 @@ import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
-import { sendPurchaseReceipts, sendRefundReceipts, sendSupportReceipt } from "../services/receipts.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
+import {
+	sendPurchaseReceipts,
+	sendRefundReceipts,
+	sendSupportReceipt,
+} from "../services/receipts.js";
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
@@ -1467,7 +1471,9 @@ const paymentRoutes = new Hono()
 				const settledRows = await db
 					.select()
 					.from(purchases)
-					.where(and(eq(purchases.stripePaymentIntentId, intentId), eq(purchases.status, "refunded")));
+					.where(
+						and(eq(purchases.stripePaymentIntentId, intentId), eq(purchases.status, "refunded")),
+					);
 				await sendRefundReceipts(settledRows);
 			}
 		} else if (event.type === "charge.dispute.created") {
@@ -1597,7 +1603,11 @@ const paymentRoutes = new Hono()
 			// actually recorded (a redelivered event returns null there, so nobody is mailed
 			// twice), and only for a `paid` status, which `recordPaidInvoice` already guards.
 			if (invoiceRowId != null) {
-				const [invoiceRow] = await db.select().from(invoices).where(eq(invoices.id, invoiceRowId)).limit(1);
+				const [invoiceRow] = await db
+					.select()
+					.from(invoices)
+					.where(eq(invoices.id, invoiceRowId))
+					.limit(1);
 				if (invoiceRow) await sendSupportReceipt(invoiceRow);
 			}
 		}
