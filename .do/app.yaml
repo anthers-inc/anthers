@@ -224,6 +224,18 @@ envs:
   # (`payments.ts` reads `STRIPE_PAYMENT_METHOD_CONFIGURATION` when set) is kept
   # for a genuinely per-deployment override — a config named for where it is used
   # — but no deployment names one today.
+  #
+  # ⚠️ **Except it is live, and the spec must say so.** The 2026-10-06 narrowing named
+  # the account's *Default* configuration in the Dashboard and left the variable
+  # undeclared — but production already carries it (`pmc_1UMxLj…`, the card-only
+  # configuration, dashboard-set), so an undeclared key here reads as a *removal* to
+  # every future `spec-apply`, which refuses on it rather than clobbering (the
+  # refusal that saved it is the tooling working). Declared below, dashboard-set:
+  # the specification of record says the truth, and an apply reconciles cleanly.
+  # Remove BOTH halves together if the account-level Default ever fully takes over.
+  - key: STRIPE_PAYMENT_METHOD_CONFIGURATION
+    scope: RUN_TIME
+    type: SECRET
   - key: STRIPE_SECRET_KEY
     scope: RUN_TIME
     type: SECRET
