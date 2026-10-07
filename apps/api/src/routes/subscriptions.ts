@@ -44,8 +44,9 @@ import {
 } from "@anthers/shared/attention";
 import {
 	type BadgeComposeParams,
-	isBadgeComposeParams,
+	badgePerkKind,
 	isBadgeColor,
+	isBadgeComposeParams,
 	isBadgeShape,
 } from "@anthers/shared/badge-art";
 import {
@@ -80,6 +81,7 @@ import sharp from "sharp";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { accountByHandle, resolveHandle } from "../lib/handles.js";
+import type { NounIcon } from "../lib/noun/client";
 import {
 	createBillingPortalSession,
 	createSubscription,
@@ -87,6 +89,7 @@ import {
 	paymentsConfigured,
 	previewInvoice,
 	retrieveSubscription,
+	updateProduct,
 	updateSubscription,
 } from "../lib/processor.js";
 import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
@@ -100,6 +103,7 @@ import {
 } from "../services/access.js";
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds } from "../services/attention-ranges.js";
+import { composeBadgeArt } from "../services/badge-art-compose.js";
 import {
 	ensureAnthersProduct,
 	ensureCreatorProduct,
@@ -111,14 +115,10 @@ import {
 	supportItems,
 	taxCodeForBadge,
 } from "../services/billing.js";
-import { updateProduct } from "../lib/processor.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
-import { badgePerkKind } from "@anthers/shared/badge-art";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
-import { composeBadgeArt } from "../services/badge-art-compose.js";
-import type { NounIcon } from "../lib/noun/client";
 import { resolveShareToken } from "../services/share-links.js";
 import { storage } from "../services/storage/index.js";
 import { recordReductions } from "../services/support-reductions.js";
@@ -1891,30 +1891,31 @@ const subscriptionRoutes = new Hono()
 		requireAuth,
 		zValidator(
 			"json",
-			z.object({
-				threshold: z
-					.string()
-					.regex(/^\d+(\.\d{1,2})?$/)
-					.refine((v) => isChargeableAmount(Number(v)) && Number(v) > 0, {
-						message: `A Badge level is a level of monthly support — at least $${STRIPE_MIN_CHARGE.toFixed(2)}, and never $0, because everyone can already see an ungated Work.`,
-					})
-					.optional(),
-				label: z.string().min(1).max(100).optional(),
-				description: z.string().max(1000).optional(),
-				// 🚨 Validated against `@anthers/shared/badge-art`, which is the one list the
-				// web layer renders from too. A id the server accepted and the library does
-				// not carry renders as nothing, with no error to explain it — so the check is
-				// here rather than left to the form. `null` is how a creator goes back to the
-				// default, which is why each is nullable rather than merely optional.
-				// Shape and field color only: the emblem is a Noun Project composition (the
-				// compose route) or an upload (the art route), never a library id any more.
-				// 🚨 STRICT, so a stale client's `artEmblem` choices are REFUSED rather than
-				// silently ignored — a patched emblem that did nothing would be the bug the
-				// retirement could otherwise hide.
-				artShape: z.string().refine(isBadgeShape).nullable().optional(),
-				artColor: z.string().refine(isBadgeColor).nullable().optional(),
-			})
-			.strict(),
+			z
+				.object({
+					threshold: z
+						.string()
+						.regex(/^\d+(\.\d{1,2})?$/)
+						.refine((v) => isChargeableAmount(Number(v)) && Number(v) > 0, {
+							message: `A Badge level is a level of monthly support — at least $${STRIPE_MIN_CHARGE.toFixed(2)}, and never $0, because everyone can already see an ungated Work.`,
+						})
+						.optional(),
+					label: z.string().min(1).max(100).optional(),
+					description: z.string().max(1000).optional(),
+					// 🚨 Validated against `@anthers/shared/badge-art`, which is the one list the
+					// web layer renders from too. A id the server accepted and the library does
+					// not carry renders as nothing, with no error to explain it — so the check is
+					// here rather than left to the form. `null` is how a creator goes back to the
+					// default, which is why each is nullable rather than merely optional.
+					// Shape and field color only: the emblem is a Noun Project composition (the
+					// compose route) or an upload (the art route), never a library id any more.
+					// 🚨 STRICT, so a stale client's `artEmblem` choices are REFUSED rather than
+					// silently ignored — a patched emblem that did nothing would be the bug the
+					// retirement could otherwise hide.
+					artShape: z.string().refine(isBadgeShape).nullable().optional(),
+					artColor: z.string().refine(isBadgeColor).nullable().optional(),
+				})
+				.strict(),
 		),
 		async (c) => {
 			const user = c.get("user");
@@ -2096,7 +2097,13 @@ const subscriptionRoutes = new Hono()
 			}
 			return c.json({ error: outcome.error ?? "Composition failed." }, 400);
 		}
-		return c.json({ unchanged: Boolean(outcome.unchanged), artPath: `/api/subscriptions/badges/${badgeId}/art` }, 200);
+		return c.json(
+			{
+				unchanged: Boolean(outcome.unchanged),
+				artPath: `/api/subscriptions/badges/${badgeId}/art`,
+			},
+			200,
+		);
 	})
 
 	/**
@@ -2172,7 +2179,12 @@ const subscriptionRoutes = new Hono()
 				.where(eq(badgePerks.badgeId, badgeId))
 				.orderBy(badgePerks.sortOrder);
 			return c.json({
-				perks: rows.map((p) => ({ id: p.id, kind: p.kind, label: p.label, description: p.description })),
+				perks: rows.map((p) => ({
+					id: p.id,
+					kind: p.kind,
+					label: p.label,
+					description: p.description,
+				})),
 			});
 		},
 	)

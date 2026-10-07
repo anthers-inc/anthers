@@ -105,11 +105,7 @@ function Byline({ icon }: { icon: NounSearchIcon }) {
 	) : (
 		icon.artistName
 	);
-	return (
-		<span className="text-[10px] text-base-content/50">
-			{name} · Noun Project
-		</span>
-	);
+	return <span className="text-[10px] text-base-content/50">{name} · Noun Project</span>;
 }
 
 export function NounEmblemPicker({
@@ -220,8 +216,16 @@ export function NounEmblemPicker({
 			h
 				? {
 						...h,
-						offsetX: within(h.offsetX + dx, -BADGE_PLACEMENT_LIMITS.offsetMax, BADGE_PLACEMENT_LIMITS.offsetMax),
-						offsetY: within(h.offsetY + dy, -BADGE_PLACEMENT_LIMITS.offsetMax, BADGE_PLACEMENT_LIMITS.offsetMax),
+						offsetX: within(
+							h.offsetX + dx,
+							-BADGE_PLACEMENT_LIMITS.offsetMax,
+							BADGE_PLACEMENT_LIMITS.offsetMax,
+						),
+						offsetY: within(
+							h.offsetY + dy,
+							-BADGE_PLACEMENT_LIMITS.offsetMax,
+							BADGE_PLACEMENT_LIMITS.offsetMax,
+						),
 					}
 				: h,
 		);
@@ -230,7 +234,14 @@ export function NounEmblemPicker({
 	const zoom = (factor: number) => {
 		setHeld((h) =>
 			h
-				? { ...h, scale: within(h.scale * factor, BADGE_PLACEMENT_LIMITS.scaleMin, BADGE_PLACEMENT_LIMITS.scaleMax) }
+				? {
+						...h,
+						scale: within(
+							h.scale * factor,
+							BADGE_PLACEMENT_LIMITS.scaleMin,
+							BADGE_PLACEMENT_LIMITS.scaleMax,
+						),
+					}
 				: h,
 		);
 	};
@@ -260,7 +271,15 @@ export function NounEmblemPicker({
 									type="button"
 									className={`btn btn-sm btn-square ${held?.nounIcon.id === icon.id ? "btn-primary" : "btn-ghost"}`}
 									title={`${icon.term} by ${icon.artistName}`}
-									onClick={() => setHeld({ nounIcon: icon, emblemColor: held?.emblemColor ?? "#ffffff", scale: 1, offsetX: 0, offsetY: 0 })}
+									onClick={() =>
+										setHeld({
+											nounIcon: icon,
+											emblemColor: held?.emblemColor ?? "#ffffff",
+											scale: 1,
+											offsetX: 0,
+											offsetY: 0,
+										})
+									}
 									disabled={busy}
 								>
 									<Thumb icon={icon} color="#ffffff" className="h-6 w-6" />
@@ -315,20 +334,76 @@ export function NounEmblemPicker({
 					<div className="mb-2 flex items-center gap-2">
 						<div className="text-xs font-medium text-base-content/60">Size and position</div>
 						<div className="flex items-center gap-1">
-							<button type="button" className="btn btn-xs" onClick={() => zoom(0.9)} disabled={busy}>Smaller</button>
-							<button type="button" className="btn btn-xs" onClick={() => zoom(1.1)} disabled={busy}>Larger</button>
-							<button type="button" className="btn btn-xs btn-square" onClick={() => nudge(-0.05, 0)} disabled={busy} aria-label="Move left">←</button>
-							<button type="button" className="btn btn-xs btn-square" onClick={() => nudge(0.05, 0)} disabled={busy} aria-label="Move right">→</button>
-							<button type="button" className="btn btn-xs btn-square" onClick={() => nudge(0, -0.05)} disabled={busy} aria-label="Move up">↑</button>
-							<button type="button" className="btn btn-xs btn-square" onClick={() => nudge(0, 0.05)} disabled={busy} aria-label="Move down">↓</button>
+							<button
+								type="button"
+								className="btn btn-xs"
+								onClick={() => zoom(0.9)}
+								disabled={busy}
+							>
+								Smaller
+							</button>
+							<button
+								type="button"
+								className="btn btn-xs"
+								onClick={() => zoom(1.1)}
+								disabled={busy}
+							>
+								Larger
+							</button>
+							<button
+								type="button"
+								className="btn btn-xs btn-square"
+								onClick={() => nudge(-0.05, 0)}
+								disabled={busy}
+								aria-label="Move left"
+							>
+								←
+							</button>
+							<button
+								type="button"
+								className="btn btn-xs btn-square"
+								onClick={() => nudge(0.05, 0)}
+								disabled={busy}
+								aria-label="Move right"
+							>
+								→
+							</button>
+							<button
+								type="button"
+								className="btn btn-xs btn-square"
+								onClick={() => nudge(0, -0.05)}
+								disabled={busy}
+								aria-label="Move up"
+							>
+								↑
+							</button>
+							<button
+								type="button"
+								className="btn btn-xs btn-square"
+								onClick={() => nudge(0, 0.05)}
+								disabled={busy}
+								aria-label="Move down"
+							>
+								↓
+							</button>
 						</div>
 					</div>
 					<Byline icon={held.nounIcon} />
 					<div className="mt-2 flex gap-2">
-						<button type="button" className="btn btn-primary btn-xs" onClick={() => onSave(held)} disabled={busy}>
+						<button
+							type="button"
+							className="btn btn-primary btn-xs"
+							onClick={() => onSave(held)}
+							disabled={busy}
+						>
 							Use this emblem
 						</button>
-						<button type="button" className="btn btn-ghost btn-xs" onClick={onCancel} disabled={busy}>
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs"
+							onClick={onCancel}
+							disabled={busy}
+						>
 							Cancel
 						</button>
 					</div>

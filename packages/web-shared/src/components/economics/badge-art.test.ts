@@ -13,7 +13,6 @@
  * unknown name and returns an empty `<svg>`, so nothing throws and nothing fails.
  */
 import { describe, expect, it } from "bun:test";
-import { icons } from "@anthers/brand";
 import {
 	BADGE_COLORS,
 	BADGE_SHAPES,
@@ -23,14 +22,14 @@ import {
 	badgeShape,
 	DEFAULT_BADGE_COLOR,
 	DEFAULT_BADGE_SHAPE,
+	defaultBadgeColor,
 	isBadgeColor,
 	isBadgeShape,
-	defaultBadgeColor,
 } from "@anthers/shared/badge-art";
 import type { Badge } from "@anthers/shared/constants";
 import { BADGE_ORDER } from "@anthers/shared/constants";
-import { BADGE_ART } from "./economics";
 import { fallbackBadgeDesign } from "./CreatorBadgeMark";
+import { BADGE_ART } from "./economics";
 
 describe("the badge library", () => {
 	it("draws every shape it offers, as a closed path", () => {

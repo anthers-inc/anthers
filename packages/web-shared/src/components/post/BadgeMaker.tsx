@@ -19,7 +19,6 @@
  * repeatedly costs the platform nothing.
  */
 
-import type { BrandIconName } from "@anthers/brand";
 import {
 	BADGE_COLORS,
 	BADGE_PERK_KINDS,
@@ -38,7 +37,7 @@ import { apiFetch, client } from "../../lib/rpc";
 import type { CreatorBadge } from "../../lib/types";
 import { CreatorBadgeMark } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
-import { NounEmblemPicker, type EmblemPlacement } from "./NounEmblemPicker";
+import { type EmblemPlacement, NounEmblemPicker } from "./NounEmblemPicker";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
 function rungAmount(v: string): string {
@@ -72,7 +71,7 @@ function BadgeArtControl({
 }) {
 	const input = useRef<HTMLInputElement>(null);
 	const [busy, setBusy] = useState(false);
-	const [open, setOpen] = useState(false);
+	const [_open, _setOpen] = useState(false);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [composing, setComposing] = useState(false);
 
@@ -325,17 +324,27 @@ function PerkEditor({
 	const remove = (i: number) => onChange(perks.filter((_, j) => j !== i));
 	const add = (kind: string) => {
 		const kindDef = BADGE_PERK_KINDS.find((k) => k.id === kind);
-		onChange([...perks, { kind, label: "", description: kindDef?.friendly ?? "" }]);
+		onChange([
+			...perks,
+			{ key: crypto.randomUUID(), kind, label: "", description: kindDef?.friendly ?? "" },
+		]);
 	};
 
 	return (
 		<div className="rounded-lg border border-base-300 p-2">
 			<div className="mb-1 flex items-baseline justify-between">
-				<div className="text-xs font-medium text-base-content/60">Perks — what supporters receive</div>
-				<span className="text-[10px] text-base-content/40">access to gated works is added automatically</span>
+				<div className="text-xs font-medium text-base-content/60">
+					Perks — what supporters receive
+				</div>
+				<span className="text-[10px] text-base-content/40">
+					access to gated works is added automatically
+				</span>
 			</div>
 			{perks.map((perk, i) => (
-				<div key={i} className="mb-2 flex flex-wrap items-center gap-1">
+				// Keyed on the row's own stable key (minted when the row was added) — the
+				// index reorders badly on a remove, and a kind+label pair collides when two
+				// perks of one kind share a label.
+				<div key={perk.key} className="mb-2 flex flex-wrap items-center gap-1">
 					<select
 						className="select select-bordered select-xs w-40"
 						value={String(perk.kind)}
@@ -354,7 +363,12 @@ function PerkEditor({
 						onChange={(e) => update(i, { label: e.target.value })}
 						placeholder="What supporters get, in your words"
 					/>
-					<button type="button" className="btn btn-ghost btn-xs btn-square text-error" onClick={() => remove(i)} title="Remove perk">
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs btn-square text-error"
+						onClick={() => remove(i)}
+						title="Remove perk"
+					>
 						<TrashIcon className="w-3.5 h-3.5" />
 					</button>
 				</div>
@@ -385,7 +399,12 @@ function PerkEditor({
 	);
 }
 
-type PerkDraft = { kind: BadgePerkKind | string; label: string; description?: string };
+type PerkDraft = {
+	/** Stable within the editor session, for React keys on draft rows. */ key: string;
+	kind: BadgePerkKind | string;
+	label: string;
+	description?: string;
+};
 
 export default function BadgeMaker() {
 	const [badges, setBadges] = useState<CreatorBadge[]>([]);
@@ -465,13 +484,13 @@ export default function BadgeMaker() {
 		setEditLabel(badge.label);
 		setEditThreshold(badge.threshold);
 		setEditDescription(badge.description ?? "");
-		// Perks are stored rows; load them for the editor.
+		// Perks are stored rows; load them for the editor (minting keys for React).
 		setEditPerks([]);
 		try {
 			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}/perks`);
 			if (res.ok) {
-				const body = (await res.json()) as { perks: PerkDraft[] };
-				setEditPerks(body.perks ?? []);
+				const body = (await res.json()) as { perks: Omit<PerkDraft, "key">[] };
+				setEditPerks((body.perks ?? []).map((p) => ({ ...p, key: crypto.randomUUID() })));
 			}
 		} catch {
 			// The editor opens with none on a failed read; saving sends the empty list,
@@ -499,7 +518,11 @@ export default function BadgeMaker() {
 				body: JSON.stringify({
 					perks: editPerks
 						.filter((p) => p.label.trim())
-						.map((p) => ({ kind: p.kind, label: p.label.trim(), description: p.description ?? "" })),
+						.map((p) => ({
+							kind: p.kind,
+							label: p.label.trim(),
+							description: p.description ?? "",
+						})),
 				}),
 			});
 			if (!perksRes.ok) throw new Error("Failed to save perks.");

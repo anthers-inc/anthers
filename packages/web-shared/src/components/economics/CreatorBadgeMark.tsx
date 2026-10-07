@@ -48,7 +48,7 @@ const FALLBACK_ART: { emblem: string; color: string }[] = [
 /** One ladder position's fallback design, wrapping past the four. */
 export function fallbackBadgeDesign(index: number): { emblem: string; color: string } {
 	const n = FALLBACK_ART.length;
-	return FALLBACK_ART[(((index % n) + n) % n)];
+	return FALLBACK_ART[((index % n) + n) % n];
 }
 
 export interface BadgeArtChoice {

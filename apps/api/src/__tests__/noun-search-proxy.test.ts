@@ -21,7 +21,7 @@ import { db } from "@anthers/db/client";
 import { nounBlocklist, nounSpend } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
-import { DAILY_SERVICE_BUDGET, recordSpend, spendDay } from "../services/noun-budget";
+import { DAILY_SERVICE_BUDGET, recordSpend } from "../services/noun-budget";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -106,10 +106,7 @@ describe("the noun search proxy", () => {
 		expect(vendorRequests).toBe(before + 1);
 
 		// 🚨 NOTHING PERSISTED: no row in any table carries this query or these thumbs.
-		const spend = await db
-			.select()
-			.from(nounSpend)
-			.where(eq(nounSpend.creatorId, creator.userId));
+		const spend = await db.select().from(nounSpend).where(eq(nounSpend.creatorId, creator.userId));
 		// The counter row exists (the spend was recorded) but carries counts only —
 		// never a query, a term or a thumbnail URL.
 		for (const row of spend) {
@@ -140,16 +137,19 @@ describe("the noun search proxy", () => {
 
 	it("🚨 filters a blocked icon id from an otherwise live result", async () => {
 		const { addToBlocklist } = await import("../services/noun-blocklist");
-		await addToBlocklist({ kind: "icon", value: "777", reason: "test fixture", addedBy: creator.userId });
+		await addToBlocklist({
+			kind: "icon",
+			value: "777",
+			reason: "test fixture",
+			addedBy: creator.userId,
+		});
 		try {
 			const res = await get(`/api/noun/search?q=ns-test-filter-${RUN}`, creator.cookie);
 			const body = (await res.json()) as { icons: unknown[] };
 			expect(body.icons).toEqual([]);
 		} finally {
 			// This suite's fixture icon id must not stay blocked for other suites.
-			await db
-				.delete(nounBlocklist)
-				.where(sql`${nounBlocklist.value} = ${"777"}`);
+			await db.delete(nounBlocklist).where(sql`${nounBlocklist.value} = ${"777"}`);
 		}
 	});
 

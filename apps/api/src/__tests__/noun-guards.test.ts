@@ -13,17 +13,16 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { nounBlocklist, nounSpend } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
+import { addToBlocklist, filterBlockedIcons, queryRefused } from "../services/noun-blocklist";
 import {
-	DAILY_ICON_BUDGET,
-	DAILY_SERVICE_BUDGET,
 	breakerAllows,
 	budgetRefusal,
 	checkBudget,
+	DAILY_ICON_BUDGET,
+	DAILY_SERVICE_BUDGET,
 	recordSpend,
-	spendDay,
 	spendToday,
 } from "../services/noun-budget";
-import { addToBlocklist, filterBlockedIcons, queryRefused } from "../services/noun-blocklist";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -45,9 +44,7 @@ beforeAll(async () => {
 // per-creator rows, and the blocklist rows are named values this suite invented.
 afterAll(async () => {
 	await db.delete(nounSpend).where(eq(nounSpend.creatorId, creatorId));
-	await db
-		.delete(nounBlocklist)
-		.where(sql`${nounBlocklist.value} like ${"nb-test-%"}`);
+	await db.delete(nounBlocklist).where(sql`${nounBlocklist.value} like ${"nb-test-%"}`);
 });
 
 describe("the per-creator daily budget", () => {
@@ -139,7 +136,12 @@ describe("the blocklist", () => {
 	});
 
 	it("filters blocked icons and icons carrying a blocked collection from results", async () => {
-		await addToBlocklist({ kind: "icon", value: "nb-test-icon-1", reason: "test", addedBy: adminId });
+		await addToBlocklist({
+			kind: "icon",
+			value: "nb-test-icon-1",
+			reason: "test",
+			addedBy: adminId,
+		});
 		await addToBlocklist({
 			kind: "collection",
 			value: "nb-test-coll-1",
@@ -155,7 +157,12 @@ describe("the blocklist", () => {
 	});
 
 	it("keeps a blocklist entry idempotent across a double add", async () => {
-		await addToBlocklist({ kind: "term", value: "nb-test-forbidden", reason: "again", addedBy: adminId });
+		await addToBlocklist({
+			kind: "term",
+			value: "nb-test-forbidden",
+			reason: "again",
+			addedBy: adminId,
+		});
 		const rows = await db
 			.select()
 			.from(nounBlocklist)

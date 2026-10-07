@@ -10,19 +10,16 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badgePerks, badges, works } from "@anthers/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { badgePerks, works } from "@anthers/db/schema";
+import { BADGE_PERK_KINDS, mostTaxablePerkKind } from "@anthers/shared/badge-art";
+import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
+import { eq } from "drizzle-orm";
 import app from "../index";
 import { taxCodeForBadge } from "../services/billing";
-import {
-	DONATION_TAX_CODE,
-	STREAMED_SUBSCRIPTION_TAX_CODE,
-} from "@anthers/shared/tax-codes";
-import { BADGE_PERK_KINDS, mostTaxablePerkKind } from "@anthers/shared/badge-art";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { insertWork, giveWorkAFile } from "./work-fixtures.js";
+import { giveWorkAFile, insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -80,7 +77,9 @@ describe("badge perks", () => {
 		expect(mostTaxablePerkKind(["recognition", "physical_good"])?.id).toBe("physical_good");
 		expect(mostTaxablePerkKind(["recognition", "service"])?.id).toBe("service");
 		expect(mostTaxablePerkKind(["recognition"])?.id).toBe("recognition");
-		expect(mostTaxablePerkKind(["community", "service", "physical_good"])?.id).toBe("physical_good");
+		expect(mostTaxablePerkKind(["community", "service", "physical_good"])?.id).toBe(
+			"physical_good",
+		);
 		expect(mostTaxablePerkKind([])).toBeNull();
 	});
 

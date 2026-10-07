@@ -9,7 +9,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CALL_PRICE, DOWNLOAD_COLOR, callClass, credentials } from "./client";
+import { CALL_PRICE, callClass, credentials, DOWNLOAD_COLOR } from "./client";
 
 const HERE = import.meta.dir;
 

@@ -22,9 +22,9 @@
  * provenance row and the composed Badge PNG.
  */
 
-import { and, eq, sql } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { nounSpend } from "@anthers/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { CALL_PRICE, type CallClass } from "../lib/noun/client";
 
 /** Per-creator daily limits — about three times what a five-rung ladder actually takes. */
@@ -113,7 +113,10 @@ export async function recordSpend(creatorId: number, klass: CallClass): Promise<
 		.onConflictDoNothing();
 	await db
 		.update(nounSpend)
-		.set({ [klass === "icon" ? "iconCalls" : "serviceCalls"]: sql`${col} + 1`, updatedAt: new Date() })
+		.set({
+			[klass === "icon" ? "iconCalls" : "serviceCalls"]: sql`${col} + 1`,
+			updatedAt: new Date(),
+		})
 		.where(and(eq(nounSpend.creatorId, creatorId), eq(nounSpend.day, day)));
 }
 
@@ -137,11 +140,10 @@ export async function monthSpendEstimate(now = new Date()): Promise<number> {
 			serviceCalls: sql<number>`coalesce(sum(${nounSpend.serviceCalls}), 0)`,
 		})
 		.from(nounSpend)
-		.where(sql`${nounSpend.day} like ${month + "%"}`);
+		.where(sql`${nounSpend.day} like ${`${month}%`}`);
 	const r = rows[0];
 	return (
-		Number(r?.iconCalls ?? 0) * CALL_PRICE.icon +
-		Number(r?.serviceCalls ?? 0) * CALL_PRICE.service
+		Number(r?.iconCalls ?? 0) * CALL_PRICE.icon + Number(r?.serviceCalls ?? 0) * CALL_PRICE.service
 	);
 }
 

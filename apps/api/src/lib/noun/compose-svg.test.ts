@@ -11,15 +11,10 @@
  *   else — the vector is not persisted in any form.
  */
 
-import { beforeAll, afterAll, describe, expect, it } from "bun:test";
-import sharp from "sharp";
+import { describe, expect, it } from "bun:test";
 import { BADGE_COMPOSE_PX } from "@anthers/shared/badge-art";
-import {
-	composeBadgeSvg,
-	cssColorToHex,
-	normalizeToRecolorable,
-	oklchToHex,
-} from "./compose-svg";
+import sharp from "sharp";
+import { composeBadgeSvg, cssColorToHex, normalizeToRecolorable, oklchToHex } from "./compose-svg";
 
 describe("oklch → hex", () => {
 	it("anchors at white and black", () => {
@@ -98,7 +93,7 @@ describe("composeBadgeSvg", () => {
 		expect(svg).toMatch(/stroke="#[0-9a-f]{6}"/);
 		// The edge is painted inward by double-width stroke inside a clip of the same
 		// path, which is what keeps the silhouette the shape rather than growing it.
-		expect(svg).toContain("stroke-width=\"18\"");
+		expect(svg).toContain('stroke-width="18"');
 		expect(svg).toContain("clip-path");
 	});
 
@@ -111,6 +106,19 @@ describe("composeBadgeSvg", () => {
 		// A 100-unit viewBox fills a 52-unit emblemBox exactly at scale 1, centered —
 		// the transform's translate lands at (24, 24), the circle's box origin.
 		expect(svg).toMatch(/translate\(24(?:\.0+)? 24(?:\.0+)?\)/);
+	});
+
+	it("🚨 injects the creator's emblem color into the inline markup", () => {
+		// The regression lock for the dead-wiring defect: the normalized fixture carries a
+		// fill-strippable color, and the composed SVG must recolor it — not leave the
+		// vendor's own color in place.
+		const svg = composeBadgeSvg({
+			placement: { ...placement, emblemColor: "#ff0000" },
+			viewBox: "0 0 100 100",
+			inner: '<path d="M10 10h80v80z" fill="#000000"/>',
+		});
+		expect(svg).toContain('fill="#ff0000"');
+		expect(svg).not.toContain("#000000");
 	});
 
 	it("rasterizes to BADGE_COMPOSE_PX through sharp with the field reading as the field", () => {

@@ -236,28 +236,29 @@ export const BADGE_PERK_KINDS = [
 	{
 		id: "service",
 		label: "A service",
-		friendly:
-			"Something you do for supporters — feedback on a track, a lesson, a commission slot.",
+		friendly: "Something you do for supporters — feedback on a track, a lesson, a commission slot.",
 		taxCode: "txcd_20030000",
 	},
 	{
 		id: "community",
 		label: "Community access",
-		friendly:
-			"A private community — a Discord server, a members' chat, a community-only stream.",
+		friendly: "A private community — a Discord server, a members' chat, a community-only stream.",
 		taxCode: "txcd_20030000",
 	},
 	{
 		id: "recognition",
 		label: "Recognition",
-		friendly: "Their name somewhere only supporters' names go — a video's credits, a thank-you page.",
+		friendly:
+			"Their name somewhere only supporters' names go — a video's credits, a thank-you page.",
 		taxCode: "txcd_90000001",
 	},
 ] as const;
 
 export type BadgePerkKind = (typeof BADGE_PERK_KINDS)[number]["id"];
 
-export function badgePerkKind(id: string | null | undefined): (typeof BADGE_PERK_KINDS)[number] | null {
+export function badgePerkKind(
+	id: string | null | undefined,
+): (typeof BADGE_PERK_KINDS)[number] | null {
 	return BADGE_PERK_KINDS.find((k) => k.id === id) ?? null;
 }
 
@@ -378,7 +379,9 @@ export function isBadgeComposeParams(value: unknown): value is BadgeComposeParam
  */
 import { createHash } from "node:crypto";
 
-export function badgeComposeFingerprint(params: { nounIconId: string } & BadgeComposeParams): string {
+export function badgeComposeFingerprint(
+	params: { nounIconId: string } & BadgeComposeParams,
+): string {
 	return createHash("sha256")
 		.update(
 			[

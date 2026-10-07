@@ -19,9 +19,9 @@
  * and the picker must not ship with the mechanism present and the list never discussed.
  */
 
-import { eq } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { nounBlocklist } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 
 export type BlocklistKind = "term" | "icon" | "collection";
 
@@ -79,11 +79,14 @@ export async function queryRefused(query: string): Promise<boolean> {
  * Called only on a live vendor response — after the term list has already refused the
  * refused queries — and on the way OUT, which is why it is the weaker half.
  */
-export async function filterBlockedIcons<T extends { id: unknown; collections?: { id?: unknown }[] }>(
-	icons: T[],
-): Promise<T[]> {
+export async function filterBlockedIcons<
+	T extends { id: unknown; collections?: { id?: unknown }[] },
+>(icons: T[]): Promise<T[]> {
 	const [iconRows, collectionRows] = await Promise.all([
-		db.select({ value: nounBlocklist.value }).from(nounBlocklist).where(eq(nounBlocklist.kind, "icon")),
+		db
+			.select({ value: nounBlocklist.value })
+			.from(nounBlocklist)
+			.where(eq(nounBlocklist.kind, "icon")),
 		db
 			.select({ value: nounBlocklist.value })
 			.from(nounBlocklist)
@@ -93,6 +96,8 @@ export async function filterBlockedIcons<T extends { id: unknown; collections?: 
 	const blockedCollections = new Set(collectionRows.map((r) => String(r.value)));
 	return icons.filter((icon) => {
 		if (blockedIcons.has(String(icon.id))) return false;
-		return !(icon.collections ?? []).some((c) => c?.id !== undefined && blockedCollections.has(String(c.id)));
+		return !(icon.collections ?? []).some(
+			(c) => c?.id !== undefined && blockedCollections.has(String(c.id)),
+		);
 	});
 }

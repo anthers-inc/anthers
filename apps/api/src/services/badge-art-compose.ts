@@ -19,15 +19,15 @@
  * server twin, written down there.
  */
 
-import { and, eq } from "drizzle-orm";
-import sharp from "sharp";
+import { db } from "@anthers/db/client";
+import { badgeArtProvenance, badges } from "@anthers/db/schema";
 import {
 	BADGE_COMPOSE_PX,
 	type BadgeComposeParams,
 	badgeComposeFingerprint,
 } from "@anthers/shared/badge-art";
-import { db } from "@anthers/db/client";
-import { badgeArtProvenance, badges } from "@anthers/db/schema";
+import { and, eq } from "drizzle-orm";
+import sharp from "sharp";
 import { downloadSvg, type NounIcon } from "../lib/noun/client";
 import { composeBadgeSvg, normalizeToRecolorable } from "../lib/noun/compose-svg";
 import { scanInlineUpload } from "./safety-scan.js";

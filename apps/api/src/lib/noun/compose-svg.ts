@@ -33,19 +33,6 @@ import {
 import { formatHex } from "culori";
 
 /**
- * Percent-encode per RFC 3986 for a data context, applied to SVG source — never let a
- * vendor-supplied string reach XML unescaped.
- */
-function xmlEscape(s: string): string {
-	return s
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll("&", "&amp;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#39;");
-}
-
-/**
  * oklch → hex through culori, the reference conversion — anchored to Chromium's own
  * `oklch()` rendering in `compose-svg.test.ts`, which is the comparison that matters:
  * the viewer comparing the picker's emblem with the saved PNG is comparing the browser's
@@ -119,17 +106,30 @@ export function normalizeToRecolorable(raw: string): { viewBox: string; inner: s
 /**
  * Inject the creator's color into the normalized emblem markup.
  *
- * Every element carries `fill="#…"` after the injection, because the vendor art is
+ * Every shape element carries `fill="#…"` after the injection, because the vendor art is
  * line-drawing markup whose elements carry no fill after `normalizeToRecolorable`
  * stripped it — one injected color controls the whole icon, the same rule the site's
- * own recoloring follows.
+ * own recoloring follows. An element that kept `fill="none"` (a hollow stroke shape)
+ * stays unfilled: removing a `none` would fill the icon's counters.
  */
-function recolorEmblem(inner: string, emblemColorHex: string): string {
-	const withoutFills = inner.replace(/(<(path|circle|rect|ellipse|polygon|line|polyline)\b)/g,
-		`$1 fill="${emblemColorHex}"`);
-	// An element that already kept a fill="none" from normalization stays unfilled.
-	return withoutFills.replace(/(<(path|circle|rect|ellipse|polygon|line|polyline)\b[^>]*?)\sfill="none"/g,
-		`$1`);
+export function recolorEmblem(inner: string, emblemColorHex: string): string {
+	// Strip any fill the markup still carries (the strip above removes fills that existed
+	// on plain attributes; a fill that arrived on a later edit survives), then inject so
+	// the creator's color is the ONLY fill present — appending ahead of an existing fill
+	// would leave the vendor's color winning, which is the bug this fixture pinned.
+	const stripped = inner
+		.replace(
+			/(<(?:path|circle|rect|ellipse|polygon|line|polyline)\b[^>]*?)\s+fill\s*=\s*"[^"]*"/gi,
+			"$1",
+		)
+		.replace(
+			/(<(?:path|circle|rect|ellipse|polygon|line|polyline)\b[^>]*?)\s+fill\s*=\s*'[^']*'/gi,
+			"$1",
+		);
+	return stripped.replace(
+		/(<(?:path|circle|rect|ellipse|polygon|line|polyline)\b)/g,
+		`$1 fill="${emblemColorHex}"`,
+	);
 }
 
 /**
@@ -151,7 +151,7 @@ function viewBoxParams(viewBox: string): { vx: number; vy: number; vw: number; v
 export function composeBadgeSvg(input: {
 	placement: BadgeComposeParams;
 	viewBox: string;
-	/** The vendor's inner markup, fill-stripped and recolored, ready to inline. */
+	/** The vendor's inner markup, fill-stripped, ready to recolor and inline. */
 	inner: string;
 }): string {
 	const { placement, viewBox, inner } = input;
@@ -160,11 +160,17 @@ export function composeBadgeSvg(input: {
 	const field = BADGE_COLORS.find((c) => c.id === placement.fieldColor);
 	if (!field) throw new Error(`compose-svg: unknown field color ${placement.fieldColor}`);
 
+	// 🚨 The creator's emblem color is injected HERE — the fetch was pinned to black and
+	// the normalized markup carries no fill, so this is the one place the color exists.
+	// (An earlier draft computed the recolor and never wired it in; the tests missed it
+	// because the fixture SVG carried no fills. The fill-carrying fixture test below is
+	// the regression lock.)
 	const fieldHex = cssColorToHex(field.fill);
 	const edgeHex = cssColorToHex(BADGE_EDGE);
 	const emblemHex = cssColorToHex(placement.emblemColor);
+	const emblemInner = recolorEmblem(inner, emblemHex);
 
-	const { vx, vy, vw, vh } = viewBoxParams(viewBox);
+	const { vw, vh } = viewBoxParams(viewBox);
 	// `contain` in the box: the emblem's own proportions are kept by fitting its longer
 	// viewBox side to the box, exactly what `mask-size: contain` does for a glyph.
 	const box = shape.emblemBox;
@@ -179,12 +185,7 @@ export function composeBadgeSvg(input: {
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${BADGE_COMPOSE_PX}" height="${BADGE_COMPOSE_PX}">`,
 		`<clipPath id="edge"><path d="${shape.path}"/></clipPath>`,
 		`<g clip-path="url(#edge)"><path d="${shape.path}" fill="${fieldHex}" stroke="${edgeHex}" stroke-width="${BADGE_EDGE_WIDTH * 2}" stroke-linejoin="round"/></g>`,
-		`<g transform="translate(${cx.toFixed(4)} ${cy.toFixed(4)}) scale(${scale.toFixed(6)})">${inner}</g>`,
+		`<g transform="translate(${cx.toFixed(4)} ${cy.toFixed(4)}) scale(${scale.toFixed(6)})">${emblemInner}</g>`,
 		`</svg>`,
 	].join("\n");
 }
-
-// Referenced so the escaper is not tree-shaken before Phase D's search rendering uses
-// it on vendor-supplied terms; removing the emblem credit's escaping from composition
-// would let a vendor term carry markup into a stored render.
-void xmlEscape;

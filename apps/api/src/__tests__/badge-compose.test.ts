@@ -32,7 +32,6 @@ import app from "../index";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -105,7 +104,12 @@ beforeAll(() => {
 	storage.upload = ((key: string, ...rest: unknown[]) => {
 		if (key.includes("/badges/")) badgeObjectKeys.push(key);
 		return (
-			realUpload as (k: string, b: Buffer, ct: string, acl?: "private" | "public") => Promise<string>
+			realUpload as (
+				k: string,
+				b: Buffer,
+				ct: string,
+				acl?: "private" | "public",
+			) => Promise<string>
 		)(key, ...(rest as [Buffer, string, ("private" | "public")?]));
 	}) as typeof storage.upload;
 });
@@ -130,12 +134,12 @@ function compose(body: unknown, withCookie = cookie) {
 }
 
 describe("badge composition", () => {
-	let creatorId = 0;
+	let _creatorId = 0;
 
 	beforeAll(async () => {
 		const account = await createAccount(`bc_creator_${RUN}`, { fields: { isCreator: true } });
 		cookie = account.cookie;
-		creatorId = account.userId;
+		_creatorId = account.userId;
 		const res = await req("/api/subscriptions/badges", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
@@ -196,7 +200,10 @@ describe("badge composition", () => {
 
 	it("recomposes exactly when a placement parameter changes", async () => {
 		const callsBefore = vendorIconCalls;
-		const res = await compose({ noun: nounIcon, placement: { ...placement, emblemColor: "#000000" } });
+		const res = await compose({
+			noun: nounIcon,
+			placement: { ...placement, emblemColor: "#000000" },
+		});
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { unchanged?: boolean };
 		expect(body.unchanged).toBeFalsy();
