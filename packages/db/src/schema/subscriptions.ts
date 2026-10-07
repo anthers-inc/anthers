@@ -943,6 +943,28 @@ export const badges = pgTable(
 		artColor: text("art_color"),
 		/** A library emblem, used as the foreground when `art_key` is null. */
 		artEmblem: text("art_emblem"),
+		/**
+		 * What the composed art was made from, as a fingerprint over every parameter the
+		 * composition reads — noun icon id, shape, field color, emblem color, scale and
+		 * offsets — so an unchanged save matches it and costs nothing at all.
+		 *
+		 * 🚨 **Dedupe on the composition, never on the icon.** Save is the button people
+		 * press repeatedly, and the second press must be free; a fingerprint over the icon
+		 * id alone would refuse a legitimate re-compose after an edit and silently serve
+		 * stale art. The hash lives beside the row rather than in `badge_art_provenance`
+		 * because it guards THIS table's write, not the credit.
+		 */
+		artFingerprint: text("art_fingerprint"),
+		/**
+		 * Where the emblem sits and how big it is, as the creator set them — the same
+		 * 0-100 viewBox units `@anthers/shared/badge-art` uses, and a fraction of the
+		 * `emblemBox` at 1.0. Stated rather than re-derived so recomposing a Badge
+		 * reproduces exactly what the creator saw in the picker, and so the numbers
+		 * survive the emblem being changed without the placement being touched.
+		 */
+		artEmblemScale: numeric("art_emblem_scale"),
+		artEmblemOffsetX: numeric("art_emblem_offset_x"),
+		artEmblemOffsetY: numeric("art_emblem_offset_y"),
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -959,6 +981,48 @@ export const badges = pgTable(
 		// redundant.
 		uniqueIndex("uq_badges_creator_threshold").on(table.creatorId, table.threshold),
 	],
+);
+
+/**
+ * Who drew the emblem on one creator Badge, recorded at the moment it was picked.
+ *
+ * 🚨 **This row is what makes the artist credit renderable, and what keeps a creator's
+ * Badge usable under CC BY 3.0 independently of Anthers' own contract with the vendor.**
+ * The license that travels on a composed Badge is the artist's, not Anthers', so the
+ * fields are written from the search response at composition time and never re-fetched —
+ * a metadata GET is an icon call spent on nothing, because every one of them rides along
+ * free on a search.
+ *
+ * ⚠️ **One row per badge, replaced on a re-pick, and it survives the emblem leaving.**
+ * A creator who later switches to art of their own keeps the row through the Badge's
+ * detail view's flip, so the record of who drew what the Badge wore is a record about
+ * the Badge's life rather than about its current art.
+ *
+ * ⚠️ **Never a URL the vendor could expire on us.** The permalink is the artist's own
+ * page, rendered as the credit's link — it is the vendor's *metadata* (cacheable) rather
+ * than one of their asset URLs, which expire within an hour.
+ */
+// node — metadata about one creator's own Badge art, recording the third-party artist it
+// came from. Node-canonical like the badge it sits beside; the org reads it to render the
+// credit, but the row is the creator's record.
+export const badgeArtProvenance = pgTable(
+	"badge_art_provenance",
+	{
+		id: serial("id").primaryKey(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
+		/** The vendor's icon id, as a string — the API returns it typed both ways. */
+		nounIconId: text("noun_icon_id").notNull(),
+		term: text("term"),
+		artistName: text("artist_name").notNull(),
+		artistPermalink: text("artist_permalink"),
+		licenseDescription: text("license_description").notNull(),
+		attribution: text("attribution").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_badge_art_provenance_badge").on(table.badgeId)],
 );
 
 /**

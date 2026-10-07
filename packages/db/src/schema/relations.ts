@@ -24,6 +24,7 @@ import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.j
 import {
 	accountCycles,
 	attentionEvents,
+	badgeArtProvenance,
 	badges,
 	billingAccounts,
 	poolDistributions,
@@ -280,4 +281,8 @@ export const poolDistributionsRelations = relations(poolDistributions, ({ one })
 export const badgesRelations = relations(badges, ({ one, many }) => ({
 	owner: one(users, { fields: [badges.creatorId], references: [users.id] }),
 	heldBy: many(userBadges),
+}));
+
+export const badgeArtProvenanceRelations = relations(badgeArtProvenance, ({ one }) => ({
+	badge: one(badges, { fields: [badgeArtProvenance.badgeId], references: [badges.id] }),
 }));

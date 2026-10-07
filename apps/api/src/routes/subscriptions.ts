@@ -40,7 +40,13 @@ import {
 	MAX_RANGE_SECONDS,
 	RANGE_LOOKBACK_SECONDS,
 } from "@anthers/shared/attention";
-import { isBadgeColor, isBadgeEmblem, isBadgeShape } from "@anthers/shared/badge-art";
+import {
+	type BadgeComposeParams,
+	isBadgeComposeParams,
+	isBadgeColor,
+	isBadgeEmblem,
+	isBadgeShape,
+} from "@anthers/shared/badge-art";
 import {
 	currentCycleKey,
 	cycleEnd,
@@ -107,6 +113,8 @@ import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
+import { composeBadgeArt } from "../services/badge-art-compose.js";
+import type { NounIcon } from "../lib/noun/client";
 import { resolveShareToken } from "../services/share-links.js";
 import { storage } from "../services/storage/index.js";
 import { recordReductions } from "../services/support-reductions.js";
@@ -2004,6 +2012,61 @@ const subscriptionRoutes = new Hono()
 			.returning({ artKey: badges.artKey });
 		if (!updated) return c.json({ error: "Badge not found" }, 404);
 		return c.body(null, 204);
+	})
+
+	/**
+	 * Compose a Badge's art from a Noun Project icon — the Badge Maker's save.
+	 *
+	 * 🚨 **Only the composed Badge persists.** The route hands the vendor's search-shaped
+	 * icon fields plus the placement to `composeBadgeArt` and answers with hasArt-shaped
+	 * state; the vector is fetched, composed, rasterized and discarded inside the service
+	 * call, and there is deliberately **no endpoint that returns an emblem by itself** —
+	 * a creator gets a Badge, never a recolored icon file, because a recolor-and-download
+	 * flow is the vendor experience Anthers agreed not to re-create. A route answering
+	 * with anything shaped like a standalone emblem is the regression this comment stops.
+	 *
+	 * 🚨 **Dedupe happens before the vendor call** (`composeBadgeArt` reads the
+	 * fingerprint first), so an unchanged save costs no icon call — save is the button
+	 * people press repeatedly.
+	 */
+	.post("/badges/:id/compose", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		const body = await c.req.json().catch(() => null);
+		if (
+			typeof body !== "object" ||
+			body === null ||
+			!isBadgeComposeParams((body as { placement?: unknown }).placement)
+		) {
+			return c.json({ error: "Invalid composition parameters.", code: "bad_placement" }, 400);
+		}
+		const { placement } = body as { placement: BadgeComposeParams };
+		const noun = (body as { noun?: { id?: unknown } }).noun;
+		const nounIconId = noun?.id;
+		if (typeof nounIconId !== "string" && typeof nounIconId !== "number") {
+			return c.json({ error: "No emblem chosen.", code: "no_emblem" }, 400);
+		}
+
+		const outcome = await composeBadgeArt({
+			creatorId: user.id,
+			badgeId,
+			icon: noun as NounIcon,
+			placement,
+		});
+		if (!outcome.ok) {
+			if (outcome.error === "Badge not found") {
+				// Same answer the sibling routes give a non-owner: indistinguishable from a
+				// missing badge, because confirming somebody else's badge exists is itself
+				// an disclosure the ownership check exists to prevent.
+				return c.json({ error: "Badge not found" }, 404);
+			}
+			if (outcome.error?.includes("held")) {
+				return c.json({ error: outcome.error, code: "refused" }, 422);
+			}
+			return c.json({ error: outcome.error ?? "Composition failed." }, 400);
+		}
+		return c.json({ unchanged: Boolean(outcome.unchanged), artPath: `/api/subscriptions/badges/${badgeId}/art` }, 200);
 	})
 
 	/**

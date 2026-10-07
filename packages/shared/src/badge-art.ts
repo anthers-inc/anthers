@@ -213,6 +213,10 @@ export const BADGE_COLORS: BadgeColor[] = [
  * it, and the web layer resolves it against `@anthers/brand`. ⚠️ A name added here that the
  * brand package does not carry renders as nothing, so the two are asserted against each
  * other in a test rather than trusted.
+ *
+ * ⚠️ **Retired for creators by the Badge Maker, 2026-10-07** — a creator's emblem comes
+ * from the Noun Project catalog or their own upload, and nothing else. The list stays for
+ * Anthers' own Badge and Sticker rungs, which are fixed lists Anthers chooses.
  */
 export const BADGE_EMBLEMS: string[] = [
 	"bloom-round",
@@ -229,6 +233,120 @@ export const BADGE_EMBLEMS: string[] = [
 
 export const DEFAULT_BADGE_SHAPE = "circle";
 export const DEFAULT_BADGE_COLOR = "moss";
+
+/**
+ * The resolution a composed Badge PNG is rasterized at.
+ *
+ * 🚨 **The composed PNG is the resolution ceiling for the product's life** — the vector
+ * is never stored, so a Badge shown larger than it was composed at cannot be re-rendered
+ * without a live vendor fetch — which is why it sits 2× above `BADGE_ART_PX`, the largest
+ * surface uploaded art is ever displayed at. Rasterizing generously is cheap now and
+ * unfixable later.
+ */
+export const BADGE_COMPOSE_PX = 1024;
+
+/**
+ * The parameters of a Noun Project emblem on a Badge — everything the composition reads
+ * besides the icon itself.
+ *
+ * ⚠️ **`scale` is a fraction of the `emblemBox`, and the offsets are too.** Stating
+ * placement in box-relative terms is what lets the same numbers place an emblem on any
+ * shape: a triangle's box is small and low, a circle's large and central, and "a quarter
+ * of the box left" means the same relationship to the stitching on both. The picker
+ * constrains the range so art cannot be pushed under the edge it has to clear.
+ */
+export interface BadgeComposeParams {
+	shape: string;
+	fieldColor: string;
+	/**
+	 * The emblem color, as a hex string — the server recolors the vector with it at
+	 * composition. ⚠️ **Hex deliberately, not an oklch token**: the picker offers it from
+	 * a swatch palette and the composition injects it verbatim, so a free-text value here
+	 * is validated as a hex color and nothing else.
+	 */
+	emblemColor: string;
+	/** The emblem's size as a fraction of the shape's `emblemBox`; 1.0 fills it. */
+	scale: number;
+	/** Offsets as a fraction of the emblem box, negative left/up. */
+	offsetX: number;
+	offsetY: number;
+}
+
+/**
+ * The emblem-color swatches the picker offers, hex because the composition injects them
+ * verbatim. ⭐ **Sourced from the palette's own `on` values plus a light and a dark**, so
+ * an emblem chosen with no color decision at all lands on the field's natural foreground,
+ * while the extremes let a creator go deliberately light or deliberately dark.
+ */
+export const BADGE_EMBLEM_COLORS: string[] = [
+	"#ffffff",
+	"#000000",
+	"#1d1d1d",
+	"#3a3a3a",
+	"#4b3b2a",
+	"#5f6f3f",
+	"#7a5a3a",
+	"#96a86b",
+	"#bfae7e",
+	"#e6d9ac",
+];
+
+export function isBadgeEmblemColor(value: unknown): boolean {
+	return typeof value === "string" && BADGE_EMBLEM_COLORS.includes(value);
+}
+
+/** The picker's bounds on placement, so art cannot be pushed under the stitching. */
+export const BADGE_PLACEMENT_LIMITS = { scaleMin: 0.4, scaleMax: 1.4, offsetMax: 0.35 };
+
+/**
+ * Validate the placement the compose route is handed, shape by shape.
+ *
+ * 🚨 **Validated here because the server refuses on it and the picker constrains to it —
+ * the library lives in `@anthers/shared` precisely so one copy answers both.** A scale
+ * or offset the picker never sends but a hand-built request might is refused rather than
+ * composed, because a value out of these bounds is art under the stitching.
+ */
+export function isBadgeComposeParams(value: unknown): value is BadgeComposeParams {
+	if (typeof value !== "object" || value === null) return false;
+	const v = value as Record<string, unknown>;
+	if (!isBadgeShape(v.shape) || !isBadgeColor(v.fieldColor)) return false;
+	if (!isBadgeEmblemColor(v.emblemColor)) return false;
+	if (typeof v.scale !== "number") return false;
+	if (typeof v.offsetX !== "number" || typeof v.offsetY !== "number") return false;
+	const { scaleMin, scaleMax, offsetMax } = BADGE_PLACEMENT_LIMITS;
+	return (
+		v.scale >= scaleMin &&
+		v.scale <= scaleMax &&
+		Math.abs(v.offsetX) <= offsetMax &&
+		Math.abs(v.offsetY) <= offsetMax
+	);
+}
+
+/**
+ * The fingerprint a composed Badge is deduped on — a hash over every parameter the
+ * composition reads, so an unchanged save matches and costs nothing.
+ *
+ * 🚨 **Dedupe on the composition, never on the icon.** Save is the button people press
+ * repeatedly; the second press must be free. A hash over the icon id alone would refuse
+ * a legitimate re-compose after an edit and silently serve stale art.
+ */
+import { createHash } from "node:crypto";
+
+export function badgeComposeFingerprint(params: { nounIconId: string } & BadgeComposeParams): string {
+	return createHash("sha256")
+		.update(
+			[
+				params.nounIconId,
+				params.shape,
+				params.fieldColor,
+				params.emblemColor,
+				params.scale.toFixed(4),
+				params.offsetX.toFixed(4),
+				params.offsetY.toFixed(4),
+			].join("\n"),
+		)
+		.digest("hex");
+}
 
 export function isBadgeShape(id: unknown): boolean {
 	return typeof id === "string" && BADGE_SHAPES.some((s) => s.id === id);
