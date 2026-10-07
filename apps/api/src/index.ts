@@ -22,6 +22,7 @@ import { dmcaRoutes } from "./routes/dmca.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
+import { createPlayPageRoutes } from "./routes/play-page.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
@@ -94,6 +95,10 @@ const app = new Hono()
 	// mount itself goes in only when `BUILD_ORIGIN_SUFFIX` names one. Refuses closed in
 	// both directions, the same shape `admin-host.ts` runs.
 	.route("/build", createBuildDeliveryRoutes())
+	// The play page — the server-rendered parent an isolation build plays inside. Same
+	// host as the API (anthers.org), by design: it is the page that holds the session
+	// AND carries COOP/COEP, which is the combination the SPA cannot be.
+	.route("/play", createPlayPageRoutes())
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 

@@ -67,6 +67,13 @@ function buildPathProblem(value: string): string | null {
 const createSchema = z.object({
 	label: z.string().max(120).optional().default(""),
 	entryPath: z.string().max(250),
+	/**
+	 * Whether this build needs cross-origin isolation (a threaded export). Declared at
+	 * create and fixed there: it decides where the build plays from, so changing it
+	 * retroactively would move a live game's origin — the thing that strands saves.
+	 * A creator who re-exports with a different posture uploads it as its own build.
+	 */
+	requiresIsolation: z.boolean().optional().default(false),
 });
 
 const registerSchema = z.object({
@@ -117,11 +124,14 @@ const webBuildRoutes = new Hono()
 		if (work === "wrong-type") {
 			return c.json({ error: "Only a game or software Work carries a browser build." }, 400);
 		}
-		const { label, entryPath } = c.req.valid("json");
+		const { label, entryPath, requiresIsolation } = c.req.valid("json");
 		const problem = buildPathProblem(entryPath);
 		if (problem) return c.json({ error: problem }, 400);
 
-		const [build] = await db.insert(webBuilds).values({ workId, label, entryPath }).returning();
+		const [build] = await db
+			.insert(webBuilds)
+			.values({ workId, label, entryPath, requiresIsolation })
+			.returning();
 		return c.json({ build }, 201);
 	})
 	// ── Register files that have landed ──

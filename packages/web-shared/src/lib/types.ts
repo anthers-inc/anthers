@@ -236,6 +236,11 @@ export interface WebBuild {
 	entryPath: string;
 	/** Whether the Work page frames this build; exactly one per Work. */
 	isPrimary: boolean;
+	/**
+	 * Whether this build needs cross-origin isolation (a threaded export). Decides
+	 * where it plays from: the server-rendered play page rather than the inline frame.
+	 */
+	requiresIsolation: boolean;
 	files: WebBuildFile[];
 	createdAt: string;
 	updatedAt: string;
@@ -393,6 +398,13 @@ export interface Work {
 
 	/** Whether an access-resolved viewer may press play on the Work's hosted browser build. Absent on the owner shape (which has the builds themselves). */
 	webPlayable?: boolean;
+	/**
+	 * Where play leads, when `webPlayable`: `"inline"` frames the minted address in
+	 * place; `"page"` opens the server-rendered play page, which an isolation
+	 * (threaded) build requires because a frame is isolated only when every ancestor
+	 * is — and this SPA carries no response headers. Null when not playable.
+	 */
+	webPlayPath?: "inline" | "page" | null;
 	assets: Asset[];
 	/**
 	 * The Work's browser builds — the owner-facing shape only. A build is one multi-file
