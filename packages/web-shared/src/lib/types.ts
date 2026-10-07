@@ -391,6 +391,8 @@ export interface Work {
 	viewCount?: number;
 	downloadCount?: number;
 
+	/** Whether an access-resolved viewer may press play on the Work's hosted browser build. Absent on the owner shape (which has the builds themselves). */
+	webPlayable?: boolean;
 	assets: Asset[];
 	/**
 	 * The Work's browser builds — the owner-facing shape only. A build is one multi-file

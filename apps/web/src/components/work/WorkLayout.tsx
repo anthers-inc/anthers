@@ -15,6 +15,7 @@
 
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
+import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -342,9 +343,17 @@ export function WorkDeliverable({
 			{work.type === "image" && work.sourceKey && (
 				<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />
 			)}
-			{(work.type === "game" || work.type === "software") && work.embedUrl && (
-				<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
-			)}
+			{/* A hosted build outranks an external embed address: the build Anthers serves is
+			    the thing the creator uploaded here, and the embed address is creator-hosted
+			    off-platform. A Work carrying both plays hosted; removing the build falls back
+			    to the address. */}
+			{work.type === "game" || work.type === "software" ? (
+				work.webPlayable ? (
+					<HostedEmbed workId={work.id} title={work.title ?? "Play"} />
+				) : (
+					work.embedUrl && <ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
+				)
+			) : null}
 			{work.bodyHtml &&
 				(isWriting(work.type) ? (
 					<WorkArticle html={work.bodyHtml} />
