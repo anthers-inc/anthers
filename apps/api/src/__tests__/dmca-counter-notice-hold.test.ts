@@ -18,7 +18,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, mock, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import { dmcaNotices, moderationActions, works } from "@anthers/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import {
 	addBusinessDays,
@@ -60,7 +60,15 @@ afterAll(async () => {
 	await db.delete(works).where(inArray(works.id, workIds));
 });
 
-afterEach(() => mock.restore());
+afterEach(async () => {
+	mock.restore();
+	// The limiter: this suite files several notices from the same request shape, which
+	// arrives from no address at all — one shared "unknown" key and one 5/hour budget,
+	// long spent by the third case. Cleared between tests the way every other fixture
+	// row is taken back; the limiter's production answer (a flood drowns the statutory
+	// queue, so it is refused) is asserted in `dmca.test.ts`, not re-asserted here.
+	await db.execute(sql`DELETE FROM rate_limits`);
+});
 
 function post(path: string, cookie: string | undefined, body: unknown) {
 	const headers: Record<string, string> = { "Content-Type": "application/json", Origin: ORIGIN };

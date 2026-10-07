@@ -16,7 +16,7 @@
 import { afterAll, beforeAll } from "bun:test";
 import { db } from "@anthers/db";
 import { signupCodes } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import app from "../index.js";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { startPendingSignup } from "../services/pending-signups.js";
@@ -64,6 +64,11 @@ export async function solvePow(): Promise<{ id: number; nonce: number }> {
 /** Spend a real code at a verify route, carrying the pending-signup token when there is one. */
 export async function spendCode(path: string, email: string, token?: string): Promise<Response> {
 	await clearThrottle(email);
+	// The per-IP limiter counts every verify this fixture drives against one shared
+	// "unknown" key (a test's Request carries no address), and a ceremony suite spends
+	// dozens. Not a flood — cleared each call, the way the address throttle is; the
+	// limiter's real refusals are asserted by the suites that test them.
+	await db.execute(sql`DELETE FROM rate_limits`);
 	const issued = await issueSignupCode(email);
 	if (!issued.code) throw new Error(`no code could be minted for ${email}`);
 	return app.request(path, {

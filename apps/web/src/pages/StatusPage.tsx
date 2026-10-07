@@ -107,24 +107,24 @@ export default function StatusPage() {
 	const [failed, setFailed] = useState(false);
 
 	useEffect(() => {
-		let cancelled = false;
+		let aborted = false;
 		async function poll() {
 			try {
 				const res = await apiFetch("/api/status");
 				if (!res.ok) throw new Error(String(res.status));
 				const body = (await res.json()) as StatusReport;
-				if (!cancelled) {
+				if (!aborted) {
 					setReport(body);
 					setFailed(false);
 				}
 			} catch {
-				if (!cancelled) setFailed(true);
+				if (!aborted) setFailed(true);
 			}
 		}
 		poll();
 		const timer = setInterval(poll, POLL_MS);
 		return () => {
-			cancelled = true;
+			aborted = true;
 			clearInterval(timer);
 		};
 	}, []);
