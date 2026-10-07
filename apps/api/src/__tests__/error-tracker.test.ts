@@ -10,9 +10,9 @@
  * mistaken for a real operator queue item.
  */
 import { beforeEach, describe, expect, it } from "bun:test";
-import { eq } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { errorEvents } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import {
 	alertDue,
 	captureError,
@@ -32,7 +32,9 @@ const unique = () => `${MARK} case ${++caseNum} ${crypto.randomUUID().slice(0, 8
 
 describe("normalizeMessage", () => {
 	it("redacts email, share-token and id shapes before anything is capped", () => {
-		const out = normalizeMessage("failed for user@example.com at /s/tok_abc12345xyz and id 3f2b8a10-1234-4abd-9e11-7e22bb3521af");
+		const out = normalizeMessage(
+			"failed for user@example.com at /s/tok_abc12345xyz and id 3f2b8a10-1234-4abd-9e11-7e22bb3521af",
+		);
 		expect(out).not.toContain("user@example.com");
 		expect(out).not.toContain("tok_abc12345xyz");
 		expect(out).not.toContain("3f2b8a10");
@@ -53,8 +55,12 @@ describe("normalizeMessage", () => {
 
 describe("redactRoute", () => {
 	it("keeps the route shape and drops the addressing that hit it", () => {
-		expect(redactRoute("/works/my-game-3f2b8a10-1234-4abd-9e11-7e22bb3521af")).toBe("/works/my-game-[id]");
-		expect(redactRoute("/api/payments/invoices/482/items")).toBe("/api/payments/invoices/[id]/items");
+		expect(redactRoute("/works/my-game-3f2b8a10-1234-4abd-9e11-7e22bb3521af")).toBe(
+			"/works/my-game-[id]",
+		);
+		expect(redactRoute("/api/payments/invoices/482/items")).toBe(
+			"/api/payments/invoices/[id]/items",
+		);
 		expect(redactRoute("/s/tok_abcd12345")).toBe("/s/tok_abcd12345");
 	});
 });
@@ -90,7 +96,8 @@ describe("captureError", () => {
 		const result = await captureError({
 			source: "api",
 			message,
-			stack: "Error: boom\n    at handler (apps/api/src/routes/auth.ts:123:45)\n    at dispatch (apps/api/src/index.ts:67:5)",
+			stack:
+				"Error: boom\n    at handler (apps/api/src/routes/auth.ts:123:45)\n    at dispatch (apps/api/src/index.ts:67:5)",
 			context: { route: "/api/auth/sign-in", method: "POST" },
 		});
 		expect(result?.firstSeen).toBe(true);

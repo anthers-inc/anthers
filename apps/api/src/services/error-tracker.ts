@@ -25,10 +25,10 @@
  * objects and never throws; every catch is deliberate.
  */
 import { createHash } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { errorEvents } from "@anthers/db/schema";
 import { APP_VERSION } from "@anthers/shared/version";
+import { eq, sql } from "drizzle-orm";
 import { sendOperationalAlert } from "./email.js";
 
 /** Where an error was caught. Browser events arrive through the beacon route, API events through onError. */
@@ -86,7 +86,10 @@ const TOKEN_SHAPE = /\/s\/[A-Za-z0-9_-]{8,}/g;
 const UUID_SHAPE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 function redact(text: string): string {
-	return text.replace(EMAIL_SHAPE, "[email]").replace(TOKEN_SHAPE, "/s/[token]").replace(UUID_SHAPE, "[id]");
+	return text
+		.replace(EMAIL_SHAPE, "[email]")
+		.replace(TOKEN_SHAPE, "/s/[token]")
+		.replace(UUID_SHAPE, "[id]");
 }
 
 /**
@@ -182,7 +185,9 @@ export interface CaptureResult {
 export async function captureError(captured: CapturedError): Promise<CaptureResult | null> {
 	const message = normalizeMessage(captured.message);
 	if (!message) return null;
-	const frames = captured.frames?.length ? captured.frames.slice(0, MAX_FRAMES) : parseStack(captured.stack ?? "");
+	const frames = captured.frames?.length
+		? captured.frames.slice(0, MAX_FRAMES)
+		: parseStack(captured.stack ?? "");
 	const fingerprint = fingerprintFor(captured.source, message, frames);
 	const context = sampleContextFor(captured.context, APP_VERSION);
 
@@ -219,7 +224,10 @@ export async function captureError(captured: CapturedError): Promise<CaptureResu
 		return { firstSeen, fingerprint, count: row.count };
 	} catch (error) {
 		// The tracker failing must never become the incident. Log and continue.
-		console.error("[error-tracker] capture failed:", error instanceof Error ? error.message : error);
+		console.error(
+			"[error-tracker] capture failed:",
+			error instanceof Error ? error.message : error,
+		);
 		return null;
 	}
 }
@@ -240,9 +248,15 @@ export function shouldAlert(row: { count: number; alertSentAt: Date | null }): b
 /** Mark an alert as sent for a fingerprint, so `shouldAlert`'s callers can record it. */
 export async function markAlerted(fingerprint: string): Promise<void> {
 	try {
-		await db.update(errorEvents).set({ alertSentAt: new Date() }).where(eq(errorEvents.fingerprint, fingerprint));
+		await db
+			.update(errorEvents)
+			.set({ alertSentAt: new Date() })
+			.where(eq(errorEvents.fingerprint, fingerprint));
 	} catch (error) {
-		console.error("[error-tracker] alert mark failed:", error instanceof Error ? error.message : error);
+		console.error(
+			"[error-tracker] alert mark failed:",
+			error instanceof Error ? error.message : error,
+		);
 	}
 }
 
@@ -262,7 +276,10 @@ export async function alertDue(result: CaptureResult): Promise<boolean> {
 		const row = rows[0];
 		return row ? shouldAlert(row) : false;
 	} catch (error) {
-		console.error("[error-tracker] alert check failed:", error instanceof Error ? error.message : error);
+		console.error(
+			"[error-tracker] alert check failed:",
+			error instanceof Error ? error.message : error,
+		);
 		return false;
 	}
 }
@@ -287,7 +304,10 @@ export async function alertOperational(
 		});
 		await markAlerted(result.fingerprint);
 	} catch (mailError) {
-		console.error("[error-tracker] alert send failed:", mailError instanceof Error ? mailError.message : mailError);
+		console.error(
+			"[error-tracker] alert send failed:",
+			mailError instanceof Error ? mailError.message : mailError,
+		);
 	}
 }
 
