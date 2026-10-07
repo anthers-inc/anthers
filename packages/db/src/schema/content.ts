@@ -779,6 +779,68 @@ export const inlineImages = pgTable(
 );
 
 /**
+ * A browser game's cloud save — **one blob per (player, Work)**, the settled shape of
+ * the Badge storage ladder task's *Cloud saves* design (2026-09-22). Not a filesystem,
+ * not named slots, no version history: a game that wants slots manages them inside its
+ * own blob, which keeps the interface one row and one cap.
+ *
+ * 🚨 **The write goes through the parent page, never from the build.** The build runs
+ * on its own delivery origin where the Anthers session never arrives, and must never
+ * be able to call the save API itself — the served runtime's shim posts save bytes up
+ * to the page, and the page (holding the session) makes this request. A malicious
+ * build can at worst spam its own save slot, which the per-blob cap bounds; a build
+ * that never speaks the message saves locally, exactly as before.
+ *
+ * 🚨 **Newest write wins, full stop.** Two machines playing the same game overwrite
+ * each other; the rule is stated that plainly so nobody invents per-field merging or
+ * a conflict prompt in a v1 the player should never think about. There is no
+ * updated-by-which-machine column because there is no merge to arbitrate.
+ *
+ * ⚠️ **Sync is the Badge perk; the local save is the floor.** The write route checks
+ * the held Anthers Badge, not this table — lapsed-badge writes are refused there with
+ * the local copy untouched, so what lapsing costs is portability, never the save.
+ * Reads pass the same access check as delivery (a Work you cannot currently reach has
+ * no restore either), and a purchased Work's saves survive its withdrawal for its
+ * buyers: **cascade here is deliberate and load-bearing** — a withdrawn Work is a
+ * visibility state, not a deletion, so its row and its buyers' saves ride out
+ * withdrawal on the standing promise that a purchase outlives everything. Erasing the
+ * account destroys the save, as the player asked.
+ */
+// org — the player's own record (no node of theirs holds it), about node content; the
+// same classification `library_items` takes.
+export const workSaves = pgTable(
+	"work_saves",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// Cascade, deliberately: an unpurchased Work's deletion ends the save (there is
+		// nothing left to restore into), while a *withdrawn* Work keeps its row and its
+		// buyers' saves — withdrawal is visibility, not deletion. A purchased Work's
+		// deletion is a withdrawal (the rule `DELETE /works/:id` encodes), so the save
+		// rides on the same promise: a purchase outlives everything.
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** The save bytes the game itself wrote — opaque to Anthers, capped by the route. */
+		blob: text("blob").notNull(),
+		/** The engine that wrote it ("godot"), for the shim's restore path to shape itself by. */
+		runtime: text("runtime").notNull().default(""),
+		/** Opaque bookkeeping the game may set on itself; never read by Anthers. */
+		note: text("note").notNull().default(""),
+		byteSize: integer("byte_size").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		// The newest-write-wins column: an upsert sets it, and nothing reads it to merge.
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One save per (player, Work) — the settled interface in one index.
+		uniqueIndex("uq_work_saves_user_work").on(table.userId, table.workId),
+	],
+);
+
+/**
  * Comments, polymorphic over what they're attached to.
  *
  * A comment hangs off a **Post** (discussion of an announcement) or a **Work** (discussion

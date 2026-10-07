@@ -64,6 +64,34 @@ export function buildFileContentType(filePath: string): string {
 	);
 }
 
+/** Whether a requested path is an HTML document — the kind the save shim rides in. */
+export function contentTypeIsHtml(filePath: string): boolean {
+	return filePath.toLowerCase().endsWith(".html");
+}
+
+/**
+ * Inject the save shim into a served entry document, as the FIRST thing in `<head>` —
+ * ahead of every engine script, so the shim's message listener exists before the
+ * engine's boot pull could miss it.
+ *
+ * 🚨 **Injection is idempotent and fails open to unmodified content.** A document
+ * already carrying the shim (an entry a creator pre-injected in an earlier session —
+ * impossible today, but the rule costs one check) is served unchanged; a document with
+ * no `<head>` at all gets the shim after `<html>`, or prepended when no `<html>`
+ * either. The shim never changes what the build is, only what it can reach.
+ */
+export function injectSaveShim(html: string, runtime: string, script: string): string {
+	if (html.includes("anthers-save-shim")) return html;
+	const tag = `<script data-anthers-save-shim>${script}</script>`;
+	if (/<head[^>]*>/i.test(html)) {
+		return html.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
+	}
+	if (/<html[^>]*>/i.test(html)) {
+		return html.replace(/<html[^>]*>/i, (m) => `${m}${tag}`);
+	}
+	return `${tag}${html}`;
+}
+
 // ── The play token ────────────────────────────────────────────────────────────
 //
 // The Anthers session never reaches the delivery origin, so the entitlement rides in

@@ -44,11 +44,16 @@ import {
 	webBuilds,
 	workPages,
 	workPanels,
+	workSaves,
 	works,
 } from "@anthers/db/schema";
 import {
+	badgeFor,
 	CHARGEABLE_AMOUNT_MESSAGE,
 	isChargeableAmount,
+	SAVE_BLOB_MAX_BYTES_LABEL,
+	SAVE_BLOB_MAX_CHARS,
+	SAVE_SYNC_PERK_ERROR,
 	WITHDRAWN_RESCUE_DAYS,
 } from "@anthers/shared/constants";
 import {
@@ -117,6 +122,7 @@ import {
 	buildAccessContext,
 	buildPreviewContext,
 	defaultSeedAccess,
+	heldAnthersBadgeAmount,
 	resolveAccessSync,
 } from "../services/access.js";
 import {
@@ -767,6 +773,17 @@ export async function buildFlagsForWork(workId: number): Promise<[boolean, boole
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
+
+/**
+ * A cloud save's body. The blob is base64 text (the shim's postMessage channel is
+ * text-shaped; bytes would need a second encoding anyway), capped by the shared
+ * constant pair. `runtime`/`note` are the game's own bookkeeping, opaque to Anthers.
+ */
+const saveBlobSchema = z.object({
+	blob: z.string().min(1).max(SAVE_BLOB_MAX_CHARS),
+	runtime: z.string().max(40).optional().default(""),
+	note: z.string().max(2000).optional().default(""),
+});
 
 /** An image Work is its own thumbnail and takes no other (`isOwnThumbnail`). */
 const IMAGE_THUMBNAIL_REFUSAL = {
@@ -3435,6 +3452,100 @@ const contentRoutes = new Hono()
 		// reasoning the audio route's 302 carries.
 		c.header("Cache-Control", "no-store");
 		return c.json({ src, expiresIn: PLAY_TOKEN_TTL_SECONDS });
+	})
+
+	// ── Cloud saves — the serving half of the settled save design ────────────────
+	//
+	// One blob per (player, Work), newest write wins; the full contract lives on
+	// `workSaves`'s schema doc. Three rules govern these routes:
+	//
+	// 🚨 **The caller is the page, never the build.** The request holds the Anthers
+	// session, which by design never reaches the delivery origin — so a request here is
+	// one the player's own page made. A build could only reach these routes through the
+	// player's credentials, which is the same wall every other user-facing route sits
+	// behind.
+	//
+	// 🚨 **Sync is the Badge perk; the local save is the floor.** Both directions check
+	// the held Anthers Badge: a lapsed holder's writes are refused with the local copy
+	// untouched — what lapsing costs is portability, never the save. The read is
+	// Badge-gated too (it is the same syncing act in the other direction).
+	//
+	// 🚨 **Reads and writes pass the same access check as delivery** — you sync a save
+	// only for a Work you can currently reach. Share links do not carry saves: a save
+	// belongs to the player's account, and a link is not an account (the refusal is
+	// `requireAuth`, which is also why this route does not take `requireUserOrShareLink`).
+	.put("/works/:id/save", requireAuth, zValidator("json", saveBlobSchema), async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		// The perk is a held Anthers Badge, read the same way the Badges page reads it.
+		const held = await heldAnthersBadgeAmount(user.id);
+		if (badgeFor(held).badge === null) {
+			return c.json({ error: SAVE_SYNC_PERK_ERROR }, 402);
+		}
+
+		const { blob, runtime, note } = c.req.valid("json");
+		const bytes = blob.length; // a base64 string's length bounds the bytes above it
+		if (bytes > SAVE_BLOB_MAX_CHARS) {
+			return c.json({ error: `That save is over the ${SAVE_BLOB_MAX_BYTES_LABEL} limit.` }, 413);
+		}
+
+		// The upsert IS the newest-write-wins rule: one row, replaced whole.
+		const [save] = await db
+			.insert(workSaves)
+			.values({ userId: user.id, workId: work.id, blob, runtime, note, byteSize: bytes })
+			.onConflictDoUpdate({
+				target: [workSaves.userId, workSaves.workId],
+				set: {
+					blob: sql`excluded.blob`,
+					runtime: sql`excluded.runtime`,
+					note: sql`excluded.note`,
+					byteSize: sql`excluded.byte_size`,
+					updatedAt: new Date(),
+				},
+			})
+			.returning({ id: workSaves.id, updatedAt: workSaves.updatedAt });
+		return c.json({ saved: true as const, updatedAt: save.updatedAt });
+	})
+	.get("/works/:id/save", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		const held = await heldAnthersBadgeAmount(user.id);
+		if (badgeFor(held).badge === null) {
+			return c.json({ error: SAVE_SYNC_PERK_ERROR }, 402);
+		}
+
+		const [save] = await db
+			.select()
+			.from(workSaves)
+			.where(and(eq(workSaves.userId, user.id), eq(workSaves.workId, work.id)))
+			.limit(1);
+		// A Work with no cloud save yet is a 200 with `save: null` — that is the shape a
+		// shim restores from: play locally, sync when there is something to sync.
+		return c.json({
+			save: save
+				? { blob: save.blob, runtime: save.runtime, note: save.note, updatedAt: save.updatedAt }
+				: null,
+		});
+	})
+	.delete("/works/:id/save", requireAuth, async (c) => {
+		const user = c.get("user");
+		const [deleted] = await db
+			.delete(workSaves)
+			.where(and(eq(workSaves.userId, user.id), eq(workSaves.workId, Number(c.req.param("id")))))
+			.returning({ id: workSaves.id });
+		// Deleting your own save is a playerRight-shaped act and needs no gate beyond
+		// owning it: it removes only the synced copy, never the game's local one.
+		return c.json({ deleted: deleted != null });
 	})
 
 	// ── Panels (comic page regions) ──────────────────────────────────────────────

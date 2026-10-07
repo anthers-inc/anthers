@@ -36,7 +36,14 @@ import { db } from "@anthers/db/client";
 import { webBuildFiles, webBuilds, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { buildFileContentType, isBuildDeliveryHost, verifyPlayToken } from "../lib/web-build.js";
+import { saveShimScript } from "../lib/save-shim-script.js";
+import {
+	buildFileContentType,
+	contentTypeIsHtml,
+	injectSaveShim,
+	isBuildDeliveryHost,
+	verifyPlayToken,
+} from "../lib/web-build.js";
 import { storage } from "../services/storage/index.js";
 
 /**
@@ -112,6 +119,28 @@ export function createBuildDeliveryRoutes(): Hono {
 				// playlist lesson warns about (a working set of directions around the gate).
 				const bytes = await storage.read(file.storageKey);
 				if (!bytes) return c.json({ error: "not found" }, 404);
+
+				// 🚨 **HTML entries get the save shim injected ahead of any engine script** —
+				// the serving-side half of the settled save design. The shim hooks the
+				// frame's own per-origin store and postMessages to the parent; it holds no
+				// credential and makes no Anthers call, so a build that strips it saves
+				// locally and a malicious build gains nothing. Injection (rather than a
+				// stored shim file) is the playlist-rewrite precedent: served content
+				// shaped at the checked endpoint. Non-HTML files are untouched.
+				if (contentTypeIsHtml(requestedPath)) {
+					const html = new TextDecoder().decode(bytes as unknown as Uint8Array);
+					// The shim's engine family is a constant of the shim itself ("godot" —
+					// the IDBFS record shape is what restore is written against); the save
+					// row's runtime col carries what the parent relayed, for the desktop
+					// SDK's future restore path, not for this route.
+					const shimmed = injectSaveShim(html, "godot", saveShimScript("godot"));
+					return new Response(shimmed, {
+						headers: {
+							"Content-Type": buildFileContentType(requestedPath),
+							"Cache-Control": "no-store",
+						},
+					});
+				}
 
 				// Raw Response: the object bytes are a Uint8Array, which Hono's typed `c.body`
 				// narrows out — the dev harness returns one the same way.

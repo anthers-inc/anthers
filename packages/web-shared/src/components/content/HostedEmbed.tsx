@@ -22,21 +22,150 @@
  * see is what a player sees.
  */
 
+import { isSaveShimMessage, type SaveShimInbound } from "@anthers/shared/save-shim";
 import { PlayIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { client } from "../../lib/rpc";
+
+/** A helper the handler uses to answer a frame through its own event.source. */
+function postTo(source: MessageEventSource | null | undefined, message: SaveShimInbound): void {
+	source?.postMessage(message);
+}
 
 interface HostedEmbedProps {
 	workId: number;
 	/** The viewer-resolved verdict to show the play button under. */
 	title: string;
+	/**
+	 * The origin the frame answers on — what the parent validates incoming shim
+	 * messages against. The play route's `src` names it; the parent derives the origin
+	 * from the same src and refuses messages from anything else.
+	 */
+	deliveryOrigin?: string;
 }
 
-export default function HostedEmbed({ workId, title }: HostedEmbedProps) {
+export default function HostedEmbed({ workId, title, deliveryOrigin }: HostedEmbedProps) {
 	const [active, setActive] = useState(false);
 	const [src, setSrc] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [pressed, setPressed] = useState(false);
+	const frameRef = useRef<HTMLIFrameElement | null>(null);
+
+	// ── The save-sync parent half ─────────────────────────────────────────────
+	//
+	// 🚨 **This page is the only side with authority.** The shim inside the frame
+	// posts save bytes up; the parent (here) holds the session and makes the API
+	// call. The sender is validated on both axes — same-origin as the minted frame
+	// AND the actual frame object — before anything it says is acted on. This is the
+	// wall the settled save design builds: a build can speak, but only to a parent
+	// that checks who is speaking, and nothing the build says can act as the player
+	// except within this one narrow channel (its own save slot).
+	useEffect(() => {
+		if (!active) return;
+		let closed = false;
+
+		const expectedOrigin = (() => {
+			if (deliveryOrigin) return deliveryOrigin;
+			if (!src) return null;
+			try {
+				return new URL(src).origin;
+			} catch {
+				return null;
+			}
+		})();
+
+		const onMessage = async (event: MessageEvent) => {
+			if (closed) return;
+			if (event.source !== frameRef.current?.contentWindow) return;
+			if (expectedOrigin && event.origin !== expectedOrigin) return;
+			if (!isSaveShimMessage(event.data)) return;
+
+			switch (event.data.type) {
+				case "anthers-save:load": {
+					// Restore: the cloud save (if any) goes down to the frame, which writes
+					// it into its own store before the engine's boot pull runs.
+					let blob: string | null = null;
+					let updatedAt: string | undefined;
+					try {
+						const res = await client.api.content.works[":id"].save.$get({
+							param: { id: String(workId) },
+						});
+						if (res.ok) {
+							const body = (await res.json()) as {
+								save: { blob: string; updatedAt: string } | null;
+							};
+							blob = body.save?.blob ?? null;
+							updatedAt = body.save?.updatedAt;
+						} else if (res.status === 402) {
+							// No Badge: local saves keep working; say so passively.
+							postTo(event.source, {
+								type: "anthers-save:posture",
+								syncing: false,
+								reason: "badge",
+							});
+							return;
+						}
+					} catch {
+						return; // A network miss restores nothing; the local save stands.
+					}
+					postTo(event.source, {
+						type: "anthers-save:loaded",
+						blob,
+						...(updatedAt ? { updatedAt } : {}),
+					});
+					postTo(event.source, {
+						type: "anthers-save:posture",
+						syncing: true,
+					});
+					return;
+				}
+				case "anthers-save:put": {
+					// The newest write wins: PUT the blob whole.
+					try {
+						const res = await client.api.content.works[":id"].save.$put({
+							param: { id: String(workId) },
+							json: { blob: event.data.blob, runtime: "godot" },
+						});
+						if (res.ok || res.status === 413) {
+							postTo(event.source, {
+								type: "anthers-save:ack",
+								ok: res.ok,
+								reason: res.ok ? undefined : "cap",
+							});
+						} else if (res.status === 402) {
+							postTo(event.source, {
+								type: "anthers-save:ack",
+								ok: false,
+								reason: "badge",
+							});
+						} else {
+							postTo(event.source, {
+								type: "anthers-save:ack",
+								ok: false,
+								reason: "error",
+							});
+						}
+					} catch {
+						postTo(event.source, { type: "anthers-save:ack", ok: false, reason: "error" });
+					}
+					return;
+				}
+				case "anthers-save:status": {
+					postTo(event.source, {
+						type: "anthers-save:posture",
+						syncing: true,
+					});
+					return;
+				}
+			}
+		};
+
+		window.addEventListener("message", onMessage);
+		return () => {
+			closed = true;
+			window.removeEventListener("message", onMessage);
+		};
+	}, [active, src, deliveryOrigin, workId]);
 
 	const play = async () => {
 		setPressed(true);
@@ -96,6 +225,7 @@ export default function HostedEmbed({ workId, title }: HostedEmbedProps) {
 			    The src is the freshly minted play address; closing and replaying mints a new
 			    one, so an expired token never lingers past the frame that held it. */}
 			<iframe
+				ref={frameRef}
 				src={src ?? undefined}
 				title={title}
 				className="w-full"
