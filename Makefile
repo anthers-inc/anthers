@@ -396,7 +396,7 @@ receipt-replay: ## Re-send a past transaction's buyer receipt (INTENT=pi_… or 
 		echo 'Usage: make receipt-replay INTENT=pi_…  (or REFUND=re_…)' >&2; exit 64; fi
 	@PID=$$(bun run scripts/bws-project-id.ts prod) || exit 1; \
 	BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-prod-token)} \
-		bws run --project-id $$PID -- '$(MAKE) prod-db CMD="bun run scripts/receipt-replay.ts$(if $(INTENT), --intent $(INTENT),)$(if $(REFUND), --refund $(REFUND),)"'
+		bws run --project-id $$PID -- '$(MAKE) prod-db "CMD=bun run scripts/receipt-replay.ts$(if $(INTENT), --intent $(INTENT),)$(if $(REFUND), --refund $(REFUND),)"'
 
 # Support from signup through settlement against test-mode Stripe, on a test clock. Needs `bws`
 # (the Anthers Dev key) and the network, and takes a few minutes, so it is not part of `verify`.
