@@ -81,6 +81,16 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.13",
+		date: "2026-10-07",
+		lede: "Email receipts for every transaction, on both sides of a sale.",
+		entries: [
+			"Every purchase arrives with an itemized receipt: what was bought, the sales tax added on top, and the total the card was charged, one receipt per payment even when it covered several works. Refunds are receipted the same way, and a monthly support payment earns a receipt naming the creators it reached.",
+			"Creators receive a copy of every sale and refund on their work, emailed to their account address. The emails are on by default while volume is low, and a switch on the Studio Settings page turns them off for a creator who has outgrown them.",
+			"A transaction that predates receipts can have its receipt sent retroactively; the platform's first live purchase was receipted this way the day this shipped.",
+		],
+	},
+	{
 		version: "2026.10.12",
 		date: "2026-10-07",
 		lede: "A rename that settles what the record of shipping is called, and a basket card that reads like its creator.",
