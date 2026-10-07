@@ -169,7 +169,7 @@ describe("isolation posture", () => {
 			true,
 		);
 
-		const res = await call("GET", `/play/${w.id}`, creator.cookie);
+		const res = await call("GET", `/api/play/${w.id}`, creator.cookie);
 		expect(res.status).toBe(200);
 		// 🚨 The pair: this is what makes the frame inside isolated. The test is the
 		// contract that the SPA cannot deliver and this page must.
@@ -194,7 +194,7 @@ describe("isolation posture", () => {
 		const w = await insertWork({ creatorId: creator.id, type: "game", title: `plainpage ${run}` });
 		workIds.push(w.id);
 		await createBuildWithFiles(w.id, creator.cookie, ["index.html"], "index.html", false);
-		const res = await call("GET", `/play/${w.id}`, creator.cookie);
+		const res = await call("GET", `/api/play/${w.id}`, creator.cookie);
 		expect(res.status).toBe(200);
 		expect(res.headers.get("Cross-Origin-Embedder-Policy")).toBeNull();
 	});
@@ -210,7 +210,7 @@ describe("isolation posture", () => {
 		workIds.push(w.id);
 		await createBuildWithFiles(w.id, creator.cookie, ["index.html"], "index.html", true);
 
-		const res = await call("GET", `/play/${w.id}`, other.cookie);
+		const res = await call("GET", `/api/play/${w.id}`, other.cookie);
 		expect(res.status).toBe(200); // A refusal page — a real page, not an error frame.
 		expect(res.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
 		expect(res.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
@@ -222,7 +222,7 @@ describe("isolation posture", () => {
 	it("a Work with no hosted build gets a refusal page, not a broken frame", async () => {
 		const w = await insertWork({ creatorId: creator.id, type: "game", title: `nobuild ${run}` });
 		workIds.push(w.id);
-		const res = await call("GET", `/play/${w.id}`, creator.cookie);
+		const res = await call("GET", `/api/play/${w.id}`, creator.cookie);
 		expect(res.status).toBe(200);
 		const html = await res.text();
 		expect(html).not.toContain("<iframe");

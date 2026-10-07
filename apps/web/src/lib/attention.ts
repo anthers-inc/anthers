@@ -159,6 +159,17 @@ const INTERACTION_EVENTS = [
 	"mousemove",
 ] as const;
 
+/**
+ * A sign of life reported from OUTSIDE this page's own event stream — currently the
+ * hosted-build shim's presence heartbeat, whose in-frame input otherwise never
+ * reaches `markInteraction`. Feeding it here means an actively played game stays
+ * live on precisely the same terms as page input: same idle gate, same policy, same
+ * evidence record. No new claim, no second ticker.
+ */
+export function reportExternalActivity() {
+	markInteraction();
+}
+
 function markInteraction() {
 	lastInteractionAt = Date.now();
 }

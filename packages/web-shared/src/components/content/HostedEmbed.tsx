@@ -37,6 +37,13 @@ interface HostedEmbedProps {
 	/** The viewer-resolved verdict to show the play button under. */
 	title: string;
 	/**
+	 * Fed the frame's presence heartbeats — the shim's throttled "input happened"
+	 * signal, which otherwise never crosses the frame boundary. The page passes its
+	 * own idle detector's mark function, so an actively played game stays live on
+	 * exactly the terms page input earns, with no second policy anywhere.
+	 */
+	onActivity?: () => void;
+	/**
 	 * The origin the frame answers on — what the parent validates incoming shim
 	 * messages against. The play route's `src` names it; the parent derives the origin
 	 * from the same src and refuses messages from anything else.
@@ -44,7 +51,12 @@ interface HostedEmbedProps {
 	deliveryOrigin?: string;
 }
 
-export default function HostedEmbed({ workId, title, deliveryOrigin }: HostedEmbedProps) {
+export default function HostedEmbed({
+	workId,
+	title,
+	deliveryOrigin,
+	onActivity,
+}: HostedEmbedProps) {
 	const [active, setActive] = useState(false);
 	const [src, setSrc] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -150,6 +162,11 @@ export default function HostedEmbed({ workId, title, deliveryOrigin }: HostedEmb
 					}
 					return;
 				}
+				case "anthers-save:alive": {
+					// A played game is a live player. No reply — one-way, throttled upstream.
+					onActivity?.();
+					return;
+				}
 				case "anthers-save:status": {
 					postTo(event.source, {
 						type: "anthers-save:posture",
@@ -165,7 +182,7 @@ export default function HostedEmbed({ workId, title, deliveryOrigin }: HostedEmb
 			closed = true;
 			window.removeEventListener("message", onMessage);
 		};
-	}, [active, src, deliveryOrigin, workId]);
+	}, [active, src, deliveryOrigin, workId, onActivity]);
 
 	const play = async () => {
 		setPressed(true);

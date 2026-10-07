@@ -27,6 +27,7 @@
 
 import { db } from "@anthers/db/client";
 import { webBuilds } from "@anthers/db/schema";
+import { eventTypeFor, IDLE_TIMEOUT_MS } from "@anthers/shared/attention";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
@@ -175,6 +176,13 @@ export function createPlayPageRoutes(): Hono {
 
 				if (d.type === PREFIX + "load") restore();
 				if (d.type === PREFIX + "put") take(d.blob);
+				// The played game's own signal: the shim's throttled "input happened".
+				// This is what keeps a busy player live without any input on THIS page —
+				// the frame has the keyboard and pointer, and now the parent knows.
+				if (d.type === PREFIX + "alive") {
+					lastAlive = Date.now();
+					lastInteract = lastAlive;
+				}
 			});
 
 			function restore() {
@@ -198,6 +206,95 @@ export function createPlayPageRoutes(): Hono {
 					var reason = r.ok ? undefined : (r.status === 402 ? "badge" : r.status === 413 ? "cap" : "error");
 					post({ type: PREFIX + "ack", ok: r.ok, reason: reason });
 				}).catch(function () { post({ type: PREFIX + "ack", ok: false, reason: "error" }); });
+			}
+
+			// ── Attention: this page is the recording parent ────────────────────────
+			// 🚨 Isolation frames play HERE, and their input never reaches any other
+			// listener — so this page carries the presence recorder itself. It is the
+			// parent machinery of the SPA's tracker (apps/web/src/lib/attention.ts)
+			// unrolled into a plain page, with NO policy restated in it: the one dial
+			// (the idle timeout) is injected from the shared policy module at render.
+			// Ranges open while the frame is alive and the tab is visible; the idle
+			// clock is fed by BOTH the heartbeat and this page's own input events; a
+			// hidden tab or dead frame closes and flushes. Same event shape, same
+			// endpoint, same server clamps.
+			var WORK_ID = ${work.id};
+			var CREATOR_ID = ${work.creatorId ?? 0};
+			// The event type is the shared vocabulary's call — the policy module's
+			// decision, injected like the idle dial, never restated here.
+			var EVENT_TYPE = ${JSON.stringify(eventTypeFor(work.type))};
+			var IDLE_MS = ${IDLE_TIMEOUT_MS};
+			var FRAME = frame;
+			var lastAlive = Date.now();
+			var rangeStart = null;
+			var lastInteract = Date.now();
+
+			window.addEventListener("pointerdown", function () { lastInteract = Date.now(); }, { passive: true });
+			window.addEventListener("keydown", function () { lastInteract = Date.now(); }, { passive: true });
+
+			document.addEventListener("visibilitychange", function () {
+				if (document.visibilityState === "hidden" && rangeStart !== null) {
+					closeAndFlush(Date.now());
+				}
+				if (document.visibilityState === "visible") {
+					lastInteract = Date.now();
+				}
+			});
+
+			function live() {
+				return FRAME && document.visibilityState === "visible" && Date.now() - lastAlive < IDLE_MS && Date.now() - lastInteract < IDLE_MS;
+			}
+			window.setInterval(function () {
+				var now = Date.now();
+				if (live()) {
+					if (rangeStart === null) rangeStart = now;
+					return;
+				}
+				if (rangeStart !== null) closeAndFlush(now);
+			}, 1000);
+			// A long-lived range is flushed periodically rather than only at its end, so a
+			// crash mid-session doesn't lose the session, and each flush closes and — if
+			// still live — reopens: the server's per-flush rows stay short, which is what
+			// MAX_RANGE_SECONDS is sized for. Same shape as the SPA tracker's flusher.
+			window.setInterval(function () {
+				if (rangeStart === null) return;
+				var wasLive = live();
+				closeAndFlush(Date.now());
+				if (wasLive) rangeStart = Date.now();
+			}, 30000);
+			window.addEventListener("pagehide", function () { if (rangeStart !== null) closeAndFlush(Date.now()); });
+
+			// Close the open range, report what it earned, and reopen — the SPA tracker's
+			// close-and-reopen shape, so a long session stays a series of short rows the
+			// server's per-flush clamps were sized for. Returns the new range start so
+			// the periodic flusher keeps continuity; a sub-second remainder is noise and
+			// closes for good, as the SPA's own rule has it.
+			function closeAndFlush(endedAt) {
+				var startedAt = rangeStart;
+				rangeStart = null;
+				if (startedAt === null) return;
+				var seconds = Math.floor((endedAt - startedAt) / 1000);
+				if (seconds < 1) return;
+				var clientId = crypto.randomUUID ? crypto.randomUUID() : "r-" + endedAt.toString(36);
+				fetch("/api/subscriptions/attention", {
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ events: [{
+						creatorId: CREATOR_ID,
+						workId: WORK_ID,
+						eventType: EVENT_TYPE,
+						durationSeconds: seconds,
+						startedAt: startedAt,
+						endedAt: endedAt,
+						clientId: clientId,
+						tabVisible: true,
+						elementVisible: true,
+						playing: false,
+						surface: "play",
+						device: "web",
+					}]}),
+				}).catch(function () {});
 			}
 		})();`;
 

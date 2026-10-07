@@ -135,5 +135,27 @@ export function saveShimScript(runtime: string): string {
 	if (typeof GodotOS !== "undefined" && GodotOS && GodotOS.atexit) {
 		GodotOS.atexit(function () { return snapshot().then(function () {})["catch"](function () {}); });
 	}
+
+	// ── The presence heartbeat ──────────────────────────────────────────────────
+	// 🚨 The frame's input never reaches the parent's idle detector — keyboard and
+	// pointer events do not cross the frame boundary — so a game being ACTIVELY played
+	// looks idle to the parent after its idle timeout and stops earning. The shim is
+	// the one trusted observer on the served side: it listens to the same interaction
+	// family the parent's own detector does and reports ALIVE, throttled hard.
+	//
+	// The message carries no content — not which key, not where the pointer is, only
+	// "input happened" — at most one per second, inside the channel that already
+	// exists for exactly this class of message. Nothing here scores time: the parent
+	// (which holds the session and the policy) decides what aliveness means.
+	var lastBeat = 0;
+	function beat() {
+		var now = Date.now();
+		if (now - lastBeat < 1000) return;
+		lastBeat = now;
+		send({ type: PREFIX + "alive" });
+	}
+	["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (type) {
+		window.addEventListener(type, beat, { passive: true, capture: true });
+	})();
 })();`;
 }

@@ -34,7 +34,16 @@ export type SaveShimOutbound =
 	 */
 	| { type: "anthers-save:put"; blob: string; note?: string }
 	/** The frame asks what the sync posture is (Badge held? last sync fine?). */
-	| { type: "anthers-save:status" };
+	| { type: "anthers-save:status" }
+	/**
+	 * A sign of life from inside the frame — the presence heartbeat. Input events do
+	 * not cross a frame boundary, so this is how a game being ACTIVELY played stays
+	 * live against the parent's idle detector. Throttled to at most one per second by
+	 * the shim, and carrying no content whatsoever: the event family, the key, the
+	 * pointer position all stay inside the frame. The parent feeds it to its own idle
+	 * detector only; nothing is scored here.
+	 */
+	| { type: "anthers-save:alive" };
 
 /** What the parent sends down. */
 export type SaveShimInbound =

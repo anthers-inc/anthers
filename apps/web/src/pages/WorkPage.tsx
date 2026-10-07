@@ -46,7 +46,7 @@ import {
 	type WorkDetail,
 	WorkHeader,
 } from "../components/work/WorkLayout";
-import { useAttentionClaim } from "../lib/attention";
+import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
 
@@ -330,7 +330,11 @@ export default function WorkPage() {
 						errorMessage={work.transcoding?.errorMessage ?? undefined}
 					/>
 				) : (
-					<WorkDeliverable work={work} shareToken={shareToken} />
+					<WorkDeliverable
+						work={work}
+						shareToken={shareToken}
+						onFrameActivity={reportExternalActivity}
+					/>
 				)}
 			</section>
 

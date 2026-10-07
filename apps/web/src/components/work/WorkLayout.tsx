@@ -265,6 +265,7 @@ export function WorkDeliverable({
 	shareToken = null,
 	lyrics,
 	videoRef,
+	onFrameActivity,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
@@ -272,6 +273,12 @@ export function WorkDeliverable({
 	lyrics?: ReactNode;
 	/** Handed a video's `<video>` element, for the Studio to take a frame from. */
 	videoRef?: MutableRefObject<HTMLVideoElement | null>;
+	/**
+	 * Fed the hosted frame's presence heartbeats, for the page's idle detector — the
+	 * in-frame input signal that otherwise never leaves the frame. See
+	 * `HostedEmbed`'s `onActivity` and `attention.ts`'s `reportExternalActivity`.
+	 */
+	onFrameActivity?: () => void;
 }) {
 	const { playTracks } = useMediaPlayer();
 	return (
@@ -355,9 +362,9 @@ export function WorkDeliverable({
 			    COOP/COEP. An ordinary build frames inline as before. */}
 			{work.type === "game" || work.type === "software" ? (
 				work.webPlayable && work.webPlayPath === "inline" ? (
-					<HostedEmbed workId={work.id} title={work.title ?? "Play"} />
+					<HostedEmbed workId={work.id} title={work.title ?? "Play"} onActivity={onFrameActivity} />
 				) : work.webPlayable && work.webPlayPath === "page" ? (
-					<a href={`/play/${work.id}`} className="btn btn-primary btn-lg gap-2 self-start">
+					<a href={`/api/play/${work.id}`} className="btn btn-primary btn-lg gap-2 self-start">
 						<PlayIcon className="w-6 h-6" />
 						Play in Browser
 					</a>
