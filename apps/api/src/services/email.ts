@@ -232,6 +232,35 @@ export function shell(heading: string, bodyHtml: string): string {
 	});
 	return `<!doctype html>
 <html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!--
+		Light-authored, and not available in dark. The palette below is the light theme's
+		hexes baked at authoring time; a client that re-themes the message for a dark
+		(reader's) setting produces the one combination this mail can neither predict nor
+		test against — darkened cream reads as murky olive, and the dark-green ink is
+		auto-lightened into washed-out contrast. Every component color is declared
+		inline, so nothing here actually benefits from a client's dark translation:
+		declaring "only light" is what keeps the mail readable on the mobile clients
+		that honor it (Apple Mail, Outlook, Thunderbird), and no worse than before on
+		the few that re-theme regardless.
+		-->
+		<meta name="color-scheme" content="only light">
+		<meta name="supported-color-schemes" content="only light">
+		<style>
+			:root {
+				color-scheme: only light;
+				supported-color-schemes: only light;
+			}
+			/* The mail is light-authored; a client dark theme has nothing to do here.
+			Declared so the client's translation pass finds an explicit answer rather
+			than improvising one over the inline styles. */
+			@media (prefers-color-scheme: dark) {
+				:root { color-scheme: only light; supported-color-schemes: only light; }
+			}
+		</style>
+	</head>
 	<body style="margin:0;padding:0;background:${MEADOW.ground};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 		<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MEADOW.ground};padding:32px 0;">
 			<tr><td align="center">
