@@ -277,7 +277,7 @@ const CREATOR_TERMS: LegalDocument = {
 		"Prices and gates apply from when you set them. **Changing them does not reach back**: someone who already bought something, or who already holds a Badge for the cycle they have paid for, keeps what they had.",
 
 		"## Storage",
-		"**You pay for storing your own work. Nobody pays for delivering it.** Your first 50 GiB is free. Above that, storage is charged at our storage provider's rate plus half again — and that half is not profit, it is what funds free access and Anthers' charitable programs.",
+		"**Storage past your Badge's allowance is charged at cost. Nobody pays for delivering anything.** Your first 25 GiB is free, held together for your catalog and the files you keep — no Badge needed for either purpose. Each rung of Anthers' Badges bundles more storage; past the allowance a Badge you hold grants, more bytes are billed at our storage provider's rate, with no mark-up — what we charge is what the bytes cost. Storage past the free floor requires holding at least the first Badge.",
 		"We will tell you before a change to your storage costs takes effect, and you will always be able to see what you are using.",
 
 		"## Tax",

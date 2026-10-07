@@ -16,6 +16,7 @@ import {
 	FREE_STORAGE_GIB,
 	PUBLIC_ACCESS_PRICE,
 	SELF_HOST_FEE,
+	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
 	TIME_POOL_RATE,
 	thresholdForBadge,
@@ -365,26 +366,39 @@ describe("estimateStorageCost — and the self-hosting branch that inverted unno
 		// If this ever goes non-zero again, that inversion changes and the endpoint closed
 		// in `routes/subscriptions.ts` needs revisiting rather than silently re-opening.
 		expect(SELF_HOST_FEE).toBe(0);
-		const selfHosted = estimateStorageCost({ storageBytes: 500 * GIB_BYTES, isSelfHosting: true });
-		const hosted = estimateStorageCost({ storageBytes: 500 * GIB_BYTES });
+		// The comparison that means something now: a self-hosting Root holder stores
+		// nothing here, so their overflow bill is 0 — while a hosted Root holder with the
+		// same catalog pays the vendor rate on every byte past their allowance.
+		const selfHosted = estimateStorageCost({
+			storageBytes: 500 * GIB_BYTES,
+			anthersDollars: 3,
+			isSelfHosting: true,
+		});
+		const hosted = estimateStorageCost({ storageBytes: 500 * GIB_BYTES, anthersDollars: 3 });
+		expect(selfHosted.total.toNumber()).toBe(0);
 		expect(hosted.total.greaterThan(selfHosted.total)).toBe(true);
 	});
 
-	test("a hosted creator pays nothing up to the free allowance, then the rate plus half again", () => {
+	test("a held Badge's bytes past its allowance bill at cost from Root onward — free is the gate", () => {
+		// A free account's combined 25 GiB is the subsidized offer and cannot buy
+		// overflow: the entry gate is Root. Nothing at or under the floor is ever billed.
+		const freeAcct = estimateStorageCost({ storageBytes: 200 * GIB_BYTES });
+		expect(freeAcct.topUpEligible).toBe(false);
+		expect(freeAcct.storageGiB.toNumber()).toBe(0);
+		expect(freeAcct.total.toNumber()).toBe(0);
 		expect(
-			estimateStorageCost({ storageBytes: FREE_STORAGE_GIB * GIB_BYTES }).total.toNumber(),
+			estimateStorageCost({ storageBytes: STORAGE_LADDER_GIB.free * GIB_BYTES }).total.toNumber(),
 		).toBe(0);
-		const over = estimateStorageCost({ storageBytes: (FREE_STORAGE_GIB + 100) * GIB_BYTES });
+		// Root's allowance is 50: bytes up to it bill nothing.
+		expect(estimateStorageCost({ storageBytes: 50 * GIB_BYTES, anthersDollars: 3 }).total.toNumber()).toBe(0);
+		// 100 GiB past Root's allowance at R2's rate, to the cent.
+		const over = estimateStorageCost({ storageBytes: 150 * GIB_BYTES, anthersDollars: 3 });
+		expect(over.topUpEligible).toBe(true);
+		expect(over.allowanceGiB).toBe(STORAGE_LADDER_GIB.root);
 		expect(over.storageGiB.toNumber()).toBeCloseTo(100, 6);
-		// 100 GiB over the allowance at R2's rate, to the cent.
 		expect(over.storageCost.toFixed(2)).toBe((100 * STORAGE_PER_GIB_MONTH).toFixed(2));
-		// 🚨 The charge is half again on the ROUNDED cost, not the rounded half of the raw
-		// one — the distinction that stopped `creatorReceipt` reconciling when R2's $0.0161
-		// left exact cents behind, and the reason it must call this rather than re-derive it.
-		const half = new Decimal(over.storageCost)
-			.mul(AFF_INFRA_RATE)
-			.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-		expect(over.storageAff.equals(half)).toBe(true);
-		expect(over.total.equals(over.storageCost.plus(over.storageAff))).toBe(true);
+		// 🚨 Margin-neutrality is the property the ruling bought: the charge equals the
+		// provider cost exactly — no multiplier between them, ever.
+		expect(over.total.equals(over.storageCost)).toBe(true);
 	});
 });

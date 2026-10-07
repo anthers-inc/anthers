@@ -13,7 +13,7 @@
 // from here. After that these constants are the record of the port, and the thing they
 // guard is that a later refactor does not quietly move a landmark.
 import { describe, expect, test } from "bun:test";
-import { AFF_INFRA_RATE, FREE_TIME_POOL, STORAGE_PER_GIB_MONTH } from "./constants.js";
+import { FREE_TIME_POOL, STORAGE_LADDER_GIB, STORAGE_PER_GIB_MONTH } from "./constants.js";
 import {
 	ADMIN_CEILING,
 	affordable,
@@ -43,15 +43,15 @@ function near(actual: number | null, expected: number, pct = 1.5) {
 }
 
 describe("the landmarks 61.01 publishes", () => {
-	test("the platform stops costing Parker money at ~239 accounts", () => {
+	test("the platform stops costing Parker money at ~225 accounts", () => {
 		near(
 			crossover((m) => m.solvent, { payingShare: SHARE, staffing: NO_STAFFING }),
-			239,
+			225,
 		);
 	});
 
-	test("it is charity-healthy with no salary at ~553", () => {
-		near(crossover(affordable, { payingShare: SHARE, staffing: NO_STAFFING }), 553);
+	test("it is charity-healthy with no salary at ~555", () => {
+		near(crossover(affordable, { payingShare: SHARE, staffing: NO_STAFFING }), 555);
 	});
 
 	test("a full-time salary is SOLVENT at ~12,300 — far below where it is responsible", () => {
@@ -65,8 +65,8 @@ describe("the landmarks 61.01 publishes", () => {
 		near(crossover(affordable, { payingShare: SHARE, staffing: full }), 33_100);
 	});
 
-	test("INFLECTION 2 — a first hire — is ~77,900", () => {
-		near(crossover(affordable, { payingShare: SHARE, staffing: hire }), 77_900);
+	test("INFLECTION 2 — a first hire — is ~78,000", () => {
+		near(crossover(affordable, { payingShare: SHARE, staffing: hire }), 78_000);
 	});
 
 	/**
@@ -80,8 +80,8 @@ describe("the landmarks 61.01 publishes", () => {
 	 * table turns violent there. Pinning this row means a landmark *value*, not just a
 	 * verdict, protects the free-access pot's contribution to the model.
 	 */
-	test("at 10% paying — where solvency binds instead of Admin — inflection 1 is ~209,600", () => {
-		near(crossover(affordable, { payingShare: 0.1, staffing: full }, { maxLog: 12 }), 209_600, 2);
+	test("at 10% paying — where solvency binds instead of Admin — inflection 1 is ~201,500", () => {
+		near(crossover(affordable, { payingShare: 0.1, staffing: full }, { maxLog: 12 }), 201_500, 2);
 	});
 
 	/**
@@ -137,8 +137,8 @@ describe("affordability takes BOTH tests", () => {
 });
 
 describe("the floor paying share", () => {
-	test("is ~8.8% at the shipped free pot", () => {
-		expect(floorPayingShare({ staffing: NO_STAFFING }) * 100).toBeCloseTo(8.75, 1);
+	test("is ~8.7% at the shipped free pot", () => {
+		expect(floorPayingShare({ staffing: NO_STAFFING }) * 100).toBeCloseTo(8.7, 1);
 	});
 
 	/**
@@ -170,8 +170,10 @@ describe("the floor paying share", () => {
 		const a = floorPayingShare({ staffing: NO_STAFFING, freeTimePool: FREE_TIME_POOL });
 		const b = floorPayingShare({ staffing: NO_STAFFING, freeTimePool: FREE_TIME_POOL * 2 });
 		expect(b).toBeGreaterThan(a);
-		// 61.01 records the $0.50 pot's floor as 15.66%, from the retired playground.
-		expect(b * 100).toBeCloseTo(15.66, 1);
+		// 61.01 recorded the $0.50 pot's floor as 15.66% under the old storage shape; the
+		// ruled ladder makes carrying allowances cheaper than the half-again world was,
+		// so the same pot lands at 15.61% — recorded as the relationship, re-derived here.
+		expect(b * 100).toBeCloseTo(15.61, 1);
 	});
 
 	test("staffing does not move it — a floor is asymptotic, and fixed cost washes out", () => {
@@ -203,16 +205,18 @@ describe("the ledger balances", () => {
 	 * decoupling and the reason a purchase-heavy Anthers can look successful while the
 	 * budget that funds free access stays thin.
 	 */
-	test("charitable revenue reads Seeds given to Anthers, plus the storage charge, and nothing else", () => {
+	test("charitable revenue reads support given to Anthers, and nothing else", () => {
 		const m = modelAt({ accounts: 80_000, payingShare: SHARE, staffing: full });
+		// The storage mark-up was charitable revenue's second line; the top-up ruling
+		// (2026-10-07) retires it — top-up is at cost, so every segment's `storageChargeEach`
+		// is zero and users' remainder is the whole of revenue.
 		const fromCreators = m.segments.reduce((a, s) => a + s.storageChargeEach * s.count, 0);
-		const fromUsers = m.charitableRevenue - fromCreators;
-		expect(fromCreators).toBeGreaterThan(0);
-		expect(fromUsers / m.payingAccounts).toBeCloseTo(2.8, 1);
+		expect(fromCreators).toBe(0);
+		expect(m.charitableRevenue / m.payingAccounts).toBeCloseTo(2.8, 1);
 	});
 });
 
-describe("creator storage is billed in full", () => {
+describe("creator storage follows the ruled Badge shape", () => {
 	/**
 	 * 🚨 **This is the guard that replaced the Public Access storage exemption's tests**
 	 * (2026-08-30). A creator's Public Access bytes used to be free, so `modelAt` billed
@@ -221,12 +225,14 @@ describe("creator storage is billed in full", () => {
 	 * left to assert — and deleting them without putting this in its place would have left
 	 * the discount reintroducible by a one-character edit with nothing to notice.
 	 *
-	 * What this asserts is the **absence of any discount**, which is a property rather than
-	 * a number: every modeled paying creator pays the object-store rate on their whole
-	 * library. It is deliberately derived from `CREATOR_SEGMENTS` rather than from frozen
-	 * dollar figures, so it moves with the dials and fails only on a real change of rule.
+	 * What it asserts now (2026-10-07's ruling) is the **ruled split of who pays**: a
+	 * paying creator pays at-cost overflow *past* their rung's allowance — nothing at or
+	 * under it — and Anthers carries the allowance bytes the catalog actually uses. A
+	 * model creator's allowance is the rung that covers their catalog (never below Root).
+	 * Derived from `CREATOR_SEGMENTS` and `STORAGE_LADDER_GIB` rather than frozen dollar
+	 * figures, so it moves with the dials and fails only on a real change of rule.
 	 */
-	test("a paying creator's cost is their whole library, with no exemption applied", () => {
+	test("a paying creator pays overflow past their allowance; the allowance is Anthers' obligation", () => {
 		const m = modelAt({
 			accounts: 10_000,
 			payingShare: SHARE,
@@ -235,14 +241,26 @@ describe("creator storage is billed in full", () => {
 		const paying = m.segments.filter((s) => !s.free);
 		expect(paying.length, "no paying creator segments to check").toBeGreaterThan(0);
 		for (const seg of paying) {
-			expect(seg.storageCostEach, `${seg.name} is being discounted`).toBeCloseTo(
-				seg.storageGiB * STORAGE_PER_GIB_MONTH,
+			const covered = Math.min(seg.storageGiB, seg.allowanceGiBEach);
+			// The allowance never reads below Root's 50 for a paying creator.
+			expect(seg.allowanceGiBEach).toBeGreaterThanOrEqual(STORAGE_LADDER_GIB.root);
+			// The creator pays the vendor rate on overflow, and nothing else — the
+			// mark-up is retired, so `storageChargeEach` is zero everywhere.
+			expect(
+				seg.storageCostEach,
+				`${seg.name} pays something other than at-cost overflow`,
+			).toBeCloseTo(Math.max(0, seg.storageGiB - covered) * STORAGE_PER_GIB_MONTH, 10);
+			expect(seg.storageChargeEach, `${seg.name} carries a mark-up that retired`).toBe(0);
+			// Anthers' obligation is the stored bytes the allowance covers.
+			expect(seg.allowanceCostEach, `${seg.name}'s allowance cost is off`).toBeCloseTo(
+				covered * STORAGE_PER_GIB_MONTH,
 				10,
 			);
-			expect(seg.storageChargeEach, `${seg.name}'s half-again is off the wrong base`).toBeCloseTo(
-				AFF_INFRA_RATE * seg.storageGiB * STORAGE_PER_GIB_MONTH,
-				10,
-			);
+		}
+		// The ruled ladder's whole point: no paying segment's overflow can be a loss
+		// position for Anthers, because overflow is margin-neutral by construction.
+		for (const seg of m.segments) {
+			expect(seg.storageChargeEach).toBe(0);
 		}
 	});
 
