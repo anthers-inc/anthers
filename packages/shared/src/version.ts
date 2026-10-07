@@ -29,4 +29,4 @@
  * `APP_VERSION_SHAPE.test.ts` pins the constant to the calver shape, so a typo in a
  * bump fails the build rather than shipping a footer that reads `202.10.0`.
  */
-export const APP_VERSION = "2026.10.11";
+export const APP_VERSION = "2026.10.12";

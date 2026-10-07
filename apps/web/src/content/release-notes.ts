@@ -81,6 +81,45 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.12",
+		date: "2026-10-07",
+		lede: "A rename that settles what the record of shipping is called, and a basket card that reads like its creator.",
+		entries: [
+			"The changelog is the release notes now. The page and its address use what GitHub calls them, /release-notes, and the old /changelog address redirects there with its deep links intact. The name was chosen because changelog and changelist sounded too much alike to keep apart; the raw, unedited list of every commit still lives on each version's GitHub release, one click from every entry.",
+			"A release's notes are now part of shipping it: a release whose notes are missing cannot deploy, and the notes of the two releases this one follows, 2026.10.10 and 2026.10.11, arrive with this one as backfill.",
+			"The basket's items sit under the card of the creator they belong to, so a basket holding works from several creators reads as one group per creator rather than one undivided list.",
+		],
+	},
+	{
+		version: "2026.10.11",
+		date: "2026-10-07",
+		roadmapIds: ["observability"],
+		lede: "The release that can say something broke: a status page, an error tracker, and limits on the doors that had none.",
+		entries: [
+			"A public status page at /status answers what is working right now: the site, the API, the database, storage, and email, with links to the release notes and the roadmap, so an outage question has a place to be answered without asking anybody.",
+			"Errors the site itself hits are captured now. A browser beacon hands a failure to the server, which records it, redacts anything that looks like a credential, folds duplicates together, and raises an alert when the same error keeps happening. Before this, finding out meant somebody thinking to read logs.",
+			"Every open door (signup, sign-in, uploads, and the public reads) runs behind a shared rate limit, so traffic that arrives in bulk is slowed by itself rather than taking the platform with it.",
+			"The health endpoint tells the whole story: each dependency's state alongside the deploy's commit and version, and the server reports its own heartbeat, so a machine that stops reporting is a fact somebody sees rather than an absence nobody notices.",
+			"Creators hosting browser builds got the serving half of the cloud-save design: a hosted build's saves round-trip through Anthers' storage, and threaded builds play on an isolation page so a thread's workers cannot collide with the page that opened them.",
+			"The Work Edit page uses its width, and the dates a Work carries sit together instead of scattered.",
+		],
+	},
+	{
+		version: "2026.10.10",
+		date: "2026-10-05",
+		lede: "Getting paid, and the machinery that reads its own state honestly.",
+		entries: [
+			"The Studio's Payments tab is where a creator sets up payouts: connecting a Stripe account, seeing what Anthers holds and what has settled, and reading the ledger of what moved. Every newly connected account's payouts start on a manual schedule, so money arrives on a person's review rather than on a default nobody chose.",
+			"Connected-account flags reconcile from Stripe on every read, so a webhook that arrives late, or never, cannot leave onboarding stranded half-finished.",
+			"The locked preview and the purchase panel sit together on a Work page, so a buyer sees what they are buying and how to buy it without the page hiding one behind the other.",
+			"Every dollar figure the site quotes is read from the ladder rows the database holds, rather than from copy that could drift from what the checkout actually charges.",
+			"Issue reports have a public intake at /issues, separate from the statutory paths: a page, a database table, and a queue in the admin console, for when the site itself misbehaves.",
+			"A post's content is stored as markdown rather than HTML, so what the editor wrote is what is stored, and rendering decides presentation.",
+			"Checkout kept its form, gained a split receipt, opens the address step by default, and takes cards only, matching how the account's payment methods are narrowed.",
+			"Operators got three tools for corrections: an ATProto drift report with re-sync, the ability to correct a Work's listing, and a ladder-rows surface that serves the copy the site reads.",
+		],
+	},
+	{
 		version: "2026.10.9",
 		date: "2026-10-04",
 		lede: "Housekeeping in the open, most of it where a visitor will never meet it.",

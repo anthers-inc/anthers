@@ -876,8 +876,8 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "Knowing Something Broke",
 						blurb:
 							"Error tracking, metrics and alerts, plus rate limits on the paths without them.",
-						bucket: "planned",
-						note: "Finding out today means somebody thinking to read logs.",
+						bucket: "launched",
+						quarter: "Q4 2026",
 						doc: { id: "83.02", title: "Checks That Can Actually Fail" },
 					},
 				],
