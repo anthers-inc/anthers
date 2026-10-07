@@ -1,19 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Settings card: the creator's **Badge ladder** — the rungs that populate every Work's
- * access table. Each rung is a Badge (label + monthly amount + description).
- * Wired to the subscriptions badges API — the creator's own ladder, which is the
- * only kind of rung there is.
+ * Settings card: the **Badge Maker** — the one place a creator makes a Badge.
  *
- * 🚨 **Thresholds are DOLLARS, and any amount is expressible** (migration `0041`). They
- * were whole Seeds — an indivisible $3 unit — so a rung between two of them could not be
- * written down at all, which is why the input steps by 1 rather than by a cent, and why
- * the dollar figure beside it is
- * derived for display rather than typed.
+ * 🚨 **This replaces the Badge rung editor rather than adding a picker beside it**
+ * (Parker, 2026-09-13): naming a rung, setting its monthly amount, describing it, and
+ * designing its art are one tool's four jobs. Studio settings renders this card where
+ * the old editor sat.
+ *
+ * 🚨 **There are no standard creator Badges any more.** A creator's Badge art is built
+ * from the Noun Project catalog here or uploaded as their own file, and nothing else —
+ * the old mix-and-match emblem library is retired for creators. **A rung with no art of
+ * its own falls back to Anthers' own Badge designs by ladder position** (`index % 4`); *
+ * that is a fallback and a start, not a design to settle for, so an untouched rung says
+ * so and invites the creator to give it an emblem of their own.
+ *
+ * ⭐ **Composition happens at save, and an unchanged save is free** — the server dedupes
+ * on the composition fingerprint before it spends anything, so a creator pressing save
+ * repeatedly costs the platform nothing.
  */
 
-import type { BrandIconName } from "@anthers/brand";
-import { BADGE_COLORS, BADGE_EMBLEMS, BADGE_SHAPES } from "@anthers/shared/badge-art";
+import { BADGE_COLORS, BADGE_SHAPES } from "@anthers/shared/badge-art";
 import {
 	amountLabel,
 	BADGE_ART_MAX_BYTES,
@@ -24,9 +30,9 @@ import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, client } from "../../lib/rpc";
 import type { CreatorBadge } from "../../lib/types";
-import { BrandGlyph } from "../decor/BrandGlyph";
 import { CreatorBadgeMark } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
+import { NounEmblemPicker, type EmblemPlacement } from "./NounEmblemPicker";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
 function rungAmount(v: string): string {
@@ -43,16 +49,9 @@ function rungLabel(threshold: string | number): string {
 }
 
 /**
- * The mark for one rung, and the way its art is changed.
- *
- * ⭐ **The mark is the control**, rather than a separate "upload" button beside a preview.
- * A creator picking art for a rung is looking at the rung, and what they want to press is
- * the picture — which also means the default is visible in the place the real art will
- * appear, so nothing about the ladder changes shape when a file lands.
- *
- * ⚠️ **Raster only, and the input says so.** An SVG is refused by the server, which cannot
- * safety-scan one without rasterizing it first, so accepting one here would only move the
- * refusal later and make it look like a bug.
+ * The art control for one rung: shape, field color, the Noun Project catalog, or the
+ * creator's own upload — the four art choices in one place, with the rung's own mark as
+ * the button that opens them.
  */
 function BadgeArtControl({
 	badge,
@@ -68,6 +67,8 @@ function BadgeArtControl({
 	const input = useRef<HTMLInputElement>(null);
 	const [busy, setBusy] = useState(false);
 	const [open, setOpen] = useState(false);
+	const [pickerOpen, setPickerOpen] = useState(false);
+	const [composing, setComposing] = useState(false);
 
 	const upload = async (file: File) => {
 		onError(null);
@@ -111,7 +112,7 @@ function BadgeArtControl({
 		}
 	};
 
-	/** Save one library choice. Null is how a creator goes back to the default. */
+	/** Save one library choice (shape or field color) — server-validated against the list. */
 	const choose = async (patch: Record<string, string | null>) => {
 		setBusy(true);
 		onError(null);
@@ -130,13 +131,53 @@ function BadgeArtControl({
 		}
 	};
 
+	/**
+	 * Compose the held placement into the rung's art.
+	 *
+	 * 🚨 The compose route composes, rasterizes and discards the vendor's vector inside
+	 * one request and stores only the finished Badge — this client never sees an icon
+	 * file, because there is deliberately no such artifact anywhere in the product.
+	 */
+	const savePlacement = async (placement: EmblemPlacement) => {
+		setComposing(true);
+		onError(null);
+		try {
+			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}/compose`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					noun: { id: placement.nounIcon.id },
+					placement: {
+						shape: badge.artShape ?? "circle",
+						fieldColor: badge.artColor ?? "moss",
+						emblemColor: placement.emblemColor,
+						scale: placement.scale,
+						offsetX: placement.offsetX,
+						offsetY: placement.offsetY,
+					},
+				}),
+			});
+			if (!res.ok) {
+				const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+				onError(detail?.error ?? "Couldn't compose that emblem.");
+				return;
+			}
+			setPickerOpen(false);
+			onChanged();
+		} catch {
+			onError("Couldn't compose that emblem.");
+		} finally {
+			setComposing(false);
+		}
+	};
+
 	return (
 		<div className="relative flex flex-col items-center gap-1">
 			<button
 				type="button"
 				className="btn btn-ghost btn-square h-14 w-14 p-0"
-				onClick={() => setOpen((o) => !o)}
-				disabled={busy}
+				onClick={() => setPickerOpen((o) => !o)}
+				disabled={busy || composing}
 				title="Change this badge"
 			>
 				<CreatorBadgeMark
@@ -146,6 +187,13 @@ function BadgeArtControl({
 					art={badge}
 				/>
 			</button>
+			{!badge.hasArt && (
+				// The fallback is a start, not a design to settle for — say so where the
+				// creator is looking at it.
+				<span className="text-[10px] text-base-content/50 max-w-16 text-center leading-tight">
+					Give it your own emblem
+				</span>
+			)}
 			<input
 				ref={input}
 				type="file"
@@ -157,11 +205,8 @@ function BadgeArtControl({
 				}}
 			/>
 
-			{open && (
-				// ⭐ Shape, color and emblem are three separate choices, and that is the whole
-				// point: a creator who cannot draw still ends up with a badge that is
-				// recognizably theirs, without ever opening a file picker.
-				<div className="absolute top-16 left-0 z-10 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
+			{pickerOpen && (
+				<div className="absolute top-16 left-0 z-10 w-96 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
 					<PickerRow label="Shape">
 						{BADGE_SHAPES.map((s) => (
 							<button
@@ -181,7 +226,7 @@ function BadgeArtControl({
 						))}
 					</PickerRow>
 
-					<PickerRow label="Color">
+					<PickerRow label="Field color">
 						{BADGE_COLORS.map((col) => (
 							<button
 								key={col.id}
@@ -196,21 +241,23 @@ function BadgeArtControl({
 						))}
 					</PickerRow>
 
-					<PickerRow label="Emblem">
-						{BADGE_EMBLEMS.map((name) => (
-							<button
-								key={name}
-								type="button"
-								aria-label={name}
-								aria-pressed={badge.artEmblem === name}
-								className={`btn btn-xs btn-square ${badge.artEmblem === name ? "btn-primary" : "btn-ghost"}`}
-								onClick={() => choose({ artEmblem: name })}
-								disabled={busy || badge.hasArt}
-							>
-								<BrandGlyph name={name as BrandIconName} className="h-4 w-4" />
-							</button>
-						))}
-					</PickerRow>
+					{/* 🚨 The catalog. Every emblem here is somebody's artwork, shown with the
+					    artist's name — byline in the picker, credit on the Badge itself. */}
+					<div className="mt-3 border-t border-base-300 pt-3">
+						<div className="mb-2 flex items-baseline justify-between">
+							<div className="text-xs font-medium text-base-content/60">
+								Emblem from the Noun Project
+							</div>
+							<span className="text-[10px] text-base-content/40">
+								nearly ten million icons, every one by a named artist
+							</span>
+						</div>
+						<NounEmblemPicker
+							onSave={(p) => void savePlacement(p)}
+							onCancel={() => setPickerOpen(false)}
+							busy={busy || composing}
+						/>
+					</div>
 
 					<div className="mt-2 flex items-center gap-2 border-t border-base-300 pt-2">
 						<button
@@ -252,7 +299,7 @@ function PickerRow({ label, children }: { label: string; children: React.ReactNo
 	);
 }
 
-export default function BadgeLadderEditor() {
+export default function BadgeMaker() {
 	const [badges, setBadges] = useState<CreatorBadge[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -371,10 +418,12 @@ export default function BadgeLadderEditor() {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Badge Ladder</h3>
+				<h3 className="card-title text-lg">Badge Maker</h3>
 				<p className="text-sm text-base-content/60 mb-2">
 					Badges let supporters unlock work by giving you a monthly amount — you choose the levels,
-					at any amount you like. They appear as rows in every Work's access table.
+					at any amount you like. Design each Badge here: its shape, field color and emblem, drawn
+					from the Noun Project catalog where every emblem was made by a named artist, or your own
+					art. They appear as rows in every Work's access table.
 				</p>
 
 				{error && (

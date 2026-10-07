@@ -33,6 +33,7 @@ import {
 import type { Badge } from "@anthers/shared/constants";
 import { BADGE_ORDER } from "@anthers/shared/constants";
 import { BADGE_ART } from "./economics";
+import { fallbackBadgeDesign } from "./CreatorBadgeMark";
 
 describe("the badge library", () => {
 	it("🚨 names only emblems the brand package can actually draw", () => {
@@ -154,6 +155,27 @@ describe("the badge library", () => {
 		// that subtracted before it checked.
 		expect(defaultBadgeEmblem(BADGE_EMBLEMS.length)).toBe(defaultBadgeEmblem(0));
 		expect(BADGE_EMBLEMS).toContain(defaultBadgeEmblem(-1));
+	});
+});
+
+describe("the creator-rung fallback", () => {
+	it("🚨 wears exactly the designs of Anthers' own Badges, in ladder order", () => {
+		// The fallback stands in BY POSITION over Anthers' own four designs (Parker,
+		// 2026-09-13). `CreatorBadgeMark` restates those designs so the fallback does not
+		// reach into the marketing tree — so the restatement is asserted against
+		// `BADGE_ART` here, because two hand-copied lists are one edit away from
+		// disagreeing silently.
+		for (const [i, badge] of BADGE_ORDER.filter((b) => b !== "free").entries()) {
+			const design = BADGE_ART[badge as Badge];
+			const fallback = fallbackBadgeDesign(i);
+			expect(fallback.emblem, badge).toBe(design.emblem);
+			expect(fallback.color, badge).toBe(design.color);
+		}
+	});
+
+	it("wraps past four rungs rather than breaking", () => {
+		expect(fallbackBadgeDesign(4)).toEqual(fallbackBadgeDesign(0));
+		expect(fallbackBadgeDesign(-1)).toEqual(fallbackBadgeDesign(3));
 	});
 });
 

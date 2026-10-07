@@ -124,8 +124,8 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	// The default first: a rung with no art of its own is still a badge, not a hole.
 	await expect(control.getByRole("img", { name: `${LABEL} badge` })).toBeVisible();
 
-	const ladder = page.locator("div").filter({ hasText: "Badge Ladder" }).last();
-	await ladder.screenshot({ path: `.screenshots/badge-ladder-default-${RUN}.png` });
+	const ladder = page.locator("div").filter({ hasText: "Badge Maker" }).last();
+	await ladder.screenshot({ path: `.screenshots/badge-maker-default-${RUN}.png` });
 
 	// The library first — three choices, no file picker. This is the path a creator who
 	// does not draw actually takes, so it is the one worth walking.
@@ -145,7 +145,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 			"true",
 		);
 	}
-	await ladder.screenshot({ path: `.screenshots/badge-ladder-library-${RUN}.png` });
+	await ladder.screenshot({ path: `.screenshots/badge-maker-library-${RUN}.png` });
 
 	// Then the creator's own art, through the file input the picker opens.
 	await control.locator('input[type="file"]').setInputFiles({
@@ -162,7 +162,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 		},
 	);
 
-	await ladder.screenshot({ path: `.screenshots/badge-ladder-art-${RUN}.png` });
+	await ladder.screenshot({ path: `.screenshots/badge-maker-art-${RUN}.png` });
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });

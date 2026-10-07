@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import BadgeLadderEditor from "../components/post/BadgeLadderEditor";
+import BadgeMaker from "../components/post/BadgeMaker";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
 import { Link } from "../lib/router";
@@ -357,7 +357,7 @@ export default function StudioSettingsPage() {
 				<AtmospherePublishingSection />
 				<div>
 					<h2 className="text-lg font-semibold mb-2">Badges</h2>
-					<BadgeLadderEditor />
+					<BadgeMaker />
 				</div>
 			</div>
 		</div>

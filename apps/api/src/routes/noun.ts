@@ -67,6 +67,9 @@ nounRoutes.get("/search", requireAuth, requireCreator, async (c) => {
 	const query = (c.req.query("q") ?? "").trim();
 	if (!query) return c.json({ error: "Search for something.", icons: [] }, 400);
 	if (query.length > 100) return c.json({ error: "That search is too long.", icons: [] }, 400);
+	// Cursor pagination, passed straight through — never a result cache's page key,
+	// because the results themselves are never held.
+	const page = (c.req.query("page") ?? "").trim();
 
 	const user = c.get("user");
 	if (await queryRefused(query)) {
@@ -83,7 +86,7 @@ nounRoutes.get("/search", requireAuth, requireCreator, async (c) => {
 	}
 
 	try {
-		const res = await search(query, {});
+		const res = await search(query, page ? { page } : {});
 		await recordSpend(user.id, klass);
 		const icons = await filterBlockedIcons(res.icons ?? []);
 		return c.json({
