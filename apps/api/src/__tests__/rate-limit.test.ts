@@ -6,8 +6,8 @@
  * most of them are the concurrency shapes the fixed-window upsert exists to survive.
  */
 import { beforeEach, describe, expect, it } from "bun:test";
-import { sql } from "drizzle-orm";
 import { db } from "@anthers/db/client";
+import { sql } from "drizzle-orm";
 import { checkRate, clientIp } from "../services/rate-limit";
 
 /** A door + ip pair unique to each case, so parallel suites sharing the table stay isolated. */

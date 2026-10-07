@@ -57,6 +57,11 @@ export const csrfProtection = createMiddleware(async (c, next) => {
 		return next();
 	}
 
+	// The beacon re-checks Origin at the route, allowlist and all — see the note below.
+	if (CSRF_EXEMPT_MUTATIONS.has(c.req.path)) {
+		return next();
+	}
+
 	// The admin routes carry a stricter check of their own in `adminHostOnly`, which admits only
 	// the admin origin and refuses a bearer token outright. Running this one first would admit the
 	// site and the desktop Studio before that check ever saw the request.
@@ -84,3 +89,15 @@ export const csrfProtection = createMiddleware(async (c, next) => {
 
 	await next();
 });
+
+/**
+ * 🚨 **The browser error beacon is a mutation that is NOT cookie-forgeable to any effect,
+ * and it carries a route-level Origin check rather than the blanket one.** Exempting it
+ * here removes nothing that protects it: `routes/errors.ts` re-checks the Origin against
+ * the same `allowedOrigins()` list on every POST, because the beacon legitimately arrives
+ * without an Origin header on some browsers' `unhandledrejection` deliveries — and that
+ * delivery shape is safe by the same argument the desktop bearer's is: a same-page
+ * attacker forges nothing that matters, because the write records *the attacker's own
+ * error*, not the victim's state. See the route's docblock for the full ruling.
+ */
+const CSRF_EXEMPT_MUTATIONS = new Set(["/api/errors/browser"]);

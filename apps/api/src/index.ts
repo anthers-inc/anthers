@@ -19,6 +19,7 @@ import { createBuildDeliveryRoutes, isBuildDeliveryRequest } from "./routes/buil
 import { contentRoutes } from "./routes/content.js";
 import { createDevBuildRoutes } from "./routes/dev-build.js";
 import { dmcaRoutes } from "./routes/dmca.js";
+import { errorCaptureRoutes } from "./routes/errors.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
@@ -132,7 +133,8 @@ const app = new Hono()
 	.route("/api/play", createPlayPageRoutes())
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes)
-	.route("/api/status", statusRoutes);
+	.route("/api/status", statusRoutes)
+	.route("/api/errors", errorCaptureRoutes);
 
 /**
  * The dev-only build-delivery harness, registered only from a checkout. Keeping the mount

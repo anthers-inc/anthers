@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { handleFromParam } from "@anthers/web-shared/profile";
-import { lazy } from "react";
+import { lazy, useEffect } from "react";
 import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
@@ -10,8 +10,8 @@ import RouteSuspense from "./components/layout/RouteSuspense";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
-
 import StudioRedirect from "./components/ui/StudioRedirect";
+import { installBrowserErrorCapture } from "./lib/error-beacon";
 
 /**
  * The Studio — the creator authoring surface, merged in from `apps/studio-web` on
@@ -143,6 +143,13 @@ function HandleRoute() {
  * header), so a page chunk arriving must never be able to unmount it.
  */
 export default function App() {
+	// The error beacon installs once, at the root's mount — lib/error-beacon.ts carries
+	// the throttling rules and the never-a-second-error-loop rule. Idempotent by its own
+	// `installed` guard, so StrictMode's double effect is harmless.
+	useEffect(() => {
+		installBrowserErrorCapture();
+	}, []);
+
 	return (
 		<RouteSuspense>
 			<Routes>
