@@ -21,7 +21,17 @@
  */
 
 import { relations } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import {
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	real,
+	serial,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { adminAccounts } from "./admin.js";
 import { users } from "./auth.js";
 
@@ -59,6 +69,34 @@ export const resourceSnapshots = pgTable(
 	(table) => [
 		// The trend query walks (component, taken_at) in order, per component, newest first.
 		index("idx_resource_snapshots_component_taken").on(table.component, table.takenAt),
+	],
+);
+
+// org — operational telemetry about Anthers' own infrastructure, never a creator's anything,
+// the same classification `resource_snapshots` carries — and that includes the rate limiter's
+// counters, which are records about requesters' behavior, not rows any creator's node holds.
+/**
+ * The per-IP rate limiter's counters. Keyed (door, ip), one row per door per address inside
+ * its window; a window rolls by `reset_at`, the count is spent by `checkRate`'s atomic
+ * upsert, and old rows are pruned alongside the credentials they outlived.
+ */
+export const rateLimits = pgTable(
+	"rate_limits",
+	{
+		id: serial("id").primaryKey(),
+		/** The door the limit guards (e.g. `auth-code-send`, `parental-pin`) — namespaced so doors cannot share budgets. */
+		door: text("door").notNull(),
+		/** The client address as the edge's own hop presented it (the last X-Forwarded-For entry). */
+		ip: text("ip").notNull(),
+		/** Requests seen inside the current window. */
+		count: integer("count").notNull().default(0),
+		/** When the window rolls. Stamped at first sight of the key, never moved by volume. */
+		resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+	},
+	(table) => [
+		// The upsert's conflict target and the prune's walk, one shape each.
+		uniqueIndex("idx_rate_limits_door_ip").on(table.door, table.ip),
+		index("idx_rate_limits_reset").on(table.resetAt),
 	],
 );
 

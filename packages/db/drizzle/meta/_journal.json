@@ -853,6 +853,13 @@
       "tag": "0120_clean_black_cat",
 >>>>>>> a6c96779 (Hand-rolled error tracker: error_events table and API capture)
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1791342680819,
+      "tag": "0121_abandoned_salo",
+      "breakpoints": true
     }
   ]
 }

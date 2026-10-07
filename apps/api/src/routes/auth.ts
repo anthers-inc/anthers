@@ -55,6 +55,7 @@ import {
 	startPendingSignup,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
+import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { issueSignupChallenge, spendSignupChallenge } from "../services/signup-challenges.js";
 import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 
@@ -602,6 +603,14 @@ const authRoutes = new Hono()
 	.post("/signup/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
 
+		// Per-IP limit, beyond the per-address resend delay the code service keeps: the
+		// delay throttles one address, this throttles one address*er* fanning out across
+		// many addresses (the mail-bomb shape the delay cannot see). The always-200 rule
+		// below is untouched by it — a limited requester gets the same 200 with nothing
+		// sent, which is indistinguishable from every other reason nothing was sent.
+		const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
+		if (!limited.ok) return limitResponse(limited);
+
 		// The pending row follows the address the code is actually going to. Without this a
 		// corrected typo would leave the row pointing at the mistyped address, and the resume
 		// path would go looking for a mailbox nobody can read.
@@ -643,6 +652,11 @@ const authRoutes = new Hono()
 	// which is the correct outcome and takes no code to arrange.
 	.post("/signup/verify", zValidator("json", emailCodeVerifySchema, invalidBody), async (c) => {
 		const { email, code } = c.req.valid("json");
+
+		// The code service caps five wrong guesses per code; this caps guesses per address
+		// *per IP*, so spending one code's budget and moving to the next is also slow.
+		const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
+		if (!limited.ok) return limitResponse(limited);
 
 		const result = await checkSignupCode(email, code);
 		if (!result.ok) {
@@ -737,8 +751,13 @@ const authRoutes = new Hono()
 	// that second door, however little it looks like one.
 	//
 	// Step 1 — issue a code, but only to an address that already has an account. ALWAYS 200.
+	// The same per-IP send limit as /signup/start — the two doors hand the same mail to the
+	// same sender, so one budget for one address*er*, keyed under the send door it shares.
 	.post("/signin/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
+
+		const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
+		if (!limited.ok) return limitResponse(limited);
 
 		try {
 			// `issueSignInCode` is the half that decides — see its note for why an unknown
@@ -762,8 +781,13 @@ const authRoutes = new Hono()
 	})
 
 	// Step 2 — spend the code and sign in. Creates nothing, ever.
+	//   The same per-IP guess limit as /signup/verify, for the same reason: the code
+	//   service caps one code's guesses, this caps one guesser's pace across codes.
 	.post("/signin/verify", zValidator("json", emailCodeVerifySchema, invalidBody), async (c) => {
 		const { email, code } = c.req.valid("json");
+
+		const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
+		if (!limited.ok) return limitResponse(limited);
 
 		const result = await checkSignupCode(email, code);
 		if (!result.ok) {
