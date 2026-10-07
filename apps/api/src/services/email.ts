@@ -232,6 +232,35 @@ export function shell(heading: string, bodyHtml: string): string {
 	});
 	return `<!doctype html>
 <html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!--
+		Light-authored, and not available in dark. The palette below is the light theme's
+		hexes baked at authoring time; a client that re-themes the message for a dark
+		(reader's) setting produces the one combination this mail can neither predict nor
+		test against — darkened cream reads as murky olive, and the dark-green ink is
+		auto-lightened into washed-out contrast. Every component color is declared
+		inline, so nothing here actually benefits from a client's dark translation:
+		declaring "only light" is what keeps the mail readable on the mobile clients
+		that honor it (Apple Mail, Outlook, Thunderbird), and no worse than before on
+		the few that re-theme regardless.
+		-->
+		<meta name="color-scheme" content="only light">
+		<meta name="supported-color-schemes" content="only light">
+		<style>
+			:root {
+				color-scheme: only light;
+				supported-color-schemes: only light;
+			}
+			/* The mail is light-authored; a client dark theme has nothing to do here.
+			Declared so the client's translation pass finds an explicit answer rather
+			than improvising one over the inline styles. */
+			@media (prefers-color-scheme: dark) {
+				:root { color-scheme: only light; supported-color-schemes: only light; }
+			}
+		</style>
+	</head>
 	<body style="margin:0;padding:0;background:${MEADOW.ground};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 		<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MEADOW.ground};padding:32px 0;">
 			<tr><td align="center">
@@ -647,4 +676,224 @@ export function terminalSecondLegLine(): string {
 		"The other, genuinely independent leg is the Colorado Secretary of State's and the Copyright Office's own " +
 		"notification emails — make sure those reach a mailbox somebody reads."
 	);
+}
+
+// ─── What a receipt says ─────────────────────────────────────────────────────
+
+/**
+ * One line of a receipt's item table: what was bought, and what it cost.
+ *
+ * Kept structural rather than shaped on `purchases`' row type, so this module does not
+ * depend on the schema package for three fields — the same reasoning
+ * `ComplainantNotice` above states.
+ */
+export interface ReceiptLine {
+	/** What the reader bought, as the receipt snapshot recorded it at sale time. */
+	description: string;
+	/** The line's money figure, as a dollar string ("9.99"); a refund's lines are negative. */
+	amount: string;
+}
+
+/**
+ * Money as a receipt shows it: `$5.25`, or `-$10.48` where a figure is money coming
+ * back. The caller hands a dollar *string* (the DB's numeric columns read back as
+ * strings) and this only prefixes the sign — no arithmetic happens in a template,
+ * because formatting money anywhere except decimal.js is exactly the bug class the
+ * repo's conventions rule out.
+ */
+function usd(dollars: string): string {
+	return `${dollars.startsWith("-") ? "-" : ""}$${dollars.replace("-", "")}`;
+}
+
+/** One table row of the itemized body. */
+function receiptLineHtml(line: ReceiptLine): string {
+	return `<tr>
+			<td style="padding:6px 12px 6px 0;border-bottom:1px solid ${MEADOW.hairline};color:${MEADOW.ink};font-size:14px;">${escapeHtml(line.description)}</td>
+			<td style="padding:6px 0 6px 12px;border-bottom:1px solid ${MEADOW.hairline};color:${MEADOW.ink};font-size:14px;text-align:right;white-space:nowrap;">${usd(line.amount)}</td>
+		</tr>`;
+}
+
+/**
+ * The itemized table at a receipt's center: one row per Work bought, an optional tax
+ * line, and the bold closing figure. The tax line is the buyer's copies only — it was
+ * never the creator's money, so the creator's tables name their own closing figure
+ * ("Your earnings, after the card fee") and carry no tax row.
+ */
+function itemsTable(opts: {
+	lines: ReceiptLine[];
+	tax?: string;
+	totalLabel: string;
+	total: string;
+}): string {
+	const rows = opts.lines.map(receiptLineHtml).join("\n");
+	const taxRow = opts.tax
+		? `<tr>
+			<td style="padding:6px 12px 6px 0;color:${MEADOW.muted};font-size:13px;">Sales tax</td>
+			<td style="padding:6px 0 6px 12px;color:${MEADOW.muted};font-size:13px;text-align:right;white-space:nowrap;">${usd(opts.tax)}</td>
+		</tr>`
+		: "";
+	return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">
+		${rows}
+		${taxRow}
+		<tr>
+			<td style="padding:10px 12px 0 0;color:${MEADOW.ink};font-size:15px;font-weight:700;">${escapeHtml(opts.totalLabel)}</td>
+			<td style="padding:10px 0 0 12px;color:${MEADOW.ink};font-size:15px;font-weight:700;text-align:right;white-space:nowrap;">${usd(opts.total)}</td>
+		</tr>
+	</table>`;
+}
+
+/**
+ * The transaction's date and reference, as every receipt opens with them —
+ * the day and the PaymentIntent id, so the buyer can match the email to the card
+ * statement and to anything Anthers' support asks about later.
+ */
+function receiptMeta(date: Date, reference: string): string {
+	return `<p style="margin:0 0 12px;color:${MEADOW.muted};font-size:13px;">${longDate(date)} · Ref. ${escapeHtml(reference)}</p>`;
+}
+
+/**
+ * A buyer's receipt for a completed purchase: what they bought, each item and its
+ * price, the sales tax added on top, and the total their card was charged.
+ *
+ * The link is to their Library page, where the purchase is already waiting; a receipt
+ * that can point at the thing you now own is worth more than one pointing at a history
+ * page. The copy says "you" throughout — a receipt has exactly one audience, the person
+ * whose money it was.
+ */
+export async function sendPurchaseReceiptEmail(args: {
+	to: string;
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	tax: string;
+	total: string;
+}): Promise<SendResult> {
+	const html = shell(
+		"Your Anthers receipt",
+		`${receiptMeta(args.date, args.reference)}
+		<p style="margin:0 0 14px;">Thanks for supporting creators directly. Here's what your payment covered:</p>
+		${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
+		<p style="margin:0 0 18px;"><a href="${frontendUrl()}/library" style="color:${BRAND};">Your purchases are in your Library</a>, ready to read, watch, play or listen. They stay there.</p>
+		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a purchase was made from your account. Anthers keeps none of your payment: after the processor's at-cost fee, it goes to the creator.</p>`,
+	);
+	return sendEmail({ to: args.to, subject: `Your Anthers receipt: ${usd(args.total)}`, html });
+}
+
+/**
+ * A creator's copy of the same purchase: what sold, and what reaches them after the
+ * processor's at-cost fee. The earnings figure is what the transfer pinned at
+ * session creation (`transfer_data[amount]`), so the number in the email is the number
+ * Stripe moved, not one derived again.
+ *
+ * Off by the creator's receipt preference by the *caller* (`services/receipts.ts`),
+ * not here: this module renders and sends, it does not decide who is told.
+ */
+export async function sendCreatorSaleReceiptEmail(args: {
+	to: string;
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	earnings: string;
+}): Promise<SendResult> {
+	const html = shell(
+		"A sale on your work",
+		`${receiptMeta(args.date, args.reference)}
+		<p style="margin:0 0 14px;">A reader bought something of yours. Here's what sold:</p>
+		${itemsTable({ lines: args.lines, totalLabel: "Your earnings, after the card fee", total: args.earnings })}
+		<p style="margin:0 0 18px;">After the card processor's at-cost fee, <strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> is on its way to your connected account.</p>
+		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of the sale's price.</p>`,
+	);
+	return sendEmail({
+		to: args.to,
+		subject: `A sale on your work: ${usd(args.earnings)} to you`,
+		html,
+	});
+}
+
+/**
+ * A buyer's receipt for a refund: the item(s) returned, and the amount going back to
+ * their card. The amounts are passed already signed negative by the caller, because the
+ * row's own figure is what the refund returned — the template stays arithmetic-free.
+ *
+ * The copy does not apologize or explain: the refund's reason is on the row and the
+ * platform-initiated cases (a takedown, a defect) are already messaged where they
+ * happen. The receipt's job is to say the money moved back.
+ */
+export async function sendRefundReceiptEmail(args: {
+	to: string;
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	tax: string;
+	total: string;
+}): Promise<SendResult> {
+	const html = shell(
+		"Your Anthers refund receipt",
+		`${receiptMeta(args.date, args.reference)}
+		<p style="margin:0 0 14px;">A refund was issued on your purchase:</p>
+		${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total refunded", total: args.total })}
+		<p style="margin:0 0 18px;">The refund goes back to the card you paid with; banks usually post it within 5–10 business days. Your access to the refunded work ends when it does.</p>
+		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a refund was made on a purchase from your account. Questions about a refund can go to contact@anthers.org.</p>`,
+	);
+	return sendEmail({ to: args.to, subject: `Your Anthers refund: ${usd(args.total)}`, html });
+}
+
+/**
+ * A creator's copy of the refund: what came back, and what was clawed back from the
+ * transfer — their earnings exactly, and never below zero (services/refunds.ts'
+ * invariant). Whether the clawback recovered at Stripe or waits in the netting ledger
+ * is accounting the creator's copy does not carry; the figure they hold is what left.
+ */
+export async function sendCreatorRefundReceiptEmail(args: {
+	to: string;
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	earnings: string;
+}): Promise<SendResult> {
+	const html = shell(
+		"A refund on a sale of yours",
+		`${receiptMeta(args.date, args.reference)}
+		<p style="margin:0 0 14px;">A purchase from your work was refunded:</p>
+		${itemsTable({ lines: args.lines, totalLabel: "Your earnings, returned", total: args.earnings })}
+		<p style="margin:0 0 18px;"><strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> comes back from the transfer, so it never stays with a sale that was undone.</p>
+		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings.</p>`,
+	);
+	return sendEmail({
+		to: args.to,
+		subject: `A refund on your sale: ${usd(args.earnings)} returned`,
+		html,
+	});
+}
+
+/**
+ * A supporter's receipt for a monthly Badge support payment: the month the charge was
+ * for, the amount given to Anthers, and the split that reached creators. Anthers' own
+ * line is excluded from the itemization — the receipt is about what the supporter gave
+ * creators, and the whole amount is the only figure they chose.
+ */
+export async function sendSupportReceiptEmail(args: {
+	to: string;
+	reference: string;
+	date: Date;
+	/** The month this payment is for, as cycleKeyFor spells it ("2026-10"). */
+	billingCycle: string;
+	/** Lines naming each creator this payment reached, excluding Anthers' own line. */
+	lines: ReceiptLine[];
+	tax: string;
+	total: string;
+}): Promise<SendResult> {
+	const html = shell(
+		"Your monthly support receipt",
+		`${receiptMeta(args.date, args.reference)}
+		<p style="margin:0 0 14px;">Thanks for supporting creators. Here's your payment for <strong style="color:${MEADOW.ink};">${escapeHtml(args.billingCycle)}</strong>:</p>
+		${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
+		<p style="margin:0 0 18px;"><a href="${frontendUrl()}/supporters" style="color:${BRAND};">See who your support reached</a> on the supporters page.</p>
+		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a monthly support payment was made from your account.</p>`,
+	);
+	return sendEmail({
+		to: args.to,
+		subject: `Your Anthers support receipt: ${usd(args.total)}`,
+		html,
+	});
 }
