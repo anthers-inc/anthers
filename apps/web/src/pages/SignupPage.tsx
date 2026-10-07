@@ -447,7 +447,7 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 				{
 					tone: "pool",
 					amount: timePoolFor(amount),
-					label: "To creators, through the Time Pool",
+					label: "To creators, by time",
 					desc: "split by the share of your time each one earned",
 				},
 				{
@@ -471,7 +471,7 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 			{
 				tone: "pool",
 				amount: FREE_TIME_POOL,
-				label: "To creators, through the Time Pool",
+				label: "To creators, by time",
 				desc: "split by the share of your time each one earned — funded by Anthers, not by you",
 			},
 			{
