@@ -49,6 +49,7 @@
       "name": "api",
       "version": "0.1.0",
       "dependencies": {
+        "@anthers/brand": "workspace:*",
         "@anthers/db": "workspace:*",
         "@anthers/shared": "workspace:*",
         "@atproto/jwk-jose": "0.2.4",

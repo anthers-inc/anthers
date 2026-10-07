@@ -32,7 +32,7 @@ import {
 	moderationReasonLabel,
 } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
-import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
+import { abuseAlertsEnabled, escapeHtml, sendAbuseAlert } from "./email.js";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 /** DSA Art. 16 asks for a substantiated explanation; this is what "substantiated" costs. */
@@ -288,13 +288,4 @@ export async function loadAbuseQueue(
 		escalatedAt: r.escalatedAt?.toISOString() ?? null,
 		createdAt: r.createdAt.toISOString(),
 	}));
-}
-
-/** Minimal entity escaping — everything on a public report is untrusted and goes into an email. */
-function escapeHtml(value: string): string {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;");
 }

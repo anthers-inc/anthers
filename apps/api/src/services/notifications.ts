@@ -46,7 +46,7 @@
 import { db } from "@anthers/db/client";
 import { notifications, userPreferences, users } from "@anthers/db/schema";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
-import { sendEmail } from "./email.js";
+import { EMAIL_LINK_COLOR, escapeHtml, sendEmail, shell } from "./email.js";
 
 /**
  * `essential` cannot be switched off. See decision 2 — if this ever grows a third
@@ -208,40 +208,35 @@ export async function markRead(userId: number, ids?: number[]): Promise<{ marked
 /**
  * The email body.
  *
- * Deliberately plain, and deliberately **self-hosted-nothing**: no images, no tracking
- * pixel, no open-rate beacon. The same rule the app is held to under the Privacy Policy — Anthers
- * makes no off-origin request on a user's behalf — does not stop applying because the
- * surface is an inbox, and an open-tracking pixel is precisely the "third party learns
- * you read this" pattern the policy says we don't do.
+ * Rendered through the same {@link shell} every ceremony email wears, so a
+ * notification digest is recognizably Anthers mail and one template change
+ * re-skins all of it together. Deliberately **self-hosted-nothing** still holds:
+ * no images, no tracking pixel, no open-rate beacon. The same rule the app is held
+ * to under the Privacy Policy — Anthers makes no off-origin request on a user's
+ * behalf — does not stop applying because the surface is an inbox, and an
+ * open-tracking pixel is precisely the "third party learns you read this" pattern
+ * the policy says we don't do. The shell asks for nothing either, which is why the
+ * brand travels as styled text and color rather than as a logo image.
  */
 function renderEmail(input: NotifyInput): string {
 	const link = input.linkPath
-		? `<p><a href="${appUrl(input.linkPath)}">${appUrl(input.linkPath)}</a></p>`
+		? `<p style="margin:0 0 18px;"><a href="${appUrl(input.linkPath)}" style="color:${EMAIL_LINK_COLOR};">${appUrl(input.linkPath)}</a></p>`
 		: "";
-	return `<div style="font-family:system-ui,sans-serif;line-height:1.5">
-	<h2 style="font-size:18px;margin:0 0 12px">${escapeHtml(input.title)}</h2>
-	${input.body ? `<p>${escapeHtml(input.body)}</p>` : ""}
-	${link}
-	<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
-	<p style="font-size:12px;color:#666">
-		${
-			input.category === "essential"
-				? "You're receiving this because it affects your account, your money, or your access to something you paid for. These can't be turned off."
-				: "You can turn these off in your Anthers settings."
-		}
-	</p>
-</div>`;
+	return shell(
+		escapeHtml(input.title),
+		`${input.body ? `<p style="margin:0 0 18px;">${escapeHtml(input.body)}</p>` : ""}
+		${link}
+		<p style="margin:22px 0 0;color:#4d5f52;font-size:12px;">
+			${
+				input.category === "essential"
+					? "You're receiving this because it affects your account, your money, or your access to something you paid for. These can't be turned off."
+					: "You can turn these off in your Anthers settings."
+			}
+		</p>`,
+	);
 }
 
 function appUrl(path: string): string {
 	const base = process.env.APP_URL ?? "https://anthers.org";
 	return `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function escapeHtml(text: string): string {
-	return text
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
 }

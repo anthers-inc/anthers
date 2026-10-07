@@ -14,6 +14,8 @@ export type { BrandIcon, BrandIconName } from "./compose";
 export { iconDataUri, iconGroup, iconSvg, icons } from "./compose";
 export type { VineStrand, VineStyle, VineWave, VineWaveName } from "./decor";
 export {
+	emailGrassFloorDataUri,
+	emailVineTileDataUri,
 	grassFloorDataUri,
 	leafD,
 	pollenDataUri,
