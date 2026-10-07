@@ -2,7 +2,7 @@
 /**
  * `promote-version.ts` must produce the right next calver string — the deploy job
  * composes a git tag from it and the footer renders it, so a wrong bump ships a
- * tag nobody can find the changelist for.
+ * tag nobody can find the release notes for.
  *
  * The bump rules under test:
  * - Same month: patch increments.
@@ -44,7 +44,7 @@ describe("nextVersion", () => {
 
 	it("does not skip patch numbers on a same-month re-promote", () => {
 		// A re-promote of the same month keeps counting rather than skipping, so a
-		// pulled release never strands a number a changelist can never account for.
+		// pulled release never strands a number the release notes can never account for.
 		expect(nextVersion("2026.10.2", inMonth("2026-10-05"))).toBe("2026.10.3");
 	});
 });

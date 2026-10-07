@@ -13,12 +13,17 @@
  *
  * The full promote flow, in order:
  *
- * 1. `bun run scripts/promote-version.ts` — compute the next version and commit the
- *    bump (this script).
- * 2. Open a PR for the bump, let CI go green, merge to `main`.
+ * 1. `bun run scripts/promote-version.ts` — compute the next version, write the bump
+ *    and the release-notes entries the version needs (this script; idempotent, so a
+ *    re-run converges).
+ * 2. Open a PR for the bump — **its commit carries the version and the new release's
+ *    release-notes entry together**, because CI's deploy job refuses a release whose
+ *    version has no entry (`scripts/release-notes-audit.ts` runs before the deploy).
+ *    Let CI go green, merge to `main`.
  * 3. Promote `main` to `release` from a detached worktree at `origin/main` — the
  *    documented flow, never a bare `git push origin main:release` from a stale local.
- * 4. CI's deploy job tags the deployed commit `v<APP_VERSION>` once the deploy verifies.
+ * 4. CI's deploy job audits the notes, deploys, tags the deployed commit
+ *    `v<APP_VERSION>`, and publishes the raw release notes on the tag.
  * 5. `make deploy-status` reports the running version beside the deployment state.
  *
  * ⚠️ **The bump is its own PR, deliberately not pushed by this script.** Merging to
@@ -105,7 +110,11 @@ if (import.meta.main) {
 		fail(`next version "${target}" is not calver YYYY.M.N`);
 	}
 	if (target === current) {
-		fail(`next version "${target}" equals the committed constant — pass --version to pin`);
+		// Idempotent, not an error: the flow's step 1 already ran (a re-invocation after
+		// the release-notes pass staged its entries, a resumed promote). Converging on
+		// the same version is success — that is what makes the whole flow self-healing.
+		console.log(`promote-version: APP_VERSION is already ${target} ✓`);
+		process.exit(0);
 	}
 
 	// Write the bump: replace the constant's line, preserving everything around it.
@@ -121,11 +130,15 @@ if (import.meta.main) {
 
 	console.log(`promote-version: ${current} → ${target}`);
 	console.log("");
-	console.log("Next steps — the bump is a PR, not a push:");
-	console.log("  1. Commit this change on a branch, open a PR, wait for CI's five checks.");
+	console.log("Next steps — the bump and its release-notes entry are one PR:");
+	console.log("  1. Run the /promote command, or by hand:");
+	console.log("     a. Write the new release's entry into apps/web/src/content/release-notes.ts");
+	console.log("        (the anthers-release-notes skill's pass), and backfill any version the");
+	console.log("        audit names: bun run scripts/release-notes-audit.ts");
+	console.log("     b. Commit both on this branch, open a PR, wait for CI's five checks.");
 	console.log("  2. Merge, then promote from a detached worktree at origin/main:");
 	console.log("     git worktree add --detach .worktrees/promote origin/main");
 	console.log("     git push origin HEAD:refs/heads/release   # from inside that worktree");
-	console.log(`  3. CI's deploy job tags the deployed commit v${target} once verified.`);
+	console.log(`  3. CI's deploy job audits the notes, deploys, and tags the commit v${target}.`);
 	console.log("  4. Watch the run on release; deploy-status reports the version from there.");
 }

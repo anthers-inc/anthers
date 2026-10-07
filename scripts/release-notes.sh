@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# The raw changelist of a release — every change between this tag and the previous
-# one, one line per squash commit, unedited — published as the GitHub release on
-# the tag the deploy job just applied.
+# The raw release notes of a release — every change between this tag and the previous
+# one, one line per squash commit, unedited — published as the GitHub release notes
+# on the tag the deploy job just applied.
 #
 # ⭐ This lives in a script rather than inline in `ci.yml` so it can be tested. The
 # deploy job calls it with a working tree the tag step already fully fetched; the
 # test below stubs `git` and `gh` and drives every branch through it — including the
-# two that a green deploy can never reach (empty changelist, missing base) and the
+# two that a green deploy can never reach (empty notes, missing base) and the
 # re-run path, where the tag step no-opped and the release already exists.
 #
-# The changelist's home is the GitHub release, deliberately: created by the same job
+# The notes' home is the GitHub release, deliberately: created by the same job
 # that applies the tag, so capture is exactly as guaranteed as the tag itself; the
 # repo is public and every subject line is already public on /commits, so the
-# release exposes nothing new. The `/changelog` page reads releases through the
-# GitHub API, and the public-pass skill edits upward from this record — it is the
+# release exposes nothing new. The `/release-notes` page links each version to its
+# release, and the public-pass skill edits upward from this record — it is the
 # audit trail, never replaced.
 #
 # 🚨 `--no-merges` is load-bearing, not cosmetic. Two commits in the first batch
@@ -69,15 +69,15 @@ if [ -z "$BASE" ] || ! git rev-parse -q --verify "${BASE}^{commit}" >/dev/null; 
 	fail "No previous calver tag and no usable before-SHA (${BASE:-none}) — cannot say what this release changed without a range to diff."
 fi
 
-git log "${BASE}..${SHA}" --no-merges --format="- %s" >changelist.md
-if [ ! -s changelist.md ]; then
-	fail "The changelist between ${BASE} and ${SHA} is empty — a release with no changes is a promote of an already-released commit."
+git log "${BASE}..${SHA}" --no-merges --format="- %s" >release-notes-raw.md
+if [ ! -s release-notes-raw.md ]; then
+	fail "The notes between ${BASE} and ${SHA} is empty — a release with no changes is a promote of an already-released commit."
 fi
 
 {
 	echo "## What shipped in ${VERSION}"
 	echo ""
-	cat changelist.md
+	cat release-notes-raw.md
 } >release-body.md
 
 if gh release view "v${VERSION}" --repo "$REPO" >/dev/null 2>&1; then
@@ -88,4 +88,4 @@ else
 	ACTION=created
 fi
 
-echo "::notice::${ACTION} the changelist for v${VERSION} (${BASE}..${SHA}, $(wc -l <changelist.md | tr -d ' ') entries)"
+echo "::notice::${ACTION} the release notes for v${VERSION} (${BASE}..${SHA}, $(wc -l <release-notes-raw.md | tr -d ' ') entries)"

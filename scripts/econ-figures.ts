@@ -542,7 +542,7 @@ function renderReceiptMarkdown(): string {
  * for.** The exemption licenses a deliberately historical sentence for a user who was
  * there. A public document has no such license — it states what is true and deletes what is
  * not — so a public block needing the exemption is a public block carrying somebody else's
- * changelog. **Reach for a public renderer rather than an exemption.**
+ * audit trail. **Reach for a public renderer rather than an exemption.**
  */
 function renderSalePublicMarkdown(): string {
 	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];

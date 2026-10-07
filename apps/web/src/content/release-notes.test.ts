@@ -1,32 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The changelog's rules, made enforceable. Mirrors `roadmap.test.ts` beside it, and
+// The release notes' rules, made enforceable. Mirrors `roadmap.test.ts` beside it, and
 // exists for the same reason: a rule that only lives in a docblock produces something
 // that still looks right when broken.
 //
 // 🚨 **The version rule is the two-way link's foundation.** An entry names the version
-// whose GitHub release holds the raw changelist, and the roadmap's card for a shipped
+// whose GitHub release holds the raw release notes, and the roadmap's card for a shipped
 // item names the version that launched it — a typo'd version breaks the link from both
 // directions at once, silently, which is why it is checked against the shape the deploy
 // job tags rather than against another list in this file.
 //
 // ⚠️ **The roadmap cross-reference check is the page's honesty mechanism.** The two-way
-// link is the point of `/changelog`: an entry may only claim roadmap items that exist,
-// and — harder to catch, and the reason this is a test — an item it claims may not still
-// be sitting in `active` or `planned` on the roadmap while the changelog says it shipped.
+// link is the point of `/release-notes`: an entry may only claim roadmap items that
+// exist, and — harder to catch, and the reason this is a test — an item it claims may not
+// still be sitting in `active` or `planned` on the roadmap while the notes say it shipped.
 // `roadmapIds` is deliberately optional and usually absent for exactly this reason: most
 // work is not a roadmap item, and a stretched claim is the failure mode.
 
 import { describe, expect, it } from "bun:test";
-import { CHANGELOG, type ChangelogRelease } from "./changelog";
+import { RELEASE_NOTES, type ReleaseNotesEntry } from "./release-notes";
 import { allItems, type RoadmapItem } from "./roadmap";
 
 /** Calver, the shape `scripts/promote-version.ts` writes and the deploy job tags. */
 const CALVER = /^(\d{4})\.(\d{1,2})\.(\d+)$/;
 
 /** Reported as `version (entry N)` so a failure names the entry, not an index. */
-function located(): { where: string; entry: string; release: ChangelogRelease }[] {
-	return CHANGELOG.flatMap((release) =>
+function located(): { where: string; entry: string; release: ReleaseNotesEntry }[] {
+	return RELEASE_NOTES.flatMap((release) =>
 		release.entries.map((entry, i) => ({
 			where: `${release.version} (entry ${i})`,
 			entry,
@@ -35,13 +35,13 @@ function located(): { where: string; entry: string; release: ChangelogRelease }[
 	);
 }
 
-describe("the changelog versions and orders itself", () => {
-	it("holds at least one release — an empty changelog is a broken page, not a fresh one", () => {
-		expect(CHANGELOG.length).toBeGreaterThan(0);
+describe("the release notes version and order themselves", () => {
+	it("holds at least one release — an empty page is a broken page, not a fresh one", () => {
+		expect(RELEASE_NOTES.length).toBeGreaterThan(0);
 	});
 
 	it("gives every release a calver version, the shape the deploy job tags", () => {
-		for (const release of CHANGELOG) {
+		for (const release of RELEASE_NOTES) {
 			expect(`${release.version}: ${CALVER.test(release.version) ? "calver" : "not calver"}`).toBe(
 				`${release.version}: calver`,
 			);
@@ -54,16 +54,16 @@ describe("the changelog versions and orders itself", () => {
 		// tuple orders, not just year.month: a `.1` hotfix in the same month as its `.0`
 		// is the normal shape (the page groups by month), so a strictly-decreasing
 		// year.month rule would forbid every hotfix the page is built to fold.
-		for (let i = 0; i < CHANGELOG.length; i++) {
-			expect(`${CHANGELOG[i].version}: ${/^\d{4}-\d{2}-\d{2}$/.test(CHANGELOG[i].date)}`).toBe(
-				`${CHANGELOG[i].version}: true`,
-			);
+		for (let i = 0; i < RELEASE_NOTES.length; i++) {
+			expect(
+				`${RELEASE_NOTES[i].version}: ${/^\d{4}-\d{2}-\d{2}$/.test(RELEASE_NOTES[i].date)}`,
+			).toBe(`${RELEASE_NOTES[i].version}: true`);
 			if (i === 0) continue;
-			expect(`${CHANGELOG[i].version} sorted after ${CHANGELOG[i - 1].version}`).toBe(
-				`${CHANGELOG[i].version} sorted after ${CHANGELOG[i - 1].version}`,
+			expect(`${RELEASE_NOTES[i].version} sorted after ${RELEASE_NOTES[i - 1].version}`).toBe(
+				`${RELEASE_NOTES[i].version} sorted after ${RELEASE_NOTES[i - 1].version}`,
 			);
-			const current = CHANGELOG[i].version;
-			const previous = CHANGELOG[i - 1].version;
+			const current = RELEASE_NOTES[i].version;
+			const previous = RELEASE_NOTES[i - 1].version;
 			const [cy, cm, cp] = current.split(".").map(Number);
 			const [py, pm, pp] = previous.split(".").map(Number);
 			// Duplicates are a separate test's subject below; the tuple rule here governs
@@ -80,14 +80,14 @@ describe("the changelog versions and orders itself", () => {
 	});
 
 	it("holds no duplicate versions — the roadmap's reverse link resolves a version to one release", () => {
-		const versions = CHANGELOG.map((r) => r.version);
+		const versions = RELEASE_NOTES.map((r) => r.version);
 		expect(versions.length).toBe(new Set(versions).size);
 	});
 });
 
 describe("every entry is user-facing", () => {
 	it("gives every release a lede and at least one entry", () => {
-		for (const release of CHANGELOG) {
+		for (const release of RELEASE_NOTES) {
 			expect(`${release.version}: lede "${release.lede.slice(0, 20)}…" is non-empty`).toBe(
 				`${release.version}: lede "${release.lede.slice(0, 20)}…" is non-empty`,
 			);
@@ -115,7 +115,7 @@ describe("every roadmap cross-reference is real", () => {
 	const items: Map<string, RoadmapItem> = new Map(allItems().map((i) => [i.id, i]));
 
 	it("resolves each reference to a real roadmap item", () => {
-		for (const release of CHANGELOG) {
+		for (const release of RELEASE_NOTES) {
 			for (const id of release.roadmapIds ?? []) {
 				expect(`${release.version} → ${id} ${items.get(id)?.title ?? "«no such item»"}`).toBe(
 					`${release.version} → ${id} ${items.get(id)?.title}`,
@@ -124,12 +124,12 @@ describe("every roadmap cross-reference is real", () => {
 		}
 	});
 
-	it("🚨 claims no roadmap item that is still unbuilt — the changelog never ships something the roadmap still shows planned", () => {
+	it("🚨 claims no roadmap item that is still unbuilt — the notes never ship something the roadmap still shows planned", () => {
 		// The hard one, and the reason this file exists. An item claimed by a release
-		// must have moved to `launched` in the same PR: a changelog entry and a roadmap
+		// must have moved to `launched` in the same PR: a release-notes entry and a roadmap
 		// card disagreeing about whether something shipped is the two surfaces the
 		// exporter plan is meant to unify, contradicting each other in public.
-		for (const release of CHANGELOG) {
+		for (const release of RELEASE_NOTES) {
 			for (const id of release.roadmapIds ?? []) {
 				const item = items.get(id);
 				if (!item) continue;

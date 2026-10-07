@@ -1,36 +1,36 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The changelog page's month grouping, pinned. Lives beside the page it tests, like
+// The release-notes page's month grouping, pinned. Lives beside the page it tests, like
 // `finish-face.test.ts` beside FinishSignupPage: the grouping is a pure function on the
 // page module, testable directly.
 //
 // 🚨 **Why a test, and why synthetic fixtures.** The grouping exists so a `####.##.0`
 // release and the `####.##.1` / `####.##.2` hotfixes after it read as one month's full
-// set of changes. The live `CHANGELOG` cannot express that yet — its one release has a
+// set of changes. The live `RELEASE_NOTES` cannot express that yet — its one release has a
 // month to itself — so a test written only against live data would pass a grouping
 // that splits per release, which is exactly the behavior this task replaced. The
 // synthetic fixtures below carry the shape the page exists for.
 //
-// ⚠️ **The grouping is derived, so it can drift.** `changelog.ts` carries no month
+// ⚠️ **The grouping is derived, so it can drift.** `release-notes.ts` carries no month
 // field on purpose (the exporter must not have to reproduce one), which makes
 // `groupedByMonth` the only place that decides what a month is. A change to it — a
 // different cut of the date, a version-derived month instead of a date-derived one —
 // changes the page's structure in a way no typecheck can see.
 
 import { describe, expect, it } from "bun:test";
-import type { ChangelogRelease } from "../content/changelog";
-import { CHANGELOG } from "../content/changelog";
-import { groupedByMonth } from "./ChangelogPage";
+import type { ReleaseNotesEntry } from "../content/release-notes";
+import { RELEASE_NOTES } from "../content/release-notes";
+import { groupedByMonth } from "./ReleaseNotesPage";
 
 /** A minimal entry carrying only what the grouping reads, unless a test extends it. */
-const release = (version: string, date: string): ChangelogRelease => ({
+const release = (version: string, date: string): ReleaseNotesEntry => ({
 	version,
 	date,
 	lede: `${version}.`,
 	entries: [`Shipped in ${version}.`],
 });
 
-describe("groupedByMonth folds the changelog into months, newest first", () => {
+describe("groupedByMonth folds the release notes into months, newest first", () => {
 	it("puts the .0/.1/.2 releases of one month under one section, dividers preserving each version", () => {
 		const months = groupedByMonth([
 			release("2026.10.2", "2026-10-18"),
@@ -85,12 +85,12 @@ describe("groupedByMonth folds the changelog into months, newest first", () => {
 		]);
 	});
 
-	it("keeps the live changelog folded correctly — every release of the real data under its own month, newest first", () => {
+	it("keeps the live release notes folded correctly — every release of the real data under its own month, newest first", () => {
 		const months = groupedByMonth();
 
-		// Every release appears exactly once, in `CHANGELOG`'s own order within its month.
+		// Every release appears exactly once, in `RELEASE_NOTES`'s own order within its month.
 		const versions = months.flatMap((m) => m.releases.map((r) => r.version));
-		expect(versions).toEqual(CHANGELOG.map((r) => r.version));
+		expect(versions).toEqual(RELEASE_NOTES.map((r) => r.version));
 	});
 
 	it("makes each month's key and releases agree — no release filed under a month its date does not name", () => {

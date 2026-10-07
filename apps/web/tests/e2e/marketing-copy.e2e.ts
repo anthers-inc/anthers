@@ -15,7 +15,7 @@
 
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import type { Page } from "@playwright/test";
-import { CHANGELOG } from "../../src/content/changelog";
+import { RELEASE_NOTES } from "../../src/content/release-notes";
 import { expect, test } from "./fixtures";
 
 /**
@@ -25,7 +25,7 @@ import { expect, test } from "./fixtures";
  * links. Pointing a test at it lands on `RootRedirect`'s spinner while `/auth/me`
  * resolves, which is how the first draft of this file "passed": see `copy()`.
  */
-const PAGES = ["/", "/for-creators", "/about", "/faq", "/parents", "/roadmap", "/changelog"];
+const PAGES = ["/", "/for-creators", "/about", "/faq", "/parents", "/roadmap", "/release-notes"];
 
 /**
  * Navigate, prove the page actually rendered, and hand back its text.
@@ -112,20 +112,20 @@ test.describe("FAQ", () => {
 	});
 });
 
-test.describe("changelog", () => {
+test.describe("release notes", () => {
 	// Presence-of-structure, not copy assertion: the page links back to the roadmap
 	// (the closing button), and every release in the data module renders on the page.
 	// The page groups by month — one `h2` per month — so a release is asserted through
 	// its divider heading (`h3`) rather than its own section, and the version headings
-	// are still read from `CHANGELOG` rather than hardcoded, so a new release that fails
+	// are still read from `RELEASE_NOTES` rather than hardcoded, so a new release that fails
 	// to render fails here without anyone updating the test.
 	test("every release renders, and the page links back to the roadmap", async ({ page }) => {
-		await page.goto("/changelog");
+		await page.goto("/release-notes");
 		await expect(page.locator("h1").first()).toBeVisible();
 
-		for (const release of CHANGELOG) {
+		for (const release of RELEASE_NOTES) {
 			// The release's divider block carries `id={release.version}` — the same anchor
-			// `/changelog#<version>` on the roadmap's launched cards scrolls to — so its
+			// `/release-notes#<version>` on the roadmap's launched cards scrolls to — so its
 			// presence is both the render assertion and the anchor's. The attribute selector
 			// is the form that has to be used: `#<version>` reads as CSS, and a calver id's
 			// dots parse as class selectors, matching nothing.

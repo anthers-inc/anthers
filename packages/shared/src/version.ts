@@ -19,7 +19,7 @@
  * 4. The deployed bundle already carried the constant — footer and tag cannot disagree.
  *
  * ⚠️ **Calver chosen over semver deliberately (Parker, 2026-10-01), for every Anthers
- * repo.** The version's audience is the changelog, release notes and a support
+ * repo.** The version's audience is the release notes and a support
  * question, all of which want "when did this ship" rather than a compatibility
  * promise — Anthers is one hosted deployment, not a distributed library. The string
  * is also valid semver (`2026.10.0` parses), which is why the desktop app and the
