@@ -252,52 +252,64 @@ export default function BasketPage() {
 				{/* One group in practice — a basket holds ONE creator's work. Grouped anyway,
 				    so the display already answers "who receives what" the day the constraint
 				    lifts. */}
-				<div className="rounded-lg bg-base-200/50 p-3">
-					{/* The group's headline: the creator and what they receive, beside each
-					    other, with the (i) naming the fee taken OUT of the earnings — the
-					    card fee is paid to the processor out of the price, never kept by
-					    Anthers and never added for the buyer. */}
-					<div className="mb-1 flex items-baseline justify-between gap-2">
-						<span className="text-sm">
-							<Link to={profileUrl(creator ?? "")} className="link link-hover font-medium">
+				<div className="rounded-lg bg-base-200/50 px-3 py-1">
+					{/* The group's header: the creator and what they receive, set apart from
+					    the items beneath — larger, semibold, the group's voice — with the
+					    (i) riding the same trailing slot the remove buttons do and a
+					    divider closing the header off from the list. The (i) names the fee
+					    taken OUT of the earnings — the card fee is paid to the processor
+					    out of the price, never kept by Anthers and never added for the
+					    buyer. */}
+					<div className="flex items-center justify-between gap-2 py-2.5">
+						<span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
+							<Link to={profileUrl(creator ?? "")} className="link link-hover">
 								{creator}
 							</Link>{" "}
-							<span className="text-base-content/60">receives</span>
+							<span className="text-xs font-normal text-base-content/60">receives</span>
 						</span>
-						<span className="flex items-center text-sm font-semibold tabular-nums text-success">
+						<span className="shrink-0 text-[15px] font-semibold tabular-nums text-success">
 							<span data-testid="basket-creator-earns">${quote.creatorEarnings}</span>
+						</span>
+						<span className="flex w-6 shrink-0 items-center justify-center">
 							<InfoTip
 								align="right"
 								text={`Each price is all-in: card processing (2.9% + $0.30, at cost) is taken out of it, not added on top. This basket's one fee is split pro-rata by item value; Anthers keeps none of it.`}
 							/>
 						</span>
 					</div>
-					<ul className="divide-y divide-base-300" data-testid="basket-items">
+					{/* The items nest under the header: indented beside a rule that hangs
+					    off the group's left edge, smaller and quieter than the header —
+					    the receipt's detail lines against the header's voice. The dividers
+					    and the price column stay aligned with the Payment card's. */}
+					<ul
+						className="ml-3 divide-y divide-base-300 border-l border-base-300 pl-3"
+						data-testid="basket-items"
+					>
 						{quote.items.map((item) => {
 							// The list's own item record — the remove buttons work off the
 							// BASKET's items (the source with handles), matched by id.
 							const held = items.find((i) => i.workId === item.workId);
 							return (
-								<li key={item.workId} className="flex items-center gap-3 py-2">
-									<div className="min-w-0 flex-1">
-										<Link
-											to={creatorWorkUrl(held?.creatorHandle ?? "", item.slug)}
-											className="link-hover"
-										>
-											<span className="block truncate text-sm font-medium">
-												{item.title ?? "Untitled"}
-											</span>
-										</Link>
-									</div>
-									<span className="shrink-0 text-sm tabular-nums">${item.price}</span>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs shrink-0"
-										onClick={() => held && remove(held.workId)}
-										aria-label={`Remove ${item.title ?? "item"}`}
+								<li key={item.workId} className="flex items-center justify-between gap-2 py-2">
+									<Link
+										to={creatorWorkUrl(held?.creatorHandle ?? "", item.slug)}
+										className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
 									>
-										<XMarkIcon className="w-4 h-4" />
-									</button>
+										<span className="block truncate">{item.title ?? "Untitled"}</span>
+									</Link>
+									<span className="shrink-0 text-sm tabular-nums text-base-content/80">
+										${item.price}
+									</span>
+									<span className="flex w-6 shrink-0 items-center justify-center">
+										<button
+											type="button"
+											className="btn btn-ghost btn-xs px-0"
+											onClick={() => held && remove(held.workId)}
+											aria-label={`Remove ${item.title ?? "item"}`}
+										>
+											<XMarkIcon className="w-4 h-4" />
+										</button>
+									</span>
 								</li>
 							);
 						})}
