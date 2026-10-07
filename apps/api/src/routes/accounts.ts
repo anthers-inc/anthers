@@ -93,6 +93,7 @@ import {
 	setPin,
 	updateParentalControls,
 } from "../services/parental-controls.js";
+import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
 
@@ -1160,6 +1161,12 @@ const accountRoutes = new Hono()
 		async (c) => {
 			const sessionUser = c.get("user");
 			const { pin, ...update } = c.req.valid("json");
+			// The pin's strength is 4-8 digits — services/parental-controls.ts says it plainly —
+			// so the pace of guesses is the load-bearing defense, and it is now capped per IP
+			// in addition to being checked per request (a 4-digit pin at this limit takes
+			// ~7 hours to walk with the whole 10^4 space, against an argon2id hash per try).
+			const limited = await checkRate("parental-pin", clientIp(c.req.raw.headers), 10, 3600);
+			if (!limited.ok) return limitResponse(limited);
 			if (!(await pinMatches(sessionUser.id, pin))) {
 				return c.json({ error: "That isn't the pin.", code: "wrong_pin" }, 403);
 			}

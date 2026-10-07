@@ -44,6 +44,7 @@ import {
 	ISSUE_URL_MAX,
 } from "../services/issue-reports.js";
 import { fileReport, findSubject } from "../services/moderation.js";
+import { checkRate } from "../services/rate-limit.js";
 
 const reportSchema = z.object({
 	subjectType: z.string().refine(isModerationSubjectType, "Unknown subject type"),
@@ -86,64 +87,26 @@ const issueReportSchema = z.object({
 });
 
 /**
- * A crude per-caller submission cap for the one public endpoint that sends mail.
+ * The submission cap for the one public endpoint that sends mail.
  *
- * ⚠️ **Best-effort, in-memory, and per-instance — say so rather than implying more.**
- * There is no rate-limiting infrastructure in this app and inventing some here would be a
- * much wider change than this route needs; Cloudflare sits in front of every request and
- * is the real answer. What this does buy is the difference between an unauthenticated
- * endpoint that will send one email per submission forever and one that will not, which
- * is worth having even imperfectly: the authenticated route is protected by the
- * one-report-per-person-per-item unique index, and a route with no identity has no such
- * key to lean on.
- *
- * It fails OPEN. A caller whose address we cannot read is allowed through, because the
- * cost of dropping a genuine report of child sexual abuse material is not comparable to
- * the cost of an extra email.
+ * The shared limiter (`services/rate-limit.ts`) now carries both intake doors' caps,
+ * replacing the per-instance Maps that were here — the honest-best-effort caveat went
+ * with them. The fails-OPEN rule survives, and it is *why* `checkRate`'s own failure
+ * mode was written as degrade-to-open rather than refuse-all: the cost of dropping a
+ * genuine report of child sexual abuse material is not comparable to the cost of an
+ * extra email.
  */
-const ABUSE_WINDOW_MS = 10 * 60 * 1000;
-const ABUSE_MAX_PER_WINDOW = 5;
-const abuseSubmissions = new Map<string, number[]>();
 
+/**
+ * The client's address for the two intake doors below. 🚨 The same last-hop read the
+ * shared limiter makes (`services/rate-limit.ts` carries the why) — the *left* end of an
+ * `X-Forwarded-For` list is client-forgeable, and these are intake doors a flood would
+ * drown, which is the exact shape a forged left end buys an attacker. Both doors' limits
+ * are `checkRate` calls on the shared table; the inline Map shapes were retired with the
+ * shared limiter's arrival, which is the whole point of one mechanism.
+ */
 function clientKeyFor(c: { req: { header: (name: string) => string | undefined } }): string {
-	// Cloudflare's own header first — it is the one value an outside caller cannot forge
-	// through our edge, and `x-forwarded-for` behind it is a list whose left end they can.
-	return c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0] ?? "";
-}
-
-function tooManyFrom(key: string): boolean {
-	if (!key) return false; // Fails open — see the note above.
-	const now = Date.now();
-	const recent = (abuseSubmissions.get(key) ?? []).filter((t) => now - t < ABUSE_WINDOW_MS);
-	if (recent.length >= ABUSE_MAX_PER_WINDOW) {
-		abuseSubmissions.set(key, recent);
-		return true;
-	}
-	recent.push(now);
-	abuseSubmissions.set(key, recent);
-	// Bounded so a long-running process cannot accumulate a key per address seen. The map
-	// is a cache of the last few minutes, and dropping it entirely only ever forgives.
-	if (abuseSubmissions.size > 10_000) abuseSubmissions.clear();
-	return false;
-}
-
-const ISSUE_WINDOW_MS = 10 * 60 * 1000;
-const ISSUE_MAX_PER_WINDOW = 5;
-const issueSubmissions = new Map<string, number[]>();
-
-/** The issue intake's own cap — deliberately not shared with the abuse one, so a burst of one kind never starves the other's allowance. */
-function tooManyIssueFrom(key: string): boolean {
-	if (!key) return false; // Fails open, for the same reason the abuse cap does.
-	const now = Date.now();
-	const recent = (issueSubmissions.get(key) ?? []).filter((t) => now - t < ISSUE_WINDOW_MS);
-	if (recent.length >= ISSUE_MAX_PER_WINDOW) {
-		issueSubmissions.set(key, recent);
-		return true;
-	}
-	recent.push(now);
-	issueSubmissions.set(key, recent);
-	if (issueSubmissions.size > 10_000) issueSubmissions.clear();
-	return false;
+	return c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? "";
 }
 
 const moderationRoutes = new Hono()
@@ -212,8 +175,10 @@ const moderationRoutes = new Hono()
 	 * and never asked for.
 	 */
 	.post("/abuse-reports", zValidator("json", abuseReportSchema), async (c) => {
-		const limited = tooManyFrom(clientKeyFor(c));
-		if (limited) {
+		// Now on the shared limiter — shared storage, so the cap binds every instance, and
+		// the same refusal shape every other limited door answers with (services/rate-limit.ts).
+		const limited = await checkRate("abuse-report", clientKeyFor(c) || "unknown", 5, 3600);
+		if (!limited.ok) {
 			return c.json(
 				{
 					error:
@@ -254,12 +219,13 @@ const moderationRoutes = new Hono()
 	 *
 	 * There is no mail in this pipeline by design — the admin console's queue is where these
 	 * are read — so no rate cap is inherited here either, and this route carries its own,
-	 * narrower than the abuse one: an unauthenticated write endpoint needs *something*, and
-	 * this is the same best-effort in-memory shape rather than invented infrastructure.
+	 * narrower than the abuse one, now on the shared limiter (services/rate-limit.ts) rather
+	 * than the retired per-instance Map: an unauthenticated write endpoint needs *something*,
+	 * and something shared across instances is the something that actually binds.
 	 */
 	.post("/issue-reports", zValidator("json", issueReportSchema), async (c) => {
-		const limited = tooManyIssueFrom(clientKeyFor(c));
-		if (limited) {
+		const limited = await checkRate("issue-report", clientKeyFor(c) || "unknown", 5, 3600);
+		if (!limited.ok) {
 			return c.json(
 				{
 					error: "Too many reports from here in the last few minutes. Please try again shortly.",

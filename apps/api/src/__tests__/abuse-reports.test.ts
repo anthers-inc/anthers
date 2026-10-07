@@ -270,6 +270,16 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Which reports are owed an alert", () => {
 });
 
 describe.skipIf(SKIP_ABUSE_TESTS)("Too many from one caller", () => {
+	// 🚨 This suite asserts the limiter's refusal, so the session knob has to be OFF for
+	// it: test sessions set RATE_LIMITS_DISABLED=1, which would make the sixth request
+	// sail through and this whole describe pass vacuously. Taken out for the run and put
+	// back at process exit — the same discipline the limiter's own suite applies.
+	const knob = process.env.RATE_LIMITS_DISABLED;
+	delete process.env.RATE_LIMITS_DISABLED;
+	process.on("exit", () => {
+		process.env.RATE_LIMITS_DISABLED = knob;
+	});
+
 	it("declines the sixth in ten minutes, and says where to go instead", async () => {
 		const ip = "203.0.113.77";
 		const send = () =>

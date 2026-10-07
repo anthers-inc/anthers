@@ -32,11 +32,17 @@ describe("Vertical Slice", () => {
 		await db.execute(sql`DELETE FROM projects WHERE slug = 'test-game-${sql.raw(testId)}'`);
 	}, DB_SETUP_TIMEOUT);
 
-	it("health check returns ok", async () => {
+	it("health check answers the deepened shape, healthy in a session with a database", async () => {
 		const res = await makeRequest("/health");
 		expect(res.status).toBe(200);
-		const data = await res.json();
-		expect(data.status).toBe("ok");
+		const data = (await res.json()) as {
+			state: string;
+			components: Record<string, { state: string }>;
+		};
+		// The deepened /health (2026-10-07) answers per-component rather than a bare
+		// {status:"ok"}; the session's database is up, so the honest assertion is the
+		// database component reading operational.
+		expect(data.components.database.state).toBe("operational");
 	});
 
 	it("a fixture account gets a working session", async () => {

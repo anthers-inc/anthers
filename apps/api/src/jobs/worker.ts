@@ -30,6 +30,7 @@ import {
 	runEscalationSweep,
 } from "../services/moderation.js";
 import { releaseStalePayoutHolds } from "../services/payouts.js";
+import { sweepRateLimits } from "../services/rate-limit.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { sweepSignupChallenges } from "../services/signup-challenges.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
@@ -201,17 +202,32 @@ async function start() {
 
 	await queue.work(QUEUES.PRUNE_CREDENTIALS, async (jobs) => {
 		for (const job of jobs) {
-			const [sessionsGone, codesGone, adminSessionsGone, adminCodesGone, challengesGone] =
-				await Promise.all([
-					deleteExpiredSessions(),
-					deleteExpiredSignupCodes(),
-					deleteExpiredAdminSessions(),
-					deleteExpiredAdminSignInCodes(),
-					sweepSignupChallenges(),
-				]);
-			if (sessionsGone + codesGone + adminSessionsGone + adminCodesGone + challengesGone > 0) {
+			const [
+				sessionsGone,
+				codesGone,
+				adminSessionsGone,
+				adminCodesGone,
+				challengesGone,
+				limitsGone,
+			] = await Promise.all([
+				deleteExpiredSessions(),
+				deleteExpiredSignupCodes(),
+				deleteExpiredAdminSessions(),
+				deleteExpiredAdminSignInCodes(),
+				sweepSignupChallenges(),
+				sweepRateLimits(),
+			]);
+			if (
+				sessionsGone +
+					codesGone +
+					adminSessionsGone +
+					adminCodesGone +
+					challengesGone +
+					limitsGone >
+				0
+			) {
 				console.log(
-					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${codesGone} expired signup code(s), ${adminSessionsGone} expired admin session(s), ${adminCodesGone} expired admin sign-in code(s), ${challengesGone} spent or expired signup challenge(s)`,
+					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${codesGone} expired signup code(s), ${adminSessionsGone} expired admin session(s), ${adminCodesGone} expired admin sign-in code(s), ${challengesGone} spent or expired signup challenge(s), ${limitsGone} spent rate-limit window(s)`,
 				);
 			}
 		}

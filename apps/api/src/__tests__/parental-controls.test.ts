@@ -114,10 +114,19 @@ describe("Parental controls", () => {
 		await db.execute(
 			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${childName}@example.com`}`, sql`${`${creatorName}@example.com`}`, sql`${`${otherCreatorName}@example.com`}`], sql`, `)})`,
 		);
+		// Every pin write this suite made sat in one rate-limit window (they arrive from
+		// no address at all, so the shared "unknown" key is the suite's own row); taken
+		// back like every other fixture row, on success or failure.
+		await db.execute(sql`DELETE FROM rate_limits`);
 	});
 
 	/** Put the account back to "a pin and nothing else" between tests. */
 	async function reset() {
+		// This suite's own rate-limit window is spent between tests (27 pin writes share
+		// the "unknown" IP key); cleared the way the suite clears its other fixtures, so
+		// the limiter's 10/hour never starves a later case. Suites are isolated, not
+		// flooders — this is the test-fixture half of the limiter's contract.
+		await db.execute(sql`DELETE FROM rate_limits`);
 		await send("/api/accounts/me/parental-controls", "PATCH", child, {
 			pin: PIN,
 			lockMaturity: false,

@@ -80,6 +80,7 @@ import {
 	noticeAttestationText,
 	noticesForCreator,
 } from "../services/dmca.js";
+import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 
 /**
  * The six elements of a § 512(c)(3)(A) notice, as a Zod schema.
@@ -171,6 +172,15 @@ const dmcaRoutes = new Hono()
 	// not a session.
 	.post("/notices", zValidator("json", noticeSchema), async (c) => {
 		const input = c.req.valid("json");
+
+		// 🚨 **A statutory intake is a document a provider relies on, so volume is the
+		// abuse shape to refuse.** This door is public on purpose (no account is a
+		// precondition of an agent's § 512(c)(3) notice), which is exactly why it is
+		// limiter-guarded: a scripted flood of "notices" would drown the operator queue
+		// the law's clocks run through. A notice that was real and got a 429 can be
+		// re-filed after the window — the retry line tells the complainant so.
+		const limited = await checkRate("dmca-notice", clientIp(c.req.raw.headers), 5, 3600);
+		if (!limited.ok) return limitResponse(limited);
 
 		// Resolve the Work — a notice naming a Work that doesn't exist would sit
 		// in the queue with nothing to act on. The Work must exist and be released

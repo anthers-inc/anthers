@@ -224,6 +224,18 @@ envs:
   # (`payments.ts` reads `STRIPE_PAYMENT_METHOD_CONFIGURATION` when set) is kept
   # for a genuinely per-deployment override — a config named for where it is used
   # — but no deployment names one today.
+  #
+  # ⚠️ **Except it is live, and the spec must say so.** The 2026-10-06 narrowing named
+  # the account's *Default* configuration in the Dashboard and left the variable
+  # undeclared — but production already carries it (`pmc_1UMxLj…`, the card-only
+  # configuration, dashboard-set), so an undeclared key here reads as a *removal* to
+  # every future `spec-apply`, which refuses on it rather than clobbering (the
+  # refusal that saved it is the tooling working). Declared below, dashboard-set:
+  # the specification of record says the truth, and an apply reconciles cleanly.
+  # Remove BOTH halves together if the account-level Default ever fully takes over.
+  - key: STRIPE_PAYMENT_METHOD_CONFIGURATION
+    scope: RUN_TIME
+    type: SECRET
   - key: STRIPE_SECRET_KEY
     scope: RUN_TIME
     type: SECRET
@@ -347,6 +359,22 @@ ingress:
 # thought.
 services:
   - name: api
+    # App Platform metric alerts, rendered by scripts/resource-alerts.ts (2026-10-07):
+    # each emails OPS_ALERT_EMAIL, and each value is the shared threshold table's "now"
+    # band — the alert and the console must never disagree about the number that trips.
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 3
+        window: ONE_HOUR
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
@@ -413,6 +441,21 @@ services:
 
 workers:
   - name: worker
+    # The same rendered alert set on the worker — rendered and explained at services:
+    # scripts/resource-alerts-lib.ts (2026-10-07).
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 3
+        window: ONE_HOUR
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
@@ -458,6 +501,15 @@ workers:
       - key: OPS_ALERT_EMAIL
         scope: RUN_TIME
         value: admin@anthers.org
+      # The droplet heartbeat's bearer token — the secret the outside check presents when
+      # POSTing its verdict to /api/heartbeat. Generated once by the operator (openssl rand
+      # -hex 32), stored in the Bitwarden prod project beside the other secrets, and set
+      # through a spec apply rather than committed here: a committed token is a published
+      # door. Unset, the ingest 404s every report and the status page's outside view reads
+      # unknown — degraded toward honesty rather than all-clear.
+      - key: HEARTBEAT_TOKEN
+        scope: RUN_TIME
+        type: SECRET
       # Where deadline reminders go — the operator's own mailbox, per the 2026-09-14 decision
       # that anything with a deadline reaches the operator by email. Unset, the daily
       # deadline-reminders sweep logs one warning and sends nothing rather than guessing at an

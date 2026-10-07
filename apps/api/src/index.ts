@@ -19,13 +19,17 @@ import { createBuildDeliveryRoutes, isBuildDeliveryRequest } from "./routes/buil
 import { contentRoutes } from "./routes/content.js";
 import { createDevBuildRoutes } from "./routes/dev-build.js";
 import { dmcaRoutes } from "./routes/dmca.js";
+import { errorCaptureRoutes } from "./routes/errors.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { createPlayPageRoutes } from "./routes/play-page.js";
+import { statusRoutes } from "./routes/status.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
+import { healthReport } from "./services/health.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { LocalStorageService } from "./services/storage/local.js";
@@ -59,6 +63,24 @@ const app = new Hono()
 		}),
 	)
 	.use(csrfProtection)
+	// The hand-rolled error tracker: every unhandled exception in a route lands here —
+	// fingerprinted, deduped into `error_events`, and alerted on first sight. Registered
+	// before the routes so it sees everything they throw. Its own failure logs and
+	// continues; a capture that fails is never the error that pages (services/error-tracker.ts).
+	.onError(async (error, c) => {
+		const captured = await captureError({
+			source: "api",
+			message: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+			context: { route: redactRoute(c.req.path), method: c.req.method },
+		});
+		const due = captured ? (captured.firstSeen ? true : await alertDue(captured)) : false;
+		if (captured && due) {
+			await alertOperational(captured, error, c.req);
+		}
+		console.error(`[api] unhandled error on ${c.req.method} ${c.req.path}:`, error);
+		return c.json({ error: "Something went wrong" }, 500);
+	})
 	// Serve uploaded content files from local filesystem in dev mode
 	.use("/content/*", async (c, next) => {
 		if (!isLocalStorage) return next();
@@ -75,7 +97,15 @@ const app = new Hono()
 			rewriteRequestPath: (path) => path.slice("/content".length),
 		})(c, next);
 	})
-	.get("/health", (c) => c.json({ status: "ok" }))
+	.get("/health", async (c) => {
+		// The deepened health check: Postgres and the queue rather than only liveness —
+		// services/health.ts carries why the shallow answer was a lie by omission. The
+		// response still returns fast (both probes are single reads with the server's own
+		// timeouts), and answers 200 only for operational-or-degraded, so a container-level
+		// health check that maps non-200 to "restart me" restarts a genuinely broken app.
+		const report = await healthReport();
+		return c.json(report, report.state === "down" ? 503 : 200);
+	})
 	.route("/api/auth", authRoutes)
 	.route("/api/atproto", atprotoRoutes)
 	.route("/api/accounts", accountRoutes)
@@ -102,7 +132,9 @@ const app = new Hono()
 	// to this component — a bare path would fall to the web static site and 404.
 	.route("/api/play", createPlayPageRoutes())
 	.route("/api/admin", adminRoutes)
-	.route("/api/webhooks", webhookRoutes);
+	.route("/api/webhooks", webhookRoutes)
+	.route("/api/status", statusRoutes)
+	.route("/api/errors", errorCaptureRoutes);
 
 /**
  * The dev-only build-delivery harness, registered only from a checkout. Keeping the mount

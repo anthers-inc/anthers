@@ -241,6 +241,10 @@ function noticeBody(targetWorkId: number) {
 
 /** File a notice against a Work and have the admin act on it. Returns the notice id. */
 async function takedown(targetWorkId: number): Promise<number> {
+	// The limiter's budget belongs to no fixture here — filing arrives from no address,
+	// so every case shares one "unknown" key and the third would 429. Cleared per call,
+	// like the other suites clear it per test; the refusals themselves are dmca.test.ts's.
+	await db.execute(sql`DELETE FROM rate_limits`);
 	const filed = await post("/api/dmca/notices", undefined, noticeBody(targetWorkId));
 	expect(filed.status).toBe(201);
 	const noticeId = (await filed.json()).noticeId as number;

@@ -160,6 +160,16 @@ describe("What the form requires", () => {
 });
 
 describe("Too many from one caller", () => {
+	// 🚨 This suite asserts the limiter's refusal, so the session knob has to be OFF for
+	// it — the same discipline the limiter's own suite applies (see there): taken out for
+	// the run and put back at process exit, so the opt-in never makes a refusal test
+	// pass vacuously.
+	const knob = process.env.RATE_LIMITS_DISABLED;
+	delete process.env.RATE_LIMITS_DISABLED;
+	process.on("exit", () => {
+		process.env.RATE_LIMITS_DISABLED = knob;
+	});
+
 	it("declines the sixth in ten minutes, with its own cap that never touches the abuse one", async () => {
 		const ip = "203.0.113.77";
 		const send = () =>

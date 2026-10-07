@@ -139,6 +139,10 @@ jobs:
       # grind real difficulty-4 puzzles into their timeouts while passing locally.
       ANTHERS_SESSION: ci
       SIGNUP_POW_DIFFICULTY: "0"
+      # The rate limiter's opt-in, CI's copy of the session knob: an e2e or unit run signs
+      # in dozens of times from one address, and the limiter obeyed there measures the
+      # harness. See services/rate-limit.ts and scripts/session.ts.
+      RATE_LIMITS_DISABLED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -334,6 +338,10 @@ jobs:
       # grind real difficulty-4 puzzles into their timeouts while passing locally.
       ANTHERS_SESSION: ci
       SIGNUP_POW_DIFFICULTY: "0"
+      # The rate limiter's opt-in, CI's copy of the session knob: an e2e or unit run signs
+      # in dozens of times from one address, and the limiter obeyed there measures the
+      # harness. See services/rate-limit.ts and scripts/session.ts.
+      RATE_LIMITS_DISABLED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -486,6 +494,10 @@ jobs:
       # grind real difficulty-4 puzzles into their timeouts while passing locally.
       ANTHERS_SESSION: ci
       SIGNUP_POW_DIFFICULTY: "0"
+      # The rate limiter's opt-in, CI's copy of the session knob: an e2e or unit run signs
+      # in dozens of times from one address, and the limiter obeyed there measures the
+      # harness. See services/rate-limit.ts and scripts/session.ts.
+      RATE_LIMITS_DISABLED: "1"
 
     steps:
       - uses: actions/checkout@v4
