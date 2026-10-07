@@ -347,6 +347,22 @@ ingress:
 # thought.
 services:
   - name: api
+    # App Platform metric alerts, rendered by scripts/resource-alerts.ts (2026-10-07):
+    # each emails OPS_ALERT_EMAIL, and each value is the shared threshold table's "now"
+    # band — the alert and the console must never disagree about the number that trips.
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 3
+        window: ONE_HOUR
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
@@ -413,6 +429,21 @@ services:
 
 workers:
   - name: worker
+    # The same rendered alert set on the worker — rendered and explained at services:
+    # scripts/resource-alerts-lib.ts (2026-10-07).
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 3
+        window: ONE_HOUR
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
@@ -458,6 +489,15 @@ workers:
       - key: OPS_ALERT_EMAIL
         scope: RUN_TIME
         value: admin@anthers.org
+      # The droplet heartbeat's bearer token — the secret the outside check presents when
+      # POSTing its verdict to /api/heartbeat. Generated once by the operator (openssl rand
+      # -hex 32), stored in the Bitwarden prod project beside the other secrets, and set
+      # through a spec apply rather than committed here: a committed token is a published
+      # door. Unset, the ingest 404s every report and the status page's outside view reads
+      # unknown — degraded toward honesty rather than all-clear.
+      - key: HEARTBEAT_TOKEN
+        scope: RUN_TIME
+        type: SECRET
       # Where deadline reminders go — the operator's own mailbox, per the 2026-09-14 decision
       # that anything with a deadline reaches the operator by email. Unset, the daily
       # deadline-reminders sweep logs one warning and sends nothing rather than guessing at an
