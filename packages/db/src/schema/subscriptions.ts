@@ -929,11 +929,12 @@ export const badges = pgTable(
 		 * The background a creator picked from the standard library — a shape id and a color
 		 * id from `@anthers/shared/badge-art`, null for the defaults.
 		 *
-		 * ⭐ **Three layers, and this is the middle one** (Parker, 2026-08-29): Anthers' frame,
-		 * a background of a shape and a color, and a foreground that is either a library
-		 * emblem or the creator's own art. The point is flexibility without inconsistency — a
-		 * creator who does not draw still gets a badge that is recognizably theirs, because
-		 * shape, color and emblem are three choices rather than one upload they cannot make.
+		 * ⭐ **The background is the badge**: a shape and a field color the creator picks
+		 * freely, and the foreground is either a Noun Project emblem composed at save (the
+		 * placement columns below) or the creator's own upload (`art_key`). The mix-and-match
+		 * emblem library this row once carried a third id from was retired for creators by
+		 * the Badge Maker (2026-10-07); Anthers' own Badges and Stickers keep their fixed
+		 * emblems, chosen by Anthers rather than picked here.
 		 *
 		 * ⚠️ **Ids rather than values.** Storing `oklch(...)` or a path would freeze today's
 		 * library into every row, so a palette correction would leave old badges on the old
@@ -941,8 +942,6 @@ export const badges = pgTable(
 		 */
 		artShape: text("art_shape"),
 		artColor: text("art_color"),
-		/** A library emblem, used as the foreground when `art_key` is null. */
-		artEmblem: text("art_emblem"),
 		/**
 		 * What the composed art was made from, as a fingerprint over every parameter the
 		 * composition reads — noun icon id, shape, field color, emblem color, scale and

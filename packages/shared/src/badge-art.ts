@@ -206,30 +206,12 @@ export const BADGE_COLORS: BadgeColor[] = [
 ];
 
 /**
- * The foreground emblems from the standard library.
- *
- * These are `BrandIconName`s, typed as plain strings here so `@anthers/shared` does not
- * depend on the browser-facing brand package — the API validates the id and never renders
- * it, and the web layer resolves it against `@anthers/brand`. ⚠️ A name added here that the
- * brand package does not carry renders as nothing, so the two are asserted against each
- * other in a test rather than trusted.
- *
- * ⚠️ **Retired for creators by the Badge Maker, 2026-10-07** — a creator's emblem comes
- * from the Noun Project catalog or their own upload, and nothing else. The list stays for
- * Anthers' own Badge and Sticker rungs, which are fixed lists Anthers chooses.
+ * The mix-and-match emblem library is RETIRED for creators (the Badge Maker, 2026-10-07):
+ * a creator's foreground emblem comes from the Noun Project catalog or their own upload,
+ * and nothing else. There is deliberately no emblem list here any more — Anthers' own
+ * Badges and Stickers keep their fixed emblems, chosen from `packages/brand/icons.json`
+ * by Anthers, and `BadgeMark` renders whichever emblem id its caller hands it.
  */
-export const BADGE_EMBLEMS: string[] = [
-	"bloom-round",
-	"bloom-tulip",
-	"bloom-cluster",
-	"grass-clump",
-	"grass-cattail",
-	"grass-reed",
-	"grass-tall",
-	"bee",
-	"bee-flying",
-	"wreath",
-];
 
 export const DEFAULT_BADGE_SHAPE = "circle";
 export const DEFAULT_BADGE_COLOR = "moss";
@@ -356,10 +338,6 @@ export function isBadgeColor(id: unknown): boolean {
 	return typeof id === "string" && BADGE_COLORS.some((c) => c.id === id);
 }
 
-export function isBadgeEmblem(id: unknown): boolean {
-	return typeof id === "string" && BADGE_EMBLEMS.includes(id);
-}
-
 export function badgeShape(id: string | null | undefined): BadgeShape {
 	return BADGE_SHAPES.find((s) => s.id === id) ?? BADGE_SHAPES[0];
 }
@@ -393,25 +371,14 @@ export function badgeColor(id: string | null | undefined): BadgeColor {
 }
 
 /**
- * The emblem a rung falls back to when the creator has chosen nothing.
- *
- * ⚠️ **Keyed on ladder POSITION, and it wraps.** A creator may have more rungs than there
- * are emblems, and repricing a rung must not change its picture — keying on the index keeps
- * a ladder visually distinct rung to rung and stable under a price change, which is the
- * pair of properties that actually matter.
- */
-export function defaultBadgeEmblem(index: number): string {
-	const n = BADGE_EMBLEMS.length;
-	return BADGE_EMBLEMS[((index % n) + n) % n];
-}
-
-/**
  * The field color a rung falls back to, by ladder position.
  *
- * ⭐ **Varied rather than uniform, for the same reason the emblem is.** A creator who has
- * touched nothing should see a ladder of distinct patches — which is what a scout set looks
- * like — rather than five identical discs that only differ if you look closely. A default
- * that reads as a set is doing the job; a default that reads as "unset" is not.
+ * ⭐ **Varied rather than uniform, for the same reason the fallback emblems are.** A creator
+ * who has touched nothing should see a ladder of distinct patches — which is what a scout
+ * set looks like — rather than five identical discs that only differ if you look closely. A
+ * default that reads as a set is doing the job; a default that reads as "unset" is not.
+ * (The fallback EMBLEM is Anthers' own design by position — `CreatorBadgeMark`'s
+ * `fallbackBadgeDesign`, which pairs with this.)
  *
  * ⚠️ **Stepped by a stride that is coprime with the list length**, so consecutive rungs land
  * far apart in the palette instead of on neighboring greens.

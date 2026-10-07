@@ -212,13 +212,17 @@ describe("Creator Badge art", () => {
 		const res = await req(`/api/subscriptions/badges/${badgeId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-			body: JSON.stringify({ artShape: "hexagon", artColor: "amber", artEmblem: "bee" }),
+			body: JSON.stringify({ artShape: "hexagon", artColor: "amber" }),
 		});
 		expect(res.status).toBe(200);
 		const { badge } = (await res.json()) as {
-			badge: { artShape: string; artColor: string; artEmblem: string };
+			badge: { artShape: string; artColor: string };
 		};
-		expect(badge).toMatchObject({ artShape: "hexagon", artColor: "amber", artEmblem: "bee" });
+		// 🚨 An emblem is NOT part of the pick any more — the Badge Maker retired the
+		// mix-and-match library for creators (2026-10-07). An emblem is a Noun Project
+		// composition (`/compose`) or an upload (`/art`), and a patch carrying the retired
+		// `artEmblem` key is REFUSED rather than silently ignored.
+		expect(badge).toMatchObject({ artShape: "hexagon", artColor: "amber" });
 	});
 
 	it("🚨 refuses a shape, color or emblem the library does not carry", async () => {
@@ -228,7 +232,7 @@ describe("Creator Badge art", () => {
 		for (const patch of [
 			{ artShape: "octagon" },
 			{ artColor: "chartreuse" },
-			{ artEmblem: "corner-leafy" },
+			{ artEmblem: "corner-leafy" }, // retired key — refused by the strict schema
 			{ artShape: "../etc/passwd" },
 		]) {
 			const res = await req(`/api/subscriptions/badges/${badgeId}`, {
@@ -244,7 +248,7 @@ describe("Creator Badge art", () => {
 		const res = await req(`/api/subscriptions/badges/${badgeId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-			body: JSON.stringify({ artShape: null, artColor: null, artEmblem: null }),
+			body: JSON.stringify({ artShape: null, artColor: null }),
 		});
 		expect(res.status).toBe(200);
 		expect((await res.json()).badge.artShape).toBeNull();

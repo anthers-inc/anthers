@@ -1027,10 +1027,22 @@ export interface CreatorBadge {
 	 * out of it and quietly move badge art onto a path nothing checks.
 	 */
 	hasArt: boolean;
+	/** Whether the art is a composed Noun Project emblem (drives the artist credit). */
+	hasComposedArt?: boolean;
+	/**
+	 * Who drew the emblem or art this rung wears, when a credit is recorded for it — the
+	 * "flip the Badge over" line on the detail view. Present on the public ladder read;
+	 * null when the rung wears only its fallback or uncredited own art.
+	 */
+	artistCredit?: {
+		artistName: string;
+		artistPermalink: string | null;
+		attribution: string;
+		licenseDescription: string;
+	} | null;
 	/** Ids into `@anthers/shared/badge-art`; null means the default. */
 	artShape: string | null;
 	artColor: string | null;
-	artEmblem: string | null;
 	sortOrder: number;
 	createdAt: string;
 	updatedAt: string;

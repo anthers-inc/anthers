@@ -16,7 +16,6 @@ import { describe, expect, it } from "bun:test";
 import { icons } from "@anthers/brand";
 import {
 	BADGE_COLORS,
-	BADGE_EMBLEMS,
 	BADGE_SHAPES,
 	type BadgeColor,
 	badgeBoxStyle,
@@ -24,11 +23,9 @@ import {
 	badgeShape,
 	DEFAULT_BADGE_COLOR,
 	DEFAULT_BADGE_SHAPE,
-	defaultBadgeColor,
-	defaultBadgeEmblem,
 	isBadgeColor,
-	isBadgeEmblem,
 	isBadgeShape,
+	defaultBadgeColor,
 } from "@anthers/shared/badge-art";
 import type { Badge } from "@anthers/shared/constants";
 import { BADGE_ORDER } from "@anthers/shared/constants";
@@ -36,14 +33,6 @@ import { BADGE_ART } from "./economics";
 import { fallbackBadgeDesign } from "./CreatorBadgeMark";
 
 describe("the badge library", () => {
-	it("🚨 names only emblems the brand package can actually draw", () => {
-		const missing = BADGE_EMBLEMS.filter((name) => !(name in icons));
-		expect(
-			missing,
-			"these are offered to creators and stored by the API, and render as nothing",
-		).toEqual([]);
-	});
-
 	it("draws every shape it offers, as a closed path", () => {
 		for (const shape of BADGE_SHAPES) {
 			expect(shape.path, shape.id).toMatch(/^M/);
@@ -104,13 +93,12 @@ describe("the badge library", () => {
 		}
 	});
 
-	it("carries no duplicate ids, in any of the three lists", () => {
+	it("carries no duplicate ids, in either list", () => {
 		// A duplicate makes `badgeShape` return the first and the picker show two, so a
 		// creator's choice would silently become the other one.
 		for (const [name, ids] of [
 			["shapes", BADGE_SHAPES.map((s) => s.id)],
 			["colors", BADGE_COLORS.map((c) => c.id)],
-			["emblems", BADGE_EMBLEMS],
 		] as const) {
 			expect(new Set(ids).size, name).toBe(ids.length);
 		}
@@ -129,32 +117,19 @@ describe("the badge library", () => {
 		for (const bad of ["", "circle ", "CIRCLE", "../etc/passwd", null, 3]) {
 			expect(isBadgeShape(bad), String(bad)).toBe(false);
 			expect(isBadgeColor(bad), String(bad)).toBe(false);
-			expect(isBadgeEmblem(bad), String(bad)).toBe(false);
 		}
 		expect(isBadgeShape(DEFAULT_BADGE_SHAPE)).toBe(true);
 		expect(isBadgeColor(DEFAULT_BADGE_COLOR)).toBe(true);
-		expect(isBadgeEmblem(BADGE_EMBLEMS[0])).toBe(true);
 	});
 
 	it("⭐ gives an untouched ladder distinct patches rather than five of the same", () => {
-		// A default that reads as "unset" is not doing the job. Consecutive rungs get
-		// different fields AND different emblems, so a creator who has touched nothing still
-		// sees a set.
+		// A default that reads as "unset" is not doing the job. The fallback pairs Anthers'
+		// own designs by position with distinct field colors, so a creator who has touched
+		// nothing still sees a set.
 		const colors = [0, 1, 2, 3].map(defaultBadgeColor);
 		expect(new Set(colors).size).toBe(4);
 		for (const id of colors) expect(isBadgeColor(id)).toBe(true);
 		expect(BADGE_COLORS.map((c) => c.id)).toContain(defaultBadgeColor(-1));
-	});
-
-	it("gives consecutive rungs different default emblems, and wraps rather than breaking", () => {
-		// A ladder whose rungs all defaulted to the same picture would read as one rung
-		// repeated, which is the opposite of what a default is for.
-		const first = [0, 1, 2, 3].map(defaultBadgeEmblem);
-		expect(new Set(first).size).toBe(4);
-		// More rungs than emblems is ordinary, and so is a negative index from a caller
-		// that subtracted before it checked.
-		expect(defaultBadgeEmblem(BADGE_EMBLEMS.length)).toBe(defaultBadgeEmblem(0));
-		expect(BADGE_EMBLEMS).toContain(defaultBadgeEmblem(-1));
 	});
 });
 

@@ -17,6 +17,7 @@ import { db } from "@anthers/db/client";
 import {
 	accountCycles,
 	attentionEvents,
+	badgeArtProvenance,
 	badges,
 	billingAccounts,
 	comments,
@@ -44,7 +45,6 @@ import {
 	type BadgeComposeParams,
 	isBadgeComposeParams,
 	isBadgeColor,
-	isBadgeEmblem,
 	isBadgeShape,
 } from "@anthers/shared/badge-art";
 import {
@@ -346,13 +346,19 @@ function badgeViewFor(anthersSupport: number) {
  * default, so that is the whole of what it gets.
  */
 type BadgeRow = typeof badges.$inferSelect;
-function publicBadge({ artKey, ...badge }: BadgeRow) {
-	return { ...badge, hasArt: Boolean(artKey) };
+function publicBadge({ artKey, artFingerprint, ...badge }: BadgeRow) {
+	return {
+		...badge,
+		hasArt: Boolean(artKey),
+		// Whether a rung's art is a composed Noun emblem is the one thing the detail view's
+		// artist credit wants to know; the parameters it was composed from do not travel.
+		...(artFingerprint !== null ? { hasComposedArt: true } : {}),
+	};
 }
 
-// ⭐ `artShape`, `artColor` and `artEmblem` DO reach the client, and only `artKey` does not.
-// They are ids into a library the browser already has, so there is nothing to protect — what
-// must not travel is the path to a private object.
+// ⭐ `artShape` and `artColor` DO reach the client, and only the storage key and the
+// composition parameters do not. They are ids into a library the browser already has, so
+// there is nothing to protect — what must not travel is the path to a private object.
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1615,7 +1621,6 @@ const subscriptionRoutes = new Hono()
 				description: r.badge.description,
 				artShape: r.badge.artShape,
 				artColor: r.badge.artColor,
-				artEmblem: r.badge.artEmblem,
 				hasArt: Boolean(r.badge.artKey),
 				billingCycle: r.holding.billingCycle,
 				createdAt: r.holding.createdAt,
@@ -1801,12 +1806,28 @@ const subscriptionRoutes = new Hono()
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
 		const rows = await db
-			.select()
+			.select({ badge: badges, provenance: badgeArtProvenance })
 			.from(badges)
+			.leftJoin(badgeArtProvenance, eq(badgeArtProvenance.badgeId, badges.id))
 			.where(eq(badges.creatorId, creator.id))
 			.orderBy(badges.sortOrder, badges.threshold);
 
-		return c.json({ badges: rows.map(publicBadge) });
+		// The artist credit rides on the rung it credits — the flip a supporter reads on a
+		// Badge's detail view. Only the credit's own fields travel: never a storage key,
+		// never a composition parameter.
+		return c.json({
+			badges: rows.map(({ badge, provenance }) => ({
+				...publicBadge(badge),
+				artistCredit: provenance
+					? {
+							artistName: provenance.artistName,
+							artistPermalink: provenance.artistPermalink,
+							attribution: provenance.attribution,
+							licenseDescription: provenance.licenseDescription,
+						}
+					: null,
+			})),
+		});
 	})
 
 	.post(
@@ -1881,10 +1902,15 @@ const subscriptionRoutes = new Hono()
 				// not carry renders as nothing, with no error to explain it — so the check is
 				// here rather than left to the form. `null` is how a creator goes back to the
 				// default, which is why each is nullable rather than merely optional.
+				// Shape and field color only: the emblem is a Noun Project composition (the
+				// compose route) or an upload (the art route), never a library id any more.
+				// 🚨 STRICT, so a stale client's `artEmblem` choices are REFUSED rather than
+				// silently ignored — a patched emblem that did nothing would be the bug the
+				// retirement could otherwise hide.
 				artShape: z.string().refine(isBadgeShape).nullable().optional(),
 				artColor: z.string().refine(isBadgeColor).nullable().optional(),
-				artEmblem: z.string().refine(isBadgeEmblem).nullable().optional(),
-			}),
+			})
+			.strict(),
 		),
 		async (c) => {
 			const user = c.get("user");
@@ -2356,18 +2382,33 @@ const subscriptionRoutes = new Hono()
 				: undefined);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
-		// Get the creator's Badge ladder
+		// Get the creator's Badge ladder, with each rung's artist credit beside it — the
+		// flip a supporter reads on the Badge's detail view (the public ladder route and
+		// this one both carry it, because a profile's Badge tab and a Works gate table
+		// resolve the same rows).
 		const ladder = await db
-			.select()
+			.select({ badge: badges, provenance: badgeArtProvenance })
 			.from(badges)
+			.leftJoin(badgeArtProvenance, eq(badgeArtProvenance.badgeId, badges.id))
 			.where(eq(badges.creatorId, creator.id))
 			.orderBy(badges.sortOrder, badges.threshold);
+		const ladderPublic = ladder.map(({ badge, provenance }) => ({
+			...publicBadge(badge),
+			artistCredit: provenance
+				? {
+						artistName: provenance.artistName,
+						artistPermalink: provenance.artistPermalink,
+						attribution: provenance.attribution,
+						licenseDescription: provenance.licenseDescription,
+					}
+				: null,
+		}));
 
 		if (!currentUserId) {
 			return c.json({
 				badge: "free",
 				badgeAmount: "0.00",
-				badges: ladder.map(publicBadge),
+				badges: ladderPublic,
 				unlockedBadges: [],
 			});
 		}
@@ -2397,13 +2438,13 @@ const subscriptionRoutes = new Hono()
 		// reinterpretation hazard the retired `gate_type` enum used to encode.
 		const given = supportAmount(badgeAmount);
 		const unlockedBadges = ladder
-			.filter((b) => amountMeets(given, Number(b.threshold)))
-			.map((b) => b.id);
+			.filter((b) => amountMeets(given, Number(b.badge.threshold)))
+			.map((b) => b.badge.id);
 
 		return c.json({
 			badge,
 			badgeAmount,
-			badges: ladder.map(publicBadge),
+			badges: ladderPublic,
 			unlockedBadges,
 		});
 	});
