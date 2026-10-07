@@ -136,9 +136,24 @@ export function pageHoldsTheMeter(type: string): boolean {
 /**
  * The page's column, shared so the Edit page is the width a user's page is. A piece of writing
  * gets a reading column, narrow enough that a line of its body stays a comfortable length.
+ *
+ * `wide` is the Studio Edit page's own width, and deliberately not the user's: the Edit page
+ * is a working form whose Access table, rating matrix and credits editor are controls rather
+ * than reader surfaces, and each scrunched badly at the reading width (the "Widen and Reorder
+ * the Work Edit Layout" task). The one-layout rule still binds — the parts above are the same
+ * parts — so the cap is this page's only divergence, and it never binds below it: on a laptop
+ * or a phone the page is the user's width still.
  */
-export function WorkColumn({ children, type }: { children: ReactNode; type?: string }) {
-	const width = type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
+export function WorkColumn({
+	children,
+	type,
+	wide,
+}: {
+	children: ReactNode;
+	type?: string;
+	wide?: boolean;
+}) {
+	const width = wide ? "max-w-7xl" : type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
 	return <div className={`${width} mx-auto px-4 py-8 space-y-6`}>{children}</div>;
 }
 

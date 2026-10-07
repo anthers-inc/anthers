@@ -104,17 +104,25 @@ export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) 
 				what makes it <strong>Public Access</strong>: free to all, with nothing to clear.
 			</p>
 
-			{/* Access table */}
+			{/* Access table. No heading of its own: the page that renders this supplies the
+			    section's heading, and this component's own `h3 "Access"` under it read as the
+			    same heading twice (the widening task's record). Only the Studio's Edit page
+			    renders this component. */}
 			<div>
-				<h3 className="font-semibold text-sm mb-2">Access</h3>
 				<div className="overflow-x-auto">
 					<table className="table table-sm">
 						<thead>
 							<tr>
-								<th>Level</th>
-								<th className="w-20 text-center">Allow</th>
-								<th className="w-32">Price ($)</th>
-								<th className="w-64">You receive</th>
+								{/* Every column carries a width, so a wide viewport spreads the surplus
+								    across all of them proportionally rather than pooling it in Level —
+								    the previous sizing left Level an auto column that took the whole
+								    remainder (the widening task's record), and the controls sat pinned
+								    right beside a nearly empty stretch of cells. The receipt box needs
+								    a TakeHome's width; at $0 it renders nothing and the space stays. */}
+								<th className="w-56">Level</th>
+								<th className="w-16 text-center">Allow</th>
+								<th className="w-40">Price ($)</th>
+								<th className="w-[36rem]">You receive</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -169,11 +177,10 @@ export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) 
 						</tbody>
 					</table>
 				</div>
-				{rows.length === 1 && (
-					<p className="text-xs text-base-content/50 mt-1">
-						Add rungs in Settings → Badge Ladder to gate by monthly support.
-					</p>
-				)}
+				{/* The rung hint is the page's to write, not this component's: the Edit page's
+				    own paragraph carries the link to Settings, and the two rendered together
+				    said the same thing twice in a row (the widening task's record). What the
+				    hint names lives in the creator's Settings either way. */}
 			</div>
 		</div>
 	);
