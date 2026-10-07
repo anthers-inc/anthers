@@ -153,6 +153,11 @@ export function sessionEnvironment(
 		// difficulty-0 opt-in, never the default. `make dev` keeps the protected default
 		// (4) — a human is using it, and seeing the puzzle solve is part of the point.
 		env.SIGNUP_POW_DIFFICULTY = "0";
+		// The same opt-in shape for the per-IP rate limiter: every request an e2e run
+		// makes comes from one address (the runner's own), and a ceremony suite signs in
+		// dozens of times — a limiter obeyed here would measure the harness, not the app.
+		// The limiter's own suite asserts the refusals against a fresh knob state.
+		env.RATE_LIMITS_DISABLED = "1";
 	}
 	return env;
 }

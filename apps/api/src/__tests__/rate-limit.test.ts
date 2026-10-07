@@ -10,6 +10,19 @@ import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import { checkRate, clientIp } from "../services/rate-limit";
 
+/**
+ * 🚨 This is the ONE suite where the limiter must be live: test sessions set
+ * `RATE_LIMITS_DISABLED=1` (the SIGNUP_POW_DIFFICULTY-shaped opt-in), which would make
+ * every case here pass vacuously. The knob is removed for this file's run and restored
+ * at process exit — and the refusing cases below are what keeps the opt-in from ever
+ * becoming the way the limiter quietly stopped being testable.
+ */
+const KNOB = process.env.RATE_LIMITS_DISABLED;
+delete process.env.RATE_LIMITS_DISABLED;
+process.on("exit", () => {
+	if (KNOB !== undefined) process.env.RATE_LIMITS_DISABLED = KNOB;
+});
+
 /** A door + ip pair unique to each case, so parallel suites sharing the table stay isolated. */
 let caseNum = 0;
 const scoped = () => {

@@ -29,6 +29,17 @@ function beacon(body: unknown, origin = ORIGIN_OK, ip = "10.9.9.9") {
 beforeEach(async () => {
 	// This suite's rows carry the test marker in the message; the heartbeat's row does not.
 	await db.delete(errorEvents).where(like(errorEvents.message, "beacon-test%"));
+	// 🚨 The limiter's refusing case needs the limiter live: test sessions set
+	// RATE_LIMITS_DISABLED=1 (see scripts/session.ts), which would make the 429 case
+	// vacuous. Removed for this file, restored at exit — the same discipline
+	// rate-limit.test.ts (the limiter's own suite) applies.
+	delete process.env.RATE_LIMITS_DISABLED;
+});
+
+process.on("exit", () => {
+	// Sessions set the knob; leaving it unset would strip the opt-in from every later
+	// file in this process. Restore unconditionally, for whichever state we found.
+	process.env.RATE_LIMITS_DISABLED = "1";
 });
 
 describe("POST /api/errors/browser", () => {

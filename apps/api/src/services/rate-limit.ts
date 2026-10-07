@@ -70,6 +70,14 @@ export async function checkRate(
 	max: number,
 	windowSecs: number,
 ): Promise<LimitVerdict> {
+	// The test-session opt-in, the exact shape `SIGNUP_POW_DIFFICULTY=0` established: a
+	// session that sets it says "the ceremony's hardness is not what I am testing", and the
+	// limiter steps aside. 🚨 It is set by `scripts/session.ts` for test runs only, never
+	// by `.do/app.yaml` — in production the variable is absent and the limiter is the
+	// wall. The refusals themselves are still asserted in suites that set the knob off
+	// again or drive it through a raw table read; see rate-limit.test.ts.
+	if (process.env.RATE_LIMITS_DISABLED === "1") return { ok: true, retryAfterSecs: 0 };
+
 	try {
 		// One atomic upsert: the counter exists after this statement whatever raced, and
 		// `reset_at` is stamped only on insert — the window opens at first sight of the
