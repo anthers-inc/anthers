@@ -17,6 +17,7 @@
 		"./parental-controls": "./src/parental-controls.ts",
 		"./public-access": "./src/public-access.ts",
 		"./moderation": "./src/moderation.ts",
+		"./save-shim": "./src/save-shim.ts",
 		"./content-rating": "./src/content-rating.ts",
 		"./content-rating-fixtures": "./src/content-rating-fixtures.ts",
 		"./rights": "./src/rights.ts",

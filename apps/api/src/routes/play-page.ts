@@ -153,9 +153,57 @@ export function createPlayPageRoutes(): Hono {
 				(ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] ?? ch,
 			) ?? "Untitled";
 
+		// The parent-side save shim lives here too: this page IS the parent that holds
+		// the session, so the frame's save messages land on this listener script — the
+		// same contract `HostedEmbed` implements for the SPA path, unrolled into a plain
+		// page. Sender validation matches HostedEmbed's: only the frame this page minted.
+		const parentShim = `
+		(function () {
+			"use strict";
+			var PREFIX = "anthers-save:";
+			var API_SAVE = "/api/content/works/${work.id}/save";
+			var frame = document.querySelector("iframe");
+
+			function post(msg) { if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, "*"); }
+
+			window.addEventListener("message", function (event) {
+				if (!frame || event.source !== frame.contentWindow) return;
+				// The frame's origin is the delivery origin this page minted the src for.
+				if (event.origin !== new URL(frame.src).origin) return;
+				var d = event.data;
+				if (!d || typeof d.type !== "string" || d.type.indexOf(PREFIX) !== 0) return;
+
+				if (d.type === PREFIX + "load") restore();
+				if (d.type === PREFIX + "put") take(d.blob);
+			});
+
+			function restore() {
+				fetch(API_SAVE, { credentials: "include" }).then(function (r) {
+					if (r.status === 402) { post({ type: PREFIX + "posture", syncing: false, reason: "badge" }); return null; }
+					if (!r.ok) return null;
+					return r.json().then(function (b) {
+						post({ type: PREFIX + "loaded", blob: b.save ? b.save.blob : null, updatedAt: b.save ? b.save.updatedAt : undefined });
+						post({ type: PREFIX + "posture", syncing: true });
+					});
+				}).catch(function () {});
+			}
+
+			function take(blob) {
+				fetch(API_SAVE, {
+					method: "PUT",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ blob: blob, runtime: "godot" }),
+				}).then(function (r) {
+					var reason = r.ok ? undefined : (r.status === 402 ? "badge" : r.status === 413 ? "cap" : "error");
+					post({ type: PREFIX + "ack", ok: r.ok, reason: reason });
+				}).catch(function () { post({ type: PREFIX + "ack", ok: false, reason: "error" }); });
+			}
+		})();`;
+
 		return page(
 			`Playing ${escapedTitle} — Anthers`,
-			`<div class="wrap"><div class="frame-wrap"><iframe src="${src}" title="${escapedTitle}" sandbox="allow-scripts allow-same-origin allow-popups" allowfullscreen></iframe></div></div>`,
+			`<div class="wrap"><div class="frame-wrap"><iframe src="${src}" title="${escapedTitle}" sandbox="allow-scripts allow-same-origin allow-popups" allowfullscreen></iframe></div></div><script>${parentShim}</script>`,
 			build.requiresIsolation ? ISOLATION_HEADERS : {},
 		);
 	});

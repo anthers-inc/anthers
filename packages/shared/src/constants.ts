@@ -716,6 +716,33 @@ export const REFUND_CAP_WINDOW_MONTHS = 12;
 export const WITHDRAWN_RESCUE_DAYS = 90;
 
 /**
+ * The per-save cloud blob cap, for one (player, Work) save — bytes, and the base64
+ * character bound the wire carries (base64 inflates by 4/3, so the char cap is the
+ * byte cap of the decoded payload rounded up through the encoding).
+ *
+ * The settled design (Badge storage ladder, *Cloud saves*, 2026-09-22) says a save
+ * "runs to tens of megabytes" with screenshots or a replay log, so 64 MiB decoded is
+ * the honest v1: above everything a real save carries today, below where abuse of the
+ * one-blob-per-Work interface would begin to matter. 🚨 **Both numbers are one dial in
+ * two spellings** — raise the byte cap and the char cap moves with it, because the
+ * route checks the wire shape against the decoded intent rather than carrying two
+ * figures that can drift.
+ */
+export const SAVE_BLOB_MAX_BYTES = 64 * 1024 * 1024;
+/** chars = ceil(bytes × 4/3), the exact inflation of base64. */
+export const SAVE_BLOB_MAX_CHARS = Math.ceil((SAVE_BLOB_MAX_BYTES * 4) / 3);
+/** The cap as user-facing copy ("64 MB") — never restate the number in a route's message. */
+export const SAVE_BLOB_MAX_BYTES_LABEL = "64 MB";
+
+/**
+ * The 402 refusal a save route returns to an account holding no Anthers Badge — sync
+ * is the perk, and this is the sentence the shim surfaces (passively, in the library,
+ * never as an interruption in the game).
+ */
+export const SAVE_SYNC_PERK_ERROR =
+	"Cross-device save sync is part of the Badge. Your local saves keep working either way.";
+
+/**
  * The square every badge interior is normalized to, in pixels.
  *
  * ⭐ **Normalizing is what makes one shared frame possible.** Every badge — Anthers' own
