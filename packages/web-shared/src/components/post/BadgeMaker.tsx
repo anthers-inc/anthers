@@ -19,7 +19,13 @@
  * repeatedly costs the platform nothing.
  */
 
-import { BADGE_COLORS, BADGE_SHAPES } from "@anthers/shared/badge-art";
+import type { BrandIconName } from "@anthers/brand";
+import {
+	BADGE_COLORS,
+	BADGE_PERK_KINDS,
+	BADGE_SHAPES,
+	type BadgePerkKind,
+} from "@anthers/shared/badge-art";
 import {
 	amountLabel,
 	BADGE_ART_MAX_BYTES,
@@ -299,6 +305,88 @@ function PickerRow({ label, children }: { label: string; children: React.ReactNo
 	);
 }
 
+/**
+ * The perk editor for one rung — a whole-list editor over the fixed category list.
+ *
+ * ⭐ **Each category carries its friendly explanation, not tax language** (Parker,
+ * 2026-09-15), and the line telling a creator who is unsure which applies what to do is
+ * the posture's own: write to support@anthers.org.
+ */
+function PerkEditor({
+	perks,
+	onChange,
+}: {
+	perks: PerkDraft[];
+	onChange: (perks: PerkDraft[]) => void;
+}) {
+	const update = (i: number, patch: Partial<PerkDraft>) => {
+		onChange(perks.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+	};
+	const remove = (i: number) => onChange(perks.filter((_, j) => j !== i));
+	const add = (kind: string) => {
+		const kindDef = BADGE_PERK_KINDS.find((k) => k.id === kind);
+		onChange([...perks, { kind, label: "", description: kindDef?.friendly ?? "" }]);
+	};
+
+	return (
+		<div className="rounded-lg border border-base-300 p-2">
+			<div className="mb-1 flex items-baseline justify-between">
+				<div className="text-xs font-medium text-base-content/60">Perks — what supporters receive</div>
+				<span className="text-[10px] text-base-content/40">access to gated works is added automatically</span>
+			</div>
+			{perks.map((perk, i) => (
+				<div key={i} className="mb-2 flex flex-wrap items-center gap-1">
+					<select
+						className="select select-bordered select-xs w-40"
+						value={String(perk.kind)}
+						onChange={(e) => update(i, { kind: e.target.value })}
+					>
+						{BADGE_PERK_KINDS.map((k) => (
+							<option key={k.id} value={k.id}>
+								{k.label}
+							</option>
+						))}
+					</select>
+					<input
+						type="text"
+						className="input input-bordered input-xs flex-1 min-w-40"
+						value={perk.label}
+						onChange={(e) => update(i, { label: e.target.value })}
+						placeholder="What supporters get, in your words"
+					/>
+					<button type="button" className="btn btn-ghost btn-xs btn-square text-error" onClick={() => remove(i)} title="Remove perk">
+						<TrashIcon className="w-3.5 h-3.5" />
+					</button>
+				</div>
+			))}
+			{perks.length < 10 && (
+				<select
+					className="select select-bordered select-xs w-52"
+					value=""
+					onChange={(e) => e.target.value && add(e.target.value)}
+				>
+					<option value="">Add a perk…</option>
+					{BADGE_PERK_KINDS.map((k) => (
+						<option key={k.id} value={k.id}>
+							{k.label}
+						</option>
+					))}
+				</select>
+			)}
+			{perks.length > 0 && (
+				<p className="mt-1 text-[11px] text-base-content/50">
+					{BADGE_PERK_KINDS.find((k) => k.id === String(perks[perks.length - 1]?.kind))?.friendly}
+				</p>
+			)}
+			<p className="mt-1 text-[11px] text-base-content/50">
+				Not sure which applies? Write to support@anthers.org.
+			</p>
+		</div>
+	);
+}
+
+type PerkDraft = { kind: BadgePerkKind | string; label: string; description?: string };
+
 export default function BadgeMaker() {
 	const [badges, setBadges] = useState<CreatorBadge[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -315,6 +403,8 @@ export default function BadgeMaker() {
 	const [editLabel, setEditLabel] = useState("");
 	const [editThreshold, setEditThreshold] = useState("");
 	const [editDescription, setEditDescription] = useState("");
+	// Perks, edited with the rung and saved as one whole-list replace.
+	const [editPerks, setEditPerks] = useState<PerkDraft[]>([]);
 
 	/**
 	 * ⚠️ **Only the FIRST load blanks the ladder.** A refetch after a save used to set
@@ -370,11 +460,23 @@ export default function BadgeMaker() {
 		}
 	};
 
-	const startEdit = (badge: CreatorBadge) => {
+	const startEdit = async (badge: CreatorBadge) => {
 		setEditingId(badge.id);
 		setEditLabel(badge.label);
 		setEditThreshold(badge.threshold);
 		setEditDescription(badge.description ?? "");
+		// Perks are stored rows; load them for the editor.
+		setEditPerks([]);
+		try {
+			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}/perks`);
+			if (res.ok) {
+				const body = (await res.json()) as { perks: PerkDraft[] };
+				setEditPerks(body.perks ?? []);
+			}
+		} catch {
+			// The editor opens with none on a failed read; saving sends the empty list,
+			// which is the honest state the creator saw.
+		}
 	};
 
 	const handleSaveEdit = async (id: number) => {
@@ -390,6 +492,17 @@ export default function BadgeMaker() {
 				},
 			});
 			if (!res.ok) throw new Error("Failed to save rung.");
+			// Perks ride along as their own whole-list replace, so one save settles both.
+			const perksRes = await apiFetch(`/api/subscriptions/badges/${id}/perks`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					perks: editPerks
+						.filter((p) => p.label.trim())
+						.map((p) => ({ kind: p.kind, label: p.label.trim(), description: p.description ?? "" })),
+				}),
+			});
+			if (!perksRes.ok) throw new Error("Failed to save perks.");
 			setEditingId(null);
 			fetchBadges();
 		} catch (err) {
@@ -466,6 +579,13 @@ export default function BadgeMaker() {
 										onChange={(e) => setEditDescription(e.target.value)}
 										placeholder="Description (optional)"
 									/>
+
+									{/* 🚨 PERKS. What a supporter gets beside access. Access itself is
+									    read from the Work gates — never typed here. The categories are
+									    the sales-tax posture's: a rung is taxed at its most-taxable
+									    kind, which the creator should know is why the tag matters. */}
+									<PerkEditor perks={editPerks} onChange={setEditPerks} />
+
 									<div className="flex gap-2">
 										<button
 											type="button"

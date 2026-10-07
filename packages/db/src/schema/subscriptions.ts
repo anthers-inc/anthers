@@ -964,6 +964,16 @@ export const badges = pgTable(
 		artEmblemScale: numeric("art_emblem_scale"),
 		artEmblemOffsetX: numeric("art_emblem_offset_x"),
 		artEmblemOffsetY: numeric("art_emblem_offset_y"),
+		/**
+		 * The Stripe Product this rung's subscription lines bill against, carrying the
+		 * rung's own tax code — per RUNG rather than per creator, because two rungs of one
+		 * ladder can be taxed differently (one carries a physical good, one is pure
+		 * support). Created on first use by `ensureBadgeProduct`, which mirrors
+		 * `ensureCreatorProduct`'s lazy create-and-restamp shape; empty string is the
+		 * not-yet-created state, exactly as `billing_accounts` spells it.
+		 */
+		stripeProductId: text("stripe_product_id").default(""),
+		stripeProductTaxCode: text("stripe_product_tax_code").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1092,6 +1102,41 @@ export const nounBlocklist = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [uniqueIndex("uq_noun_blocklist_kind_value").on(table.kind, table.value)],
+);
+
+/**
+ * A perk one creator Badge carries, as its creator tagged it in the Badge Maker.
+ *
+ * 🚨 **Sales tax follows what a supporter receives, so the tag is the billing fact** —
+ * `creatorProductTaxCode` reads a rung's kinds through the most-taxable ordering in
+ * `@anthers/shared/badge-art` (`mostTaxablePerkKind`), and a rung carrying nothing tags
+ * nothing, which is how a perk-free, gate-free rung stays a donation. Access to gated
+ * Works is deliberately NOT a row here: it is read from the gates themselves, which the
+ * creator cannot misstate.
+ *
+ * ⚠️ **The label is display text, not the kind**: a creator might call their Discord
+ * "The Back Room" — the kind column is what the machinery reads, and it is one of the
+ * fixed list.
+ */
+// node — the perks of a creator's own Badge rung are their pricing promises, node-owned
+// content like the rung itself.
+export const badgePerks = pgTable(
+	"badge_perks",
+	{
+		id: serial("id").primaryKey(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
+		/** A `BadgePerkKind` id — validated against `@anthers/shared/badge-art`'s list. */
+		kind: text("kind").notNull(),
+		/** What the supporter gets, in the creator's own words. */
+		label: text("label").notNull(),
+		description: text("description").default(""),
+		sortOrder: integer("sort_order").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_badge_perks_badge").on(table.badgeId, table.sortOrder)],
 );
 
 /**

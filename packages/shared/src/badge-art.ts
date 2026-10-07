@@ -213,6 +213,70 @@ export const BADGE_COLORS: BadgeColor[] = [
  * by Anthers, and `BadgeMark` renders whichever emblem id its caller hands it.
  */
 
+/**
+ * The perk categories a creator Badge can carry, and how they reach the sales-tax
+ * posture. **Access to gated Works is NOT here** — it is read automatically from the
+ * gates a Badge clears, which is data the maker cannot misstate. Everything else is
+ * what the creator tags: a service (feedback on a track), a physical good (a print),
+ * community access (a private chat), or recognition (a name in credits).
+ *
+ * 🚨 **Sales tax follows what a supporter receives, and a Badge carrying more than one
+ * kind is taxed at its MOST-TAXABLE kind** — the ordering of this list is that ordering,
+ * and the codes beside each are the Stripe tax codes the posture task settled. The
+ * friendly explanations are for creators, not tax authorities; the maker shows them and
+ * points the unsure at support@anthers.org.
+ */
+export const BADGE_PERK_KINDS = [
+	{
+		id: "physical_good",
+		label: "A physical good",
+		friendly: "Something you ship to supporters — a print, a zine, a sticker sheet.",
+		taxCode: "txcd_99999999",
+	},
+	{
+		id: "service",
+		label: "A service",
+		friendly:
+			"Something you do for supporters — feedback on a track, a lesson, a commission slot.",
+		taxCode: "txcd_20030000",
+	},
+	{
+		id: "community",
+		label: "Community access",
+		friendly:
+			"A private community — a Discord server, a members' chat, a community-only stream.",
+		taxCode: "txcd_20030000",
+	},
+	{
+		id: "recognition",
+		label: "Recognition",
+		friendly: "Their name somewhere only supporters' names go — a video's credits, a thank-you page.",
+		taxCode: "txcd_90000001",
+	},
+] as const;
+
+export type BadgePerkKind = (typeof BADGE_PERK_KINDS)[number]["id"];
+
+export function badgePerkKind(id: string | null | undefined): (typeof BADGE_PERK_KINDS)[number] | null {
+	return BADGE_PERK_KINDS.find((k) => k.id === id) ?? null;
+}
+
+/**
+ * The most-taxable kind across a Badge's perks — the tax classification a rung's
+ * subscription line carries.
+ *
+ * ⚠️ **Order matters and is the posture's ordering**, most-taxable first: a physical
+ * good outranks a service, a service outranks recognition, and recognition (not a
+ * taxable sale of anything in Colorado, per the posture) outranks nothing at all. A rung
+ * with no tagged perk and no gate codes as a donation, which is what `null` means here.
+ */
+export function mostTaxablePerkKind(kinds: string[]): (typeof BADGE_PERK_KINDS)[number] | null {
+	for (const kind of BADGE_PERK_KINDS) {
+		if (kinds.includes(kind.id)) return kind;
+	}
+	return null;
+}
+
 export const DEFAULT_BADGE_SHAPE = "circle";
 export const DEFAULT_BADGE_COLOR = "moss";
 

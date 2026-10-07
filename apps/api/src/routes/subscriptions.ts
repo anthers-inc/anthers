@@ -18,6 +18,7 @@ import {
 	accountCycles,
 	attentionEvents,
 	badgeArtProvenance,
+	badgePerks,
 	badges,
 	billingAccounts,
 	comments,
@@ -108,8 +109,11 @@ import {
 	periodStartFromSub,
 	planItemChange,
 	supportItems,
+	taxCodeForBadge,
 } from "../services/billing.js";
+import { updateProduct } from "../lib/processor.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
+import { badgePerkKind } from "@anthers/shared/badge-art";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -2094,6 +2098,84 @@ const subscriptionRoutes = new Hono()
 		}
 		return c.json({ unchanged: Boolean(outcome.unchanged), artPath: `/api/subscriptions/badges/${badgeId}/art` }, 200);
 	})
+
+	/**
+	 * The perks a rung carries, whole-list replace.
+	 *
+	 * 🚨 **Whole-list rather than per-row CRUD**, because the list is short (a ladder's
+	 * perks are a handful), the editor edits it as one form, and a whole-list replace is
+	 * what makes the most-taxable-kind re-stamp one operation rather than a sequence.
+	 * Validation is against `@anthers/shared/badge-art`'s fixed kind list — the same list
+	 * the tax code reads.
+	 */
+	.put(
+		"/badges/:id/perks",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				perks: z
+					.array(
+						z.object({
+							kind: z.string().refine((k) => badgePerkKind(k) !== null),
+							label: z.string().min(1).max(100),
+							description: z.string().max(500).optional(),
+						}),
+					)
+					.max(10),
+			}),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const badgeId = Number(c.req.param("id"));
+			const { perks } = c.req.valid("json");
+
+			const [badge] = await db
+				.select({ id: badges.id })
+				.from(badges)
+				.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+				.limit(1);
+			if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+			await db.transaction(async (tx) => {
+				await tx.delete(badgePerks).where(eq(badgePerks.badgeId, badgeId));
+				if (perks.length > 0) {
+					await tx.insert(badgePerks).values(
+						perks.map((p, i) => ({
+							badgeId,
+							kind: p.kind,
+							label: p.label.trim(),
+							description: p.description?.trim() ?? "",
+							sortOrder: i,
+						})),
+					);
+				}
+			});
+
+			// The kinds may have changed what this rung is taxed as — re-stamp now, the same
+			// best-effort follow `ensureCreatorProduct` gives its own restamp.
+			const [row] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
+			if (row?.stripeProductId) {
+				const taxCode = await taxCodeForBadge(badgeId);
+				if (row.stripeProductTaxCode !== taxCode) {
+					await updateProduct(row.stripeProductId, { tax_code: taxCode }).catch(() => null);
+					await db
+						.update(badges)
+						.set({ stripeProductTaxCode: taxCode, updatedAt: new Date() })
+						.where(eq(badges.id, badgeId));
+				}
+			}
+
+			const rows = await db
+				.select()
+				.from(badgePerks)
+				.where(eq(badgePerks.badgeId, badgeId))
+				.orderBy(badgePerks.sortOrder);
+			return c.json({
+				perks: rows.map((p) => ({ id: p.id, kind: p.kind, label: p.label, description: p.description })),
+			});
+		},
+	)
 
 	/**
 	 * Serve a rung's art.
