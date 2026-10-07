@@ -21,7 +21,7 @@
  */
 
 import { relations } from "drizzle-orm";
-import { index, integer, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { adminAccounts } from "./admin.js";
 import { users } from "./auth.js";
 
@@ -134,3 +134,68 @@ export const issueReports = pgTable(
 export const issueReportsRelations = relations(issueReports, ({ one }) => ({
 	reporter: one(users, { fields: [issueReports.reporterId], references: [users.id] }),
 }));
+
+// org — operational telemetry about Anthers' own infrastructure, never a creator's anything,
+// the same classification `resource_snapshots` carries. An error event describes a defect in
+// Anthers' own code paths; the stack frames that reach it may quote user content in a message
+// string, but the row's subject is the defect, not the person.
+/**
+ * One deduplicated error issue — the stored half of the hand-rolled error tracker, and the
+ * reason error data stays inside the database the Privacy Policy already governs rather than
+ * becoming a third party's event stream (the tooling decision of 2026-10-06).
+ *
+ * **A row is an issue, not an occurrence.** Every capture of the same defect — same
+ * normalized message, same top frames, same `source` — finds its row by fingerprint and
+ * increments `count`, so a bug recurring ten thousand times is one row with a big count
+ * rather than ten thousand rows never read. `sampleContext` carries the environment of the
+ * last capture (route, method, release, user-agent for a browser event), overwritten per
+ * occurrence rather than historized: the occcurrence history is the count, and anything
+ * richer is the Admin module's future work, not this table's.
+ *
+ * 🚨 **The ingest never 500s.** `POST /api/errors/browser` is the one unauthenticated write
+ * surface in this design, so it answers fast, refuses junk, and drops silently under
+ * pressure — a failed error capture must never become the error that pages. The API-side
+ * capture runs in the `app.onError` handler and is allowed to log-and-continue on failure,
+ * since that error is happening anyway.
+ */
+export const errorEvents = pgTable(
+	"error_events",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * SHA-256 of source + normalized message + top frame function names — the identity
+		 * the tracker dedupes on. Namespaced by `source` as part of the hash input, so an
+		 * API error and a browser error describing the same defect stay separate rows.
+		 */
+		fingerprint: text("fingerprint").notNull().unique(),
+		/** Where the error was caught: `api` (server onError) or `browser` (client beacon). */
+		source: text("source").notNull(),
+		/** The normalized message, capped. Normalization strips per-request variation. */
+		message: text("message").notNull(),
+		/**
+		 * The top stack frames, capped at 10, as JSON — raw frames for browser events
+		 * (minified, symbolication deferred to the Admin module) and readable ones for the API.
+		 */
+		topFrames: text("top_frames").notNull().default(""),
+		/** Occurrences folded into this row. One per capture after the first. */
+		count: integer("count").notNull().default(1),
+		/** First capture — when the defect was born, and the release it was born into. */
+		firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+		/** Last capture — whether a counted row is still happening. */
+		lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+		/** The release the error was last seen in, for the "our last deploy broke things" read. */
+		release: text("release").notNull().default(""),
+		/** Environment of the last capture: route, method, userAgent, and the redacted URL. */
+		sampleContext: jsonb("sample_context"),
+		/**
+		 * When an operational alert fired for this fingerprint. Null never alerted; a value
+		 * is the "told once, then only on resurface" record the noisy-channel rule costs.
+		 */
+		alertSentAt: timestamp("alert_sent_at", { withTimezone: true }),
+	},
+	(table) => [
+		// The operator's views: still-happening first, and first-seen for the "shipped broken" read.
+		index("idx_error_events_last_seen").on(table.lastSeenAt),
+		index("idx_error_events_first_seen").on(table.firstSeenAt),
+	],
+);

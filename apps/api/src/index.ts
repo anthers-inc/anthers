@@ -29,6 +29,7 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { LocalStorageService } from "./services/storage/local.js";
+import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
 
 const app = new Hono()
 	.use(logger())
@@ -59,6 +60,24 @@ const app = new Hono()
 		}),
 	)
 	.use(csrfProtection)
+	// The hand-rolled error tracker: every unhandled exception in a route lands here —
+	// fingerprinted, deduped into `error_events`, and alerted on first sight. Registered
+	// before the routes so it sees everything they throw. Its own failure logs and
+	// continues; a capture that fails is never the error that pages (services/error-tracker.ts).
+	.onError(async (error, c) => {
+		const captured = await captureError({
+			source: "api",
+			message: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+			context: { route: redactRoute(c.req.path), method: c.req.method },
+		});
+		const due = captured ? (captured.firstSeen ? true : await alertDue(captured)) : false;
+		if (captured && due) {
+			await alertOperational(captured, error, c.req);
+		}
+		console.error(`[api] unhandled error on ${c.req.method} ${c.req.path}:`, error);
+		return c.json({ error: "Something went wrong" }, 500);
+	})
 	// Serve uploaded content files from local filesystem in dev mode
 	.use("/content/*", async (c, next) => {
 		if (!isLocalStorage) return next();
