@@ -65,6 +65,7 @@
 		"stripe": "22.3.2"
 	},
 	"dependencies": {
+		"decimal.js": "10.6.0",
 		"drizzle-orm": "0.45.1"
 	}
 }

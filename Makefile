@@ -385,6 +385,19 @@ prod-db: ## Run CMD (e.g. `bun run admin:account list`) against production, DATA
 webhook-check: ## Assert Stripe's webhook endpoints and that prod's signing secrets work
 	bun run scripts/webhook-check.ts
 
+# Re-send the buyer's receipt for one production transaction the receipts machinery
+# arrived too late for (the first live charge, 2026-10-07, predates receipts). Composes
+# the two production doors: the rows through prod-db (the connection string injected,
+# never typed) and the Resend key through the Anthers Prod Bitwarden project (environment
+# injection, never an argument). Latched on receipt_sends, so it is safe to run twice.
+#   make receipt-replay INTENT=pi_…
+receipt-replay: ## Re-send a past transaction's buyer receipt (INTENT=pi_… or REFUND=re_…)
+	@if [ -z "$(INTENT)" ] && [ -z "$(REFUND)" ]; then \
+		echo 'Usage: make receipt-replay INTENT=pi_…  (or REFUND=re_…)' >&2; exit 64; fi
+	@PID=$$(bun run scripts/bws-project-id.ts prod) || exit 1; \
+	BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-prod-token)} \
+		bws run --project-id $$PID -- '$(MAKE) prod-db CMD="bun run scripts/receipt-replay.ts$(if $(INTENT), --intent $(INTENT),)$(if $(REFUND), --refund $(REFUND),)"'
+
 # Support from signup through settlement against test-mode Stripe, on a test clock. Needs `bws`
 # (the Anthers Dev key) and the network, and takes a few minutes, so it is not part of `verify`.
 # Run it after changing how invoices are read, discounted, recorded or settled — hand-built
