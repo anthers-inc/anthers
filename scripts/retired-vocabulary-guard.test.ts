@@ -103,7 +103,6 @@ const BUDGET: Record<string, number> = {
 	"packages/shared/src/figures.generated.ts": 1,
 	"packages/shared/src/public-access.test.ts": 1,
 	"packages/shared/src/public-access.ts": 1,
-	"packages/web-shared/src/components/post/BadgeLadderEditor.tsx": 1,
 	"packages/web-shared/src/components/economics/economics.tsx": 1,
 };
 
