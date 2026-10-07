@@ -23,16 +23,15 @@ import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { createPlayPageRoutes } from "./routes/play-page.js";
+import { statusRoutes } from "./routes/status.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
-import { statusRoutes } from "./routes/status.js";
 import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
+import { healthReport } from "./services/health.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { LocalStorageService } from "./services/storage/local.js";
-import { healthReport } from "./services/health.js";
-import { statusReport } from "./services/status.js";
 
 const app = new Hono()
 	.use(logger())

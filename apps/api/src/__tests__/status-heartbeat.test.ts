@@ -7,9 +7,9 @@
  * the same session database every suite gets.
  */
 import { beforeEach, describe, expect, it } from "bun:test";
-import { eq } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { errorEvents } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { readHeartbeatState, recordHeartbeat } from "../services/heartbeat";
 import { statusReport } from "../services/status";
 

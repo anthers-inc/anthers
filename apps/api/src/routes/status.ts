@@ -16,8 +16,8 @@
  * not on `requireAuth`, which would model a person where there is a machine.
  */
 import { Hono } from "hono";
+import { type HeartbeatVerdict, recordHeartbeat } from "../services/heartbeat.js";
 import { statusReport } from "../services/status.js";
-import { recordHeartbeat, type HeartbeatVerdict } from "../services/heartbeat.js";
 
 /** The bearer header's token, as the heartbeat route reads it. */
 function heartbeatToken(header: string | undefined): string | null {
@@ -39,7 +39,11 @@ export const statusRoutes = new Hono()
 		// secret-on-the-wire comparison carries, and one line to keep.
 		const expected = process.env.HEARTBEAT_TOKEN?.trim() ?? "";
 		const presented = heartbeatToken(c.req.header("Authorization")) ?? "";
-		if (!expected || presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+		if (
+			!expected ||
+			presented.length !== expected.length ||
+			!timingSafeEqual(presented, expected)
+		) {
 			return c.json({ error: "Not found" }, 404);
 		}
 		const body = await c.req.json().catch(() => null);
@@ -49,8 +53,14 @@ export const statusRoutes = new Hono()
 		}
 		await recordHeartbeat({
 			verdict: verdict as HeartbeatVerdict,
-			detail: typeof (body as { detail?: string }).detail === "string" ? (body as { detail: string }).detail : undefined,
-			checkedAt: typeof (body as { checkedAt?: string }).checkedAt === "string" ? (body as { checkedAt: string }).checkedAt : undefined,
+			detail:
+				typeof (body as { detail?: string }).detail === "string"
+					? (body as { detail: string }).detail
+					: undefined,
+			checkedAt:
+				typeof (body as { checkedAt?: string }).checkedAt === "string"
+					? (body as { checkedAt: string }).checkedAt
+					: undefined,
 		});
 		return c.json({ ok: true });
 	});
@@ -63,6 +73,7 @@ export const statusRoutes = new Hono()
 function timingSafeEqual(presented: string, expected: string): boolean {
 	if (presented.length !== expected.length) return false;
 	let diff = 0;
-	for (let i = 0; i < expected.length; i++) diff |= presented.charCodeAt(i) ^ expected.charCodeAt(i);
+	for (let i = 0; i < expected.length; i++)
+		diff |= presented.charCodeAt(i) ^ expected.charCodeAt(i);
 	return diff === 0;
 }

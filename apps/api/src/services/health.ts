@@ -23,8 +23,9 @@
  * route 40,000 times an hour must learn nothing a load-fingerprint could use. The states
  * are thresholds, deliberately coarse and deliberately not secret-but-fine-grained.
  */
-import { sql } from "drizzle-orm";
+
 import { db } from "@anthers/db/client";
+import { sql } from "drizzle-orm";
 import { rowsOf } from "./rows.js";
 
 /** The three states a component answers in. A page is honest with three; five is theater. */
@@ -66,7 +67,7 @@ async function checkDatabase(): Promise<ComponentHealth> {
 	try {
 		await db.execute(sql`select 1`);
 		return { state: "operational", ms: Date.now() - started };
-	} catch (error) {
+	} catch {
 		return {
 			state: "down",
 			detail: "The database is not answering.",
@@ -89,7 +90,8 @@ async function checkQueue(): Promise<ComponentHealth> {
 	try {
 		const exists = await db.execute(sql`SELECT to_regclass('pgboss.job') IS NOT NULL AS present`);
 		const present = rowsOf<{ present: boolean }>(exists)[0]?.present === true;
-		if (!present) return { state: "down", detail: "The job queue is not answering.", ms: Date.now() - started };
+		if (!present)
+			return { state: "down", detail: "The job queue is not answering.", ms: Date.now() - started };
 		const counts = await db.execute(sql`
 			SELECT state::text AS state, count(*)::int AS n
 			FROM pgboss.job
@@ -105,7 +107,7 @@ async function checkQueue(): Promise<ComponentHealth> {
 			...(failed > 0 ? { detail: "The job queue is holding failed jobs." } : {}),
 			ms: Date.now() - started,
 		};
-	} catch (error) {
+	} catch {
 		return {
 			state: "down",
 			detail: "The job queue is not answering.",

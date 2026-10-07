@@ -17,8 +17,8 @@
  * configuration they are — checked externally by the droplet heartbeat, whose answer this
  * route renders rather than re-measures.
  */
-import { healthReport, type ComponentState } from "./health.js";
-import { readHeartbeatState, type HeartbeatState } from "./heartbeat.js";
+import { type ComponentState, healthReport } from "./health.js";
+import { type HeartbeatState, readHeartbeatState } from "./heartbeat.js";
 
 /** The public per-component answer — a state and a sentence, never a metric. */
 export interface StatusComponent {
@@ -60,14 +60,25 @@ export async function statusReport(): Promise<StatusReport> {
 	const heartbeat = await readHeartbeatState();
 
 	const components: StatusComponent[] = [
-		{ name: "API", state: report.components.database.state === "down" ? report.components.database.state : "operational" },
+		{
+			name: "API",
+			state:
+				report.components.database.state === "down"
+					? report.components.database.state
+					: "operational",
+		},
 		{ name: "Web app", state: "operational" },
 		{ name: "Worker", state: report.components.jobQueue.state },
-		{ name: "Database", state: report.components.database.state, ...(report.components.database.detail ? { detail: report.components.database.detail } : {}) },
+		{
+			name: "Database",
+			state: report.components.database.state,
+			...(report.components.database.detail ? { detail: report.components.database.detail } : {}),
+		},
 	];
 	if (report.components.jobQueue.state !== "operational" && report.components.jobQueue.detail) {
 		const workerRow = components.find((row) => row.name === "Worker");
-		if (workerRow && workerRow.state !== "operational") workerRow.detail = report.components.jobQueue.detail;
+		if (workerRow && workerRow.state !== "operational")
+			workerRow.detail = report.components.jobQueue.detail;
 	}
 	// Storage: configured correctly is the state this process can attest to; the vendor's
 	// own reachability is what the droplet's outside view is for.
@@ -82,7 +93,8 @@ export async function statusReport(): Promise<StatusReport> {
 		...(heartbeat.detail ? { detail: heartbeat.detail } : {}),
 	});
 
-	let state: StatusReport["state"] = report.state === "down" ? "down" : externalState === "down" ? "degraded" : report.state;
+	const state: StatusReport["state"] =
+		report.state === "down" ? "down" : externalState === "down" ? "degraded" : report.state;
 
 	return {
 		state,
