@@ -1026,6 +1026,76 @@ export const badgeArtProvenance = pgTable(
 );
 
 /**
+ * What one creator spent on the Noun Project API on one UTC day — the per-creator
+ * budget's counter.
+ *
+ * 🚨 **This counter is the guard that keeps the Badge Maker from being expensive, and it
+ * bounds the platform rather than the vendor's caps do.** Icon calls track compositions
+ * (two creators picking the same emblem each pay their own), so no maturity effect ever
+ * saturates the curve; a creator's own daily budget is the bound. It is a DAILY budget:
+ * roughly 25 icon calls and 300 searches, about three times what building a five-rung
+ * ladder actually takes, capping one person near a dollar a day — the figure that keeps
+ * ten obsessive creators from being a $300/month plan requirement.
+ *
+ * ⚠️ **Exhaustion degrades rather than errors.** The ladder a creator already made keeps
+ * rendering from its stored composites; new searches and saves decline politely. The
+ * routes read this table through `services/noun-budget.ts`, its only writer, which also
+ * carries the key-wide circuit breaker.
+ */
+// both — vendor spend is real treasury activity, so the org owns the accounting, but the
+// rows are keyed per creator and read by their own picker, which is a node surface.
+export const nounSpend = pgTable(
+	"noun_spend",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** The UTC day the spend happened on, as `YYYY-MM-DD`. */
+		day: text("day").notNull(),
+		iconCalls: integer("icon_calls").notNull().default(0),
+		serviceCalls: integer("service_calls").notNull().default(0),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_noun_spend_creator_day").on(table.creatorId, table.day)],
+);
+
+/**
+ * The content blocklist for the Badge Maker's search — terms, icon ids and collection
+ * ids the vendor's catalog must not surface through Anthers.
+ *
+ * 🚨 **A free-text search across nearly ten million third-party assets is a new content
+ * surface, and this table is the control.** The term list is the half that matters,
+ * because it refuses the query BEFORE the vendor call rather than filtering the result —
+ * a refused query is also a call never spent. Anthers' own list rides alongside the
+ * vendor's key-level blocklist (20,000 entries on a paid key, cached ten minutes on
+ * their side), and additions flow up to the vendor's endpoints by the sync job, so a
+ * term removed from Anthers' catalog is removed from the key's too.
+ *
+ * ⚠️ **Never ship the picker against an empty list on the theory that line drawings are
+ * harmless.** Seeding it is a safety decision with a named owner; the mechanism exists
+ * so the list has somewhere to live and a path from a creator report into it.
+ */
+// org — the blocklist is Anthers' safety posture, not any creator's setting; every row
+// is an org decision, and no creator node has any business holding it.
+export const nounBlocklist = pgTable(
+	"noun_blocklist",
+	{
+		id: serial("id").primaryKey(),
+		/** `term` refuses a whole query; `icon` and `collection` are filtered from results. */
+		kind: text("kind").notNull(),
+		/** The term text, or the vendor id as a string. */
+		value: text("value").notNull(),
+		/** Why it is on the list — the record a review reads. */
+		reason: text("reason").notNull(),
+		/** Who added it — an admin account id, for the moderation-chain shape. */
+		addedBy: integer("added_by").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_noun_blocklist_kind_value").on(table.kind, table.value)],
+);
+
+/**
  * A guardian's controls on one account, behind a pin.
  *
  * 🚨 **Its own table rather than columns on `accounts`, because the pin changes who may write

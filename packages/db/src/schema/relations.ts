@@ -27,6 +27,8 @@ import {
 	badgeArtProvenance,
 	badges,
 	billingAccounts,
+	nounBlocklist,
+	nounSpend,
 	poolDistributions,
 	userBadges,
 	userPreferences,
@@ -285,4 +287,12 @@ export const badgesRelations = relations(badges, ({ one, many }) => ({
 
 export const badgeArtProvenanceRelations = relations(badgeArtProvenance, ({ one }) => ({
 	badge: one(badges, { fields: [badgeArtProvenance.badgeId], references: [badges.id] }),
+}));
+
+export const nounSpendRelations = relations(nounSpend, ({ one }) => ({
+	creator: one(users, { fields: [nounSpend.creatorId], references: [users.id] }),
+}));
+
+export const nounBlocklistRelations = relations(nounBlocklist, ({ one }) => ({
+	addedByAdmin: one(users, { fields: [nounBlocklist.addedBy], references: [users.id] }),
 }));
