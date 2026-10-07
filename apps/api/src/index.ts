@@ -97,8 +97,10 @@ const app = new Hono()
 	.route("/build", createBuildDeliveryRoutes())
 	// The play page — the server-rendered parent an isolation build plays inside. Same
 	// host as the API (anthers.org), by design: it is the page that holds the session
-	// AND carries COOP/COEP, which is the combination the SPA cannot be.
-	.route("/play", createPlayPageRoutes())
+	// AND carries COOP/COEP, which is the combination the SPA cannot be. Under /api
+	// rather than bare /play because production ingress routes only /api (and /health)
+	// to this component — a bare path would fall to the web static site and 404.
+	.route("/api/play", createPlayPageRoutes())
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes);
 
