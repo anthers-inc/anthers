@@ -14,6 +14,13 @@
  * layout is why this page lives in `apps/web` rather than beside the other Studio pages in
  * `@anthers/web-shared`: the players belong to this app.
  *
+ * ⚠️ **Two deliberate divergences from the user's page, both the widening task's** (2026-10-06):
+ * the column is `WorkColumn`'s `wide` variant, because the Access table, the rating matrix and
+ * the credits editor are working controls rather than reader surfaces and scrunched at the
+ * reading width; and the Original Release Date is edited in the Release section beside the
+ * release control rather than in the header, because the two dates name one fact pair. The
+ * parts themselves stay shared, which is the rule the one-layout docblock actually states.
+ *
  * 🚨 **The container is the point, and it is about addressability rather than size.** Two
  * controls on this page send the creator somewhere else: the Access table needs Badge rungs
  * that live in Settings, and Release needs payout setup that lives in Settings. Both are
@@ -111,6 +118,7 @@ import { isUploading, useWorkUploads, workUploads } from "@anthers/web-shared/wo
 import { ArrowUpTrayIcon, CalendarIcon, EyeIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+	formatOriginallyReleased,
 	isWriting,
 	WORK_DESCRIPTION_CLASS,
 	WORK_LYRICS_CLASS,
@@ -150,6 +158,15 @@ async function fetchOwnWork(id: string | number): Promise<Work | null> {
  */
 const IN_PLACE =
 	"rounded-md border border-transparent bg-transparent px-2 -mx-2 hover:border-base-300 focus:border-primary focus:outline-none";
+
+/**
+ * The in-place style a control gets while it is EMPTY — a placeholder in an invisible field
+ * read as stray text on the page (the widening task's record), so an empty control carries a
+ * quiet border that says a field is here. It drops the moment content exists, restoring the
+ * pure in-place look the page is about.
+ */
+const IN_PLACE_EMPTY =
+	"rounded-md border border-base-300 bg-transparent px-2 -mx-2 hover:border-primary/40 focus:border-primary focus:outline-none placeholder:text-base-content/40";
 
 /** A text area that grows with what is in it, the way the text it stands in for would. */
 const GROWS = "resize-none [field-sizing:content]";
@@ -706,7 +723,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		<section>
 			<textarea
 				aria-label="Description"
-				className={`${writing ? WRITING_STANDFIRST_CLASS : WORK_DESCRIPTION_CLASS} ${IN_PLACE} ${GROWS} w-full ${writing ? "min-h-12" : "min-h-16"}`}
+				// Empty shows a quiet field border (`IN_PLACE_EMPTY`) — a placeholder in an
+				// invisible field read as stray text — and filled restores the in-place look.
+				className={`${writing ? WRITING_STANDFIRST_CLASS : WORK_DESCRIPTION_CLASS} ${description ? IN_PLACE : IN_PLACE_EMPTY} ${GROWS} w-full ${writing ? "min-h-12" : "min-h-16"}`}
 				style={writing ? WRITING_BODY_STYLE : undefined}
 				value={description}
 				onChange={(e) => setDescription(e.target.value)}
@@ -720,7 +739,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	);
 
 	return (
-		<WorkColumn type={type}>
+		<WorkColumn type={type} wide>
 			{/* What this page is, and the way to see it exactly as a user does. The user's view
 			    shows what is saved, which is why it says so while anything is not. */}
 			<div className="flex flex-wrap items-center gap-2">
@@ -763,7 +782,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					/>
 				}
 				dates={
-					<OriginalReleaseDate value={originalDate} released={released} onValue={setOriginalDate} />
+					<WorkDatesSlot
+						originally={formatOriginallyReleased(current.originallyReleased)}
+						released={released}
+					/>
 				}
 				rating={<RatingLine maturity={maturity} notes={contentNotes} />}
 			/>
@@ -1111,6 +1133,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						/>
 						<span className="label-text text-sm">Released to my public Catalog</span>
 					</label>
+					{/* The pair brought together (the widening task): the creator's claim about
+					    when this first came out anywhere, edited beside the control that records
+					    when it released HERE — it sat at the very top of the page while its
+					    partner sat at the bottom. */}
+					<OriginalReleaseDate value={originalDate} released={released} onValue={setOriginalDate} />
 					{/*
 					 * The released Work's listing on the network, as its record, read raw from the
 					 * creator's own server (Parker, 2026-09-18). Said of what is SAVED, since a listing
@@ -1301,8 +1328,36 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 }
 
 /**
- * The Original Release Date, where a user sees "First released": the creator's claim about
- * when the work first came out anywhere, beside the date Anthers records it releasing here.
+ * The header's dates slot: the saved dates drawn as a user sees them, which is the public
+ * page's `WorkDates` shape. The Original Release Date's *input* is no longer here — it sits
+ * beside the release control in the Release section below, because the two dates name one
+ * fact pair and splitting input from its partner across the page split the pair.
+ */
+function WorkDatesSlot({
+	originally,
+	released,
+}: {
+	originally: string | null;
+	released: string | null;
+}) {
+	return (
+		<div className="flex flex-wrap items-center gap-4 text-sm text-base-content/60">
+			{originally && (
+				<span className="flex items-center gap-1">
+					<CalendarIcon className="w-4 h-4" />
+					First released {originally}
+				</span>
+			)}
+			{released && <span>Released {released}</span>}
+		</div>
+	);
+}
+
+/**
+ * The Original Release Date, edited inside the Release section beside the release control:
+ * the creator's claim about when the work first came out anywhere, beside the date Anthers
+ * records it releasing here. It sat at the very top of the page while its partner sat at the
+ * bottom, which split the pair (the "Widen and Reorder the Work Edit Layout" task).
  */
 function OriginalReleaseDate({
 	value,
@@ -1407,35 +1462,40 @@ function Thumbnail({
 	frameError: string | null;
 }) {
 	return (
-		<div className="flex flex-wrap items-start gap-4">
-			<div className="w-48 flex flex-col gap-2">
-				<FileUpload
-					accept="image/*"
-					maxSize={10 * 1024 * 1024}
-					preview={preview}
-					label="Upload a thumbnail"
-					compact
-					onFileSelect={onFile}
-					onClear={onClear}
-				/>
-				{onFrame && (
-					<button type="button" className="btn btn-outline btn-sm" onClick={onFrame}>
-						Use This Frame
-					</button>
-				)}
-			</div>
-			<div className="flex-1 min-w-48 flex flex-col gap-1 text-xs text-base-content/60">
-				<span className="font-medium text-base-content/80">
-					{required ? "Thumbnail" : "Thumbnail (optional)"}
-				</span>
-				<p>
-					Shown on cards, before a video plays, and in front of this Work for anyone who hasn't
-					unlocked it.
-					{required &&
-						" A video needs one before it's released: upload an image, or pause the video above and use that frame."}
-				</p>
-				<p>{THUMBNAIL_RULE}</p>
-				{frameError && <p className="text-warning">{frameError}</p>}
+		<div className="flex flex-col gap-2">
+			{/* The label first, at the width the row now has, rather than packed into a
+			    narrow sub-column beside the image where it wrapped into a dense block
+			    (the widening task's record). */}
+			<span className="font-medium text-base-content/80">
+				{required ? "Thumbnail" : "Thumbnail (optional)"}
+			</span>
+			<div className="flex flex-wrap items-start gap-4">
+				<div className="w-48 flex flex-col gap-2">
+					<FileUpload
+						accept="image/*"
+						maxSize={10 * 1024 * 1024}
+						preview={preview}
+						label="Upload a thumbnail"
+						compact
+						onFileSelect={onFile}
+						onClear={onClear}
+					/>
+					{onFrame && (
+						<button type="button" className="btn btn-outline btn-sm" onClick={onFrame}>
+							Use This Frame
+						</button>
+					)}
+				</div>
+				<div className="flex-1 min-w-48 flex flex-col gap-1 text-xs text-base-content/60">
+					<p className="max-w-prose">
+						Shown on cards, before a video plays, and in front of this Work for anyone who hasn't
+						unlocked it.
+						{required &&
+							" A video needs one before it's released: upload an image, or pause the video above and use that frame."}
+					</p>
+					<p className="max-w-prose">{THUMBNAIL_RULE}</p>
+					{frameError && <p className="text-warning">{frameError}</p>}
+				</div>
 			</div>
 		</div>
 	);
