@@ -1,0 +1,1 @@
+ALTER TABLE "web_builds" ADD COLUMN "requires_isolation" boolean DEFAULT false NOT NULL;

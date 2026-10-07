@@ -22,6 +22,7 @@ import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type { Work } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
+import { PlayIcon } from "@heroicons/react/24/solid";
 import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
@@ -346,10 +347,20 @@ export function WorkDeliverable({
 			{/* A hosted build outranks an external embed address: the build Anthers serves is
 			    the thing the creator uploaded here, and the embed address is creator-hosted
 			    off-platform. A Work carrying both plays hosted; removing the build falls back
-			    to the address. */}
+			    to the address.
+			    🚨 The ancestor rule decides the shape: an isolation build (threaded export,
+			    SharedArrayBuffer) is cross-origin isolated only when EVERY ancestor is, and
+			    this SPA carries no per-Work response headers — so it plays on the
+			    server-rendered /play page, which mints the token itself and carries
+			    COOP/COEP. An ordinary build frames inline as before. */}
 			{work.type === "game" || work.type === "software" ? (
-				work.webPlayable ? (
+				work.webPlayable && work.webPlayPath === "inline" ? (
 					<HostedEmbed workId={work.id} title={work.title ?? "Play"} />
+				) : work.webPlayable && work.webPlayPath === "page" ? (
+					<a href={`/play/${work.id}`} className="btn btn-primary btn-lg gap-2 self-start">
+						<PlayIcon className="w-6 h-6" />
+						Play in Browser
+					</a>
 				) : (
 					work.embedUrl && <ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
 				)

@@ -732,7 +732,7 @@ async function findPostRow(param: string): Promise<typeof posts.$inferSelect | n
  * callers (delivery URLs, pickers) address Works by id, while public URLs carry the
  * slug-publicId form.
  */
-async function findWorkRow(param: string): Promise<typeof works.$inferSelect | null> {
+export async function findWorkRow(param: string): Promise<typeof works.$inferSelect | null> {
 	if (/^\d+$/.test(param)) {
 		const n = Number(param);
 		const [byId] = await db.select().from(works).where(eq(works.id, n)).limit(1);
@@ -747,6 +747,23 @@ async function findWorkRow(param: string): Promise<typeof works.$inferSelect | n
 	}
 	const [bySlug] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
 	return bySlug ?? null;
+}
+
+/**
+ * The build flags the user-facing serializer takes — whether a completed primary build
+ * exists and whether it declared isolation — as one spread pair, from ONE query. The
+ * detail route is the one caller (the batch routes read them off `loadWorkBundles`'s
+ * map instead, which loads rows anyway); without this, adding a second flag was
+ * becoming two nearly-identical inline lookups, which is how an N+1 and a drift are
+ * both born.
+ */
+export async function buildFlagsForWork(workId: number): Promise<[boolean, boolean]> {
+	const [row] = await db
+		.select({ id: webBuilds.id, requiresIsolation: webBuilds.requiresIsolation })
+		.from(webBuilds)
+		.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)))
+		.limit(1);
+	return row != null ? [true, row.requiresIsolation] : [false, false];
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -1662,7 +1679,7 @@ function contextFor(
  * still be refused gated and Adult work by the resolver, but they would be drawing the
  * sharer's budget across a catalog the sharer never shared.
  */
-const requireUserOrShareLink = createMiddleware(async (c, next) => {
+export const requireUserOrShareLink = createMiddleware(async (c, next) => {
 	const workId = parseNumericId(c.req.param("id") ?? "");
 	if (workId != null) {
 		const token = c.req.query("share");
@@ -1708,7 +1725,7 @@ async function requesterFor(
  * project, or the URL that got the caller here — and, since 2026-08-28, nothing is inherited
  * from a share link either. A token supplies an *attribution*; the gates are unmoved.
  */
-async function workAccessFor(
+export async function workAccessFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 ): Promise<AccessResultLike> {
@@ -1741,7 +1758,7 @@ async function workAccessFor(
  *
  * Returns null when delivery may proceed, or the 402 body when the allowance is spent.
  */
-async function publicAccessGate(
+export async function publicAccessGate(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 	access: AccessResultLike,
@@ -1799,7 +1816,7 @@ async function publicAccessGate(
  *
  * Returns null when delivery may proceed, or the 403 body when the window is spent.
  */
-async function parentalTimeGate(
+export async function parentalTimeGate(
 	userId: number | null,
 	work: WorkRow,
 ): Promise<{ error: string; code: string; window: LimitWindow } | null> {
@@ -1901,6 +1918,8 @@ async function serializeWorkForUser(
 	 * gates the external embed. The build's files ride nowhere in this payload.
 	 */
 	hasPrimaryBuild = false,
+	/** Whether that primary build declared cross-origin isolation (threaded export). */
+	primaryRequiresIsolation = false,
 ) {
 	const canAccess = access.canAccess;
 
@@ -1994,7 +2013,14 @@ async function serializeWorkForUser(
 		// audio route leaves to the player (withhold the URL, enforce at the endpoint).
 		// The build's files themselves are never in this payload: they resolve against
 		// the delivery origin's allowlist, where only the token speaks.
+		//
+		// `webPlayPath` says WHERE the play button leads: `"inline"` frames the minted
+		// address in place; `"page"` sends the user to the server-rendered play page —
+		// which an isolation build (threaded export) requires, because a frame is
+		// cross-origin isolated only when every ancestor is, and this SPA cannot carry
+		// per-Work response headers. Withheld under the same not-deliverable branch.
 		webPlayable: deliverable && hasPrimaryBuild,
+		webPlayPath: deliverable ? (primaryRequiresIsolation ? "page" : "inline") : null,
 		// 🚨 Lyrics ride WITH the payload, not with the blurb. A gated track's words are as
 		// much the deliverable as its audio, and the two failure directions are not
 		// symmetric: a creator who wants them public can put them in `description`, which
@@ -2193,6 +2219,7 @@ async function loadPostWorks(
 					userId,
 					pagesByWork.get(work.id) ?? 0,
 					(buildsByWork.get(work.id) ?? []).some((b) => b.isPrimary),
+					(buildsByWork.get(work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 				),
 			};
 		}),
@@ -3999,13 +4026,9 @@ const contentRoutes = new Hono()
 					// The Work's own detail page — the one place a play button renders, so
 					// this is the one lookup this endpoint owes (it does not go through
 					// loadWorkBundles; see the page-count note above for the same shape).
-					(
-						await db
-							.select({ id: webBuilds.id })
-							.from(webBuilds)
-							.where(and(eq(webBuilds.workId, work.id), eq(webBuilds.isPrimary, true)))
-							.limit(1)
-					).length > 0,
+					// One query answers both: is there a primary build, and does it need
+					// isolation (which decides whether play opens the /play page).
+					...(await buildFlagsForWork(work.id)),
 				)),
 				creator,
 				creatorHasStripe,
@@ -4292,6 +4315,7 @@ const contentRoutes = new Hono()
 						userId,
 						pagesByWork.get(w.id) ?? 0,
 						(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
+						(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 					),
 				),
 			),
@@ -5274,6 +5298,8 @@ const contentRoutes = new Hono()
 							userId,
 							pagesByWork.get(m.work.id) ?? 0,
 							(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
+							(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
+								false,
 						)),
 					})),
 				),
@@ -6006,6 +6032,8 @@ const contentRoutes = new Hono()
 									user.id,
 									pagesByWork.get(w.id) ?? 0,
 									(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
+									(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
+										false,
 								),
 							};
 						}

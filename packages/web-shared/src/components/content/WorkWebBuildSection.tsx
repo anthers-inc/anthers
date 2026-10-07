@@ -111,6 +111,7 @@ export default function WebBuildSection({
 	const [label, setLabel] = useState("");
 	const [picked, setPicked] = useState<File[]>([]);
 	const [entryPath, setEntryPath] = useState("");
+	const [requiresIsolation, setRequiresIsolation] = useState(false);
 	const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
 	const [phase, setPhase] = useState<"idle" | "uploading" | "registering">("idle");
 	const [error, setError] = useState<string | null>(null);
@@ -142,7 +143,7 @@ export default function WebBuildSection({
 			// 1. Create the build unit.
 			const res = await client.api["web-builds"].works[":id"]["web-build"].$post({
 				param: { id: String(work.id) },
-				json: { label: label.trim(), entryPath: entry },
+				json: { label: label.trim(), entryPath: entry, requiresIsolation },
 			});
 			if (!res.ok) throw new Error("Could not create the build.");
 			const { build } = await res.json();
@@ -327,6 +328,22 @@ export default function WebBuildSection({
 							disabled={uploading}
 						/>
 					</FormField>
+					<label className="label cursor-pointer justify-start gap-2 w-fit">
+						<input
+							type="checkbox"
+							className="checkbox checkbox-sm"
+							checked={requiresIsolation}
+							onChange={(e) => setRequiresIsolation(e.target.checked)}
+							disabled={uploading}
+						/>
+						<span className="label-text text-sm">
+							Threaded build (SharedArrayBuffer)
+							<span className="block text-xs text-base-content/60">
+								On when your export preset had Thread Support enabled. Plays on a dedicated page
+								with the isolation headers, rather than inline.
+							</span>
+						</span>
+					</label>
 
 					{uploading && (
 						<ul className="flex flex-col gap-1 text-xs">

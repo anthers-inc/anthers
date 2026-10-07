@@ -589,6 +589,18 @@ export const webBuilds = pgTable(
 		entryPath: text("entry_path").notNull(),
 		/** Whether the Work page frames this build. Exactly one per Work, enforced in code. */
 		isPrimary: boolean("is_primary").notNull().default(false),
+		/**
+		 * Whether this build needs cross-origin isolation — a threaded engine export
+		 * asks for `SharedArrayBuffer`, which a browser grants only to a page carrying
+		 * `COOP: same-origin` + `COEP: require-corp`, and the frame's ancestors count:
+		 * an isolated frame inside a page that is not itself isolated is not isolated,
+		 * full stop. So the declaration decides where the build plays from — Anthers'
+		 * own SPA cannot carry per-Work response headers at all, so an isolation build
+		 * plays on the server-rendered play page (which carries the pair) rather than
+		 * the Work page's inline frame. Declared by the creator who exported the build,
+		 * because the export preset knows: it is their "Thread Support" checkbox.
+		 */
+		requiresIsolation: boolean("requires_isolation").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
