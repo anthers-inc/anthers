@@ -32,7 +32,7 @@
 
 import { db } from "@anthers/db/client";
 import { errorEvents } from "@anthers/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 /** How long since the last report the outside view reads as *unknown* rather than current. */
 const HEARTBEAT_STALE_MS = 10 * 60 * 1000; // Ten minutes against a one-minute check cadence.
