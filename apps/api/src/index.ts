@@ -26,10 +26,13 @@ import { createPlayPageRoutes } from "./routes/play-page.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { statusRoutes } from "./routes/status.js";
 import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { LocalStorageService } from "./services/storage/local.js";
+import { healthReport } from "./services/health.js";
+import { statusReport } from "./services/status.js";
 
 const app = new Hono()
 	.use(logger())
@@ -94,7 +97,15 @@ const app = new Hono()
 			rewriteRequestPath: (path) => path.slice("/content".length),
 		})(c, next);
 	})
-	.get("/health", (c) => c.json({ status: "ok" }))
+	.get("/health", async (c) => {
+		// The deepened health check: Postgres and the queue rather than only liveness —
+		// services/health.ts carries why the shallow answer was a lie by omission. The
+		// response still returns fast (both probes are single reads with the server's own
+		// timeouts), and answers 200 only for operational-or-degraded, so a container-level
+		// health check that maps non-200 to "restart me" restarts a genuinely broken app.
+		const report = await healthReport();
+		return c.json(report, report.state === "down" ? 503 : 200);
+	})
 	.route("/api/auth", authRoutes)
 	.route("/api/atproto", atprotoRoutes)
 	.route("/api/accounts", accountRoutes)
@@ -121,7 +132,8 @@ const app = new Hono()
 	// to this component — a bare path would fall to the web static site and 404.
 	.route("/api/play", createPlayPageRoutes())
 	.route("/api/admin", adminRoutes)
-	.route("/api/webhooks", webhookRoutes);
+	.route("/api/webhooks", webhookRoutes)
+	.route("/api/status", statusRoutes);
 
 /**
  * The dev-only build-delivery harness, registered only from a checkout. Keeping the mount
