@@ -281,7 +281,10 @@ export default function BasketPage() {
 					    off the group's left edge, smaller and quieter than the header —
 					    the receipt's detail lines against the header's voice. The dividers
 					    and the price column stay aligned with the Payment card's. */}
-					<ul className="ml-3 divide-y divide-base-300 border-l border-base-300 pl-3" data-testid="basket-items">
+					<ul
+						className="ml-3 divide-y divide-base-300 border-l border-base-300 pl-3"
+						data-testid="basket-items"
+					>
 						{quote.items.map((item) => {
 							// The list's own item record — the remove buttons work off the
 							// BASKET's items (the source with handles), matched by id.
@@ -294,7 +297,9 @@ export default function BasketPage() {
 									>
 										<span className="block truncate">{item.title ?? "Untitled"}</span>
 									</Link>
-									<span className="shrink-0 text-sm tabular-nums text-base-content/80">${item.price}</span>
+									<span className="shrink-0 text-sm tabular-nums text-base-content/80">
+										${item.price}
+									</span>
 									<span className="flex w-6 shrink-0 items-center justify-center">
 										<button
 											type="button"
