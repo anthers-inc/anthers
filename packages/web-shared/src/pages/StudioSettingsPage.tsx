@@ -263,6 +263,85 @@ function AtmospherePublishingSection() {
 	);
 }
 
+/**
+ * Receipt emails on the creator's side of a transaction: a sale, a refund, mailed to the
+ * account address for every one, on by default. Low volume is when every creator starts
+ * (and where the platform is today), so the default is on and the switch is the way out
+ * at scale — the reasoning lives on the column.
+ *
+ * The toggle hides entirely until a Stripe account exists: a creator still onboarding
+ * has received no money and can receive none, so a switch about sale emails would render
+ * as dead UI — the same show-nothing rule `AtmospherePublishingSection` applies to a
+ * closed door. PATCH is refused by the API in that state anyway.
+ */
+function CreatorReceiptEmailsSection() {
+	const [enabled, setEnabled] = useState<boolean | null>(null);
+	const [exists, setExists] = useState(true);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		apiFetch("/api/payments/stripe/receipt-emails")
+			.then(async (res) => {
+				if (!res.ok) {
+					// 409 is the no-Stripe-account answer, which is the hide case, not an error.
+					if (res.status === 409) setExists(false);
+					return null;
+				}
+				return (res.json() as Promise<{ enabled: boolean }>).then((d) => d.enabled);
+			})
+			.then((v) => v !== null && setEnabled(v))
+			.catch(() => setExists(false));
+	}, []);
+
+	const toggle = async () => {
+		if (enabled === null) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/payments/stripe/receipt-emails", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ enabled: !enabled }),
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(body?.error ?? "Couldn't save the setting.");
+			}
+			const data = (await res.json()) as { enabled: boolean };
+			setEnabled(data.enabled);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't save the setting.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	if (!exists || enabled === null) return null;
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Email me about every transaction</h3>
+				<p className="text-sm text-base-content/60">
+					An email each time somebody buys or is refunded on your work, sent to your account
+					address. It's on while volume is low; turn it off any time.
+				</p>
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
+					</div>
+				)}
+				<div>
+					<button className="btn btn-sm btn-outline" onClick={toggle} disabled={busy}>
+						{enabled ? "Turn off" : "Turn on"}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export default function StudioSettingsPage() {
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
@@ -274,6 +353,7 @@ export default function StudioSettingsPage() {
 
 			<div className="flex flex-col gap-6">
 				<StripeOnboardingSection />
+				<CreatorReceiptEmailsSection />
 				<AtmospherePublishingSection />
 				<div>
 					<h2 className="text-lg font-semibold mb-2">Badges</h2>

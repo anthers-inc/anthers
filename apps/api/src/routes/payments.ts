@@ -29,6 +29,7 @@ import {
 	crfLedger,
 	crfSubsidies,
 	disputes,
+	invoices,
 	purchases,
 	stripeAccounts,
 	users,
@@ -63,6 +64,7 @@ import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
+import { sendPurchaseReceipts, sendRefundReceipts, sendSupportReceipt } from "../services/receipts.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
 import {
 	refundPurchase,
@@ -704,6 +706,40 @@ const paymentRoutes = new Hono()
 		return c.json({ url });
 	})
 
+	// ── The creator's receipt-email preference ───────────────────────────────
+	// GET answers even with no Stripe account row (on, the default), because the
+	// toggle lives on the Studio Settings page a pre-onboarding creator also reads;
+	// PATCH writes through to the row, creating it with a placeholder account id is
+	// NOT done — an unbuilt row is a real state (the onboarding route owns it), so
+	// PATCH is refused with the same 409 the other Stripe routes give, and the page
+	// hides the toggle until payouts exist (the toggle's own reasoning below).
+	.get("/stripe/receipt-emails", requireAuth, async (c) => {
+		const [account] = await db
+			.select({ wants: stripeAccounts.creatorReceiptEmails })
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, c.get("user").id))
+			.limit(1);
+		return c.json({ enabled: account?.wants !== false });
+	})
+	.patch("/stripe/receipt-emails", requireAuth, async (c) => {
+		const body = await c.req.json().catch(() => null);
+		const enabled = (body as { enabled?: unknown } | null)?.enabled;
+		if (typeof enabled !== "boolean") return c.json({ error: "enabled must be a boolean" }, 400);
+
+		const [account] = await db
+			.select({ id: stripeAccounts.id })
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, c.get("user").id))
+			.limit(1);
+		if (!account) return c.json({ error: "Connect a Stripe account first." }, 409);
+
+		await db
+			.update(stripeAccounts)
+			.set({ creatorReceiptEmails: enabled, updatedAt: new Date() })
+			.where(eq(stripeAccounts.id, account.id));
+		return c.json({ enabled });
+	})
+
 	// ── Quote (accurate fee preview, no charge) ──────────────────────────────
 	.get("/quote/:slug", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -1220,6 +1256,16 @@ const paymentRoutes = new Hono()
 			return c.json({ error: result.message, code: result.code }, status);
 		}
 
+		// The route refund's own receipt. Stripe reports a per-item refund as a partial
+		// charge refund, which the webhook's guard passes over, so this is where the
+		// buyer (and creator) are emailed; the Stripe event that the action provokes
+		// arrives at the webhook's wholly-refunded branch for single-item purchases and
+		// latches on the same refund id, mailing nobody twice. A settled row carries the
+		// refund id; an `alreadyRefunded` result settled nothing and is not re-mailed.
+		if (!result.alreadyRefunded) {
+			await sendRefundReceipts([result.purchase]);
+		}
+
 		return c.json({
 			refunded: true,
 			alreadyRefunded: result.alreadyRefunded,
@@ -1343,6 +1389,14 @@ const paymentRoutes = new Hono()
 				// type can still be read — `services/refunds.ts` and `services/dmca.ts`
 				// still know the value; nothing can still be written.
 			}
+
+			// The receipt, after the books have moved: buyer's itemized receipt for the
+			// charge, creator's sale receipt when another account bought the work. One
+			// email per charge (a basket's rows arrive together), latched on the
+			// PaymentIntent id, so a redelivered event mails nobody twice. A receipt
+			// built from rows that had not yet settled would show the transaction at
+			// the wrong moment, which is why this sits after the loop above.
+			await sendPurchaseReceipts(completedRows);
 		} else if (event.type === "payment_intent.payment_failed") {
 			const pi = event.data.object as Stripe.PaymentIntent;
 			await db
@@ -1399,6 +1453,22 @@ const paymentRoutes = new Hono()
 						// back and the netting ledger takes the recovery (`services/netting.ts`).
 						transferReversed: charge.refunds?.data?.[0]?.source_transfer_reversal != null,
 					});
+
+				// The dashboard refund reached nobody in the routes, so the receipts go out
+				// here. The rows are RE-READ rather than reused: a refund issued by our own
+				// route arrives at this branch too (a single-item route refund refunds the
+				// whole charge), the route has already mailed its receipt and stamped the
+				// refund id, and a receipt built from the stale in-memory rows would latch
+				// on a different key and mail a second time. Re-reading hands this the
+				// settled rows whoever settled them, and the dedupe key does the rest.
+				// Re-read hands this the settled rows whoever settled them; the status
+				// filter keeps the receipt naming only what this refund actually took
+				// back, and the dedupe key does the rest.
+				const settledRows = await db
+					.select()
+					.from(purchases)
+					.where(and(eq(purchases.stripePaymentIntentId, intentId), eq(purchases.status, "refunded")));
+				await sendRefundReceipts(settledRows);
 			}
 		} else if (event.type === "charge.dispute.created") {
 			/**
@@ -1521,7 +1591,15 @@ const paymentRoutes = new Hono()
 			 * that is what lets a late payment be credited against the month it paid for rather
 			 * than the month it arrived in.
 			 */
-			await recordPaidInvoice(event.data.object as Stripe.Invoice);
+			const invoice = event.data.object as Stripe.Invoice;
+			const invoiceRowId = await recordPaidInvoice(invoice);
+			// The supporter's receipt rides the recorded row: sent only when the invoice was
+			// actually recorded (a redelivered event returns null there, so nobody is mailed
+			// twice), and only for a `paid` status, which `recordPaidInvoice` already guards.
+			if (invoiceRowId != null) {
+				const [invoiceRow] = await db.select().from(invoices).where(eq(invoices.id, invoiceRowId)).limit(1);
+				if (invoiceRow) await sendSupportReceipt(invoiceRow);
+			}
 		}
 
 		return c.json({ received: true });
