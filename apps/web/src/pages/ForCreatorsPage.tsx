@@ -473,8 +473,9 @@ export default function ForCreatorsPage() {
 						There's one thing to support on Anthers: a{" "}
 						<strong className="font-semibold text-base-content/80">monthly amount</strong>, at
 						whatever levels you set. A fan points it at you—and we take no cut of it—or at Anthers,
-						where part of it becomes the Time Pool that pays for the work Anthers hands out on your
-						behalf. Both reach creators; neither is a cut of your earnings, and{" "}
+						where half of it goes to creators, paid in proportion to the time people spend with
+						their work, and the rest funds free access and the charitable programs. Both reach you;
+						neither is a cut of your earnings, and{" "}
 						<strong className="font-semibold text-base-content/80">
 							neither one needs the other
 						</strong>

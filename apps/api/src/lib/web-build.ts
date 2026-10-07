@@ -80,7 +80,7 @@ export function contentTypeIsHtml(filePath: string): boolean {
  * no `<head>` at all gets the shim after `<html>`, or prepended when no `<html>`
  * either. The shim never changes what the build is, only what it can reach.
  */
-export function injectSaveShim(html: string, runtime: string, script: string): string {
+export function injectSaveShim(html: string, script: string): string {
 	if (html.includes("anthers-save-shim")) return html;
 	const tag = `<script data-anthers-save-shim>${script}</script>`;
 	if (/<head[^>]*>/i.test(html)) {

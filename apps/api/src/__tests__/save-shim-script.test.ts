@@ -54,7 +54,7 @@ describe("save shim injection", () => {
 	it("lands the shim as the first thing in <head>, ahead of every engine script", () => {
 		const html =
 			"<!doctype html><html><head><meta charset='utf-8'><script src='index.js'></script></head><body></body></html>";
-		const out = injectSaveShim(html, "godot", script);
+		const out = injectSaveShim(html, script);
 		expect(out).toContain(
 			"<script data-anthers-save-shim>SHIM_CODE</script><meta charset='utf-8'>",
 		);
@@ -67,12 +67,12 @@ describe("save shim injection", () => {
 	it("is idempotent — a document already carrying it is served unchanged", () => {
 		const html =
 			"<html><head><script data-anthers-save-shim>existing anthers-save-shim</script></head></html>";
-		expect(injectSaveShim(html, "godot", script)).toBe(html);
+		expect(injectSaveShim(html, script)).toBe(html);
 	});
 
 	it("fails open to unmodified content shapes — no head, no html", () => {
 		const fragment = "<p>not a real document</p>";
-		const out = injectSaveShim(fragment, "godot", script);
+		const out = injectSaveShim(fragment, script);
 		expect(out.startsWith(`<script data-anthers-save-shim>${script}</script>`)).toBe(true);
 		expect(out).toContain("not a real document");
 	});

@@ -133,7 +133,7 @@ export function createBuildDeliveryRoutes(): Hono {
 					// the IDBFS record shape is what restore is written against); the save
 					// row's runtime col carries what the parent relayed, for the desktop
 					// SDK's future restore path, not for this route.
-					const shimmed = injectSaveShim(html, "godot", saveShimScript("godot"));
+					const shimmed = injectSaveShim(html, saveShimScript("godot"));
 					return new Response(shimmed, {
 						headers: {
 							"Content-Type": buildFileContentType(requestedPath),
