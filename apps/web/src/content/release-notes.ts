@@ -81,6 +81,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.14",
+		date: "2026-10-07",
+		lede: "The emails keep their palette on a phone set to dark.",
+		entries: [
+			"Email from Anthers keeps the palette it was written in on a phone set to dark mode. The messages were written entirely in the light theme, and the mail clients that re-theme mail for a dark reader setting were washing them out; the messages now say so, and the clients that honor it leave them alone.",
+		],
+	},
+	{
 		version: "2026.10.13",
 		date: "2026-10-07",
 		lede: "Email receipts for every transaction, on both sides of a sale.",
