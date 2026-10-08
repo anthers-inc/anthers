@@ -208,11 +208,12 @@ envs:
     type: SECRET
   # The Badge Maker's circuit breaker: the key's monthly spend cap in dollars, as a
   # LOCAL estimate bound (the routes degrade at 90% of it rather than letting the
-  # vendor's own cap hard-fail a save mid-launch). Keep it at or below the cap actually
-  # configured on the vendor's dashboard, which is the authority this approximates.
+  # vendor's own cap hard-fail a save mid-launch). Sits at the dashboard cap ($25,
+  # Parker 2026-10-07); the 90% degradation is the buffer beneath it. Keep at or below
+  # the cap configured on the vendor's dashboard, which is the authority.
   - key: NOUN_PROJECT_MONTHLY_CAP_USD
     scope: RUN_TIME
-    value: "100"
+    value: "25"
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
