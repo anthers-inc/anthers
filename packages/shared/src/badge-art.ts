@@ -206,29 +206,196 @@ export const BADGE_COLORS: BadgeColor[] = [
 ];
 
 /**
- * The foreground emblems from the standard library.
- *
- * These are `BrandIconName`s, typed as plain strings here so `@anthers/shared` does not
- * depend on the browser-facing brand package — the API validates the id and never renders
- * it, and the web layer resolves it against `@anthers/brand`. ⚠️ A name added here that the
- * brand package does not carry renders as nothing, so the two are asserted against each
- * other in a test rather than trusted.
+ * The mix-and-match emblem library is RETIRED for creators (the Badge Maker, 2026-10-07):
+ * a creator's foreground emblem comes from the Noun Project catalog or their own upload,
+ * and nothing else. There is deliberately no emblem list here any more — Anthers' own
+ * Badges and Stickers keep their fixed emblems, chosen from `packages/brand/icons.json`
+ * by Anthers, and `BadgeMark` renders whichever emblem id its caller hands it.
  */
-export const BADGE_EMBLEMS: string[] = [
-	"bloom-round",
-	"bloom-tulip",
-	"bloom-cluster",
-	"grass-clump",
-	"grass-cattail",
-	"grass-reed",
-	"grass-tall",
-	"bee",
-	"bee-flying",
-	"wreath",
-];
+
+/**
+ * The perk categories a creator Badge can carry, and how they reach the sales-tax
+ * posture. **Access to gated Works is NOT here** — it is read automatically from the
+ * gates a Badge clears, which is data the maker cannot misstate. Everything else is
+ * what the creator tags: a service (feedback on a track), a physical good (a print),
+ * community access (a private chat), or recognition (a name in credits).
+ *
+ * 🚨 **Sales tax follows what a supporter receives, and a Badge carrying more than one
+ * kind is taxed at its MOST-TAXABLE kind** — the ordering of this list is that ordering,
+ * and the codes beside each are the Stripe tax codes the posture task settled. The
+ * friendly explanations are for creators, not tax authorities; the maker shows them and
+ * points the unsure at support@anthers.org.
+ */
+export const BADGE_PERK_KINDS = [
+	{
+		id: "physical_good",
+		label: "A physical good",
+		friendly: "Something you ship to supporters — a print, a zine, a sticker sheet.",
+		taxCode: "txcd_99999999",
+	},
+	{
+		id: "service",
+		label: "A service",
+		friendly: "Something you do for supporters — feedback on a track, a lesson, a commission slot.",
+		taxCode: "txcd_20030000",
+	},
+	{
+		id: "community",
+		label: "Community access",
+		friendly: "A private community — a Discord server, a members' chat, a community-only stream.",
+		taxCode: "txcd_20030000",
+	},
+	{
+		id: "recognition",
+		label: "Recognition",
+		friendly:
+			"Their name somewhere only supporters' names go — a video's credits, a thank-you page.",
+		taxCode: "txcd_90000001",
+	},
+] as const;
+
+export type BadgePerkKind = (typeof BADGE_PERK_KINDS)[number]["id"];
+
+export function badgePerkKind(
+	id: string | null | undefined,
+): (typeof BADGE_PERK_KINDS)[number] | null {
+	return BADGE_PERK_KINDS.find((k) => k.id === id) ?? null;
+}
+
+/**
+ * The most-taxable kind across a Badge's perks — the tax classification a rung's
+ * subscription line carries.
+ *
+ * ⚠️ **Order matters and is the posture's ordering**, most-taxable first: a physical
+ * good outranks a service, a service outranks recognition, and recognition (not a
+ * taxable sale of anything in Colorado, per the posture) outranks nothing at all. A rung
+ * with no tagged perk and no gate codes as a donation, which is what `null` means here.
+ */
+export function mostTaxablePerkKind(kinds: string[]): (typeof BADGE_PERK_KINDS)[number] | null {
+	for (const kind of BADGE_PERK_KINDS) {
+		if (kinds.includes(kind.id)) return kind;
+	}
+	return null;
+}
 
 export const DEFAULT_BADGE_SHAPE = "circle";
 export const DEFAULT_BADGE_COLOR = "moss";
+
+/**
+ * The resolution a composed Badge PNG is rasterized at.
+ *
+ * 🚨 **The composed PNG is the resolution ceiling for the product's life** — the vector
+ * is never stored, so a Badge shown larger than it was composed at cannot be re-rendered
+ * without a live vendor fetch — which is why it sits 2× above `BADGE_ART_PX`, the largest
+ * surface uploaded art is ever displayed at. Rasterizing generously is cheap now and
+ * unfixable later.
+ */
+export const BADGE_COMPOSE_PX = 1024;
+
+/**
+ * The parameters of a Noun Project emblem on a Badge — everything the composition reads
+ * besides the icon itself.
+ *
+ * ⚠️ **`scale` is a fraction of the `emblemBox`, and the offsets are too.** Stating
+ * placement in box-relative terms is what lets the same numbers place an emblem on any
+ * shape: a triangle's box is small and low, a circle's large and central, and "a quarter
+ * of the box left" means the same relationship to the stitching on both. The picker
+ * constrains the range so art cannot be pushed under the edge it has to clear.
+ */
+export interface BadgeComposeParams {
+	shape: string;
+	fieldColor: string;
+	/**
+	 * The emblem color, as a hex string — the server recolors the vector with it at
+	 * composition. ⚠️ **Hex deliberately, not an oklch token**: the picker offers it from
+	 * a swatch palette and the composition injects it verbatim, so a free-text value here
+	 * is validated as a hex color and nothing else.
+	 */
+	emblemColor: string;
+	/** The emblem's size as a fraction of the shape's `emblemBox`; 1.0 fills it. */
+	scale: number;
+	/** Offsets as a fraction of the emblem box, negative left/up. */
+	offsetX: number;
+	offsetY: number;
+}
+
+/**
+ * The emblem-color swatches the picker offers, hex because the composition injects them
+ * verbatim. ⭐ **Sourced from the palette's own `on` values plus a light and a dark**, so
+ * an emblem chosen with no color decision at all lands on the field's natural foreground,
+ * while the extremes let a creator go deliberately light or deliberately dark.
+ */
+export const BADGE_EMBLEM_COLORS: string[] = [
+	"#ffffff",
+	"#000000",
+	"#1d1d1d",
+	"#3a3a3a",
+	"#4b3b2a",
+	"#5f6f3f",
+	"#7a5a3a",
+	"#96a86b",
+	"#bfae7e",
+	"#e6d9ac",
+];
+
+export function isBadgeEmblemColor(value: unknown): boolean {
+	return typeof value === "string" && BADGE_EMBLEM_COLORS.includes(value);
+}
+
+/** The picker's bounds on placement, so art cannot be pushed under the stitching. */
+export const BADGE_PLACEMENT_LIMITS = { scaleMin: 0.4, scaleMax: 1.4, offsetMax: 0.35 };
+
+/**
+ * Validate the placement the compose route is handed, shape by shape.
+ *
+ * 🚨 **Validated here because the server refuses on it and the picker constrains to it —
+ * the library lives in `@anthers/shared` precisely so one copy answers both.** A scale
+ * or offset the picker never sends but a hand-built request might is refused rather than
+ * composed, because a value out of these bounds is art under the stitching.
+ */
+export function isBadgeComposeParams(value: unknown): value is BadgeComposeParams {
+	if (typeof value !== "object" || value === null) return false;
+	const v = value as Record<string, unknown>;
+	if (!isBadgeShape(v.shape) || !isBadgeColor(v.fieldColor)) return false;
+	if (!isBadgeEmblemColor(v.emblemColor)) return false;
+	if (typeof v.scale !== "number") return false;
+	if (typeof v.offsetX !== "number" || typeof v.offsetY !== "number") return false;
+	const { scaleMin, scaleMax, offsetMax } = BADGE_PLACEMENT_LIMITS;
+	return (
+		v.scale >= scaleMin &&
+		v.scale <= scaleMax &&
+		Math.abs(v.offsetX) <= offsetMax &&
+		Math.abs(v.offsetY) <= offsetMax
+	);
+}
+
+/**
+ * The fingerprint a composed Badge is deduped on — a hash over every parameter the
+ * composition reads, so an unchanged save matches and costs nothing.
+ *
+ * 🚨 **Dedupe on the composition, never on the icon.** Save is the button people press
+ * repeatedly; the second press must be free. A hash over the icon id alone would refuse
+ * a legitimate re-compose after an edit and silently serve stale art.
+ */
+import { createHash } from "node:crypto";
+
+export function badgeComposeFingerprint(
+	params: { nounIconId: string } & BadgeComposeParams,
+): string {
+	return createHash("sha256")
+		.update(
+			[
+				params.nounIconId,
+				params.shape,
+				params.fieldColor,
+				params.emblemColor,
+				params.scale.toFixed(4),
+				params.offsetX.toFixed(4),
+				params.offsetY.toFixed(4),
+			].join("\n"),
+		)
+		.digest("hex");
+}
 
 export function isBadgeShape(id: unknown): boolean {
 	return typeof id === "string" && BADGE_SHAPES.some((s) => s.id === id);
@@ -236,10 +403,6 @@ export function isBadgeShape(id: unknown): boolean {
 
 export function isBadgeColor(id: unknown): boolean {
 	return typeof id === "string" && BADGE_COLORS.some((c) => c.id === id);
-}
-
-export function isBadgeEmblem(id: unknown): boolean {
-	return typeof id === "string" && BADGE_EMBLEMS.includes(id);
 }
 
 export function badgeShape(id: string | null | undefined): BadgeShape {
@@ -275,25 +438,14 @@ export function badgeColor(id: string | null | undefined): BadgeColor {
 }
 
 /**
- * The emblem a rung falls back to when the creator has chosen nothing.
- *
- * ⚠️ **Keyed on ladder POSITION, and it wraps.** A creator may have more rungs than there
- * are emblems, and repricing a rung must not change its picture — keying on the index keeps
- * a ladder visually distinct rung to rung and stable under a price change, which is the
- * pair of properties that actually matter.
- */
-export function defaultBadgeEmblem(index: number): string {
-	const n = BADGE_EMBLEMS.length;
-	return BADGE_EMBLEMS[((index % n) + n) % n];
-}
-
-/**
  * The field color a rung falls back to, by ladder position.
  *
- * ⭐ **Varied rather than uniform, for the same reason the emblem is.** A creator who has
- * touched nothing should see a ladder of distinct patches — which is what a scout set looks
- * like — rather than five identical discs that only differ if you look closely. A default
- * that reads as a set is doing the job; a default that reads as "unset" is not.
+ * ⭐ **Varied rather than uniform, for the same reason the fallback emblems are.** A creator
+ * who has touched nothing should see a ladder of distinct patches — which is what a scout
+ * set looks like — rather than five identical discs that only differ if you look closely. A
+ * default that reads as a set is doing the job; a default that reads as "unset" is not.
+ * (The fallback EMBLEM is Anthers' own design by position — `CreatorBadgeMark`'s
+ * `fallbackBadgeDesign`, which pairs with this.)
  *
  * ⚠️ **Stepped by a stride that is coprime with the list length**, so consecutive rungs land
  * far apart in the palette instead of on neighboring greens.

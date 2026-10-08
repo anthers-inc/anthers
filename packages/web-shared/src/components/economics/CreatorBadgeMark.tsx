@@ -17,12 +17,39 @@
  * the moment the palette moved. The art route 404s for a rung with no upload, and this
  * falls back — so a creator who has uploaded nothing still gets a mark that belongs beside
  * Anthers' own rather than an empty circle.
+ *
+ * 🚨 **The fallback for a rung with no art of its own is Anthers' OWN Badge design,
+ * standing in by ladder position** (Parker, 2026-09-13) — `badge-root`, `badge-sprout`,
+ * `badge-petal`, `badge-blossom`, each on its own field, wrapping `index % 4` for longer
+ * ladders. It replaced `defaultBadgeEmblem`/`defaultBadgeColor` over the retired
+ * mix-and-match library, which the Badge Maker took away from creators. The fallback is
+ * deliberately a stopgap the Badge Maker's own encourage-line calls out.
  */
 
-import { defaultBadgeColor, defaultBadgeEmblem } from "@anthers/shared/badge-art";
 import { useState } from "react";
 import { apiBaseUrl } from "../../lib/rpc";
 import { BadgeMark } from "./BadgeMark";
+
+/**
+ * Anthers' own four Badge designs, as the fallback wears them — the emblem names and
+ * field colors of `BADGE_ART` in `economics.tsx`, restated here so the fallback does not
+ * reach across into the marketing-side component tree. A design change there is a change
+ * here in the same commit; a test asserts the two agree. Plain strings — `BadgeMark`
+ * resolves the emblem against `@anthers/brand` and warns rather than crashes on an
+ * unknown one, and the agreement test is what actually holds this to the designs.
+ */
+const FALLBACK_ART: { emblem: string; color: string }[] = [
+	{ emblem: "badge-root", color: "cream" },
+	{ emblem: "badge-sprout", color: "meadow" },
+	{ emblem: "badge-petal", color: "amber" },
+	{ emblem: "badge-blossom", color: "sun" },
+];
+
+/** One ladder position's fallback design, wrapping past the four. */
+export function fallbackBadgeDesign(index: number): { emblem: string; color: string } {
+	const n = FALLBACK_ART.length;
+	return FALLBACK_ART[((index % n) + n) % n];
+}
 
 export interface BadgeArtChoice {
 	/** A shape id from the library; null draws the default. */
@@ -44,7 +71,7 @@ export function CreatorBadgeMark({
 	size = "h-12 w-12",
 }: {
 	badgeId: number;
-	/** The rung's position on this creator's ladder, for the default emblem. */
+	/** The rung's position on this creator's ladder, for the fallback design. */
 	index: number;
 	label: string;
 	art: BadgeArtChoice;
@@ -55,13 +82,14 @@ export function CreatorBadgeMark({
 	// back on error rather than trusting the flag means a badge is never a broken image.
 	const [failed, setFailed] = useState(false);
 	const showUpload = Boolean(art.hasArt) && !failed;
+	const fallback = fallbackBadgeDesign(index);
 
 	return (
 		<BadgeMark
 			shape={art.artShape}
-			color={art.artColor ?? defaultBadgeColor(index)}
+			color={art.artColor ?? fallback.color}
 			label={label}
-			emblem={art.artEmblem ?? defaultBadgeEmblem(index)}
+			emblem={art.artEmblem ?? fallback.emblem}
 			// 🚨 Rooted on `apiBaseUrl()` rather than written as `/api/...`. The web app and
 			// the API are not always the same origin — the Studio subdomain, the desktop
 			// shell, and the e2e preview all separate them — and a root-relative src asks the

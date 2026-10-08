@@ -929,11 +929,12 @@ export const badges = pgTable(
 		 * The background a creator picked from the standard library — a shape id and a color
 		 * id from `@anthers/shared/badge-art`, null for the defaults.
 		 *
-		 * ⭐ **Three layers, and this is the middle one** (Parker, 2026-08-29): Anthers' frame,
-		 * a background of a shape and a color, and a foreground that is either a library
-		 * emblem or the creator's own art. The point is flexibility without inconsistency — a
-		 * creator who does not draw still gets a badge that is recognizably theirs, because
-		 * shape, color and emblem are three choices rather than one upload they cannot make.
+		 * ⭐ **The background is the badge**: a shape and a field color the creator picks
+		 * freely, and the foreground is either a Noun Project emblem composed at save (the
+		 * placement columns below) or the creator's own upload (`art_key`). The mix-and-match
+		 * emblem library this row once carried a third id from was retired for creators by
+		 * the Badge Maker (2026-10-07); Anthers' own Badges and Stickers keep their fixed
+		 * emblems, chosen by Anthers rather than picked here.
 		 *
 		 * ⚠️ **Ids rather than values.** Storing `oklch(...)` or a path would freeze today's
 		 * library into every row, so a palette correction would leave old badges on the old
@@ -941,8 +942,38 @@ export const badges = pgTable(
 		 */
 		artShape: text("art_shape"),
 		artColor: text("art_color"),
-		/** A library emblem, used as the foreground when `art_key` is null. */
-		artEmblem: text("art_emblem"),
+		/**
+		 * What the composed art was made from, as a fingerprint over every parameter the
+		 * composition reads — noun icon id, shape, field color, emblem color, scale and
+		 * offsets — so an unchanged save matches it and costs nothing at all.
+		 *
+		 * 🚨 **Dedupe on the composition, never on the icon.** Save is the button people
+		 * press repeatedly, and the second press must be free; a fingerprint over the icon
+		 * id alone would refuse a legitimate re-compose after an edit and silently serve
+		 * stale art. The hash lives beside the row rather than in `badge_art_provenance`
+		 * because it guards THIS table's write, not the credit.
+		 */
+		artFingerprint: text("art_fingerprint"),
+		/**
+		 * Where the emblem sits and how big it is, as the creator set them — the same
+		 * 0-100 viewBox units `@anthers/shared/badge-art` uses, and a fraction of the
+		 * `emblemBox` at 1.0. Stated rather than re-derived so recomposing a Badge
+		 * reproduces exactly what the creator saw in the picker, and so the numbers
+		 * survive the emblem being changed without the placement being touched.
+		 */
+		artEmblemScale: numeric("art_emblem_scale"),
+		artEmblemOffsetX: numeric("art_emblem_offset_x"),
+		artEmblemOffsetY: numeric("art_emblem_offset_y"),
+		/**
+		 * The Stripe Product this rung's subscription lines bill against, carrying the
+		 * rung's own tax code — per RUNG rather than per creator, because two rungs of one
+		 * ladder can be taxed differently (one carries a physical good, one is pure
+		 * support). Created on first use by `ensureBadgeProduct`, which mirrors
+		 * `ensureCreatorProduct`'s lazy create-and-restamp shape; empty string is the
+		 * not-yet-created state, exactly as `billing_accounts` spells it.
+		 */
+		stripeProductId: text("stripe_product_id").default(""),
+		stripeProductTaxCode: text("stripe_product_tax_code").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -959,6 +990,153 @@ export const badges = pgTable(
 		// redundant.
 		uniqueIndex("uq_badges_creator_threshold").on(table.creatorId, table.threshold),
 	],
+);
+
+/**
+ * Who drew the emblem on one creator Badge, recorded at the moment it was picked.
+ *
+ * 🚨 **This row is what makes the artist credit renderable, and what keeps a creator's
+ * Badge usable under CC BY 3.0 independently of Anthers' own contract with the vendor.**
+ * The license that travels on a composed Badge is the artist's, not Anthers', so the
+ * fields are written from the search response at composition time and never re-fetched —
+ * a metadata GET is an icon call spent on nothing, because every one of them rides along
+ * free on a search.
+ *
+ * ⚠️ **One row per badge, replaced on a re-pick, and it survives the emblem leaving.**
+ * A creator who later switches to art of their own keeps the row through the Badge's
+ * detail view's flip, so the record of who drew what the Badge wore is a record about
+ * the Badge's life rather than about its current art.
+ *
+ * ⚠️ **Never a URL the vendor could expire on us.** The permalink is the artist's own
+ * page, rendered as the credit's link — it is the vendor's *metadata* (cacheable) rather
+ * than one of their asset URLs, which expire within an hour.
+ */
+// node — metadata about one creator's own Badge art, recording the third-party artist it
+// came from. Node-canonical like the badge it sits beside; the org reads it to render the
+// credit, but the row is the creator's record.
+export const badgeArtProvenance = pgTable(
+	"badge_art_provenance",
+	{
+		id: serial("id").primaryKey(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
+		/** The vendor's icon id, as a string — the API returns it typed both ways. */
+		nounIconId: text("noun_icon_id").notNull(),
+		term: text("term"),
+		artistName: text("artist_name").notNull(),
+		artistPermalink: text("artist_permalink"),
+		licenseDescription: text("license_description").notNull(),
+		attribution: text("attribution").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_badge_art_provenance_badge").on(table.badgeId)],
+);
+
+/**
+ * What one creator spent on the Noun Project API on one UTC day — the per-creator
+ * budget's counter.
+ *
+ * 🚨 **This counter is the guard that keeps the Badge Maker from being expensive, and it
+ * bounds the platform rather than the vendor's caps do.** Icon calls track compositions
+ * (two creators picking the same emblem each pay their own), so no maturity effect ever
+ * saturates the curve; a creator's own daily budget is the bound. It is a DAILY budget:
+ * roughly 25 icon calls and 300 searches, about three times what building a five-rung
+ * ladder actually takes, capping one person near a dollar a day — the figure that keeps
+ * ten obsessive creators from being a $300/month plan requirement.
+ *
+ * ⚠️ **Exhaustion degrades rather than errors.** The ladder a creator already made keeps
+ * rendering from its stored composites; new searches and saves decline politely. The
+ * routes read this table through `services/noun-budget.ts`, its only writer, which also
+ * carries the key-wide circuit breaker.
+ */
+// both — vendor spend is real treasury activity, so the org owns the accounting, but the
+// rows are keyed per creator and read by their own picker, which is a node surface.
+export const nounSpend = pgTable(
+	"noun_spend",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** The UTC day the spend happened on, as `YYYY-MM-DD`. */
+		day: text("day").notNull(),
+		iconCalls: integer("icon_calls").notNull().default(0),
+		serviceCalls: integer("service_calls").notNull().default(0),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_noun_spend_creator_day").on(table.creatorId, table.day)],
+);
+
+/**
+ * The content blocklist for the Badge Maker's search — terms, icon ids and collection
+ * ids the vendor's catalog must not surface through Anthers.
+ *
+ * 🚨 **A free-text search across nearly ten million third-party assets is a new content
+ * surface, and this table is the control.** The term list is the half that matters,
+ * because it refuses the query BEFORE the vendor call rather than filtering the result —
+ * a refused query is also a call never spent. Anthers' own list rides alongside the
+ * vendor's key-level blocklist (20,000 entries on a paid key, cached ten minutes on
+ * their side), and additions flow up to the vendor's endpoints by the sync job, so a
+ * term removed from Anthers' catalog is removed from the key's too.
+ *
+ * ⚠️ **Never ship the picker against an empty list on the theory that line drawings are
+ * harmless.** Seeding it is a safety decision with a named owner; the mechanism exists
+ * so the list has somewhere to live and a path from a creator report into it.
+ */
+// org — the blocklist is Anthers' safety posture, not any creator's setting; every row
+// is an org decision, and no creator node has any business holding it.
+export const nounBlocklist = pgTable(
+	"noun_blocklist",
+	{
+		id: serial("id").primaryKey(),
+		/** `term` refuses a whole query; `icon` and `collection` are filtered from results. */
+		kind: text("kind").notNull(),
+		/** The term text, or the vendor id as a string. */
+		value: text("value").notNull(),
+		/** Why it is on the list — the record a review reads. */
+		reason: text("reason").notNull(),
+		/** Who added it — an admin account id, for the moderation-chain shape. */
+		addedBy: integer("added_by").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_noun_blocklist_kind_value").on(table.kind, table.value)],
+);
+
+/**
+ * A perk one creator Badge carries, as its creator tagged it in the Badge Maker.
+ *
+ * 🚨 **Sales tax follows what a supporter receives, so the tag is the billing fact** —
+ * `creatorProductTaxCode` reads a rung's kinds through the most-taxable ordering in
+ * `@anthers/shared/badge-art` (`mostTaxablePerkKind`), and a rung carrying nothing tags
+ * nothing, which is how a perk-free, gate-free rung stays a donation. Access to gated
+ * Works is deliberately NOT a row here: it is read from the gates themselves, which the
+ * creator cannot misstate.
+ *
+ * ⚠️ **The label is display text, not the kind**: a creator might call their Discord
+ * "The Back Room" — the kind column is what the machinery reads, and it is one of the
+ * fixed list.
+ */
+// node — the perks of a creator's own Badge rung are their pricing promises, node-owned
+// content like the rung itself.
+export const badgePerks = pgTable(
+	"badge_perks",
+	{
+		id: serial("id").primaryKey(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
+		/** A `BadgePerkKind` id — validated against `@anthers/shared/badge-art`'s list. */
+		kind: text("kind").notNull(),
+		/** What the supporter gets, in the creator's own words. */
+		label: text("label").notNull(),
+		description: text("description").default(""),
+		sortOrder: integer("sort_order").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_badge_perks_badge").on(table.badgeId, table.sortOrder)],
 );
 
 /**

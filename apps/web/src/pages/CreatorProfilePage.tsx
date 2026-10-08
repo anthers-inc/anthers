@@ -319,6 +319,28 @@ function BadgesTab({
 										{rung.description && (
 											<p className="text-sm text-base-content/60 mt-1 ml-7">{rung.description}</p>
 										)}
+										{/* 🚨 THE FLIP — the artist credit a supporter reads on a Badge's
+										    back. Every emblem has a named human behind it, and naming them
+										    here is the promise made when the library was taken on. It
+										    covers uploaded art's credit too when the creator names one. */}
+										{rung.artistCredit && (
+											<p className="text-xs text-base-content/40 mt-1 ml-7">
+												Emblem by{" "}
+												{rung.artistCredit.artistPermalink ? (
+													<a
+														href={rung.artistCredit.artistPermalink}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="underline decoration-dotted underline-offset-2"
+													>
+														{rung.artistCredit.artistName}
+													</a>
+												) : (
+													rung.artistCredit.artistName
+												)}{" "}
+												· Noun Project
+											</p>
+										)}
 									</div>
 								</div>
 							);

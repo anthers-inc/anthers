@@ -24,8 +24,12 @@ import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.j
 import {
 	accountCycles,
 	attentionEvents,
+	badgeArtProvenance,
+	badgePerks,
 	badges,
 	billingAccounts,
+	nounBlocklist,
+	nounSpend,
 	poolDistributions,
 	userBadges,
 	userPreferences,
@@ -280,4 +284,20 @@ export const poolDistributionsRelations = relations(poolDistributions, ({ one })
 export const badgesRelations = relations(badges, ({ one, many }) => ({
 	owner: one(users, { fields: [badges.creatorId], references: [users.id] }),
 	heldBy: many(userBadges),
+}));
+
+export const badgeArtProvenanceRelations = relations(badgeArtProvenance, ({ one }) => ({
+	badge: one(badges, { fields: [badgeArtProvenance.badgeId], references: [badges.id] }),
+}));
+
+export const nounSpendRelations = relations(nounSpend, ({ one }) => ({
+	creator: one(users, { fields: [nounSpend.creatorId], references: [users.id] }),
+}));
+
+export const nounBlocklistRelations = relations(nounBlocklist, ({ one }) => ({
+	addedByAdmin: one(users, { fields: [nounBlocklist.addedBy], references: [users.id] }),
+}));
+
+export const badgePerksRelations = relations(badgePerks, ({ one }) => ({
+	badge: one(badges, { fields: [badgePerks.badgeId], references: [badges.id] }),
 }));

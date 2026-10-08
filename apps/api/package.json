@@ -14,8 +14,8 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@anthers/db": "workspace:*",
 		"@anthers/brand": "workspace:*",
+		"@anthers/db": "workspace:*",
 		"@anthers/shared": "workspace:*",
 		"@atproto/jwk-jose": "0.2.4",
 		"@atproto/oauth-client": "0.8.3",
@@ -23,6 +23,7 @@
 		"@aws-sdk/s3-request-presigner": "3.1005.0",
 		"@hono/zod-validator": "^0.5.0",
 		"@noble/curves": "2.4.0",
+		"culori": "4.0.2",
 		"decimal.js": "10.6.0",
 		"hono": "^4.7.0",
 		"jose": "6.2.1",
@@ -39,8 +40,9 @@
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
-		"@types/turndown": "5.0.6",
+		"@types/culori": "4.0.1",
 		"@types/sanitize-html": "2.16.1",
+		"@types/turndown": "5.0.6",
 		"typescript": "^5.8.0"
 	}
 }

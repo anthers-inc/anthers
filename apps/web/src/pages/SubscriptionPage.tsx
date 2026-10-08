@@ -377,7 +377,6 @@ export default function SubscriptionPage() {
 				hasArt: h.hasArt,
 				artShape: h.artShape,
 				artColor: h.artColor,
-				artEmblem: h.artEmblem,
 				sortOrder: 0,
 				createdAt: h.createdAt,
 				updatedAt: h.createdAt,

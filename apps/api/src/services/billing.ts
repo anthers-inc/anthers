@@ -22,7 +22,16 @@
  * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, badges, billingAccounts, invoices, userBadges } from "@anthers/db/schema";
+import {
+	accountCycles,
+	badgePerks,
+	badges,
+	billingAccounts,
+	invoices,
+	userBadges,
+	works,
+} from "@anthers/db/schema";
+import { mostTaxablePerkKind } from "@anthers/shared/badge-art";
 import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
@@ -297,12 +306,11 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
  * 22-005's shape). The Anthers line's Product buys unlimited Public Access — also
  * `txcd_10402200`, stamped where that Product is provisioned.
  *
- * ⚠️ **Perk-tagging arrives with the Badge Maker and is not built yet.** A creator whose
- * support carries a service or a physical good will be coded from what its creator tagged
- * (`txcd_20030000` general services, `txcd_99999999` tangible goods, shipping on its own
- * line) — until the tagging exists, a gate ladder is the one honest discriminator, and a
- * rung carrying more than one kind of perk is taxed at its most-taxable kind only once
- * there is a kind to read.
+ * ⭐ **Perk-tagging is live (the Badge Maker, 2026-10-07), and it discriminates PER RUNG
+ * through `taxCodeForBadge`** — a rung's own subscription line names a Product stamped
+ * with that rung's most-taxable perk kind (`ensureBadgeProduct`). This per-creator
+ * function stays for the ladder-less discrimination it always answered: a creator with
+ * any gate ladder is a streamed subscription for the lines that do not name a rung.
  */
 export async function creatorProductTaxCode(creatorId: number): Promise<string> {
 	const [badge] = await db
@@ -311,6 +319,101 @@ export async function creatorProductTaxCode(creatorId: number): Promise<string> 
 		.where(eq(badges.creatorId, creatorId))
 		.limit(1);
 	return badge ? STREAMED_SUBSCRIPTION_TAX_CODE : DONATION_TAX_CODE;
+}
+
+/**
+ * One rung's tax code — the most-taxable thing the rung actually delivers, with access
+ * IN the comparison rather than beneath it (Parker, 2026-10-07, exercising it on a real
+ * creator account).
+ *
+ * 🚨 **A rung that opens a gate on ANY of the creator's Works delivers access, and the
+ * streamed-subscription code enters the comparison on that fact alone** — gates are data
+ * rather than a tag, so the rung cannot be talked out of it by mis-tagging, and a
+ * "recognition" tag can never put a gratuity code on a line whose supporters genuinely
+ * receive gated access (that was the understatement the tags-first draft allowed). The
+ * ordering across the pool: a physical good, service or community tag outranks access;
+ * access outranks recognition; and a rung with no gate and no tag is a donation. The gate
+ * read is over `works.access` rows (a row with `allow: true` whose threshold the rung's
+ * dollar amount meets is a gate it opens), which is the comparison `resolveAccessSync`
+ * itself makes, read in TypeScript rather than re-derived as a jsonb predicate.
+ */
+export async function taxCodeForBadge(badgeId: number): Promise<string> {
+	const [badge] = await db
+		.select({ id: badges.id, creatorId: badges.creatorId, threshold: badges.threshold })
+		.from(badges)
+		.where(eq(badges.id, badgeId))
+		.limit(1);
+	if (!badge) return DONATION_TAX_CODE;
+	const perkRows = await db
+		.select({ kind: badgePerks.kind })
+		.from(badgePerks)
+		.where(eq(badgePerks.badgeId, badgeId));
+	const tagged = mostTaxablePerkKind(perkRows.map((r) => r.kind));
+	// No tagged perk: does this rung's dollar amount open any gate on the creator's own
+	// Works? A gate row with `allow: true` whose threshold the rung meets is a gate it
+	// opens — the comparison `resolveAccessSync` itself makes, read in TypeScript rather
+	// than re-derived as a jsonb predicate.
+	const rows = await db
+		.select({ access: works.access })
+		.from(works)
+		.where(eq(works.creatorId, badge.creatorId));
+	const held = Number(badge.threshold);
+	const opensAGate = rows.some((r) =>
+		(r.access ?? []).some((row) => row.allow && held >= row.threshold),
+	);
+
+	// 🚨 Access sits IN the most-taxable comparison, not beneath it (Parker, 2026-10-07,
+	// who will exercise this on a real creator account): a goods or service tag outranks
+	// the access beside it, but a GRATUITY tag does not — access is a real taxable
+	// delivery, and a "recognition" tag must never understate a line whose supporters
+	// genuinely receive gated access.
+	if (opensAGate) {
+		if (tagged && tagged.id !== "recognition") return tagged.taxCode;
+		return STREAMED_SUBSCRIPTION_TAX_CODE;
+	}
+	return tagged ? tagged.taxCode : DONATION_TAX_CODE;
+}
+
+/**
+ * The Stripe Product one creator Badge's subscription lines bill against, carrying that
+ * rung's own tax code — created on first use, re-stamped when the rung's kinds change.
+ *
+ * ⚠️ Per-rung rather than per-creator, because two rungs of one ladder can be taxed
+ * differently (one carries a physical good, one is pure support). {@link ensureCreatorProduct} stays
+ * for anything that bills the creator without naming a rung.
+ */
+export async function ensureBadgeProduct(
+	badgeId: number,
+	badgeLabel: string,
+	creatorHandle: string,
+): Promise<string> {
+	if (!paymentsConfigured()) throw new Error("Stripe not configured");
+	const [row] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
+	if (!row) throw new Error("Badge not found");
+	const taxCode = await taxCodeForBadge(badgeId);
+	if (row.stripeProductId) {
+		if (row.stripeProductTaxCode !== taxCode) {
+			await updateProduct(row.stripeProductId, { tax_code: taxCode }).catch(() => null);
+			await db
+				.update(badges)
+				.set({ stripeProductTaxCode: taxCode, updatedAt: new Date() })
+				.where(eq(badges.id, badgeId));
+		}
+		return row.stripeProductId;
+	}
+	const product = await createProduct({
+		// The label is the rung's own — this line buys THIS Badge, and the itemized
+		// receipt should say so rather than restating the creator's name.
+		name: `${badgeLabel} — a Badge from @${creatorHandle}`,
+		tax_code: taxCode,
+		metadata: { badgeId: String(badgeId) },
+	});
+	if (!product) throw new Error("Stripe not configured");
+	await db
+		.update(badges)
+		.set({ stripeProductId: product.id, stripeProductTaxCode: taxCode, updatedAt: new Date() })
+		.where(eq(badges.id, badgeId));
+	return product.id;
 }
 
 /**
