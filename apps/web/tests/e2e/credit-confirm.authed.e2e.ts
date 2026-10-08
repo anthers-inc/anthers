@@ -316,3 +316,103 @@ async function viewerSessionCookie(
 	expect(session, "the user context carries no session cookie").toBeTruthy();
 	return `session=${session}`;
 }
+
+// ── The contributor input's affordances ────────────────────────────────────────
+//
+// The bare text input grew three things the task owned: an autocomplete over the
+// identities Anthers knows, a credit-me shortcut, and the guidance copy. What only a
+// browser can prove:
+//
+// - **A picked suggestion writes the DID, not the display name.** The acceptance keys on
+//   the DID and the save sends the field verbatim — a name in its place is the
+//   data-destroying save the serialization rules exist to prevent.
+// - **Credit me writes the signed-in account's own DID** — the same assertion, keyed on
+//   the creator rather than a search hit.
+// - **The guidance copy renders**, because it is the point-of-assignment ask the
+//   re-scope landed there.
+//
+// The API suites prove the endpoint's filters; this walk proves the field actually keys
+// what it was handed.
+test("the contributor field autocompletes the identities Anthers knows and credit-me writes the creator's own DID", async ({
+	page,
+	context,
+}) => {
+	test.setTimeout(120_000);
+	session = await signInAsMediaFixture(context);
+
+	const created = await fetch(`${API_URL}/api/content/works`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Cookie: `session=${session}`,
+			Origin: WEB_ORIGIN,
+		},
+		body: JSON.stringify({ type: "service", title: TITLE }),
+	});
+	expect(created.status).toBe(201);
+	const { work } = (await created.json()) as { work: OwnedWork };
+
+	await page.goto(`/studio/works/${work.publicId}/edit`);
+	// A `service` Work needs no file; the release gates are the rating and a credit naming
+	// a human — both of which this walk sets up.
+	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	await page.getByRole("button", { name: "Add a credit" }).click();
+	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
+
+	// ── The autocomplete ──
+	// The gauntlet user matches by display name prefix — the same fixture the DID walk
+	// uses, reached this time through the search rather than pasted.
+	const contributor = page.getByRole("textbox", { name: "Credit 1 contributor" });
+	await contributor.click();
+	await contributor.fill("Gauntlet");
+	const suggestion = page.getByRole("button", { name: /Gauntlet User/ }).first();
+	await expect(suggestion).toBeVisible({ timeout: 15_000 });
+	await suggestion.click();
+
+	// The row now holds the DID, never the display name — read live, before any save,
+	// because this is the moment a wrong value could still be shown to the creator.
+	await expect(contributor).toHaveValue(userDid);
+	await expect(contributor).not.toHaveValue(VIEWER_NAME);
+
+	// And the round-trip proves the shape the acceptance keys on: save, reload, the
+	// DID is what the owner overlay sends back untouched.
+	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(ROLE);
+	await page.getByRole("checkbox", { name: /released to my public catalog/i }).check();
+	await page.getByRole("button", { name: /save work/i }).click();
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
+		timeout: 15_000,
+	});
+	await page.reload();
+	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
+
+	// ── Credit me ──
+	// A second row, carrying the creator's own DID without typing anything.
+	await page.getByRole("button", { name: "Credit me" }).click();
+	await expect(page.getByRole("textbox", { name: "Credit 2 contributor" })).toHaveValue(/^(did:)/);
+	// The creator's own DID, specifically — read off their public profile the same way
+	// the user's was, and the media fixture's own handle for the search.
+	const ownProfile = (await (
+		await fetch(`${API_URL}/api/accounts/users/${await mediaFixtureHandle()}`)
+	).json()) as PublicProfile;
+	expect(ownProfile.user?.atprotoDid).toBeTruthy();
+	await expect(page.getByRole("textbox", { name: "Credit 2 contributor" })).toHaveValue(
+		ownProfile.user!.atprotoDid!,
+	);
+
+	await page.getByRole("button", { name: /save work/i }).click();
+	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
+		timeout: 15_000,
+	});
+
+	// ── The guidance copy ──
+	// The point-of-assignment ask, rendered where the creator is choosing.
+	await expect(
+		page.getByText(/A blend \(Created and AI together\) is a genuine mixed credit/),
+	).toBeVisible();
+});
+
+/** The media fixture's handle, resolved the way the walker's is. */
+async function mediaFixtureHandle(): Promise<string> {
+	const { MEDIA_FIXTURE_USERNAME } = await import("@anthers/db/media-fixture");
+	return gauntletHandle(API_URL, MEDIA_FIXTURE_USERNAME);
+}
