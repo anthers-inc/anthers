@@ -14,12 +14,13 @@
 //
 // **The page says what the data can support and no more.** The outside view's row renders
 // its own state (including *unknown* — "not reported recently", which is what a dead
-// monitor says), and the page's own reachability is the elephant in the design: if the
-// hub is down, this page is down too. So the footer links it, rather than a nav slot —
-// a person who cannot reach the site is not browsing its status page — and the page says
-// plainly that it is served from the same platform it reports on. The alerting path
-// (email from the droplet) never depended on this page being up, which is why the
-// honest limitation is affordable.
+// monitor says). The page's own reachability stopped being the elephant in the design:
+// the standalone status page at status.anthers.org is served by the droplet the outside
+// check runs on, a failure domain apart from this hub, and stays up when the hub — and
+// this page with it — is down. This page remains the in-app view; the lede hands readers
+// to the standalone one for exactly the moment this one cannot serve. The alerting path
+// (email from the droplet) never depended on either page being up, which is why the
+// arrangement is affordable.
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -39,6 +40,8 @@ interface StatusComponent {
 	name: string;
 	state: "operational" | "degraded" | "down";
 	detail?: string;
+	/** ISO timestamp of when the present condition began. Absent when operational. */
+	since?: string;
 }
 interface StatusReport {
 	state: "operational" | "degraded" | "down";
@@ -76,6 +79,17 @@ const HEADLINE: Record<StatusReport["state"], string> = {
 	degraded: "Some systems degraded",
 	down: "Service disruption",
 };
+
+/** A readable "for about N …" from a timestamp — the same scale the status email uses. */
+function durationSince(iso: string): string | null {
+	const started = new Date(iso).getTime();
+	if (Number.isNaN(started)) return null;
+	const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
+	if (seconds < 90) return `${seconds} seconds`;
+	if (seconds < 5400) return `${Math.max(1, Math.round(seconds / 60))} minutes`;
+	if (seconds < 172_800) return `${Math.round(seconds / 3600)} hours`;
+	return `${Math.round(seconds / 86_400)} days`;
+}
 
 /** The outside view's label, with the page's honest limitation spelled out beside it. */
 function ExternalRow({ external }: { external: StatusReport["external"] }) {
@@ -152,9 +166,12 @@ export default function StatusPage() {
 					<Reveal delay={150}>
 						<Lede>
 							What is running and what is not, answered fresh each time this page loads — and
-							refreshing every thirty seconds. Anthers is served by the same platform this page
-							reports on, so if the platform is down this page goes down with it; when that happens
-							a check outside our hosting emails us directly.
+							refreshing every thirty seconds. A copy of this page also lives at{" "}
+							<a href="https://status.anthers.org" className="link">
+								status.anthers.org
+							</a>
+							, served by a machine outside our hosting platform, so it stays readable even
+							when the site — and this page with it — is not.
 						</Lede>
 					</Reveal>
 				</div>
@@ -174,8 +191,14 @@ export default function StatusPage() {
 										<h3 className="font-semibold">{component.name}</h3>
 										<span className="text-sm font-medium">{STATE_LABEL[component.state]}</span>
 									</div>
-									{component.detail && (
-										<p className="mt-1 text-sm text-base-content/70">{component.detail}</p>
+									{(component.detail || component.since) && (
+										<p className="mt-1 text-sm text-base-content/70">
+											{component.detail}
+											{component.detail && component.since ? " " : ""}
+											{component.since
+												? `Continuing for about ${durationSince(component.since) ?? "a moment"}.`
+												: ""}
+										</p>
 									)}
 								</div>
 							))}

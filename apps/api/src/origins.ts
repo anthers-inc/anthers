@@ -35,7 +35,8 @@ const DESKTOP_ORIGINS = ["tauri://localhost", "http://tauri.localhost"];
  */
 export function allowedOrigins(): string[] {
 	const configured = [process.env.FRONTEND_URL].filter((o): o is string => !!o);
-	if (isPublicDeployment()) return [...new Set([...configured, ...DESKTOP_ORIGINS])];
+	if (isPublicDeployment())
+		return [...new Set([...configured, ...DESKTOP_ORIGINS, ...statusPageOrigins()])];
 	return [
 		...new Set([
 			...configured,
@@ -75,6 +76,25 @@ export function allowedOrigins(): string[] {
 			...sessionPreviewOrigins(),
 		]),
 	];
+}
+
+/**
+ * The standalone status page's origins. The page answers at `status.anthers.org`, served
+ * by the droplet — deliberately a failure domain apart from the hub it reports on. Its
+ * fetch of `GET /api/status` is cross-origin and carries **no credentials** (no session
+ * is involved in reading public status), so the allowlist only needs to let CORS return
+ * the body; nothing ambient is granted.
+ */
+const STATUS_PAGE_HOST = "status.anthers.org";
+
+function statusPageOrigins(): string[] {
+	// Configurable so a rehearsal deployment can point the page elsewhere; the
+	// production value is the status subdomain. Unset, dev adds none — a dev checkout
+	// has no status page to serve.
+	const configured = (process.env.STATUS_PAGE_URL ?? "").replace(/\/$/, "");
+	if (configured) return [configured];
+	if (!isPublicDeployment()) return [];
+	return [`https://${STATUS_PAGE_HOST}`];
 }
 
 /**
