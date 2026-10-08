@@ -15,7 +15,12 @@
  */
 
 import { db } from "@anthers/db/client";
-import { adminAccounts, type DmcaNoticeStatus, rightsRequests } from "@anthers/db/schema";
+import {
+	adminAccounts,
+	type DmcaNoticeStatus,
+	nounBlocklist,
+	rightsRequests,
+} from "@anthers/db/schema";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
 	HOLD_SUBJECT_TYPES,
@@ -88,6 +93,12 @@ import {
 	unsuspendAccount,
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
+import {
+	addToBlocklist,
+	blocklistVendorSync,
+	isBlocklistKind,
+	removeFromBlocklist,
+} from "../services/noun-blocklist.js";
 import { releasePayoutHold, suspensionPayoutReview } from "../services/payouts.js";
 import {
 	clearObjectQuarantine,
@@ -1483,6 +1494,57 @@ const adminRoutes = new Hono<AdminEnv>()
 		// answer to the operator: there is nothing here left to lift.
 		if (!lifted) return c.json({ error: "No active hold with that id", code: "not_active" }, 404);
 		return c.json({ lifted: true });
+	})
+
+	// ── Noun Project blocklist ───────────────────────────────────────────────
+	// The Badge Maker's content control: the list a creator report lands in, and the
+	// half that refuses a search before the vendor call. Read the full arrangement in
+	// `services/noun-blocklist.ts` — here is only the operator's door onto it.
+	.get("/noun-blocklist", async (c) => {
+		const rows = await db
+			.select()
+			.from(nounBlocklist)
+			.orderBy(nounBlocklist.kind, nounBlocklist.value);
+		return c.json({ entries: rows });
+	})
+
+	.post(
+		"/noun-blocklist",
+		zValidator(
+			"json",
+			z.object({
+				kind: z.string().refine(isBlocklistKind),
+				value: z.string().min(1).max(200),
+				reason: z.string().min(1).max(1000),
+			}),
+			invalidBody,
+		),
+		async (c) => {
+			const { kind, value, reason } = c.req.valid("json");
+			await addToBlocklist({ kind, value, reason, addedBy: c.get("admin").id });
+			// The vendor's endpoints receive the same entry, best-effort: the local list
+			// is the control, the vendor's key-level blocklist is the belt-and-braces.
+			const sync = await blocklistVendorSync().catch(() => ({
+				pushed: [] as string[],
+				failed: ["sync skipped"],
+			}));
+			return c.json(
+				{ added: { kind, value }, vendorPushed: sync.pushed.length, vendorFailed: sync.failed },
+				201,
+			);
+		},
+	)
+
+	.delete("/noun-blocklist/:kind/:value", async (c) => {
+		const kind = c.req.param("kind");
+		if (!isBlocklistKind(kind)) return c.json({ error: "Unknown kind" }, 400);
+		await removeFromBlocklist(kind, c.req.param("value"));
+		return c.body(null, 204);
+	})
+
+	.post("/noun-blocklist/sync", async (c) => {
+		const result = await blocklistVendorSync();
+		return c.json(result, result.failed.length > 0 ? 207 : 200);
 	});
 
 /** Pull a readable message out of a pg-boss job's `output` jsonb (shape varies). */

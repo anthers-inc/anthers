@@ -21,7 +21,8 @@
 
 import { db } from "@anthers/db/client";
 import { nounBlocklist } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { vendorPost } from "../lib/noun/client";
 
 export type BlocklistKind = "term" | "icon" | "collection";
 
@@ -100,4 +101,54 @@ export async function filterBlockedIcons<
 			(c) => c?.id !== undefined && blockedCollections.has(String(c.id)),
 		);
 	});
+}
+
+/**
+ * Remove one entry — the report-path's reversal, and its own admin action.
+ */
+export async function removeFromBlocklist(kind: BlocklistKind, value: string): Promise<void> {
+	await db
+		.delete(nounBlocklist)
+		.where(and(eq(nounBlocklist.kind, kind), eq(nounBlocklist.value, value.trim().toLowerCase())));
+}
+
+/**
+ * Push every Anthers-side blocklist entry up to the vendor's key-level blocklist.
+ *
+ * 🚨 **The term half is what this sync exists for** — an entry on the vendor's own
+ * blocklist refuses the query on their side too, so a search answer never carries it,
+ * and the control holds for any other surface that ever shares the key. Best-effort per
+ * entry: the local list is the control that actually gates the routes, so a vendor
+ * refusal is recorded in the run's return and never blocks the others.
+ *
+ * ⚠️ The vendor's blocklist view is cached ten minutes on their side, so their
+ * endpoints lag a sync by that much; the LOCAL list is what Anthers' routes read, and
+ * it takes effect immediately.
+ */
+export async function blocklistVendorSync(): Promise<{
+	pushed: string[];
+	failed: string[];
+}> {
+	const rows = await db.select().from(nounBlocklist);
+	const vendorPath = (kind: BlocklistKind) =>
+		kind === "term"
+			? "/v2/client/blacklist/term"
+			: kind === "icon"
+				? "/v2/client/blacklist/id"
+				: "/v2/client/blacklist/collection";
+	const pushed: string[] = [];
+	const failed: string[] = [];
+	for (const row of rows) {
+		try {
+			await vendorPost(vendorPath(row.kind as BlocklistKind), {
+				[row.kind === "term" ? "term" : "id"]: row.value,
+			});
+			pushed.push(`${row.kind}:${row.value}`);
+		} catch (err) {
+			failed.push(
+				`${row.kind}:${row.value} — ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`,
+			);
+		}
+	}
+	return { pushed, failed };
 }

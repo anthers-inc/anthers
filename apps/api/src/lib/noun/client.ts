@@ -169,3 +169,43 @@ export async function downloadSvg(id: string | number): Promise<string> {
 	}
 	return Buffer.from(res.base64_encoded_file, "base64").toString("utf8");
 }
+
+/**
+ * One signed POST to the vendor — the blocklist endpoints' shape (`POST
+ * /v2/client/blacklist/{term,id,collection}`), the only POSTs the integration makes.
+ *
+ * 🚨 No download path may ever become a POST — the API is read-only for assets by
+ * design, and a write endpoint's appearance here is a decision to be argued in the
+ * vendor's own terms, not a helper's signature widening. The blocklist is the exception
+ * because the vendor's key-level blocklist is itself part of the content-controls
+ * arrangement the badge-maker's access was granted under.
+ */
+export async function vendorPost(path: string, body: Record<string, string>): Promise<unknown> {
+	const { key, secret } = await credentials();
+	const url = new URL(API_ROOT + path);
+	// OAuth 1.0a signs POSTs over the BODY parameters rather than the query — the same
+	// signer, with `params` carrying the body's pairs. The body is form-encoded, which is
+	// what the vendor's blocklist endpoints document.
+	const entries: [string, string][] = Object.entries(body);
+	const form = new URLSearchParams(entries);
+	const res = await fetch(url, {
+		method: "POST",
+		headers: {
+			Authorization: authorizationHeader({
+				method: "POST",
+				url: url.toString(),
+				consumerKey: key,
+				consumerSecret: secret,
+				params: entries,
+			}),
+			"Content-Type": "application/x-www-form-urlencoded",
+			Accept: "application/json",
+		},
+		body: form.toString(),
+	});
+	if (!res.ok)
+		throw new Error(
+			`vendor POST ${path} answered ${res.status}: ${(await res.text()).slice(0, 200)}`,
+		);
+	return res.json().catch(() => null);
+}
