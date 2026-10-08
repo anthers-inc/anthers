@@ -208,4 +208,48 @@ test.describe
 
 			expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 		});
+
+		test("the ATProto Records page loads its report and highlights only itself", async ({
+			page,
+		}) => {
+			// 🚨 This page's two shipped defects are why it gets a browser walk of its own: it
+			// fetched `/admin/…` instead of `/api/admin/…`, which the admin static site answered
+			// with index.html and a 200 — parsed as JSON, an exception, and a wrong-banner page
+			// no API test can see, because the API tests address the router directly. And its
+			// nav item prefix-lit "Jobs and Services" beside it. Both were invisible to every
+			// suite that ran before this walked the page.
+			const errors = trackErrorsStrict(page, [/status of 401/]);
+
+			await page.goto(ADMIN_ORIGIN);
+			await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
+			await page.getByRole("button", { name: "Send a Code" }).click();
+			await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL, 15_000, Date.now()));
+			await page.getByRole("button", { name: "Sign In" }).click();
+			await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
+
+			await page.getByRole("link", { name: "ATProto Records" }).click();
+
+			// Exactly one nav item is highlighted: this page's own — not "Jobs and Services"
+			// beside it, which the missing `end` on `/infrastructure` lit up. The positive
+			// assertion comes first on purpose: at click time the previous page is still
+			// mounted, where the active set is genuinely different — a count-0 assertion
+			// checked first would poll and pass in that window before the transition lands.
+			await expect(page.locator("nav .menu-active", { hasText: "ATProto Records" })).toHaveCount(1);
+			await expect(page.locator("nav .menu-active", { hasText: "Jobs and Services" })).toHaveCount(
+				0,
+			);
+
+			// The report loads: the tallies render with no error banner, which is what the
+			// wrong-path fetch produced. The empty-state message is asserted *only* when the
+			// counts say zero — a full `verify` runs after the gauntlet's fixtures have
+			// published real Works, so the database is not always empty and this test must
+			// not care which state it lands in.
+			await expect(page.getByText("report generated")).toBeVisible();
+			await expect(page.getByText("Couldn't reach the API.", { exact: false })).toHaveCount(0);
+			await expect(page.getByText("rows walked")).toBeVisible();
+
+			await page.locator("main").screenshot({ path: `.screenshots/admin-atproto-${RUN}.png` });
+
+			expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+		});
 	});
