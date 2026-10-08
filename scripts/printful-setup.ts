@@ -161,7 +161,33 @@ async function main() {
 		console.log(`  ${size}: catalog variant ${blank.id} at $${blank.price} — ${printFile}`);
 	}
 
+	console.log(`Sync Product created for work "${slug}" (work id ${work.id})`);
 	console.log("Done. The Work's merch panel is live; the margin constant prices the list.");
+
+	// The webhook configuration — the same person-runs-it step, pointed at this API's
+	// receiver. Only one URL is active per store, so this step is also how a moved
+	// endpoint is repointed.
+	const webhookBase = process.env.PUBLIC_API_URL?.trim();
+	if (webhookBase) {
+		const ok = await setWebhookUrl(`${webhookBase}/api/webhooks/printful`, [
+			"package_shipped",
+			"package_returned",
+			"order_created",
+			"order_updated",
+			"order_failed",
+			"order_canceled",
+			"order_put_hold",
+			"order_remove_hold",
+			"order_refunded",
+		]);
+		console.log(
+			ok ? "Webhook configuration set." : "Webhook configuration FAILED — set it in the dashboard.",
+		);
+	} else {
+		console.log(
+			"PUBLIC_API_URL not set — webhook configuration skipped; set it in Printful's dashboard or re-run with it set.",
+		);
+	}
 	process.exit(0);
 }
 
