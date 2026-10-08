@@ -81,6 +81,20 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.15",
+		date: "2026-10-07",
+		lede: "The Badge Maker: a creator's own Badge art, drawn from a catalog of nearly ten million icons and credited to the artists who drew them.",
+		entries: [
+			"The Badge Maker is live, and it is the one place a creator makes a Badge: the name, the monthly amount, the perks, and the art. The old ladder editor's small set of preset emblems is gone; a rung's emblem is picked from the Noun Project catalog through a live search, or uploaded as a creator's own file.",
+			"The catalog search suggests visually similar icons for the rest of a ladder, so a set of rungs reads as if drawn by one hand. Every catalog emblem shows its artist's name in the picker, and a supporter who flips a Badge over on the creator's profile reads the same credit.",
+			"A composed Badge image is built on Anthers' servers at save time. The icon file itself is never downloadable from here, and a rung a creator has not touched yet wears one of Anthers' own Badge designs until they give it an emblem of its own.",
+			"Perks are a new part of a Badge. A creator tags what a rung carries beyond access, from four plain categories (a physical good, a service, community access, or recognition), each with a plain-language explanation, and access to gated works is added automatically.",
+			"Storage moved onto a ruled ladder: the free allowance is 25 GiB across a creator's catalog and their kept files alike, each Badge rung bundles more, and past it a creator pays the object store's rate with no mark-up. The half-again mark-up retired, and the FAQ, legal copy, For Creators and signup pages state the ruled shape.",
+			"The Admin Console gained the financial plan as an editable projection from launch to inflection 1, with the budget shares beside it and the flow diagram a phase's numbers draw.",
+		],
+		roadmapIds: ["badge-maker"],
+	},
+	{
 		version: "2026.10.14",
 		date: "2026-10-07",
 		lede: "The emails keep their palette on a phone set to dark.",

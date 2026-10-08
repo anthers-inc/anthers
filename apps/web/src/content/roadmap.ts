@@ -543,6 +543,15 @@ export const ROADMAP: RoadmapGroup[] = [
 						doc: { id: "21.01", title: "Badges" },
 					},
 					{
+						id: "badge-maker",
+						title: "The Badge Maker",
+						blurb:
+							"One place a creator makes a Badge: the name, the amount, the perks, and the art from a catalog of icons or their own file.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						doc: { id: "32.02", title: "Designing Your Badges" },
+					},
+					{
 						id: "directing",
 						title: "Directing Your Support",
 						blurb:
@@ -574,7 +583,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"Giving above the Public Access price buys no more access, by design. What it carries instead must make nobody else poorer.",
 						bucket: "active",
-						note: "Stickers and the supporters page work. Storage, merch and preservation are not built.",
+						note: "Stickers work; creator Badge perks too. Storage, merch, preservation: not built.",
 						doc: { id: "21.01", title: "Badges" },
 					},
 				],
