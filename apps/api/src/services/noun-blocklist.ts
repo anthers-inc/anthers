@@ -115,39 +115,75 @@ export async function removeFromBlocklist(kind: BlocklistKind, value: string): P
 /**
  * Push every Anthers-side blocklist entry up to the vendor's key-level blocklist.
  *
- * 🚨 **The term half is what this sync exists for** — an entry on the vendor's own
- * blocklist refuses the query on their side too, so a search answer never carries it,
- * and the control holds for any other surface that ever shares the key. Best-effort per
- * entry: the local list is the control that actually gates the routes, so a vendor
- * refusal is recorded in the run's return and never blocks the others.
+ * 🚨 **The vendor's documented contract is BATCHES, not one entry per call** — `POST
+ * /v2/client/blacklist/term` takes a JSON body `{"blacklist": [terms…], "overwrite":
+ * false}`, and `/v2/client/blacklist/id` takes `type=icon|collection` as a QUERY
+ * parameter beside the same body shape (the vendor's API documentation, 2026-10-07).
+ * An earlier draft inferred a one-term-per-call form-field shape, which would have made
+ * every push answer a 400 and every seed entry silently fail to reach the vendor.
+ * ⭐ **Live-verified the same day**: one probe term pushed, read back in the vendor's
+ * `search_terms`, and removed by an overwrite — the round trip works against the real
+ * API.
  *
- * ⚠️ The vendor's blocklist view is cached ten minutes on their side, so their
- * endpoints lag a sync by that much; the LOCAL list is what Anthers' routes read, and
- * it takes effect immediately.
+ * Best-effort per batch: the local list is the control that actually gates the routes,
+ * so a vendor refusal is recorded in the run's return and never blocks the others. The
+ * vendor's own view is cached ten minutes on their side, so their endpoints lag a sync
+ * by that much; the LOCAL list is what Anthers' routes read, and it takes effect
+ * immediately.
  */
 export async function blocklistVendorSync(): Promise<{
 	pushed: string[];
 	failed: string[];
 }> {
 	const rows = await db.select().from(nounBlocklist);
-	const vendorPath = (kind: BlocklistKind) =>
-		kind === "term"
-			? "/v2/client/blacklist/term"
-			: kind === "icon"
-				? "/v2/client/blacklist/id"
-				: "/v2/client/blacklist/collection";
+	const terms = rows.filter((r) => r.kind === "term").map((r) => r.value);
+	const iconIds = rows
+		.filter((r) => r.kind === "icon")
+		.map((r) => Number(r.value))
+		.filter((n) => Number.isFinite(n));
+	const collectionIds = rows
+		.filter((r) => r.kind === "collection")
+		.map((r) => Number(r.value))
+		.filter((n) => Number.isFinite(n));
+
 	const pushed: string[] = [];
 	const failed: string[] = [];
-	for (const row of rows) {
-		try {
-			await vendorPost(vendorPath(row.kind as BlocklistKind), {
-				[row.kind === "term" ? "term" : "id"]: row.value,
+
+	// Batches of 900 — the documented cap is 1,000 per request, and headroom keeps a
+	// re-sync of a grown list from straddling the cap.
+	const batch = <T>(items: T[]): T[][] => {
+		const out: T[][] = [];
+		for (let i = 0; i < items.length; i += 900) out.push(items.slice(i, i + 900));
+		return out;
+	};
+
+	try {
+		for (const chunk of batch(terms)) {
+			await vendorPost("/v2/client/blacklist/term", {
+				blacklist: chunk,
+				overwrite: false,
 			});
-			pushed.push(`${row.kind}:${row.value}`);
+			pushed.push(...chunk.map((t) => `term:${t}`));
+		}
+	} catch (err) {
+		failed.push(`terms — ${err instanceof Error ? err.message.slice(0, 200) : "unknown"}`);
+	}
+	for (const [type, ids] of [
+		["icon", iconIds],
+		["collection", collectionIds],
+	] as const) {
+		try {
+			for (const chunk of batch(ids)) {
+				await vendorPost(
+					`/v2/client/blacklist/id?type=${type}`,
+					{ blacklist: chunk, overwrite: false },
+					// The type parameter rides in the QUERY, so it is signed like one.
+					{ type },
+				);
+				pushed.push(...chunk.map((id) => `${type}:${id}`));
+			}
 		} catch (err) {
-			failed.push(
-				`${row.kind}:${row.value} — ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`,
-			);
+			failed.push(`${type}s — ${err instanceof Error ? err.message.slice(0, 200) : "unknown"}`);
 		}
 	}
 	return { pushed, failed };

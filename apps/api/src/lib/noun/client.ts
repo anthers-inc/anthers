@@ -171,22 +171,26 @@ export async function downloadSvg(id: string | number): Promise<string> {
 
 /**
  * One signed POST to the vendor — the blocklist endpoints' shape (`POST
- * /v2/client/blacklist/{term,id,collection}`), the only POSTs the integration makes.
+ * /v2/client/blacklist/term`, `POST /v2/client/blacklist/id?type=…`), the only POSTs
+ * the integration makes. The body is JSON (`{"blacklist": […], "overwrite": false}` —
+ * the vendor's documented contract, confirmed against their own examples 2026-10-07),
+ * and any query parameters are signed alongside it, which is what makes
+ * `/id?type=icon` authenticate. OAuth 1.0a does not hash a request body.
  *
  * 🚨 No download path may ever become a POST — the API is read-only for assets by
- * design, and a write endpoint's appearance here is a decision to be argued in the
- * vendor's own terms, not a helper's signature widening. The blocklist is the exception
- * because the vendor's key-level blocklist is itself part of the content-controls
- * arrangement the badge-maker's access was granted under.
+ * design. The blocklist is the exception because the vendor's key-level blocklist is
+ * itself part of the content-controls arrangement the Badge Maker's access was granted
+ * under: the terms we refuse locally must refuse on their side too.
  */
-export async function vendorPost(path: string, body: Record<string, string>): Promise<unknown> {
-	const { key, secret } = await credentials();
+export async function vendorPost(
+	path: string,
+	jsonBody: { blacklist: (string | number)[]; overwrite: boolean },
+	query: Record<string, string> = {},
+): Promise<unknown> {
 	const url = new URL(API_ROOT + path);
-	// OAuth 1.0a signs POSTs over the BODY parameters rather than the query — the same
-	// signer, with `params` carrying the body's pairs. The body is form-encoded, which is
-	// what the vendor's blocklist endpoints document.
-	const entries: [string, string][] = Object.entries(body);
-	const form = new URLSearchParams(entries);
+	for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+	const { key, secret } = await credentials();
+	const entries: [string, string][] = Object.entries(query);
 	const res = await fetch(url, {
 		method: "POST",
 		headers: {
@@ -197,10 +201,10 @@ export async function vendorPost(path: string, body: Record<string, string>): Pr
 				consumerSecret: secret,
 				params: entries,
 			}),
-			"Content-Type": "application/x-www-form-urlencoded",
+			"Content-Type": "application/json",
 			Accept: "application/json",
 		},
-		body: form.toString(),
+		body: JSON.stringify(jsonBody),
 	});
 	if (!res.ok)
 		throw new Error(
