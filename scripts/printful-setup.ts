@@ -28,6 +28,16 @@ import { eq } from "drizzle-orm";
 
 const API = "https://api.printful.com";
 
+/** The webhook event types the receiver tracks, registered as the setup's closing step. */
+async function setWebhookUrl(url: string, types: string[]): Promise<boolean> {
+	try {
+		await pf("POST", "/webhooks", { url, types });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function parseArgs() {
 	const args = process.argv.slice(2);
 	const get = (name: string) => {
