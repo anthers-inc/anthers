@@ -168,9 +168,7 @@ export async function getCatalogVariant(variantId: number): Promise<PrintfulCata
 /** One sync variant by Printful's id — the in-store representation. */
 export async function getSyncVariant(syncVariantId: number): Promise<PrintfulSyncVariant | null> {
 	if (!printfulConfigured()) return null;
-	return call<{ result: PrintfulSyncVariant }>("GET", `/sync/variants/${syncVariantId}`).then(
-		(r) => r.result,
-	);
+	return call<PrintfulSyncVariant>("GET", `/sync/variants/${syncVariantId}`);
 }
 
 /**
@@ -185,10 +183,10 @@ export async function getShippingRates(
 	items: Array<{ catalogVariantId: number; quantity: number }>,
 ): Promise<PrintfulShippingOption[] | null> {
 	if (!printfulConfigured()) return null;
-	return call<{ result: PrintfulShippingOption[] }>("POST", "/shipping/rates", {
+	return call<PrintfulShippingOption[]>("POST", "/shipping/rates", {
 		recipient,
 		items: items.map((i) => ({ variant_id: i.catalogVariantId, quantity: i.quantity })),
-	}).then((r) => r.result);
+	});
 }
 
 // ── Writes ────────────────────────────────────────────────────────────────────
@@ -238,7 +236,7 @@ export async function placeOrder(input: PrintfulOrderInput): Promise<PrintfulOrd
 /** One order by id — the webhook receiver's read-back, the hint verifying itself. */
 export async function getOrder(orderId: number): Promise<PrintfulOrder | null> {
 	if (!printfulConfigured()) return null;
-	return call<{ result: PrintfulOrder }>("GET", `/orders/${orderId}`).then((r) => r.result);
+	return call<PrintfulOrder>("GET", `/orders/${orderId}`);
 }
 
 /** Cancel an order — printable only in draft/pending; later states answer 400 and the refund path records that. */
