@@ -51,6 +51,7 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 	{
 		title: "Books",
 		items: [
+			{ to: "/financial-plan", label: "Financial Plan" },
 			{ to: "/books/sales-tax", label: "Sales-Tax Worksheet" },
 			{ to: "/books/sales-tax-forecast", label: "Sales-Tax Forecast" },
 			{ to: "/books/close-package", label: "Monthly Close Package" },

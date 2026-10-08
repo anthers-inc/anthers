@@ -35,7 +35,9 @@
 		"./tax-codes": "./src/tax-codes.ts",
 		"./sales-tax-thresholds": "./src/sales-tax-thresholds.ts",
 		"./compliance-calendar": "./src/compliance-calendar.ts",
-		"./resource-thresholds": "./src/resource-thresholds.ts"
+		"./resource-thresholds": "./src/resource-thresholds.ts",
+		"./growth": "./src/growth.ts",
+		"./financial-plan": "./src/financial-plan.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

@@ -13,6 +13,7 @@ import ClosePackage from "./pages/books/ClosePackage";
 import Disputes from "./pages/books/Disputes";
 import SalesTaxWorksheet from "./pages/books/SalesTax";
 import SalesTaxForecast from "./pages/books/SalesTaxForecast";
+import FinancialPlan from "./pages/FinancialPlan";
 import Home from "./pages/Home";
 import Infrastructure from "./pages/Infrastructure";
 import IssueReports from "./pages/infrastructure/IssueReports";
@@ -52,6 +53,7 @@ export default function App() {
 				<Route path="books/sales-tax-forecast" element={<SalesTaxForecast />} />
 				<Route path="books/close-package" element={<ClosePackage />} />
 				<Route path="books/disputes" element={<Disputes />} />
+				<Route path="financial-plan" element={<FinancialPlan />} />
 				<Route
 					path="accounts"
 					element={account.isSuperAdmin ? <Accounts /> : <Navigate to="/" replace />}
