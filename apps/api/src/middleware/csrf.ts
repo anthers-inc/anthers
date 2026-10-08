@@ -29,6 +29,15 @@ const CSRF_EXEMPT_PATHS = new Set([
 	"/api/webhooks/resend",
 	"/api/auth/desktop/start",
 	"/api/auth/desktop/exchange",
+	// The droplet's heartbeat ingest (routes/status.ts): a machine on another failure
+	// domain authenticating by its own bearer secret, not by an Origin any browser would
+	// send. The route verifies the secret itself (timing-safe), so the exemption removes
+	// the Origin check and puts nothing in its place that could be absent — the same
+	// shape the two webhooks above follow. 🚨 This was missed at the feature's first
+	// ship: middleware ran first, resolved the presented token as a *session* (it is not
+	// one), failed, and 401'd every report before the route's own check ran — the page's
+	// outside view stayed `unknown` in production while the droplet reported every minute.
+	"/api/status/heartbeat",
 ]);
 
 /**

@@ -37,6 +37,12 @@ export interface ComponentHealth {
 	state: ComponentState;
 	/** What a reader is told when the state is anything but operational. Human, not machine. */
 	detail?: string;
+	/**
+	 * ISO timestamp of when the present condition began, where the check's own evidence
+	 * names one — the oldest job in the window for the queue. The public status page
+	 * renders this as "for N hours"; absent when operational.
+	 */
+	since?: string;
 	/** Milliseconds the probe took. Diagnostics for the Admin module; the public page may render or drop it. */
 	ms?: number;
 }
@@ -92,9 +98,19 @@ async function checkQueue(): Promise<ComponentHealth> {
 		const present = rowsOf<{ present: boolean }>(exists)[0]?.present === true;
 		if (!present)
 			return { state: "down", detail: "The job queue is not answering.", ms: Date.now() - started };
+		// 🚨 **The failed/retry count is time-boxed to the last 24 hours, on purpose.**
+		// A retry budget exhausted during a rolling deploy's one-minute window (old workers
+		// running code a column migration has just raced) leaves a permanent `failed` row
+		// beside ten thousand later successes — and an unwindowed count held the whole
+		// status page, and the droplet's outside check, at `degraded` for six days from one
+		// such row. A *live* recurring failure keeps creating fresh rows and still trips
+		// the check; a superseded one ages out on its own. The window matches the
+		// 24h-resurface rule the error tracker alerts on.
 		const counts = await db.execute(sql`
 			SELECT state::text AS state, count(*)::int AS n
 			FROM pgboss.job
+			WHERE state IN ('failed','retry')
+				AND started_on > now() - interval '24 hours'
 			GROUP BY state
 		`);
 		const byState = new Map<string, number>();
@@ -102,9 +118,21 @@ async function checkQueue(): Promise<ComponentHealth> {
 			byState.set(row.state, row.n);
 		}
 		const failed = (byState.get("failed") ?? 0) + (byState.get("retry") ?? 0);
+		if (failed === 0) return { state: "operational", ms: Date.now() - started };
+		// When the condition began, from the evidence itself: the oldest failure still in
+		// the window. Drives the status page's "for N hours" — a duration a reader can
+		// act on, derived from the row rather than invented.
+		const oldest = await db.execute(sql`
+			SELECT min(started_on)::text AS since
+			FROM pgboss.job
+			WHERE state IN ('failed','retry')
+				AND started_on > now() - interval '24 hours'
+		`);
+		const since = rowsOf<{ since: string | null }>(oldest)[0]?.since ?? null;
 		return {
-			state: failed > 0 ? "degraded" : "operational",
-			...(failed > 0 ? { detail: "The job queue is holding failed jobs." } : {}),
+			state: "degraded",
+			detail: "The job queue is holding failed jobs.",
+			...(since ? { since: new Date(since).toISOString() } : {}),
 			ms: Date.now() - started,
 		};
 	} catch {
