@@ -489,25 +489,43 @@ export function stickerBudgetFor(anthersDollars: number): number {
 /**
  * A Badge's cloud storage floor, in GiB.
  *
- * Free gets `FREE_STORAGE_GIB` and it holds a **creator's catalog only**, so an account
- * that has never published has no storage at all. From the first rung the same floor
- * becomes spendable on the account's own kept files too, and each further rung adds
- * another `FREE_STORAGE_GIB`.
+ * Free gets `FREE_STORAGE_GIB` and it is **combined** (Parker, 2026-10-07): the floor
+ * holds a creator's catalog *and* the account's own kept files on every account, no
+ * Badge needed — there is no creator-only floor any more, and an account that has
+ * never published still has its own 25 GiB. From the first rung upward the floor
+ * rises by the ruled ladder, and it serves both purposes together at every height.
  *
- * 🚨 **Counted by rungs CLEARED, never by position in a list.** `BADGE_ORDER`'s own note
- * records why: a Badge is identified by its threshold, and the retired
- * `indexOf(BADGE_ORDER)` looked correct for as long as Anthers' set happened to be evenly
- * spaced. `amountMeets` is the only comparison that survives a ladder with gaps.
+ * 🚨 **Ruled amounts, 2026-10-07** (Parker, solvency-first): 25/50/100/150/200 —
+ * every rung's cumulative storage cost stays under its cumulative remainder at full
+ * utilization, so no paid rung is underwater and no loss-leader is priced into a
+ * paying tier. Past the held allowance, **at-cost top-up is available from Root
+ * onward** at the vendor rate with no markup (see `estimateStorageCost`) — so the
+ * ladder carries the bundle and the bytes beyond it are never a reason to climb.
  *
- * 🚨 **The per-rung scaling is DESIGNED, NOT BUILT** — `estimateStorageCost` bills every
- * creator against `FREE_STORAGE_GIB` flat, and there is no user-side storage at all. 50 GiB
- * a rung is what the rung budget affords rather than a settled increment; the storage-ladder
- * task on the vault board carries that question.
+ * 🚨 **The per-rung ladder is DESIGNED, NOT BUILT** — no user-side storage exists yet,
+ * `estimateStorageCost` cannot bill against a rung allowance until the storage-billing
+ * work lands, and the rescue-window sweep, cloud saves and kept-file surface are all
+ * the Badge storage ladder task's build. What is ruled here are the amounts.
  */
 export function storageGibFor(anthersDollars: number): number {
-	const rungs = ANTHERS_BADGES.filter((b) => amountMeets(anthersDollars, b.threshold)).length;
-	return rungs === 0 ? FREE_STORAGE_GIB : FREE_STORAGE_GIB * rungs;
+	return STORAGE_LADDER_GIB[heldBadgeName(anthersDollars)];
 }
+
+/**
+ * The ruled storage ladder by Badge state, in GiB — the amounts `storageGibFor`
+ * serves. A lookup table rather than arithmetic, because the rungs are **policy**
+ * (the solvency ruling picked them) and a table says so: there is no formula these
+ * numbers are "the honest answer to", and pretending otherwise is how a hand-tuned
+ * shape gets mistaken for a derivation. Root's step is the combined-free floor's
+ * first upgrade (+25); the rest rise by fifty.
+ */
+export const STORAGE_LADDER_GIB: Record<BadgeKey, number> = {
+	free: 25,
+	root: 50,
+	sprout: 100,
+	petal: 150,
+	blossom: 200,
+};
 
 /**
  * How much more a creator earns from an hour of your attention once you give Anthers
@@ -545,21 +563,28 @@ export function formatMultiple(n: number): string {
 	return `${Number.isInteger(n) ? n : n.toFixed(1)}×`;
 }
 
-// ── Storage charge rate (creator storage only) ───────────────────────────────
+// ── Storage charge rate ───────────────────────────────────────────────────────
 /**
- * Half again on a creator's storage cost above the free allowance. This is a
- * creator's own opt-in infrastructure cost, **not a share of anyone's sale**.
- * The branded name ("Anthers Foundation Fee" / "AF Fee" / "AFF") was retired
- * 2026-08-08 — copy names who pays for what, not a fee. The identifier stays.
+ * 🚨 **RETIRED — 2026-10-07 (Parker): the half-again mark-up on creator storage is
+ * gone from the model, and this constant is retained at 0 only to keep its import
+ * sites building while their call sites migrate.**
  *
- * The purchase fees this constant also used to drive — 50% of a download's
- * delivery on a digital sale, and 1% of price on a physical one — were
- * **removed 2026-08-03**. They raised a fraction of a cent per sale, and a
- * commission on a creator's sale is the exact feature the IRS keyed on in Rev.
- * Rul. 76-152 and Final Adverse Determination 202521022. Anthers now takes $0
- * from every creator transaction. Do not reinstate them as a funding fix.
+ * The ruling: bundled storage comes with Badges (the 25/50/100/150/200 ladder, free
+ * 25 combined), everything past the held rung's allowance is **at-cost top-up from
+ * Root onward** — the provider's rate, no markup, eligibility by Badge held — so
+ * `AFF_INFRA_RATE` has no surviving charging surface. Storage stops being a revenue
+ * line at all and becomes the charitable-program shape: a cost the organization
+ * delivers and reports on, like the bandwidth it rides on. The revenue cost was
+ * negligible (~0.08% of modeled charitable revenue), and it buys margin-neutrality
+ * by construction: top-up bytes cannot go underwater at any size.
+ *
+ * History behind the identifier: this was the "Anthers Foundation Fee" half-again
+ * (the branded name retired 2026-08-08); earlier still it drove purchase fees —
+ * 50% of a download's delivery on a digital sale, 1% of price on a physical one —
+ * **removed 2026-08-03**. Anthers now takes $0 from every creator transaction. Do
+ * not reinstate any of them as a funding fix.
  */
-export const AFF_INFRA_RATE = 0.5;
+export const AFF_INFRA_RATE = 0;
 
 /**
  * Coarse accounting split of charitable dollars into Admin / Programs /
@@ -586,8 +611,28 @@ export const FOUNDATION_SPLIT = { admin: 0.1, programs: 0.4, subsidy: 0.5 } as c
  * class is not a free saving and shouldn't be assumed into this number.
  */
 export const STORAGE_PER_GIB_MONTH = 0.0161;
-/** Free creator storage allowance (GiB), subsidized. */
-export const FREE_STORAGE_GIB = 50;
+/**
+ * The storage rate as user-facing copy ("$0.0161") — derived from the dial, never
+ * retyped, so a vendor move updates every surface that quotes it. Trimmed of
+ * trailing zeros for display.
+ */
+export const STORAGE_PER_GIB_MONTH_LABEL = `$${STORAGE_PER_GIB_MONTH.toFixed(4).replace(/0+$/, "")}`;
+/**
+ * The combined free storage floor, in GiB — **25** (Parker's ruling, 2026-10-07).
+ *
+ * It was 50, creator-only. The ruling makes it 25 and **combined**: user + creator
+ * purposes on every account, no Badge needed. Combined-at-25 over combined-at-50 is
+ * the solvency asymmetry the pool task's arithmetic ran down: a floor is a standing
+ * obligation regardless of use, and the fully-used bound at 50 was a bigger standing
+ * promise than any usage data yet justifies, while at 25 it is a rounding error.
+ * Free-25 concentrates Root's upgrade pressure on exactly the accounts that want
+ * the bytes.
+ *
+ * The same figure holds a creator's catalog — the ranking paragraph ("Anthers
+ * subsidizes creation ahead of preservation") is retired with it: the subsidy now
+ * covers both purposes at once, a stronger free offering rather than a ranked one.
+ */
+export const FREE_STORAGE_GIB = 25;
 /**
  * What a self-hosting creator pays Anthers for infrastructure: **nothing**.
  *

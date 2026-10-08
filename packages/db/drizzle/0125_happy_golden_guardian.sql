@@ -1,1 +1,0 @@
-ALTER TABLE "badges" DROP COLUMN "art_emblem";

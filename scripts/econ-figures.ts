@@ -387,7 +387,7 @@ function renderReadmeModelMarkdown(): string {
 			]),
 		),
 		"",
-		`A directed $${seed.gross} a month is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator — that being the worst case, since batching several destinations onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.`,
+		`A directed $${seed.gross} a month is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator — that being the worst case, since batching several destinations onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Storage past your Badge's allowance is the only creator-side charge — the first ${FREE_STORAGE_GIB} GiB free for catalog and kept files alike, each rung bundling more, and past it the object-store rate with no mark-up.`,
 	].join("\n");
 }
 
@@ -481,7 +481,7 @@ function renderPerkLadderMarkdown(): string {
 		"",
 		"**Free viewing, the Time Pool and Stickers are live today. The storage floor is committed and not built yet.**",
 		"",
-		`A free account's Time Pool is paid by Anthers on its behalf, and its ${FREE_STORAGE_GIB} GiB holds a creator's catalog only — so an account that has never published anything has no storage of its own until the first rung, where the same floor becomes usable for what you keep.`,
+		`A free account's Time Pool is paid by Anthers on its behalf. Its ${FREE_STORAGE_GIB} GiB of storage is combined — a creator's catalog and the account's own kept files together, on every account, no Badge needed for either purpose. Each rung bundles more, and past a held rung's allowance more bytes are available at cost from Root onward — the provider's rate, with no mark-up. The storage surfaces themselves (kept files, cloud saves) are committed and not built yet.`,
 		"",
 		"**The Sticker column is part of the Time Pool column rather than an addition to it.** A Sticker is money already on its way to creators, handed by you to a particular one instead of being shared out by the time you spend. Whatever you do not hand out is shared by time as usual, so the two columns overlap on purpose and giving no Stickers costs creators nothing.",
 	].join("\n");
@@ -618,11 +618,10 @@ function renderCreatorReceiptMarkdown(): string {
 		"━".repeat(66),
 		pad("Time Pool (by time spent) + directed support (net of card)", `$${r.gross}`),
 		pad(
-			`Storage (${r.libraryGiB} GiB library − ${r.freeGiB} GiB free = ${r.billableGiB} GiB, at cost)`,
+			`Storage (${r.libraryGiB} GiB library − ${r.freeGiB} GiB Root allowance = ${r.billableGiB} GiB, at cost)`,
 			`−$${r.storage}`,
 		),
 		pad("Delivery (unlimited, at any volume)", "$0.00"),
-		pad("Storage charge (half again)", `−$${r.storageCharge}`),
 		`${" ".repeat(54)}──────────`,
 		pad("Net earnings", `$${r.net}`),
 		"",
@@ -876,7 +875,7 @@ function renderCreatorSegmentsMarkdown(): string {
 			]),
 		),
 		"",
-		`**Free creators' first ${FREE_STORAGE_GIB} GiB is a free-access obligation**, funded from what users give — the only cost line that scales with creators and is paid for by users. Everything above the free tier is the creator's own opt-in cost: the object-store rate plus half again, and nothing else, because delivery costs nobody anything.`,
+		`**Free creators' first ${FREE_STORAGE_GIB} GiB is a free-access obligation, now combined** — catalog and kept files together on every account — and funded from what users give, along with the allowance bytes every paying rung bundles: the cost lines that scale with creators and are paid for by users. Everything past a rung's allowance is the holder's own at-cost purchase from Root onward — the object-store rate, with no mark-up, and nothing else, because delivery costs nobody anything.`,
 	].join("\n");
 }
 

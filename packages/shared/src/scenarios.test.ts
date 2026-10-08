@@ -14,6 +14,7 @@ import {
 	FREE_TIME_POOL,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
+	STORAGE_LADDER_GIB,
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
 import {
@@ -194,27 +195,26 @@ describe("creatorReceipt", () => {
 	 * not the rounded half of the raw one ($0.155). The formula was right about the
 	 * model and wrong about the money, and nothing would have said so.
 	 *
-	 * So the figures below are computed by hand: 19 billable GiB × $0.0161 = $0.3059,
-	 * which is $0.31 to the cent, and half again on that is $0.155 → $0.16.
+	 * The receipt's creator holds Root (2026-10-07's ruled shape), whose allowance is
+	 * 50 GiB, and there is **no mark-up on storage any more** — the half-again retired
+	 * with the top-up ruling, so `storage` is the whole cost. Figures by hand:
+	 * 19 billable GiB × $0.0161 = $0.3059, which is $0.31 to the cent.
 	 */
-	test("charges storage only above the free allowance, and nothing else", () => {
+	test("charges storage only above the held allowance, at cost with no mark-up", () => {
 		const r = creatorReceipt(1575, 69);
-		expect(r.billableGiB).toBe(69 - FREE_STORAGE_GIB);
+		expect(r.billableGiB).toBe(69 - STORAGE_LADDER_GIB.root);
 		expect(r.storage).toBe("0.31");
-		expect(r.storageCharge).toBe("0.16");
-		// Net is gross less storage and its charge — payouts carry no processing (Connect
-		// standard transfers are free) and delivery costs nothing. Anything else appearing
-		// here is a bug.
-		expect(r.net).toBe("1574.53");
-		expect(new Decimal(r.net)).toEqual(
-			new Decimal(r.gross).minus(r.storage).minus(r.storageCharge),
-		);
-		// Half again, to the cent — the rate itself is a vendor pass-through and may move,
-		// but the multiplier is the dial that funds the mission.
-		expect(AFF_INFRA_RATE).toBe(0.5);
+		// Net is gross less storage — payouts carry no processing (Connect standard
+		// transfers are free) and delivery costs nothing. Anything else appearing here
+		// is a bug.
+		expect(r.net).toBe("1574.69");
+		expect(new Decimal(r.net)).toEqual(new Decimal(r.gross).minus(r.storage));
+		// The top-up's margin-neutrality is the property the ruling bought: the provider
+		// rate is a pass-through, so there is no multiplier between cost and charge.
+		expect(AFF_INFRA_RATE).toBe(0);
 	});
 
-	test("a library inside the free allowance costs its creator nothing", () => {
+	test("a library inside the combined allowance costs its holder nothing", () => {
 		const r = creatorReceipt(500, FREE_STORAGE_GIB);
 		expect(r.billableGiB).toBe(0);
 		expect(r.net).toBe("500.00");

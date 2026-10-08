@@ -49,6 +49,7 @@ import {
 	cardFeeDisplay,
 	FREE_STORAGE_GIB,
 	PUBLIC_ACCESS_PRICE,
+	STORAGE_PER_GIB_MONTH_LABEL,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -275,10 +276,11 @@ export default function ForCreatorsPage() {
 								title="No fee on your sales"
 							>
 								Anthers takes <strong>nothing</strong> from a sale or from monthly support. The only
-								charge that touches a creator is half again on your storage past the free{" "}
-								{FREE_STORAGE_GIB} GiB — your own infrastructure, opt-in, and nothing to do with
-								what you sell. Free access and the charitable programs are funded by what's left of
-								a fan's monthly support to Anthers after the Time Pool and the card cost, and by
+								charge that touches a creator is storage past your Badge's allowance, at cost: from
+								the {FREE_STORAGE_GIB} GiB free floor upward, each rung bundles more, and past it
+								more bytes are {STORAGE_PER_GIB_MONTH_LABEL} per GiB-month — our provider's rate,
+								with no mark-up. Free access and the charitable programs are funded by what's left
+								of a fan's monthly support to Anthers after the Time Pool and the card cost, and by
 								lean operations—Anthers itself never profits.
 							</PricePoint>
 						</div>

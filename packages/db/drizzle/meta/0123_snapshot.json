@@ -1,5 +1,5 @@
 {
-  "id": "e69bc90f-3be6-4a8f-ab4c-96b07f783422",
+  "id": "cca36eb4-b4ed-4a4e-9cbf-20a060751183",
   "prevId": "fe54a9f1-27bb-4a2e-b7c1-96d600c441c3",
   "version": "7",
   "dialect": "postgresql",
@@ -2808,6 +2808,143 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.financial_plan_phases": {
+      "name": "financial_plan_phases",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "phase": {
+          "name": "phase",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accounts": {
+          "name": "accounts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paying_share": {
+          "name": "paying_share",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "staff": {
+          "name": "staff",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "tooling": {
+          "name": "tooling",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "services": {
+          "name": "services",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "admin_budget_share": {
+          "name": "admin_budget_share",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fund_share": {
+          "name": "fund_share",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_financial_plan_phases_phase": {
+          "name": "uq_financial_plan_phases_phase",
+          "columns": [
+            {
+              "expression": "phase",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.financial_plan_settings": {
+      "name": "financial_plan_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "admin_budget_share": {
+          "name": "admin_budget_share",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fund_share": {
+          "name": "fund_share",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.admin_account_events": {
       "name": "admin_account_events",
       "schema": "",
@@ -5329,111 +5466,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.badge_art_provenance": {
-      "name": "badge_art_provenance",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "badge_id": {
-          "name": "badge_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "noun_icon_id": {
-          "name": "noun_icon_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "term": {
-          "name": "term",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "artist_name": {
-          "name": "artist_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "artist_permalink": {
-          "name": "artist_permalink",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "license_description": {
-          "name": "license_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attribution": {
-          "name": "attribution",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_badge_art_provenance_badge": {
-          "name": "uq_badge_art_provenance_badge",
-          "columns": [
-            {
-              "expression": "badge_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "badge_art_provenance_badge_id_badges_id_fk": {
-          "name": "badge_art_provenance_badge_id_badges_id_fk",
-          "tableFrom": "badge_art_provenance",
-          "tableTo": "badges",
-          "columnsFrom": [
-            "badge_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.badges": {
       "name": "badges",
       "schema": "",
@@ -5490,30 +5522,6 @@
         "art_emblem": {
           "name": "art_emblem",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "art_fingerprint": {
-          "name": "art_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "art_emblem_scale": {
-          "name": "art_emblem_scale",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "art_emblem_offset_x": {
-          "name": "art_emblem_offset_x",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "art_emblem_offset_y": {
-          "name": "art_emblem_offset_y",
-          "type": "numeric",
           "primaryKey": false,
           "notNull": false
         },

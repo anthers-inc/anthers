@@ -618,10 +618,15 @@ const PERK_ROWS: PerkRow[] = [
 	{
 		title: "Cloud Content Storage",
 		notBuilt: true,
-		desc: "Free storage for a catalog you publish. From Root the same space also holds your own files — cloud saves, and purchases you have kept.",
+		// 🚨 **The floor is COMBINED at every rung now (ruled 2026-10-07)**: the same
+		// allowance holds a catalog and the account's own files together, on every
+		// account — there is no "catalog only" rung to render. The surfaces (kept files,
+		// cloud saves) remain the Badge storage ladder task's build, so `notBuilt` stays.
+		// At-cost top-up from Root onward is ruled beside it and lands with the same work.
+		desc: "Free storage for your catalog and your own files together, on every account. Each rung bundles more; past your Badge's allowance, more bytes are available at cost from Root onward.",
 		cell: (amount) => ({
 			value: `${storageGibFor(amount)} GiB`,
-			note: amount > 0 ? "catalog & your files" : "catalog only",
+			note: "catalog & your files",
 		}),
 	},
 	{
@@ -1509,18 +1514,15 @@ function FreeInclusions() {
 		},
 		{
 			icon: ServerStackIcon,
-			label: `${FREE_STORAGE_GIB} GiB of Creator storage`,
-			// ⚠️ **This is a CREATOR allowance, and the sentence has to keep saying so.**
-			// `FREE_STORAGE_GIB`'s only consumer is `estimateStorageCost` in
-			// `packages/shared/src/fees.ts`, which bills a creator's catalog against it —
-			// there is no user-side storage quota to describe. A draft of this line offered
-			// the same allowance to users for preserving delisted purchases and storing
-			// cloud saves; neither exists, and a delisted purchase already survives without
-			// drawing on anybody's quota, since that is a free-access obligation under the wiki's *How Anthers Talks About Itself*.
-			//
-			// ⚠️ The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`. Only the numeral
-			// is computed; the sentence is Parker's, word for word.
-			sub: `If you're interested in creating on Anthers, you can store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free in your catalog.`,
+			// ⚠️ **The floor is COMBINED now (ruled 2026-10-07, this branch):** the same
+			// allowance holds a creator's catalog *and*, once the Badge storage ladder task
+			// builds the kept-file surface, the account's own files — on every account, no
+			// Badge needed for the floor. The build is not here yet, so the sentence keeps
+			// to what is real today (storing your catalog) and signposts the rest as
+			// "coming" rather than claiming a keeping mechanism that does not exist.
+			// The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`.
+			label: `${FREE_STORAGE_GIB} GiB of storage`,
+			sub: `Store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free in your catalog — and storage for what you keep is coming, on the same allowance.`,
 		},
 	];
 	return (
