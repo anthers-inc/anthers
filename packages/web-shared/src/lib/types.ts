@@ -1060,6 +1060,42 @@ export interface CreatorStatus {
 	unlockedBadges: number[];
 }
 
+// ─── Notifications ──────────────────────────────────────────────────────────────
+
+/**
+ * One thing the app told a person — a row of the notifications feed.
+ *
+ * Shaped on `routes/accounts.ts`' `GET /me/notifications` response (the row's own shape,
+ * dates as ISO strings). The `kind` is the stable machine value the server records; the
+ * client never branches copy on it today — the title carries the sentence — but the icon
+ * and the "read the whole sentence where it happened" render branch on `kind`, so it
+ * travels.
+ */
+export interface NotificationItem {
+	id: number;
+	/** `essential` | `activity` */
+	category: string;
+	/** The stable machine value — `comment_reply`, `post_comment`, `work_review`, … */
+	kind: string;
+	title: string;
+	body: string;
+	/** App-relative path the item points at; empty string when there is nowhere to go. */
+	linkPath: string;
+	/** When the email actually went (the send succeeded), or null when it did not. */
+	emailSentAt: string | null;
+	/** When the person read it in the app, or null while unread. */
+	readAt: string | null;
+	createdAt: string;
+}
+
+/**
+ * A delivery group's mode, as the client renders it: app feed only, email only, or both.
+ * The names are the API's (`services/notifications.ts`), and an unrecognized value renders
+ * as "both" — the default everything unwritten answers, so a future fourth mode degrades
+ * to the noisier display rather than silently hiding mail the person is receiving.
+ */
+export type NotificationDeliveryMode = "app" | "email" | "both";
+
 export interface Bookmark {
 	id: number;
 	userId: number;

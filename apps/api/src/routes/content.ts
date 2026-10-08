@@ -130,6 +130,7 @@ import {
 	notSuspendedAccount,
 	notTestAccount,
 } from "../services/account-visibility.js";
+import { notifyPostComment, notifyReply, notifyReview } from "../services/activity-notify.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import {
 	POST_COLLECTION,
@@ -2867,9 +2868,17 @@ const contentRoutes = new Hono()
 
 			const { body, replyTo } = c.req.valid("json");
 
+			// The parent's author, for the reply notification. Read on the same walk the
+			// refusal below already makes, so the notification costs no second query —
+			// `replyRefusal`'s 404 also stands in as the block check the notification
+			// needs. ⚠️ `ancestry[0]` is the reply's OWN subject — the comment being
+			// answered — because the walk's first row is `replyTo` itself.
+			let parentAuthorId: number | null = null;
 			if (replyTo !== undefined) {
+				const ancestry = await commentAncestry(replyTo);
 				const refusal = await replyRefusal(replyTo, post.id, user.id);
 				if (refusal) return c.json({ error: refusal }, 404);
+				parentAuthorId = ancestry[0]?.userId ?? null;
 			}
 
 			// A comment is a record in the commenter's own repository, so one Anthers cannot write
@@ -2889,6 +2898,31 @@ const contentRoutes = new Hono()
 			// The author's own upvote lands on the new comment itself — posting it at all says
 			// it is worth reading. See `authorUpvote`.
 			await authorUpvote("comment", comment.id, user.id);
+
+			// The social half: tell whoever just got answered. The reply's parent author was
+			// read above; a fresh comment tells the post's creator instead. AWAITED, not
+			// void — credit-acceptance's reasoning is the precedent: the awaits are so a
+			// request cannot outlive its notifications (a process edge between response
+			// and insert would drop the row, and the row is the deliverable). One insert
+			// plus a preferences read is a couple of milliseconds against a posted reply;
+			// the mail attempt inside is bounded by sendEmail's own no-op/send, and a
+			// notify THROWN failure would 500 the comment — `.catch` keeps that case as
+			// "posted, unannounced" rather than "failed, try again".
+			try {
+				if (replyTo === undefined) {
+					await notifyPostComment({ commenterId: user.id, post });
+				} else if (parentAuthorId != null) {
+					await notifyReply({
+						replierId: user.id,
+						parentId: replyTo,
+						parentAuthorId,
+						post: { slug: post.slug, publicId: post.publicId },
+					});
+				}
+			} catch {
+				// The comment stands; the announcement may have failed. Log nothing per-row:
+				// the next session's read of the thread is the truth the feed renders.
+			}
 
 			// The record goes in the commenter's own repository, once the post has a record for it
 			// to name — see `user-record-listing.ts` for what happens while it does not.
@@ -3214,6 +3248,10 @@ const contentRoutes = new Hono()
 		// insert idempotent, so a race between them still lands one vote.
 		if (existing.length === 0) {
 			await authorUpvote("review", review.id, user.id);
+			// The creator is told about a NEW review only — an edit re-notifying is the noise
+			// the branch itself is here to stop. Awaited for the same reason the comment
+			// emitters are; see that call site.
+			await notifyReview({ reviewerId: user.id, work, isNew: true }).catch(() => {});
 		}
 
 		void queueRecordSync("review", review.id);
