@@ -876,6 +876,13 @@
       "when": 1791423523864,
       "tag": "0124_sparkling_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1791488248554,
+      "tag": "0125_burly_the_executioner",
+      "breakpoints": true
     }
   ]
 }

@@ -9,12 +9,12 @@
  * under-collected tax is owed from Anthers' own funds, and over-collected tax has to be
  * remitted or refunded.
  *
- * 🚨 **`physical` and `service` Works are refused at checkout rather than given a code.**
- * Nothing fulfills them yet — there is no shipping lane for a physical Work and no
- * fulfillment mechanism for a service one — so there is nothing a buyer receives to tax and
- * no code that honestly describes the charge. `purchaseTaxCode` returns `null` for them,
- * which the checkout paths read as a refusal; selling them arrives with whatever fulfills
- * them, and with a code.
+ * 🚨 **`service` Works are refused at checkout rather than given a code**, and a
+ * `physical` Work is sold only through the merch path (`services/printful.ts`), which
+ * maps it in its own constant rather than here — the generic checkout path's refusal
+ * stands for everything that has no fulfillment mechanism behind it. `purchaseTaxCode`
+ * returns `null` for both, which the generic checkout paths read as a refusal; the merch
+ * path is the exception that carries the code beside its own reader.
  *
  * `game` and `software` share `txcd_10201000` (downloaded software). The posture table also
  * names `txcd_10202000` for an embedded game, and the Work model does not carry the
@@ -60,10 +60,21 @@ export function purchaseTaxCode(type: WorkType): string | null {
 			return "txcd_10201000";
 		case "physical":
 		case "service":
-			// Not sold until something fulfills them — no code describes an undelivered thing.
+			// Refused on the generic path — the merch path carries its own code constant
+			// for physical goods (see the header; the generic checkout cannot fulfill a
+			// thing, so it never names a tax code for one).
 			return null;
 	}
 }
+
+/**
+ * The tax code a merch (physical) sale's **shipping line** carries: `txcd_92010001`,
+ * Shipping — a shipping charge in conjunction with the sale of physical goods. Verified
+ * against Stripe's published tax-code table on 2026-10-08. Colorado keeps separately
+ * stated shipping untaxed, which is the posture's reason Printful's shipping rides its
+ * own line rather than folding into the goods price (the Tax and Compliance Plan).
+ */
+export const SHIPPING_TAX_CODE = "txcd_92010001";
 
 /**
  * The code for support that buys nothing: a cash donation, `txcd_90000001`.

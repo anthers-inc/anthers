@@ -115,6 +115,27 @@ export const ANTHERS_BADGES: readonly BadgeDef[] = [
 export const PLATFORM_HANDLE = "anthers.org";
 
 /**
+ * The clothing & footwear product tax code, `txcd_30011000` — the goods line of a merch
+ * sale. Verified against Stripe's published tax-code table on 2026-10-08 ("Apparel and
+ * footwear for people made for general use"). Lives here rather than inline at the
+ * session builder so the constant is greppable and the tax posture stays one table.
+ */
+export const CLOTHING_TAX_CODE = "txcd_30011000";
+
+/**
+ * **The margin Anthers keeps on its own merch, in dollars, per item** — the list price
+ * is Printful's catalog price plus this figure, and the buyer is shown both halves.
+ *
+ * 🚨 **This is a placeholder until the margin decision lands its numbers** (the task
+ * *Decide the merch margin and the size of the Badge discount*): a quote computed with
+ * `"0.00"` prices the shirt at cost, which is exactly the shape the decision task drops
+ * its figure into — the constant is the only thing that changes. Published money figures
+ * are generated, never typed: any page rendering this figure goes through the figures
+ * generator like every other money constant.
+ */
+export const MERCH_MARGIN_DOLLARS = "0.00";
+
+/**
  * **Free is the absence of a Badge, not a Badge at $0** (Parker, 2026-10-03, reversing the
  * Free-row artifact): a creator's ungated Work requires no "Free" Badge for exactly the
  * reason Anthers' commons does not — the Badges are overrides on a default, and the default

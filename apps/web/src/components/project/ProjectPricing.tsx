@@ -19,6 +19,7 @@ import type { AccessResult } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
 import AddToBasket from "../basket/AddToBasket";
 import BuyNow from "../basket/BuyNow";
+import MerchBuyPanel from "../merch/MerchBuyPanel";
 
 interface ProjectPricingProps {
 	workId: number;
@@ -28,6 +29,8 @@ interface ProjectPricingProps {
 	creatorHandle: string;
 	thumbnail?: string | null;
 	creatorHasStripe?: boolean;
+	/** The Work's type — `physical` renders the merch panel rather than the basket doors. */
+	workType?: string;
 }
 
 interface Quote {
@@ -46,6 +49,7 @@ export default function ProjectPricing({
 	creatorHandle,
 	thumbnail,
 	creatorHasStripe = false,
+	workType,
 }: ProjectPricingProps) {
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -81,6 +85,13 @@ export default function ProjectPricing({
 
 	// Free posts have nothing to sell.
 	if (access.isFree) return null;
+
+	// A merch Work's pricing panel is the merch panel — the size picker and the
+	// derived price replace the creator doors entirely (a merch sale has no connected
+	// creator and no transfer; `creatorHasStripe` is meaningless on it).
+	if (workType === "physical") {
+		return <MerchBuyPanel workId={workId} slug={slug} access={access} title={title} />;
+	}
 
 	// The listed price arrives as a string in dollars — no client-side money arithmetic
 	// happens here; `toFixed(2)` formats, it never computes.

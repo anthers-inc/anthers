@@ -53,6 +53,7 @@ import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/const
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { issueRefund, paymentsConfigured } from "../lib/processor.js";
+import { unwindMerchOrder } from "./printful.js";
 import { recordNettingForRefund } from "./netting.js";
 
 type Purchase = typeof purchases.$inferSelect;
@@ -348,6 +349,13 @@ export async function settleRefundedPurchase(
 		.returning();
 
 	if (!updated) return { ok: true, purchase, shortfall: new Decimal(0), alreadyRefunded: true };
+
+	// A merch purchase unwinds its Printful side with the money: cancellation where
+	// Printful's status still allows it (draft/pending), and the record either way —
+	// a fulfillment begun is the B-stock posture's problem, never the refund's.
+	if (updated.type === "physical") {
+		await unwindMerchOrder(updated.id);
+	}
 
 	// The creator's share did not come back at Stripe — recover it from later earnings
 	// instead. The refund id is the netting row's own identity, so a replayed or
