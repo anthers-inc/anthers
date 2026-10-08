@@ -37,7 +37,6 @@ export const DOWNLOAD_COLOR = "000000";
  * cannot bound spend.
  */
 export type CallClass = "icon" | "service";
-
 /** Published list prices, for the spend estimator the circuit breaker reads. */
 export const CALL_PRICE: Record<CallClass, number> = { icon: 0.0095, service: 0.0025 };
 
@@ -47,20 +46,20 @@ export function callClass(path: string): CallClass {
 }
 
 /**
- * The runtime credential, from the API component's environment only.
+ * The runtime credential, from the API component's environment.
  *
- * 🚨 **Deliberately NOT the authoring credential's name.** The authoring key's env
- * names appear nowhere that ships — the authoring-time scan fails the build if they
- * do — so the runtime names differ by the whole string, keeping that scan true
- * without weakening it and keeping the two keys un-confusable. The runtime key is the
- * one with the monthly spend cap configured on the vendor dashboard.
+ * The same names the vault's projects already carry (`NOUN_PROJECT_KEY` /
+ * `NOUN_PROJECT_SECRET` — production's were provisioned there before this build), so
+ * `make spec-apply FROM_BWS=1` resolves them with no third spelling anywhere. Provisioned
+ * through `make spec-apply`, never declared with a value in the spec file. The monthly
+ * spend cap is set on the vendor dashboard against this key.
  */
 export async function credentials(): Promise<{ key: string; secret: string }> {
-	const key = (process.env.NOUNPRO_KEY ?? "").trim();
-	const secret = (process.env.NOUNPRO_SECRET ?? "").trim();
+	const key = (process.env.NOUN_PROJECT_KEY ?? "").trim();
+	const secret = (process.env.NOUN_PROJECT_SECRET ?? "").trim();
 	if (!key || !secret) {
 		throw new Error(
-			"no Noun Project runtime credential: NOUNPRO_KEY/NOUNPRO_SECRET are unset. " +
+			"no Noun Project runtime credential: NOUN_PROJECT_KEY/NOUN_PROJECT_SECRET are unset. " +
 				"The runtime key is provisioned through `make spec-apply`, never declared in the spec file.",
 		);
 	}

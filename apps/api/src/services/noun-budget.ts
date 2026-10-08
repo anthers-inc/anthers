@@ -150,10 +150,11 @@ export async function monthSpendEstimate(now = new Date()): Promise<number> {
 /**
  * The configured monthly spend cap, in dollars — an env for the same reason every
  * deployment-shaping figure is one. Unset means the breaker is inert, which is the
- * development posture; a public deployment sets it.
+ * development posture; a public deployment sets it. Provisioned through
+ * `make spec-apply` like the key itself.
  */
 export function monthlySpendCap(): number | null {
-	const raw = (process.env.NOUNPRO_MONTHLY_CAP_USD ?? "").trim();
+	const raw = (process.env.NOUN_PROJECT_MONTHLY_CAP_USD ?? "").trim();
 	if (!raw) return null;
 	const n = Number(raw);
 	return Number.isFinite(n) && n > 0 ? n : null;

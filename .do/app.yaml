@@ -191,6 +191,28 @@ envs:
   - key: ARACHNID_SHIELD_PASSWORD
     scope: RUN_TIME
     type: SECRET
+  # Noun Project Icon API — the Badge Maker's vendor leg (creator-facing catalog search
+  # and emblem composition), runtime. At APP level because the compose runs in the API
+  # and the budget/breaker service may be read by the worker.
+  #
+  # The vault (Anthers Prod) carries the same names, so `make spec-apply FROM_BWS=1`
+  # resolves them with no third spelling anywhere. Unset means the search routes answer
+  # an error the picker states — the picker degrades, the rest of the platform is
+  # unaffected. The monthly spend cap is set on the vendor's dashboard against this key;
+  # `NOUN_PROJECT_MONTHLY_CAP_USD` (below, non-secret) is the breaker's local figure.
+  - key: NOUN_PROJECT_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: NOUN_PROJECT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  # The Badge Maker's circuit breaker: the key's monthly spend cap in dollars, as a
+  # LOCAL estimate bound (the routes degrade at 90% of it rather than letting the
+  # vendor's own cap hard-fail a save mid-launch). Keep it at or below the cap actually
+  # configured on the vendor's dashboard, which is the authority this approximates.
+  - key: NOUN_PROJECT_MONTHLY_CAP_USD
+    scope: RUN_TIME
+    value: "100"
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to

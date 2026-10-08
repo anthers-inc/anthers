@@ -32,29 +32,28 @@ describe("the pin and the call classes", () => {
 });
 
 describe("the credential boundary", () => {
-	it("keeps the runtime credential name distinct from the authoring key's", () => {
-		// The authoring-time scan (`scripts/noun/authoring-time.test.ts`) fails the
-		// build if the authoring key's env names appear anywhere that ships; the
-		// runtime names differ by the whole string, so that scan stays true rather
-		// than being weakened around. The assertion reads the compiled source on
-		// disk, so it checks the file this test exists to police.
+	it("reads the vault's own names, which Anthers Prod already carries", () => {
+		// One credential spelling across the whole arrangement: the vault's
+		// `NOUN_PROJECT_KEY`/`NOUN_PROJECT_SECRET`, which production's project holds and
+		// `spec-apply --from-bws` resolves BY NAME. A runtime-specific spelling would be a
+		// second set of secrets for no reason (Parker, 2026-10-07: no redundant secrets,
+		// full stop).
 		const source = readFileSync(join(HERE, "client.ts"), "utf8");
-		const authoringPrefix = "NOUN" + "_PROJECT"; // spelled assembled: this file ships too
-		expect(source.includes(authoringPrefix)).toBe(false);
-		expect(source.includes("NOUNPRO_KEY")).toBe(true);
+		expect(source.includes("NOUN_PROJECT_KEY")).toBe(true);
+		expect(source.includes("NOUNPRO_")).toBe(false);
 	});
 
 	it("refuses cleanly with the runtime names unset", async () => {
-		const key = process.env.NOUNPRO_KEY;
-		const secret = process.env.NOUNPRO_SECRET;
-		delete process.env.NOUNPRO_KEY;
-		delete process.env.NOUNPRO_SECRET;
+		const key = process.env.NOUN_PROJECT_KEY;
+		const secret = process.env.NOUN_PROJECT_SECRET;
+		delete process.env.NOUN_PROJECT_KEY;
+		delete process.env.NOUN_PROJECT_SECRET;
 		try {
-			await expect(credentials()).rejects.toThrow(/NOUNPRO_KEY/);
+			await expect(credentials()).rejects.toThrow(/NOUN_PROJECT_KEY/);
 		} finally {
 			// Restore: another suite sharing this process may have set them.
-			if (key) process.env.NOUNPRO_KEY = key;
-			if (secret) process.env.NOUNPRO_SECRET = secret;
+			if (key) process.env.NOUN_PROJECT_KEY = key;
+			if (secret) process.env.NOUN_PROJECT_SECRET = secret;
 		}
 	});
 });

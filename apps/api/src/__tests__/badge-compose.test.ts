@@ -78,8 +78,8 @@ function stubVendor() {
 	// (the credential-shape guard refuses one) and never the real key, which a suite has
 	// no business holding. The fetch stub below answers before any real request happens,
 	// so these exist only to pass the client's own precondition.
-	process.env.NOUNPRO_KEY = "badge-compose-test-key";
-	process.env.NOUNPRO_SECRET = "badge-compose-test-secret";
+	process.env.NOUN_PROJECT_KEY = "badge-compose-test-key";
+	process.env.NOUN_PROJECT_SECRET = "badge-compose-test-secret";
 	globalThis.fetch = (async (input: RequestInfo | URL) => {
 		const url = String(input);
 		if (url.includes("api.thenounproject.com")) {
@@ -117,8 +117,8 @@ beforeAll(() => {
 afterAll(() => {
 	globalThis.fetch = originalFetch;
 	(storage as { upload: unknown }).upload = realUpload;
-	delete process.env.NOUNPRO_KEY;
-	delete process.env.NOUNPRO_SECRET;
+	delete process.env.NOUN_PROJECT_KEY;
+	delete process.env.NOUN_PROJECT_SECRET;
 });
 
 function req(path: string, options?: RequestInit) {

@@ -1,20 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Noun Project integration runs at AUTHORING time and never at build time.
+ * The Noun Project integration's two LAYOUT rules, proved rather than restated:
  *
- * 🚨 **This is the one rule the whole arrangement rests on, so it is a test rather
- * than a paragraph.** `packages/brand` commits `src/generated/icons.ts` and the SVGs
- * it is made from, which is what lets somebody clone this repository, build a working
- * site and regenerate the icons with no API key, no network call and no access to
- * anything private. Wiring a
- * fetch into the build would put a credential and a third-party dependency on the
- * deploy path for artwork that changes twice a year, cost an icon call per asset on
- * every cold build, and give away the property that makes the repository forkable.
+ * 🚨 **Nothing that ships may import from `scripts/noun/`.** `packages/brand` commits
+ * `src/generated/icons.ts` and the SVGs it is made from, which is what lets somebody
+ * clone this repository, build a working site and regenerate the icons with no API key,
+ * no network call and no access to anything private. Wiring a fetch into the build would
+ * put a credential and a third-party dependency on the deploy path for artwork that
+ * changes twice a year, cost an icon call per asset on every cold build, and give away
+ * the property that makes the repository forkable.
  *
- * ⚠️ **A future Badge Maker will need a runtime key, and it will not be this one.**
- * That is a creator-facing product surface with its own credential, spend cap and
- * blocklist. If this test ever has to change, the change is a deliberate product
- * decision and not a tidy-up.
+ * ⭐ **Where the credential scans went, and why.** This test once also failed the build
+ * on any mention of the credential's env names outside `scripts/` — a rule written to
+ * keep provenance storytelling out of shipped surfaces, back when the integration was
+ * authoring-only. The Badge Maker runs the API at runtime, and an env-var name carries
+ * no secret (the value is what would), so the scan became noise with no point and was
+ * removed on 2026-10-07 by Parker's ruling that it was antiquated: it was never a
+ * security control, and the credential rule that IS one — values pass only through
+ * environment injection — lives in spec-apply and the vault, which are unaffected. The
+ * runtime client (`apps/api/src/lib/noun/client.ts`) reads the same vault names the
+ * authoring scripts have always used.
+ *
+ * ⚠️ ASSET URLS EXPIRE WITHIN AN HOUR, so this is a sourcing API and can never be a
+ * serving one. Every byte it returns has to be written to disk by the caller;
+ * nothing Anthers renders may point at a Noun Project URL.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -23,7 +32,6 @@ import { join } from "node:path";
 import { Glob } from "bun";
 
 const REPO = join(import.meta.dir, "..", "..");
-const CREDENTIAL = "NOUN_PROJECT";
 
 /**
  * Every matching file under the repository, with dependency and build trees left out, and
@@ -49,35 +57,6 @@ function scan(pattern: string): string[] {
 }
 
 const read = (p: string) => readFileSync(join(REPO, p), "utf8");
-
-describe("the credential never reaches the deploy path", () => {
-	it("🚨 is named in nothing that ships", () => {
-		// Anything the server, the web app or the desktop shell can see is on the deploy
-		// path by definition, whether or not it is read.
-		const shipped = [...scan("apps/**/*.{ts,tsx}"), ...scan("packages/*/src/**/*.{ts,tsx}")];
-		expect(shipped.length).toBeGreaterThan(50); // the scan itself has to be working
-		const offenders = shipped.filter((p) => read(p).includes(CREDENTIAL));
-		expect(offenders).toEqual([]);
-	});
-
-	it("🚨 is named in no deployment or CI configuration", () => {
-		// A secret declared in the app spec is injected into every running container,
-		// which is the state this rule exists to prevent — and it is invisible in code.
-		const config = [
-			...scan(".do/*.yaml"),
-			...scan(".github/workflows/*.yml"),
-			...scan("Dockerfile*"),
-			...scan("apps/*/Dockerfile*"),
-		];
-		expect(config.length).toBeGreaterThan(0);
-		expect(config.filter((p) => read(p).includes(CREDENTIAL))).toEqual([]);
-	});
-
-	it("🚨 is reachable only from the authoring scripts", () => {
-		const everywhere = scan("**/*.ts").filter((p) => read(p).includes(CREDENTIAL));
-		for (const p of everywhere) expect(p.startsWith("scripts/")).toBe(true);
-	});
-});
 
 describe("no build step talks to the API", () => {
 	it("🚨 keeps the API client out of every package's build script", () => {

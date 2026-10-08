@@ -35,8 +35,8 @@ const originalFetch = globalThis.fetch;
 let vendorRequests = 0;
 
 beforeAll(() => {
-	process.env.NOUNPRO_KEY = "noun-search-test-key";
-	process.env.NOUNPRO_SECRET = "noun-search-test-secret";
+	process.env.NOUN_PROJECT_KEY = "noun-search-test-key";
+	process.env.NOUN_PROJECT_SECRET = "noun-search-test-secret";
 	globalThis.fetch = (async (input: RequestInfo | URL) => {
 		const url = String(input);
 		if (url.includes("api.thenounproject.com")) {
@@ -65,8 +65,8 @@ beforeAll(() => {
 
 afterAll(async () => {
 	globalThis.fetch = originalFetch;
-	delete process.env.NOUNPRO_KEY;
-	delete process.env.NOUNPRO_SECRET;
+	delete process.env.NOUN_PROJECT_KEY;
+	delete process.env.NOUN_PROJECT_SECRET;
 	await db.delete(nounBlocklist).where(sql`${nounBlocklist.value} like ${"ns-test-%"}`);
 });
 

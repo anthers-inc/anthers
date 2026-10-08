@@ -82,27 +82,27 @@ describe("the per-creator daily budget", () => {
 
 describe("the circuit breaker", () => {
 	it("is inert with no cap configured (the development posture)", async () => {
-		const prior = process.env.NOUNPRO_MONTHLY_CAP_USD;
-		delete process.env.NOUNPRO_MONTHLY_CAP_USD;
+		const prior = process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
+		delete process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
 		try {
 			expect(await breakerAllows("icon")).toBe(true);
 		} finally {
-			if (prior !== undefined) process.env.NOUNPRO_MONTHLY_CAP_USD = prior;
+			if (prior !== undefined) process.env.NOUN_PROJECT_MONTHLY_CAP_USD = prior;
 		}
 	});
 
 	it("degrades at 90% of the configured cap, with headroom before the wall", async () => {
-		const prior = process.env.NOUNPRO_MONTHLY_CAP_USD;
+		const prior = process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
 		// Cap $1: one icon call (9.5¢) plus this suite's recorded service spend must
 		// still fit; a cap of one cent must not.
-		process.env.NOUNPRO_MONTHLY_CAP_USD = "1";
+		process.env.NOUN_PROJECT_MONTHLY_CAP_USD = "1";
 		try {
 			expect(await breakerAllows("icon")).toBe(true);
-			process.env.NOUNPRO_MONTHLY_CAP_USD = "0.01";
+			process.env.NOUN_PROJECT_MONTHLY_CAP_USD = "0.01";
 			expect(await breakerAllows("icon")).toBe(false);
 		} finally {
-			if (prior !== undefined) process.env.NOUNPRO_MONTHLY_CAP_USD = prior;
-			else delete process.env.NOUNPRO_MONTHLY_CAP_USD;
+			if (prior !== undefined) process.env.NOUN_PROJECT_MONTHLY_CAP_USD = prior;
+			else delete process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
 		}
 	});
 
