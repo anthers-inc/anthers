@@ -107,7 +107,6 @@ import {
 	type UploadableWorkType,
 	type Work,
 	type WorkCredit,
-	type WorkCreditType,
 	type WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
@@ -133,6 +132,7 @@ import {
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
 import { frameOf } from "../lib/video-frame";
+import CreditsSection from "./CreditsSection";
 import PanelEditor from "./PanelEditor";
 import RatingMatrix from "./RatingMatrix";
 import { unsavedKey } from "./work-edit";
@@ -1094,7 +1094,15 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 				<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Credits</h2>
-					<CreditsSection rows={creditRows} onChange={setCreditRows} />
+					<CreditsSection
+						rows={creditRows}
+						onChange={setCreditRows}
+						selfIdentity={
+							user
+								? { did: user.atprotoDid, handle: user.handle, displayName: user.displayName }
+								: null
+						}
+					/>
 				</div>
 
 				<div className="border-t border-base-300 pt-4 flex flex-col gap-2">
@@ -1558,141 +1566,6 @@ function SaveBar({
 						</button>
 					</div>
 				)}
-			</div>
-		</div>
-	);
-}
-
-/** What a credit type is called in the editor, in the order the checkboxes appear. */
-const CREDIT_TYPES: { value: WorkCreditType; label: string }[] = [
-	{ value: "created", label: "Created" },
-	{ value: "licensed", label: "Licensed" },
-	{ value: "ai", label: "AI" },
-];
-
-/**
- * The Work's credits table — its liner notes, edited one row at a time.
- *
- * The one rule enforced here as well as on the server: a **Created** credit names its
- * contributor. Pure Licensed/AI rows may stay anonymous, and the Contributor box is
- * disabled and cleared unless Created is among the ticked types — an AI credit never names
- * a model as its contributor, because a model owns nothing and is granted nothing.
- */
-function CreditsSection({
-	rows,
-	onChange,
-}: {
-	rows: WorkCredit[];
-	onChange: (next: WorkCredit[]) => void;
-}) {
-	const setRow = (index: number, next: WorkCredit) => {
-		onChange(rows.map((r, i) => (i === index ? next : r)));
-	};
-	const toggleType = (index: number, type: WorkCreditType, checked: boolean) => {
-		const row = rows[index];
-		const types = checked ? [...row.types, type] : row.types.filter((t) => t !== type);
-		// Contributor is created-only: unticking the last Created clears it rather than
-		// leaving a name attached to a credit that no longer asserts one.
-		//
-		// ⚠️ The overlay flag drops here rather than surviving the edit: the flag says
-		// "this identity has not confirmed yet," and a creator editing the row has
-		// changed what the person would be confirming. The flag is display state the
-		// server re-derives on the next load, never something this form sends back.
-		setRow(index, {
-			...row,
-			types,
-			contributor: types.includes("created") ? row.contributor : "",
-			awaitingContributorConfirmation: undefined,
-		});
-	};
-	const missingContributor = (row: WorkCredit) =>
-		row.types.includes("created") && row.contributor.trim() === "";
-
-	return (
-		<div className="flex flex-col gap-3">
-			<p className="text-xs text-base-content/50">
-				Who and what made this — users see these as liner notes on the Work. A Created credit names
-				who; Licensed and AI credits may stay anonymous. An AI credit never names the model — a tool
-				owns nothing. A Work needs at least one credit naming a human creator before it can be
-				released.
-			</p>
-			{rows.length === 0 && (
-				<p className="text-xs text-warning">
-					No credits yet — add one with its Created box ticked before this can be released.
-				</p>
-			)}
-			{rows.map((row, i) => (
-				<div
-					// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id of its own; the inputs are controlled by position and rows are replaced wholesale on save.
-					key={i}
-					className="flex flex-wrap items-center gap-3 rounded-lg border border-base-300 p-3"
-				>
-					<input
-						type="text"
-						aria-label={`Credit ${i + 1} role`}
-						className="input input-bordered input-sm w-44"
-						placeholder="Written by, Cut by…"
-						value={row.role}
-						onChange={(e) => setRow(i, { ...row, role: e.target.value })}
-					/>
-					<div className="flex items-center gap-3">
-						{CREDIT_TYPES.map((t) => (
-							<label key={t.value} className="label cursor-pointer gap-1.5 py-0">
-								<input
-									type="checkbox"
-									className="checkbox checkbox-sm checkbox-primary"
-									aria-label={`Credit ${i + 1} ${t.label}`}
-									checked={row.types.includes(t.value)}
-									onChange={(e) => toggleType(i, t.value, e.target.checked)}
-								/>
-								<span className="label-text text-sm">{t.label}</span>
-							</label>
-						))}
-					</div>
-					<input
-						type="text"
-						aria-label={`Credit ${i + 1} contributor`}
-						className="input input-bordered input-sm flex-1 min-w-40"
-						placeholder={row.types.includes("created") ? "Who made this part" : "Optional"}
-						value={row.contributor}
-						disabled={!row.types.includes("created")}
-						onChange={(e) => setRow(i, { ...row, contributor: e.target.value })}
-					/>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs"
-						aria-label={`Remove credit ${i + 1}`}
-						onClick={() => onChange(rows.filter((_, j) => j !== i))}
-					>
-						Remove
-					</button>
-					{row.awaitingContributorConfirmation && (
-						<p className="w-full text-xs text-base-content/50">
-							Waiting on the contributor of this {row.role || "credit"} to confirm it. The DID stays
-							as written — it is who the acceptance keys on, and it shows as their name once they
-							confirm.
-						</p>
-					)}
-					{missingContributor(row) && (
-						<p className="w-full text-xs text-error">
-							A Created credit names its contributor — say who made this part.
-						</p>
-					)}
-				</div>
-			))}
-			{rows.some(missingContributor) && (
-				<div className="alert alert-error text-sm">
-					<span>Every Created credit names its contributor before this can save.</span>
-				</div>
-			)}
-			<div>
-				<button
-					type="button"
-					className="btn btn-outline btn-sm"
-					onClick={() => onChange([...rows, { role: "", contributor: "", types: [] }])}
-				>
-					Add a credit
-				</button>
 			</div>
 		</div>
 	);
