@@ -235,9 +235,9 @@ test.describe
 			// mounted, where the active set is genuinely different — a count-0 assertion
 			// checked first would poll and pass in that window before the transition lands.
 			await expect(page.locator("nav .menu-active", { hasText: "ATProto Records" })).toHaveCount(1);
-			await expect(
-				page.locator("nav .menu-active", { hasText: "Jobs and Services" }),
-			).toHaveCount(0);
+			await expect(page.locator("nav .menu-active", { hasText: "Jobs and Services" })).toHaveCount(
+				0,
+			);
 
 			// The report loads: the tallies render, and no "Couldn't reach the API." banner,
 			// which is what the wrong-path fetch produced. In this session's fresh database
