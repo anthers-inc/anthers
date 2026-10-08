@@ -184,8 +184,12 @@ export const purchases = pgTable(
 		 * against; Printful's own invoices are its statements, this is Anthers' record of
 		 * what fulfillment cost per sale.
 		 */
-		printfulCosts: jsonb("printful_costs")
-			.$type<{ subtotal: string; shipping: string; tax: string; total: string } | null>(),
+		printfulCosts: jsonb("printful_costs").$type<{
+			subtotal: string;
+			shipping: string;
+			tax: string;
+			total: string;
+		} | null>(),
 		/** The size the buyer chose, referencing `merch_variants.size` by value — a merch-only column. */
 		merchSize: text("merch_size"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

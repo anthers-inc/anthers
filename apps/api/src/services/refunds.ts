@@ -53,8 +53,8 @@ import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/const
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { issueRefund, paymentsConfigured } from "../lib/processor.js";
-import { unwindMerchOrder } from "./printful.js";
 import { recordNettingForRefund } from "./netting.js";
+import { unwindMerchOrder } from "./printful.js";
 
 type Purchase = typeof purchases.$inferSelect;
 
