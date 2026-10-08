@@ -40,7 +40,9 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 	{
 		title: "Infrastructure",
 		items: [
-			{ to: "/infrastructure", label: "Jobs and Services" },
+			// `end` — without it NavLink prefix-matches, so opening `/infrastructure/atproto`
+			// lights up "Jobs and Services" along with its own item, as with `/moderation`.
+			{ to: "/infrastructure", label: "Jobs and Services", end: true },
 			{ to: "/infrastructure/atproto", label: "ATProto Records" },
 		],
 	},

@@ -86,7 +86,7 @@ function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void
 		setError(null);
 		setDone(null);
 		const result = await adminPost<{ result: { status: string; reason?: string; error?: string } }>(
-			"/admin/atproto/resync",
+			"/api/admin/atproto/resync",
 			{ kind: row.kind, id: row.id },
 		);
 		setBusy(false);
@@ -107,7 +107,7 @@ function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void
 		const body: Record<string, unknown> = { workId: row.id };
 		if (title !== "") body.title = title;
 		if (description !== "") body.description = description;
-		const result = await adminPost("/admin/works/listing", body);
+		const result = await adminPost("/api/admin/works/listing", body);
 		setBusy(false);
 		if (!result.ok) {
 			setError(result.error);
@@ -217,7 +217,7 @@ function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void
 
 export default function AtProtoRecords() {
 	const { data, loading, error, reload } = useAdminData<{ report: DriftReport }>(
-		"/admin/atproto/drift",
+		"/api/admin/atproto/drift",
 	);
 	const [showInSync, setShowInSync] = useState(false);
 
