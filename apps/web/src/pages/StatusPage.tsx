@@ -170,8 +170,8 @@ export default function StatusPage() {
 							<a href="https://status.anthers.org" className="link">
 								status.anthers.org
 							</a>
-							, served by a machine outside our hosting platform, so it stays readable even
-							when the site — and this page with it — is not.
+							, served by a machine outside our hosting platform, so it stays readable even when the
+							site — and this page with it — is not.
 						</Lede>
 					</Reveal>
 				</div>

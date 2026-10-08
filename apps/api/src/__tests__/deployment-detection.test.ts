@@ -21,7 +21,13 @@ import { isPublicDeployment, publicOrigin } from "../lib/deployment.js";
 import { allowedOrigins } from "../origins.js";
 import { sendAbuseAlert } from "../services/email.js";
 
-const TOUCHED = ["BASE_URL", "FRONTEND_URL", "NODE_ENV", "PREVIEW_PORT", "STATUS_PAGE_URL"] as const;
+const TOUCHED = [
+	"BASE_URL",
+	"FRONTEND_URL",
+	"NODE_ENV",
+	"PREVIEW_PORT",
+	"STATUS_PAGE_URL",
+] as const;
 const saved = new Map<string, string | undefined>();
 
 beforeEach(() => {

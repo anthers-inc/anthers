@@ -27,11 +27,13 @@ function ingest(body: unknown, token: string | null = "right", origin?: string) 
 	const headers: Record<string, string> = { "Content-Type": "application/json" };
 	if (token !== null) headers.Authorization = `Bearer ${token}`;
 	if (origin) headers.Origin = origin;
-	return app.fetch(new Request("http://localhost/api/status/heartbeat", {
-		method: "POST",
-		headers,
-		body: JSON.stringify(body),
-	}));
+	return app.fetch(
+		new Request("http://localhost/api/status/heartbeat", {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body),
+		}),
+	);
 }
 
 beforeEach(async () => {
