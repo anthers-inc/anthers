@@ -21,7 +21,13 @@ import { isPublicDeployment, publicOrigin } from "../lib/deployment.js";
 import { allowedOrigins } from "../origins.js";
 import { sendAbuseAlert } from "../services/email.js";
 
-const TOUCHED = ["BASE_URL", "FRONTEND_URL", "NODE_ENV", "PREVIEW_PORT"] as const;
+const TOUCHED = [
+	"BASE_URL",
+	"FRONTEND_URL",
+	"NODE_ENV",
+	"PREVIEW_PORT",
+	"STATUS_PAGE_URL",
+] as const;
 const saved = new Map<string, string | undefined>();
 
 beforeEach(() => {
@@ -103,6 +109,23 @@ describe("allowedOrigins in production's actual environment", () => {
 		// carry no ambient authority, and both merely LOOK like localhost.
 		expect(origins).toContain("tauri://localhost");
 		expect(origins).toContain("http://tauri.localhost");
+		// The standalone status page's origin, served by the droplet — a cross-origin read
+		// of the public answer that carries no credentials, so letting CORS return it grants
+		// nothing ambient.
+		expect(origins).toContain("https://status.anthers.org");
+	});
+
+	it("admits a configured status-page origin over the default, and none on a dev checkout without one", () => {
+		asProduction();
+		process.env.STATUS_PAGE_URL = "https://status.staging.example.org/";
+		// The trailing slash is normalized away — an allowlist entry that never matches a
+		// browser's actual Origin header would be a guard that never fires.
+		expect(allowedOrigins()).toContain("https://status.staging.example.org");
+		expect(allowedOrigins()).not.toContain("https://status.anthers.org");
+		asDevelopment();
+		delete process.env.STATUS_PAGE_URL;
+		// A dev checkout serves no status page, so it admits no origin for one.
+		expect(allowedOrigins().filter((o) => o.includes("status.anthers.org"))).toEqual([]);
 	});
 
 	it("still admits the dev and e2e origins on a developer's machine", () => {

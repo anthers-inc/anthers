@@ -31,10 +31,12 @@ test.describe("the status page", () => {
 		await expect(page.locator("footer a[href='/status']")).toHaveText("Status");
 	});
 
-	test("renders the honest-limitation sentence about the platform it is served from", async ({
-		page,
-	}) => {
+	test("hands readers to the standalone page served off the platform", async ({ page }) => {
 		await page.goto(PAGE);
-		await expect(page.getByText("served by the same platform")).toBeVisible();
+		// The old sentence apologized for this page dying with the platform; the standalone
+		// page at status.anthers.org (served by the droplet the outside check runs on) is
+		// the answer to it, and the lede now hands readers there.
+		await expect(page.locator('a[href="https://status.anthers.org"]')).toBeVisible();
+		await expect(page.getByText("served by the same platform")).toHaveCount(0);
 	});
 });

@@ -20,12 +20,19 @@
 import { type ComponentState, healthReport } from "./health.js";
 import { type HeartbeatState, readHeartbeatState } from "./heartbeat.js";
 
-/** The public per-component answer — a state and a sentence, never a metric. */
+/** The public per-component answer — a state, a sentence, and since when, never a metric. */
 export interface StatusComponent {
 	name: string;
 	state: ComponentState;
 	/** What a reader is told when the state is not operational. Absent when operational. */
 	detail?: string;
+	/**
+	 * ISO timestamp of when this component's present condition began — how long it has
+	 * been degraded or down. Derived from the evidence the component's check already
+	 * holds (the failed job's own timestamp, the heartbeat's last report), never
+	 * invented; absent when operational, where there is no "began" to name.
+	 */
+	since?: string;
 }
 
 export interface StatusReport {
@@ -73,12 +80,15 @@ export async function statusReport(): Promise<StatusReport> {
 			name: "Database",
 			state: report.components.database.state,
 			...(report.components.database.detail ? { detail: report.components.database.detail } : {}),
+			...(report.components.database.since ? { since: report.components.database.since } : {}),
 		},
 	];
 	if (report.components.jobQueue.state !== "operational" && report.components.jobQueue.detail) {
 		const workerRow = components.find((row) => row.name === "Worker");
-		if (workerRow && workerRow.state !== "operational")
+		if (workerRow && workerRow.state !== "operational") {
 			workerRow.detail = report.components.jobQueue.detail;
+			if (report.components.jobQueue.since) workerRow.since = report.components.jobQueue.since;
+		}
 	}
 	// Storage: configured correctly is the state this process can attest to; the vendor's
 	// own reachability is what the droplet's outside view is for.
@@ -86,11 +96,17 @@ export async function statusReport(): Promise<StatusReport> {
 
 	// The outside view renders as its own component: a degraded/unknown heartbeat says so,
 	// and a down one degrades the page's overall state rather than claiming all-clear.
+	// Its `since` is when its present answer began — the last report's own timestamp,
+	// whether that report named trouble or has merely gone stale — so the page can say
+	// how long the outside check has been saying this, not only that it is.
 	const externalState = heartbeatComponentState(heartbeat.state);
 	components.push({
 		name: "Outside view",
 		state: externalState,
 		...(heartbeat.detail ? { detail: heartbeat.detail } : {}),
+		...(externalState !== "operational" && heartbeat.lastReportAt
+			? { since: heartbeat.lastReportAt }
+			: {}),
 	});
 
 	const state: StatusReport["state"] =
