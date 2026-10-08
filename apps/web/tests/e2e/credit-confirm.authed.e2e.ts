@@ -374,6 +374,26 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	await expect(contributor).toHaveValue(userDid);
 	await expect(contributor).not.toHaveValue(VIEWER_NAME);
 
+	// And the index finds the creator themselves the same way: searching one's own
+	// handle is a path to Me as real as the button — the media fixture clears its own
+	// query against the same door. The DID read off the public profile is the same one
+	// the Me section below asserts the button wrote.
+	const ownHandle = await mediaFixtureHandle();
+	const ownProfile = (await (
+		await fetch(`${API_URL}/api/accounts/users/${ownHandle}`)
+	).json()) as PublicProfile;
+	expect(ownProfile.user?.atprotoDid).toBeTruthy();
+	const selfSearch = await fetch(
+		`${API_URL}/api/accounts/identity-search?q=${encodeURIComponent(ownHandle)}`,
+		{ headers: { Cookie: `session=${session}` } },
+	);
+	expect(selfSearch.ok).toBe(true);
+	const selfHits = (await selfSearch.json()) as { identities: { did: string; handle: string }[] };
+	expect(
+		selfHits.identities.some((s) => s.did === ownProfile.user!.atprotoDid!),
+		"the creator's own handle is missing from the identity index",
+	).toBe(true);
+
 	// And the round-trip proves the shape the acceptance keys on: save, reload, the
 	// DID is what the owner overlay sends back untouched.
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(ROLE);
@@ -385,16 +405,14 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	await page.reload();
 	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
 
-	// ── Credit me ──
-	// A second row, carrying the creator's own DID without typing anything.
-	await page.getByRole("button", { name: "Credit me" }).click();
-	await expect(page.getByRole("textbox", { name: "Credit 2 contributor" })).toHaveValue(/^(did:)/);
-	// The creator's own DID, specifically — read off their public profile the same way
-	// the user's was, and the media fixture's own handle for the search.
-	const ownProfile = (await (
-		await fetch(`${API_URL}/api/accounts/users/${await mediaFixtureHandle()}`)
-	).json()) as PublicProfile;
-	expect(ownProfile.user?.atprotoDid).toBeTruthy();
+	// ── Me ──
+	// A second row, created like any other: Created ticked, then credited with the button
+	// beside its own field — the creator's own DID, without typing anything.
+	await page.getByRole("button", { name: "Add a credit" }).click();
+	await page.getByRole("checkbox", { name: "Credit 2 Created" }).check();
+	const meButton = page.getByRole("button", { name: "Credit 2 contributor — credit yourself" });
+	await expect(meButton).toBeVisible();
+	await meButton.click();
 	await expect(page.getByRole("textbox", { name: "Credit 2 contributor" })).toHaveValue(
 		ownProfile.user!.atprotoDid!,
 	);

@@ -5,9 +5,11 @@
  *
  * What the bare text input it replaced grew, and the task that moved it here:
  *
- * - **Credit me** — an explicit button writing the signed-in account's own DID into a Created
- *   row, so crediting your own contribution is one action rather than pasting a handle or a
- *   DID by hand. The account's identity is already on the page (`useAuth`).
+ * - **Me** — a button beside every contributor field writing the signed-in account's own
+ *   DID into that row, so crediting your own contribution is one action rather than pasting
+ *   a handle or a DID by hand. The account's identity is already on the page (`useAuth`);
+ *   and the autocomplete finds you the same way it finds anybody — your own handle and
+ *   display name are in the same index.
  * - **Identity autocomplete** — as-you-type suggestions from `/api/accounts/identity-search`,
  *   the accounts Anthers already knows. ⚠️ **A picked suggestion writes the DID into the row,
  *   never the display name** — the Studio edit path sends `contributor` back verbatim on save
@@ -95,7 +97,7 @@ export default function CreditsSection({
 }: {
 	rows: WorkCredit[];
 	onChange: (next: WorkCredit[]) => void;
-	/** The signed-in account's own identity, for the credit-me action; null when signed out. */
+	/** The signed-in account's own identity, for the Me button on every row; null when signed out. */
 	selfIdentity: { did: string; handle: string; displayName: string | null } | null;
 }) {
 	const setRow = (index: number, next: WorkCredit) => {
@@ -164,6 +166,7 @@ export default function CreditsSection({
 						ariaLabel={`Credit ${i + 1} contributor`}
 						types={row.types}
 						value={row.contributor}
+						selfDid={selfIdentity?.did ?? null}
 						onChange={(value) =>
 							setRow(i, { ...row, contributor: value, awaitingContributorConfirmation: undefined })
 						}
@@ -203,20 +206,6 @@ export default function CreditsSection({
 				>
 					Add a credit
 				</button>
-				{selfIdentity && (
-					<button
-						type="button"
-						className="btn btn-outline btn-sm"
-						// One action: a Created row crediting this account by its own
-						// DID — the DID is the acceptance key, and the row is created
-						// with an empty role for the creator to name.
-						onClick={() =>
-							onChange([...rows, { role: "", contributor: selfIdentity.did, types: ["created"] }])
-						}
-					>
-						Credit me
-					</button>
-				)}
 			</div>
 			<p className="text-xs text-base-content/40">
 				As you type a contributor, the field suggests the accounts Anthers knows — anyone on the
@@ -283,7 +272,7 @@ function TypeLabel({
 }
 
 /**
- * The contributor field, with the identity autocomplete on it.
+ * The contributor field, with the identity autocomplete on it and the Me button beside it.
  *
  * 🚨 **The stored value is whatever the creator typed, or the DID of a picked suggestion —
  * never the suggestion's display name.** The save sends this field back verbatim and the
@@ -293,16 +282,24 @@ function TypeLabel({
  * The fetch is debounced and asks for at least two characters, so a keystroke never turns
  * into a request. The door is rate-limited server-side too; neither layer is the other's
  * substitute.
+ *
+ * **Me** sits beside the field rather than beside the table (Parker, 2026-10-08): a row is
+ * created like any other, and crediting yourself is an answer the field offers, not a
+ * second row-shape. The autocomplete finds you too — your own handle and display name are
+ * in the same index — so Me is the shortcut, not the only path.
  */
 function ContributorInput({
 	ariaLabel,
 	types,
 	value,
+	selfDid,
 	onChange,
 }: {
 	ariaLabel: string;
 	types: WorkCreditType[];
 	value: string;
+	/** The signed-in account's own DID; null hides the Me button. */
+	selfDid: string | null;
 	onChange: (value: string) => void;
 }) {
 	const createdTicked = types.includes("created");
@@ -350,51 +347,64 @@ function ContributorInput({
 	const didStored = isDid(value);
 
 	return (
-		<div className="relative flex-1 min-w-40">
-			<input
-				type="text"
-				aria-label={ariaLabel}
-				className="input input-bordered input-sm w-full"
-				placeholder={
-					!createdTicked ? "Optional" : didStored ? "Credited by identity" : "Who made this part"
-				}
-				value={value}
-				disabled={!createdTicked}
-				onFocus={() => {
-					if (results != null && results.length > 0) setOpen(true);
-				}}
-				onBlur={() => setOpen(false)}
-				onChange={(e) => onChange(e.target.value)}
-			/>
-			{showList && (
-				<ul className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border border-base-content/10 bg-base-100 py-1 shadow-lg">
-					{results.map((s, j) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: two credits can name the same identity under different roles, so the DID is not unique in this list; the order is stable per fetch.
-						<li key={`${s.did}-${j}`}>
-							<button
-								type="button"
-								className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-base-200"
-								// mousedown, not click: fires before the input's blur,
-								// which would tear this list down before the click ran.
-								onMouseDown={(e) => {
-									e.preventDefault();
-									onChange(s.did);
-									setOpen(false);
-								}}
-							>
-								{s.avatar ? (
-									<img src={s.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
-								) : (
-									<div className="flex h-6 w-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
-										{(s.displayName ?? s.handle).charAt(0).toUpperCase()}
-									</div>
-								)}
-								<span className="font-medium">{s.displayName ?? s.handle}</span>
-								<span className="text-xs text-base-content/50">{s.handle}</span>
-							</button>
-						</li>
-					))}
-				</ul>
+		<div className="flex flex-1 min-w-40 items-center gap-1">
+			<div className="relative flex-1 min-w-0">
+				<input
+					type="text"
+					aria-label={ariaLabel}
+					className="input input-bordered input-sm w-full"
+					placeholder={
+						!createdTicked ? "Optional" : didStored ? "Credited by identity" : "Who made this part"
+					}
+					value={value}
+					disabled={!createdTicked}
+					onFocus={() => {
+						if (results != null && results.length > 0) setOpen(true);
+					}}
+					onBlur={() => setOpen(false)}
+					onChange={(e) => onChange(e.target.value)}
+				/>
+				{showList && (
+					<ul className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border border-base-content/10 bg-base-100 py-1 shadow-lg">
+						{results.map((s, j) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: two credits can name the same identity under different roles, so the DID is not unique in this list; the order is stable per fetch.
+							<li key={`${s.did}-${j}`}>
+								<button
+									type="button"
+									className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-base-200"
+									// mousedown, not click: fires before the input's blur,
+									// which would tear this list down before the click ran.
+									onMouseDown={(e) => {
+										e.preventDefault();
+										onChange(s.did);
+										setOpen(false);
+									}}
+								>
+									{s.avatar ? (
+										<img src={s.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+									) : (
+										<div className="flex h-6 w-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
+											{(s.displayName ?? s.handle).charAt(0).toUpperCase()}
+										</div>
+									)}
+									<span className="font-medium">{s.displayName ?? s.handle}</span>
+									<span className="text-xs text-base-content/50">{s.handle}</span>
+								</button>
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+			{selfDid && createdTicked && value.trim() !== selfDid && (
+				<button
+					type="button"
+					aria-label={`${ariaLabel} — credit yourself`}
+					title="Credit yourself on this row"
+					className="btn btn-ghost btn-xs shrink-0"
+					onClick={() => onChange(selfDid)}
+				>
+					Me
+				</button>
 			)}
 		</div>
 	);
