@@ -453,6 +453,15 @@ services:
         type: SECRET
       # RESEND_API_KEY and HOSTED_ACCOUNT_KEY live at app level (see the envs: block
       # above) to avoid component-level shadowing.
+      # 🚨 HEARTBEAT_TOKEN was declared on the worker component once — the wrong one. The
+      # ingest route (`POST /api/status/heartbeat`) answers on the api component, so the
+      # secret must be declared HERE: a secret on a component that does not run the route
+      # is an unset variable to the process that reads it, which 404'd every droplet
+      # report for six days, and the status page's outside view stayed unknown the whole
+      # time. The rule: check which component carries a variable before building on it.
+      - key: HEARTBEAT_TOKEN
+        scope: RUN_TIME
+        type: SECRET
 
 workers:
   - name: worker
@@ -516,15 +525,6 @@ workers:
       - key: OPS_ALERT_EMAIL
         scope: RUN_TIME
         value: admin@anthers.org
-      # The droplet heartbeat's bearer token — the secret the outside check presents when
-      # POSTing its verdict to /api/heartbeat. Generated once by the operator (openssl rand
-      # -hex 32), stored in the Bitwarden prod project beside the other secrets, and set
-      # through a spec apply rather than committed here: a committed token is a published
-      # door. Unset, the ingest 404s every report and the status page's outside view reads
-      # unknown — degraded toward honesty rather than all-clear.
-      - key: HEARTBEAT_TOKEN
-        scope: RUN_TIME
-        type: SECRET
       # Where deadline reminders go — the operator's own mailbox, per the 2026-09-14 decision
       # that anything with a deadline reaches the operator by email. Unset, the daily
       # deadline-reminders sweep logs one warning and sends nothing rather than guessing at an
