@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import Decimal from "decimal.js";
 import {
-	AFF_INFRA_RATE,
 	ANTHERS_BADGES,
 	type Badge,
 	type BadgeKey,
@@ -9,9 +8,10 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	FOUNDATION_SPLIT,
-	FREE_STORAGE_GIB,
 	SELF_HOST_FEE,
+	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
+	storageGibFor,
 	supportAmount,
 	timePoolFor,
 } from "./constants.js";
@@ -289,28 +289,62 @@ export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {
 }
 
 /**
- * A creator's monthly storage cost and the half-again on top of it.
+ * Storage past an account's Badge allowance, billed **at cost**.
  *
- * Storage beyond the free allowance is billed at the object-store rate, plus half
- * again — the half is what funds free access and the charitable programs. Storage
- * is the **only** creator-side infrastructure charge: delivery costs nothing to
- * anyone. A self-hosting creator stores nothing here and so pays nothing.
+ * 🚨 **The ruled shape (Parker, 2026-10-07):** bundled storage comes with Badges —
+ * the 25/50/100/150/200 ladder, free floor 25 GiB combined — and everything past
+ * the held rung's allowance is at-cost top-up from **Root onward**: the vendor
+ * rate, no markup, eligibility by Badge held rather than by creator status. The
+ * half-again mark-up this function used to apply is retired; the
+ * return's `storageCost` is both what the creator pays and what the provider
+ * costs, which makes the top-up **margin-neutral by construction** — it cannot go
+ * underwater at any size, the only pricing in the model with that property.
+ *
+ * A **free account** (no Badge) is not top-up-eligible: its combined 25 GiB floor
+ * is the subsidized offer, and buying bytes past it is what Root is for — Root's
+ * $3 is the entry gate that keeps the free floor from becoming abuse surface. A
+ * free account's bytes past the floor cost its holder nothing here; the
+ * charitable budget's side of that subsidy is `growth.ts`'s free-access line, not
+ * this function's.
+ *
+ * A self-hosting creator stores nothing here and so pays nothing (`SELF_HOST_FEE`
+ * is 0).
+ *
+ * Pass `anthersDollars` — the account's monthly support to Anthers — so the
+ * allowance resolves through `storageGibFor`; omitting it means the free floor,
+ * which is the correct reading only for an account known to hold no Badge.
  */
-export function estimateStorageCost(params: { storageBytes: number; isSelfHosting?: boolean }): {
+export function estimateStorageCost(params: {
+	storageBytes: number;
+	anthersDollars?: number;
+	isSelfHosting?: boolean;
+}): {
+	/** The account's allowance, in GiB — the ruled ladder at its Badge. */
+	allowanceGiB: number;
+	/** Overflow GiB past the allowance that would actually be billed, 0 when not eligible. */
 	storageGiB: Decimal;
+	/** Whether this account can buy overflow at all — Root or above. */
+	topUpEligible: boolean;
+	/** The at-cost charge for that overflow, in dollars. */
 	storageCost: Decimal;
-	storageAff: Decimal;
+	/** Same as `storageCost` — there is no mark-up on any storage anywhere. */
 	total: Decimal;
 } {
+	const allowanceGiB = storageGibFor(params.anthersDollars ?? 0);
+	const topUpEligible = allowanceGiB > STORAGE_LADDER_GIB.free;
 	if (params.isSelfHosting) {
 		const fee = new Decimal(SELF_HOST_FEE);
-		return { storageGiB: new Decimal(0), storageCost: new Decimal(0), storageAff: fee, total: fee };
+		return {
+			allowanceGiB,
+			storageGiB: new Decimal(0),
+			topUpEligible,
+			storageCost: fee,
+			total: fee,
+		};
 	}
-	const billableGiB = Decimal.max(
-		0,
-		new Decimal(params.storageBytes).div(GIB).minus(FREE_STORAGE_GIB),
-	);
+	const billableGiB = topUpEligible
+		? Decimal.max(0, new Decimal(params.storageBytes).div(GIB).minus(allowanceGiB))
+		: new Decimal(0);
 	const storageCost = CENTS(billableGiB.mul(STORAGE_PER_GIB_MONTH));
-	const storageAff = CENTS(storageCost.mul(AFF_INFRA_RATE));
-	return { storageGiB: billableGiB, storageCost, storageAff, total: storageCost.plus(storageAff) };
+	return { allowanceGiB, storageGiB: billableGiB, topUpEligible, storageCost, total: storageCost };
 }

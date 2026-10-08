@@ -205,7 +205,7 @@ export const FAQ_ITEMS = {
 		category: "Subscriptions & Payments",
 		question: "What pays for free access and Anthers' charitable programs?",
 		answer:
-			"The remainder of what is given to Anthers — what's left after the Time Pool and the at-cost card processing — plus the half-again on creator storage above the free allowance. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. The budget is read obligations-first: lean operating overhead and everyone's free access come off the top, and whatever remains funds the charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
+			"The remainder of what is given to Anthers — what's left after the Time Pool and the at-cost card processing. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. (Storage's old half-again mark-up was a small second line here; it retired when storage moved onto Badges as at-cost top-up.) The budget is read obligations-first: lean operating overhead and everyone's free access come off the top, and whatever remains funds the charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
 	},
 	"direct-purchases": {
 		category: "Subscriptions & Payments",
@@ -245,7 +245,7 @@ export const FAQ_ITEMS = {
 	"creator-take-home": {
 		category: "Creators",
 		question: "How much do creators keep?",
-		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what users give Anthers, distributed by the time people spend with them, and paid out in full) plus what users direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets ${FREE_STORAGE_GIB} GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
+		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what users give Anthers, distributed by the time people spend with them, and paid out in full) plus what users direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every account gets ${FREE_STORAGE_GIB} GiB of free storage — for a creator's catalog and their own kept files alike; each Badge rung bundles more, and past your Badge's allowance the only thing a creator pays is their own storage at our object store's rate, with no mark-up. That is entirely their choice.`,
 	},
 	"what-can-i-publish": {
 		category: "Creators",
@@ -287,7 +287,7 @@ export const FAQ_ITEMS = {
 	"creator-costs": {
 		category: "Creators",
 		question: "What does it cost to publish here?",
-		answer: `Publishing costs nothing, and neither does delivery: a creator is never billed for somebody streaming or downloading their work, at any size and at any volume. There is exactly one creator-side charge and it is storage — your first ${FREE_STORAGE_GIB} GiB are free, and above that you pay our storage provider's rate plus half again, where that half funds free access and Anthers' charitable programs. Anthers takes no cut of anything you earn, so nothing else comes out of what reaches you except the card processing the payment network charges.`,
+		answer: `Publishing costs nothing, and neither does delivery: a creator is never billed for somebody streaming or downloading their work, at any size and at any volume. There is exactly one creator-side charge and it is storage past your Badge's allowance — your first ${FREE_STORAGE_GIB} GiB are free, each Badge rung bundles more, and past that you pay our storage provider's rate, with no mark-up: what we charge is what the bytes cost. Anthers takes no cut of anything you earn, so nothing else comes out of what reaches you except the card processing the payment network charges.`,
 	},
 	"creator-ownership": {
 		category: "Creators",

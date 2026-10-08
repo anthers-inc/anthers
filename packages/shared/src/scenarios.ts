@@ -23,7 +23,6 @@ import {
 	BADGE_ORDER,
 	CARD_FLAT,
 	CARD_RATE,
-	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
@@ -257,32 +256,37 @@ export function cartSaving(unitPrice = 1, count = 5) {
  * A mid-size creator's monthly earnings receipt.
  *
  * Gross earnings and library size are the two ASSUMPTIONS; everything below them is
- * derived. Storage above the free allowance, plus the charge on it, is a creator's
- * **only** platform-side cost — payouts carry no processing (Connect standard
- * transfers are free) and delivery costs nothing at any volume.
+ * derived. Storage past the held rung's allowance — at cost, from Root onward — is a
+ * creator's **only** platform-side cost; payouts carry no processing (Connect standard
+ * transfers are free) and delivery costs nothing at any volume. There is no mark-up on
+ * any storage any more (the half-again retired 2026-10-07), so the receipt carries no
+ * `storageCharge` line: `storage` is both what the creator pays and what the provider
+ * costs.
  *
  * ⚠️ **The numbers come from `estimateStorageCost`, not from a second copy of its
  * formula.** They used to be re-derived here, which was invisible while the rate was
  * $0.02/GiB: 19 billable GiB landed on exact cents at every step, so rounding once or
  * twice gave the same answer. R2's $0.0161 does not, and the receipt promptly stopped
- * reconciling — the charge is half of the *rounded* storage cost, not the rounded half
- * of the raw one. Same family as the five hand-rolled card-fee copies: a duplicated
- * formula agrees with its original right up until a dial moves.
+ * reconciling — rounding at the wrong step drifts from the billed figure. Same family
+ * as the five hand-rolled card-fee copies: a duplicated formula agrees with its
+ * original right up until a dial moves.
  */
 export function creatorReceipt(grossEarnings = 1575, libraryGiB = 69) {
 	const gross = new Decimal(grossEarnings);
-	const billableGiB = Math.max(0, libraryGiB - FREE_STORAGE_GIB);
-	const { storageCost, storageAff } = estimateStorageCost({
+	// The receipt's creator holds Root — the first rung whose holder can owe any storage
+	// charge at all — so the allowance reads from the ladder rather than from nothing.
+	const { allowanceGiB, storageCost } = estimateStorageCost({
 		storageBytes: libraryGiB * 1024 ** 3,
+		anthersDollars: 3,
 	});
+	const billableGiB = Math.max(0, libraryGiB - allowanceGiB);
 	return {
 		libraryGiB,
-		freeGiB: FREE_STORAGE_GIB,
+		freeGiB: allowanceGiB,
 		billableGiB,
 		gross: money(gross),
 		storage: money(storageCost),
-		storageCharge: money(storageAff),
-		net: money(gross.minus(storageCost).minus(storageAff)),
+		net: money(gross.minus(storageCost)),
 	};
 }
 

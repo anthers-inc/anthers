@@ -35,10 +35,10 @@
  * that funds free access stays thin.
  */
 import {
-	AFF_INFRA_RATE,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	PUBLIC_ACCESS_PRICE,
+	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
 } from "./constants.js";
 import { anthersSupportBreakdown, paymentsSplit } from "./fees.js";
@@ -250,11 +250,15 @@ export interface CreatorSegmentLedger extends CreatorSegment {
 	count: number;
 	/** Monthly Time Pool earnings for one creator in this segment. */
 	earnsEach: number;
-	/** What one creator is billed for storage, before the charge. */
+	/** The rung allowance this segment's holders are modeled at, in GiB. */
+	allowanceGiBEach: number;
+	/** What one creator pays Anthers for storage: at-cost overflow past the allowance. */
 	storageCostEach: number;
-	/** The half-again on top, which is charitable revenue. */
+	/** The mark-up on top, which was charitable revenue — retired 2026-10-07, always 0. */
 	storageChargeEach: number;
-	/** Take-home after storage and the charge. */
+	/** The vendor cost of the bundled allowance, which Anthers now carries. */
+	allowanceCostEach: number;
+	/** Take-home: earnings minus at-cost overflow. */
 	netEach: number;
 }
 
@@ -264,7 +268,7 @@ export interface GrowthLedger {
 	payingAccounts: number;
 	freeAccounts: number;
 	segments: CreatorSegmentLedger[];
-	/** Charitable revenue in: the users' remainder plus paying creators' storage charge. */
+	/** Charitable revenue in: the users' remainder. (Paying creators' storage mark-up was the second line; retired 2026-10-07 with the top-up ruling — top-up is at cost.) */
 	charitableRevenue: number;
 	/** Admin: infrastructure, staffing and reserves. */
 	overhead: number;
@@ -337,6 +341,15 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 	// Bookkeeping care with the Public Access exemption: a FREE creator's whole catalog
 	// is already subsidized, so only a PAYING creator's PA bytes are new cost. Counting
 	// both would double-count them.
+	//
+	// 🚨 **The storage model is the ruled Badge shape, 2026-10-07**: a paying creator's
+	// allowance is their rung's bundled storage (free floor is combined at 25), which
+	// **Anthers pays the vendor for** — a new free-access obligation sitting beside free
+	// pools and free creators' catalogs — and everything past it is at-cost top-up from
+	// Root onward, charged at the vendor rate with no markup. The half-again
+	// `AFF_INFRA_RATE` revenue line this used to book is retired: `storageCharge` is
+	// kept in the ledger at zero so the accounting shape survives, but every term it
+	// carried now reads through the allowance-cost and overflow terms.
 	const segmentCounts = apportion(
 		creators,
 		CREATOR_SEGMENTS.map((s) => s.share),
@@ -351,32 +364,56 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		const count = segmentCounts[i];
 		const attentionShare = attentionTotal > 0 && count > 0 ? seg.attention / attentionTotal : 0;
 		const earnsEach = count > 0 ? (attentionShare * timePoolToCreators) / count : 0;
-		// 🚨 **Every stored byte is billed, and the Public Access exemption that used to
-		// discount this is gone** (Parker, 2026-08-30). A creator's Public Access bytes
-		// once cost them nothing, which made the commons cheaper to join; the exemption
-		// was retired because its cost is governed by a number Anthers does not control
-		// and cannot observe in advance — how much creators store. Priced at its own
-		// worst case it fit the ceiling with almost nothing to spare (2.97% of charitable
-		// revenue at rung 1), and doubling the modeled library sizes breached it. Those
-		// sizes are modest for video: `CREATOR_SEGMENTS` puts Large at 400 GiB, while a
-		// 100-hour 1080p60 library with masters is ~1,062 GiB by our own storage model.
-		// So the exemption was solvent only on an assumption the platform is actively
-		// trying to falsify. It may return in a **bounded** form — see 11.02.
+		// 🚨 **Every stored byte still costs, and the Public Access exemption stays gone**
+		// (Parker, 2026-08-30). What changed on 2026-10-07 is WHO pays and HOW: the
+		// allowance bytes are prepaid through the rung (Anthers' obligation), overflow
+		// bytes are the creator's at-cost purchase from Root onward.
+		//
+		// ⚠️ **The modeled allowance is the rung whose allowance covers the catalog** —
+		// the bundle's own intent ("the rung you hold should just cover you"), and the
+		// conservative case for the books: a storage-rational creator could instead hold
+		// Root and buy overflow at cost below Blossom, which would leave Anthers carrying
+		// only Root's 50 GiB, but "most creators hold the rung that covers them" is the
+		// honest default and the heavier obligation is what solvency is modeled against.
+		// ⚠️ **The modeled allowance is the rung whose allowance covers the catalog** —
+		// the bundle's own intent ("the rung you hold should just cover you"), and the
+		// conservative case for the books: a storage-rational creator could instead hold
+		// Root and buy overflow at cost below Blossom, which would leave Anthers carrying
+		// only Root's 50 GiB, but "most creators hold the rung that covers them" is the
+		// honest default and the heavier obligation is what solvency is modeled against.
+		// A paying creator holds at least Root, so their allowance never reads below 50 —
+		// even a smaller catalog keeps Root's full allowance (the allowance is what the
+		// Badge grants, not what the catalog uses); and **the obligation carried is the
+		// stored bytes the allowance covers** (`min(catalog, allowance)` — the vendor
+		// bills what exists, not the ceiling), with everything past it the creator's
+		// own at-cost overflow.
+		const coveredGiB = Math.max(
+			STORAGE_LADDER_GIB.root,
+			Object.values(STORAGE_LADDER_GIB).find((g) => g >= seg.storageGiB) ??
+				STORAGE_LADDER_GIB.blossom,
+		);
+		const allowanceGiBEach = coveredGiB;
 		const fullCost = seg.storageGiB * STORAGE_PER_GIB_MONTH;
-		const chargeEach = seg.free ? 0 : AFF_INFRA_RATE * fullCost;
-		const paidByCreator = seg.free ? 0 : fullCost;
+		const allowanceCost = Math.min(seg.storageGiB, coveredGiB) * STORAGE_PER_GIB_MONTH;
+		const paidByCreator = seg.free
+			? 0
+			: Math.max(0, seg.storageGiB - coveredGiB) * STORAGE_PER_GIB_MONTH;
+		const chargeEach = 0;
 		if (seg.free) {
 			freeStorageSubsidy += fullCost * count;
 		} else {
+			freeStorageSubsidy += allowanceCost * count;
 			storageCharge += chargeEach * count;
 		}
 		return {
 			...seg,
 			count,
 			earnsEach,
+			allowanceGiBEach,
 			storageCostEach: paidByCreator,
 			storageChargeEach: chargeEach,
-			netEach: earnsEach - paidByCreator - chargeEach,
+			allowanceCostEach: seg.free ? 0 : allowanceCost,
+			netEach: earnsEach - paidByCreator,
 		};
 	});
 	// The Public Access incentive program's cost. Its first and only priced member was the
