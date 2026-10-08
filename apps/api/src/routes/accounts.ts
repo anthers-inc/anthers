@@ -21,6 +21,7 @@
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change either rung, or any kind of content
  *   GET    /creators                — list all creators
+ *   GET    /identity-search         — handle-prefix autocomplete for the credits editor
  *   GET    /users/:handle         — public user profile
  *   POST   /users/:handle/follow  — follow a creator
  *   POST   /users/:handle/unfollow — unfollow a creator
@@ -53,7 +54,7 @@ import {
 } from "@anthers/shared/rights";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
@@ -670,6 +671,71 @@ const accountRoutes = new Hono()
 					mediums: row.mediums ?? [],
 				}),
 			),
+		});
+	})
+
+	// ── Identity Search (credits autocomplete) ────────────────────────────────
+	//
+	// 🚨 **Anthers can only suggest the identities it already knows, and that is a boundary
+	// this endpoint is honest about rather than a limitation to paper over.** The credits
+	// editor offers the accounts Anthers holds rows for — accounts on `anthers.social` and
+	// identities brought at signup — because resolution to a DID keys on a `users` row and
+	// the credit acceptance keys on the DID. Off-network handles stay freeform text in the
+	// same field, which is the documented rule for naming people who are not on-network.
+	//
+	// ⚠️ **It enumerates nothing that is not already public.** An account's handle, display
+	// name and avatar are its public profile — `/creators` ships all three, `/users/:handle`
+	// ships them again. The `q` prefix match answers one at a time what the creator list
+	// already answers as a whole.
+	//
+	// ⚠️ **Query-only, bounded, and rate-limited**, because a handle-prefix look-up table is
+	// exactly the shape a scraper would walk. Matched against a signed-in session (credits
+	// are written in the Studio, so there is no signed-out use) and capped at ten.
+	//
+	// ⭐ **Blocked pairs are filtered in the query, not checked after** — one account must
+	// never be offered another as a suggestion, either direction, per the two-users-meet
+	// rule the follow and comment surfaces also run. Suspended and test accounts are
+	// filtered the same way `/creators` does.
+	.get("/identity-search", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const limited = await checkRate("identity-search", clientIp(c.req.raw.headers), 30, 600);
+		if (!limited.ok) return limitResponse(limited);
+
+		const q = (c.req.query("q") ?? "").trim();
+		if (q.length < 2) return c.json({ identities: [] });
+
+		const rows = await db
+			.select({
+				atprotoDid: users.atprotoDid,
+				handle: users.atprotoHandle,
+				displayName: users.displayName,
+				avatar: users.avatar,
+			})
+			.from(users)
+			.where(
+				and(
+					// Match the way `services/atproto.ts` normalizes handles: lowercased. A
+					// display name is matched too — that is the name somebody types when they
+					// know a person but not their handle — and a display-name match lands
+					// under its own handle still, so the answer never becomes a name.
+					or(ilike(users.atprotoHandle, `%${q}%`), ilike(users.displayName, `%${q}%`)),
+					notBlockedBy(sessionUser.id, users.id),
+					notSuspendedAccount(users.id),
+					notTestAccount(users.id),
+				),
+			)
+			// Handles first (an exact or prefix handle match is the likeliest intent), then
+			// alphabetical for a stable order a repeated keystroke keeps.
+			.orderBy(users.atprotoHandle)
+			.limit(10);
+
+		return c.json({
+			identities: rows.map((r) => ({
+				did: r.atprotoDid,
+				handle: r.handle,
+				displayName: r.displayName,
+				avatar: r.avatar,
+			})),
 		});
 	})
 
