@@ -356,7 +356,10 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 						</button>
 					)}
 				</div>
-				<p className="text-sm mt-1 break-words">{comment.body}</p>
+				{/* The body's text in full, with the returns the person typed kept — a break
+				    is what they pressed, and no spacing is added between paragraphs (replies
+				    render here too, through the same row). */}
+				<p className="text-sm mt-1 break-words whitespace-pre-line">{comment.body}</p>
 				<div className="mt-1.5 flex items-center gap-3">
 					<VoteControl
 						subjectType="comment"

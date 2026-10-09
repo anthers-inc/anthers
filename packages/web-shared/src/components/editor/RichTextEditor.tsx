@@ -79,7 +79,7 @@ export default function RichTextEditor({
 				<EditorContent
 					editor={editor}
 					style={{ fontFamily: FONTS.spectral }}
-					className={`prose prose-lg max-w-none leading-relaxed prose-headings:font-semibold [&_.tiptap]:min-h-[320px] [&_.tiptap]:px-2 [&_.tiptap]:py-4 ${EDITABLE}`}
+					className={`prose prose-lg max-w-none leading-relaxed prose-headings:font-semibold flush [&_.tiptap]:min-h-[320px] [&_.tiptap]:px-2 [&_.tiptap]:py-4 ${EDITABLE}`}
 				/>
 			</div>
 		);

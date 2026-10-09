@@ -382,7 +382,9 @@ export default function WorkReviews({ workId }: { workId: number }) {
 											)}
 										</div>
 										{/* "" is a verdict-only review written before text was required. */}
-										{review.body && <p className="text-sm mt-1">{review.body}</p>}
+										{review.body && (
+											<p className="text-sm mt-1 whitespace-pre-line">{review.body}</p>
+										)}
 									</div>
 								</div>
 							))}

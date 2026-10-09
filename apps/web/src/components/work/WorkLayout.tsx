@@ -81,9 +81,11 @@ export const WRITING_TITLE_STYLE: CSSProperties = { fontFamily: FONTS.fraunces }
 export const WRITING_STANDFIRST_CLASS = "text-xl leading-snug text-base-content/70";
 export const WRITING_BODY_STYLE: CSSProperties = { fontFamily: FONTS.spectral };
 
-/** A piece of writing's body: a text serif at a reading size, with room between the lines. */
+/** A piece of writing's body: a text serif at a reading size, with room between the lines
+ *  and none added between paragraphs — a break is what the creator typed, and the gap
+ *  they want is the blank paragraph they press return again for (flush, see globals.css). */
 export const WRITING_ARTICLE_CLASS =
-	"prose prose-lg max-w-none leading-relaxed prose-headings:font-semibold";
+	"prose prose-lg max-w-none leading-relaxed prose-headings:font-semibold flush";
 
 /** The title's typography for a Work of this kind. */
 export function workTitleTypography(type: string): {
