@@ -46,6 +46,12 @@ interface MerchVariant {
 	inStock: boolean;
 }
 
+/** One color row of the variants answer — the Work's pickers are color, then size. */
+interface MerchColorGroup {
+	color: string;
+	sizes: MerchVariant[];
+}
+
 interface MerchQuote {
 	amount: string;
 	listPrice: string;
@@ -59,15 +65,16 @@ interface MerchQuote {
 }
 
 export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
-	const [variants, setVariants] = useState<MerchVariant[] | null>(null);
+	const [colors, setColors] = useState<MerchColorGroup[] | null>(null);
 	const [variantsError, setVariantsError] = useState<string | null>(null);
+	const [color, setColor] = useState<string | null>(null);
 	const [size, setSize] = useState<string | null>(null);
 	const [session, setSession] = useState<MerchQuote | null>(null);
 	const [sessionError, setSessionError] = useState<string | null>(null);
 	const [creating, setCreating] = useState(false);
 
-	// The size list, per Work — fetched unconditionally (hooks order), read by the
-	// branches below.
+	// The color/size list, per Work — fetched unconditionally (hooks order), read by
+	// the branches below.
 	useEffect(() => {
 		let canceled = false;
 		client.api.payments.merch[":slug"].variants
@@ -75,31 +82,36 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 			.then(async (res) => {
 				if (canceled) return;
 				const body = (await res.json().catch(() => null)) as {
-					variants?: MerchVariant[];
+					colors?: MerchColorGroup[];
 					error?: string;
 				} | null;
 				if (!res.ok) {
-					setVariantsError(body?.error ?? "We couldn't load the sizes right now.");
+					setVariantsError(body?.error ?? "We couldn't load the options right now.");
 					return;
 				}
-				setVariants(body?.variants ?? []);
+				setColors(body?.colors ?? []);
+				// A single-color item skips the color picker entirely — the row is
+				// preselected, and only the size asks.
+				if (body?.colors?.length === 1) setColor(body.colors[0].color);
 			})
 			.catch(() => {
-				if (!canceled) setVariantsError("We couldn't load the sizes right now.");
+				if (!canceled) setVariantsError("We couldn't load the options right now.");
 			});
 		return () => {
 			canceled = true;
 		};
 	}, [slug]);
 
+	const pickedGroup = colors?.find((g) => g.color === color) ?? null;
+
 	const createSession = async () => {
-		if (!size) return;
+		if (!size || !color) return;
 		setCreating(true);
 		setSessionError(null);
 		try {
 			const res = await client.api.payments.merch.checkout[":slug"].$post({
 				param: { slug },
-				json: { size },
+				json: { color, size },
 			});
 			const body = (await res.json().catch(() => null)) as (MerchQuote & { error?: string }) | null;
 			if (!res.ok || !body?.clientSecret) {
@@ -117,14 +129,15 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 	if (access.isFree) return null;
 
 	if (session) {
-		// The session quote carries the goods line's breakdown; the size is rendered
-		// from the picked state (the session is keyed to the size it was created for).
+		// The session quote carries the goods line's breakdown; the color and size are
+		// rendered from the picked state (the session is keyed to the pair it was
+		// created for).
 		const pickedSize = session.size ?? size ?? "";
 		return (
 			<div className="card bg-base-200 border border-base-300 h-full">
 				<div className="card-body p-5 gap-4">
 					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-						Checkout — size {pickedSize}
+						Checkout — {color}, size {pickedSize}
 					</h2>
 					<CheckoutElementsProvider
 						stripe={getStripe()}
@@ -133,6 +146,8 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 						<MerchCheckoutForm
 							quote={{
 								size: pickedSize,
+								color,
+								listPrice: session.listPrice,
 								goodsPrice: session.goodsPrice,
 								discount: session.discount,
 								shipping: session.shipping,
@@ -152,30 +167,57 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">
 						Pricing
 					</h2>
-					{/* The size picker IS the price display on a merch Work — each size's
-					    price is Printful's own retail price for that variant (stamped at
-					    setup), discounted when this buyer holds a Badge, so the picker and
-					    the price are one control. */}
-					{variants ? (
-						variants.length > 0 ? (
-							<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Size">
-								<legend className="sr-only">Size</legend>
-								{variants.map((v) => (
-									<button
-										key={v.size}
-										type="button"
-										aria-pressed={size === v.size}
-										className={`btn btn-sm justify-between ${size === v.size ? "btn-primary" : "btn-outline"}`}
-										onClick={() => {
-											setSize(v.size);
-											setSession(null);
-										}}
-									>
-										<span>{v.size}</span>
-										<span className="tabular-nums ml-2">${v.amount}</span>
-									</button>
-								))}
-							</fieldset>
+					{/* The pickers ARE the price display on a merch Work — each variant's
+					    price is Printful's own retail price for it (stamped at setup),
+					    discounted when this buyer holds a Badge, so the picker and the
+					    price are one control. Color first, then size; a one-color item
+					    renders only the size row. */}
+					{colors ? (
+						colors.length > 0 ? (
+							<div className="space-y-2 w-full">
+								{colors.length > 1 && (
+									<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Color">
+										<legend className="sr-only">Color</legend>
+										{colors.map((g) => (
+											<button
+												key={g.color}
+												type="button"
+												aria-pressed={color === g.color}
+												className={`btn btn-sm ${color === g.color ? "btn-primary" : "btn-outline"}`}
+												onClick={() => {
+													setColor(g.color);
+													setSize(null);
+													setSession(null);
+												}}
+											>
+												<span>{g.color}</span>
+											</button>
+										))}
+									</fieldset>
+								)}
+								<fieldset
+									className="flex flex-wrap gap-2 border-0 p-0 m-0"
+									aria-label="Size"
+									disabled={!color}
+								>
+									<legend className="sr-only">Size</legend>
+									{(pickedGroup?.sizes ?? []).map((v) => (
+										<button
+											key={v.size}
+											type="button"
+											aria-pressed={size === v.size}
+											className={`btn btn-sm justify-between ${size === v.size ? "btn-primary" : "btn-outline"}`}
+											onClick={() => {
+												setSize(v.size);
+												setSession(null);
+											}}
+										>
+											<span>{v.size}</span>
+											<span className="tabular-nums ml-2">${v.amount}</span>
+										</button>
+									))}
+								</fieldset>
+							</div>
 						) : (
 							<p className="text-sm text-base-content/60">This item isn't in the store yet.</p>
 						)
@@ -188,9 +230,9 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 					)}
 				</div>
 
-				{size && (
+				{size && color && (
 					<dl className="w-full rounded-lg bg-base-100 p-3 text-sm space-y-1.5">
-						<MerchPriceRows variant={variants?.find((v) => v.size === size)} />
+						<MerchPriceRows variant={pickedGroup?.sizes.find((v) => v.size === size)} />
 					</dl>
 				)}
 
@@ -204,10 +246,10 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 					<button
 						type="button"
 						className="btn btn-primary w-full"
-						disabled={!size || creating}
+						disabled={!size || !color || creating}
 						onClick={() => void createSession()}
 					>
-						{creating ? "Starting checkout…" : "Buy this size"}
+						{creating ? "Starting checkout…" : "Buy this shirt"}
 					</button>
 				</div>
 			</div>
@@ -261,9 +303,12 @@ function MerchCheckoutForm({
 }: {
 	quote: {
 		size: string;
+		listPrice: string;
 		goodsPrice: string;
 		discount: { badge: string; percent: string; saved: string } | null;
 		shipping: string;
+		/** Rendered in the line's label when this panel picked one. */
+		color?: string | null;
 	};
 	onCancel: () => void;
 }) {
@@ -335,9 +380,11 @@ function MerchCheckoutForm({
 			</div>
 			<dl className="w-full rounded-lg bg-base-100 p-3 text-sm space-y-1.5">
 				<div className="flex justify-between text-base-content/60">
-					<dt>The shirt, size {quote.size}</dt>
+					<dt>
+						The shirt{quote.color ? `, ${quote.color}` : ""}, size {quote.size}
+					</dt>
 					<dd className="tabular-nums">
-						{quote.discount ? <s>$30.00</s> : null} ${quote.goodsPrice}
+						{quote.discount ? <s>${quote.listPrice}</s> : null} ${quote.goodsPrice}
 					</dd>
 				</div>
 				{quote.discount && (

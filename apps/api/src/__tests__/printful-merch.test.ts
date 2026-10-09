@@ -149,8 +149,10 @@ async function makeMerchWork(variantIds: number[]) {
 	for (const catalogVariantId of variantIds) {
 		await db.insert(merchVariants).values({
 			workId: work.id,
+			color: "black",
 			size: `S${catalogVariantId}`.slice(0, 6),
 			catalogVariantId,
+			syncVariantId: catalogVariantId,
 			catalogVariantName: `Black / size ${catalogVariantId}`,
 			catalogPrice: "9.50",
 			listPrice: "30.00", // Printful's retail price is the list source (Parker, 2026-10-08)
@@ -167,7 +169,7 @@ describe("Merch not configured — every guard refuses", () => {
 		const res = await req(`/api/payments/merch/checkout/${work.slug}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
-			body: JSON.stringify({ size: "S4011" }),
+			body: JSON.stringify({ color: "black", size: "S4011" }),
 		});
 		expect(res.status).toBe(503);
 		// Nothing reached Printful and nothing was bought.
@@ -204,7 +206,7 @@ describe("The merch resolution — whose physical Work is buyable", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("refuses a merch Work whose body names a size with no row", async () => {
+	it("refuses a merch Work whose body names a color+size with no row", async () => {
 		printfulCalls.length = 0;
 		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
 		try {
@@ -228,7 +230,7 @@ describe("The merch resolution — whose physical Work is buyable", () => {
 			const res = await req(`/api/payments/merch/checkout/${work.slug}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
-				body: JSON.stringify({ size: "NOSUCH" }),
+				body: JSON.stringify({ color: "black", size: "NOSUCH" }),
 			});
 			expect(res.status).toBe(400);
 		} finally {

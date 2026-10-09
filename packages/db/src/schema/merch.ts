@@ -58,12 +58,20 @@ export const merchVariants = pgTable(
 		workId: integer("work_id")
 			.notNull()
 			.references(() => works.id, { onDelete: "cascade" }),
+		/** The buyer-facing color label, exactly as the Work page shows it ("Oatmeal Triblend"). */
+		color: text("color").notNull(),
 		/** The buyer-facing size label, exactly as the Work page shows it ("M", "L", "XL"). */
 		size: text("size").notNull(),
 		/** Printful's catalog variant id — the blank garment+size+color, NOT the product id. */
 		catalogVariantId: integer("catalog_variant_id").notNull(),
 		/** Printful's name for the variant, as the receipt and packing slip name it. */
 		catalogVariantName: text("catalog_variant_name").notNull(),
+		/**
+		 * Printful's Sync Variant id — the store's own variant row, what an order's item
+		 * names as `sync_variant_id`. Distinct from `catalog_variant_id`, the blank garment
+		 * itself: the Sync Variant is the store's copy carrying the print files and retail.
+		 */
+		syncVariantId: integer("sync_variant_id").notNull().default(0),
 		/** Printful's wholesale cost for the blank — the transparency prose's basis, never the pricing source. */
 		catalogPrice: numeric("catalog_price").notNull(),
 		/**
@@ -74,14 +82,18 @@ export const merchVariants = pgTable(
 		listPrice: numeric("list_price").notNull(),
 		/** The print-file URL this variant prints from — unique per design, per the File Library's reuse rule. */
 		printFileUrl: text("print_file_url").notNull(),
-		/** True once the row exists on the Printful store as a Sync Variant (`external_id` = this row's id). */
+		/**
+		 * True once the row is bound to a store Sync Variant — Parker's store was built in
+		 * the dashboard, so the binding is a read-back (the setup script's `--bind` mode),
+		 * not a creation; the flag means the read-back matched this row.
+		 */
 		synced: boolean("synced").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// One row per (Work, size) — the picker offers each size once.
-		uniqueIndex("uq_merch_variants_work_size").on(table.workId, table.size),
+		// One row per (Work, color, size) — the picker offers each size in each color once.
+		uniqueIndex("uq_merch_variants_work_color_size").on(table.workId, table.color, table.size),
 		index("idx_merch_variants_work").on(table.workId),
 	],
 );
