@@ -105,7 +105,10 @@ export function merchTable(listPrice: string = "30.00"): MerchRow[] {
 	const rows: MerchRow[] = [];
 	for (const badge of BADGE_ORDER) {
 		// `free` is the undiscounted list row — the absence answer, not a rung with 0%.
-		const percent = badge === "free" ? "0" : (MERCH_BADGE_DISCOUNT[badge as keyof typeof MERCH_BADGE_DISCOUNT] ?? "0");
+		const percent =
+			badge === "free"
+				? "0"
+				: (MERCH_BADGE_DISCOUNT[badge as keyof typeof MERCH_BADGE_DISCOUNT] ?? "0");
 		const goods = list.minus(list.times(new Decimal(percent).dividedBy(100))).toDecimalPlaces(2);
 		const fee = calculateFees(goods, { type: "physical" }).processingFee;
 		rows.push({
