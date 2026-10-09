@@ -129,14 +129,16 @@ async function main() {
 		process.exit(1);
 	}
 
-	// The store product, fully expanded: the Sync Variants carry everything the rows need.
-	const detail = await pf<{ result: { sync_product: SyncProductRow; items: SyncVariantRow[] } }>(
+	// The store product, fully expanded: the Sync Variants carry everything the rows
+	// need. (The listing's own field name is `sync_variants` — the 2026-10-09 probe
+	// read it live; the create-mode draft's `items` spelling was never API-tested.)
+	const detail = await pf<{ sync_product: SyncProductRow; sync_variants: SyncVariantRow[] }>(
 		"GET",
 		`/store/products/${storeProduct}`,
 	);
-	const variants = detail.result.items;
+	const variants = detail.sync_variants;
 	console.log(
-		`Binding Work "${slug}" (#${work.id}) to store product ${storeProduct} "${detail.result.sync_product.name}" — ${variants.length} variant(s).`,
+		`Binding Work "${slug}" (#${work.id}) to store product ${storeProduct} "${detail.sync_product.name}" — ${variants.length} variant(s).`,
 	);
 
 	// The catalog blanks, for the wholesale-cost snapshot (`catalog_price`) — the
@@ -146,11 +148,11 @@ async function main() {
 	const blanks = new Map<number, string>();
 	for (const id of catalogIds) {
 		try {
-			const v = await pf<{ result: { variant: { id: number; price: string } } }>(
+			const v = await pf<{ variant: { id: number; price: string } }>(
 				"GET",
 				`/products/variant/${id}`,
 			);
-			blanks.set(id, v.result.variant.price);
+			blanks.set(id, v.variant.price);
 		} catch {
 			console.error(`  catalog variant ${id} is gone from Printful's catalog — its rows skip`);
 		}

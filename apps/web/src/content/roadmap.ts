@@ -310,8 +310,9 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "storage-billing",
 						title: "Knowing What Your Storage Costs",
 						blurb: `Your first ${FREE_STORAGE_GIB} GiB is free, for catalog and kept files alike. Rungs bundle more; past your allowance, bytes are at cost with no mark-up.`,
-						bucket: "active",
-						note: "No invoice, no charge, and nowhere to see your usage.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						note: "The reading on the dashboard, the meter in the renewal, and the copy say the ruled shape.",
 						doc: { id: "31.04", title: "How Much Space Your Work Takes" },
 					},
 					{
