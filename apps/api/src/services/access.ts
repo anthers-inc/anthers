@@ -490,6 +490,53 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		return { ...base, canAccess: false, reason: "adult_gated" };
 	}
 
+	// ── Goods works: the deliverable is the goods themselves ────────────────────
+	// A physical Work has no stream, no reader, no frame — nothing the attention
+	// model can attribute, so the commons machinery that the rest of the resolver
+	// serves does not apply to it (Parker, 2026-10-09: "Public Access rules — how
+	// the money works, measuring attention, sign-in restrictions — are only
+	// relevant for Works that are streamable").
+	//
+	// What replaces it, for a physical Work:
+	// - The access table still governs the PAGE: no qualifying allowed row is the
+	//   same hard gate as any digital Work (a creator may badge-gate a shirt, and
+	//   that is the gate, not a price).
+	// - A qualifying viewer sees a page the store sits on, and the goods are
+	//   BOUGHT, never "unlocked" — the price is the store's own (Printful's
+	//   retail, stamped at setup), which is why `price` is null here: the row's
+	//   price field means nothing on a physical Work, and the store panel reads
+	//   `merch_variants`.
+	// - `requiresPurchase` stays true for every qualifying non-owner, signed in or
+	//   out — which is what mounts the store panel (`ProjectPricing` →
+	//   `MerchBuyPanel`) in the deliverable's place, without the signed-out
+	//   login wall: a visitor may look at the shirt exactly as an account may,
+	//   and creating an account is required only to buy.
+	// 🚨 Checked BEFORE the purchase branch, and the purchase branch below skips
+	// this type: a past purchase grants a shipment, not an access verdict — a
+	// buyer who wants a second shirt must be able to buy again, which a
+	// "purchased"-forever verdict would refuse ("You already have access").
+	if (work.type === "physical") {
+		const goodsGiven = work.creatorId == null ? 0 : (ctx.supportByCreator.get(work.creatorId) ?? 0);
+		const goodsOffers = offersFor(work.access ?? [], goodsGiven);
+		if (goodsOffers.length === 0) {
+			if (ctx.userId == null) return { ...base, canAccess: false, reason: "login_required" };
+			return {
+				...base,
+				canAccess: false,
+				reason: "gated",
+				unlock: { creator: unlockRoute(work.access ?? [], goodsGiven, []) },
+			};
+		}
+		return {
+			...base,
+			canAccess: false,
+			reason: "payment_required",
+			requiresPurchase: true,
+			price: null,
+			isEntitled: goodsOffers.some((o) => !o.baseline),
+		};
+	}
+
 	// A prior purchase unlocks it permanently.
 	if (ctx.purchasedWorkIds.has(work.id)) {
 		return { ...base, canAccess: true, reason: "purchased" };

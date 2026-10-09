@@ -24,7 +24,12 @@ import MerchBuyPanel from "../merch/MerchBuyPanel";
 interface ProjectPricingProps {
 	workId: number;
 	slug: string;
-	access: AccessResult;
+	/**
+	 * The viewer's verdict. Absent on the owner's own serialization (the owner's shape
+	 * carries the editable rows, which read as no verdict at all) — and the merch path
+	 * never reads it, since a goods Work's price is the store's, not an access posture's.
+	 */
+	access?: AccessResult;
 	title: string;
 	creatorHandle: string;
 	thumbnail?: string | null;
@@ -83,24 +88,32 @@ export default function ProjectPricing({
 		};
 	}, [slug]);
 
-	// Free posts have nothing to sell.
-	if (access.isFree) return null;
-
 	// A merch Work's pricing panel is the merch panel — the size picker and the
 	// derived price replace the creator doors entirely (a merch sale has no connected
 	// creator and no transfer; `creatorHasStripe` is meaningless on it).
+	//
+	// 🚨 Before the free check, deliberately: a goods Work is never free by its
+	// access row. The row only opens the page; the store's own prices are the
+	// price (Parker, 2026-10-09 — one price source, and it is not the access
+	// table), so the isFree posture the resolver carries on digital work must
+	// never be able to erase the store. The panel also mounts for the owner and a
+	// revisiting buyer, whose verdicts are `canAccess` — a goods store is where
+	// buying happens again, not a gate that opened once.
 	if (workType === "physical") {
-		return <MerchBuyPanel workId={workId} slug={slug} access={access} title={title} />;
+		return <MerchBuyPanel workId={workId} slug={slug} title={title} />;
 	}
+
+	// Free posts have nothing to sell.
+	if (access?.isFree) return null;
 
 	// The listed price arrives as a string in dollars — no client-side money arithmetic
 	// happens here; `toFixed(2)` formats, it never computes.
-	const price = Number(access.price ?? "0");
+	const price = Number(access?.price ?? "0");
 	const basketProps = {
 		workId,
 		slug,
 		title,
-		price: access.price ?? quote?.amount ?? "0",
+		price: access?.price ?? quote?.amount ?? "0",
 		creatorHandle,
 		thumbnail: thumbnail ?? null,
 	};
@@ -121,9 +134,9 @@ export default function ProjectPricing({
 					<p className="text-3xl font-bold leading-none tabular-nums">${price.toFixed(2)}</p>
 				</div>
 
-				{access.canAccess ? (
+				{access?.canAccess ? (
 					<div className="badge badge-success badge-lg gap-1">Owned</div>
-				) : !access.requiresPurchase ? (
+				) : !access?.requiresPurchase ? (
 					<p className="text-sm text-base-content/60">Sign in to purchase this Work.</p>
 				) : !creatorHasStripe ? (
 					<p className="text-sm text-base-content/60">

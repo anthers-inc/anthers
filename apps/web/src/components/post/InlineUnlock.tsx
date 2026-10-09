@@ -99,7 +99,11 @@ export default function InlineUnlock({
 				<UnlockCard
 					icon="account"
 					heading="Free to everyone on Anthers"
-					blurb={`This Work costs nothing to watch. Make a free account and it's yours — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access every month, and ${creatorName} is paid for the time you spend on it.`}
+					// "Watch" would be the video's verb and nobody else's — this card
+					// stands in front of music, comics, essays, and everything free the
+					// visitor can consume. Whatever the noun, what is missing is the
+					// account; the sentence says the free part and lets the Work say the rest.
+					blurb={`This Work is free for everyone. Make a free account and it's yours — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access every month, and ${creatorName} is paid for the time you spend on it.`}
 				>
 					<Link to={withNextPath("/signup", back)} className="btn btn-primary btn-wide">
 						Create a free account

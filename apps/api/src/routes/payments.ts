@@ -67,7 +67,7 @@ import {
 	retrieveConnectBalance,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
-import { requireAuth, requireVerified } from "../middleware/auth.js";
+import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import { resolveAccess } from "../services/access.js";
 import { heldAnthersBadgeAmount } from "../services/anthers-badges.js";
@@ -119,6 +119,26 @@ async function resolvePurchase(slug: string, userId: number) {
 			status: 400 as const,
 			error: "You already have access to this work",
 		};
+
+	// 🚨 **A physical or service Work is refused on the generic paths, because nothing
+	// generic fulfills it — and the goods-works rule prices them here as null (the
+	// store prices the goods), so this refusal has to come BEFORE the priced-row
+	// checks or a merch Work's generic refusal would read as a data error rather
+	// than the posture's sentence.** There is no shipping lane behind
+	// `resolvePurchase` and no fulfillment mechanism for a service one — a merch
+	// Work (a physical Work owned by the official account with merch variants
+	// mapped) is sold by the *merch* routes (`/merch/:slug/variants` and
+	// `/merch/checkout/:slug` below), which call this for everything except this
+	// refusal. This is the posture's refusal rather than a judgment about the
+	// types: selling them arrives when the fulfillment behind them arrives, and
+	// until then checkout is the one door that has to say no.
+	if (work.type === "physical" || work.type === "service")
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: "This kind of work can't be bought yet — there's nothing to deliver it.",
+		};
+
 	if (!access.requiresPurchase || !access.price)
 		return {
 			ok: false as const,
@@ -129,21 +149,6 @@ async function resolvePurchase(slug: string, userId: number) {
 	const amount = new Decimal(access.price);
 	if (amount.lte(0))
 		return { ok: false as const, status: 400 as const, error: "This work is free" };
-
-	// 🚨 **A physical or service Work is refused on the generic paths, because nothing
-	// generic fulfills it.** There is no shipping lane behind `resolvePurchase` and no
-	// fulfillment mechanism for a service one — a merch Work (a physical Work owned by
-	// the official account with merch variants mapped) is sold by the *merch* routes
-	// (`/merch/:slug/variants` and `/merch/checkout/:slug` below), which call this for
-	// everything except this refusal. This is the posture's refusal rather than a
-	// judgment about the types: selling them arrives when the fulfillment behind them
-	// arrives, and until then checkout is the one door that has to say no.
-	if (work.type === "physical" || work.type === "service")
-		return {
-			ok: false as const,
-			status: 400 as const,
-			error: "This kind of work can't be bought yet — there's nothing to deliver it.",
-		};
 
 	// 🚨 **A price the processor will not accept, caught here rather than at Stripe.** The
 	// validators refuse a sub-floor price on the way in, but a Work priced before that
@@ -612,13 +617,30 @@ async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]
  * physical-type refusal (this IS the fulfillment path) and the price read (a merch Work's
  * price is derived, not stored — `access.price` is ignored). Returns the Work alone.
  */
-async function resolveMerchPurchase(slug: string, userId: number) {
+/**
+ * The merch door, shared by the checkout (buying) and the variants read (the picker).
+ *
+ * `userId` is null for a signed-out visitor reading the picker — page viewing needs no
+ * account (the goods-works rule in `resolveAccessSync`), so the read stands. Buying still
+ * requires one upstream (`requireAuth` on the checkout route), so null never reaches a
+ * purchase here.
+ *
+ * `opts.read` is the variants route's mode: the one `canAccess` refusal below is a
+ * CHECKOUT's refusal ("you already have access", which a buyer's repeat purchase would
+ * otherwise need), and a reading call — the only way a `canAccess: true` verdict arrives
+ * here is the WORK OWNER checking their own store — must see the panel, not that refusal.
+ */
+async function resolveMerchPurchase(
+	slug: string,
+	userId: number | null,
+	opts?: { read?: boolean },
+) {
 	const [work] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
 	if (!work) return { ok: false as const, status: 404 as const, error: "Work not found" };
 	if (work.visibility !== "released" && work.creatorId !== userId)
 		return { ok: false as const, status: 404 as const, error: "Work not found" };
 	const access = await resolveAccess(work, userId);
-	if (access.canAccess)
+	if (access.canAccess && !(opts?.read && access.reason === "owner"))
 		return {
 			ok: false as const,
 			status: 400 as const,
@@ -928,9 +950,15 @@ const paymentRoutes = new Hono()
 	// carries, and, when this buyer holds a Badge, the discounted figure beside it.
 	// Never the print cost: that is the transparency prose's basis (never an exact
 	// published figure — Printful reprices), and the picker is a buyer surface.
-	.get("/merch/:slug/variants", requireAuth, async (c) => {
-		const user = c.get("user");
-		const q = await resolveMerchPurchase(c.req.param("slug") ?? "", user.id);
+	//
+	// Optional auth, deliberately: a signed-out visitor reads the page and the
+	// picker like any account (the goods-works rule in `resolveAccessSync`) — the
+	// list price is theirs to see. A Badge discount needs an account by
+	// construction (the Badge is held BY an account), so signed out every row
+	// prices undiscounted, and the panel's buy door asks for the account.
+	.get("/merch/:slug/variants", async (c) => {
+		const userId = await getOptionalUserId(c);
+		const q = await resolveMerchPurchase(c.req.param("slug") ?? "", userId, { read: true });
 		if (!q.ok) return c.json({ error: q.error }, q.status);
 		const { work } = q;
 		const { merchVariants } = await import("@anthers/db/schema");
@@ -939,14 +967,16 @@ const paymentRoutes = new Hono()
 			.from(merchVariants)
 			.where(eq(merchVariants.workId, work.id))
 			.orderBy(merchVariants.id);
-		// The Badge resolves once; every row prices against it. `free` holds no
-		// discount — only Badge keys index the ladder.
+		// The Badge resolves once — for a signed-in buyer only; every row prices
+		// against it. `free` holds no discount — only Badge keys index the ladder.
 		let heldBadge: Badge | null = null;
-		try {
-			const badge = heldBadgeName(await heldAnthersBadgeAmount(user.id));
-			if (badge !== "free") heldBadge = badge;
-		} catch {
-			heldBadge = null; // unseeded ladder — prices answer undiscounted
+		if (userId != null) {
+			try {
+				const badge = heldBadgeName(await heldAnthersBadgeAmount(userId));
+				if (badge !== "free") heldBadge = badge;
+			} catch {
+				heldBadge = null; // unseeded ladder — prices answer undiscounted
+			}
 		}
 		const price = (v: typeof merchVariants.$inferSelect) => {
 			const list = new Decimal(v.listPrice);
