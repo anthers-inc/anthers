@@ -162,6 +162,7 @@ import {
 	notifyCreditedAccounts,
 	rejectCredit,
 } from "../services/credit-acceptance.js";
+import { electToKeep, KEEP_REFUSAL_COPY, releaseKeep } from "../services/keeping.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -6294,6 +6295,31 @@ const contentRoutes = new Hono()
 			);
 		}
 		return c.json({ error: "Not found" }, 404);
+	})
+
+	// ── The keeping election ─────────────────────────────────────────────────────
+	//
+	// A buyer's claim on a withdrawn Work's bytes, past the ninety-day window. The
+	// service (`services/keeping.ts`) is the one writer of `purchases.keptAt`; both
+	// routes here are its doors. The refusal shapes name WHY so the buyer's next move
+	// differs: `not_purchased` is permanent absent a purchase, `not_withdrawn` has
+	// nothing to keep (the Work is being published — keeping is what publishing does),
+	// and `purged` means the bytes are already gone.
+	.post("/works/:id/keep", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = Number(c.req.param("id"));
+		if (!Number.isFinite(workId)) return c.json({ error: "Not found" }, 404);
+		const result = await electToKeep(user.id, workId);
+		if (result.ok) return c.json({ kept: true as const });
+		return c.json({ error: KEEP_REFUSAL_COPY[result.reason], reason: result.reason }, 409);
+	})
+	.delete("/works/:id/keep", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = Number(c.req.param("id"));
+		if (!Number.isFinite(workId)) return c.json({ error: "Not found" }, 404);
+		const result = await releaseKeep(user.id, workId);
+		if (result.ok) return c.json({ kept: false as const, released: result.released });
+		return c.json({ error: KEEP_REFUSAL_COPY[result.reason], reason: result.reason }, 409);
 	})
 
 	/**

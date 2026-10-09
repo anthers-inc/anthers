@@ -46,6 +46,7 @@ import { db } from "@anthers/db/client";
 import {
 	assets,
 	inlineImages,
+	purchases,
 	storageUsage,
 	transcodingJobs,
 	webBuildFiles,
@@ -55,7 +56,8 @@ import {
 } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { STORAGE_USE_KINDS, type StorageUseKind } from "@anthers/shared/constants";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { keptShareBytes } from "../services/keeping.js";
 import { storage } from "../services/storage/index.js";
 import { urlToKey } from "../services/storage/keys.js";
 
@@ -235,6 +237,48 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		.groupBy(workSaves.userId);
 	for (const row of saveRows) {
 		add(account(row.userId).purposes, "cloud-saves", Number(row.total));
+	}
+
+	// ── Kept files, the buying keeper's 1/N share ────────────────────────────────
+	// A withdrawn Work kept by its buyers is stored ONCE, and each keeper draws an
+	// equal share of the counted media against their own allowance — the 1/N arithmetic
+	// the ladder task's design fixed and `keptShareBytes` derives per Work. The sweep
+	// walks the kept purchases (keptAt present, media not yet purged), groups keeper
+	// counts per Work, and attributes each buyer's share into their kept-files line.
+	const keptRows = (
+		await db
+			.select({ workId: purchases.workId, buyerId: purchases.buyerId })
+			.from(purchases)
+			.innerJoin(works, eq(purchases.workId, works.id))
+			.where(
+				and(
+					eq(purchases.status, "completed"),
+					isNotNull(purchases.keptAt),
+					eq(works.visibility, "withdrawn"),
+					isNull(works.mediaPurgedAt),
+				),
+			)
+	).filter((r): r is { workId: number; buyerId: number } => r.buyerId != null);
+	const keeperCount = new Map<number, number>();
+	for (const row of keptRows) {
+		keeperCount.set(row.workId, (keeperCount.get(row.workId) ?? 0) + 1);
+	}
+	// Per-buyer attribution, share-divided: group keptRows by buyer, add each Work's
+	// 1/N share (deriving the share via the service, which reads the counted media
+	// rather than trusting any column here).
+	const byBuyer = new Map<number, number[]>();
+	for (const row of keptRows) {
+		if (row.buyerId == null) continue;
+		const list = byBuyer.get(row.buyerId) ?? [];
+		list.push(row.workId);
+		byBuyer.set(row.buyerId, list);
+	}
+	for (const [buyerId, workIdList] of byBuyer) {
+		let shareSum = 0;
+		for (const workId of workIdList) {
+			shareSum += await keptShareBytes(workId, keeperCount.get(workId) ?? 1);
+		}
+		if (shareSum > 0) add(account(buyerId).purposes, "kept-files", shareSum);
 	}
 
 	// ── Upsert, one row per account with any bytes at all ────────────────────────
