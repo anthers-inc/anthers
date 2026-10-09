@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { assets, storageUsage, workSaves, works } from "@anthers/db/schema";
 import { STORAGE_LADDER_GIB, STORAGE_USE_KINDS } from "@anthers/shared/constants";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { runStorageUsageSweep } from "../jobs/storage-usage.js";
 import { storageReadingFor } from "../services/storage-reading.js";
@@ -216,15 +216,19 @@ describe("the reading — allowance, drawn bytes and the at-cost estimate", () =
 
 describe("the ladder through the metered reading", () => {
 	it("a Root holding raises the allowance the reading shows", async () => {
-		// The same fixture shape the work-saves suite uses: an Anthers-ladder rung held
-		// this cycle. Root is $3.
+		// The same fixture shape the work-saves suite uses, threshold filter included:
+		// 🚨 the find MUST name the threshold. A lookup by issuer alone grabs whichever
+		// Anthers rung a seeded session lists first (Blossom in CI) and the holding
+		// would point there rather than at Root — passing on an unseeded local session
+		// and failing every seeded one. Root is $3.
 		const { badges, userBadges } = await import("@anthers/db/schema");
 		const { anthersUserId } = await import("../services/anthers-badges.js");
+		const { currentCycleKey } = await import("@anthers/shared/billing-cycle");
 		const anthersId = await anthersUserId();
 		const [existing] = await db
 			.select({ id: badges.id })
 			.from(badges)
-			.where(eq(badges.creatorId, anthersId))
+			.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, "3")))
 			.limit(1);
 		const badgeId =
 			existing?.id ??
@@ -237,7 +241,7 @@ describe("the ladder through the metered reading", () => {
 		await db.insert(userBadges).values({
 			userId: creatorId,
 			badgeId,
-			billingCycle: `${new Date().toISOString().slice(0, 8)}01`,
+			billingCycle: currentCycleKey(),
 		});
 
 		const reading = await storageReadingFor(creatorId);
