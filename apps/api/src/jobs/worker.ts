@@ -55,6 +55,7 @@ import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listin
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
 import { watchHostedIdentities } from "./watch-identities.js";
+import { runWithdrawnSweep } from "./withdrawn-sweep.js";
 
 async function start() {
 	console.log("Starting job worker...");
@@ -185,6 +186,17 @@ async function start() {
 			const written = await runStorageUsageSweep();
 			if (written > 0)
 				console.log(`[storage-usage] job ${job.id}: ${written} account(s) snapshotted`);
+		}
+	});
+
+	// The claim-aware rescue sweep: purges a withdrawn Work's media when no claim
+	// remains, warns buyers inside the last week. Both figures logged only when nonzero.
+	await queue.work(QUEUES.WITHDRAWN_SWEEP, async (jobs) => {
+		for (const job of jobs) {
+			const { sweptCount, warnedCount } = await runWithdrawnSweep();
+			if (sweptCount > 0 || warnedCount > 0) {
+				console.log(`[withdrawn-sweep] job ${job.id}: swept ${sweptCount}, warned ${warnedCount}`);
+			}
 		}
 	});
 

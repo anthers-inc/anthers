@@ -191,6 +191,19 @@ export const works = pgTable(
 		// privacy-policy work. Stamping the timestamp now is what makes the sweep a
 		// later addition rather than a later migration.
 		withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+		/**
+		 * When the claim-aware sweep removed the Work's media — the claim side of the
+		 * rescue window's expiry (the Badge storage ladder's build, 2026-10-09).
+		 *
+		 * 🚨 **The "done" marker, not a state.** The row, its purchases, the Library
+		 * entries and the buyers' cloud saves all outlive the bytes (a purchase
+		 * outlives everything), and a sweep that re-listed every historical withdrawn
+		 * Work forever would be a daily full scan of a table that only ever grows.
+		 * Null while any claim remains; stamped by the sweep's own purge pass.
+		 * Delivery of a media-purged Work answers with the access the buyer no longer
+		 * has bytes behind — the record saying so, not a dead link.
+		 */
+		mediaPurgedAt: timestamp("media_purged_at", { withTimezone: true }),
 
 		// ── Dates ──
 		// Three dates exist for a Work. `createdAt` is the UPLOAD date (ours,

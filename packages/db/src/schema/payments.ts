@@ -145,6 +145,30 @@ export const purchases = pgTable(
 		// counts only `completed`, so no code is needed to take the unlock away), and
 		// a won dispute flips it back because the money came back.
 		status: text("status").notNull().default("pending"), // pending | completed | failed | refunded | disputed
+		/**
+		 * The keeping election — **the Badge storage ladder's first user-side storage
+		 * surface**, and the only claim on a withdrawn Work's media beyond the ninety
+		 * days.
+		 *
+		 * ⭐ **A property of the PURCHASE, not of the account, and timestamped rather
+		 * than boolean.** The claim on the object belongs to the buyer of that Work —
+		 * which is why the rescue sweep checks `keptAt IS NOT NULL` on completed
+		 * purchases and never walks accounts — and null means "not keeping", so the
+		 * default state of every historical row is already correct with no backfill.
+		 * A keeper released by the lapse rule has `keptAt` set back to null — the
+		 * release re-arms the buyer's own ninety-day clock, which is what "settle
+		 * the lapse with an existing mechanism" means in practice: the release
+		 * re-uses the window the buyer was always promised, rather than inventing
+		 * a third account status.
+		 *
+		 * 🚨 **Keeping is automatic until the floor binds** (the leaned answer in the
+		 * ladder task's open decisions, made binding here): the election is written
+		 * by the sweep's binding pass when the floor would be exceeded, and read by
+		 * the claim check. Kept bytes draw the buyer's own allowance, share-divided
+		 * across keepers (the 1/N arithmetic in the ladder task's design); the meter
+		 * reads that share into their `kept-files` line.
+		 */
+		keptAt: timestamp("kept_at", { withTimezone: true }),
 		// ── Delivery & refunds (`0018`) ──────────────────────────────────────────
 		// When this buyer first pulled the actual payload down. Null = never
 		// downloaded, and that distinction is what the refund policy turns on: the

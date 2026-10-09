@@ -184,6 +184,9 @@ export const QUEUES = {
 	// The storage ladder's meter — snapshot what each account holds against its allowance.
 	// See storage-usage.ts for the DB-first counting rule and the per-purpose split.
 	STORAGE_USAGE: "storage-usage",
+	// The claim-aware rescue sweep — a withdrawn Work's media leaves when no claim
+	// remains: no keeper, and every buyer past the ninety days. See withdrawn-sweep.ts.
+	WITHDRAWN_SWEEP: "withdrawn-sweep",
 	// Write, replace or remove a Work's public listing on the AT Protocol network. Carries only
 	// a Work id: the handler re-reads the Work and decides from its current state, so a
 	// duplicate is harmless and a late one still converges. Deliberately not part of the release
@@ -370,6 +373,13 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 30,
 	},
+	[QUEUES.WITHDRAWN_SWEEP]: {
+		// Best-effort purge, marked done per Work — a retry sweeps already-swept Works
+		// as no-ops and re-sends nothing (the warning dedupes by key).
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 30,
+	},
 	[QUEUES.PUBLISH_SCHEDULED]: {
 		retryLimit: 1,
 		expireInMinutes: 5,
@@ -442,6 +452,12 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// a moving stock, not a transaction. The meter must precede nothing; it must only run
 	// daily so the in-flight month's estimate stays fresh.
 	[QUEUES.STORAGE_USAGE, "30 1 * * *"], // 1:30 AM daily (idempotent upsert per cycle)
+	// 2:30 AM daily, after the meter's 1:30: a Work this sweep purges changes the stock
+	// the meter measures, so the meter's reading of the ending month should already
+	// include the day's last state. The buyer's deadline arithmetic is per-Work from
+	// withdrawnAt, so running after midnight UTC's turn is what keeps "90 days" honest
+	// at the boundary — a Work one day short is warned, not swept.
+	[QUEUES.WITHDRAWN_SWEEP, "30 2 * * *"], // 2:30 AM daily
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
 	[QUEUES.RELEASE_SCHEDULED, "* * * * *"], // every minute — releases due Works that are ready
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
