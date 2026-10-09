@@ -53,33 +53,37 @@
 }
 
 /* Dark — opt-in via data-theme=dark. A near-black green ground, on the same hue as the
-   light theme's green ink, with cream text; it stays this dark so the pollen texture and
-   botanical decor read subtly over it. Primary is green here too: an amber primary on
+   light theme's green ink, with cream text; it stays dark enough that the pollen texture
+   and botanical decor still read subtly over it, without swallowing the band alternation.
+   Primary is green here too: an amber primary on
    this ground turns every heading, label and button yellow at once, which is the loud
    look the green ground exists to avoid. Must follow the :root block above so it wins by
    source order at equal specificity. */
 [data-theme="dark"] {
 	color-scheme: dark;
-	--color-base-100: oklch(13.5% 0.016 158);
-	--color-base-200: oklch(16.5% 0.019 158);
-	--color-base-300: oklch(21.5% 0.023 158);
-	--color-base-content: oklch(93% 0.03 96);
+	--color-base-100: oklch(16.5% 0.019 158);
+	--color-base-200: oklch(20.5% 0.022 158);
+	--color-base-300: oklch(26% 0.027 158);
+	--color-base-content: oklch(95.5% 0.02 96);
 	--color-primary: oklch(68% 0.11 152);
 	--color-primary-content: oklch(18% 0.04 155);
 	--color-secondary: oklch(84% 0.11 92);
 	--color-secondary-content: oklch(24% 0.05 88);
 	--color-accent: oklch(76% 0.12 76);
 	--color-accent-content: oklch(22% 0.05 76);
-	--color-neutral: oklch(30% 0.033 156);
-	--color-neutral-content: oklch(93% 0.03 96);
+	--color-neutral: oklch(33% 0.036 156);
+	--color-neutral-content: oklch(95.5% 0.02 96);
 	--color-info: oklch(70% 0.1 220);
-	--color-info-content: oklch(13.5% 0.016 158);
+	--color-info-content: oklch(16.5% 0.019 158);
 	--color-success: oklch(72% 0.12 148);
-	--color-success-content: oklch(13.5% 0.016 158);
+	--color-success-content: oklch(16.5% 0.019 158);
 	--color-warning: oklch(83% 0.13 88);
-	--color-warning-content: oklch(13.5% 0.016 158);
+	--color-warning-content: oklch(16.5% 0.019 158);
 	--color-error: oklch(66% 0.16 28);
-	--color-error-content: oklch(13.5% 0.016 158);
+	--color-error-content: oklch(16.5% 0.019 158);
+
+	/* `primary-content` rides slightly above the base (24%), and the `-content` values
+	   name the ground they are read on — all of it keyed to the dark base itself. */
 
 	/* White is the variant Bluesky's guidance names for a dark background. Blue is listed
 	   for white or light backgrounds only, and a base this dark is neither. Revisit it if
